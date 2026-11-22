@@ -3,15 +3,13 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import SessionConversation from "../../src/lib/components/session-chat/SessionConversation.svelte";
 import { token } from "../../src/stores/auth";
 
-const image = (id: string, turn: string, share = `share-${id}`) => ({
-  file_id: id,
-  share_id: share,
-  turn_id: turn,
-  name: `${id}.png`,
-  path: `/tmp/${id}.png`,
-  size: 10,
-  media_type: "image/png",
-  created_at: "2026-11-17T00:00:00Z",
+const reply = (id: string, turnId: string, ...names: string[]) => ({
+  id,
+  turnId,
+  role: "assistant" as const,
+  content: ["```attachments", ...names.map((name) => `/tmp/${name}.png`), "```"].join("\n"),
+  status: "sent" as const,
+  createdAt: "",
 });
 
 class VisibleObserver {
@@ -28,7 +26,11 @@ beforeEach(() => {
   vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:image");
   vi.stubGlobal(
     "fetch",
-    vi.fn(() => Promise.resolve(new Response("png", { headers: { "Content-Type": "image/png" } }))),
+    vi.fn(() =>
+      Promise.resolve(
+        new Response("png", { headers: { "Content-Type": "image/png", "Content-Length": "3" } }),
+      ),
+    ),
   );
 });
 
@@ -38,19 +40,16 @@ afterEach(() => {
   token.set("");
 });
 
-test("pages only between the images of the share that was opened", async () => {
+test("pages only between the images of the card that was opened", async () => {
   render(SessionConversation, {
     sessionId: "viewer-session",
+    // img1 and img2 are one card; img3 and img4 are cards of their own.
     messages: [
-      { id: "u1", role: "user", content: "first", status: "complete", turnId: "t1" },
-      { id: "u2", role: "user", content: "second", status: "complete", turnId: "t2" },
-    ],
-    // The store lists newest first. img1 and img2 are one share; img3 and img4 are single shares.
-    sharedFiles: [
-      image("img4", "t2"),
-      image("img3", "t1"),
-      image("img2", "t1", "batch"),
-      image("img1", "t1", "batch"),
+      { id: "u1", role: "user", content: "first", status: "sent", turnId: "t1", createdAt: "" },
+      reply("a1", "t1", "img1", "img2"),
+      reply("a2", "t1", "img3"),
+      { id: "u2", role: "user", content: "second", status: "sent", turnId: "t2", createdAt: "" },
+      reply("a3", "t2", "img4"),
     ],
   });
 

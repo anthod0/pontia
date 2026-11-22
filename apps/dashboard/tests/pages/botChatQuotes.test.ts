@@ -6,6 +6,7 @@ import type { Bot, BotEntry, BotMessage } from "../../src/api/types";
 import { ApiError } from "../../src/api/errors";
 import BotChatPage from "../../src/pages/BotChatPage.svelte";
 import { saveUploadRecord } from "../../src/lib/uploads/records";
+import { VisibleObserver, mockFileInfo } from "../components/fileCardFixture";
 
 const toast = vi.hoisted(() => ({
   error: vi.fn(),
@@ -27,18 +28,6 @@ const bot: Bot = {
   model: "test",
 };
 const id = (n: number) => `bmsg_0193a000-0000-7000-8000-${String(n).padStart(12, "0")}`;
-const fileId = "file_0193a000-0000-7000-8000-000000000001";
-const imageId = "file_0193a000-0000-7000-8000-000000000002";
-const sharedFile = (file_id: string, name: string, media_type: string) => ({
-  file_id,
-  share_id: "share_0193a000-0000-7000-8000-000000000001",
-  turn_id: null,
-  name,
-  path: `/work/${name}`,
-  size: 12,
-  media_type,
-  created_at: new Date(2000).toISOString(),
-});
 const message = (n: number, kind: BotMessage["kind"], content: string): BotMessage => ({
   id: id(n),
   kind,
@@ -47,16 +36,14 @@ const message = (n: number, kind: BotMessage["kind"], content: string): BotMessa
   created_at: new Date(n * 1000).toISOString(),
 });
 const reply = message(1, "bot_reply", "Renew the **certificate** first.");
-const file: BotEntry = {
-  kind: "shared_files",
-  id: "share_0193a000-0000-7000-8000-000000000001",
-  session_id: "s",
-  created_at: new Date(2000).toISOString(),
-  files: [
-    sharedFile(fileId, "checklist.md", "text/markdown"),
-    sharedFile(imageId, "chart.png", "image/png"),
-  ],
-};
+/** A Bot reply with an attachments block. */
+const attached = (n: number, ...names: string[]) =>
+  message(
+    n,
+    "bot_reply",
+    ["Files:", "", "```attachments", ...names.map((name) => `/work/${name}`), "```"].join("\n"),
+  );
+const file = attached(2, "checklist.md", "chart.png");
 
 function serve(entries: BotEntry[], options: { older?: BotEntry[]; missing?: string[] } = {}) {
   return vi
@@ -67,7 +54,7 @@ function serve(entries: BotEntry[], options: { older?: BotEntry[]; missing?: str
       const base = {
         bot,
         status: { kind: "idle" as const },
-        file_link_session: null,
+        file_link_session: { session_id: "s", workspace: "/work" },
         open_todo_count: 0,
         notice_session_id: "s",
         generation_notice: null,
@@ -141,19 +128,20 @@ test("sends a quoted Bot reply as a user_quote element before the typed text", a
   );
 });
 
-test("quotes one file of a share with its ID and path", async () => {
+test("quotes one attached file with its message ID and path", async () => {
   serve([file]);
   const send = sent();
   render(BotChatPage, { botId: bot.bot_id });
   await screen.findByText(/checklist/);
-  expect(rows()).toHaveLength(2);
-  await quoteFromMenu(rows()[0]);
+  // The reply text and each attached file are quotable.
+  expect(rows()).toHaveLength(3);
+  await quoteFromMenu(rows()[1]);
   await userEvent.type(screen.getByRole("textbox"), "Check it");
   await fireEvent.click(screen.getByRole("button", { name: "Send" }));
   await waitFor(() =>
     expect(send).toHaveBeenCalledWith(
       bot.bot_id,
-      `<user_quote file_id="${fileId}" speaker="Bot" path="/work/checklist.md">checklist.md</user_quote>\nCheck it`,
+      `<user_quote message_id="${file.id}" speaker="Bot" path="/work/checklist.md">checklist.md</user_quote>\nCheck it`,
     ),
   );
 });
@@ -344,19 +332,13 @@ test("opens the message menu from the keyboard and quotes with R", async () => {
 });
 
 test("quotes one image from its menu, shows its thumbnail, and jumps back to it", async () => {
-  class VisibleObserver {
-    constructor(private readonly callback: IntersectionObserverCallback) {}
-    observe(target: Element) {
-      this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as never);
-    }
-    disconnect() {}
-  }
   vi.stubGlobal("IntersectionObserver", VisibleObserver);
-  vi.spyOn(testDevice.previews, "sharedImageUrl").mockResolvedValue("blob:chart");
+  mockFileInfo();
+  vi.spyOn(testDevice.previews, "imageUrl").mockResolvedValue("blob:chart");
   const quoted = message(
     3,
     "user_input",
-    `<user_quote file_id="${imageId}" speaker="Bot" path="/work/chart.png">chart.png</user_quote>\nBigger`,
+    `<user_quote message_id="${file.id}" speaker="Bot" path="/work/chart.png">chart.png</user_quote>\nBigger`,
   );
   serve([file, quoted]);
   render(BotChatPage, { botId: bot.bot_id });
@@ -372,9 +354,9 @@ test("quotes one image from its menu, shows its thumbnail, and jumps back to it"
   const jump = screen.getByRole("button", { name: /^Quote from Helper Bot: chart\.png/ });
   expect(jump.querySelector("[data-quote-thumbnail]")).toBeInTheDocument();
   await fireEvent.click(jump);
-  // A mixed share is a list; the quoted row is ringed.
+  // A mixed card is a list; the quoted row is ringed.
   await waitFor(() =>
-    expect(document.querySelector(`[data-shared-file="${imageId}"]`)!.className).toContain(
+    expect(document.querySelector('[data-shared-file="/work/chart.png"]')!.className).toContain(
       "ring-2",
     ),
   );
@@ -395,8 +377,9 @@ test("the message actions button opens the touch menu to reply to the whole mess
   serve([reply, file]);
   render(BotChatPage, { botId: bot.bot_id });
   await screen.findByText("certificate");
-  const [replyMenu, fileMenu] = screen.getAllByRole("button", { name: "Message actions" });
-  await tap(fileMenu);
+  const replyMenu = screen.getAllByRole("button", { name: "Message actions" })[0];
+  const fileRow = document.querySelector<HTMLElement>('[data-bot-file-path="/work/checklist.md"]')!;
+  await tap(within(fileRow).getByRole("button", { name: "Message actions" }));
   const sheet = within(await screen.findByRole("dialog"));
   await fireEvent.click(sheet.getByRole("menuitem", { name: /Quote file/ }));
   await screen.findByRole("button", { name: /^Remove quote.*checklist/ });
@@ -463,17 +446,10 @@ test("quotes a native touch selection from the floating bar", async () => {
 test.each([false, true])(
   "touch actions quote the selected image from a batch (mosaic: %s)",
   async (mosaic) => {
-    const images = Array.from({ length: 7 }, (_, n) =>
-      sharedFile(
-        `file_0193a000-0000-7000-8000-${String(n + 10).padStart(12, "0")}`,
-        `image-${n}.png`,
-        "image/png",
-      ),
-    );
-    const share = {
-      ...file,
-      files: mosaic ? images : [sharedFile(fileId, "checklist.md", "text/markdown"), ...images],
-    };
+    vi.stubGlobal("IntersectionObserver", VisibleObserver);
+    mockFileInfo();
+    const images = Array.from({ length: 7 }, (_, n) => `image-${n}.png`);
+    const share = attached(2, ...(mosaic ? images : ["checklist.md", ...images]));
     serve([share]);
     const send = sent();
     render(BotChatPage, { botId: bot.bot_id });
@@ -481,7 +457,7 @@ test.each([false, true])(
       await screen.findByRole("button", { name: mosaic ? /more images/ : /Show .* more/ }),
     );
     const selected = images[6];
-    const row = document.querySelector(`[data-bot-file-id="${selected.file_id}"]`)! as HTMLElement;
+    const row = document.querySelector(`[data-bot-file-path="/work/${selected}"]`)! as HTMLElement;
     await tap(within(row).getByRole("button", { name: "Message actions" }));
     const sheet = within(await screen.findByRole("dialog"));
     await fireEvent.click(sheet.getByRole("menuitem", { name: /Quote image/ }));
@@ -490,7 +466,7 @@ test.each([false, true])(
     await waitFor(() =>
       expect(send).toHaveBeenCalledWith(
         bot.bot_id,
-        `<user_quote file_id="${selected.file_id}" speaker="Bot" path="${selected.path}">${selected.name}</user_quote>\nThis one`,
+        `<user_quote message_id="${share.id}" speaker="Bot" path="/work/${selected}">${selected}</user_quote>\nThis one`,
       ),
     );
   },
@@ -510,7 +486,7 @@ test.each([false, true])(
     });
     if (restore) {
       localStorage.setItem(
-        `pontia:bot-quote:v1:${JSON.stringify([testDevice.id, bot.bot_id])}`,
+        `pontia:bot-quote:v2:${JSON.stringify([testDevice.id, bot.bot_id])}`,
         JSON.stringify({
           kind: "message",
           messageId: id(1),
@@ -706,4 +682,19 @@ test("cancels a todo reply without sending it", async () => {
   expect(item.queryByRole("textbox")).not.toBeInTheDocument();
   expect(button).toHaveAttribute("aria-expanded", "false");
   expect(send).not.toHaveBeenCalled();
+});
+
+test("a reply with only attachments keeps its message menu", async () => {
+  const only = message(2, "bot_reply", "```attachments\n/work/report.pdf\n```");
+  serve([only]);
+  render(BotChatPage, { botId: bot.bot_id });
+  await screen.findByRole("button", { name: "Download report.pdf" });
+  const buttons = screen.getAllByRole("button", { name: "Message actions" });
+  await userEvent.click(buttons.at(-1)!);
+  const menu = await screen.findByRole("menu");
+  expect(
+    within(menu)
+      .getAllByRole("menuitem")
+      .map((item) => item.textContent),
+  ).toEqual(["ReplyR", "Copy", "View context"]);
 });

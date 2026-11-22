@@ -78,13 +78,7 @@ pontia completions powershell | Out-String | Invoke-Expression
 
 ## Agent tools
 
-`pontia --help` lists `send-file` and `workflow` under Agent tools.
-
-### Files
-
-| Command | Context | Purpose |
-| --- | --- | --- |
-| `pontia send-file PATH...` | Inside a Pontia Session | Share files with the Session's user; files given together appear as one card in the Dashboard chat. If any path is invalid, nothing is shared |
+`pontia --help` lists `workflow` and `bot` under Agent tools.
 
 ### Workflows
 

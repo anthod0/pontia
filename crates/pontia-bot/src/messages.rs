@@ -101,7 +101,7 @@ impl MessageService {
             quoted.as_ref().map(|_| "quote"),
         )
         .await?;
-        if let Some(crate::quote::Target::Message(target)) = quoted {
+        if let Some(crate::quote::Target(target)) = quoted {
             link_message(&mut tx, &message, &target).await?;
         }
         tx.commit().await?;

@@ -7,7 +7,7 @@
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
   import FileAction from './FileAction.svelte'
-  import { observePreview, type SharedFileState } from './sharedFileState.svelte'
+  import { observeFile, type SharedFileState } from './sharedFileState.svelte'
 
   /** One image of an all-image share, cropped to fill its cell, with its download state drawn on it. */
   let { itemActions, state, more = 0, highlighted = false, onenlarge, onmore, itemProps = {}, class: className = '' }: {
@@ -27,7 +27,7 @@
   const previewFailed = $derived(state.imageUrl === null || (!state.task && state.failure !== null))
 </script>
 
-<div use:observePreview={state} {...itemProps} class={['group/tile relative overflow-hidden bg-background', className, itemProps.class]} title={name} data-shared-file={state.file.file_id}>
+<div use:observeFile={state} {...itemProps} class={['group/tile relative overflow-hidden bg-background', className, itemProps.class]} title={name} data-shared-file={state.file.path}>
   {#if more}
     <!-- The last collapsed tile always expands the card, whatever its own image's state. -->
     <button type="button" class="absolute inset-0 block outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset" onclick={onmore} aria-label={$t('files.showMoreImages', { count: more })}>

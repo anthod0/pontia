@@ -817,44 +817,95 @@ test("conversation renders assistant loading placeholder when session is startin
   expect(screen.queryByText("No messages yet")).not.toBeInTheDocument();
 });
 
-test("conversation shows one card per share on the Turn it is bound to", () => {
-  const file = (file_id: string, turn_id: string | null, share_id = `share-${file_id}`) => ({
-    file_id,
-    share_id,
-    turn_id,
-    name: `${file_id}.txt`,
-    path: `/tmp/${file_id}.txt`,
-    size: 3,
-    media_type: "text/plain",
-    created_at: "2026-06-11T00:00:05Z",
-  });
+test("an Agent reply shows its attachments blocks as one card below the message", () => {
+  const block = (...paths: string[]) => ["```attachments", ...paths, "```"].join("\n");
   render(SessionConversation, {
     props: {
-      messages: messages.map((message) => ({ ...message, turnId: "turn-1" })),
       sessionId: "session-1",
-      sharedFiles: [
-        file("bound", "turn-1"),
-        file("batch-b", "turn-1", "batch"),
-        file("batch-a", "turn-1", "batch"),
-        file("other", "turn-missing"),
-        file("unbound", null),
+      messages: [
+        {
+          id: "u",
+          turnId: "turn-1",
+          role: "user",
+          content: "Send them",
+          status: "sent",
+          createdAt: "",
+        },
+        {
+          id: "a",
+          turnId: "turn-1",
+          role: "assistant",
+          content: `Here you go.\n\n${block("/tmp/a.txt", "/tmp/b.txt")}\n\nAnd one more:\n\n${block("/tmp/b.txt", "/tmp/c.txt")}`,
+          status: "sent",
+          createdAt: "",
+        },
+        {
+          id: "u2",
+          turnId: "turn-2",
+          role: "user",
+          content: block("/tmp/user.txt"),
+          status: "sent",
+          createdAt: "",
+        },
       ],
     },
   });
-  const turn = document.querySelector('[data-chat-turn-id="turn-1"]');
-  const list = screen.getByRole("list", { name: "Shared files in this turn" });
-  expect(turn).toContainElement(list);
-  const cards = [...list.children];
-  expect(cards).toHaveLength(2);
-  const batch = cards.find((card) => card.querySelector("[data-shared-files]"))!;
+  const message = document.querySelector('[data-chat-message-id="a"]')!;
+  expect(message).toHaveTextContent("Here you go.");
+  expect(message).toHaveTextContent("And one more:");
+  expect(message.textContent).not.toContain("attachments");
+  const card = message.querySelector("[data-chat-message-files]")!;
+  expect(message.lastElementChild).toBe(card);
   expect(
-    [...batch.querySelectorAll("[data-shared-file]")].map((row) =>
+    [...card.querySelectorAll("[data-shared-file]")].map((row) =>
       row.getAttribute("data-shared-file"),
     ),
-  ).toEqual(["batch-a", "batch-b"]);
-  expect(within(list).getByRole("button", { name: "Download bound.txt" })).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Download other.txt" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Download unbound.txt" })).not.toBeInTheDocument();
+  ).toEqual(["/tmp/a.txt", "/tmp/b.txt", "/tmp/c.txt"]);
+  // A user message keeps the block as text.
+  expect(document.querySelector('[data-chat-message-id="u2"]')).toHaveTextContent("/tmp/user.txt");
+  expect(screen.queryByRole("button", { name: "Download user.txt" })).not.toBeInTheDocument();
+});
+
+test("a streaming reply hides an unclosed attachments block until it closes", async () => {
+  const content = "Sending.\n\n```attachments\n/tmp/a.txt";
+  const reply = {
+    id: "a",
+    turnId: "turn-1",
+    role: "assistant",
+    content,
+    status: "pending",
+    createdAt: "",
+  } as const;
+  const { rerender } = render(SessionConversation, {
+    props: { sessionId: "session-1", messages: [reply] },
+  });
+  const message = () => document.querySelector('[data-chat-message-id="a"]')!;
+  expect(message()).toHaveTextContent("Sending.");
+  expect(message().textContent).not.toContain("/tmp/a.txt");
+  await rerender({
+    sessionId: "session-1",
+    messages: [{ ...reply, content: `${content}\n\`\`\`` }],
+  });
+  expect(message().querySelector('[data-shared-file="/tmp/a.txt"]')).toBeInTheDocument();
+  // Ending without the closing fence shows the block as written.
+  await rerender({ sessionId: "session-1", messages: [{ ...reply, status: "sent" }] });
+  expect(message().querySelector("[data-shared-file]")).not.toBeInTheDocument();
+  expect(message()).toHaveTextContent("/tmp/a.txt");
+});
+
+test("an attachments block with a relative path stays a code block", () => {
+  const content = "```attachments\n/tmp/a.txt\nnotes.md\n```";
+  render(SessionConversation, {
+    props: {
+      sessionId: "session-1",
+      messages: [
+        { id: "a", turnId: "turn-1", role: "assistant", content, status: "sent", createdAt: "" },
+      ],
+    },
+  });
+  const message = document.querySelector('[data-chat-message-id="a"]')!;
+  expect(message.querySelector("[data-shared-file]")).not.toBeInTheDocument();
+  expect(message).toHaveTextContent("notes.md");
 });
 
 test("Codex question replies render as answered questions", async () => {

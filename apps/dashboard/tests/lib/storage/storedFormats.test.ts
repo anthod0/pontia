@@ -66,8 +66,8 @@ test("the last page is saved as JSON per device and the opened tab as a session 
 
 test("a Bot quote draft is saved as JSON per device and Bot and removed when cleared", async () => {
   const { createQuoteDraft } = await import("../../../src/lib/botQuoteDraft");
-  const key = 'pontia:bot-quote:v1:["local","bot-1"]';
-  const quote = { kind: "file", fileId: "file-1", path: "a.txt", name: "a.txt" } as const;
+  const key = 'pontia:bot-quote:v2:["local","bot-1"]';
+  const quote = { kind: "file", messageId: "bmsg-1", path: "/a.txt", name: "a.txt" } as const;
   const draft = createQuoteDraft("local", "bot-1");
   draft.current = quote;
   expect(localStorage.getItem(key)).toBe(JSON.stringify(quote));

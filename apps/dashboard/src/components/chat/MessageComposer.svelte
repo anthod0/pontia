@@ -47,7 +47,6 @@
     autofocus?: boolean
     commands?: ChatCommand[]
     header?: Snippet
-    menuItems?: Snippet
     draftId?: string
     retainDraft?: boolean
     onSubmit: (message: string, deliveryPolicy: InboxDeliveryPolicy) => void | Promise<boolean | void>
@@ -71,7 +70,6 @@
     autofocus = false,
     commands = [],
     header,
-    menuItems,
     draftId,
     retainDraft = false,
     onSubmit,
@@ -118,19 +116,18 @@
   let editor = $state<{ focusEnd: () => void } | null>(null)
   let focusCommandInput = false
   const availableCommands = $derived(startSession ? [] : commands.filter((item) => !item.disabledReason))
-  // Fixed menu groups; `menuItems` renders at the start of the /compact group.
-  const menuGroups: { names: ChatCommand['name'][]; withMenuItems?: boolean }[] = [
+  // Fixed menu groups.
+  const menuGroups: { names: ChatCommand['name'][] }[] = [
     { names: ['/new'] },
     { names: ['/rename', '/pin', '/archive'] },
-    { names: ['/compact'], withMenuItems: true },
+    { names: ['/compact'] },
     { names: ['/exit'] },
   ]
   const visibleMenuGroups = $derived(menuGroups
     .map(group => ({
-      withMenuItems: Boolean(group.withMenuItems && menuItems),
       commands: group.names.flatMap(name => availableCommands.filter(item => item.name === name)),
     }))
-    .filter(group => group.withMenuItems || group.commands.length > 0))
+    .filter(group => group.commands.length > 0))
   const command = $derived(findChatCommand(value, commands))
   const commandAction = $derived(command ? commandActionFor(command) : undefined)
   const commandArgument = $derived(command ? value.trim().slice(command.name.length).trim() : '')
@@ -293,7 +290,6 @@
         <DropdownMenu.Content side="top" align="end" class="w-64" preventScroll={false} onCloseAutoFocus={restoreCommandFocus}>
           {#each visibleMenuGroups as group, index}
             {#if index > 0}<DropdownMenu.Separator />{/if}
-            {#if group.withMenuItems}{@render menuItems?.()}{/if}
             {#each group.commands as item (item.name)}
               {@const action = commandActionFor(item)}
               <DropdownMenu.Item variant={item.name === '/exit' ? 'destructive' : 'default'} onSelect={() => chooseMenuCommand(item)}>

@@ -168,19 +168,6 @@ vi.mock("../../../src/api/client", async (importOriginal) => {
   };
 });
 
-vi.mock("../../../src/api/sessionFiles", async (importOriginal) => {
-  const original = await importOriginal();
-  const mocked = {
-    listSessionFiles: vi.fn(async () => ({ files: [], next_cursor: null })),
-    sharedFileContent: vi.fn(),
-  };
-  return {
-    ...original,
-    ...mocked,
-    createFileApi: (device) => ({ ...original.createFileApi(device), ...mocked }),
-  };
-});
-
 vi.mock("../../../src/stores/sessions", async (importOriginal) => {
   const original = await importOriginal();
   const mocked = {

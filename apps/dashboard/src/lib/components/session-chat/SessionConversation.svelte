@@ -21,7 +21,8 @@
   import MessageTime from './MessageTime.svelte'
   import QuestionReplyCard from './QuestionReplyCard.svelte'
   import SharedFiles from '../../../components/chat/files/SharedFiles.svelte'
-  import type { SharedFile, TurnView, TimelineItem } from '../../../api/types'
+  import { splitAttachments } from '$lib/attachmentBlocks'
+  import type { TurnView, TimelineItem } from '../../../api/types'
   import type { SessionChatMessage } from '../../session-chat/sessionChat'
 
   interface Props {
@@ -32,7 +33,6 @@
     sessionId?: string
     /** Session workspace directory; relative local file links in messages resolve against it. */
     workspace?: string | null
-    sharedFiles?: SharedFile[]
     sessionState?: string | null
     activeTurnId?: string | null
     loading?: boolean
@@ -52,7 +52,6 @@
     turns = [],
     sessionId = '',
     workspace = null,
-    sharedFiles = [],
     sessionState = null,
     activeTurnId = null,
     loading = false,
@@ -72,7 +71,6 @@
   const displayMessages = $derived(messages)
   const displayItems = $derived(conversationDisplayItems(displayMessages, timelineItems, compactionBusy))
   const displayTurns = $derived(conversationDisplayTurns(displayItems))
-  const sharesByTurn = $derived(groupSharesByTurn(sharedFiles))
   const turnsById = $derived(new Map(turns.map((turn) => [turn.turn_id, turn])))
   const busy = $derived(sessionState === 'busy')
   const showBottomStatus = $derived(sessionState === 'starting' || sessionState === 'exited' || sessionState === 'interrupted')
@@ -86,17 +84,6 @@
   let topHistoryPullDistance = $state(0)
   let topHistoryTouchStartY: number | null = null
   const TOP_HISTORY_PULL_THRESHOLD_PX = 96
-
-  /** Shares of each Turn, oldest first, each with its files in share order. */
-  function groupSharesByTurn(files: SharedFile[]): Map<string, SharedFile[][]> {
-    const shares = new Map<string, SharedFile[]>()
-    for (const file of [...files].sort((a, b) => a.created_at.localeCompare(b.created_at) || a.file_id.localeCompare(b.file_id))) {
-      if (file.turn_id) shares.set(file.share_id, [...(shares.get(file.share_id) ?? []), file])
-    }
-    const turns = new Map<string, SharedFile[][]>()
-    for (const share of shares.values()) turns.set(share[0].turn_id!, [...(turns.get(share[0].turn_id!) ?? []), share])
-    return turns
-  }
 
   onDestroy(() => {
     if (copiedMessageResetTimer) clearTimeout(copiedMessageResetTimer)
@@ -338,13 +325,14 @@
         </ul>
       {/if}
       {#if chatMessage.role === 'assistant'}
+        {@const attachments = splitAttachments(chatMessage.content, chatMessage.status === 'pending')}
         {#if chatMessage.thoughtSteps?.length}
           <ThoughtSummary steps={chatMessage.thoughtSteps} active={liveSegment && busy && !chatMessage.content.trim()} />
         {/if}
-        {#if chatMessage.content.trim()}
+        {#if attachments.text.trim()}
           <Message.Content class={chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''}>
             <Message.Response
-              content={chatMessage.content}
+              content={attachments.text}
               {sessionId}
               linkBase={workspace ? `${workspace.replace(/\/+$/, '')}/` : null}
               markdown
@@ -352,6 +340,9 @@
               streamId={chatMessage.id}
             />
           </Message.Content>
+        {/if}
+        {#if attachments.paths.length && sessionId}
+          <div class="w-full max-w-md" data-chat-message-files><SharedFiles paths={attachments.paths} {sessionId} /></div>
         {/if}
       {:else if !uploadParts || uploadParts.text.trim() || editingMessageId === chatMessage.id}
         <Message.Content class={`${chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''} ${editingMessageId === chatMessage.id ? 'w-full' : ''}`}>
@@ -467,11 +458,6 @@
           {#each displayTurn.items as displayItem (displayItem.id)}
             {@render conversationItem(displayItem, displayItem.id === liveMessageId)}
           {/each}
-          {#if displayTurn.turnId && sharesByTurn.get(displayTurn.turnId)?.length}
-            <ul class="max-w-md space-y-2" aria-label={$t('files.sharedInTurn')} data-chat-turn-files>
-              {#each sharesByTurn.get(displayTurn.turnId) ?? [] as share (share[0].share_id)}<li><SharedFiles files={share} {sessionId} /></li>{/each}
-            </ul>
-          {/if}
           {@render turnFooter(displayTurn, showProgress)}
           {#if showBottomStatus && index === displayTurns.length - 1}
             <AgentBottomStatus state={sessionState} class="py-0" />

@@ -51,7 +51,7 @@
   const path = $derived(current.path)
   const name = $derived(path.slice(path.lastIndexOf('/') + 1))
   const language = $derived(textFileLanguage(path))
-  const key = $derived(downloadKey(target.device.id, target.sessionId, { kind: 'path', path }))
+  const key = $derived(downloadKey(target.device.id, target.sessionId, { path }))
   const task = $derived($downloads.find(task => task.key === key))
   const receiving = $derived(task?.status === 'receiving')
   let text = $state<string | null>(null)
@@ -132,7 +132,7 @@
   }
 
   function download() {
-    downloads.start(target.device.id, target.sessionId, { kind: 'path', path }, name)
+    downloads.start(target.device.id, target.sessionId, { path }, name)
   }
 
   function previewFailure(cause: unknown): PreviewFailure {

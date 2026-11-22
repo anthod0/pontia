@@ -1,25 +1,25 @@
 import { responseSize } from "./save";
-import type { SharedFile } from "../../api/types";
+import type { FileInfo } from "../../api/sessionFiles";
 import type { DeviceRuntime } from "../../device/runtime";
 
 export const PREVIEW_LIMIT = 20 * 1024 * 1024;
 
 export const PREVIEW_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 
-export function canPreviewImage(file: SharedFile): boolean {
+export function canPreviewImage(file: FileInfo): boolean {
   return file.size <= PREVIEW_LIMIT && PREVIEW_TYPES.has(file.media_type);
 }
 
 export function createPreviews(device: DeviceRuntime) {
   const previews = new Map<string, Promise<string | null>>();
 
-  /** Object URL of a shared image, kept for the page lifetime and shared by every view of the file. */
-  async function sharedImageUrl(sessionId: string, fileId: string): Promise<string | null> {
-    const key = `${await device.access.uploadStorageScope()}:${fileId}`;
+  /** Object URL of an attached image, kept for the page lifetime and shared by every view of the file. */
+  async function imageUrl(sessionId: string, path: string): Promise<string | null> {
+    const key = JSON.stringify([await device.access.uploadStorageScope(), sessionId, path]);
     let preview = previews.get(key);
     if (!preview) {
       preview = device.fileApi
-        .sharedFileContent(sessionId, fileId)
+        .pathFileContent(sessionId, path)
         .then(readPreview)
         .then((blob) => blob && URL.createObjectURL(blob));
       previews.set(key, preview);
@@ -60,5 +60,5 @@ export function createPreviews(device: DeviceRuntime) {
       reader.releaseLock();
     }
   }
-  return { sharedImageUrl, pathImagePreview };
+  return { imageUrl, pathImagePreview };
 }

@@ -135,7 +135,6 @@ impl ProjectionState {
                 && event.event_type == EventType::SessionResuming)
             && !(session.state == SessionState::Error
                 && event.event_type == EventType::SessionExited)
-            && event.event_type != EventType::SessionFilesShared
             && event.event_type != EventType::SessionTitleUpdated
             && event.event_type != EventType::SessionContextUsageUpdated
             && event.event_type != EventType::SessionModelUpdated
@@ -193,8 +192,7 @@ impl ProjectionState {
                 };
                 self.apply_session(event, state)
             }
-            EventType::SessionFilesShared
-            | EventType::SessionCompactionStarted
+            EventType::SessionCompactionStarted
             | EventType::SessionCompactionCompleted
             | EventType::SessionCompactionFailed
             | EventType::RuntimeStarting

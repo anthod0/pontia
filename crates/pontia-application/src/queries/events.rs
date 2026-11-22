@@ -1,5 +1,5 @@
 use pontia_agent_control::EventStreamScope;
-use pontia_core::error::{Error, Result};
+use pontia_core::error::Result;
 use pontia_storage_sqlite::repositories::events::SqliteEventRepository;
 
 use super::ExternalQueryService;
@@ -21,12 +21,7 @@ impl ExternalQueryService {
             .list_session_stream_rows_after(after_rowid, limit)
             .await?;
 
-        self.enrich_file_events(
-            rows.into_iter()
-                .map(row_to_item)
-                .collect::<Result<Vec<_>>>()?,
-        )
-        .await
+        rows.into_iter().map(row_to_item).collect()
     }
 
     pub async fn list_event_stream_items_after(
@@ -52,28 +47,6 @@ impl ExternalQueryService {
             }
         };
 
-        self.enrich_file_events(
-            rows.into_iter()
-                .map(row_to_item)
-                .collect::<Result<Vec<_>>>()?,
-        )
-        .await
-    }
-    async fn enrich_file_events(
-        &self,
-        mut items: Vec<EventStreamItem>,
-    ) -> Result<Vec<EventStreamItem>> {
-        let files = pontia_storage_sqlite::repositories::session_files::SessionFileRepository::new(
-            self.pool.clone(),
-        );
-        for item in &mut items {
-            if item.event.fact.event_type == "session.files_shared" {
-                let id = item.event.fact.payload["share_id"]
-                    .as_str()
-                    .ok_or_else(|| Error::Domain("File event missing share_id".into()))?;
-                item.event.files = Some(files.share_files(&item.event.fact.session_id, id).await?);
-            }
-        }
-        Ok(items)
+        rows.into_iter().map(row_to_item).collect()
     }
 }

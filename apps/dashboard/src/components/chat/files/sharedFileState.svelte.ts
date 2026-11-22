@@ -2,33 +2,33 @@ import { fromStore } from "svelte/store";
 import { translate } from "$lib/i18n";
 import { downloads, downloadKey } from "$lib/downloads/manager";
 import { canPreviewImage } from "$lib/downloads/preview";
+import { isImagePath } from "$lib/downloads/localFilePath";
 import { ApiError } from "../../../api/errors";
-import type { SharedFile } from "../../../api/types";
+import type { FileInfo } from "../../../api/sessionFiles";
+import type { AttachedFile } from "../../../api/types";
 import type { DeviceRuntime } from "../../../device/runtime";
 
 const tasks = fromStore(downloads);
 
-/** Download and preview state of one shared file, shared by every view of it in a card. */
+/** Download and preview state of one attached file, shared by every view of it in a card. */
 export class SharedFileState {
-  readonly device: DeviceRuntime;
-  readonly sessionId: string;
-  readonly file: SharedFile;
-  readonly image: boolean;
   readonly key: string;
   readonly stem: string;
   readonly extension: string;
+  /** Size and type read when the file first scrolls into view. */
+  info = $state<FileInfo | null>(null);
   /** Object URL of the image preview; null when the content is not a previewable image. */
   imageUrl = $state<string | null | undefined>(undefined);
-  // Loading an image preview reads the same file, so its failure also tells whether the file is gone.
-  private previewFailure = $state<Error | null>(null);
-  private previewRequested = false;
+  // Reading the file's details or image also tells whether the file is gone.
+  private loadFailure = $state<Error | null>(null);
+  private requested = false;
 
-  constructor(device: DeviceRuntime, sessionId: string, file: SharedFile) {
-    this.device = device;
-    this.sessionId = sessionId;
-    this.file = file;
-    this.image = canPreviewImage(file);
-    this.key = downloadKey(device.id, sessionId, { kind: "shared", fileId: file.file_id });
+  constructor(
+    readonly device: DeviceRuntime,
+    readonly sessionId: string,
+    readonly file: AttachedFile,
+  ) {
+    this.key = downloadKey(device.id, sessionId, { path: file.path });
     const dot = file.name.lastIndexOf(".");
     this.stem = dot > 0 ? file.name.slice(0, dot) : file.name;
     this.extension = dot > 0 ? file.name.slice(dot + 1) : "";
@@ -40,51 +40,57 @@ export class SharedFileState {
   readonly percent = $derived(
     this.progress?.total ? (this.progress.received / this.progress.total) * 100 : null,
   );
-  private readonly previewMissing = $derived(
-    this.previewFailure instanceof ApiError && this.previewFailure.code === "not_found",
+  private readonly loadMissing = $derived(
+    this.loadFailure instanceof ApiError && this.loadFailure.code === "not_found",
   );
-  // A download started after a failed preview supersedes the preview's error.
+  // A download started after a failed load supersedes the load's error.
   readonly failure = $derived(
     this.task
       ? this.task.status === "failed"
         ? this.task.error
         : null
-      : this.previewFailure
-        ? this.previewMissing
+      : this.loadFailure
+        ? this.loadMissing
           ? translate("files.missing")
-          : this.previewFailure.message
+          : this.loadFailure.message
         : null,
   );
   readonly missing = $derived(
     this.task
       ? this.task.status === "failed" && this.task.errorCode === "not_found"
-      : this.previewMissing,
+      : this.loadMissing,
   );
-  /** Whether the image preview can show, or is still loading. */
-  get showImage(): boolean {
-    return this.image && this.imageUrl !== null && !this.previewFailure && !this.missing;
+  /** Whether the file can show as an image; judged by its name until its details load. */
+  get image(): boolean {
+    return this.info ? canPreviewImage(this.info) : isImagePath(this.file.path);
   }
 
-  loadPreview() {
-    if (!this.image || this.previewRequested) return;
-    this.previewRequested = true;
-    void this.device.previews
-      .sharedImageUrl(this.sessionId, this.file.file_id)
-      .then((url) => {
-        this.imageUrl = url;
+  /** Whether the image preview can show, or is still loading. */
+  get showImage(): boolean {
+    return this.image && this.imageUrl !== null && !this.loadFailure && !this.missing;
+  }
+
+  /** Reads the file's details, then its image preview when it is an image. */
+  load() {
+    if (this.requested) return;
+    this.requested = true;
+    const fail = (cause: unknown) => {
+      this.loadFailure = cause instanceof Error ? cause : new Error(String(cause));
+    };
+    void this.device.fileApi
+      .pathFileInfo(this.sessionId, this.file.path)
+      .then((info) => {
+        this.info = info;
+        if (!canPreviewImage(info)) return;
+        return this.device.previews.imageUrl(this.sessionId, this.file.path).then((url) => {
+          this.imageUrl = url;
+        });
       })
-      .catch((cause) => {
-        this.previewFailure = cause instanceof Error ? cause : new Error(String(cause));
-      });
+      .catch(fail);
   }
 
   download() {
-    downloads.start(
-      this.device.id,
-      this.sessionId,
-      { kind: "shared", fileId: this.file.file_id },
-      this.file.name,
-    );
+    downloads.start(this.device.id, this.sessionId, { path: this.file.path }, this.file.name);
   }
 
   cancel() {
@@ -92,13 +98,12 @@ export class SharedFileState {
   }
 }
 
-/** Loads the image preview once the element scrolls into view. */
-export function observePreview(node: HTMLElement, state: SharedFileState) {
-  if (!state.image) return;
+/** Loads the file's details and preview once the element scrolls into view. */
+export function observeFile(node: HTMLElement, state: SharedFileState) {
   const observer = new IntersectionObserver((entries) => {
     if (!entries.some((entry) => entry.isIntersecting)) return;
     observer.disconnect();
-    state.loadPreview();
+    state.load();
   });
   observer.observe(node);
   return { destroy: () => observer.disconnect() };

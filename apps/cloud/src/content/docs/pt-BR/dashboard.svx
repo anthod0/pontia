@@ -46,15 +46,22 @@ A página do chat transmite a conversa e as etapas de trabalho expostas pelo Age
 
 O Inbox acompanha as mensagens enviadas que aguardam entrega ou que estão na fila de um Agent Client.
 
-## Arquivos compartilhados
+## Arquivos nas respostas
 
-Um agente pode compartilhar arquivos da Session dele executando `pontia send-file PATH...`. Arquivos compartilhados juntos aparecem em um único card no fim do Turn, onde você pode baixar cada arquivo ou clicar em **Download all** para baixar todos os que ainda existem. Um card com mais de seis arquivos mostra os quatro primeiros até você clicar em **Show more**. Quando todos os arquivos de um card são imagens, o card mostra as imagens juntas; clique no botão de lista para ver os nomes e tamanhos. Imagens e arquivos de texto e código também podem ser visualizados; outros arquivos, como vídeos, PDFs e arquivos compactados, só podem ser baixados. Abra **Shared files** no menu do compositor para listar todos os arquivos compartilhados na Session. O Pontia lê o arquivo do dispositivo no momento do download, então um arquivo que foi movido ou excluído deixa de estar disponível.
+Um agente mostra um arquivo escrevendo o caminho absoluto dele em uma resposta. Um link Markdown como `[report](/work/report.pdf)` aparece no texto; clique nele para visualizar ou baixar o arquivo. Para anexar arquivos, o agente escreve um bloco de anexos, um bloco de código com a linguagem `attachments` e um caminho absoluto por linha:
 
-Quando um Bot compartilhar arquivos, eles aparecem na conversa com o Bot em um card com o tipo e o tamanho de cada arquivo. Imagens aparecem na própria conversa e abrem em tamanho real ao clicar; o visualizador navega pelas outras imagens do mesmo card; clique em um arquivo de texto ou código para visualizá-lo. Clique no botão de download para salvar qualquer arquivo.
+```attachments
+/work/report.pdf
+/work/chart.png
+```
+
+Os arquivos aparecem em um único card abaixo da resposta, onde você pode baixar cada arquivo ou clicar em **Download all** para baixar todos os que ainda existem. Um card com mais de seis arquivos mostra os quatro primeiros até você clicar em **Show more**. Quando todos os arquivos de um card são imagens, o card mostra as imagens juntas; clique no botão de lista para ver os nomes e tamanhos. Imagens e arquivos de texto e código também podem ser visualizados; outros arquivos, como vídeos, PDFs e arquivos compactados, só podem ser baixados. O Pontia lê o arquivo do dispositivo quando você o abre ou baixa, então um arquivo que foi movido ou excluído deixa de estar disponível.
+
+Quando um Bot anexar arquivos a uma resposta, eles aparecem na conversa com o Bot em um card com o tipo e o tamanho de cada arquivo. Imagens aparecem na própria conversa e abrem em tamanho real ao clicar; o visualizador navega pelas outras imagens do mesmo card; clique em um arquivo de texto ou código para visualizá-lo. Clique no botão de download para salvar qualquer arquivo.
 
 ## Citar uma mensagem na conversa com um Bot
 
-Na conversa com um Bot, clique com o botão direito em uma mensagem, ou no botão **⋯** que aparece ao lado dela quando você passa o mouse, e escolha **Reply**. Para um arquivo ou imagem compartilhado, escolha **Quote file** ou **Quote image** no mesmo menu. Para citar parte de uma mensagem, selecione o trecho e escolha **Quote** acima da seleção. No celular, toque e segure a mensagem; o menu também oferece **Copy** e **Select text**. Shift+clique com o botão direito abre o menu do próprio navegador.
+Na conversa com um Bot, clique com o botão direito em uma mensagem, ou no botão **⋯** que aparece ao lado dela quando você passa o mouse, e escolha **Reply**. Para um arquivo ou imagem anexado, escolha **Quote file** ou **Quote image** no mesmo menu. Para citar parte de uma mensagem, selecione o trecho e escolha **Quote** acima da seleção. No celular, toque e segure a mensagem; o menu também oferece **Copy** e **Select text**. Shift+clique com o botão direito abre o menu do próprio navegador.
 
 A citação aparece acima do compositor; clique em **×** para removê-la. Citar outra mensagem substitui a atual, e é preciso escrever um texto para enviar uma citação. O Bot recebe o texto citado completo. Clique em uma citação em uma mensagem enviada para voltar à original, mesmo que ela esteja no histórico mais antigo.
 

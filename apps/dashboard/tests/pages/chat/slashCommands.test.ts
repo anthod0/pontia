@@ -323,7 +323,7 @@ function menuLayout(menu: HTMLElement): string[] {
   );
 }
 
-test("chat actions group session operations with shared files next to compaction and exit last", async () => {
+test("chat actions group session operations with compaction before exit last", async () => {
   renderChat("", { capabilities: { manual_compaction: true } });
   await openChatActions();
   const menu = await screen.findByRole("menu", { hidden: true });
@@ -334,7 +334,6 @@ test("chat actions group session operations with shared files next to compaction
     "Pin",
     "Archive",
     "---",
-    "Shared files",
     "Compact context",
     "---",
     "Exit",
@@ -352,8 +351,6 @@ test("chat actions drop empty groups without leaving extra separators", async ()
     "---",
     "Rename",
     "Unarchive",
-    "---",
-    "Shared files",
   ]);
 });
 

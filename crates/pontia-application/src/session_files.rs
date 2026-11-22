@@ -1,22 +1,18 @@
 use pontia_core::{Error, Result};
-use pontia_storage_sqlite::repositories::session_files::SessionFileRepository;
-use serde::Serialize;
 use sqlx::SqlitePool;
 use std::{
     fs::File,
     io::{Read, Seek},
     path::{Path, PathBuf},
 };
-use uuid::Uuid;
 
-pub use pontia_storage_sqlite::models::session_files::SharedFile;
 pub const MAX_FILE_SIZE: u64 = 1 << 30;
 
 #[derive(Debug, thiserror::Error)]
 pub enum FileContentError {
     #[error("File no longer exists")]
     NotFound,
-    #[error("File path has changed; ask the Agent to share it again")]
+    #[error("File path has changed")]
     PathChanged,
     #[error("File exceeds the 1 GiB download limit")]
     TooLarge,
@@ -24,31 +20,21 @@ pub enum FileContentError {
     Internal(#[from] Error),
 }
 
-pub struct SharedFileContent {
+pub struct FileContent {
     pub file: File,
     pub size: u64,
     pub media_type: &'static str,
     pub name: String,
 }
 
-#[derive(Serialize)]
-pub struct SharedFilePage {
-    pub files: Vec<SharedFile>,
-    pub next_cursor: Option<String>,
-}
-
 #[derive(Clone)]
 pub struct SessionFileService {
     pool: SqlitePool,
-    repository: SessionFileRepository,
 }
 
 impl SessionFileService {
     pub fn new(pool: SqlitePool) -> Self {
-        Self {
-            repository: SessionFileRepository::new(pool.clone()),
-            pool,
-        }
+        Self { pool }
     }
 
     async fn ensure_session(&self, session_id: &str) -> Result<()> {
@@ -64,85 +50,11 @@ impl SessionFileService {
         Ok(())
     }
 
-    /// Shares `paths` as one batch. Either every path is valid and shared, or nothing is;
-    /// the error names the first invalid path.
-    pub async fn share(&self, session_id: &str, paths: Vec<PathBuf>) -> Result<Vec<SharedFile>> {
-        self.ensure_session(session_id).await?;
-        if paths.is_empty() {
-            return Err(Error::Domain("At least one file path is required".into()));
-        }
-        let files = tokio::task::spawn_blocking(move || {
-            let share_id = format!("share_{}", Uuid::now_v7());
-            let created_at = pontia_core::time::utc_now()
-                .format(&time::format_description::well_known::Rfc3339)
-                .expect("UTC timestamp");
-            paths
-                .iter()
-                .map(|path| {
-                    declare(path, &share_id, &created_at)
-                        .map_err(|reason| Error::Domain(format!("{}: {reason}", path.display())))
-                })
-                .collect::<Result<Vec<_>>>()
-        })
-        .await
-        .map_err(|e| Error::Io(std::io::Error::other(e)))??;
-        self.repository
-            .share(
-                session_id,
-                files,
-                &pontia_core::ids::new_event_id().to_string(),
-            )
-            .await
-    }
-
-    pub async fn list(
-        &self,
-        session_id: &str,
-        limit: Option<i64>,
-        cursor: Option<&str>,
-    ) -> Result<SharedFilePage> {
-        self.ensure_session(session_id).await?;
-        let limit = limit.unwrap_or(50);
-        if !(1..=200).contains(&limit) {
-            return Err(Error::Domain("limit must be between 1 and 200".into()));
-        }
-        let mut files = self.repository.list(session_id, limit + 1, cursor).await?;
-        let next_cursor = if files.len() > limit as usize {
-            files.truncate(limit as usize);
-            files.last().map(|f| f.file_id.clone())
-        } else {
-            None
-        };
-        Ok(SharedFilePage { files, next_cursor })
-    }
-
-    pub async fn content(
-        &self,
-        session_id: &str,
-        file_id: &str,
-    ) -> std::result::Result<SharedFileContent, FileContentError> {
-        let record = self
-            .repository
-            .get(session_id, file_id)
-            .await?
-            .ok_or(FileContentError::NotFound)?;
-        tokio::task::spawn_blocking(move || {
-            let path = Path::new(&record.path);
-            let current = path.canonicalize().map_err(content_io_error)?;
-            if current != path {
-                return Err(FileContentError::PathChanged);
-            }
-            read_content(path, record.name)
-        })
-        .await
-        .map_err(|e| FileContentError::Internal(Error::Io(std::io::Error::other(e))))?
-    }
-
     pub async fn path_content(
         &self,
         session_id: &str,
         path: PathBuf,
-    ) -> std::result::Result<SharedFileContent, FileContentError> {
+    ) -> std::result::Result<FileContent, FileContentError> {
         self.ensure_session(session_id).await?;
         if !path.is_absolute() {
             return Err(Error::Domain("An absolute file path is required".into()).into());
@@ -161,48 +73,13 @@ impl SessionFileService {
     }
 }
 
-fn declare(
-    path: &Path,
-    share_id: &str,
-    created_at: &str,
-) -> std::result::Result<SharedFile, String> {
-    if !path.is_absolute() {
-        return Err("An absolute file path is required".into());
-    }
-    let path = path.canonicalize().map_err(|e| e.to_string())?;
-    let (file, media_type) = open_file(&path).map_err(|e| e.to_string())?;
-    let size = file.metadata().map_err(|e| e.to_string())?.len();
-    if size > MAX_FILE_SIZE {
-        return Err("File exceeds the 1 GiB download limit".into());
-    }
-    let name = path
-        .file_name()
-        .and_then(|s| s.to_str())
-        .ok_or("File name must be UTF-8")?
-        .to_owned();
-    let path = path.to_str().ok_or("File path must be UTF-8")?.to_owned();
-    Ok(SharedFile {
-        file_id: format!("file_{}", Uuid::now_v7()),
-        share_id: share_id.into(),
-        turn_id: None,
-        path,
-        name,
-        size: size as i64,
-        media_type: media_type.into(),
-        created_at: created_at.into(),
-    })
-}
-
-fn read_content(
-    path: &Path,
-    name: String,
-) -> std::result::Result<SharedFileContent, FileContentError> {
+fn read_content(path: &Path, name: String) -> std::result::Result<FileContent, FileContentError> {
     let (file, media_type) = open_file(path).map_err(content_io_error)?;
     let size = file.metadata().map_err(content_io_error)?.len();
     if size > MAX_FILE_SIZE {
         return Err(FileContentError::TooLarge);
     }
-    Ok(SharedFileContent {
+    Ok(FileContent {
         file,
         size,
         media_type,

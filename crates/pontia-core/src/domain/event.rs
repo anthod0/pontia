@@ -45,8 +45,6 @@ impl std::str::FromStr for EventSource {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum EventType {
-    #[serde(rename = "session.files_shared")]
-    SessionFilesShared,
     #[serde(rename = "session.created")]
     SessionCreated,
     #[serde(rename = "session.starting")]
@@ -209,7 +207,6 @@ impl EventType {
 impl std::fmt::Display for EventType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            Self::SessionFilesShared => "session.files_shared",
             Self::SessionCreated => "session.created",
             Self::SessionStarting => "session.starting",
             Self::SessionResuming => "session.resuming",
@@ -256,7 +253,6 @@ impl std::str::FromStr for EventType {
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
-            "session.files_shared" => Ok(Self::SessionFilesShared),
             "session.created" => Ok(Self::SessionCreated),
             "session.starting" => Ok(Self::SessionStarting),
             "session.resuming" => Ok(Self::SessionResuming),

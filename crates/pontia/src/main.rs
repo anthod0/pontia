@@ -49,7 +49,7 @@ Configuration and state live in $PONTIA_HOME (default: ~/.pontia).
 
 For documentation, see https://pontia.dev/llms.txt";
 
-const AGENT_TOOLS: [&str; 3] = ["send-file", "workflow", "bot"];
+const AGENT_TOOLS: [&str; 2] = ["workflow", "bot"];
 
 const INIT_HELP: &str = "\
 Prompts on the terminal. Rerunning checks the service and defaults to enabled clients.
@@ -102,15 +102,6 @@ struct Cli {
 enum Command {
     #[command(hide = true)]
     WorkspaceCheck { path: PathBuf },
-    /// Share files with the user of the current Session
-    #[command(
-        after_help = "Files given together appear as one card. If any path is invalid, no file is shared.\nPrints one file ID per line. Files are read when the user downloads them."
-    )]
-    SendFile {
-        /// Files to share
-        #[arg(required = true)]
-        paths: Vec<PathBuf>,
-    },
     /// Configure Pontia interactively and start its per-user service
     #[command(after_help = INIT_HELP)]
     Init,
@@ -283,11 +274,6 @@ async fn execute(command: Command) -> Result<bool, String> {
                 );
             }
             result.map(|_| true)
-        }
-        Command::SendFile { paths } => {
-            let config = pontia_clients::config_from_env().map_err(|e| e.to_string())?;
-            println!("{}", pontia::send_file::run(paths, &config).await?);
-            Ok(true)
         }
         Command::Client(command) => {
             let config = pontia_clients::config_from_env().map_err(|error| error.to_string())?;

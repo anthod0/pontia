@@ -1,6 +1,5 @@
-use super::{ApiError, response::ok};
+use super::ApiError;
 use axum::{
-    Json,
     body::Body,
     extract::{Path, Query, State},
     http::{StatusCode, header},
@@ -8,59 +7,10 @@ use axum::{
 };
 use pontia_application::{
     AppState,
-    session_files::{FileContentError, SessionFileService, SharedFileContent},
+    session_files::{FileContent, FileContentError, SessionFileService},
 };
 use serde::Deserialize;
-use serde_json::json;
 use tokio::io::AsyncReadExt;
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ShareFilesRequest {
-    paths: Vec<std::path::PathBuf>,
-}
-
-#[derive(Deserialize)]
-pub struct FileListQuery {
-    limit: Option<i64>,
-    cursor: Option<String>,
-}
-
-pub async fn share_files(
-    State(state): State<AppState>,
-    Path(session_id): Path<String>,
-    Json(request): Json<ShareFilesRequest>,
-) -> Result<Response, ApiError> {
-    let files = SessionFileService::new(state.db())
-        .share(&session_id, request.paths)
-        .await?;
-    Ok((
-        StatusCode::CREATED,
-        ok(json!({"share_id": files[0].share_id, "files": files})),
-    )
-        .into_response())
-}
-
-pub async fn list_session_files(
-    State(state): State<AppState>,
-    Path(session_id): Path<String>,
-    Query(query): Query<FileListQuery>,
-) -> Result<Response, ApiError> {
-    let page = SessionFileService::new(state.db())
-        .list(&session_id, query.limit, query.cursor.as_deref())
-        .await?;
-    Ok(ok(json!(page)).into_response())
-}
-
-pub async fn shared_file_content(
-    State(state): State<AppState>,
-    Path((session_id, file_id)): Path<(String, String)>,
-) -> Result<Response, ApiError> {
-    let content = SessionFileService::new(state.db())
-        .content(&session_id, &file_id)
-        .await;
-    file_response(content)
-}
 
 #[derive(Deserialize)]
 pub struct FileContentQuery {
@@ -78,9 +28,7 @@ pub async fn path_file_content(
     file_response(content)
 }
 
-fn file_response(
-    content: Result<SharedFileContent, FileContentError>,
-) -> Result<Response, ApiError> {
+fn file_response(content: Result<FileContent, FileContentError>) -> Result<Response, ApiError> {
     let content = content.map_err(|e| match e {
         FileContentError::NotFound => ApiError::not_found(e.to_string()),
         FileContentError::PathChanged => {

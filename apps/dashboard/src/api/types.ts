@@ -70,17 +70,7 @@ export interface BotNotice {
   created_at: string;
 }
 
-/** One `pontia send-file` call; `id` is its share ID. */
-export interface BotSharedFiles {
-  id: string;
-  kind: "shared_files";
-  session_id: string;
-  created_at: string;
-  /** In share order. */
-  files: SharedFile[];
-}
-
-export type BotEntry = BotMessage | BotNotice | BotSharedFiles;
+export type BotEntry = BotMessage | BotNotice;
 
 export interface BotMessagePage {
   open_todo_count: number;
@@ -521,20 +511,13 @@ export interface InboxMessageView {
   cancelled_at: string | null;
 }
 
-export interface SharedFile {
-  file_id: string;
-  share_id: string;
-  turn_id: string | null;
-  name: string;
+/** A file of a message's attachments block. */
+export interface AttachedFile {
   path: string;
-  size: number;
-  media_type: string;
-  created_at: string;
+  name: string;
 }
 
 export interface EventView {
-  /** Files of a `session.files_shared` event, in share order. */
-  files?: SharedFile[];
   event_id: string;
   session_id: string;
   turn_id: string | null;

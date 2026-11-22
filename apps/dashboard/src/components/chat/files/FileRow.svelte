@@ -9,7 +9,7 @@
   import FileXIcon from 'phosphor-svelte/lib/FileXIcon'
   import FileDetails from './FileDetails.svelte'
   import FileAction from './FileAction.svelte'
-  import { observePreview, type SharedFileState } from './sharedFileState.svelte'
+  import { observeFile, type SharedFileState } from './sharedFileState.svelte'
 
   /** One file as an icon or thumbnail, its name and status, and its download action. */
   let { itemActions, state, onenlarge, class: className = '', ...rest }: HTMLAttributes<HTMLDivElement> & {
@@ -24,7 +24,7 @@
   const thumbnail = $derived(state.showImage && onenlarge)
 </script>
 
-<div use:observePreview={state} class={['flex items-center gap-2', state.missing && 'opacity-80', className]} data-file-row {...rest}>
+<div use:observeFile={state} class={['flex items-center gap-2', state.missing && 'opacity-80', className]} data-file-row {...rest}>
   {#snippet icon()}
     {#if state.missing}
       <div class="grid size-11 shrink-0 place-items-center rounded-xl bg-background text-muted-foreground"><FileXIcon class="size-6" /></div>

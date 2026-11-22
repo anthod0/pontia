@@ -162,8 +162,8 @@ fn dashboard_sse_stream(
                     .id(format!("session:{cursor}"))
                     .event("dashboard_event")
                     .json_data(DashboardStreamEvent::SessionEvent {
-                        id: item.event.fact.event_id.clone(),
-                        occurred_at: item.event.fact.time.clone(),
+                        id: item.event.event_id.clone(),
+                        occurred_at: item.event.time.clone(),
                         event: item.event,
                     });
                 let Ok(event) = event else {

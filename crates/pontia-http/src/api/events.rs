@@ -159,7 +159,7 @@ fn event_sse_stream(
 
             for item in items {
                 cursor = item.rowid;
-                let event_id = item.event.fact.event_id.clone();
+                let event_id = item.event.event_id.clone();
                 let event = Event::default()
                     .id(event_id)
                     .event("domain_event")

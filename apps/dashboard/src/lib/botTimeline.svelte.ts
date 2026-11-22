@@ -4,9 +4,7 @@ import type {
   BotMessage,
   BotMessagePage,
   BotNotice,
-  BotSharedFiles,
   BotWorkStatus,
-  SharedFile,
 } from "../api/types";
 import { ApiError } from "../api/errors";
 import type { DeviceRuntime } from "../device/runtime";
@@ -88,24 +86,9 @@ export class BotTimeline {
     void this.drain();
   }
 
-  /** The loaded entry with this ID, or the file share containing this file ID. */
-  entryId(id: string): string | null {
-    return this.known.has(id) ? id : (this.sharedFile(id)?.share.id ?? null);
-  }
-
-  /** A loaded shared file and the share it belongs to. */
-  sharedFile(fileId: string): { share: BotSharedFiles; file: SharedFile } | null {
-    for (const row of this.known.values()) {
-      if (row.kind !== "shared_files") continue;
-      const file = row.files.find((file) => file.file_id === fileId);
-      if (file) return { share: row, file };
-    }
-    return null;
-  }
-
-  /** Loads history back to an entry or shared file. Resolves false when this Bot has no such entry. */
+  /** Loads history back to an entry. Resolves false when this Bot has no such entry. */
   reveal(id: string): Promise<boolean> {
-    if (this.entryId(id)) return Promise.resolve(true);
+    if (this.known.has(id)) return Promise.resolve(true);
     return new Promise((resolve, reject) => {
       this.revealRequest?.resolve(false);
       this.revealRequest = { id, resolve, reject };
@@ -194,12 +177,12 @@ export class BotTimeline {
       if (error instanceof ApiError && error.status === 404) return false;
       throw error;
     }
-    while (!this.entryId(id) && this.before) {
+    while (!this.known.has(id) && this.before) {
       const page = await this.page({ before: this.before, limit: 100 });
       this.merge(page.entries);
       this.before = page.next_before;
     }
-    return this.entryId(id) !== null;
+    return this.known.has(id);
   }
 
   private async verifyVisible() {
@@ -255,7 +238,7 @@ export class BotTimeline {
       this.before = latest.next_before;
     }
     if (rotated) {
-      this.entries = this.entries.filter((row) => "content" in row || row.kind === "shared_files");
+      this.entries = this.entries.filter((row) => "content" in row);
       this.known.clear();
       for (const row of this.entries) this.known.set(row.id, row);
       this.rebaseHistory = this.before !== null;

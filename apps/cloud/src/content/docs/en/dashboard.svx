@@ -46,15 +46,22 @@ The chat page streams the conversation and work steps exposed by the Agent Clien
 
 The Inbox tracks submitted messages waiting for delivery or queued by an Agent Client.
 
-## Shared files
+## Files in replies
 
-An agent can share files from its Session by running `pontia send-file PATH...`. Files shared together appear as one card at the end of the Turn, where you can download each file or click **Download all** to download every file that still exists. A card of more than six files shows the first four until you click **Show more**. When every file in a card is an image, the card shows the images together; click the list button to see their names and sizes. Images, text, and code files can also be previewed; other files, such as videos, PDFs, and archives, are download-only. Open **Shared files** in the composer menu to list every file shared in the Session. Pontia reads the file from the device when you download it, so a file that was moved or deleted is no longer available.
+An agent shows you a file by writing its absolute path in a reply. A Markdown link such as `[report](/work/report.pdf)` appears in the text; click it to preview or download the file. To attach files, the agent writes an attachments block, a code block with the language `attachments` and one absolute path per line:
 
-When a Bot shares files, they appear in the Bot chat as a card with each file's type and size. Images are shown inline and open full size when clicked; the viewer pages through the other images of the same card. Click a text or code file to preview it. Click the download button to save any file.
+```attachments
+/work/report.pdf
+/work/chart.png
+```
+
+The files appear as one card below the reply, where you can download each file or click **Download all** to download every file that still exists. A card of more than six files shows the first four until you click **Show more**. When every file in a card is an image, the card shows the images together; click the list button to see their names and sizes. Images, text, and code files can also be previewed; other files, such as videos, PDFs, and archives, are download-only. Pontia reads the file from the device when you open or download it, so a file that was moved or deleted is no longer available.
+
+When a Bot attaches files to a reply, they appear in the Bot chat as a card with each file's type and size. Images are shown inline and open full size when clicked; the viewer pages through the other images of the same card. Click a text or code file to preview it. Click the download button to save any file.
 
 ## Quote a Bot chat message
 
-In a Bot chat, right-click a message, or click the **⋯** button that appears next to it when you hover over it, and choose **Reply**. For one shared file or image, choose **Quote file** or **Quote image** from the same menu. To quote part of a message, select it and choose **Quote** above the selection. On a phone, press and hold a message; the menu also offers **Copy** and **Select text**. Shift+right-click opens the browser's own menu.
+In a Bot chat, right-click a message, or click the **⋯** button that appears next to it when you hover over it, and choose **Reply**. For one attached file or image, choose **Quote file** or **Quote image** from the same menu. To quote part of a message, select it and choose **Quote** above the selection. On a phone, press and hold a message; the menu also offers **Copy** and **Select text**. Shift+right-click opens the browser's own menu.
 
 The quote appears above the composer; click **×** to remove it. Quoting another message replaces it, and a message needs text to be sent with a quote. The Bot receives the full quoted text. Click a quote in a sent message to scroll back to the original, even when it is in older history.
 

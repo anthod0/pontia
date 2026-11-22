@@ -16,5 +16,5 @@
 {:else if state.failure}
   <p class={['text-xs [overflow-wrap:anywhere]', state.missing ? 'text-muted-foreground' : 'text-destructive']} role="alert">{state.failure}</p>
 {:else}
-  <p class="truncate text-xs text-muted-foreground tabular-nums">{state.extension ? state.extension.toUpperCase() : $t('files.file')} · {size(state.file.size)}</p>
+  <p class="truncate text-xs text-muted-foreground tabular-nums">{[state.extension ? state.extension.toUpperCase() : $t('files.file'), state.info && size(state.info.size)].filter(Boolean).join(' · ')}</p>
 {/if}
