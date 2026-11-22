@@ -11,7 +11,6 @@ import { createInboxRecovery } from "../stores/inboxRecovery";
 import { createSessions } from "../stores/sessions";
 import { createWorkflows } from "../stores/workflows";
 import { createTimeline } from "../stores/timeline";
-import { createSessionFiles } from "../stores/sessionFiles";
 import { createSessionQueries } from "../queries/sessions";
 import { createWorkspaceQueries } from "../queries/workspaces";
 import { createWorkflowQueries } from "../queries/workflows";
@@ -96,11 +95,6 @@ export class DeviceRuntime {
   private _timeline?: ReturnType<typeof createTimeline>;
   get timeline(): ReturnType<typeof createTimeline> {
     return (this._timeline ??= createTimeline(this));
-  }
-
-  private _sessionFiles?: ReturnType<typeof createSessionFiles>;
-  get sessionFiles(): ReturnType<typeof createSessionFiles> {
-    return (this._sessionFiles ??= createSessionFiles(this));
   }
 
   private _sessionQueries?: ReturnType<typeof createSessionQueries>;

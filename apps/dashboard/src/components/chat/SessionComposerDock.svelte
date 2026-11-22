@@ -1,14 +1,10 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
-  import type { SessionFilesStore } from '../../stores/sessionFiles'
   import type { InboxDeliveryPolicy, InboxMessageView, SessionView, WorkspaceGitStatusView } from '../../api/types'
   import { canSendSessionMessage } from '$lib/session-chat/sessionChat'
   import MessageComposer from './MessageComposer.svelte'
   import QueuedMessages from './QueuedMessages.svelte'
   import InboxSubmissionRecovery from './InboxSubmissionRecovery.svelte'
-  import SessionFiles from './SessionFiles.svelte'
-  import FilesIcon from 'phosphor-svelte/lib/FilesIcon'
-  import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import SessionMetadata from './SessionMetadata.svelte'
   import { type SessionMetadataItem } from './sessionMetadata'
   import type { ChatCommand } from '$lib/chatCommands'
@@ -17,7 +13,6 @@
 
   interface Props {
     session: SessionView
-    sharedFiles: SessionFilesStore
     gitStatus?: WorkspaceGitStatusView
     metadataItems: SessionMetadataItem[]
     metadataSummary: string
@@ -47,7 +42,6 @@
 
   let {
     session,
-    sharedFiles,
     gitStatus,
     metadataItems,
     metadataSummary,
@@ -74,8 +68,6 @@
     onTogglePin,
     onToggleArchive,
   }: Props = $props()
-
-  let sharedFilesOpen = $state(false)
 
   let composerDisabled = $derived(submitting || actionBusy)
   let interruptMode = $derived(isExecutingSessionState(session.state) && session.capabilities?.interrupt === true && input.trim() === '')
@@ -120,15 +112,7 @@
       onRetry={onRetryInboxMessage}
       onDismiss={onDismissInboxMessage}
     />
-    <SessionFiles sessionId={session.session_id} files={sharedFiles} bind:open={sharedFilesOpen} />
     <MessageComposer draftId={`session:${session.session_id}`} bind:value={input} {commands} workspaceId={session.workspace_id} busy={submitting} disabled={composerDisabled} submitDisabled={!canSend} fullscreen {autofocus} {interruptMode} interruptBusy={actionBusy} onSubmit={onSend} {onInterrupt} {onFocus}>
-      {#snippet menuItems()}
-        <DropdownMenu.Item onSelect={() => { sharedFilesOpen = true }}>
-          <FilesIcon class="size-4" />
-          <span class="min-w-0 flex-1">{$t('files.shared')}</span>
-          <span class="text-xs text-muted-foreground">{$sharedFiles.files.length}</span>
-        </DropdownMenu.Item>
-      {/snippet}
       {#snippet header()}
         <SessionMetadata {session} {gitStatus} {metadataItems} {metadataSummary} {onRefreshGitStatus} />
       {/snippet}

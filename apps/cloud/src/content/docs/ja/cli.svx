@@ -76,13 +76,7 @@ pontia completions powershell | Out-String | Invoke-Expression
 
 ## エージェントツール
 
-`pontia --help` では、`send-file` と `workflow` が Agent tools の下に表示されます。
-
-### ファイル
-
-| コマンド | 実行場所 | 用途 |
-| --- | --- | --- |
-| `pontia send-file PATH...` | Pontia Session 内 | ファイルを Session のユーザーと共有します。一緒に指定したファイルは Dashboard のチャットに 1 枚のカードとして表示されます。無効なパスが 1 つでもあると、何も共有されません |
+`pontia --help` では、`workflow` と `bot` が Agent tools の下に表示されます。
 
 ### Workflow
 

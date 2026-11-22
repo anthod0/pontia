@@ -4,8 +4,8 @@ import SharedFilePreviewHarness from "./SharedFilePreviewHarness.svelte";
 import { get } from "svelte/store";
 import { downloads } from "../../src/lib/downloads/manager";
 import { testDevice } from "../deviceFixture";
-import { ApiError } from "../../src/api/errors";
 import { token } from "../../src/stores/auth";
+import { VisibleObserver } from "./fileCardFixture";
 
 beforeEach(() => {
   token.set("shared-preview-token");
@@ -17,22 +17,10 @@ afterEach(() => {
   token.set("");
 });
 
-test("previews a shared text file in the file preview panel", async () => {
+test("an attached text file opens in the file preview panel", async () => {
   const fetch = vi.fn().mockResolvedValue(new Response("# Notes\n"));
   vi.stubGlobal("fetch", fetch);
-  render(SharedFilePreviewHarness, {
-    sharedFiles: [
-      {
-        file_id: "file-1",
-        turn_id: "t1",
-        name: "notes.md",
-        path: "/tmp/out/notes.md",
-        size: 8,
-        media_type: "application/octet-stream",
-        created_at: "2026-06-11T00:00:05Z",
-      },
-    ],
-  });
+  render(SharedFilePreviewHarness, { paths: ["/tmp/out/notes.md"] });
   expect(fetch).not.toHaveBeenCalled();
   await fireEvent.click(screen.getByRole("button", { name: "Preview notes.md" }));
   const panel = screen.getByRole("complementary");
@@ -42,51 +30,39 @@ test("previews a shared text file in the file preview panel", async () => {
   expect(request.searchParams.get("path")).toBe("/tmp/out/notes.md");
 });
 
-test("lists a shared file the preview panel cannot show without a preview action", () => {
-  render(SharedFilePreviewHarness, {
-    sharedFiles: [
-      {
-        file_id: "file-1",
-        turn_id: "t1",
-        name: "demo.mp4",
-        path: "/tmp/out/demo.mp4",
-        size: 8,
-        media_type: "video/mp4",
-        created_at: "2026-06-11T00:00:05Z",
-      },
-    ],
-  });
+test("a card reads each file's details with a HEAD request on the path route", async () => {
+  vi.stubGlobal("IntersectionObserver", VisibleObserver);
+  const fetch = vi.fn().mockResolvedValue(
+    new Response(null, {
+      headers: { "Content-Length": "2048", "Content-Type": "application/pdf" },
+    }),
+  );
+  vi.stubGlobal("fetch", fetch);
+  render(SharedFilePreviewHarness, { paths: ["/tmp/out/report.pdf"] });
+  expect(await screen.findByText("PDF · 2 KiB")).toBeInTheDocument();
+  const [url, init] = fetch.mock.calls[0];
+  expect(init.method).toBe("HEAD");
+  expect(new URL(url, "http://localhost").searchParams.get("path")).toBe("/tmp/out/report.pdf");
+});
+
+test("an attached file the preview panel cannot show has no preview action", () => {
+  render(SharedFilePreviewHarness, { paths: ["/tmp/out/demo.mp4"] });
   expect(screen.queryByRole("button", { name: "Preview demo.mp4" })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Download demo.mp4" })).toBeInTheDocument();
 });
 
-test("a missing shared text file loses its download and preview actions in Session chat", async () => {
+test("a missing attached file loses its download and preview actions", async () => {
+  vi.stubGlobal("IntersectionObserver", VisibleObserver);
   const unregister = downloads.registerDevice(testDevice);
-  vi.spyOn(testDevice.fileApi, "sharedFileContent").mockRejectedValue(
-    new ApiError("File not found", "not_found", 404),
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(new Response(null, { status: 404, statusText: "Not Found" })),
   );
   try {
-    render(SharedFilePreviewHarness, {
-      sharedFiles: [
-        {
-          file_id: "missing",
-          turn_id: "t1",
-          name: "missing.txt",
-          path: "/tmp/missing.txt",
-          size: 10,
-          media_type: "text/plain",
-          created_at: "2026-11-20T00:00:00Z",
-        },
-      ],
-    });
-    expect(screen.getByRole("button", { name: "Preview missing.txt" })).toBeInTheDocument();
-    await fireEvent.click(screen.getByRole("button", { name: "Download missing.txt" }));
-    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    render(SharedFilePreviewHarness, { paths: ["/tmp/missing.txt"] });
+    expect(await screen.findByRole("alert")).toHaveTextContent("File no longer exists");
     expect(screen.queryByRole("button", { name: "Preview missing.txt" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Download missing.txt" })).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Retry download of missing.txt" }),
-    ).not.toBeInTheDocument();
   } finally {
     for (const task of get(downloads)) downloads.cancel(task.id);
     unregister();

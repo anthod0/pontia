@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Grok Build can run device Bots, helpers, and dreaming sessions with restricted native tools. Messages sent to a busy Grok Bot or helper are queued until the current turn ends.
 
+- Agents and Bots attach files to a reply with an attachments block, a fenced code block with the language `attachments` and one absolute path per line. Dashboard shows the files as one card below the reply in Session chats and Bot chats, with the same download, preview and quote actions as before. The built-in Session, helper and Bot instructions describe the block and Markdown file links.
+
 - Each Bot receives its own description as its identity when a new Bot Session starts.
 
 - In Dashboard, the Files tab of a Bot chat's side panel lists the last 10 files you opened in that Bot chat on that device. Click one to open it again, or clear the list.
@@ -33,9 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - In Dashboard, the Bot chat message menu item that marks an open todo as done is now called Ignore, matching the Ignore button in the todo list. The confirmation after ignoring a todo now reads Ignored.
 
-- In Dashboard, the Session chat actions menu next to the input lists New chat first, then Rename, Pin and Archive, then Shared files and Compact context, with Exit in its own group at the bottom.
+- In Dashboard, the Session chat actions menu next to the input lists New chat first, then Rename, Pin and Archive, then Compact context, with Exit in its own group at the bottom.
 
-- In Dashboard, Bot chat messages and shared files show their **⋯** actions button on desktop while you hover over them or focus them with the keyboard. Phones still show it all the time. The menu item that quotes a whole message is now called Reply. Quote is still the name for quoting a selection, a file or an image.
+- In Dashboard, Bot chat messages and attached files show their **⋯** actions button on desktop while you hover over them or focus them with the keyboard. Phones still show it all the time. The menu item that quotes a whole message is now called Reply. Quote is still the name for quoting a selection, a file or an image.
 
 - In Dashboard, Bot chat errors for a failed send, a failed message retry, or a failed refresh now appear as a toast with a Retry button instead of a line above the input. Chat input errors after sending attachments also appear as a toast.
 
@@ -67,6 +69,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- Removed `pontia send-file`, the `POST` and `GET /api/v1/sessions/{session_id}/files` and `GET /api/v1/sessions/{session_id}/files/{file_id}/content` endpoints, the `session.files_shared` event, and `shared_files` entries in Bot timelines. Upgrading deletes recorded file shares and their events, so earlier file cards no longer appear, and earlier quotes of those files show as plain text. In Dashboard, the Shared files item is gone from the Session chat actions menu.
 - Removed OpenCode, custom ACP clients, and ACP launch overrides from the Dashboard and CLI. Pontia now runs Grok Build with `grok agent stdio`. Install `grok` on the Pontia service user's PATH.
 - Removed the `[acp]` section from `config.toml`. Existing sections are ignored. Running sessions can reconnect, but sessions for removed agents cannot resume after their agent process exits.
 

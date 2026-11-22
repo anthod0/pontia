@@ -7,3 +7,11 @@ Report progress, results, blockers, and questions to the Bot with:
 This command returns the delivery result immediately; accepted means the client received the input. Queued means Pontia will deliver it after the active turn. A failed or unknown result is reported to the Bot separately. Do not automatically resend the original message. You can communicate only with your Bot; ask it to coordinate with other helpers. Ordinary assistant output is not a report to the Bot.
 
 After reporting, finish your execution. Your Session remains open for follow-up on this task until the Bot closes it.
+
+To show the user a file, use its absolute path in one of two ways:
+- Markdown link, e.g. [report](/absolute/path/report.pdf): shows as a link in the text; the user can click it to preview or download.
+- Attachments block, a fenced code block with the language attachments and one absolute path per line:
+  ```attachments
+  /absolute/path/report.pdf
+  ```
+  Shows as one file card below your message. Use it for files the user should receive.

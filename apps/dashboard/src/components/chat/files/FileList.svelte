@@ -21,11 +21,11 @@
 </script>
 
 <ul class="space-y-0.5">
-  {#each shown as state (state.file.file_id)}
+  {#each shown as state (state.file.path)}
     {@const props = itemProps(state)}
     <li>
-      <FileRow {itemActions} {state} onenlarge={state.image ? () => onenlarge(state) : undefined} {...props} data-shared-file={state.file.file_id}
-        class={['rounded-xl p-1.5 transition-[background-color,box-shadow] hover:bg-background/60', highlighted === state.file.file_id && 'bg-background/60 ring-2 ring-primary/50', props.class]} />
+      <FileRow {itemActions} {state} onenlarge={state.image ? () => onenlarge(state) : undefined} {...props} data-shared-file={state.file.path}
+        class={['rounded-xl p-1.5 transition-[background-color,box-shadow] hover:bg-background/60', highlighted === state.file.path && 'bg-background/60 ring-2 ring-primary/50', props.class]} />
     </li>
   {/each}
 </ul>

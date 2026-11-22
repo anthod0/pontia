@@ -979,7 +979,7 @@ test("mobile more menu hides downloads until a download starts, then opens the d
   const task = downloads.start(
     "missing-device",
     "session",
-    { kind: "shared", fileId: "file-1" },
+    { path: "/tmp/report.txt" },
     "report.txt",
   );
   await fireEvent.click(within(screen.getByRole("banner")).getByRole("button", { name: "More" }));
@@ -1030,7 +1030,7 @@ test("Bot top bar shows a downloads button only while downloads exist", async ()
   const task = downloads.start(
     "missing-device",
     "session",
-    { kind: "shared", fileId: "file-1" },
+    { path: "/tmp/report.txt" },
     "report.txt",
   );
   const button = await within(banner).findByRole("button", { name: "Downloads" });

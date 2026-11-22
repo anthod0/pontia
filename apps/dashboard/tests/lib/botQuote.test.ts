@@ -3,7 +3,6 @@ import { entryQuote, messageText, parseQuotedMessage, quotedMessage } from "../.
 import type { BotMessage } from "../../src/api/types";
 
 const messageId = "bmsg_0193a000-0000-7000-8000-000000000002";
-const fileId = "file_0193a000-0000-7000-8000-000000000001";
 
 const message = (kind: BotMessage["kind"], content: string): BotMessage => ({
   id: messageId,
@@ -33,19 +32,36 @@ test("writes a message quote on its own line before the text and reads it back",
   });
 });
 
-test("writes a file quote with its path and reads it back", () => {
+test("writes a file quote with its message and path and reads it back", () => {
   const content = quotedMessage(
-    { kind: "file", fileId, path: '/work/a "b".md', name: 'a "b".md' },
+    { kind: "file", messageId, path: '/work/a "b".md', name: 'a "b".md' },
     "Check this",
   );
   expect(content).toBe(
-    `<user_quote file_id="${fileId}" speaker="Bot" path="/work/a &quot;b&quot;.md">a "b".md</user_quote>\nCheck this`,
+    `<user_quote message_id="${messageId}" speaker="Bot" path="/work/a &quot;b&quot;.md">a "b".md</user_quote>\nCheck this`,
   );
   expect(parseQuotedMessage(content).quote).toEqual({
     kind: "file",
-    fileId,
+    messageId,
     path: '/work/a "b".md',
     name: 'a "b".md',
+  });
+});
+
+test("quotes only files attached to a Bot reply", () => {
+  const content = "Done.\n\n```attachments\n/work/report.pdf\n```";
+  expect(entryQuote(message("bot_reply", content), null, "/work/report.pdf")).toEqual({
+    kind: "file",
+    messageId,
+    path: "/work/report.pdf",
+    name: "report.pdf",
+  });
+  expect(entryQuote(message("bot_reply", content), null, "/work/other.pdf")).toBeNull();
+  expect(entryQuote(message("user_input", content), null, "/work/report.pdf")).toBeNull();
+  expect(messageText(message("bot_reply", content))).toBe("Done.");
+  expect(entryQuote(message("bot_reply", "```attachments\n/work/report.pdf\n```"))).toMatchObject({
+    kind: "message",
+    text: "report.pdf",
   });
 });
 
@@ -90,11 +106,19 @@ test.each([
   ],
   [
     "a file quote with a relative path",
-    `<user_quote file_id="${fileId}" speaker="Bot" path="a.md">a.md</user_quote>\nreply`,
+    `<user_quote message_id="${messageId}" speaker="Bot" path="a.md">a.md</user_quote>\nreply`,
   ],
   [
-    "mixed message and file attributes",
-    `<user_quote message_id="${messageId}" file_id="${fileId}" speaker="Bot">x</user_quote>\nreply`,
+    "a file quote of a user message",
+    `<user_quote message_id="${messageId}" speaker="User" path="/a.md">a.md</user_quote>\nreply`,
+  ],
+  [
+    "a file quote marked as an excerpt",
+    `<user_quote message_id="${messageId}" speaker="Bot" path="/a.md" excerpt="true">a.md</user_quote>\nreply`,
+  ],
+  [
+    "a former file ID quote",
+    `<user_quote file_id="file_0193a000-0000-7000-8000-000000000001" speaker="Bot" path="/a.md">a.md</user_quote>\nreply`,
   ],
   [
     "nested markup",

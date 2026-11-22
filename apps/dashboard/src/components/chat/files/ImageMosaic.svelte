@@ -29,12 +29,12 @@
 </script>
 
 {#snippet tile(state: SharedFileState, className: string, extra = 0)}
-  <ImageTile {itemActions} {state} class={className} more={extra} highlighted={highlighted === state.file.file_id} onenlarge={() => onenlarge(state)} onmore={() => expanded = true} itemProps={itemProps(state)} />
+  <ImageTile {itemActions} {state} class={className} more={extra} highlighted={highlighted === state.file.path} onenlarge={() => onenlarge(state)} onmore={() => expanded = true} itemProps={itemProps(state)} />
 {/snippet}
 
 {#if expanded}
   <div class="grid grid-cols-3 gap-0.5">
-    {#each states as state (state.file.file_id)}{@render tile(state, 'aspect-square')}{/each}
+    {#each states as state (state.file.path)}{@render tile(state, 'aspect-square')}{/each}
   </div>
   {#if states.length > MAX}
     <button type="button" class="w-full pt-1.5 text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring" aria-expanded="true" onclick={() => expanded = false}>{$t('files.showLess')}</button>
@@ -49,7 +49,7 @@
   <div class="flex flex-col gap-0.5">
     {#each rows ?? [] as row, r (r)}
       <div class={['grid gap-0.5', row.class]}>
-        {#each row.tiles as state, i (state.file.file_id)}
+        {#each row.tiles as state, i (state.file.path)}
           {@render tile(state, '', r === 1 && i === row.tiles.length - 1 ? more : 0)}
         {/each}
       </div>

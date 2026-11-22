@@ -103,7 +103,7 @@ fn help_lists_agent_tools_in_their_own_section() {
         .split_once("Agent tools:\n")
         .expect("help has an Agent tools section");
     let agent_tools = agent_tools.split("\n\n").next().unwrap();
-    for tool in ["send-file", "workflow"] {
+    for tool in ["workflow", "bot"] {
         assert!(agent_tools.contains(&format!("  {tool} ")), "{tool}");
         assert!(!commands.contains(&format!("  {tool} ")), "{tool}");
     }

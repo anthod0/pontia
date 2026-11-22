@@ -82,13 +82,7 @@ pontia completions powershell | Out-String | Invoke-Expression
 
 ## Agent 工具
 
-`pontia --help` 在 Agent tools 下列出 `send-file` 和 `workflow`。
-
-### 文件
-
-| 命令 | 上下文 | 用途 |
-| --- | --- | --- |
-| `pontia send-file PATH...` | 在 Pontia Session 内 | 与该 Session 的用户共享文件；一起发送的文件会作为一张卡片出现在 Dashboard 聊天中。任一路径无效时不会共享任何文件 |
+`pontia --help` 在 Agent tools 下列出 `workflow` 和 `bot`。
 
 ### Workflow
 

@@ -20,8 +20,9 @@
   import { provideFilePreviewNavigator } from '../components/chat/filePreviewContext'
   import BotMessageActions from '../components/bots/BotMessageActions.svelte'
   import BotQuoteBlock from '../components/bots/BotQuoteBlock.svelte'
-  import { parseQuotedMessage, quoteId, quotedMessage, type BotQuote } from '$lib/botQuote'
-  import { canPreviewImage } from '$lib/downloads/preview'
+  import { parseQuotedMessage, quotedMessage, type BotQuote } from '$lib/botQuote'
+  import { splitAttachments } from '$lib/attachmentBlocks'
+  import { isImagePath } from '$lib/downloads/localFilePath'
   import { createQuoteDraft } from '$lib/botQuoteDraft'
 
   let { botId }: { botId: string } = $props()
@@ -40,6 +41,8 @@
   const quoteDraft = createQuoteDraft(device.id, untrack(() => botId))
   const quote = $derived(quoteDraft.current)
   let highlighted = $state<string | null>(null)
+  // The attached file to mark within the highlighted message.
+  let highlightedPath = $state<string | null>(null)
   let jumping = $state<string | null>(null)
   let missingQuotes = $state<string[]>([])
   let highlightTimer: ReturnType<typeof setTimeout> | undefined
@@ -82,7 +85,7 @@
     composer?.focusInput()
   }
 
-  async function jumpTo(id: string) {
+  async function jumpTo(id: string, path: string | null = null) {
     if (jumping) return
     jumping = id
     try {
@@ -92,10 +95,11 @@
         return
       }
       await tick()
-      feed?.scrollToEntry(timeline.entryId(id)!)
+      feed?.scrollToEntry(id)
       highlighted = id
+      highlightedPath = path
       clearTimeout(highlightTimer)
-      highlightTimer = setTimeout(() => { highlighted = null }, 1500)
+      highlightTimer = setTimeout(() => { highlighted = highlightedPath = null }, 1500)
     } catch (failure) {
       toast.error(failure instanceof Error ? failure.message : String(failure))
     } finally {
@@ -110,16 +114,12 @@
       if (update.type === 'message') timeline.message(update.message)
       else if (update.type === 'changed' || update.type === 'reset') timeline.refresh(update.type === 'reset')
     }, () => { typing = false })
-    const unsubscribeFiles = device.events.subscribeDashboardEvents(event => {
-      if (event.kind === 'session_event' && event.event.files) timeline.refresh()
-    })
     const resume = () => { if (!document.hidden) timeline.refresh(true) }
     document.addEventListener('visibilitychange', resume)
     window.addEventListener('online', resume)
     timeline.refresh()
     return () => {
       stream()
-      unsubscribeFiles()
       timeline.destroy()
       document.removeEventListener('visibilitychange', resume)
       window.removeEventListener('online', resume)
@@ -166,10 +166,8 @@
   const quotableProps = { 'data-bot-quotable': '', tabindex: 0, role: 'article' } as const
 
   function quoteImage(value: BotQuote) {
-    // Reading the entries keeps the thumbnail in step with loaded history.
-    if (value.kind !== 'file' || !timeline.entries.length) return null
-    const found = timeline.sharedFile(value.fileId)
-    return found && canPreviewImage(found.file) ? { sessionId: found.share.session_id, file: found.file } : null
+    const sessionId = timeline.fileLinkSession?.session_id
+    return value.kind === 'file' && sessionId && isImagePath(value.path) ? { sessionId, path: value.path } : null
   }
 
   function quoteSpeaker(value: BotQuote) {
@@ -225,12 +223,14 @@
   <BotChatPanel bind:this={panel} bot={timeline.bot} count={timeline.openTodoCount} onjump={jumpTo} onquote={addQuote} onreply={replyTodo} ontodochange={changeTodo} />
   <!-- The feed scrolls beneath the transparent top bar, like the Session chat page. -->
   <section class="mx-auto -mt-14 flex h-dvh max-w-3xl flex-col md:-mt-12" aria-label={timeline.bot.name}>
-    <BotMessageActions root={feedRoot} entry={id => timeline.entries.find(row => row.id === id)} bind:this={actions} onresolve={id => changeTodo(id, 'resolve')} oncontext={id => panel?.viewContext(id)} onquote={quote => void addQuote(quote)} />
-    <BotMessageFeed bind:this={feed} bind:root={feedRoot} {timeline} {typing} highlighted={highlighted && timeline.entries.some(row => row.id === highlighted) ? highlighted : null}>
+    <BotMessageActions root={feedRoot} fileSessionId={timeline.fileLinkSession?.session_id} entry={id => timeline.entries.find(row => row.id === id)} bind:this={actions} onresolve={id => changeTodo(id, 'resolve')} oncontext={id => panel?.viewContext(id)} onquote={quote => void addQuote(quote)} />
+    <BotMessageFeed bind:this={feed} bind:root={feedRoot} {timeline} {typing} highlighted={highlighted && !highlightedPath && timeline.entries.some(row => row.id === highlighted) ? highlighted : null}>
       {#snippet row(entry)}
         {#if 'content' in entry}
           {@const quoted = entry.kind === 'user_input' ? parseQuotedMessage(entry.content) : { text: entry.content, quote: null }}
           {@const parts = entry.kind === 'user_input' ? { ...parseUploadMessage(quoted.text), quote: quoted.quote } : { ...quoted, files: [] }}
+          {@const attachments = entry.kind === 'bot_reply' ? splitAttachments(entry.content) : { text: parts.text, paths: [] }}
+          {@const fileSession = timeline.fileLinkSession?.session_id}
           <div class={['flex gap-1', entry.kind === 'user_input' ? 'justify-end' : 'justify-start']}>
             {#if entry.kind === 'user_input'}{@render menuButton(entry.id)}{/if}
             <div class="max-w-[90%] min-w-0 space-y-2">
@@ -239,10 +239,10 @@
                   {#each parts.files as file}<li class="rounded-md border bg-background px-2 py-1 text-xs [overflow-wrap:anywhere]" title={file.path}>{$t('files.uploadedPrefix')} {file.name}</li>{/each}
                 </ul>
               {/if}
-              {#if parts.text}
+              {#if attachments.text}
                 {#if entry.kind === 'bot_reply'}
                   <MessageResponse
-                    content={parts.text}
+                    content={attachments.text}
                     markdown
                     sessionId={timeline.fileLinkSession?.session_id}
                     linkBase={timeline.fileLinkSession?.workspace ? `${timeline.fileLinkSession.workspace.replace(/\/+$/, '')}/` : null}
@@ -253,12 +253,19 @@
                 {:else}
                   <div class="{userBubbleClass} {highlightableClass} text-sm leading-6" {...quotableProps}>
                     {#if parts.quote}
-                      {@const target = quoteId(parts.quote)}
-                      <BotQuoteBlock quote={parts.quote} speaker={quoteSpeaker(parts.quote)} image={quoteImage(parts.quote)} missing={missingQuotes.includes(target)} busy={jumping === target} onjump={() => void jumpTo(target)} />
+                      {@const current = parts.quote}
+                      {@const target = current.messageId}
+                      <BotQuoteBlock quote={current} speaker={quoteSpeaker(current)} image={quoteImage(current)} missing={missingQuotes.includes(target)} busy={jumping === target} onjump={() => void jumpTo(target, current.kind === 'file' ? current.path : null)} />
                     {/if}
                     <p class="whitespace-pre-wrap [overflow-wrap:anywhere]" data-bot-quote-source>{parts.text}</p>
                   </div>
                 {/if}
+              {/if}
+              {#if attachments.paths.length && fileSession}
+                <SharedFiles paths={attachments.paths} sessionId={fileSession} highlighted={highlighted === entry.id ? highlightedPath : null}
+                  itemProps={file => ({ ...quotableProps, class: 'group/file', 'data-bot-file-path': file.path })}>
+                  {#snippet itemActions()}{@render menuButton(entry.id, true)}{/snippet}
+                </SharedFiles>
               {/if}
               {#if entry.status === 'failed'}
                 <div class="mt-1 flex items-center justify-end gap-2 text-xs text-destructive">
@@ -274,13 +281,6 @@
               </button>
             {/if}
             {#if entry.kind === 'bot_reply'}{@render menuButton(entry.id)}{/if}
-          </div>
-        {:else if entry.kind === 'shared_files'}
-          <div class="max-w-[90%]">
-            <SharedFiles files={entry.files} sessionId={entry.session_id} highlighted={highlighted}
-              itemProps={file => ({ ...quotableProps, class: 'group/file', 'data-bot-file-id': file.file_id })}>
-              {#snippet itemActions()}{@render menuButton(entry.id, true)}{/snippet}
-            </SharedFiles>
           </div>
         {:else}
           <p class="flex items-center justify-center gap-2 text-center text-xs text-muted-foreground">

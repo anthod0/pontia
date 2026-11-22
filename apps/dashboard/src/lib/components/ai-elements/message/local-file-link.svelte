@@ -51,7 +51,7 @@
   }
 
   function download() {
-    downloads.start(device.id, sessionId, { kind: 'path', path }, name)
+    downloads.start(device.id, sessionId, { path }, name)
   }
 
   function showImage() {

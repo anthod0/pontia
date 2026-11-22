@@ -110,8 +110,10 @@ async fn explicit_quotes_are_protected_even_without_a_stored_edge() {
     for attributes in [
         format!("message_id=\"{}\" speaker=\"Bot\"", target.id),
         "message_id=\"bmsg_0193a000-0000-7000-8000-000000000002\" speaker=\"Bot\"".into(),
-        "file_id=\"file_0193a000-0000-7000-8000-000000000001\" speaker=\"Bot\" path=\"/work/file\""
-            .into(),
+        format!(
+            "message_id=\"{}\" speaker=\"Bot\" path=\"/work/file\"",
+            target.id
+        ),
     ] {
         let content = format!("<user_quote {attributes}>Original</user_quote>\nExplain");
         let input = messages

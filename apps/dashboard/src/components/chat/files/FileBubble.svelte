@@ -6,7 +6,7 @@
   import FileDetails from './FileDetails.svelte'
   import FileAction from './FileAction.svelte'
   import FileRow from './FileRow.svelte'
-  import { observePreview, type SharedFileState } from './sharedFileState.svelte'
+  import { observeFile, type SharedFileState } from './sharedFileState.svelte'
 
   /** A share of one file: an image with a caption, or a file row. */
   let { itemActions, state, highlighted = false, onenlarge, itemProps = {} }: {
@@ -19,7 +19,7 @@
   } = $props()
 </script>
 
-<div use:observePreview={state} {...itemProps} class={['w-80 max-w-full rounded-2xl transition-shadow', highlighted && 'ring-2 ring-primary/50', itemProps.class]} data-shared-file={state.file.file_id}>
+<div use:observeFile={state} {...itemProps} class={['w-80 max-w-full rounded-2xl transition-shadow', highlighted && 'ring-2 ring-primary/50', itemProps.class]} data-shared-file={state.file.path}>
   {#if state.showImage}
     <figure class="overflow-hidden rounded-2xl bg-muted">
       {#if state.imageUrl}

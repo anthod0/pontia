@@ -4,7 +4,7 @@ import { ApiError } from "../../api/errors";
 import type { DeviceRuntime } from "../../device/runtime";
 import { saveDownload, type DownloadProgress } from "./save";
 
-export type DownloadFile = { kind: "shared"; fileId: string } | { kind: "path"; path: string };
+export type DownloadFile = { path: string };
 export type DownloadTask = {
   id: string;
   key: string;
@@ -22,12 +22,7 @@ export type DownloadTask = {
 };
 
 export function downloadKey(deviceId: string, sessionId: string, file: DownloadFile): string {
-  return JSON.stringify([
-    deviceId,
-    sessionId,
-    file.kind,
-    file.kind === "shared" ? file.fileId : file.path,
-  ]);
+  return JSON.stringify([deviceId, sessionId, file.path]);
 }
 
 export function createDownloads() {
@@ -49,9 +44,11 @@ export function createDownloads() {
     try {
       const device = devices.get(task.deviceId);
       if (!device) throw new Error(translate("downloads.deviceUnavailable"));
-      const response = await (task.file.kind === "shared"
-        ? device.fileApi.sharedFileContent(task.sessionId, task.file.fileId, controller.signal)
-        : device.fileApi.pathFileContent(task.sessionId, task.file.path, controller.signal));
+      const response = await device.fileApi.pathFileContent(
+        task.sessionId,
+        task.file.path,
+        controller.signal,
+      );
       await saveDownload(
         response,
         task.name,

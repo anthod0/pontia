@@ -9,6 +9,12 @@ fn quoted(text: &str, excerpt: bool) -> String {
     )
 }
 
+fn file_quote(name: &str) -> String {
+    format!(
+        "<user_quote message_id=\"{MESSAGE_ID}\" speaker=\"Bot\" path=\"/work/{name}\">{name}</user_quote>\nExplain"
+    )
+}
+
 #[tokio::test]
 async fn new_quotes_are_capped_before_storage_and_bot_delivery() {
     let (_root, _pool, client, _control, service) = fixture().await;
@@ -87,11 +93,20 @@ async fn file_quotes_and_plain_text_are_unchanged() {
         .unwrap();
     for content in [
         "x".repeat(2100),
-        "<user_quote file_id=\"file_0193a000-0000-7000-8000-000000000001\" speaker=\"Bot\" path=\"/work/chart.png\">chart.png</user_quote>\nExplain".into(),
+        file_quote(&format!("{}.png", "a".repeat(2100))),
+        file_quote("chart.png").replace("speaker=\"Bot\"", "speaker=\"User\""),
         format!("Example:\n{}", quoted(&"a".repeat(2100), false)),
         quoted(&"a".repeat(2100), false).replace("speaker=\"Bot\"", "speaker=\"Other\""),
     ] {
-        assert_eq!(service.send(&bot.bot_id, &content).await.unwrap().message.content, content);
+        assert_eq!(
+            service
+                .send(&bot.bot_id, &content)
+                .await
+                .unwrap()
+                .message
+                .content,
+            content
+        );
     }
 }
 
@@ -141,8 +156,12 @@ async fn saved_user_inputs_link_only_valid_quotes_from_the_same_chat() {
         .unwrap()
         .bot_id;
     let target = service.send(&a, "Original").await.unwrap().message;
-    for excerpt in [false, true] {
-        let content = quoted("Original", excerpt).replace(MESSAGE_ID, &target.id);
+    for content in [
+        quoted("Original", false),
+        quoted("Original", true),
+        file_quote("chart.png"),
+    ] {
+        let content = content.replace(MESSAGE_ID, &target.id);
         let input = service.send(&a, &content).await.unwrap().message;
         let context = service.message_context(&a, &input.id).await.unwrap();
         assert_eq!(context.messages, [target.clone(), input]);
@@ -166,6 +185,9 @@ async fn saved_user_inputs_link_only_valid_quotes_from_the_same_chat() {
         quoted("Original", false)
             .replace(MESSAGE_ID, &target.id)
             .replace("message_id=", "file_id="),
+        file_quote("chart.png")
+            .replace(MESSAGE_ID, &target.id)
+            .replace("speaker=\"Bot\"", "speaker=\"User\""),
     ] {
         let input = service.send(&a, &content).await.unwrap().message;
         assert_eq!(

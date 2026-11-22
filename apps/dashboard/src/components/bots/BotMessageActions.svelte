@@ -13,21 +13,24 @@
   import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
   import { downloads } from '$lib/downloads/manager'
-  import { canPreviewImage } from '$lib/downloads/preview'
+  import { isImagePath } from '$lib/downloads/localFilePath'
+  import { attachedFile, splitAttachments } from '$lib/attachmentBlocks'
   import { useDeviceRuntime } from '../../device/context'
-  import type { BotEntry, SharedFile } from '../../api/types'
+  import type { AttachedFile, BotEntry } from '../../api/types'
 
-  let { root, entry, onquote, oncontext, onresolve }: {
+  let { root, fileSessionId, entry, onquote, oncontext, onresolve }: {
     /** Element containing the feed rows; events are delegated from it. */
     root: HTMLElement | undefined
+    /** Session through which attached files are read. */
+    fileSessionId: string | undefined
     entry: (id: string) => BotEntry | undefined
     onresolve: (messageId: string) => void
     oncontext: (messageId: string) => void
     onquote: (quote: BotQuote) => void
   } = $props()
 
-  /** A message, or one file of a share when `file` is set. */
-  type Target = { entry: BotEntry; element: HTMLElement; excerpt: string | null; file: SharedFile | null }
+  /** A message, or one file attached to it when `file` is set. */
+  type Target = { entry: BotEntry; element: HTMLElement; excerpt: string | null; file: AttachedFile | null }
   const device = useDeviceRuntime()
 
   let target = $state<Target | null>(null)
@@ -43,14 +46,14 @@
   const menuAnchor = { getBoundingClientRect: () => DOMRect.fromRect({ x: anchor.x, y: anchor.y, width: 0, height: 0 }) }
 
   type Row = Omit<Target, 'excerpt'>
-  // Files are quoted one at a time: each file of a share is its own quotable element.
+  // Files are quoted one at a time: each attached file is its own quotable element.
   function rowOf(node: Node | null): Row | null {
     const element = (node instanceof Element ? node : node?.parentElement)?.closest<HTMLElement>('[data-bot-quotable]')
     const id = element?.closest<HTMLElement>('[data-bot-entry-id]')?.dataset.botEntryId
     const found = id ? entry(id) : undefined
     if (!element || !found || !root?.contains(element)) return null
-    const fileId = element.dataset.botFileId
-    const file = fileId && found.kind === 'shared_files' ? found.files.find(file => file.file_id === fileId) ?? null : null
+    const path = element.dataset.botFilePath
+    const file = path && found.kind === 'bot_reply' && splitAttachments(found.content).paths.includes(path) ? attachedFile(path) : null
     return { entry: found, element, file }
   }
 
@@ -65,11 +68,11 @@
     return row && text ? { ...row, excerpt: text } : null
   }
 
-  // A shared image opens the file menu; other images and links keep the browser's.
+  // An attached image opens the file menu; other images and links keep the browser's.
   function keepsNativeMenu(event: MouseEvent): boolean {
     if (event.shiftKey || !(event.target instanceof Element)) return event.shiftKey
     const native = event.target.closest('a, img, video, input, textarea, [contenteditable="true"]')
-    return Boolean(native && !(native.tagName === 'IMG' && native.closest('[data-bot-file-id]')))
+    return Boolean(native && !(native.tagName === 'IMG' && native.closest('[data-bot-file-path]')))
   }
 
   function open(next: Target, touch: boolean, point: { x: number; y: number }, from: HTMLElement | null = null) {
@@ -103,9 +106,12 @@
   /** Opens a row's menu from its menu button: a sheet on touch, a dropdown with a mouse or keyboard. */
   export function openMenu(id: string, event: MouseEvent) {
     const button = event.currentTarget as HTMLElement
-    const element = button.closest<HTMLElement>('[data-bot-quotable]') ?? button.closest('[data-bot-entry-id]')?.querySelector<HTMLElement>('[data-bot-quotable]')
-    const row = rowOf(element ?? null)
-    if (!row || row.entry.id !== id) return
+    const own = button.closest<HTMLElement>('[data-bot-quotable]')
+    const element = own ?? button.closest('[data-bot-entry-id]')?.querySelector<HTMLElement>('[data-bot-quotable]')
+    const found = rowOf(element ?? null)
+    if (!found || found.entry.id !== id) return
+    // A button outside every quotable element acts on the whole message, even when only its files are quotable.
+    const row = own ? found : { ...found, file: null }
     const rect = button.getBoundingClientRect()
     const touch = (event instanceof PointerEvent && event.pointerType === 'touch') || matchMedia('(pointer: coarse)').matches
     open({ ...row, excerpt: null }, touch, { x: rect.left, y: rect.bottom }, button)
@@ -158,7 +164,7 @@
   })
 
   function quote(next: Target) {
-    const value = entryQuote(next.entry, next.excerpt, next.file?.file_id)
+    const value = entryQuote(next.entry, next.excerpt, next.file?.path)
     if (!value) return
     menuOpen = sheetOpen = false
     selection = null
@@ -178,8 +184,8 @@
 
   function download(next: Target) {
     menuOpen = sheetOpen = false
-    if (next.file && next.entry.kind === 'shared_files')
-      downloads.start(device.id, next.entry.session_id, { kind: 'shared', fileId: next.file.file_id }, next.file.name)
+    if (next.file && fileSessionId)
+      downloads.start(device.id, fileSessionId, { path: next.file.path }, next.file.name)
   }
 
   async function copy(next: Target) {
@@ -208,9 +214,9 @@
     const row = target && entry(target.entry.id)
     return row && 'content' in row && row.todo?.state === 'open'
   })
-  const isMessage = $derived(target !== null && 'content' in target.entry)
+  const isMessage = $derived(target !== null && !target.file && 'content' in target.entry)
   // A whole message is quoted as a reply; a file keeps its quote label.
-  const quoteLabel = $derived(target?.file ? (canPreviewImage(target.file) ? $t('bots.quoteImage') : $t('bots.quoteFile')) : $t('bots.reply'))
+  const quoteLabel = $derived(target?.file ? (isImagePath(target.file.path) ? $t('bots.quoteImage') : $t('bots.quoteFile')) : $t('bots.reply'))
   const QuoteIcon = $derived(target?.file ? QuotesIcon : ArrowBendUpLeftIcon)
   // Touch: below the selection, clear of the system selection menu. Mouse: above it.
   // Both stay inside the viewport when the selection runs past an edge.
@@ -251,7 +257,7 @@
     <Sheet.Title class="sr-only">{$t('bots.messageActions')}</Sheet.Title>
     {#if target}
       {@const current = target}
-      {@const preview = entryQuote(current.entry, null, current.file?.file_id)}
+      {@const preview = entryQuote(current.entry, null, current.file?.path)}
       {#if preview}
         <Sheet.Description class="mx-2 mb-2 rounded-xl bg-muted px-3 py-2 text-[13px] leading-5"><span class="line-clamp-2 [overflow-wrap:anywhere]">{quoteSummary(preview)}</span></Sheet.Description>
       {/if}

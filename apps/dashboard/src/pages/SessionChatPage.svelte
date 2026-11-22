@@ -87,7 +87,6 @@
   } = device.timeline;
   const { subscribeDashboardEvents } = device.events;
   const { openLiveOutputStream } = device.liveOutput;
-  const { createSessionFilesStore } = device.sessionFiles;
 
   const { queuedInboxMessages } = device.inboxQueries;
 
@@ -167,7 +166,6 @@
   })
 
   $: selectedSession = selectedSessionId && $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.session : null
-  $: sharedFiles = selectedSessionId ? createSessionFilesStore(selectedSessionId) : null
   $: controlDetails = selectedSession ? clientControlDetails(selectedSession) : null
   $: liveOutputKey = selectedSession ? `${selectedSession.session_id}:${selectedSession.capabilities.stream_output === true}:${$timelineState.status}:${$timelineState.historySource ?? ""}` : ''
   let activeLiveOutputKey = ''
@@ -1097,7 +1095,6 @@
                   compactionBusy={selectedCompaction?.busy ?? false}
                   sessionId={selectedSessionId}
                   workspace={selectedSession.workspace}
-                  sharedFiles={$sharedFiles?.files ?? []}
                   turns={selectedTurns}
                   sessionState={selectedSession.state}
                   activeTurnId={selectedSession.current_turn_id}
@@ -1147,8 +1144,7 @@
           class="fixed bottom-[calc(var(--chat-composer-height)+0.5rem)] left-0 right-0 lg:right-[var(--file-preview-width,0px)] z-40 px-4 transition-[left] duration-200 ease-linear md:left-[var(--sidebar-width)] md:px-8 group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)]"
         />
 
-        {#if sharedFiles}<SessionComposerDock
-          sharedFiles={sharedFiles}
+        <SessionComposerDock
           bind:height={composerHeight}
           bind:input={$chatDraft}
           session={selectedSession}
@@ -1175,7 +1171,7 @@
           onInterrupt={() => void interruptSelectedSession()}
           onFocus={() => void refreshCurrentSessionGitStatus()}
           onRefreshGitStatus={() => void refreshCurrentSessionGitStatus()}
-        />{/if}
+        />
       {/if}
     </div>
   </div>

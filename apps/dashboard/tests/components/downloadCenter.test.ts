@@ -2,18 +2,9 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/sve
 import { get } from "svelte/store";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import DownloadCenter from "../../src/components/layout/DownloadCenter.svelte";
-import SharedFileRow from "../../src/components/chat/SharedFileRow.svelte";
+import SharedFilesHarness from "./SharedFilesHarness.svelte";
 import { downloads } from "../../src/lib/downloads/manager";
 
-const file = {
-  file_id: "file-1",
-  turn_id: null,
-  name: "report.txt",
-  path: "/tmp/report.txt",
-  size: 10,
-  media_type: "text/plain",
-  created_at: "2026-11-17T00:00:00Z",
-};
 let saved: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
@@ -34,7 +25,7 @@ test("the download button appears after a download starts and counts every liste
   const first = downloads.start(
     "missing-device",
     "session",
-    { kind: "shared", fileId: "file-1" },
+    { path: "/tmp/report.txt" },
     "report.txt",
   );
   expect(await screen.findByRole("button", { name: "Downloads", exact: true })).toBeInTheDocument();
@@ -42,7 +33,7 @@ test("the download button appears after a download starts and counts every liste
   const second = downloads.start(
     "missing-device",
     "session",
-    { kind: "shared", fileId: "file-2" },
+    { path: "/tmp/notes.txt" },
     "notes.txt",
   );
   await waitFor(() => expect(screen.getByTestId("downloads-count")).toHaveTextContent("2"));
@@ -55,7 +46,7 @@ test("the download button appears after a download starts and counts every liste
   );
 });
 
-test("a shared file keeps receiving after its card and download dialog close, and can be cancelled centrally", async () => {
+test("an attached file keeps receiving after its card and download dialog close, and can be cancelled centrally", async () => {
   let stream!: ReadableStreamDefaultController<Uint8Array>;
   const cancelled = vi.fn();
   const body = new ReadableStream<Uint8Array>({
@@ -68,7 +59,7 @@ test("a shared file keeps receiving after its card and download dialog close, an
     "fetch",
     vi.fn().mockResolvedValue(new Response(body, { headers: { "Content-Length": "10" } })),
   );
-  const card = render(SharedFileRow, { file, sessionId: "session" });
+  const card = render(SharedFilesHarness, { paths: ["/tmp/report.txt"] });
   render(DownloadCenter);
   await fireEvent.click(screen.getByRole("button", { name: "Download report.txt" }));
   stream.enqueue(new TextEncoder().encode("first"));
@@ -114,7 +105,7 @@ test("a failed download stays in the dialog after leaving its card and leaves it
         ),
       ),
   );
-  const card = render(SharedFileRow, { file, sessionId: "session" });
+  const card = render(SharedFilesHarness, { paths: ["/tmp/report.txt"] });
   render(DownloadCenter);
   await fireEvent.click(screen.getByRole("button", { name: "Download report.txt" }));
   card.unmount();
@@ -135,7 +126,7 @@ test("a failed download stays in the dialog after leaving its card and leaves it
 
 test("a failed download can be dismissed from the dialog", async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
-  render(SharedFileRow, { file, sessionId: "session" });
+  render(SharedFilesHarness, { paths: ["/tmp/report.txt"] });
   render(DownloadCenter);
   await fireEvent.click(screen.getByRole("button", { name: "Download report.txt" }));
   await fireEvent.click(await screen.findByRole("button", { name: "Downloads", exact: true }));

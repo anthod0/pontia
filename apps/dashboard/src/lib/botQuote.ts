@@ -1,10 +1,12 @@
 import type { BotEntry, BotMessage } from "../api/types";
 import { escapeXml, parseUploadMessage } from "./uploads/message";
+import { attachedFile, splitAttachments } from "./attachmentBlocks";
 
 export type QuoteSpeaker = "User" | "Bot";
 export type BotQuote =
   | { kind: "message"; messageId: string; speaker: QuoteSpeaker; text: string; excerpt: boolean }
-  | { kind: "file"; fileId: string; path: string; name: string };
+  /** One attached file of a Bot reply. */
+  | { kind: "file"; messageId: string; path: string; name: string };
 
 export const QUOTE_CHARACTER_LIMIT = 2000;
 
@@ -18,17 +20,12 @@ export function limitQuote(quote: BotQuote): BotQuote {
 
 const open = "<user_quote ";
 const close = "</user_quote>";
-// Bot message and shared file IDs are a prefix plus a lowercase UUIDv7.
+// Bot message IDs are a prefix plus a lowercase UUIDv7.
 const uuidV7 = "[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
 const messageIdPattern = new RegExp(`^bmsg_${uuidV7}$`);
-const fileIdPattern = new RegExp(`^file_${uuidV7}$`);
 
 function escapeText(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-}
-
-export function quoteId(quote: BotQuote): string {
-  return quote.kind === "message" ? quote.messageId : quote.fileId;
 }
 
 export function quoteText(quote: BotQuote): string {
@@ -55,7 +52,7 @@ export function quotedMessage(quote: BotQuote, text: string): string {
           ...(quote.excerpt ? [["excerpt", "true"]] : []),
         ]
       : [
-          ["file_id", quote.fileId],
+          ["message_id", quote.messageId],
           ["speaker", "Bot"],
           ["path", quote.path],
         ];
@@ -92,12 +89,12 @@ function parseElement(xml: string): BotQuote | null {
       excerpt: "excerpt" in attributes,
     };
   if (
-    names === "file_id path speaker" &&
-    fileIdPattern.test(attributes.file_id) &&
+    names === "message_id path speaker" &&
+    messageIdPattern.test(attributes.message_id) &&
     attributes.speaker === "Bot" &&
     attributes.path.startsWith("/")
   )
-    return { kind: "file", fileId: attributes.file_id, path: attributes.path, name: text };
+    return { kind: "file", messageId: attributes.message_id, path: attributes.path, name: text };
   return null;
 }
 
@@ -116,27 +113,29 @@ export function parseQuotedMessage(text: string): { quote: BotQuote | null; text
 
 /** The visible text of a Bot chat message, without attachments or its own quote. */
 export function messageText(message: BotMessage): string {
-  if (message.kind === "bot_reply") return message.content;
+  if (message.kind === "bot_reply") return splitAttachments(message.content).text;
   return parseUploadMessage(parseQuotedMessage(message.content).text).text;
 }
 
-/** A quote of a message, or of one file of a share. */
+/** A quote of a message, or of one file attached to a Bot reply. */
 export function entryQuote(
   entry: BotEntry,
   excerpt: string | null = null,
-  fileId: string | null = null,
+  path: string | null = null,
 ): BotQuote | null {
-  if (entry.kind === "shared_files") {
-    const file = entry.files.find((file) => file.file_id === fileId);
-    return file ? { kind: "file", fileId: file.file_id, path: file.path, name: file.name } : null;
-  }
   if (!("content" in entry)) return null;
+  if (path !== null) {
+    if (entry.kind !== "bot_reply" || !splitAttachments(entry.content).paths.includes(path))
+      return null;
+    return { kind: "file", messageId: entry.id, ...attachedFile(path) };
+  }
   const text =
     excerpt ??
     (messageText(entry) ||
-      parseUploadMessage(entry.content)
-        .files.map((file) => file.name)
-        .join("\n"));
+      (entry.kind === "bot_reply"
+        ? splitAttachments(entry.content).paths.map((path) => attachedFile(path).name)
+        : parseUploadMessage(entry.content).files.map((file) => file.name)
+      ).join("\n"));
   return limitQuote({
     kind: "message",
     messageId: entry.id,

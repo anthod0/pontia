@@ -1081,14 +1081,6 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
       return { accepted: true, operation_id: operationId };
     },
   ],
-  [
-    "GET",
-    "/sessions/:id/files",
-    ({ device, params: [id] }) => {
-      findSession(device, id);
-      return { files: [], next_cursor: null };
-    },
-  ],
 ];
 
 const compiledRoutes = routes.map(([method, pattern, handler]) => ({

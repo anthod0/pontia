@@ -14,39 +14,43 @@
   import DownloadAllButton from './DownloadAllButton.svelte'
   import { SharedFileState, formatFileSize } from './sharedFileState.svelte'
   import { hiddenUntilExpanded } from './layout'
-  import type { SharedFile } from '../../../api/types'
+  import { attachedFile } from '$lib/attachmentBlocks'
+  import type { AttachedFile } from '../../../api/types'
 
   /**
-   * The files of one share as a single card: one file keeps the single-file bubble, a share where
-   * every file can be previewed as an image becomes a mosaic, and anything else a list.
+   * The attached files of one message as a single card: one file keeps the single-file bubble, files
+   * that can all be previewed as images become a mosaic, and anything else a list.
    */
-  let { itemActions, files, sessionId, highlighted = null, itemProps = () => ({}) }: {
+  let { itemActions, paths, sessionId, highlighted = null, itemProps = () => ({}) }: {
     itemActions?: Snippet
-    files: SharedFile[]
+    /** Absolute paths, in order and without duplicates. */
+    paths: string[]
     sessionId: string
-    /** File ID to mark, such as a quote's jump target; a hidden file is revealed first. */
+    /** Path to mark, such as a quote's jump target; a hidden file is revealed first. */
     highlighted?: string | null
     /** Attributes for the element that stands for each file, such as quote targets. */
-    itemProps?: (file: SharedFile) => HTMLAttributes<HTMLDivElement>
+    itemProps?: (file: AttachedFile) => HTMLAttributes<HTMLDivElement>
   } = $props()
   const device = useDeviceRuntime()
   // Refreshed file lists keep each file's state, such as its loaded preview.
   const cache = new Map<string, SharedFileState>()
-  const states = $derived(files.map(file => {
-    let state = cache.get(file.file_id)
-    if (!state || state.sessionId !== sessionId) cache.set(file.file_id, state = new SharedFileState(device, sessionId, file))
+  const states = $derived(paths.map(path => {
+    let state = cache.get(path)
+    if (!state || state.sessionId !== sessionId) cache.set(path, state = new SharedFileState(device, sessionId, attachedFile(path)))
     return state
   }))
+  const files = $derived(states.map(state => state.file))
   const allImages = $derived(states.length > 1 && states.every(state => state.image))
   let showList = $state(false)
   let expanded = $state(false)
   let root = $state<HTMLElement>()
-  const total = $derived(files.reduce((sum, file) => sum + file.size, 0))
+  // The total shows once every file's size is known.
+  const total = $derived(states.every(state => state.info) ? states.reduce((sum, state) => sum + state.info!.size, 0) : null)
   const receiving = $derived(states.filter(state => state.receiving).length)
   const failed = $derived(states.filter(state => state.task?.status === 'failed' && !state.missing).length)
   const missing = $derived(states.filter(state => state.missing).length)
   const segments = $derived([
-    { text: formatFileSize(total, $number), alert: false },
+    ...(total !== null ? [{ text: formatFileSize(total, $number), alert: false }] : []),
     ...(receiving ? [{ text: $t('files.receivingCount', { count: receiving }), alert: false }] : []),
     ...(failed ? [{ text: $t('files.failedCount', { count: failed }), alert: true }] : []),
     ...(missing ? [{ text: $t('files.missingCount', { count: missing }), alert: false }] : []),
@@ -54,7 +58,7 @@
   const stateItemProps = (state: SharedFileState) => itemProps(state.file)
 
   // Viewer images are fixed when it opens so a file found missing meanwhile does not shift the index.
-  let viewerFiles = $state<SharedFile[]>([])
+  let viewerFiles = $state<AttachedFile[]>([])
   let viewerIndex = $state(0)
   let viewerOpen = $state(false)
   function enlarge(state: SharedFileState) {
@@ -67,7 +71,7 @@
   $effect(() => {
     const id = highlighted
     if (!id) return
-    const index = files.findIndex(file => file.file_id === id)
+    const index = paths.indexOf(id)
     if (index === -1) return
     // Only a new highlight expands the card; switching views while it shows does not.
     if (untrack(() => hiddenUntilExpanded(index, files.length, allImages && !showList))) expanded = true
@@ -76,7 +80,7 @@
 </script>
 
 {#if states.length === 1}
-  <FileBubble {itemActions} state={states[0]} highlighted={highlighted === states[0].file.file_id} onenlarge={() => enlarge(states[0])} itemProps={stateItemProps(states[0])} />
+  <FileBubble {itemActions} state={states[0]} highlighted={highlighted === states[0].file.path} onenlarge={() => enlarge(states[0])} itemProps={stateItemProps(states[0])} />
 {:else if allImages}
   <figure bind:this={root} class="w-80 max-w-full overflow-hidden rounded-2xl bg-muted" data-shared-files>
     {#if showList}
@@ -102,7 +106,7 @@
     <div class="flex items-center gap-2 px-1.5 pt-0.5 pb-1">
       <FilesIcon class="size-4 shrink-0 text-muted-foreground" />
       <p class="min-w-0 flex-1 text-xs leading-4 text-muted-foreground tabular-nums">
-        {[$t('files.fileCount', { count: files.length }), formatFileSize(total, $number), receiving && $t('files.receivingCount', { count: receiving })].filter(Boolean).join(' · ')}
+        {[$t('files.fileCount', { count: files.length }), total !== null && formatFileSize(total, $number), receiving && $t('files.receivingCount', { count: receiving })].filter(Boolean).join(' · ')}
       </p>
       <DownloadAllButton {states} />
     </div>
