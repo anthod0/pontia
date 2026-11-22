@@ -292,19 +292,75 @@ test("the root composer device selector switches devices like the sidebar", asyn
   expect(screen.getByRole("button", { name: "Sidebar device" })).toHaveTextContent("Travel Laptop");
 });
 
-test.each(["/", "/office-mac"])(
-  "Alt+M switches to the next device from New Chat at %s",
-  async (path) => {
-    window.history.replaceState({}, "", path);
-    render(MultiDeviceDashboardHarness);
-    const composer = await screen.findByRole("textbox");
-    await fireEvent.keyDown(composer, { key: "m", code: "KeyM", altKey: true });
-    await waitFor(() => expect(location.pathname).toBe("/travel-laptop"));
-    expect(screen.getByRole("button", { name: "Sidebar device" })).toHaveTextContent(
-      "Travel Laptop",
-    );
-  },
-);
+const switchBack = (name: string) =>
+  screen.findByRole("button", { name: `Switch back to ${name}` });
+
+test("the sidebar switch-back button and Alt+M return to the previous device", async () => {
+  render(MultiDeviceDashboardHarness);
+  const composer = await screen.findByRole("textbox");
+  expect(screen.queryByRole("button", { name: /^Switch back to/ })).not.toBeInTheDocument();
+  await fireEvent.keyDown(composer, { key: "m", code: "KeyM", altKey: true });
+  await new Promise((resolve) => setTimeout(resolve));
+  expect(goto).not.toHaveBeenCalled();
+
+  await chooseSidebarDevice("Travel Laptop");
+  await waitFor(() => expect(location.pathname).toBe("/travel-laptop"));
+  const back = await switchBack("Office Mac");
+  expect(back).toHaveAttribute("title", "Switch back to Office Mac (Online, Alt+M)");
+  await userEvent.click(back);
+  await waitFor(() => expect(location.pathname).toBe("/office-mac"));
+  expect(screen.getByRole("button", { name: "Sidebar device" })).toHaveTextContent("Office Mac");
+
+  await fireEvent.keyDown(await screen.findByRole("textbox"), {
+    key: "m",
+    code: "KeyM",
+    altKey: true,
+  });
+  await waitFor(() => expect(location.pathname).toBe("/travel-laptop"));
+  expect(await switchBack("Office Mac")).toBeInTheDocument();
+});
+
+test("the previous device survives a reload and is hidden once it is no longer listed", async () => {
+  window.history.replaceState({}, "", "/office-mac/chat/same");
+  render(MultiDeviceDashboardHarness);
+  await sidebar().findByRole("button", { name: "office-mac chat" });
+  await chooseSidebarDevice("Travel Laptop");
+  await waitFor(() => expect(location.pathname).toBe("/travel-laptop"));
+  cleanup();
+
+  window.history.replaceState({}, "", "/");
+  render(MultiDeviceDashboardHarness);
+  await userEvent.click(await switchBack("Office Mac"));
+  await waitFor(() => expect(location.pathname).toBe("/office-mac/chat/same"));
+  cleanup();
+
+  vi.mocked(fixture.remote.listPublicDevices).mockResolvedValue({
+    userId: "user-one",
+    devices: [
+      {
+        handle: "travel-laptop",
+        deviceId: "travel-laptop",
+        edgeId: "edge-one",
+        name: "Travel Laptop",
+      },
+      { handle: "studio", deviceId: "studio", edgeId: "edge-one", name: "Studio" },
+    ],
+  });
+  // Office Mac, the previous device, has been removed from the account.
+  localStorage.setItem("pontia.lastDeviceHandle", "travel-laptop");
+  localStorage.setItem("pontia.previousDeviceHandle", "office-mac");
+  window.history.replaceState({}, "", "/");
+  render(MultiDeviceDashboardHarness);
+  expect(await screen.findByRole("button", { name: "Sidebar device" })).toHaveTextContent(
+    "Travel Laptop",
+  );
+  await screen.findByRole("textbox");
+  expect(screen.queryByRole("button", { name: /^Switch back to/ })).not.toBeInTheDocument();
+  goto.mockClear();
+  await fireEvent.keyDown(window, { key: "m", code: "KeyM", altKey: true });
+  await new Promise((resolve) => setTimeout(resolve));
+  expect(goto).not.toHaveBeenCalled();
+});
 
 test.each(["handshake", "workspaces"])(
   "the composer can switch to another device while the active device waits for %s",
@@ -364,12 +420,27 @@ test("root honors the workspace query parameter for the active device", async ()
   expect(JSON.parse(call[2].body as string).workspace_id).toBe("other");
 });
 
-test("Alt+M switches devices from settings and keeps the section", async () => {
+test("a reload on a device route remembers the last device as the previous one", async () => {
+  localStorage.setItem("pontia.lastDeviceHandle", "office-mac");
+  window.history.replaceState({}, "", "/travel-laptop/chat/same");
+  render(MultiDeviceDashboardHarness);
+  await userEvent.click(await switchBack("Office Mac"));
+  await waitFor(() => expect(location.pathname).toBe("/office-mac"));
+});
+
+test("Alt+M switches back from settings and keeps the section, even to an offline device", async () => {
+  localStorage.setItem("pontia.lastDeviceHandle", "travel-laptop");
   window.history.replaceState({}, "", "/office-mac/settings/clients");
   render(MultiDeviceDashboardHarness);
   await screen.findByText("Device page");
+  fixture.connectionFailures.get("travel-laptop")!(new Error("offline"));
+  expect(await switchBack("Travel Laptop")).toHaveAttribute(
+    "title",
+    "Switch back to Travel Laptop (Offline, Alt+M)",
+  );
   await fireEvent.keyDown(window, { key: "m", code: "KeyM", altKey: true });
   await waitFor(() => expect(location.pathname).toBe("/travel-laptop/settings/clients"));
+  await screen.findByText("Travel Laptop is offline");
 });
 
 test("sidebar device selection keeps the settings section and permits an offline target", async () => {

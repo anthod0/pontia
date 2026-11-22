@@ -1,14 +1,18 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
+  import ArrowsLeftRightIcon from 'phosphor-svelte/lib/ArrowsLeftRightIcon'
   import CaretUpDownIcon from 'phosphor-svelte/lib/CaretUpDownIcon'
   import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
+  import { chatShortcuts } from '$lib/shortcuts/definitions'
+  import { formatShortcutKeys } from '$lib/shortcuts/format'
   import { deviceStateLabel, type ConnectedDevice } from './deviceConnections'
 
-  let { devices, selected, onSelect }: {
+  let { devices, selected, previous, onSelect }: {
     devices: ConnectedDevice[]
     selected: ConnectedDevice | undefined
+    previous: ConnectedDevice | undefined
     onSelect: (handle: string) => void
   } = $props()
 </script>
@@ -38,6 +42,15 @@
           </DropdownMenu.RadioGroup>
         </DropdownMenu.Content>
       </DropdownMenu.Root>
+      {#if previous}
+        <Sidebar.MenuAction
+          aria-label={$t('devices.switchBack', { name: previous.name })}
+          title={$t('devices.switchBackTitle', { name: previous.name, state: $t(deviceStateLabel[previous.state]), keys: formatShortcutKeys(chatShortcuts.previousDevice.keys) })}
+          onclick={() => onSelect(previous.handle)}
+        >
+          <ArrowsLeftRightIcon />
+        </Sidebar.MenuAction>
+      {/if}
     </Sidebar.MenuItem>
   </Sidebar.Menu>
 </Sidebar.Group>

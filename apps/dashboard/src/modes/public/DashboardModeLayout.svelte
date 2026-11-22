@@ -9,7 +9,6 @@
   import { Button } from '$lib/components/ui/button/index.js';
   import { dashboardRelativePath, dashboardScope, navigate } from '$lib/navigation';
   import { matchChatShortcut } from '$lib/shortcuts/definitions';
-  import { adjacentValue } from '$lib/shortcuts/sessionNavigation';
   import DeviceStatus, { type DeviceStatusView } from '../../components/devices/DeviceStatus.svelte';
   import AppShell from '../../components/layout/AppShell.svelte';
   import AppSidebar from '../../components/layout/AppSidebar.svelte';
@@ -45,13 +44,20 @@
   let disposed = false;
   let loadingModule = false;
   const lastDeviceStorageKey = 'pontia.lastDeviceHandle';
-  let lastHandle = $state<string | null>(null);
+  const previousDeviceStorageKey = 'pontia.previousDeviceHandle';
+  let lastHandle = $state(readStoredHandle(lastDeviceStorageKey));
+  let previousHandle = $state(readStoredHandle(previousDeviceStorageKey));
+  // The device shown before the active one changed; starts from the last device of the previous visit.
+  let shownHandle = readStoredHandle(lastDeviceStorageKey);
   let currentLocation = $state(window.location.pathname);
   const currentPath = $derived(dashboardRelativePath(currentLocation));
   // The routed device is active; the root uses the last routed device, then the first listed one.
   const activeHandle = $derived(handle ||
     ($devices.some(target => target.handle === lastHandle) ? lastHandle! : $devices[0]?.handle));
   const active = $derived($devices.find(target => target.handle === activeHandle));
+  // The device shown before the active one, while it is still listed.
+  const previous = $derived(previousHandle === activeHandle ? undefined
+    : $devices.find(target => target.handle === previousHandle));
   const device = $derived(active?.state === 'online' ? active.runtime : null);
   const signInUrl = $derived($signInRequired ? remote?.dashboardSignInUrl(
     `${window.location.pathname}${window.location.search}${window.location.hash}`,
@@ -94,9 +100,25 @@
     if (handle && $devices.some(target => target.handle === handle)) rememberDevice(handle);
   });
 
+  $effect(() => {
+    const current = active?.handle;
+    if (!current || current === shownHandle) return;
+    if ($devices.some(target => target.handle === shownHandle)) rememberPreviousDevice(shownHandle!);
+    shownHandle = current;
+  });
+
+  function readStoredHandle(key: string): string | null {
+    try { return window.localStorage.getItem(key); } catch { return null; /* Storage is optional. */ }
+  }
+
   function rememberDevice(target: string): void {
     lastHandle = target;
     try { window.localStorage.setItem(lastDeviceStorageKey, target); } catch { /* Storage is optional. */ }
+  }
+
+  function rememberPreviousDevice(target: string): void {
+    previousHandle = target;
+    try { window.localStorage.setItem(previousDeviceStorageKey, target); } catch { /* Storage is optional. */ }
   }
 
   $effect(() => {
@@ -124,13 +146,11 @@
   }
 
   function handleDeviceShortcut(event: KeyboardEvent): void {
-    if ($devices.length < 2) return;
-    const shortcut = matchChatShortcut(event);
-    if (shortcut?.action !== 'switchDevice') return;
-    const target = adjacentValue($devices.map(device => device.handle), activeHandle ?? null, shortcut.direction);
-    if (!target) return;
+    if (!previous || matchChatShortcut(event)?.action !== 'previousDevice') return;
     event.preventDefault();
-    selectDevice(target);
+    // Holding the key would bounce between the two devices.
+    if (event.repeat) return;
+    selectDevice(previous.handle);
   }
 
   function openNewChat(): void {
@@ -167,7 +187,6 @@
   }
 
   onMount(() => {
-    try { lastHandle = window.localStorage.getItem(lastDeviceStorageKey); } catch { /* Storage is optional. */ }
     void start();
     return () => {
       disposed = true;
@@ -198,7 +217,7 @@
       onSettings={() => { if (activeHandle) void navigate('/settings/common', undefined, { scope: `/${activeHandle}` }) }}>
       {#snippet deviceSwitcher()}
         {#if $devices.length > 1}
-          <SidebarDeviceSwitcher devices={$devices} selected={active} onSelect={selectDevice} />
+          <SidebarDeviceSwitcher devices={$devices} selected={active} {previous} onSelect={selectDevice} />
         {/if}
       {/snippet}
       {#snippet groups()}
