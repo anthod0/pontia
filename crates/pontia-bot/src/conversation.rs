@@ -738,6 +738,17 @@ impl ConversationService {
             })
     }
 
+    pub async fn set_own_description(&self, session_id: &str, description: &str) -> Result<Bot> {
+        let bot = self.require_bot(session_id).await?;
+        let updated = self
+            .records
+            .set_description_if_empty(&bot.bot_id, session_id, description)
+            .await?;
+        self.activity(&bot.bot_id)
+            .notify(ConversationUpdate::Changed);
+        Ok(updated)
+    }
+
     pub async fn link_message(
         &self,
         session_id: &str,

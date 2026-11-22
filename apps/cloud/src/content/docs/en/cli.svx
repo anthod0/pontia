@@ -32,6 +32,10 @@ See [Initialization](/docs/initialization) for interactive setup and the equival
 
 Stopping `pontiad` stops observation, input reception, and Workflow scheduling. Agent Clients manage the lifecycle of their native conversations separately.
 
+## Set a Bot description
+
+From the current main Bot Session, run `pontia bot set-description --description TEXT` to fill in an empty description. The command accepts up to 2,000 characters. Users can edit or clear the description in Bot settings.
+
 ## Bot helper compaction
 
 Run `pontia bot helper compact --session-id ID` from the current Bot Session to request context compaction for one of its helpers. The helper must be idle or interrupted, with manual compaction available from its client. Wait for a working helper to become idle before retrying.

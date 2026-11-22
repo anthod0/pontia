@@ -115,7 +115,7 @@ async fn avatar_selection_persists_across_updates_and_session_changes() {
     let mut input = configuration("A", "a", "model");
     input.avatar_shape = Some(AvatarShape::Mochi);
     input.avatar_color = Some(AvatarColor::Rose);
-    let bot = f.bots.create(input.clone()).await.unwrap();
+    let bot = f.bots.create(input.clone(), Locale::En).await.unwrap();
     assert_eq!(bot.avatar_shape, AvatarShape::Mochi);
     assert_eq!(bot.avatar_color, AvatarColor::Rose);
     input.avatar_shape = Some(AvatarShape::Onigiri);
@@ -143,7 +143,7 @@ async fn omitted_avatar_uses_creation_defaults() {
         "client_type": "generic", "client_key": "a", "model": "model"
     }))
     .unwrap();
-    let bot = f.bots.create(input).await.unwrap();
+    let bot = f.bots.create(input, Locale::En).await.unwrap();
     assert_eq!(bot.avatar_shape, AvatarShape::Classic);
     assert_eq!(bot.avatar_color, AvatarColor::Blue);
 }
@@ -162,12 +162,12 @@ async fn bots_have_independent_configuration_directories_and_current_sessions() 
     let f = Fixture::new().await;
     let a = f
         .bots
-        .create(configuration("A", "a", "model-a"))
+        .create(configuration("A", "a", "model-a"), Locale::En)
         .await
         .unwrap();
     let mut input = configuration("B", "b", "model-b");
     input.description = None;
-    let b = f.bots.create(input).await.unwrap();
+    let b = f.bots.create(input, Locale::En).await.unwrap();
     assert_ne!(a.bot_id, b.bot_id);
     assert_eq!(b.description, None);
     assert_eq!(a.description.as_deref(), Some("A description"));
@@ -221,7 +221,7 @@ async fn bot_lifecycle_preserves_user_information_and_writes_no_agent_profiles()
     std::fs::write(&user, "existing user information").unwrap();
     let bot = f
         .bots
-        .create(configuration("A", "a", "model-a"))
+        .create(configuration("A", "a", "model-a"), Locale::En)
         .await
         .unwrap();
     f.bots
@@ -241,7 +241,7 @@ async fn initialization_leaves_a_deleted_legacy_helper_profile_deleted() {
     let f = Fixture::new().await;
     let bot = f
         .bots
-        .create(configuration("A", "a", "model-a"))
+        .create(configuration("A", "a", "model-a"), Locale::En)
         .await
         .unwrap();
     let legacy = format!("{}-helper", bot.bot_id);
@@ -273,7 +273,7 @@ async fn filesystem_initialization_failure_can_be_retried_with_the_saved_bot_id(
     std::fs::create_dir_all(&user).unwrap();
     let error = f
         .bots
-        .create(configuration("A", "a", "model-a"))
+        .create(configuration("A", "a", "model-a"), Locale::En)
         .await
         .unwrap_err();
     let CreateError::Initialization {
@@ -284,6 +284,8 @@ async fn filesystem_initialization_failure_can_be_retried_with_the_saved_bot_id(
         panic!("expected initialization IO failure")
     };
     assert_eq!(f.bots.list().await.unwrap().len(), 1);
+    let greeting = f.messages.list(&bot_id).await.unwrap();
+    assert_eq!(greeting.len(), 1);
     std::fs::remove_dir(&user).unwrap();
     f.bots.initialize(&bot_id).await.unwrap();
     assert_eq!(std::fs::read_to_string(&user).unwrap(), "");
@@ -291,6 +293,7 @@ async fn filesystem_initialization_failure_can_be_retried_with_the_saved_bot_id(
     let reopened = BotService::new(f.pool.clone(), f.root.path(), f.registry.clone());
     reopened.initialize(&bot_id).await.unwrap();
     assert_eq!(std::fs::read_to_string(user).unwrap(), "user edited this");
+    assert_eq!(f.messages.list(&bot_id).await.unwrap(), greeting);
     assert_eq!(reopened.list().await.unwrap().len(), 1);
     assert!(f.profiles.list().await.unwrap().is_empty());
 }
@@ -304,7 +307,7 @@ async fn invalid_bot_configuration_is_rejected_before_persistence() {
         configuration("A", "a", " "),
     ] {
         assert!(matches!(
-            f.bots.create(input).await,
+            f.bots.create(input, Locale::En).await,
             Err(CreateError::Rejected(_))
         ));
     }
@@ -317,12 +320,12 @@ async fn visible_messages_are_isolated_and_ordered_across_session_changes() {
     let f = Fixture::new().await;
     let a = f
         .bots
-        .create(configuration("A", "a", "model"))
+        .create(configuration("A", "a", "model"), Locale::En)
         .await
         .unwrap();
     let b = f
         .bots
-        .create(configuration("B", "b", "model"))
+        .create(configuration("B", "b", "model"), Locale::En)
         .await
         .unwrap();
     let first = f
@@ -345,8 +348,8 @@ async fn visible_messages_are_isolated_and_ordered_across_session_changes() {
         .await
         .unwrap();
     let messages = f.messages.list(&a.bot_id).await.unwrap();
-    assert_eq!(messages, vec![first, reply]);
-    assert_eq!(f.messages.list(&b.bot_id).await.unwrap(), vec![other]);
+    assert_eq!(messages[1..], [first, reply]);
+    assert_eq!(f.messages.list(&b.bot_id).await.unwrap()[1..], [other]);
     assert!(matches!(
         f.messages
             .append("missing", MessageKind::UserInput, "input")
@@ -374,7 +377,7 @@ async fn messages_with_equal_timestamps_have_a_stable_id_order() {
     let f = Fixture::new().await;
     let bot = f
         .bots
-        .create(configuration("A", "a", "model"))
+        .create(configuration("A", "a", "model"), Locale::En)
         .await
         .unwrap();
     for id in ["c", "a", "b"] {
@@ -382,7 +385,29 @@ async fn messages_with_equal_timestamps_have_a_stable_id_order() {
     }
     let messages = f.messages.list(&bot.bot_id).await.unwrap();
     assert_eq!(
-        messages.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(),
+        messages
+            .iter()
+            .filter(|m| m.kind == MessageKind::UserInput)
+            .map(|m| m.id.as_str())
+            .collect::<Vec<_>>(),
         vec!["a", "b", "c"]
     );
+}
+
+#[tokio::test]
+async fn a_failed_greeting_rolls_back_bot_creation() {
+    let f = Fixture::new().await;
+    sqlx::query(
+        "CREATE TRIGGER reject_greeting BEFORE INSERT ON bot_messages
+                 BEGIN SELECT RAISE(ABORT, 'message write failed'); END",
+    )
+    .execute(&f.pool)
+    .await
+    .unwrap();
+    let result = f
+        .bots
+        .create(configuration("A", "a", "model"), Locale::En)
+        .await;
+    assert!(matches!(result, Err(CreateError::Rejected(_))));
+    assert!(f.bots.list().await.unwrap().is_empty());
 }

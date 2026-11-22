@@ -32,6 +32,10 @@
 
 `pontiad` を停止すると、監視、入力の受信、Workflow のスケジューリングが停止します。Agent Client のネイティブな会話のライフサイクルは、各 Agent Client が別途管理します。
 
+## Bot の説明を設定する
+
+Bot の現在のメイン Session で `pontia bot set-description --description TEXT` を実行すると、その Bot の説明が空欄のときに最大 2,000 文字まで記入できます。ユーザーは Bot の設定で説明を編集したり、空欄に戻したりできます。
+
 ## シェル補完
 
 `pontia completions` は `bash`、`zsh`、`fish`、`elvish`、`powershell` に対応しています。使用するシェルの行を設定ファイルに追加し、新しいターミナルを開いてください。

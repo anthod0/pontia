@@ -65,7 +65,10 @@ async fn fixed_windows_merge_by_last_occurrence_and_send_only_to_live_recipients
     let (_, exited) = bot(&service).await;
     let never = service
         .records()
-        .create(bot_configuration("Never started", MODEL))
+        .create(
+            bot_configuration("Never started", MODEL),
+            Default::default(),
+        )
         .await
         .unwrap();
     let task = todo(&service, &active, &format!("One\n{}", "字".repeat(100))).await;

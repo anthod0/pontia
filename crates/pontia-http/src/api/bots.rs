@@ -13,7 +13,7 @@ use pontia_agent_control::{agent_clients::AgentClientService, client_contract::D
 use pontia_bot::{
     conversation::{ConversationUpdate, ReplyRequest},
     messages::TodoAction,
-    records::{BotConfiguration, CreateError},
+    records::{BotConfiguration, CreateError, Locale},
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -39,16 +39,25 @@ pub async fn clients(State(state): State<HttpState>) -> Result<Json<ApiResponse<
     Ok(ok(json!({"clients": clients})))
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CreateBot {
+    #[serde(flatten)]
+    configuration: BotConfiguration,
+    #[serde(default)]
+    locale: Locale,
+}
+
 pub async fn create(
     State(state): State<HttpState>,
-    request: Result<Json<BotConfiguration>, JsonRejection>,
+    request: Result<Json<CreateBot>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let Json(request) = request.map_err(|error| ApiError::invalid_request(error.body_text()))?;
-    validate_client(&state, &request)?;
+    validate_client(&state, &request.configuration)?;
     let bot = state
         .bots()
         .records()
-        .create(request)
+        .create(request.configuration, request.locale)
         .await
         .map_err(|error| match error {
             CreateError::Rejected(error) => error.into(),
@@ -200,15 +209,36 @@ pub async fn retry(
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct LinkMessageRequest {
+pub struct BotToolRequest<T> {
     session_id: String,
-    input: pontia_bot::messages::MessageLinks,
+    input: T,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SetDescription {
+    description: String,
+}
+
+pub async fn set_description(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    request: Result<Json<BotToolRequest<SetDescription>>, JsonRejection>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let Json(request) = request.map_err(|error| ApiError::invalid_request(error.body_text()))?;
+    super::bot_context::authorize_tool(&state, &headers, &request.session_id).await?;
+    let bot = state
+        .bots()
+        .set_own_description(&request.session_id, &request.input.description)
+        .await
+        .map_err(bot_tool_error)?;
+    Ok(ok(json!({"description": bot.description})))
 }
 
 pub async fn link_message(
     State(state): State<HttpState>,
     headers: HeaderMap,
-    request: Result<Json<LinkMessageRequest>, JsonRejection>,
+    request: Result<Json<BotToolRequest<pontia_bot::messages::MessageLinks>>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let Json(request) = request.map_err(|error| ApiError::invalid_request(error.body_text()))?;
     super::bot_context::authorize_tool(&state, &headers, &request.session_id).await?;

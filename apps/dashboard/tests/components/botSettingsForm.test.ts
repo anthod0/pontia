@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { testDevice } from "../deviceFixture";
+import { languagePreference } from "../../src/lib/i18n";
 import type { Bot } from "../../src/api/types";
 import BotSettingsForm from "../../src/components/bots/BotSettingsForm.svelte";
 
@@ -125,20 +126,25 @@ test.each([{ catalog: [] }, { catalog: models.slice(1) }])(
   },
 );
 
-test("preselects the client default model for a new Bot", async () => {
+test("preselects the client default model for a new Bot in the selected language", async ({
+  onTestFinished,
+}) => {
+  onTestFinished(() => languagePreference.set("system"));
+  languagePreference.set("zh-CN");
   vi.mocked(testDevice.api.listAgentClientModels).mockResolvedValue({
     models,
     default_model: "provider/second",
   });
   const save = vi.spyOn(testDevice.api, "saveBot").mockResolvedValue(bot);
   render(BotSettingsForm, { onsaved: vi.fn() });
-  await fireEvent.input(screen.getByLabelText("Name"), { target: { value: "New" } });
-  await waitFor(() => expect(screen.getByLabelText("Model")).toHaveTextContent("Second model"));
-  await fireEvent.click(screen.getByRole("button", { name: "Create Bot" }));
+  await fireEvent.input(screen.getByLabelText("名称"), { target: { value: "New" } });
+  await waitFor(() => expect(screen.getByLabelText("模型")).toHaveTextContent("Second model"));
+  await fireEvent.click(screen.getByRole("button", { name: "创建 Bot" }));
   await waitFor(() =>
     expect(save).toHaveBeenCalledWith(
       expect.objectContaining({ client_type: "pi", model: "provider/second" }),
       undefined,
+      "zh-CN",
     ),
   );
 });

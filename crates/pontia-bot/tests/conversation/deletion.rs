@@ -127,7 +127,7 @@ async fn open_helpers_block_deletion_until_closed_then_only_that_bot_is_removed(
     assert!(conversation.resolve(&worker).await.is_err());
 
     assert!(conversation.records().get(&kept).await.is_ok());
-    assert_eq!(count(&pool, "bot_messages", &kept).await, 1);
+    assert_eq!(count(&pool, "bot_messages", &kept).await, 2);
     assert!(root.path().join("bot").join(&kept).is_dir());
     assert_eq!(std::fs::read_to_string(&user).unwrap(), "user notes");
     let memories: i64 = sqlx::query_scalar("SELECT count(*) FROM bot_memories WHERE id = 'm'")
