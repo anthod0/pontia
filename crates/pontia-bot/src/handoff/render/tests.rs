@@ -83,6 +83,7 @@ fn untrusted_markdown_stays_inside_its_record_or_field() {
     let malicious = "literal | `tick`\n# injected heading\n```\n- injected item\n\n</code><script>bad()</script>\r## another heading\r\n~~~\n```";
     let doc = document(
         "",
+        None,
         &[workspace(
             "wks-project",
             malicious,
@@ -115,6 +116,7 @@ fn untrusted_markdown_stays_inside_its_record_or_field() {
             .collect::<Vec<_>>(),
         [
             "## User",
+            "## Your Bot identity",
             "## Workspace",
             "### Workspace Roots",
             "## Memory",
@@ -152,6 +154,7 @@ fn untrusted_markdown_stays_inside_its_record_or_field() {
 fn example_covers_project_temporary_retrieval_and_failed_delivery() {
     let doc = document(
         "Investigate before planning. Commit completed repository work locally without pushing.",
+        Some("Coordinate project releases."),
         &[
             workspace(
                 "wks-project",

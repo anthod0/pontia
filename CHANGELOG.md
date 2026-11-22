@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Each Bot receives its own description as its identity when a new Bot Session starts.
+
 - In Dashboard, the Files tab of a Bot chat's side panel lists the last 10 files you opened in that Bot chat on that device. Click one to open it again, or clear the list.
 
 - In Dashboard, Bot chats show a scroll-to-bottom button after you scroll up, like Session chats.
