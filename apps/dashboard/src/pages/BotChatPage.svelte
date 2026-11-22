@@ -56,14 +56,17 @@
     toast.error(message, {
       id: refreshToastId,
       duration: Number.POSITIVE_INFINITY,
+      dismissible: false,
+      important: true,
       action: { label: $t('common.retry'), onClick: event => { event.preventDefault(); timeline.refresh(true) } },
     })
     return () => toast.dismiss(refreshToastId)
   })
 
-  function showActionError(failure: unknown, retry: () => void) {
+  function showActionError(failure: unknown, retry: (event: MouseEvent) => void) {
     toast.error(failure instanceof Error ? failure.message : String(failure), {
       id: actionToastId,
+      important: true,
       action: { label: $t('common.retry'), onClick: retry },
     })
   }
@@ -134,7 +137,7 @@
       return true
     } catch (failure) {
       draft = draft ? text + '\n\n' + draft : text
-      showActionError(failure, () => composer?.submit())
+      showActionError(failure, event => { if (!composer?.submit()) event.preventDefault() })
       timeline.refresh()
       return false
     }
@@ -174,7 +177,7 @@
     try {
       timeline.message(await device.api.retryBotMessage(botId, id))
     } catch (failure) {
-      showActionError(failure, () => void retry(id))
+      showActionError(failure, () => { if (!retrying.includes(id)) void retry(id) })
       timeline.refresh()
     } finally {
       retrying = retrying.filter((messageId) => messageId !== id)

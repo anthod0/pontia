@@ -134,7 +134,7 @@ test("keeps rich text pastes that carry a rendered image as text", async () => {
 test("reports a failed attachment cleanup in a persistent toast whose Retry action clears it", async () => {
   const draftId = await seed(true);
   const onSubmit = vi.fn().mockResolvedValue(true);
-  render(MessageComposer, { value: "", draftId, onSubmit });
+  const view = render(MessageComposer, { value: "", draftId, onSubmit });
   const submit = screen.getByRole("button", { name: "Send" });
   await waitFor(() => expect(submit).toBeEnabled());
   const records = await import("../../src/lib/uploads/records");
@@ -147,7 +147,7 @@ test("reports a failed attachment cleanup in a persistent toast whose Retry acti
     expect(toast.error).toHaveBeenCalledExactlyOnceWith(
       "storage locked",
       expect.objectContaining({
-        id: `composer-submit-error:${draftId}`,
+        id: "composer-submit-error",
         duration: Number.POSITIVE_INFINITY,
         action: expect.objectContaining({ label: "Retry" }),
       }),
@@ -157,8 +157,19 @@ test("reports a failed attachment cleanup in a persistent toast whose Retry acti
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   await screen.findByRole("button", { name: "Dismiss sent attachments" });
   remove.mockRestore();
-  (toast.error.mock.lastCall![1] as { action: { onClick: () => void } }).action.onClick();
+  const action = (
+    toast.error.mock.lastCall![1] as { action: { onClick: (event: MouseEvent) => void } }
+  ).action;
+  await view.rerender({ disabled: true });
+  const blocked = new MouseEvent("click", { cancelable: true });
+  action.onClick(blocked);
+  expect(blocked.defaultPrevented).toBe(true);
+  await view.rerender({ disabled: false });
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Dismiss sent attachments" })).toBeEnabled(),
+  );
+  action.onClick(new MouseEvent("click", { cancelable: true }));
   await waitFor(async () => expect(await loadUploadRecords("composer-test", draftId)).toEqual([]));
   expect(onSubmit).toHaveBeenCalledOnce();
-  expect(toast.dismiss).toHaveBeenCalledWith(`composer-submit-error:${draftId}`);
+  expect(toast.dismiss).toHaveBeenCalledWith("composer-submit-error");
 });

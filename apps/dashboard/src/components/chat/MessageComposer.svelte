@@ -91,7 +91,7 @@
   })
   let sentAwaitingCleanup = $state(false)
   let sending = $state(false)
-  const submissionToastId = $derived(`composer-submit-error:${draftId ?? 'default'}`)
+  const submissionToastId = 'composer-submit-error'
   onDestroy(() => toast.dismiss(submissionToastId))
   const uploadBlocked = $derived(Boolean(draftId) && (!attachments.ready || attachments.items.some(item => item.status !== 'complete')))
   const completedFiles = $derived(attachments.items.flatMap(item => item.status === 'complete' && item.upload?.path ? [{ name: item.name, path: item.upload.path }] : []))
@@ -151,10 +151,12 @@
     fullscreenEditor?.focusEnd()
   }
 
-  export function submit(deliveryPolicy: InboxDeliveryPolicy = 'steer'): void {
-    if (cannotSubmit) return
+  /** Returns false when the composer cannot submit right now. */
+  export function submit(deliveryPolicy: InboxDeliveryPolicy = 'steer'): boolean {
+    if (cannotSubmit) return false
     if (command) executeCommand(command)
     else void submitMessage(deliveryPolicy)
+    return true
   }
 
   async function submitMessage(deliveryPolicy: InboxDeliveryPolicy): Promise<void> {
@@ -172,7 +174,8 @@
       toast.error(error instanceof Error ? error.message : String(error), {
         id: submissionToastId,
         duration: Number.POSITIVE_INFINITY,
-        action: { label: $t('common.retry'), onClick: () => submit(deliveryPolicy) },
+        important: true,
+        action: { label: $t('common.retry'), onClick: event => { if (!submit(deliveryPolicy)) event.preventDefault() } },
       })
     } finally {
       sending = false
