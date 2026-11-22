@@ -37,7 +37,9 @@ CREATE TABLE bot_messages (
         CAST(substr(substr(created_at, 21, length(created_at) - 20 -
             CASE WHEN substr(created_at, -1) = 'Z' THEN 1 ELSE 6 END) || '000', 1, 3) AS INTEGER)
       ELSE 0 END
-) VIRTUAL
+) VIRTUAL,
+    link_source TEXT
+        CHECK (link_source IS NULL OR (kind = 'user_input' AND link_source IN ('quote', 'bot')))
 );
 
 CREATE INDEX idx_bot_messages_bot_created

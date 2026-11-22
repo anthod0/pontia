@@ -1,3 +1,5 @@
+mod links;
+pub use links::MessageLinks;
 mod todos;
 pub use todos::{TodoAction, TodoList};
 
@@ -8,6 +10,8 @@ use sqlx::SqlitePool;
 use std::collections::BTreeSet;
 
 use crate::conversation::{Reply, SentReply};
+
+const MAX_RELATED: usize = 5;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "state", rename_all = "snake_case")]
@@ -89,8 +93,15 @@ impl MessageService {
             MessageKind::BotReply => (content.into(), None),
         };
         let mut tx = self.pool.begin().await?;
-        let message = append_message(&mut *tx, bot_id, kind, &content).await?;
-        if let Some(target) = quoted {
+        let message = append_message(
+            &mut *tx,
+            bot_id,
+            kind,
+            &content,
+            quoted.as_ref().map(|_| "quote"),
+        )
+        .await?;
+        if let Some(crate::quote::Target::Message(target)) = quoted {
             link_message(&mut tx, &message, &target).await?;
         }
         tx.commit().await?;
@@ -98,14 +109,20 @@ impl MessageService {
     }
 
     pub(crate) async fn reply(&self, bot_id: &str, reply: &Reply) -> Result<SentReply> {
-        if reply.related_to.len() > 5 {
+        if reply.related_to.len() > MAX_RELATED {
             return Err(Error::Domain(
                 "at most five related messages are allowed".into(),
             ));
         }
         let mut tx = self.pool.begin().await?;
-        let mut message =
-            append_message(&mut *tx, bot_id, MessageKind::BotReply, &reply.message).await?;
+        let mut message = append_message(
+            &mut *tx,
+            bot_id,
+            MessageKind::BotReply,
+            &reply.message,
+            None,
+        )
+        .await?;
         for target in reply
             .related_to
             .iter()
@@ -293,17 +310,19 @@ async fn append_message<'a>(
     bot_id: &str,
     kind: MessageKind,
     content: &str,
+    link_source: Option<&str>,
 ) -> Result<BotMessage> {
     if content.trim().is_empty() {
         return Err(Error::Domain("message content cannot be empty".into()));
     }
     sqlx::query_as(
-        "INSERT INTO bot_messages (id, bot_id, kind, content)
-             SELECT ?, bot_id, ?, ? FROM bots WHERE bot_id = ? RETURNING *",
+        "INSERT INTO bot_messages (id, bot_id, kind, content, link_source)
+             SELECT ?, bot_id, ?, ?, ? FROM bots WHERE bot_id = ? RETURNING *",
     )
     .bind(format!("bmsg_{}", uuid::Uuid::now_v7()))
     .bind(kind)
     .bind(content)
+    .bind(link_source)
     .bind(bot_id)
     .fetch_optional(executor)
     .await?

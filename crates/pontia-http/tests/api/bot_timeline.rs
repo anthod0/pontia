@@ -648,3 +648,52 @@ async fn context_returns_the_nearest_fifty_in_timeline_order_and_scopes_the_anch
         StatusCode::NOT_FOUND
     );
 }
+
+#[tokio::test]
+async fn linking_a_message_requires_the_current_bot_session_and_its_credential() {
+    let app = fixture().await;
+    message(&app, "a", "previous", "2026-01-01T00:00:00Z", "normal").await;
+    message(&app, "a", "follow", "2026-01-02T00:00:00Z", "normal").await;
+    for session in ["s", "old"] {
+        sqlx::query("INSERT INTO sessions(session_id, client_type, state, application_id, application_ref, runtime_environment)
+            VALUES (?, 'generic', 'idle', 'bot', ?, ?)")
+            .bind(session).bind(format!("a:{session}")).bind(json!({"PONTIA_BOT_TOOL_TOKEN":session}).to_string())
+            .execute(&app.db).await.unwrap();
+    }
+    let router = pontia_http::router(app.state.clone());
+    let before = page(&app, &[]).await;
+    let mut live = get_body(&router, "/api/v1/bots/a/stream?timeline=true").await;
+    assert_eq!(next_update(&mut live).await, json!({"type":"reset"}));
+    for (session, credential, expected) in [
+        ("s", "old", StatusCode::FORBIDDEN),
+        ("old", "old", StatusCode::FORBIDDEN),
+        ("s", "s", StatusCode::OK),
+    ] {
+        let body = json!({
+            "session_id": session,
+            "input": {"message_id": "follow", "related_to": vec!["previous"; 6]},
+        });
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/v1/bot/link-message")
+            .header("Authorization", format!("Bearer {TOKEN}"))
+            .header("Content-Type", "application/json")
+            .header(pontia_bot::identity::TOOL_TOKEN_HEADER, credential)
+            .body(Body::from(body.to_string()))
+            .unwrap();
+        let (status, body) = json_response(router.clone().oneshot(request).await.unwrap()).await;
+        assert_eq!(status, expected, "{body}");
+        if status.is_success() {
+            assert_eq!(
+                body["data"],
+                json!({"message_id":"follow", "related_to":["previous"]})
+            );
+        }
+    }
+    assert_eq!(next_update(&mut live).await, json!({"type":"changed"}));
+    assert_eq!(page(&app, &[]).await["entries"], before["entries"]);
+    let (status, context) =
+        get_json(app.state.clone(), "/api/v1/bots/a/messages/follow/context").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(context["data"]["messages"], before["entries"]);
+}

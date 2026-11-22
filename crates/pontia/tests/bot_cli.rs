@@ -490,3 +490,34 @@ async fn send_to_user_forwards_todo_and_repeated_link_and_resolution_targets() {
         json!({"message": "Hello", "related_to": ["a", "b"], "todo": true, "resolve_todos": ["c", "d"]})
     );
 }
+
+#[tokio::test]
+async fn link_message_requires_targets_and_forwards_all_of_them() {
+    let mut f = Fixture::new(
+        "link-message",
+        json!({"message_id": "m","related_to":["a","b","c"]}),
+    )
+    .await;
+    let missing = f.cli(&["link-message", "--message-id", "m"]).await;
+    assert!(!missing.status.success());
+    assert!(f.requests.try_recv().is_err());
+    let output = f
+        .cli(&[
+            "link-message",
+            "--message-id",
+            "m",
+            "--related-to",
+            "a",
+            "b",
+            "--related-to",
+            "c",
+        ])
+        .await;
+    assert!(output.status.success());
+    assert_eq!(
+        f.requests.recv().await.unwrap(),
+        json!({
+            "session_id":"caller-session", "input":{"message_id":"m","related_to":["a","b","c"]}
+        })
+    );
+}

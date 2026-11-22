@@ -268,15 +268,18 @@ async fn recent_chat_selects_sixty_visible_messages_for_this_bot_in_chronologica
     }
     f.message("b", 99, "other-bot-secret").await;
     sqlx::query(
-        "INSERT INTO bot_message_links VALUES ('msg-a-63', 'msg-a-62'), ('msg-a-62', 'msg-a-61')",
+        "INSERT INTO bot_message_links VALUES ('msg-a-63', 'msg-a-62'), ('msg-a-62', 'msg-a-61'), ('msg-a-60', 'msg-a-59')",
     )
     .execute(&f.pool)
     .await
     .unwrap();
+    sqlx::query("UPDATE bot_messages SET link_source = CASE id WHEN 'msg-a-62' THEN 'bot' ELSE 'quote' END WHERE id IN ('msg-a-62','msg-a-60')")
+        .execute(&f.pool).await.unwrap();
     let doc = f.generate().await;
     let chat = section(&doc, "Recent Chat");
     assert!(chat.contains("(`msg-a-63`) [Related to: `msg-a-62`]"));
-    assert!(!chat.contains("(`msg-a-62`) [Related to:"));
+    assert!(chat.contains("(`msg-a-62`) [Related to: `msg-a-61`]"));
+    assert!(!chat.contains("(`msg-a-60`) [Related to:"));
     assert_eq!(
         ids(chat, "- ["),
         (5..65).map(|i| format!("msg-a-{i:02}")).collect::<Vec<_>>()

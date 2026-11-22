@@ -195,6 +195,38 @@ pub async fn retry(
     ))
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LinkMessageRequest {
+    session_id: String,
+    input: pontia_bot::messages::MessageLinks,
+}
+
+pub async fn link_message(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    request: Result<Json<LinkMessageRequest>, JsonRejection>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let Json(request) = request.map_err(|error| ApiError::invalid_request(error.body_text()))?;
+    super::bot_context::authorize_tool(&state, &headers, &request.session_id).await?;
+    state
+        .bots()
+        .link_message(&request.session_id, &request.input)
+        .await
+        .map_err(bot_tool_error)?;
+    Ok(ok(json!(request.input)))
+}
+
+fn bot_tool_error(error: pontia_core::Error) -> ApiError {
+    match error {
+        pontia_core::Error::Conflict {
+            code: "bot_session_required",
+            message,
+        } => ApiError::custom(StatusCode::FORBIDDEN, "forbidden", message),
+        error => error.into(),
+    }
+}
+
 pub async fn reply(
     State(state): State<HttpState>,
     headers: HeaderMap,
@@ -206,13 +238,7 @@ pub async fn reply(
         .bots()
         .send_to_user(request)
         .await
-        .map_err(|error| match error {
-            pontia_core::Error::Conflict {
-                code: "bot_session_required",
-                message,
-            } => ApiError::custom(StatusCode::FORBIDDEN, "forbidden", message),
-            error => error.into(),
-        })?;
+        .map_err(bot_tool_error)?;
     Ok(ok(
         json!({"sent": true, "message_id": sent.message.id, "todo": sent.message.todo.is_some(), "resolved": sent.resolved, "already_resolved": sent.already_resolved}),
     ))

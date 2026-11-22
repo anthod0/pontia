@@ -22,6 +22,14 @@ pub(super) enum BotTool {
     SessionMessages(SessionMessages),
     /// Update shared USER.md (at most 2,000 characters)
     UpdateUser(UpdateUser),
+    /// Replace the links from an unquoted user message to earlier messages in this chat
+    LinkMessage {
+        #[arg(long, value_name = "ID")]
+        message_id: String,
+        /// Earlier message IDs (one to five distinct targets)
+        #[arg(long, value_name = "ID", required = true, num_args = 1..)]
+        related_to: Vec<String>,
+    },
     /// Send one complete reply to the user
     SendToUser(SendToUser),
     /// Register an existing directory or change a Workspace description
