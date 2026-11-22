@@ -1,7 +1,7 @@
 import { testDevice } from "../deviceFixture";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, expect, test, vi } from "vitest";
-const toast = vi.hoisted(() => ({ error: vi.fn(), warning: vi.fn() }));
+const toast = vi.hoisted(() => ({ error: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }));
 vi.mock("svelte-sonner", () => ({ toast }));
 import MessageComposer from "../../src/components/chat/MessageComposer.svelte";
 import { loadUploadRecords, saveUploadRecord } from "../../src/lib/uploads/records";
@@ -129,4 +129,36 @@ test("keeps rich text pastes that carry a rendered image as text", async () => {
   expect(
     screen.queryByRole("button", { name: "Remove attachment image.png" }),
   ).not.toBeInTheDocument();
+});
+
+test("reports a failed attachment cleanup in a persistent toast whose Retry action clears it", async () => {
+  const draftId = await seed(true);
+  const onSubmit = vi.fn().mockResolvedValue(true);
+  render(MessageComposer, { value: "", draftId, onSubmit });
+  const submit = screen.getByRole("button", { name: "Send" });
+  await waitFor(() => expect(submit).toBeEnabled());
+  const records = await import("../../src/lib/uploads/records");
+  const remove = vi
+    .spyOn(records, "removeUploadRecord")
+    .mockRejectedValueOnce(new Error("storage locked"));
+  toast.error.mockClear();
+  await fireEvent.click(submit);
+  await waitFor(() =>
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith(
+      "storage locked",
+      expect.objectContaining({
+        id: `composer-submit-error:${draftId}`,
+        duration: Number.POSITIVE_INFINITY,
+        action: expect.objectContaining({ label: "Retry" }),
+      }),
+    ),
+  );
+  expect(screen.queryByText("storage locked")).not.toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  await screen.findByRole("button", { name: "Dismiss sent attachments" });
+  remove.mockRestore();
+  (toast.error.mock.lastCall![1] as { action: { onClick: () => void } }).action.onClick();
+  await waitFor(async () => expect(await loadUploadRecords("composer-test", draftId)).toEqual([]));
+  expect(onSubmit).toHaveBeenCalledOnce();
+  expect(toast.dismiss).toHaveBeenCalledWith(`composer-submit-error:${draftId}`);
 });

@@ -1,7 +1,8 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
+  import { toast } from 'svelte-sonner'
   import { useDeviceRuntime } from '../../device/context';
-  import { tick, type Snippet } from 'svelte'
+  import { onDestroy, tick, type Snippet } from 'svelte'
   import ArrowsOutIcon from 'phosphor-svelte/lib/ArrowsOutIcon'
   import ArrowsInIcon from 'phosphor-svelte/lib/ArrowsInIcon'
   import StackSimpleIcon from 'phosphor-svelte/lib/StackSimpleIcon'
@@ -90,7 +91,8 @@
   })
   let sentAwaitingCleanup = $state(false)
   let sending = $state(false)
-  let submissionError = $state<string | null>(null)
+  const submissionToastId = $derived(`composer-submit-error:${draftId ?? 'default'}`)
+  onDestroy(() => toast.dismiss(submissionToastId))
   const uploadBlocked = $derived(Boolean(draftId) && (!attachments.ready || attachments.items.some(item => item.status !== 'complete')))
   const completedFiles = $derived(attachments.items.flatMap(item => item.status === 'complete' && item.upload?.path ? [{ name: item.name, path: item.upload.path }] : []))
   const uploadUnavailable = $derived(disabled || busy || sending || !attachments.ready)
@@ -149,7 +151,7 @@
     fullscreenEditor?.focusEnd()
   }
 
-  function submit(deliveryPolicy: InboxDeliveryPolicy = 'steer'): void {
+  export function submit(deliveryPolicy: InboxDeliveryPolicy = 'steer'): void {
     if (cannotSubmit) return
     if (command) executeCommand(command)
     else void submitMessage(deliveryPolicy)
@@ -158,7 +160,7 @@
   async function submitMessage(deliveryPolicy: InboxDeliveryPolicy): Promise<void> {
     const draft = uploads
     sending = true
-    submissionError = null
+    toast.dismiss(submissionToastId)
     try {
       if (!sentAwaitingCleanup) sentAwaitingCleanup = (await onSubmit(uploadMessage(value, completedFiles), deliveryPolicy)) === true
       if (sentAwaitingCleanup) {
@@ -166,7 +168,12 @@
         sentAwaitingCleanup = false
       }
     } catch (error) {
-      submissionError = error instanceof Error ? error.message : String(error)
+      // Sent messages keep their attachments until cleanup succeeds, so the error stays until the user retries.
+      toast.error(error instanceof Error ? error.message : String(error), {
+        id: submissionToastId,
+        duration: Number.POSITIVE_INFINITY,
+        action: { label: $t('common.retry'), onClick: () => submit(deliveryPolicy) },
+      })
     } finally {
       sending = false
     }
@@ -312,7 +319,6 @@
     </div>
   </PromptInput.Body>
   <div class={compact ? 'col-span-3' : 'contents'}>
-    {#if submissionError}<p role="alert" class="px-4 text-xs text-destructive">{submissionError}</p>{/if}
     {#if command?.disabledReason}<p role="status" class="px-4 pb-2 text-xs text-muted-foreground">{command.disabledReason}</p>{/if}
   </div>
   <PromptInput.Toolbar class={compact ? 'contents' : cn(fullscreen && 'px-1 pb-1', uploads ? 'pt-0' : 'justify-end pt-0')}>

@@ -84,7 +84,7 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("$lib/navigation", () => ({ navigate: mocks.navigate }));
-vi.mock("svelte-sonner", () => ({ toast: { error: vi.fn() } }));
+vi.mock("svelte-sonner", () => ({ toast: { error: vi.fn(), dismiss: vi.fn() } }));
 vi.mock("../../src/stores/sessions", async (importOriginal) => {
   const original = await importOriginal();
   const mocked = {
