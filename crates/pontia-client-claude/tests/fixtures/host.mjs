@@ -128,12 +128,18 @@ if (process.argv[2] === "history") {
             record({method: "replay_conflict", code: error.code});
           }
           const finished = captured.find(({ params }) => params.event.kind === "finished").params;
+          try {
+            await connection.request("host.event", {...finished, event: {...finished.event, input_id: active.id}});
+          } catch (error) {
+            record({method: "result_conflict", code: error.code});
+          }
+          const changedOutcome = await connection.request("host.event", {...finished, event: {...finished.event, outcome: "failed"}});
           const lateParams = hostObservation(host, ++sequence, {
             ...finished.event, outcome: "failed", result_id: randomUUID(),
           });
           const late = await connection.request("host.event", lateParams);
           const repeated = await connection.request("host.event", lateParams);
-          record({method: "late_result", late, repeated});
+          record({method: "late_result", late, repeated, changedOutcome});
         }
       } else if (request.method === "compact") {
         if (active || compacting || !ready) {

@@ -131,6 +131,11 @@ async fn replayed_host_observations_return_original_receipts_after_turn_and_peer
                 .any(|f| f["method"] == "replay_conflict" && f["code"] == -32009)
         );
         let late = wire.iter().find(|f| f["method"] == "late_result").unwrap();
+        assert!(
+            wire.iter()
+                .any(|f| f["method"] == "result_conflict" && f["code"] == -32009)
+        );
+        assert_eq!(late["late"], late["changedOutcome"]);
         assert_eq!(late["late"], late["repeated"]);
         assert_eq!(late["late"]["duplicate"], true);
         assert_eq!(late["late"]["event_id"], replays[4]["original"]["event_id"]);
@@ -1013,13 +1018,40 @@ async fn parallel_approvals_are_claimed_once_and_never_release_the_turn_boundary
     assert_ne!(choices[0]["permission_id"], choices[1]["permission_id"]);
     assert_eq!(choices[0]["option"], resolved[0]["response"]["option_key"]);
     assert_eq!(choices[1]["option"], "deny");
-    let interaction_reports: Vec<(String, String, String)> = sqlx::query_as(
-        "SELECT event_type,report_key,json_extract(payload,'$.interaction_id') FROM events WHERE session_id=? AND event_type IN ('interaction.blocked','interaction.unblocked')",
-    ).bind(&session).fetch_all(&h.app.db()).await.unwrap();
+    let ingest = h.app.event_ingest_service();
+    let interaction_reports: Vec<_> = ingest
+        .list_events(&session)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|e| {
+            matches!(
+                e.event_type,
+                pontia_core::domain::EventType::InteractionBlocked
+                    | pontia_core::domain::EventType::InteractionUnblocked
+            )
+        })
+        .collect();
     assert_eq!(interaction_reports.len(), 4);
     let host = h.host_id(&session);
-    for (kind, key, id) in interaction_reports {
-        assert_eq!(key, format!("claude:{host}:{id}:{kind}"));
+    for event in interaction_reports {
+        let id = event.payload["interaction_id"].as_str().unwrap();
+        assert_eq!(
+            event.report_key,
+            Some(format!("claude:{host}:{id}:{}", event.event_type))
+        );
+        let duplicate = ingest
+            .report_fact(pontia_agent_control::ReportedFact {
+                session_id: session.clone(),
+                turn_id: None,
+                fact_type: event.event_type,
+                report_key: event.report_key,
+                data: event.payload,
+            })
+            .await
+            .unwrap();
+        assert!(duplicate.duplicate);
+        assert_eq!(duplicate.event_id, event.event_id);
     }
     assert_eq!(h.turns(&session).await.len(), 1);
     assert_eq!(h.turns(&session).await[0].1, "running");
