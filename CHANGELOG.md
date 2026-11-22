@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - In Dashboard, each todo in a Bot chat shows Context on the left and Ignore, Quote and Reply on the right. Ignore marks the todo as done. Quote adds the todo as a quote above the chat input. Reply opens a box under the todo, so you can answer without leaving the list. The answer appears in the chat with the todo quoted.
 
-- In Dashboard, the Bot chat message menu item that marks an open todo as done is now called Ignore, matching the Ignore button in the todo list.
+- In Dashboard, the Bot chat message menu item that marks an open todo as done is now called Ignore, matching the Ignore button in the todo list. The confirmation after ignoring a todo now reads Ignored.
 
 - In Dashboard, the Session chat actions menu next to the input lists New chat first, then Rename, Pin and Archive, then Shared files and Compact context, with Exit in its own group at the bottom.
 
