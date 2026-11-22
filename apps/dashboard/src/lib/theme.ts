@@ -1,4 +1,5 @@
 import { derived, readable, writable } from "svelte/store";
+import { readStoredWith, writeStored } from "./storage";
 
 export type ThemePreference = "system" | "light" | "dark";
 export type ResolvedTheme = "light" | "dark";
@@ -8,13 +9,11 @@ const storageKey = "pontia.theme";
 const themeColors: Record<ResolvedTheme, string> = { light: "#fafaf8", dark: "#1d2021" };
 const darkQuery = "(prefers-color-scheme: dark)";
 
-function readPreference(): ThemePreference {
-  if (typeof localStorage === "undefined") return "system";
-  const saved = localStorage.getItem(storageKey);
-  return saved === "light" || saved === "dark" ? saved : "system";
-}
-
-const preference = writable<ThemePreference>(readPreference());
+const preference = writable<ThemePreference>(
+  readStoredWith(storageKey, (saved) =>
+    saved === "light" || saved === "dark" ? saved : undefined,
+  ) ?? "system",
+);
 
 const systemTheme = readable<ResolvedTheme>("light", (set) => {
   if (typeof matchMedia === "undefined") return;
@@ -28,8 +27,7 @@ const systemTheme = readable<ResolvedTheme>("light", (set) => {
 export const themePreference = {
   subscribe: preference.subscribe,
   set(next: ThemePreference): void {
-    if (next === "system") localStorage.removeItem(storageKey);
-    else localStorage.setItem(storageKey, next);
+    writeStored(storageKey, next === "system" ? null : next);
     preference.set(next);
   },
 };

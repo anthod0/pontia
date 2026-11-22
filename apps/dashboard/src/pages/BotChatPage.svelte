@@ -22,7 +22,7 @@
   import BotQuoteBlock from '../components/bots/BotQuoteBlock.svelte'
   import { parseQuotedMessage, quoteId, quotedMessage, type BotQuote } from '$lib/botQuote'
   import { canPreviewImage } from '$lib/downloads/preview'
-  import { loadQuoteDraft, saveQuoteDraft } from '$lib/botQuoteDraft'
+  import { createQuoteDraft } from '$lib/botQuoteDraft'
 
   let { botId }: { botId: string } = $props()
   const device = useDeviceRuntime()
@@ -37,7 +37,8 @@
   let panel = $state<BotChatPanel>()
   provideFilePreviewNavigator({ open: file => panel?.openFile(file) })
   let composer = $state<MessageComposer>()
-  let quote = $state<BotQuote | null>(loadQuoteDraft(device.id, untrack(() => botId)))
+  const quoteDraft = createQuoteDraft(device.id, untrack(() => botId))
+  const quote = $derived(quoteDraft.current)
   let highlighted = $state<string | null>(null)
   let jumping = $state<string | null>(null)
   let missingQuotes = $state<string[]>([])
@@ -72,8 +73,7 @@
   }
 
   function setQuote(next: BotQuote | null) {
-    quote = next
-    saveQuoteDraft(device.id, botId, next)
+    quoteDraft.current = next
   }
 
   async function addQuote(next: BotQuote) {

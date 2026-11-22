@@ -9,6 +9,7 @@
   import { Button } from '$lib/components/ui/button/index.js';
   import { dashboardRelativePath, navigate } from '$lib/navigation';
   import { returnToLastPage } from '$lib/lastPage';
+  import { PersistedState, textSerializer } from '$lib/storage';
   import { matchChatShortcut } from '$lib/shortcuts/definitions';
   import DeviceStatus, { type DeviceStatusView } from '../../components/devices/DeviceStatus.svelte';
   import AppShell from '../../components/layout/AppShell.svelte';
@@ -44,21 +45,19 @@
   let moduleError = $state<string | null>(null);
   let disposed = false;
   let loadingModule = false;
-  const lastDeviceStorageKey = 'pontia.lastDeviceHandle';
-  const previousDeviceStorageKey = 'pontia.previousDeviceHandle';
-  let lastHandle = $state(readStoredHandle(lastDeviceStorageKey));
-  let previousHandle = $state(readStoredHandle(previousDeviceStorageKey));
+  const lastHandle = new PersistedState('pontia.lastDeviceHandle', null, textSerializer);
+  const previousHandle = new PersistedState('pontia.previousDeviceHandle', null, textSerializer);
   // The device shown before the active one changed; starts from the last device of the previous visit.
-  let shownHandle = readStoredHandle(lastDeviceStorageKey);
+  let shownHandle = lastHandle.current;
   let currentLocation = $state(window.location.pathname);
   const currentPath = $derived(dashboardRelativePath(currentLocation));
   // The routed device is active; the root uses the last routed device, then the first listed one.
   const activeHandle = $derived(handle ||
-    ($devices.some(target => target.handle === lastHandle) ? lastHandle! : $devices[0]?.handle));
+    ($devices.some(target => target.handle === lastHandle.current) ? lastHandle.current! : $devices[0]?.handle));
   const active = $derived($devices.find(target => target.handle === activeHandle));
   // The device shown before the active one, while it is still listed.
-  const previous = $derived(previousHandle === activeHandle ? undefined
-    : $devices.find(target => target.handle === previousHandle));
+  const previous = $derived(previousHandle.current === activeHandle ? undefined
+    : $devices.find(target => target.handle === previousHandle.current));
   const device = $derived(active?.state === 'online' ? active.runtime : null);
   const signInUrl = $derived($signInRequired ? remote?.dashboardSignInUrl(
     `${window.location.pathname}${window.location.search}${window.location.hash}`,
@@ -108,18 +107,12 @@
     shownHandle = current;
   });
 
-  function readStoredHandle(key: string): string | null {
-    try { return window.localStorage.getItem(key); } catch { return null; /* Storage is optional. */ }
-  }
-
   function rememberDevice(target: string): void {
-    lastHandle = target;
-    try { window.localStorage.setItem(lastDeviceStorageKey, target); } catch { /* Storage is optional. */ }
+    lastHandle.current = target;
   }
 
   function rememberPreviousDevice(target: string): void {
-    previousHandle = target;
-    try { window.localStorage.setItem(previousDeviceStorageKey, target); } catch { /* Storage is optional. */ }
+    previousHandle.current = target;
   }
 
   // Settings keep their section; elsewhere the target device reopens its last chat.

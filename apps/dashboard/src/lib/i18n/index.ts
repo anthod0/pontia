@@ -2,6 +2,7 @@ import { derived, get, writable } from "svelte/store";
 import { addMessages, init, locale, format } from "svelte-i18n";
 import en from "./en.json";
 import zhCN from "./zh-CN.json";
+import { readStoredWith, writeStored } from "../storage";
 
 export type Locale = "en" | "zh-CN";
 export type LanguagePreference = "system" | Locale;
@@ -13,10 +14,11 @@ export type Translator = (
 
 const storageKey = "pontia.locale";
 
-function readPreference(): LanguagePreference {
-  const saved = typeof localStorage === "undefined" ? null : localStorage.getItem(storageKey);
-  return saved === "en" || saved === "zh-CN" ? saved : "system";
-}
+const preference = writable<LanguagePreference>(
+  readStoredWith(storageKey, (saved) =>
+    saved === "en" || saved === "zh-CN" ? saved : undefined,
+  ) ?? "system",
+);
 
 function browserLocale(): Locale {
   for (const language of typeof navigator === "undefined" ? [] : navigator.languages) {
@@ -26,7 +28,6 @@ function browserLocale(): Locale {
   return "en";
 }
 
-const preference = writable<LanguagePreference>(readPreference());
 addMessages("en", en);
 addMessages("zh-CN", zhCN);
 init({ fallbackLocale: "en", initialLocale: resolveLocale(get(preference)) });
@@ -38,8 +39,7 @@ function resolveLocale(value: LanguagePreference): Locale {
 export const languagePreference = {
   subscribe: preference.subscribe,
   set(value: LanguagePreference): void {
-    if (value === "system") localStorage.removeItem(storageKey);
-    else localStorage.setItem(storageKey, value);
+    writeStored(storageKey, value === "system" ? null : value);
     preference.set(value);
     locale.set(resolveLocale(value));
   },

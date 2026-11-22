@@ -1,4 +1,5 @@
 import { get, writable } from "svelte/store";
+import { readStored, scopedKey, writeStored } from "$lib/storage";
 import type { DeviceRuntime } from "../device/runtime";
 import type { ForkSessionOutcome } from "../api/types";
 
@@ -13,23 +14,27 @@ export interface HistoryFork {
 }
 
 export function createHistoryForks(device: DeviceRuntime) {
-  const storageKey = `pontia:history-forks:v1:${device.id}`;
-  const saved = typeof localStorage === "undefined" ? null : localStorage.getItem(storageKey);
+  const storageKey = scopedKey("pontia:history-forks:v1", device.id);
+  // Unreadable storage or data throws instead of reading as empty, so a later save cannot drop forks.
+  const saved = readStored(storageKey, { required: true });
   const pending = writable<HistoryFork[]>(saved ? JSON.parse(saved) : []);
+
+  // A failed write throws, so a fork that cannot be saved does not proceed.
+  function persist(operations: HistoryFork[]): void {
+    writeStored(storageKey, JSON.stringify(operations), { required: true });
+    pending.set(operations);
+  }
 
   function save(operation: HistoryFork): void {
     const operations = [
       ...get(pending).filter((item) => item.operationId !== operation.operationId),
       operation,
     ];
-    localStorage.setItem(storageKey, JSON.stringify(operations));
-    pending.set(operations);
+    persist(operations);
   }
 
   function forget(operationId: string): void {
-    const operations = get(pending).filter((item) => item.operationId !== operationId);
-    localStorage.setItem(storageKey, JSON.stringify(operations));
-    pending.set(operations);
+    persist(get(pending).filter((item) => item.operationId !== operationId));
   }
 
   async function resume(original: HistoryFork): Promise<HistoryFork> {

@@ -1,5 +1,6 @@
 import { ApiError } from "../api/errors";
 import type { DeviceRuntime } from "../device/runtime";
+import { readStored, readStoredWith, scopedKey, writeStored } from "./storage";
 
 // A newly opened tab or app window that lands on a device's New Chat page returns
 // to the last Session chat or Bot chat viewed on that device, and so does "Back to chat".
@@ -14,28 +15,20 @@ let returnPending = false;
 let returnPath: string | null = null;
 
 function key(deviceId: string): string {
-  return `pontia.lastPage:${deviceId}`;
+  return scopedKey("pontia.lastPage", deviceId);
 }
 
 function trimSlash(path: string): string {
   return path.replace(/\/+$/, "");
 }
 
+// Saved pages are read once when needed, not kept as state.
 function read(deviceId: string): LastPage | null {
-  try {
-    const saved = localStorage.getItem(key(deviceId));
-    return saved ? (JSON.parse(saved) as LastPage) : null;
-  } catch {
-    return null;
-  }
+  return readStoredWith(key(deviceId), (saved) => JSON.parse(saved) as LastPage);
 }
 
 function forget(deviceId: string): void {
-  try {
-    localStorage.removeItem(key(deviceId));
-  } catch {
-    // Storage is optional.
-  }
+  writeStored(key(deviceId), null);
 }
 
 function arriveAt(path: string): void {
@@ -49,20 +42,12 @@ window.addEventListener("popstate", () => arriveAt(trimSlash(location.pathname))
 
 /** Records the path a tab opened on, unless it already showed the Dashboard before a reload. */
 export function openDashboardTab(): void {
-  try {
-    if (!sessionStorage.getItem(tabKey)) entryPath = trimSlash(location.pathname);
-    sessionStorage.setItem(tabKey, "1");
-  } catch {
-    // Storage is optional.
-  }
+  if (!readStored(tabKey, { area: "session" })) entryPath = trimSlash(location.pathname);
+  writeStored(tabKey, "1", { area: "session" });
 }
 
 export function rememberLastPage(deviceId: string, page: LastPage): void {
-  try {
-    localStorage.setItem(key(deviceId), JSON.stringify(page));
-  } catch {
-    // Storage is optional.
-  }
+  writeStored(key(deviceId), JSON.stringify(page));
 }
 
 export function forgetLastPage(deviceId: string, page: LastPage): void {
