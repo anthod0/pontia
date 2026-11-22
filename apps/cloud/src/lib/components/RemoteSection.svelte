@@ -16,8 +16,7 @@
 		{ name: 'Codex', logo: '/client-logos/codex.svg', darkLogo: '/client-logos/codex-dark.svg' },
 		{ name: 'Claude Code', logo: '/client-logos/claude-code.svg' },
 		{ name: 'Pi', logo: '/client-logos/pi.svg' },
-		{ name: 'Grok Build', logo: '/client-logos/grok-build.svg' },
-		{ name: 'OpenCode', logo: '/client-logos/opencode.svg', darkLogo: '/client-logos/opencode-dark.svg' }
+		{ name: 'Grok Build', logo: '/client-logos/grok-build.svg' }
 	];
 	// Stage coordinates (viewBox 0 0 1080 420): the channel runs from the terminal's right edge
 	// to the phone's left edge at the terminal's vertical centre, and peaks under the lock.

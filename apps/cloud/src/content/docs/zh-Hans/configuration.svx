@@ -39,7 +39,6 @@ roots = [
 | `dashboard.source` | 本地 Dashboard 构建目录，或仅包含一个 `index.html` 的远程 `.tar.gz`、`.tgz` 或 `.zip` 归档 |
 | `runtime.pi.tui_command` | 启动 Pi Session 时使用的 Pi 可执行文件或命令 |
 | `runtime.codex.tui_command` | 在原生 TUI 中打开 Codex Session 时使用的 Codex 可执行文件；默认为 `codex` |
-| `acp.agents.ID` | 一个 ACP agent 条目；参见 [Agent Client](/docs/agent-clients#enable-an-acp-agent) |
 | `workspace_browser.roots` | Dashboard 可浏览以激活 Workspace 的目录 |
 
 `dashboard.source` 的发布版默认值是与已安装 Pontia 版本匹配的 Dashboard 归档。远程 Dashboard 归档缓存在 `$PONTIA_HOME/cache/dashboard` 下；刷新失败时仍可使用已有缓存提供服务。

@@ -90,7 +90,7 @@ fn execution_policy_is_applied_on_initial_launch_and_resume_without_accumulating
         serde_json::json!({}),
         serde_json::json!({}),
     );
-    let restricted = config.restricted_execution_policy().unwrap();
+    let restricted = config.restricted_execution_policy("default").unwrap();
     assert_eq!(restricted.tools, None);
     assert_eq!(restricted.disabled_tools, vec!["edit", "write"]);
     assert!(restricted.disable_mcp);

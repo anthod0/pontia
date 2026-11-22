@@ -54,7 +54,7 @@ Client の認証と Cloud へのログインには、ユーザーによる認可
 
 ### 1. インストールを準備する
 
-有効にする Client (Pi、Codex、Claude Code、またはその組み合わせ)、デバイスの表示名、参照するプロジェクトディレクトリを決めます。すべてのステップを同じ OS ユーザーで実行してください。ACP エージェントは、[Agent Client](/docs/agent-clients#enable-an-acp-agent) の説明に従って有効にします。
+有効にする Client (Pi、Codex、Claude Code、またはその組み合わせ)、デバイスの表示名、参照するプロジェクトディレクトリを決めます。すべてのステップを同じ OS ユーザーで実行してください。Grok Build は、[Agent Client](/docs/agent-clients#enable-an-acp-agent) の説明に従って有効にします。
 
 1. `npx @pontia/cli install` で `pontia` と `pontiad` をインストールして `$HOME/.local/bin` を `PATH` に追加するか、対話型の初期化を実行せずに[Linux 用のシェルインストーラー](/docs/platforms/linux#install-with-the-shell-script)または [macOS 用のシェルインストーラー](/docs/platforms/macos#install-with-the-shell-script)を使います。不足している Client ツールについては、公式の [Pi クイックスタート](https://pi.dev/docs/latest/quickstart)、[tmux インストールガイド](https://github.com/tmux/tmux/wiki/Installing)、[Codex CLI のインストール](https://learn.chatgpt.com/docs/codex/cli)に従ってください。インストールするのは選択した Client とその前提条件だけにし、動作しているインストールは再利用します。
 2. すべてのコマンドで使う絶対パスの `PONTIA_HOME` を 1 つ決めます。既存のインストールの設定と認証情報は保持してください。デフォルトは `~/.pontia` です。

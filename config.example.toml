@@ -24,14 +24,3 @@ tui_command = "pi"
 roots = [
   { root_id = "projects", label = "Projects", path = "/home/me/projects" }
 ]
-
-# ACP agents launched over local stdio. Built-in entries cover Grok Build and
-# OpenCode; enable one with `pontia client enable <id>` or in Dashboard settings.
-# The peer must declare loadSession and close. Use registry_id instead of
-# command/args to launch an agent from the ACP registry.
-# [acp.agents.company-agent]
-# name = "Company Agent"
-# command = "/opt/company-agent/bin/agent"
-# args = ["--acp"]
-# [acp.agents.company-agent.env]
-# LOG_LEVEL = "info"

@@ -5,16 +5,15 @@ use axum::{
 use http_body_util::BodyExt;
 use pontia_agent_control::{client_contract::ClientServicePhase, clients::ClientRegistry};
 use pontia_application::AppState;
-use pontia_client_acp::{AcpAgentConfig, AcpConfig};
+use pontia_client_acp::{ACP_MAX_CAPABILITIES, AcpAgentDefinition, AcpAgents, AcpLaunch};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, time::Duration};
 use tower::ServiceExt;
 
-fn registration(config: AcpConfig) -> pontia_agent_control::clients::ClientRegistration {
+fn registration(config: AcpAgents) -> pontia_agent_control::clients::ClientRegistration {
     pontia_client_acp::registration_with_relay(
         config,
-        Default::default(),
         env!("CARGO_BIN_EXE_pontia-http-test-relay").into(),
     )
 }
@@ -66,10 +65,7 @@ async fn creation_options_follow_enabled_settings_for_native_and_acp_clients() {
     clients.register(pontia_client_pi::registration(None));
     clients.register(pontia_client_codex::registration());
     clients.register(pontia_client_claude::registration());
-    let acp = pontia_client_acp::registration_from_sources(BTreeMap::from([
-        ("file-peer".into(), json!({"command":"file-agent"})),
-        ("unconfigured-peer".into(), json!({"command":null})),
-    ]));
+    let acp = pontia_client_acp::registration();
     let service = acp.service.clone().unwrap();
     clients.register(acp);
     let app = AppState::builder(
@@ -88,18 +84,6 @@ async fn creation_options_follow_enabled_settings_for_native_and_acp_clients() {
         ("codex", "default", json!({}), json!({})),
         ("claude-agent", "default", json!({}), json!({})),
         ("acp", "grok", json!({}), json!({"acp_agent_id":"grok"})),
-        (
-            "acp",
-            "file-peer",
-            json!({}),
-            json!({"acp_agent_id":"file-peer"}),
-        ),
-        (
-            "acp",
-            "pi",
-            json!({"command":"custom-agent"}),
-            json!({"acp_agent_id":"pi"}),
-        ),
     ] {
         let path = format!("/api/v1/agent-clients/{client}/{key}");
         let (status, body) = call(
@@ -200,12 +184,13 @@ async fn acp_tools_use_existing_http_snapshot_updates_reconnect_and_closed_event
         [{"update":{"sessionUpdate":"tool_call_update","toolCallId":"native-call","status":"failed","rawOutput":{"exitCode":1}}}]
     ]).to_string()).unwrap();
     let mut clients = ClientRegistry::default();
-    clients.register(registration(AcpConfig {
-        agents: BTreeMap::from([(
-            "test".into(),
-            AcpAgentConfig {
-                name: None,
-                registry_id: None,
+    clients.register(registration(AcpAgents::new([(
+        "test".into(),
+        AcpAgentDefinition {
+            name: "test".into(),
+            capabilities: ACP_MAX_CAPABILITIES,
+            restricted_execution: None,
+            launch: AcpLaunch {
                 command: "python3".into(),
                 args: vec![format!(
                     "{}/../pontia-client-acp/tests/fixtures/agent.py",
@@ -217,8 +202,8 @@ async fn acp_tools_use_existing_http_snapshot_updates_reconnect_and_closed_event
                     ("ACP_NO_UPDATES".into(), "1".into()),
                 ]),
             },
-        )]),
-    }));
+        },
+    )])));
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
     pontia_agent_control::workspaces::upsert_canonical_workspace(
@@ -312,26 +297,30 @@ async fn acp_tools_use_existing_http_snapshot_updates_reconnect_and_closed_event
 async fn configured_agent_selection_flows_through_http_creation_input_permission_cancel_history_and_exit()
  {
     let root = tempfile::tempdir().unwrap();
-    let config = AcpAgentConfig {
-        name: Some("Company Agent".into()),
-        registry_id: None,
-        command: "python3".into(),
-        args: vec![format!(
-            "{}/../pontia-client-acp/tests/fixtures/agent.py",
-            env!("CARGO_MANIFEST_DIR")
-        )],
-        env: BTreeMap::from([
-            ("ACP_FIXTURE_ROOT".into(), root.path().display().to_string()),
-            ("ACP_PERMISSION".into(), "1".into()),
-            ("ACP_MODELS".into(), "grouped".into()),
-            ("ACP_SYSTEM_PROMPT".into(), "1".into()),
-            ("PRIVATE_SECRET".into(), "never-expose".into()),
-        ]),
+    let config = AcpAgentDefinition {
+        name: "Company Agent".into(),
+        capabilities: ACP_MAX_CAPABILITIES,
+        restricted_execution: None,
+        launch: AcpLaunch {
+            command: "python3".into(),
+            args: vec![format!(
+                "{}/../pontia-client-acp/tests/fixtures/agent.py",
+                env!("CARGO_MANIFEST_DIR")
+            )],
+            env: BTreeMap::from([
+                ("ACP_FIXTURE_ROOT".into(), root.path().display().to_string()),
+                ("ACP_PERMISSION".into(), "1".into()),
+                ("ACP_MODELS".into(), "grouped".into()),
+                ("ACP_SYSTEM_PROMPT".into(), "1".into()),
+                ("PRIVATE_SECRET".into(), "never-expose".into()),
+            ]),
+        },
     };
     let mut clients = ClientRegistry::default();
-    clients.register(registration(AcpConfig {
-        agents: BTreeMap::from([("company-id".into(), config)]),
-    }));
+    clients.register(registration(AcpAgents::new([(
+        "company-id".into(),
+        config,
+    )])));
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
     pontia_agent_control::workspaces::upsert_canonical_workspace(

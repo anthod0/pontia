@@ -225,32 +225,18 @@ impl HelperService {
             reference: reference.clone(),
         };
         let retrieval = matches!(input.location, HelperLocation::ReadOnly);
-        let mut request = if retrieval {
-            let mut request = self
-                .conversation
-                .task_session_request(
-                    &bot.client_type,
-                    &bot.client_key,
-                    &bot.model,
-                    ownership.clone(),
-                    include_str!("helpers/retrieval.md"),
-                    true,
-                )
-                .await?;
-            request.launch_mode = pontia_core::LaunchMode::Background;
-            request.role = Some(RETRIEVAL_ROLE.into());
-            request
-        } else if let Some(profile_id) = &input.profile_id {
-            let profile = self
-                .control
-                .agent_profiles()
-                .resolve_launch(profile_id)
-                .await?;
+        let profile = match &input.profile_id {
+            Some(id) if !retrieval => {
+                Some((id, self.control.agent_profiles().resolve_launch(id).await?))
+            }
+            _ => None,
+        };
+        let (client_type, client_key, model, instructions) = if let Some((id, profile)) = &profile {
             let (Some(client_type), Some(client_key), Some(model)) =
                 (&profile.client_type, &profile.client_key, &profile.model)
             else {
                 return Err(Error::Domain(format!(
-                    "agent profile {profile_id} has no launch defaults"
+                    "agent profile {id} has no launch defaults"
                 )));
             };
             let instructions = [profile.system_prompt.as_deref(), Some(HELPER_INSTRUCTIONS)]
@@ -258,30 +244,37 @@ impl HelperService {
                 .flatten()
                 .collect::<Vec<_>>()
                 .join("\n\n");
-            self.conversation
-                .task_session_request(
-                    client_type,
-                    client_key,
-                    model,
-                    ownership.clone(),
-                    &instructions,
-                    false,
-                )
-                .await?
+            (client_type, client_key, model, instructions)
         } else {
-            self.conversation
-                .task_session_request(
-                    &bot.client_type,
-                    &bot.client_key,
-                    &bot.model,
-                    ownership.clone(),
-                    HELPER_INSTRUCTIONS,
-                    false,
-                )
-                .await?
+            let instructions = if retrieval {
+                include_str!("helpers/retrieval.md")
+            } else {
+                HELPER_INSTRUCTIONS
+            };
+            (
+                &bot.client_type,
+                &bot.client_key,
+                &bot.model,
+                instructions.into(),
+            )
         };
         self.conversation
-            .require_helper_client(&request.client_type)?;
+            .require_helper_client(client_type, client_key)?;
+        let mut request = self
+            .conversation
+            .task_session_request(
+                client_type,
+                client_key,
+                model,
+                ownership.clone(),
+                &instructions,
+                retrieval,
+            )
+            .await?;
+        if retrieval {
+            request.launch_mode = pontia_core::LaunchMode::Background;
+            request.role = Some(RETRIEVAL_ROLE.into());
+        }
         let mut message = input.message;
         match input.location {
             HelperLocation::WorkspaceId(id) => {

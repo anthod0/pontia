@@ -25,7 +25,7 @@ Ative diretórios dentro das raízes configuradas do Workspace Browser. A primei
 
 1. Abra [New chat](https://app.pontia.dev/).
 2. Selecione uma Workspace ativa.
-3. Selecione um Agent Client ativado, como Pi, Codex, Claude Code ou um agente ACP.
+3. Selecione um Agent Client ativado, como Pi, Codex, Claude Code ou Grok Build.
 4. Para Pi, Codex ou Claude Code, escolha um modelo ou mantenha o padrão do cliente.
 5. Descreva a tarefa e envie o prompt.
 

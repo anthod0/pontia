@@ -1,17 +1,10 @@
-use std::collections::BTreeMap;
-
+use crate::{AcpAgentDefinition, AcpAgents, AcpLaunch};
 use pontia_agent_control::client_contract::ClientConfiguration;
-mod launch;
-pub use launch::{AcpAgentConfig, AcpConfig};
-use pontia_config::ConfigurationLayers;
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 
 pub struct AcpConfiguration {
-    pub(crate) defaults: BTreeMap<String, Value>,
-    pub(crate) file: BTreeMap<String, Value>,
-    pub(crate) registry: crate::registry::Registry,
-    pub(crate) root: std::sync::Arc<std::sync::OnceLock<std::path::PathBuf>>,
+    pub(crate) agents: AcpAgents,
 }
 
 fn validate_agent_id(id: &str) -> Result<()> {
@@ -23,36 +16,46 @@ fn validate_agent_id(id: &str) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn value(config: &AcpAgentConfig) -> Value {
+impl AcpConfiguration {
+    pub fn new(agents: AcpAgents) -> Self {
+        Self { agents }
+    }
+
+    pub(crate) fn definition(&self, key: &str, overrides: &Value) -> Result<&AcpAgentDefinition> {
+        validate_agent_id(key)?;
+        let agent = self
+            .agents
+            .get(key)
+            .ok_or_else(|| Error::Domain(format!("Unknown ACP Agent: {key}")))?;
+        if !overrides
+            .as_object()
+            .is_some_and(|fields| fields.is_empty())
+        {
+            return Err(Error::Domain(
+                "ACP Agents do not accept configuration overrides".into(),
+            ));
+        }
+        Ok(agent)
+    }
+}
+
+fn effective_config(agent: &AcpAgentDefinition) -> Value {
     json!({
-        "name": config.name,
-        "registry_id": config.registry_id,
-        "command": if config.registry_id.is_some() { None } else { Some(&config.command) },
-        "args": if config.registry_id.is_some() { None } else { Some(&config.args) },
-        "env": config.env,
+        "name": agent.name,
+        "command": agent.launch.command,
+        "args": agent.launch.args,
+        "env": agent.launch.env,
     })
 }
 
-impl AcpConfiguration {
-    pub fn new(file: BTreeMap<String, Value>) -> Self {
-        Self::with_defaults(AcpConfig::default(), file)
-    }
-
-    pub(crate) fn with_defaults(defaults: AcpConfig, file: BTreeMap<String, Value>) -> Self {
-        Self {
-            registry: Default::default(),
-            root: Default::default(),
-            defaults: defaults
-                .agents
-                .into_iter()
-                .map(|(id, config)| (id, value(&config)))
-                .collect(),
-            file,
-        }
-    }
-}
-
 impl ClientConfiguration for AcpConfiguration {
+    fn restricted_execution_policy(
+        &self,
+        key: &str,
+    ) -> Option<pontia_core::execution_policy::ExecutionPolicy> {
+        crate::capabilities::restricted_execution(self.agents.get(key))
+    }
+
     fn supports_startup_model(&self) -> bool {
         true
     }
@@ -66,16 +69,9 @@ impl ClientConfiguration for AcpConfiguration {
         pontia_agent_control::agent_clients::AgentClientModels,
     > {
         Box::pin(async move {
-            let config: AcpAgentConfig = serde_json::from_value(effective.clone())?;
-            let root = self
-                .root
-                .get()
-                .ok_or_else(|| Error::CapabilityUnavailable("ACP service is not started".into()))?;
+            let launch: AcpLaunch = serde_json::from_value(effective.clone())?;
             let cwd = std::path::absolute(directory)?;
-            let config = self
-                .registry
-                .resolve(&config, &root.join("acp/registry"), &cwd)
-                .await?;
+            let config = crate::peer::resolve_command(&launch, &cwd)?;
             crate::models::probe::list(&config, &cwd).await
         })
     }
@@ -86,15 +82,10 @@ impl ClientConfiguration for AcpConfiguration {
         context: &pontia_agent_control::client_contract::DetectionContext<'_>,
     ) -> pontia_agent_control::client_contract::ClientDetection {
         use pontia_agent_control::client_contract::{ClientDetection, DetectionContext};
-        let config: AcpAgentConfig = match serde_json::from_value(effective.clone()) {
+        let config: AcpLaunch = match serde_json::from_value(effective.clone()) {
             Ok(config) => config,
             Err(error) => return ClientDetection::unknown(error.to_string()),
         };
-        if config.registry_id.is_some() {
-            return ClientDetection::unknown(
-                "Registry agents are resolved and downloaded when started",
-            );
-        }
         let mut vars = context.vars.clone();
         vars.extend(config.env);
         DetectionContext {
@@ -104,11 +95,7 @@ impl ClientConfiguration for AcpConfiguration {
         .command(&config.command)
     }
     fn keys(&self) -> Vec<String> {
-        self.defaults
-            .keys()
-            .chain(self.file.keys())
-            .cloned()
-            .collect()
+        self.agents.ids().map(str::to_owned).collect()
     }
     fn presentation(&self, key: &str, effective: &Value) -> (String, String) {
         (
@@ -128,19 +115,14 @@ impl ClientConfiguration for AcpConfiguration {
         Ok(key.into())
     }
 
-    fn merged(&self, key: &str, overrides: &Value) -> Value {
-        ConfigurationLayers {
-            defaults: self.defaults.get(key).cloned().unwrap_or_else(|| json!({})),
-            file: self.file.get(key).cloned().unwrap_or_else(|| json!({})),
-            environment: json!({}),
-        }
-        .resolve(overrides)
+    fn merged(&self, key: &str, _overrides: &Value) -> Value {
+        self.agents
+            .get(key)
+            .map(effective_config)
+            .unwrap_or_else(|| json!({}))
     }
 
     fn resolve(&self, key: &str, overrides: &Value) -> Result<Value> {
-        validate_agent_id(key)?;
-        let value = self.merged(key, overrides);
-        let _: AcpAgentConfig = serde_json::from_value(value.clone())?;
-        Ok(value)
+        self.definition(key, overrides).map(effective_config)
     }
 }

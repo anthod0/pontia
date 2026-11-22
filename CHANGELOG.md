@@ -41,6 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Closing a Claude Code Session on macOS now confirms when the host has exited, even if the system process list is incomplete.
 
+### Removed
+
+- Removed OpenCode, custom ACP clients, and ACP launch overrides from the Dashboard and CLI. Pontia now runs Grok Build with `grok agent stdio`. Install `grok` on the Pontia service user's PATH.
+- Removed the `[acp]` section from `config.toml`. Existing sections are ignored. Running sessions can reconnect, but sessions for removed agents cannot resume after their agent process exits.
+
 ## [0.8.8] - 2026-11-22
 
 ### Added

@@ -514,6 +514,13 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
     "/agent-clients/:type/:key",
     ({ device, params: [type, key], body }) => {
       const client = findAgentClient(device, type, key);
+      if (type === "acp" && body.config_overrides && Object.keys(body.config_overrides).length) {
+        throw new HttpError(
+          400,
+          "invalid_request",
+          "ACP Agents do not accept configuration overrides",
+        );
+      }
       if (typeof body.enabled === "boolean") client.enabled = body.enabled;
       if (body.config_overrides) {
         client.config_overrides = body.config_overrides as JsonObject;

@@ -74,7 +74,7 @@ pontia completions powershell | Out-String | Invoke-Expression
 | `pontia client disable CLIENT` | 禁止新 Session 使用该条目；现有 Session 不受影响 |
 | `pontia client reset CLIENT` | 删除该条目已保存的设置，同时会禁用它 |
 
-`CLIENT` 是短 ID，例如 `pi`、`codex`、`claude-agent` 或某个 ACP Agent ID。当短 ID 有歧义时，使用 `--id ID`，并填入 `pontia client list --json` 中的 ID。
+`CLIENT` 是短 ID，例如 `pi`、`codex`、`claude-agent` 或`grok`。当短 ID 有歧义时，使用 `--id ID`，并填入 `pontia client list --json` 中的 ID。
 
 ## Agent 工具
 

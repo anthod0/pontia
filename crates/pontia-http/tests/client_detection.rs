@@ -2,12 +2,7 @@ use pontia_agent_control::client_contract::{
     ClientConfiguration, DetectionContext, DetectionStatus,
 };
 use serde_json::json;
-use std::{
-    collections::{BTreeMap, HashMap},
-    fs,
-    os::unix::fs::PermissionsExt,
-    path::Path,
-};
+use std::{collections::HashMap, fs, os::unix::fs::PermissionsExt, path::Path};
 
 fn executable(path: &Path, body: &str) {
     fs::write(path, body).unwrap();
@@ -134,45 +129,24 @@ fn claude_detects_native_client_or_sdk_host_with_node() {
 }
 
 #[test]
-fn acp_respects_launch_environment_and_does_not_resolve_registry_agents() {
+fn acp_detects_the_executable_from_its_definition_on_path() {
     let root = tempfile::tempdir().unwrap();
-    let path = root.path().display().to_string();
-    let vars = HashMap::new();
+    let vars = HashMap::from([("PATH".into(), root.path().display().to_string())]);
     let context = DetectionContext {
         vars: &vars,
         pontia_home: root.path(),
     };
-    let config = pontia_client_acp::configuration::AcpConfiguration::new(BTreeMap::new());
-    let effective = json!({"command":"agent", "env":{"PATH":path}});
+    let config = pontia_client_acp::configuration::AcpConfiguration::new(
+        pontia_client_acp::AcpAgents::builtin(),
+    );
+    let effective = config.resolve("grok", &json!({})).unwrap();
     assert_eq!(
         config.detect(&effective, &context).status,
         DetectionStatus::NotDetected
     );
-    executable(&root.path().join("agent"), "#!/bin/sh\nexit 99\n");
+    executable(&root.path().join("grok"), "#!/bin/sh\nexit 99\n");
     assert_eq!(
         config.detect(&effective, &context).status,
         DetectionStatus::Detected
-    );
-    assert_eq!(
-        config
-            .detect(&json!({"command": root.path().join("agent")}), &context)
-            .status,
-        DetectionStatus::Detected
-    );
-    assert_eq!(
-        config
-            .detect(&json!({"command":"./agent"}), &context)
-            .status,
-        DetectionStatus::Unknown
-    );
-    assert_eq!(
-        config.detect(&json!({"command":"agent"}), &context).status,
-        DetectionStatus::Unknown
-    );
-    assert_eq!(
-        config
-            .detect(&json!({"registry_id":"not-downloaded"}), &context)
-            .status,
-        DetectionStatus::Unknown
     );
 }

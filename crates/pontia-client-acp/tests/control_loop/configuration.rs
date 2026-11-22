@@ -2,7 +2,7 @@ use super::*;
 use pontia_agent_control::agent_clients::AgentClientService;
 
 #[tokio::test]
-async fn new_sessions_use_latest_overrides_while_existing_peers_remain_controllable() {
+async fn disabling_and_deleting_a_record_only_affects_new_sessions() {
     let h = Harness::new(&[("ACP_UNIQUE_ID", "1")]).await;
     let management = AgentClientService::new(h.app.db(), h.app.clients());
     let first = h.create("first").await.unwrap();
@@ -12,26 +12,6 @@ async fn new_sessions_use_latest_overrides_while_existing_peers_remain_controlla
         .unwrap()
         .unwrap();
     management
-        .save(
-            "acp",
-            "first",
-            None,
-            Some(json!({"env":{"ACP_LITERAL":"database"}})),
-        )
-        .await
-        .unwrap();
-    let second = h.create("first").await.unwrap();
-    let untouched = h.create("second").await.unwrap();
-    let startups: Vec<_> = h
-        .wire()
-        .into_iter()
-        .filter_map(|value| value.get("startup").cloned())
-        .collect();
-    assert_eq!(startups.len(), 3);
-    assert_eq!(startups[0]["literal"], "${NOT_EXPANDED} ~ *");
-    assert_eq!(startups[1]["literal"], "database");
-    assert_eq!(startups[2]["literal"], "${NOT_EXPANDED} ~ *");
-    management
         .save("acp", "first", Some(false), None)
         .await
         .unwrap();
@@ -39,19 +19,7 @@ async fn new_sessions_use_latest_overrides_while_existing_peers_remain_controlla
         h.create("first").await,
         Err(Error::CapabilityUnavailable(_))
     ));
-    assert_eq!(h.requests("session/new"), 3);
-    for session in [&first, &second, &untouched] {
-        assert!(
-            h.app
-                .queries()
-                .get_session(session)
-                .await
-                .unwrap()
-                .unwrap()
-                .capabilities
-                .accept_task
-        );
-    }
+    assert_eq!(h.requests("session/new"), 1);
     let turn = h
         .app
         .turn_commands()
@@ -73,14 +41,14 @@ async fn new_sessions_use_latest_overrides_while_existing_peers_remain_controlla
             .iter()
             .filter(|value| value.get("startup").is_some())
             .count(),
-        3
+        1
     );
     management.delete("acp", "first").await.unwrap();
     assert!(matches!(
         h.create("first").await,
         Err(Error::CapabilityUnavailable(_))
     ));
-    assert_eq!(h.requests("session/new"), 3);
+    assert_eq!(h.requests("session/new"), 1);
     management
         .save("acp", "first", Some(true), None)
         .await
@@ -97,69 +65,84 @@ async fn new_sessions_use_latest_overrides_while_existing_peers_remain_controlla
 }
 
 #[tokio::test]
-async fn database_only_peer_can_launch_and_deletion_does_not_rebind_its_live_session() {
-    let h = Harness::new(&[]).await;
-    let management = AgentClientService::new(h.app.db(), h.app.clients());
-    let config = json!({"command":"python3","args":[format!("{}/tests/fixtures/agent.py", env!("CARGO_MANIFEST_DIR"))],"env":{"ACP_FIXTURE_ROOT":h.root.path(),"ACP_LITERAL":"database-only"}});
-    management
-        .save("acp", "company", Some(true), Some(config.clone()))
-        .await
-        .unwrap();
-    let options = h.app.clients().creation_options(&h.app.db()).await.unwrap();
-    assert!(
-        options
-            .iter()
-            .any(|option| option.metadata["acp_agent_id"] == "company")
-    );
-    let session = h.create("company").await.unwrap();
-    let binding = pontia_agent_control::AgentBindingService::new(h.app.db())
-        .binding_for_session(&session)
+async fn removed_definition_keeps_live_session_control_and_cold_binding_details() {
+    let mut h = Harness::new(&[]).await;
+    let session = h.create("first").await.unwrap();
+    let before = h
+        .app
+        .queries()
+        .get_session(&session)
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(
-        identity::decode(&binding.client_session_key).unwrap()[0],
-        "company"
-    );
+    h.config = AcpAgents::new([]);
+    h.restart().await;
+    h.wait_ready(&session, 2).await;
+    let restored = h
+        .app
+        .queries()
+        .get_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(restored.capabilities.accept_task);
+    assert_eq!(restored.capabilities, before.capabilities);
+    let clients = h.app.clients();
+    let target = pontia_agent_control::runtime::ControlTarget::resolve(
+        &h.app.db(),
+        &clients,
+        &session,
+        None,
+    )
+    .await
+    .unwrap();
+    let result = clients
+        .get("acp")
+        .unwrap()
+        .session
+        .as_ref()
+        .unwrap()
+        .resume(h.app.event_ingest_service(), &target)
+        .await;
     assert!(
-        management
-            .save("acp", "company", Some(false), Some(json!({"command":null})))
-            .await
-            .is_err()
+        matches!(result, Err(Error::CapabilityUnavailable(message)) if message == "ACP Agent first is not defined")
     );
-    let stored =
+    let mut clients = ClientRegistry::default();
+    clients.register(pontia_client_acp::registration());
+    let cold = AgentControl::builder(h.app.db(), h.root.path().into())
+        .clients(clients)
+        .build();
+    let detail = cold.queries().get_session(&session).await.unwrap().unwrap();
+    assert!(!detail.capabilities.accept_task);
+    assert!(!detail.capabilities.timeline);
+    assert_eq!(detail.client_details["acp"]["agent_id"], "first");
+    assert_eq!(
+        detail.client_details["acp"]["agent_info"]["name"],
+        "fixture"
+    );
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn obsolete_saved_entries_do_not_hide_valid_creation_options() {
+    let h = Harness::new(&[]).await;
+    let records =
         pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
             h.app.db(),
-        )
-        .get("acp", "company")
-        .await
-        .unwrap()
-        .unwrap();
-    assert!(stored.enabled);
-    assert_eq!(
-        serde_json::from_str::<Value>(&stored.config_overrides).unwrap(),
-        config
-    );
-    management.delete("acp", "company").await.unwrap();
-    assert!(h.create("company").await.is_err());
-    assert!(
-        h.app
-            .queries()
-            .get_session(&session)
+        );
+    for key in ["first", "removed"] {
+        records
+            .save("acp", key, Some(true), Some(r#"{"command":"old"}"#))
             .await
-            .unwrap()
-            .unwrap()
-            .capabilities
-            .accept_task
-    );
-    assert_eq!(
-        pontia_agent_control::AgentBindingService::new(h.app.db())
-            .binding_for_session(&session)
-            .await
-            .unwrap()
-            .unwrap()
-            .client_session_key,
-        binding.client_session_key
-    );
+            .unwrap();
+    }
+    let options = h.app.clients().creation_options(&h.app.db()).await.unwrap();
+    let keys: Vec<_> = options
+        .iter()
+        .map(|entry| entry.metadata["acp_agent_id"].as_str().unwrap())
+        .collect();
+    assert_eq!(keys, ["second"]);
+    assert!(h.create("first").await.is_err());
+    assert!(h.create("removed").await.is_err());
     h.stop().await;
 }

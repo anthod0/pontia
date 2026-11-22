@@ -354,7 +354,7 @@ async fn seed_pending_memory(
 async fn bot_helper_and_dreaming_enforce_yolo_on_restricted_client_policy() {
     let (_root, pool, client, control, conversation) = fixture().await;
     assert_eq!(
-        client.restricted_execution_policy(),
+        client.restricted_execution_policy("default"),
         Some(pontia_core::execution_policy::ExecutionPolicy {
             tools: None,
             disabled_tools: vec!["edit".into(), "write".into()],
@@ -401,7 +401,8 @@ async fn dreaming_rejects_clients_without_approval_free_restricted_policy_before
     let (_, bot_session) = bot(&conversation).await;
     seed_pending_memory(pool, &conversation, &bot_session).await;
     let dreaming = DreamingService::new(control.clone(), conversation.clone());
-    assert!(conversation.supports_bot_client("generic"));
+    assert!(conversation.supports_bot_client("generic", "default"));
+    assert!(!conversation.supports_bot_client("generic", "other"));
 
     for support in [
         PolicySupport::NoRestriction,
@@ -409,7 +410,7 @@ async fn dreaming_rejects_clients_without_approval_free_restricted_policy_before
         PolicySupport::RejectDisableSkills,
     ] {
         *client.policy_support.lock().unwrap() = support;
-        assert!(!conversation.supports_bot_client("generic"));
+        assert!(!conversation.supports_bot_client("generic", "default"));
         assert!(matches!(
             dreaming.start().await,
             Err(Error::CapabilityUnavailable(_))

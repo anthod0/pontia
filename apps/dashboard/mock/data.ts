@@ -341,7 +341,12 @@ function agentClient(
     enabled: true,
     has_record: false,
     config_overrides: {},
-    effective_config: { name, command, args: [], env: {} },
+    effective_config: {
+      name,
+      command,
+      args: clientType === "acp" ? ["agent", "stdio"] : [],
+      env: {},
+    },
     created_at: null,
     updated_at: null,
   };

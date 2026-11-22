@@ -12,7 +12,6 @@ pub(super) struct FileConfig {
     pub(super) run_migrations: Option<bool>,
     pub(super) default_client_type: Option<String>,
     pub(super) runtime: Option<std::collections::BTreeMap<String, serde_json::Value>>,
-    pub(super) acp: Option<super::client_configuration::AcpFileConfig>,
     pub(super) workspace_browser: Option<FileWorkspaceBrowserConfig>,
     pub(super) file_picker: Option<FilePickerConfig>,
     pub(super) uploads: Option<super::UploadsConfig>,

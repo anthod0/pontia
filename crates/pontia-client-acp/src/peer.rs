@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Weak},
 };
 
-use crate::AcpAgentConfig;
+use crate::AcpLaunch;
 use agent_client_protocol::{
     Agent, ByteStreams, JsonRpcRequest,
     schema::ProtocolVersion,
@@ -19,7 +19,7 @@ use tokio::sync::{Mutex, oneshot, watch};
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
 use crate::{
-    spec::ACP_MAX_CAPABILITIES,
+    capabilities::{self, AgentBounds, Live, Negotiated},
     transport::{Receipts, Relay},
 };
 
@@ -43,7 +43,8 @@ pub(crate) struct SessionState {
     pub ready: bool,
     pub blocked: bool,
     reconnect_needed: bool,
-    pub steer: bool,
+    pub agent: AgentBounds,
+    pub negotiated: Negotiated,
     pub system_prompt: Option<SystemPrompt>,
     pub native: Option<SessionId>,
     pub capabilities: Option<pontia_core::client_capabilities::AgentClientCapabilities>,
@@ -61,21 +62,27 @@ pub(crate) struct SessionState {
 pub(crate) type Peers = Arc<Mutex<HashMap<String, Arc<Peer>>>>;
 
 pub(crate) struct PeerOwner {
+    pub agent: AgentBounds,
     pub reconnect: tokio::sync::mpsc::UnboundedSender<String>,
     pub peers: Weak<Mutex<HashMap<String, Arc<Peer>>>>,
 }
 
 impl SessionState {
     pub fn refresh_capabilities(&mut self) {
-        self.capabilities = (self.current && self.ready && self.native.is_some() && !self.closing)
-            .then(|| {
-                let mut capabilities = ACP_MAX_CAPABILITIES;
-                capabilities.steer = self.steer;
-                capabilities.interrupt = self.active.is_some();
-                capabilities.timeline = self.history_error.is_none() && self.replay.is_none();
-                capabilities.accept_task = self.replay.is_none() && !self.blocked;
-                capabilities
-            });
+        self.capabilities = capabilities::live(
+            &self.agent,
+            self.negotiated,
+            Live {
+                current: self.current,
+                ready: self.ready,
+                has_native: self.native.is_some(),
+                closing: self.closing,
+                active: self.active.is_some(),
+                history_ok: self.history_error.is_none(),
+                replaying: self.replay.is_some(),
+                blocked: self.blocked,
+            },
+        );
     }
 }
 
@@ -121,7 +128,7 @@ pub(crate) async fn runtime_event(
     Ok(())
 }
 
-pub(crate) fn resolve_command(config: &AcpAgentConfig, cwd: &Path) -> Result<AcpAgentConfig> {
+pub(crate) fn resolve_command(config: &AcpLaunch, cwd: &Path) -> Result<AcpLaunch> {
     let command = Path::new(&config.command);
     let candidates = if command.is_absolute() {
         vec![command.to_path_buf()]
@@ -167,7 +174,7 @@ pub(crate) fn resolve_command(config: &AcpAgentConfig, cwd: &Path) -> Result<Acp
     Ok(resolved)
 }
 
-pub(crate) fn start_command(config: &AcpAgentConfig) -> String {
+pub(crate) fn start_command(config: &AcpLaunch) -> String {
     // A diagnostic rendering, never executed through a shell.
     std::iter::once(&config.command)
         .chain(config.args.iter())
@@ -201,7 +208,8 @@ impl Peer {
             reconnect_needed: false,
             native: None,
             capabilities: None,
-            steer: false,
+            agent: owner.agent,
+            negotiated: Negotiated::default(),
             system_prompt: None,
             current_model: None,
             config_options: Vec::new(),
@@ -463,28 +471,7 @@ impl Peer {
                 "ACP peer did not negotiate protocol v1".into(),
             ));
         }
-        self.state.lock().await.steer = initialize
-            .meta
-            .as_ref()
-            .and_then(|meta| meta.get("steering"))
-            .is_some_and(|steering| steering["supported"] == true);
-        let caps = serde_json::to_value(&initialize.agent_capabilities)?;
-        let mut missing = Vec::new();
-        if caps["loadSession"] != true {
-            missing.push("loadSession");
-        }
-        if !caps
-            .pointer("/sessionCapabilities/close")
-            .is_some_and(Value::is_object)
-        {
-            missing.push("sessionCapabilities.close");
-        }
-        if !missing.is_empty() {
-            return Err(Error::CapabilityUnavailable(format!(
-                "ACP peer missing required capabilities: {}",
-                missing.join(", ")
-            )));
-        }
+        self.state.lock().await.negotiated = Negotiated::from_initialize(&initialize)?;
         let instructions = pontia_agent_control::SessionInstructionsService::new(self.events.db())
             .session_instructions(&self.session)
             .await?

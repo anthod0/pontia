@@ -223,6 +223,9 @@ async fn manage(api: &ClientApi, command: ClientCommandKind) -> Result<Value, St
             .await
         }
         ClientCommandKind::Set { config, .. } => {
+            if entry.client_type == "acp" {
+                return Err("ACP Agents do not accept configuration overrides".into());
+            }
             let contents = std::fs::read(&config)
                 .map_err(|error| format!("Cannot read {}: {error}", config.display()))?;
             let overrides: Value = serde_json::from_slice(&contents)

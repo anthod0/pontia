@@ -39,7 +39,6 @@ roots = [
 | `dashboard.source` | Local Dashboard のビルドディレクトリ、または `index.html` をちょうど 1 つ含むリモートの `.tar.gz`、`.tgz`、`.zip` アーカイブ |
 | `runtime.pi.tui_command` | 起動する Pi の Session に使う Pi の実行ファイルまたはコマンド |
 | `runtime.codex.tui_command` | Codex の Session をネイティブの TUI で開くときに使う Codex の実行ファイル。デフォルトは `codex` |
-| `acp.agents.ID` | ACP エージェントのエントリー。[Agent Client](/docs/agent-clients#enable-an-acp-agent) を参照 |
 | `workspace_browser.roots` | Workspace を有効にするために Dashboard が参照できるディレクトリ |
 
 リリース版での `dashboard.source` のデフォルトは、インストールされている Pontia のバージョンに対応する Dashboard アーカイブです。リモートの Dashboard アーカイブは `$PONTIA_HOME/cache/dashboard` にキャッシュされ、更新に失敗しても既存のキャッシュを配信できます。

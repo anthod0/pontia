@@ -7,7 +7,10 @@ use std::{
     },
 };
 
-use crate::{AcpAgentConfig, AcpConfig};
+use crate::{
+    AcpAgents,
+    capabilities::{self, AgentBounds},
+};
 use agent_client_protocol::v1::schema::{
     CancelNotification, ContentBlock, PromptRequest, TextContent,
 };
@@ -15,9 +18,9 @@ use pontia_agent_control::{
     AgentBindingService, AgentControl, EventIngestService, PontiaEventType,
     UpsertAgentBindingRequest,
     client_contract::{
-        AgentClientCapabilities, ClientConfiguration, ClientExitMode, ClientExitOutcome,
-        ClientInteractions, ClientOperation, ClientService, ClientServicePhase, ClientSession,
-        ClientSessionDetails, SessionCreationOption,
+        AgentClientCapabilities, ClientExitMode, ClientExitOutcome, ClientInteractions,
+        ClientOperation, ClientService, ClientServicePhase, ClientSession, ClientSessionDetails,
+        SessionCreationOption,
     },
     clients::ClientRegistration,
     control::InputReceipt,
@@ -36,51 +39,19 @@ use crate::{
     spec::SPEC,
 };
 
-pub fn registration(config: AcpConfig) -> ClientRegistration {
-    registration_with_registry(config, crate::registry::Registry::default())
-}
-
-pub fn registration_from_sources(
-    file: std::collections::BTreeMap<String, serde_json::Value>,
-) -> ClientRegistration {
-    register(
-        crate::configuration::AcpConfiguration::new(file),
-        crate::registry::Registry::default(),
-        None,
-    )
-}
-
-pub fn registration_with_registry(
-    config: AcpConfig,
-    registry: crate::registry::Registry,
-) -> ClientRegistration {
-    register(
-        crate::configuration::AcpConfiguration::with_defaults(config, Default::default()),
-        registry,
-        None,
-    )
+pub fn registration() -> ClientRegistration {
+    register(AcpAgents::builtin(), None)
 }
 
 pub fn registration_with_relay(
-    config: AcpConfig,
-    registry: crate::registry::Registry,
+    agents: AcpAgents,
     executable: std::path::PathBuf,
 ) -> ClientRegistration {
-    register(
-        crate::configuration::AcpConfiguration::with_defaults(config, Default::default()),
-        registry,
-        Some(executable),
-    )
+    register(agents, Some(executable))
 }
 
-fn register(
-    mut config: crate::configuration::AcpConfiguration,
-    registry: crate::registry::Registry,
-    relay_executable: Option<std::path::PathBuf>,
-) -> ClientRegistration {
-    config.registry = registry.clone();
-    let root = config.root.clone();
-    let config = Arc::new(config);
+fn register(agents: AcpAgents, relay_executable: Option<std::path::PathBuf>) -> ClientRegistration {
+    let config = Arc::new(crate::configuration::AcpConfiguration::new(agents));
     let (reconnect, recovery) = tokio::sync::mpsc::unbounded_channel();
     let adapter = Arc::new(AcpAdapter {
         reconnect,
@@ -88,8 +59,7 @@ fn register(
         relay_executable,
         config: config.clone(),
         pool: Arc::new(OnceLock::new()),
-        registry,
-        root,
+        root: Default::default(),
         peers: Arc::new(Mutex::new(HashMap::new())),
         stopped: Arc::new(AtomicBool::new(false)),
         interactions: Arc::new(OnceLock::new()),
@@ -113,9 +83,8 @@ fn register(
 pub(crate) struct AcpAdapter {
     pub(crate) reconnect: tokio::sync::mpsc::UnboundedSender<String>,
     recovery: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<String>>>>,
-    config: Arc<crate::configuration::AcpConfiguration>,
+    pub(crate) config: Arc<crate::configuration::AcpConfiguration>,
     pool: Arc<OnceLock<SqlitePool>>,
-    registry: crate::registry::Registry,
     root: Arc<OnceLock<std::path::PathBuf>>,
     pub(crate) relay_executable: Option<std::path::PathBuf>,
     pub(crate) peers: Peers,
@@ -128,19 +97,6 @@ fn unavailable() -> Error {
 }
 
 impl AcpAdapter {
-    fn display_name(&self, id: &str, config: &AcpAgentConfig) -> String {
-        config
-            .name
-            .clone()
-            .or_else(|| {
-                config
-                    .registry_id
-                    .as_deref()
-                    .and_then(|registry| self.registry.cached_name(registry))
-            })
-            .unwrap_or_else(|| id.into())
-    }
-
     async fn peer(&self, session: &str) -> Result<Arc<Peer>> {
         self.peers
             .lock()
@@ -165,19 +121,13 @@ impl ClientSession for AcpAdapter {
                 .filter(|row| row.client_type == "acp" && row.enabled)
             {
                 let id = &record.client_key;
-                let overrides = record.overrides()?;
-                let config: AcpAgentConfig =
-                    serde_json::from_value(self.config.resolve(id, &overrides)?)?;
-                if config.name.is_none()
-                    && let Some(registry) = &config.registry_id
-                {
-                    self.registry.name(registry).await?;
-                }
-                let name = self.display_name(id, &config);
+                let Ok(agent) = self.config.definition(id, &record.overrides()?) else {
+                    continue;
+                };
                 options.push(SessionCreationOption {
                     model_catalog_key: Some(id.clone()),
                     id: serde_json::to_string(&["acp", id])?,
-                    name,
+                    name: agent.name.clone(),
                     client_type: "acp".into(),
                     metadata: json!({"acp_agent_id": id}),
                 });
@@ -191,16 +141,6 @@ impl ClientSession for AcpAdapter {
         events: EventIngestService,
         root: &'a Path,
         request: RuntimeStartRequest,
-    ) -> ClientOperation<'a, ()> {
-        self.provision_configured(events, root, request, serde_json::Value::Null)
-    }
-
-    fn provision_configured<'a>(
-        &'a self,
-        events: EventIngestService,
-        root: &'a Path,
-        request: RuntimeStartRequest,
-        configuration: serde_json::Value,
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move {
             if self.stopped.load(Ordering::Acquire) {
@@ -229,17 +169,9 @@ impl ClientSession for AcpAdapter {
                 .ok_or_else(|| {
                     Error::Domain("metadata.acp_agent_id must be a nonempty string".into())
                 })?;
-            let configuration = if configuration.is_null() {
-                pontia_agent_control::agent_clients::AgentClientService::new(
-                    pool.clone(),
-                    events.clients(),
-                )
-                .resolve("acp", selected)
-                .await?
-            } else {
-                configuration
-            };
-            let config: AcpAgentConfig = serde_json::from_value(configuration)?;
+            let definition = self.config.agents.get(selected).ok_or_else(|| {
+                Error::CapabilityUnavailable(format!("ACP Agent {selected} is not defined"))
+            })?;
             let peers = self.peers.lock().await;
             if self.stopped.load(Ordering::Acquire) {
                 return Err(unavailable());
@@ -283,14 +215,10 @@ impl ClientSession for AcpAdapter {
                 &request.session_id,
                 &runtime,
                 PontiaEventType::RuntimeStarting,
-                json!({"start_command":peer::start_command(&config)}),
+                json!({"start_command":peer::start_command(&definition.launch)}),
             )
             .await?;
-            let config = match self
-                .registry
-                .resolve(&config, &root.join("acp/registry"), &cwd)
-                .await
-            {
+            let config = match peer::resolve_command(&definition.launch, &cwd) {
                 Ok(config) => config,
                 Err(error) => {
                     peer::runtime_event(
@@ -306,7 +234,7 @@ impl ClientSession for AcpAdapter {
             };
             drop(peers);
             let peer = match self
-                .launch(&root, &request.session_id, &runtime, &cwd, &config)
+                .launch(&root, &request.session_id, &runtime, &cwd, config)
                 .await
             {
                 Ok(peer) => peer,
@@ -323,6 +251,7 @@ impl ClientSession for AcpAdapter {
                 }
             };
             let setup = async {
+                peer.state.lock().await.agent = AgentBounds::of(Some(definition));
                 let (native, metadata) = peer.initialize(
                     &cwd,
                     bound_identity.as_ref().map(|identity| identity[1].as_str()),
@@ -569,20 +498,24 @@ impl ClientSession for AcpAdapter {
         Box::pin(async move {
             // ACP has no capability flag for usage reports. The persisted observation
             // remains evidence of support even when the peer is disconnected.
-            let mut capabilities = AgentClientCapabilities::default();
-            if let Some(pool) = self.pool.get()
-                && sqlx::query_scalar::<_, bool>(
-                    "SELECT EXISTS(SELECT 1 FROM sessions WHERE session_id = ?
+            let usage_observed = match self.pool.get() {
+                Some(pool) => {
+                    sqlx::query_scalar::<_, bool>(
+                        "SELECT EXISTS(SELECT 1 FROM sessions WHERE session_id = ?
                                    AND json_type(metadata, '$.context_usage') = 'object')",
-                )
-                .bind(session)
-                .fetch_one(pool)
-                .await?
-            {
-                capabilities.context_usage = implementation.context_usage;
-            }
+                    )
+                    .bind(session)
+                    .fetch_one(pool)
+                    .await?
+                }
+                None => false,
+            };
             let Ok(peer) = self.peer(session).await else {
-                return Ok(capabilities);
+                return Ok(capabilities::effective(
+                    None,
+                    usage_observed,
+                    implementation,
+                ));
             };
             let retry_history = {
                 let state = peer.state.lock().await;
@@ -596,13 +529,11 @@ impl ClientSession for AcpAdapter {
                 let _ = peer.load().await;
             }
             let state = peer.state.lock().await;
-            if let Some(live) = &state.capabilities {
-                capabilities = AgentClientCapabilities {
-                    context_usage: capabilities.context_usage,
-                    ..live.intersection(implementation)
-                };
-            }
-            Ok(capabilities)
+            Ok(capabilities::effective(
+                state.capabilities.as_ref(),
+                usage_observed,
+                implementation,
+            ))
         })
     }
 
@@ -633,14 +564,11 @@ impl ClientSession for AcpAdapter {
                 ),
                 None => (None, serde_json::Value::Null, None),
             };
-            // Session inspection must not depend on live Registry availability.
             let name = agent_id.as_ref().map(|id| {
                 self.config
-                    .resolve(id, &json!({}))
-                    .ok()
-                    .and_then(|value| serde_json::from_value::<AcpAgentConfig>(value).ok())
-                    .map(|config| self.display_name(id, &config))
-                    .unwrap_or_else(|| id.clone())
+                    .agents
+                    .get(id)
+                    .map_or(id.as_str(), |agent| &agent.name)
             });
             Ok(ClientSessionDetails {
                 data: json!({"agent_id":agent_id,"name":name,"agent_info":agent_info,"system_prompt_injected":system_prompt_injected}),

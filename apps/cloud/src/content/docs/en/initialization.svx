@@ -54,7 +54,7 @@ Client authentication and Cloud login may require user authorization. Complete t
 
 ### 1. Prepare the installation
 
-Choose the Clients to enable (Pi, Codex, Claude Code, or a combination), the device display name, and the project directories to browse. Run every step as the same operating-system user. Enable ACP agents as described in [Agent Clients](/docs/agent-clients#enable-an-acp-agent).
+Choose the Clients to enable (Pi, Codex, Claude Code, or a combination), the device display name, and the project directories to browse. Run every step as the same operating-system user. Enable Grok Build as described in [Agent Clients](/docs/agent-clients#enable-an-acp-agent).
 
 1. Install `pontia` and `pontiad` with `npx @pontia/cli install` and add `$HOME/.local/bin` to your `PATH`, or use the [shell installer for Linux](/docs/platforms/linux#install-with-the-shell-script) or [macOS](/docs/platforms/macos#install-with-the-shell-script) without running the interactive initializer. For missing Client tools, follow the official [Pi quickstart](https://pi.dev/docs/latest/quickstart), [tmux installation guide](https://github.com/tmux/tmux/wiki/Installing), or [Codex CLI installation](https://learn.chatgpt.com/docs/codex/cli). Install only the selected Clients and their prerequisites; reuse working installations.
 2. Select one absolute `PONTIA_HOME` for all commands. Preserve an existing installation's configuration and credentials. The default is `~/.pontia`.

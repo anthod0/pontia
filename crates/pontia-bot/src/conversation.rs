@@ -204,6 +204,7 @@ impl ConversationService {
     fn restricted_execution_policy(
         &self,
         client_type: &str,
+        client_key: &str,
         disable_skills: bool,
     ) -> Result<pontia_core::execution_policy::ExecutionPolicy> {
         let clients = self.control.clients();
@@ -213,16 +214,18 @@ impl ConversationService {
             .ok_or_else(|| {
                 Error::CapabilityUnavailable("Client cannot restrict Session tools".into())
             })?;
-        let mut policy = configuration.restricted_execution_policy().ok_or_else(|| {
-            Error::CapabilityUnavailable("Client cannot restrict Session tools".into())
-        })?;
+        let mut policy = configuration
+            .restricted_execution_policy(client_key)
+            .ok_or_else(|| {
+                Error::CapabilityUnavailable("Client cannot restrict Session tools".into())
+            })?;
         policy.yolo = true;
         policy.disable_skills = disable_skills;
         configuration.validate_execution_policy(&policy)?;
         Ok(policy)
     }
 
-    pub fn supports_bot_client(&self, client_type: &str) -> bool {
+    pub fn supports_bot_client(&self, client_type: &str, client_key: &str) -> bool {
         self.control
             .clients()
             .get(client_type)
@@ -233,13 +236,16 @@ impl ConversationService {
                         .configuration
                         .as_ref()
                         .is_some_and(|config| config.supports_startup_model())
-                    && self.restricted_execution_policy(client_type, true).is_ok()
+                    && self
+                        .restricted_execution_policy(client_type, client_key, true)
+                        .is_ok()
             })
     }
 
     fn task_execution_policy(
         &self,
         client_type: &str,
+        client_key: &str,
         disable_skills: bool,
     ) -> Result<pontia_core::execution_policy::ExecutionPolicy> {
         if !self
@@ -254,19 +260,22 @@ impl ConversationService {
                 "Client cannot run tasks with injected instructions".into(),
             ));
         }
-        self.restricted_execution_policy(client_type, disable_skills)
+        self.restricted_execution_policy(client_type, client_key, disable_skills)
     }
 
     /// Profiles that can currently start a helper; unavailable ones are left out of the list.
     async fn helper_profiles(&self) -> Result<Vec<LaunchableAgentProfile>> {
         let mut profiles = self.control.agent_profiles().list_launchable().await?;
-        profiles.retain(|profile| self.require_helper_client(&profile.client_type).is_ok());
+        profiles.retain(|profile| {
+            self.require_helper_client(&profile.client_type, &profile.client_key)
+                .is_ok()
+        });
         Ok(profiles)
     }
 
     /// Checks the client capabilities a helper Session needs, without launching anything.
-    pub(crate) fn require_helper_client(&self, client_type: &str) -> Result<()> {
-        self.task_execution_policy(client_type, false)?;
+    pub(crate) fn require_helper_client(&self, client_type: &str, client_key: &str) -> Result<()> {
+        self.task_execution_policy(client_type, client_key, false)?;
         if !self
             .control
             .clients()
@@ -289,7 +298,8 @@ impl ConversationService {
         instructions: &str,
         disable_skills: bool,
     ) -> Result<CreateSessionRequest> {
-        let execution_policy = self.task_execution_policy(client_type, disable_skills)?;
+        let execution_policy =
+            self.task_execution_policy(client_type, client_key, disable_skills)?;
         let metadata = self.session_metadata(client_type, client_key).await?;
         Ok(CreateSessionRequest {
             launch_mode: Default::default(),
@@ -618,7 +628,7 @@ impl ConversationService {
 
     async fn start_session(&self, bot: &Bot, activity: &Activity) -> Result<String> {
         let ownership_prefix = format!("{}:", bot.bot_id);
-        if !self.supports_bot_client(&bot.client_type) {
+        if !self.supports_bot_client(&bot.client_type, &bot.client_key) {
             return Err(Error::CapabilityUnavailable(
                 "Client cannot run a Bot Session".into(),
             ));
@@ -654,7 +664,11 @@ impl ConversationService {
             .session_commands()
             .create_session(CreateSessionRequest {
                 launch_mode: pontia_core::LaunchMode::Background,
-                execution_policy: self.restricted_execution_policy(&bot.client_type, true)?,
+                execution_policy: self.restricted_execution_policy(
+                    &bot.client_type,
+                    &bot.client_key,
+                    true,
+                )?,
                 model: Some(bot.model.clone()),
                 client_type: bot.client_type.clone(),
                 title: Some(bot.name.clone()),

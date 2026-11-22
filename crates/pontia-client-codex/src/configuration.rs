@@ -20,6 +20,7 @@ impl CodexConfiguration {
 impl ClientConfiguration for CodexConfiguration {
     fn restricted_execution_policy(
         &self,
+        _key: &str,
     ) -> Option<pontia_core::execution_policy::ExecutionPolicy> {
         Some(pontia_core::execution_policy::ExecutionPolicy {
             disabled_tools: vec![SPAWN_AGENT.into()],

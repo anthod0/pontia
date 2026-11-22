@@ -11,7 +11,7 @@
   <p>English · <a href="README.zh-CN.md">简体中文</a></p>
 </div>
 
-Leave your desk, not your agents. Pontia lets you run coding agents such as pi, Codex, Claude Code, and OpenCode on your own device, then check in, approve, and steer every session from any browser, including your phone. Pontia is free and open source.
+Leave your desk, not your agents. Pontia lets you run coding agents such as pi, Codex, Claude Code, and Grok Build on your own device, then check in, approve, and steer every session from any browser, including your phone. Pontia is free and open source.
 
 <p align="center">
   <img src="apps/cloud/static/client-logos/pi.svg" height="28" alt="pi">
@@ -19,8 +19,6 @@ Leave your desk, not your agents. Pontia lets you run coding agents such as pi, 
   <picture><source media="(prefers-color-scheme: dark)" srcset="apps/cloud/static/client-logos/codex-dark.svg"><img src="apps/cloud/static/client-logos/codex.svg" height="28" alt="Codex"></picture>
   &nbsp;&nbsp;
   <img src="apps/cloud/static/client-logos/claude-code.svg" height="28" alt="Claude Code">
-  &nbsp;&nbsp;
-  <picture><source media="(prefers-color-scheme: dark)" srcset="apps/cloud/static/client-logos/opencode-dark.svg"><img src="apps/cloud/static/client-logos/opencode.svg" height="28" alt="OpenCode"></picture>
   &nbsp;&nbsp;
   <img src="apps/cloud/static/client-logos/grok-build.svg" height="28" alt="Grok Build">
 </p>
@@ -35,7 +33,7 @@ Leave your desk, not your agents. Pontia lets you run coding agents such as pi, 
 - 🤖 **Hand off work to a Bot** — chat with a Bot on your device the way you would with an assistant. It starts Sessions for each task, runs several at once, reports back, and remembers your projects across long conversations.
 - 🔒 **Encrypted end to end** — only your browser and your device can read a session. Use an official Edge or run your own; either way, the Edge only relays ciphertext.
 
-Pontia supports pi, Codex, Claude Code, and ACP agents such as OpenCode and Grok Build, on Linux and macOS.
+Pontia supports pi, Codex, Claude Code, and Grok Build (via ACP) on Linux and macOS.
 
 ## Quick start
 
@@ -50,7 +48,7 @@ Install the clients you plan to use before initialization:
 - **pi:** the `pi` CLI and `tmux`;
 - **Codex:** the `codex` CLI;
 - **Claude Code:** Node.js LTS with npm, and a signed-in Claude Code;
-- **ACP agents:** the agent itself, enabled after initialization as described in [Agent Clients](https://pontia.dev/docs/agent-clients#enable-an-acp-agent).
+- **Grok Build (ACP):** `grok` on the service user’s PATH, enabled after initialization as described in [Agent Clients](https://pontia.dev/docs/agent-clients#enable-an-acp-agent).
 
 ### Initialize
 

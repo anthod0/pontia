@@ -68,7 +68,7 @@ pontia completions powershell | Out-String | Invoke-Expression
 | `pontia client disable CLIENT` | Impedir que novas Sessions usem a entrada; as Sessions existentes não mudam |
 | `pontia client reset CLIENT` | Excluir as configurações salvas da entrada, o que também a desabilita |
 
-`CLIENT` é um ID curto como `pi`, `codex`, `claude-agent` ou o ID de um agente ACP. Use `--id ID` com um ID de `pontia client list --json` quando um ID curto for ambíguo.
+`CLIENT` é um ID curto como `pi`, `codex`, `claude-agent` ou `grok`. Use `--id ID` com um ID de `pontia client list --json` quando um ID curto for ambíguo.
 
 ## Ferramentas para agentes
 

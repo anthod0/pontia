@@ -238,3 +238,14 @@ fn missing_or_conflicting_target_selectors_are_rejected() {
         assert!(output.stdout.is_empty());
     }
 }
+
+#[test]
+fn set_rejects_acp_without_sending_a_patch() {
+    let output = run(
+        &["set", "grok", "--config", "overrides.json"],
+        vec![entry("acp", "grok", "opaque", "grok")],
+        None,
+    );
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("configuration overrides"));
+}

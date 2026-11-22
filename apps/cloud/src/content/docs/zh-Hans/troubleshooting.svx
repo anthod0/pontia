@@ -72,9 +72,9 @@ $PONTIA_HOME/state/pi-hook.log
 
 确认对运行 Pontia 的用户而言，`node --version` 和 `npm --version` 可以正常运行，然后运行 `pontia setup claude` 重新进行依赖检查。如果 SDK 重试时 Dashboard 报告认证失败，请为该用户修复 Claude Code 自身的登录或提供商设置。更新客户端软件包的方法见 [Claude Code](/docs/agent-clients/claude)。
 
-## ACP Agent 无法启动
+## Grok Build 无法启动
 
-确认该条目的 `command` 能以 Pontia 服务用户身份运行，并使用 `pontia client show AGENT_ID` 检查其 `effective_config`。该 Agent 必须支持加载和关闭会话，否则 Session 会报告缺少该能力。
+确认 Pontia 服务用户能够运行 `grok agent stdio`，并使用 `pontia client show grok` 查看客户端信息。Grok Build 必须声明支持加载和关闭会话。
 
 ## 远程设备离线
 
