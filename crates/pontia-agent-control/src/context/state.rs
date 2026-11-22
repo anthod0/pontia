@@ -31,6 +31,7 @@ struct AppRuntimeState {
 }
 
 struct EventState {
+    changes: crate::ControlChanges,
     ingest: crate::EventIngestService,
     agent_events: AgentEventBroker,
     live_output: LiveOutputStore,
@@ -123,6 +124,7 @@ impl AgentControl {
                     pontia_home: builder.pontia_home,
                 },
                 events: EventState {
+                    changes: Default::default(),
                     ingest,
                     agent_events: builder.agent_events,
                     interactions: crate::interactions::InteractionService::new(builder.db.clone()),
@@ -157,6 +159,14 @@ impl AgentControl {
 
     pub fn interactions(&self) -> crate::interactions::InteractionService {
         self.inner.events.interactions.clone()
+    }
+
+    pub fn control_changes(&self) -> crate::ControlChanges {
+        self.inner.events.changes.clone()
+    }
+
+    pub fn agent_profiles(&self) -> crate::AgentProfileService {
+        crate::AgentProfileService::new(self.db(), self.clients(), self.control_changes())
     }
 
     pub fn agent_events(&self) -> AgentEventBroker {

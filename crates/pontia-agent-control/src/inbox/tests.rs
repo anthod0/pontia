@@ -742,7 +742,7 @@ async fn steer_targets_the_active_turn_while_after_idle_waits() {
 #[tokio::test]
 async fn failed_session_restore_is_diagnostic_and_repeated_retry_does_not_restart() {
     let (root, state, channel) = connected_inbox().await;
-    let workspace = crate::workspaces::upsert_canonical_workspace(
+    let (workspace, _) = crate::workspaces::upsert_canonical_workspace(
         &state.db(),
         root.path().to_str().unwrap(),
         None,

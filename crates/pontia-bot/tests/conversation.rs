@@ -4,7 +4,7 @@ use std::{
 };
 
 use pontia_agent_control::{
-    AgentControl, AgentProfileService, EventIngestService, ReportedFact, UpsertAgentProfileRequest,
+    AgentControl, EventIngestService, ReportedFact, UpsertAgentProfileRequest,
     agent_clients::AgentClientService,
     client_contract::{
         AgentInput, ClientConfiguration, ClientInteractions, ClientLaunchRequest, ClientLauncher,
@@ -1168,53 +1168,8 @@ async fn reliable_helper_failures_are_durable_and_event_replay_does_not_duplicat
     );
 }
 
-#[tokio::test]
-async fn running_bots_receive_new_workspaces_once_and_initial_context_does_not_wake_them() {
-    use pontia_agent_control::workspaces::{RegisterWorkspaceRequest, WorkspaceService};
-    let (root, _pool, client, control, conversation) = fixture().await;
-    let workspace_service = WorkspaceService::new(
-        control.db(),
-        serde_json::from_value(json!({"roots":[{
-            "root_id":"test", "label":"Test", "path":root.path()
-        }]}))
-        .unwrap(),
-    );
-    let register = |path: &str| RegisterWorkspaceRequest {
-        root_id: "test".into(),
-        path: path.into(),
-        name: None,
-        description: Some("project".into()),
-    };
-    std::fs::create_dir(root.path().join("existing")).unwrap();
-    workspace_service
-        .register(register("existing"))
-        .await
-        .unwrap();
-    let (_, session) = bot(&conversation).await;
-    let helpers = HelperService::new(control.clone(), conversation.clone());
-    let before = client.inputs.lock().unwrap().len();
-    helpers.reconcile().await.unwrap();
-    assert_eq!(client.inputs.lock().unwrap().len(), before);
-    std::fs::create_dir(root.path().join("new")).unwrap();
-    let workspace = workspace_service.register(register("new")).await.unwrap();
-    helpers.reconcile().await.unwrap();
-    {
-        let inputs = client.inputs.lock().unwrap();
-        assert_eq!(inputs.len(), before + 1);
-        assert_eq!(inputs.last().unwrap().session_id, session);
-        assert_eq!(
-            inputs.last().unwrap().input,
-            format!(
-                "Source: System Notification\nWorkspace registered: {}\nPath: {}\nDescription: project",
-                workspace.workspace_id, workspace.canonical_path
-            )
-        );
-    }
-    workspace_service.register(register("new")).await.unwrap();
-    let recovered = HelperService::new(control.clone(), test_conversation(control));
-    recovered.reconcile().await.unwrap();
-    assert_eq!(client.inputs.lock().unwrap().len(), before + 1);
-}
+#[path = "conversation/system_notices.rs"]
+mod system_notices;
 
 fn profile(id: &str, model: &str, system_prompt: Option<&str>) -> UpsertAgentProfileRequest {
     UpsertAgentProfileRequest {
@@ -1226,10 +1181,6 @@ fn profile(id: &str, model: &str, system_prompt: Option<&str>) -> UpsertAgentPro
         model: Some(model.into()),
         system_prompt: system_prompt.map(Into::into),
     }
-}
-
-fn profile_service(control: &AgentControl) -> AgentProfileService {
-    AgentProfileService::new(control.db()).with_clients(control.clients())
 }
 
 async fn create_helper(
@@ -1273,7 +1224,8 @@ async fn general_helper_follows_a_corrected_bot_model_and_ignores_legacy_helper_
             .status,
         MessageStatus::Failed
     );
-    profile_service(&control)
+    control
+        .agent_profiles()
         .create(profile(
             &format!("{}-helper", bot.bot_id),
             "missing/model",
@@ -1337,7 +1289,7 @@ async fn profile_helper_uses_the_profile_launch_config_and_keeps_its_instruction
     let (_root, _pool, client, control, conversation) = fixture().await;
     let (id, session) = bot(&conversation).await;
     let helpers = HelperService::new(control.clone(), conversation.clone());
-    let profiles = profile_service(&control);
+    let profiles = control.agent_profiles();
     profiles
         .create(profile("specialist", MODEL, Some("Review only")))
         .await
@@ -1466,7 +1418,7 @@ async fn bot_handoff_lists_only_profiles_that_can_start_a_helper_at_each_launch(
         fixture_with_clients(&[&BOT_CLIENT, &NO_STEER_CLIENT]).await;
     let (id, session) = bot(&conversation).await;
     assert!(listed_profiles(&instructions(&control, &session).await).is_empty());
-    let profiles = profile_service(&control);
+    let profiles = control.agent_profiles();
     profiles
         .create(profile("reviewer", MODEL, Some("Review only")))
         .await
@@ -1539,7 +1491,7 @@ async fn bot_handoff_lists_only_profiles_that_can_start_a_helper_at_each_launch(
 #[tokio::test]
 async fn profile_selected_from_a_handoff_launches_with_its_current_configuration() {
     let (_root, pool, client, control, conversation) = fixture().await;
-    let profiles = profile_service(&control);
+    let profiles = control.agent_profiles();
     profiles
         .create(profile("specialist", "missing/model", None))
         .await
@@ -1606,7 +1558,7 @@ async fn helper_rejects_missing_and_deleted_profiles_before_creating_a_session()
     let (_root, pool, _client, control, conversation) = fixture().await;
     let (_, session) = bot(&conversation).await;
     let helpers = HelperService::new(control.clone(), conversation);
-    let profiles = profile_service(&control);
+    let profiles = control.agent_profiles();
     profiles
         .create(profile("deleted", MODEL, None))
         .await

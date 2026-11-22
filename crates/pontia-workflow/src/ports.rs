@@ -36,8 +36,7 @@ pub trait SessionCreator {
 
 impl SessionCreator for AgentControl {
     async fn resolve_profile(&self, id: &str) -> Result<ProfileSessionConfig> {
-        let profiles =
-            pontia_agent_control::AgentProfileService::new(self.db()).with_clients(self.clients());
+        let profiles = self.agent_profiles();
         let profile = profiles.resolve_launch(id).await?;
         let (client_type, metadata) =
             if let (Some(client), Some(key)) = (&profile.client_type, &profile.client_key) {

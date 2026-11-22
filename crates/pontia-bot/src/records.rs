@@ -178,13 +178,7 @@ impl BotService {
     /// Deletes the Bot, its chat and associations, and its directory, all or nothing in the database.
     pub(crate) async fn delete(&self, bot_id: &str) -> Result<()> {
         let mut tx = self.pool.begin().await?;
-        for table in [
-            "bot_messages",
-            "bot_helpers",
-            "bot_notifications",
-            "bot_known_workspaces",
-            "bots",
-        ] {
+        for table in ["bot_messages", "bot_helpers", "bot_notifications", "bots"] {
             sqlx::query(&format!("DELETE FROM {table} WHERE bot_id = ?"))
                 .bind(bot_id)
                 .execute(&mut *tx)

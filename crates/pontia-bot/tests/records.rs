@@ -89,7 +89,7 @@ impl Fixture {
         Self {
             bots: BotService::new(pool.clone(), root.path(), registry.clone()),
             messages: MessageService::new(pool.clone()),
-            profiles: AgentProfileService::new(pool.clone()).with_clients(registry.clone()),
+            profiles: AgentProfileService::new(pool.clone(), registry.clone(), Default::default()),
             root,
             pool,
             registry,

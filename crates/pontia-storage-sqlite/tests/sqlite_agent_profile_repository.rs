@@ -25,14 +25,17 @@ async fn creates_updates_and_deletes_profiles() {
     assert!(repository.create(record("Duplicate")).await.is_err());
     let original = repository.get("reviewer").await.unwrap().unwrap();
     assert_eq!(original.name, "Original");
-    assert!(repository.update(record("Edited")).await.unwrap());
+    assert_eq!(
+        repository.update(record("Edited")).await.unwrap(),
+        Some(false)
+    );
     let profiles = repository.list().await.unwrap();
     assert_eq!(profiles.len(), 1);
     assert_eq!(profiles[0].name, "Edited");
     assert_eq!(profiles[0].created_at, original.created_at);
     assert!(repository.delete("reviewer").await.unwrap());
     assert!(!repository.delete("reviewer").await.unwrap());
-    assert!(!repository.update(record("Missing")).await.unwrap());
+    assert_eq!(repository.update(record("Missing")).await.unwrap(), None);
     assert!(repository.get("reviewer").await.unwrap().is_none());
 }
 

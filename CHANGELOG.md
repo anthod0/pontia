@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Bots with a live Session receive workspace registrations, Agent Profile creations, deletions and description changes, and their own todo updates in three-second batches. Reopening a todo for an offline Bot takes effect in its next handoff.
+
 - Bot system notifications start with `Source: System Notification` and identify the source helper with `Helper Session:` when present. The message body follows immediately, without a notification ID or blank line.
 
 ### Fixed

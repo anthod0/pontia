@@ -82,12 +82,18 @@ pub async fn require_active_workspace_id(
     })
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WorkspaceRegistration {
+    Inserted,
+    Reactivated,
+    AlreadyActive,
+}
+
 pub async fn upsert_canonical_workspace(
     pool: &SqlitePool,
     canonical_path: &str,
     requested_name: Option<&str>,
-) -> Result<WorkspaceRecord> {
-    let display_path = canonical_path.to_string();
+) -> Result<(WorkspaceRecord, WorkspaceRegistration)> {
     let name = requested_name
         .filter(|name| !name.trim().is_empty())
         .map(ToString::to_string)
@@ -98,64 +104,27 @@ pub async fn upsert_canonical_workspace(
                 .map(ToString::to_string)
         });
 
-    let repository = SqliteWorkspaceRepository::new(pool.clone());
-    if let Some(row) = repository
-        .get_workspace_record_by_canonical_path(canonical_path)
-        .await?
-    {
-        repository
-            .reactivate_workspace(&row.workspace_id, &display_path, name.as_deref())
-            .await?;
-        return Ok(WorkspaceRecord {
-            workspace_id: row.workspace_id,
-            canonical_path: canonical_path.to_string(),
-            name,
-            description: row.description,
-        });
-    }
-
-    let workspace_id = new_workspace_id().to_string();
-    let insert_result = repository
-        .insert_workspace(
-            &workspace_id,
+    let (row, previous_state) = SqliteWorkspaceRepository::new(pool.clone())
+        .register_workspace(
+            &new_workspace_id().to_string(),
             canonical_path,
-            &display_path,
             name.as_deref(),
         )
-        .await;
-    if let Err(error) = insert_result {
-        if !is_unique_violation(&error) {
-            return Err(error);
-        }
-        let row = repository
-            .get_workspace_record_by_canonical_path(canonical_path)
-            .await?
-            .ok_or(error)?;
-        repository
-            .reactivate_workspace(&row.workspace_id, &display_path, name.as_deref())
-            .await?;
-        return Ok(WorkspaceRecord {
+        .await?;
+    let registration = match previous_state.as_deref() {
+        None => WorkspaceRegistration::Inserted,
+        Some("deleted") => WorkspaceRegistration::Reactivated,
+        Some(_) => WorkspaceRegistration::AlreadyActive,
+    };
+    Ok((
+        WorkspaceRecord {
             workspace_id: row.workspace_id,
-            canonical_path: canonical_path.to_string(),
-            name,
+            canonical_path: row.canonical_path,
+            name: row.name,
             description: row.description,
-        });
-    }
-
-    Ok(WorkspaceRecord {
-        workspace_id,
-        canonical_path: canonical_path.to_string(),
-        name,
-        description: None,
-    })
-}
-
-fn is_unique_violation(error: &Error) -> bool {
-    matches!(
-        error,
-        Error::Database(sqlx::Error::Database(database_error))
-            if database_error.is_unique_violation()
-    )
+        },
+        registration,
+    ))
 }
 
 pub async fn get_workspace_record(

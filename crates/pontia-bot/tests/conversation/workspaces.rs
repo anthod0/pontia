@@ -126,7 +126,7 @@ async fn project_helpers_follow_workspace_filters_and_accept_steering_on_their_r
     for name in ["first", "second"] {
         let path = root.path().join(name);
         std::fs::create_dir(&path).unwrap();
-        let project = upsert_canonical_workspace(&pool, path.to_str().unwrap(), None)
+        let (project, _) = upsert_canonical_workspace(&pool, path.to_str().unwrap(), None)
             .await
             .unwrap();
         let created = helpers
@@ -236,7 +236,7 @@ async fn project_helper_title_names_its_recent_session() {
     let (_, main) = bot(&conversation).await;
     let path = root.path().join("project");
     std::fs::create_dir(&path).unwrap();
-    let project = upsert_canonical_workspace(&pool, path.to_str().unwrap(), None)
+    let (project, _) = upsert_canonical_workspace(&pool, path.to_str().unwrap(), None)
         .await
         .unwrap();
     let created = helpers
@@ -281,7 +281,7 @@ async fn invalid_workspace_rejects_the_assignment_without_starting_a_private_hel
     let (root, pool, _, control, conversation) = fixture().await;
     let (id, main) = bot(&conversation).await;
     let helpers = HelperService::new(control.clone(), conversation);
-    let workspace = upsert_canonical_workspace(&pool, root.path().to_str().unwrap(), None)
+    let (workspace, _) = upsert_canonical_workspace(&pool, root.path().to_str().unwrap(), None)
         .await
         .unwrap();
     assert_eq!(
@@ -294,7 +294,7 @@ async fn invalid_workspace_rejects_the_assignment_without_starting_a_private_hel
     let old_path = root.path().join("old-project");
     let new_path = root.path().join("moved-project");
     std::fs::create_dir(&old_path).unwrap();
-    let moved = upsert_canonical_workspace(&pool, old_path.to_str().unwrap(), None)
+    let (moved, _) = upsert_canonical_workspace(&pool, old_path.to_str().unwrap(), None)
         .await
         .unwrap();
     std::fs::rename(&old_path, &new_path).unwrap();
@@ -357,7 +357,7 @@ async fn failed_launcher_keeps_project_and_bot_ownership_in_list_and_next_handof
     let (root, pool, client, control, conversation) = fixture().await;
     let (id, main) = bot(&conversation).await;
     let helpers = HelperService::new(control.clone(), conversation.clone());
-    let project = upsert_canonical_workspace(&pool, root.path().to_str().unwrap(), None)
+    let (project, _) = upsert_canonical_workspace(&pool, root.path().to_str().unwrap(), None)
         .await
         .unwrap();
     *client.fail_next_launch.lock().unwrap() = true;
@@ -467,9 +467,10 @@ async fn temporary_helper_restores_the_missing_default_directory() {
     assert!(!default.exists());
     let (_, main) = bot(conversation).await;
     let canonical = default.canonicalize().unwrap();
-    let workspace = upsert_canonical_workspace(pool, canonical.to_str().unwrap(), Some("My tasks"))
-        .await
-        .unwrap();
+    let (workspace, _) =
+        upsert_canonical_workspace(pool, canonical.to_str().unwrap(), Some("My tasks"))
+            .await
+            .unwrap();
     std::fs::remove_dir(&default).unwrap();
 
     let restored = assert_temporary_helper_uses_default_workspace(&fixture, &main).await;

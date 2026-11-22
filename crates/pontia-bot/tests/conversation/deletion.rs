@@ -108,12 +108,7 @@ async fn open_helpers_block_deletion_until_closed_then_only_that_bot_is_removed(
         conversation.records().get(&doomed).await,
         Err(Error::NotFound(_))
     ));
-    for table in [
-        "bot_messages",
-        "bot_helpers",
-        "bot_notifications",
-        "bot_known_workspaces",
-    ] {
+    for table in ["bot_messages", "bot_helpers", "bot_notifications"] {
         assert_eq!(count(&pool, table, &doomed).await, 0, "{table}");
     }
     assert!(!directory.exists());

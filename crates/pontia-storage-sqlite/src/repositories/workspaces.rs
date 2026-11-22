@@ -69,46 +69,30 @@ impl SqliteWorkspaceRepository {
         .await?)
     }
 
-    pub async fn insert_workspace(
+    pub async fn register_workspace(
         &self,
         workspace_id: &str,
         canonical_path: &str,
-        display_path: &str,
         name: Option<&str>,
-    ) -> Result<()> {
-        sqlx::query(
-            r#"INSERT INTO workspaces
-               (workspace_id, canonical_path, display_path, name, last_used_at)
-               VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#,
+    ) -> Result<(WorkspaceRecordRow, Option<String>)> {
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let previous_state =
+            sqlx::query_scalar("SELECT state FROM workspaces WHERE canonical_path = ?")
+                .bind(canonical_path)
+                .fetch_optional(&mut *tx)
+                .await?;
+        let row = sqlx::query_as(
+            r#"INSERT INTO workspaces (workspace_id, canonical_path, display_path, name, last_used_at)
+               VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+               ON CONFLICT(canonical_path) DO UPDATE SET display_path = excluded.display_path,
+                 name = COALESCE(excluded.name, workspaces.name), state = 'active',
+                 last_used_at = excluded.last_used_at, updated_at = excluded.last_used_at
+               RETURNING workspace_id, canonical_path, name, description"#,
         )
-        .bind(workspace_id)
-        .bind(canonical_path)
-        .bind(display_path)
-        .bind(name)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
-    }
-
-    pub async fn reactivate_workspace(
-        &self,
-        workspace_id: &str,
-        display_path: &str,
-        name: Option<&str>,
-    ) -> Result<()> {
-        sqlx::query(
-            r#"UPDATE workspaces
-               SET display_path = ?, name = COALESCE(?, name), state = 'active',
-                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
-                   last_used_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE workspace_id = ?"#,
-        )
-        .bind(display_path)
-        .bind(name)
-        .bind(workspace_id)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
+        .bind(workspace_id).bind(canonical_path).bind(canonical_path).bind(name)
+        .fetch_one(&mut *tx).await?;
+        tx.commit().await?;
+        Ok((row, previous_state))
     }
 
     pub async fn rename_workspace(&self, workspace_id: &str, name: Option<&str>) -> Result<u64> {

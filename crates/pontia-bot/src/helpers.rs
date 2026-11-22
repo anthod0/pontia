@@ -1,9 +1,8 @@
 mod notifications;
-pub(crate) use notifications::seed_workspaces;
 
 use pontia_agent_control::{
-    AgentControl, AgentProfileService, SessionMessagesQuery, SessionOwnership, SessionView,
-    SubmitInboxMessageRequest, TurnTimelineService, workspaces::require_active_workspace_id,
+    AgentControl, SessionMessagesQuery, SessionOwnership, SessionView, SubmitInboxMessageRequest,
+    TurnTimelineService, workspaces::require_active_workspace_id,
 };
 use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -242,8 +241,9 @@ impl HelperService {
             request.role = Some(RETRIEVAL_ROLE.into());
             request
         } else if let Some(profile_id) = &input.profile_id {
-            let profile = AgentProfileService::new(self.control.db())
-                .with_clients(self.control.clients())
+            let profile = self
+                .control
+                .agent_profiles()
                 .resolve_launch(profile_id)
                 .await?;
             let (Some(client_type), Some(client_key), Some(model)) =

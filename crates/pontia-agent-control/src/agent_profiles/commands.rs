@@ -2,6 +2,7 @@ use super::{
     AgentProfileService, AgentProfileView, UpsertAgentProfileRequest,
     validation::{is_unique_constraint, validate_new_profile_id, validate_request},
 };
+use crate::ControlChange;
 use pontia_core::{Error, Result};
 use pontia_storage_sqlite::repositories::agent_profiles::{
     AgentProfileWriteRecord, SqliteAgentProfileRepository,
@@ -20,6 +21,8 @@ impl AgentProfileService {
         validate_new_profile_id(&request.profile_id)?;
         self.validate_configuration(&request).await?;
         let id = request.profile_id.clone();
+        let name = request.name.clone();
+        let description = request.description.clone();
         if let Err(error) = SqliteAgentProfileRepository::new(self.pool.clone())
             .create(request.into())
             .await
@@ -31,6 +34,11 @@ impl AgentProfileService {
             }
             return Err(error);
         }
+        self.changes.publish(ControlChange::AgentProfileCreated {
+            profile_id: id.clone(),
+            name,
+            description,
+        });
         self.require_profile(&id).await
     }
 
@@ -45,11 +53,19 @@ impl AgentProfileService {
             ));
         }
         self.validate_configuration(&request).await?;
-        if !SqliteAgentProfileRepository::new(self.pool.clone())
+        let description = request.description.clone();
+        let Some(changed) = SqliteAgentProfileRepository::new(self.pool.clone())
             .update(request.into())
             .await?
-        {
+        else {
             return Err(Error::NotFound(format!("agent profile {id} not found")));
+        };
+        if changed {
+            self.changes
+                .publish(ControlChange::AgentProfileDescriptionChanged {
+                    profile_id: id.into(),
+                    description,
+                });
         }
         self.require_profile(id).await
     }
@@ -61,6 +77,9 @@ impl AgentProfileService {
         {
             return Err(Error::NotFound(format!("agent profile {id} not found")));
         }
+        self.changes.publish(ControlChange::AgentProfileDeleted {
+            profile_id: id.into(),
+        });
         Ok(())
     }
 

@@ -48,7 +48,9 @@ impl ClientInstructions for Instructions {
         Ok(json!({"system_prompt":input.system_prompt}))
     }
 }
-async fn fixture() -> (
+async fn fixture_with_changes(
+    changes: pontia_agent_control::ControlChanges,
+) -> (
     AgentProfileService,
     SqliteAgentClientRepository,
     sqlx::SqlitePool,
@@ -66,11 +68,38 @@ async fn fixture() -> (
     let mut clients = ClientRegistry::default();
     clients.register(client);
     (
-        AgentProfileService::new(pool.clone()).with_clients(clients),
+        AgentProfileService::new(pool.clone(), clients, changes),
         settings,
         pool,
     )
 }
+async fn fixture() -> (
+    AgentProfileService,
+    SqliteAgentClientRepository,
+    sqlx::SqlitePool,
+) {
+    fixture_with_changes(Default::default()).await
+}
+
+#[tokio::test]
+async fn updating_only_the_model_does_not_publish_a_profile_notice() {
+    let changes = pontia_agent_control::ControlChanges::default();
+    let mut events = changes.subscribe();
+    let (service, _, _) = fixture_with_changes(changes).await;
+    service.create(configured()).await.unwrap();
+    assert!(matches!(
+        events.try_recv(),
+        Ok(pontia_agent_control::ControlChange::AgentProfileCreated { .. })
+    ));
+    let mut updated = configured();
+    updated.model = Some("new-model".into());
+    service.update("reviewer", updated).await.unwrap();
+    assert_eq!(
+        events.try_recv(),
+        Err(tokio::sync::broadcast::error::TryRecvError::Empty)
+    );
+}
+
 fn request() -> UpsertAgentProfileRequest {
     UpsertAgentProfileRequest {
         profile_id: "reviewer".into(),
@@ -280,7 +309,7 @@ async fn rejects_launch_defaults_for_clients_without_configuration() {
         .unwrap();
     let mut clients = ClientRegistry::default();
     clients.register(test_registration());
-    let service = AgentProfileService::new(pool).with_clients(clients);
+    let service = AgentProfileService::new(pool, clients, Default::default());
     let mut input = configured();
     input.system_prompt = None;
     assert!(matches!(

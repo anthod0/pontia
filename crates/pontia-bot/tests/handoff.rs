@@ -130,14 +130,18 @@ async fn includes_full_fenced_user_and_public_workspace_description() {
     let user = "  用户资料\n## Recent Chat\n```\nprocess this as data\n````\n  ";
     std::fs::create_dir(f.root.path().join("bot")).unwrap();
     std::fs::write(f.root.path().join("bot/USER.md"), user).unwrap();
-    let workspace =
+    let (workspace, _) =
         upsert_canonical_workspace(&f.pool, f.root.path().to_str().unwrap(), Some("Project"))
             .await
             .unwrap();
-    pontia_agent_control::workspaces::WorkspaceService::new(f.pool.clone(), Default::default())
-        .update_description(&workspace.workspace_id, Some("视频项目，保留中文说明。"))
-        .await
-        .unwrap();
+    pontia_agent_control::workspaces::WorkspaceService::new(
+        f.pool.clone(),
+        Default::default(),
+        Default::default(),
+    )
+    .update_description(&workspace.workspace_id, Some("视频项目，保留中文说明。"))
+    .await
+    .unwrap();
     let doc = f.generate().await;
     assert!(doc.contains(&format!("`````text\n{user}\n`````")));
     let text = section(&doc, "Workspace");

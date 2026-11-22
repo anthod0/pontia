@@ -366,7 +366,7 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
     assert!(!options.to_string().contains("never-expose"));
     let workspace_path = root.path().join("project");
     std::fs::create_dir(&workspace_path).unwrap();
-    let workspace = pontia_agent_control::workspaces::upsert_canonical_workspace(
+    let (workspace, _) = pontia_agent_control::workspaces::upsert_canonical_workspace(
         &pool,
         workspace_path.to_str().unwrap(),
         None,

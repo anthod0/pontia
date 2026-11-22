@@ -31,11 +31,23 @@ impl SqliteAgentProfileRepository {
         Ok(())
     }
 
-    pub async fn update(&self, record: AgentProfileWriteRecord) -> Result<bool> {
-        Ok(sqlx::query("UPDATE agent_profiles SET name=?, description=?, client_type=?, client_key=?, model=?, system_prompt=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE profile_id=?")
+    pub async fn update(&self, record: AgentProfileWriteRecord) -> Result<Option<bool>> {
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let old: Option<Option<String>> =
+            sqlx::query_scalar("SELECT description FROM agent_profiles WHERE profile_id=?")
+                .bind(&record.profile_id)
+                .fetch_optional(&mut *tx)
+                .await?;
+        let Some(description) = old else {
+            return Ok(None);
+        };
+        let changed = description != record.description;
+        sqlx::query("UPDATE agent_profiles SET name=?, description=?, client_type=?, client_key=?, model=?, system_prompt=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE profile_id=?")
             .bind(record.name).bind(record.description).bind(record.client_type).bind(record.client_key)
             .bind(record.model).bind(record.system_prompt).bind(record.profile_id)
-            .execute(&self.pool).await?.rows_affected() != 0)
+            .execute(&mut *tx).await?;
+        tx.commit().await?;
+        Ok(Some(changed))
     }
 
     pub async fn delete(&self, profile_id: &str) -> Result<bool> {

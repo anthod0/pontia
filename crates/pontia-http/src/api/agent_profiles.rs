@@ -6,7 +6,7 @@ use axum::{
 };
 use serde_json::{Value, json};
 
-use pontia_agent_control::{AgentProfileService, UpsertAgentProfileRequest};
+use pontia_agent_control::UpsertAgentProfileRequest;
 use pontia_application::AppState;
 
 use super::{
@@ -17,10 +17,7 @@ use super::{
 pub async fn list_agent_profiles(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let profiles = AgentProfileService::new(state.db())
-        .with_clients(state.control().clients())
-        .list()
-        .await?;
+    let profiles = state.control().agent_profiles().list().await?;
     Ok(ok(json!({ "agent_profiles": profiles })))
 }
 
@@ -28,7 +25,7 @@ pub async fn get_agent_profile(
     State(state): State<AppState>,
     Path(profile_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = AgentProfileService::new(state.db()).with_clients(state.control().clients());
+    let service = state.control().agent_profiles();
     let profile = service
         .get(&profile_id)
         .await?
@@ -41,7 +38,7 @@ pub async fn create_agent_profile(
     headers: HeaderMap,
     Json(request): Json<UpsertAgentProfileRequest>,
 ) -> Result<Response, ApiError> {
-    let service = AgentProfileService::new(state.db()).with_clients(state.control().clients());
+    let service = state.control().agent_profiles();
     let outcome = idempotent(&state, &headers, "create_agent_profile", || async move {
         Ok(json!({"agent_profile": service.create(request).await?}))
     })
@@ -59,7 +56,7 @@ pub async fn delete_agent_profile(
     headers: HeaderMap,
     Path(profile_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    let service = AgentProfileService::new(state.db()).with_clients(state.control().clients());
+    let service = state.control().agent_profiles();
     let operation = format!("delete_agent_profile:{profile_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         service.delete(&profile_id).await?;
@@ -75,7 +72,7 @@ pub async fn update_agent_profile(
     Path(profile_id): Path<String>,
     Json(request): Json<UpsertAgentProfileRequest>,
 ) -> Result<Response, ApiError> {
-    let service = AgentProfileService::new(state.db()).with_clients(state.control().clients());
+    let service = state.control().agent_profiles();
     let operation = format!("update_agent_profile:{profile_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         Ok(json!({"agent_profile": service.update(&profile_id, request).await?}))

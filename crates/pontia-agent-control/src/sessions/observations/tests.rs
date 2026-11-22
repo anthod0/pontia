@@ -637,7 +637,7 @@ async fn native_admission_requires_explicit_workspace_activation_without_side_ef
             .unwrap();
         assert_eq!(bindings, 0);
     }
-    let workspace = crate::workspaces::upsert_canonical_workspace(
+    let (workspace, _) = crate::workspaces::upsert_canonical_workspace(
         &fixture.state.db(),
         cwd.to_str().unwrap(),
         Some("Chosen name"),

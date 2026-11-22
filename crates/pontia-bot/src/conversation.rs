@@ -5,8 +5,7 @@ use std::{
 };
 
 use pontia_agent_control::{
-    AgentControl, AgentProfileService, CreateSessionRequest, LaunchableAgentProfile,
-    SessionOwnership,
+    AgentControl, CreateSessionRequest, LaunchableAgentProfile, SessionOwnership,
 };
 use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -29,6 +28,12 @@ mod generation;
 pub use generation::GenerationLimits;
 mod timeline;
 pub use timeline::{NOTICE_EVENTS, TimelinePage};
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DeliveryMode {
+    StartIfNeeded,
+    LiveOnly,
+}
 
 const APPLICATION_ID: &str = "bot";
 
@@ -148,6 +153,7 @@ pub struct SentReply {
 #[derive(Clone)]
 pub struct ConversationService {
     control: AgentControl,
+    notices: broadcast::Sender<crate::system_notices::BotNotice>,
     records: BotService,
     messages: MessageService,
     handoff: HandoffService,
@@ -166,6 +172,7 @@ impl ConversationService {
         let records = BotService::new(pool.clone(), control.pontia_home(), control.clients());
         let user = UserService::new(control.pontia_home());
         Self {
+            notices: broadcast::channel(1024).0,
             records,
             messages: MessageService::new(pool.clone()),
             handoff: HandoffService::new(pool, user, control.queries(), roots),
@@ -180,6 +187,14 @@ impl ConversationService {
         self.default_workspace
             .as_deref()
             .ok_or_else(|| Error::Domain("Cannot locate the user's home directory".into()))
+    }
+
+    pub fn system_notices(&self) -> crate::system_notices::SystemNoticeService {
+        crate::system_notices::SystemNoticeService::new(
+            self.clone(),
+            self.control.clone(),
+            self.notices.subscribe(),
+        )
     }
 
     pub fn records(&self) -> &BotService {
@@ -244,10 +259,7 @@ impl ConversationService {
 
     /// Profiles that can currently start a helper; unavailable ones are left out of the list.
     async fn helper_profiles(&self) -> Result<Vec<LaunchableAgentProfile>> {
-        let mut profiles = AgentProfileService::new(self.control.db())
-            .with_clients(self.control.clients())
-            .list_launchable()
-            .await?;
+        let mut profiles = self.control.agent_profiles().list_launchable().await?;
         profiles.retain(|profile| self.require_helper_client(&profile.client_type).is_ok());
         Ok(profiles)
     }
@@ -382,6 +394,23 @@ impl ConversationService {
     ) -> Result<BotMessage> {
         let (message, changed) = self.messages.change_todo(bot_id, id, action).await?;
         if changed {
+            let verb = match action {
+                TodoAction::Resolve => "dismissed",
+                TodoAction::Reopen => "reopened",
+            };
+            let summary: String = message
+                .content
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .chars()
+                .take(80)
+                .collect();
+            let _ = self.notices.send(crate::system_notices::BotNotice {
+                bot_id: bot_id.into(),
+                key: format!("todo:{id}"),
+                text: format!("User {verb} todo message {id}: \"{summary}\""),
+            });
             self.activity(bot_id).notify(ConversationUpdate::Changed);
         }
         Ok(message)
@@ -432,7 +461,15 @@ impl ConversationService {
         );
         let revision = activity.switch_failure.lock().unwrap().0;
         let _delivery = activity.delivery.lock().await;
-        let result = self.deliver(bot_id, &input, &activity, revision).await;
+        let result = self
+            .deliver(
+                bot_id,
+                &input,
+                &activity,
+                revision,
+                DeliveryMode::StartIfNeeded,
+            )
+            .await;
         let _recording = activity.recording.lock().await;
         drop(pending);
         match result {
@@ -451,15 +488,39 @@ impl ConversationService {
 
     /// Routes input by stable Bot identity, resolving the current Session at delivery time.
     pub async fn deliver_input(&self, bot_id: &str, input: &str) -> Result<()> {
-        self.records.get(bot_id).await?;
+        self.deliver_notification(bot_id, input, DeliveryMode::StartIfNeeded)
+            .await
+    }
+
+    pub(crate) async fn deliver_system_notice(&self, bot_id: &str, input: &str) -> Result<()> {
+        self.deliver_notification(bot_id, input, DeliveryMode::LiveOnly)
+            .await
+    }
+
+    async fn deliver_notification(
+        &self,
+        bot_id: &str,
+        input: &str,
+        mode: DeliveryMode,
+    ) -> Result<()> {
         let activity = self.activity(bot_id);
         let revision = activity.switch_failure.lock().unwrap().0;
         let _guard = activity.delivery.lock().await;
+        let bot = self.records.get(bot_id).await?;
+        if mode == DeliveryMode::LiveOnly {
+            let Some(id) = bot.current_session_id else {
+                return Ok(());
+            };
+            let session = self.control.queries().session_snapshot(&id).await?;
+            if !session.is_some_and(|s| !matches!(s.state.as_str(), "exited" | "error")) {
+                return Ok(());
+            }
+        }
         let id = uuid::Uuid::now_v7().to_string();
         let pending = activity.track_input(&id);
         self.await_reply(bot_id).await?;
         activity.notify(ConversationUpdate::Changed);
-        let result = self.deliver(bot_id, input, &activity, revision).await;
+        let result = self.deliver(bot_id, input, &activity, revision, mode).await;
         drop(pending);
         activity.notify(ConversationUpdate::Changed);
         result
@@ -471,6 +532,7 @@ impl ConversationService {
         input: &str,
         activity: &Activity,
         revision: u64,
+        mode: DeliveryMode,
     ) -> Result<()> {
         {
             let failure = activity.switch_failure.lock().unwrap();
@@ -486,11 +548,18 @@ impl ConversationService {
         self.rotate(bot_id, activity, time::OffsetDateTime::now_utc())
             .await?;
         let bot = self.records.get(bot_id).await?;
-        let session_id = match self.current_session(bot, activity).await {
-            Ok(session) => session,
-            Err(error) => {
-                self.generation_error(bot_id, activity, &error);
-                return Err(error);
+        let session_id = if mode == DeliveryMode::LiveOnly {
+            let Some(session) = bot.current_session_id else {
+                return Ok(());
+            };
+            session
+        } else {
+            match self.current_session(bot, activity).await {
+                Ok(session) => session,
+                Err(error) => {
+                    self.generation_error(bot_id, activity, &error);
+                    return Err(error);
+                }
             }
         };
         let position = self
@@ -559,7 +628,6 @@ impl ConversationService {
         let default_workspace =
             crate::workspaces::initialize_default(&self.control.db(), self.default_workspace()?)
                 .await?;
-        crate::helpers::seed_workspaces(&self.control, &bot.bot_id).await?;
         let handoff = {
             let _recording = activity.recording.lock().await;
             let pending: Vec<_> = activity
@@ -619,7 +687,7 @@ impl ConversationService {
         Ok(session_id.into())
     }
 
-    async fn bot_for_session(&self, session_id: &str) -> Result<Option<Bot>> {
+    pub(crate) async fn owner_bot_id(&self, session_id: &str) -> Result<Option<String>> {
         let Some(ownership) = self.control.queries().session_ownership(session_id).await? else {
             return Ok(None);
         };
@@ -632,8 +700,15 @@ impl ConversationService {
         let Some((bot_id, _)) = ownership.reference.split_once(':') else {
             return Ok(None);
         };
+        Ok(Some(bot_id.into()))
+    }
+
+    async fn bot_for_session(&self, session_id: &str) -> Result<Option<Bot>> {
+        let Some(bot_id) = self.owner_bot_id(session_id).await? else {
+            return Ok(None);
+        };
         // Sessions of a deleted Bot remain as records but no longer act for it.
-        let bot = match self.records.get(bot_id).await {
+        let bot = match self.records.get(&bot_id).await {
             Err(Error::NotFound(_)) => return Ok(None),
             bot => bot?,
         };

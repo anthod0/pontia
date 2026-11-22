@@ -24,16 +24,22 @@ use pontia_agent_control::{ControlQueryService, WorkspaceView};
 
 #[derive(Clone)]
 pub struct WorkspaceBrowserService {
+    changes: pontia_agent_control::ControlChanges,
     pool: SqlitePool,
     config: WorkspaceBrowserConfig,
     file_picker: FilePickerConfig,
 }
 
 impl WorkspaceBrowserService {
-    pub fn new(pool: SqlitePool, config: WorkspaceBrowserConfig) -> Self {
+    pub fn new(
+        pool: SqlitePool,
+        config: WorkspaceBrowserConfig,
+        changes: pontia_agent_control::ControlChanges,
+    ) -> Self {
         Self {
             pool,
             config,
+            changes,
             file_picker: FilePickerConfig::default(),
         }
     }
@@ -41,11 +47,13 @@ impl WorkspaceBrowserService {
     pub fn with_file_picker(
         pool: SqlitePool,
         config: WorkspaceBrowserConfig,
+        changes: pontia_agent_control::ControlChanges,
         file_picker: FilePickerConfig,
     ) -> Self {
         Self {
             pool,
             config,
+            changes,
             file_picker,
         }
     }
@@ -301,8 +309,8 @@ impl WorkspaceBrowserService {
         &self,
         request: RegisterWorkspaceRequest,
     ) -> Result<WorkspaceView> {
-        WorkspaceService::new(self.pool.clone(), self.config.clone())
-            .register(request)
+        WorkspaceService::new(self.pool.clone(), self.config.clone(), self.changes.clone())
+            .register(request, None)
             .await
     }
 

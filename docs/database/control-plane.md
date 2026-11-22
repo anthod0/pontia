@@ -749,10 +749,4 @@ CREATE TABLE bot_event_cursor (
 );
 INSERT INTO bot_event_cursor VALUES (1, 0);
 
-CREATE TABLE bot_known_workspaces (
-    bot_id TEXT NOT NULL REFERENCES bots(bot_id),
-    workspace_id TEXT NOT NULL,
-    PRIMARY KEY (bot_id, workspace_id)
-);
-
 ```

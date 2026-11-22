@@ -304,11 +304,10 @@ async fn workflow_run_rejects_a_missing_phase_during_json_decoding() {
 
 #[tokio::test]
 async fn workflow_resolves_profile_launch_settings_and_pins_instructions() {
-    use pontia_agent_control::{AgentProfileService, SessionInstructionsService};
+    use pontia_agent_control::SessionInstructionsService;
     use pontia_workflow::SessionCreator;
     let app = TestApp::new().await;
-    let profiles =
-        AgentProfileService::new(app.db.clone()).with_clients(app.state.control().clients());
+    let profiles = app.state.control().agent_profiles();
     profiles
         .create(
             serde_json::from_value(json!({
@@ -382,11 +381,11 @@ async fn workflow_resolves_profile_launch_settings_and_pins_instructions() {
 
 #[tokio::test]
 async fn workflow_profiles_without_launch_defaults_use_the_default_client() {
-    use pontia_agent_control::AgentProfileService;
     use pontia_workflow::SessionCreator;
     let app = TestApp::new().await;
-    AgentProfileService::new(app.db.clone())
-        .with_clients(app.state.control().clients())
+    app.state
+        .control()
+        .agent_profiles()
         .create(
             serde_json::from_value(json!({
                 "profile_id":"default-client", "name":"Default client",

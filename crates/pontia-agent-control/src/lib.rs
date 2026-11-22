@@ -1,5 +1,7 @@
 pub mod agent_clients;
 mod agent_events;
+mod control_changes;
+pub use control_changes::{ControlChange, ControlChanges};
 mod agent_profiles;
 mod branch_replay;
 pub mod clients;
