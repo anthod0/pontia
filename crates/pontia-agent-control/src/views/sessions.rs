@@ -47,6 +47,8 @@ pub struct SessionView {
     pub workspace: Option<String>,
     pub pinned_at: Option<String>,
     pub archived_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub control_connected: Option<bool>,
     pub capabilities: SessionCapabilities,
     pub runtimes: Vec<pontia_storage_sqlite::repositories::session_runtimes::SessionRuntimeRecord>,
     pub timeline_unavailable_reason: Option<String>,
@@ -84,6 +86,7 @@ pub(crate) fn row_to_view(row: SessionRow) -> Result<SessionView> {
         workspace: row.workspace_ref,
         pinned_at: row.pinned_at,
         archived_at: row.archived_at,
+        control_connected: None,
         capabilities: SessionCapabilities::default(),
         runtimes: Vec::new(),
         timeline_unavailable_reason: None,

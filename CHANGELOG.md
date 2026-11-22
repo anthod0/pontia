@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Dashboard and helper listings report when a running Session loses its Client connection. An explicit close can now stop its dedicated agent process and confirm exit.
+
 - Closing a Claude Code Session on macOS now confirms when the host has exited, even if the system process list is incomplete.
 
 ## [0.8.8] - 2026-11-22

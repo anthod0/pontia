@@ -148,7 +148,7 @@
     // Some integrations expose control health independently of lifecycle facts.
     let refreshingControl = false
     const controlRefresh = setInterval(async () => {
-      if (refreshingControl || !controlDetails?.refreshWhileActive || !selectedSession || isTerminalSession(selectedSession)) return
+      if (refreshingControl || (!controlDetails?.refreshWhileActive && selectedSession?.control_connected === undefined) || !selectedSession || isTerminalSession(selectedSession)) return
       refreshingControl = true
       try {
         await loadSessionDetail(selectedSession.session_id, { showLoading: false })
@@ -1030,6 +1030,9 @@
 <svelte:window onpopstate={() => void selectSessionFromLocation()} />
 
 <section class="flex flex-col gap-4 pb-[var(--chat-bottom-padding)]" style={`--chat-top-offset: 4rem; --chat-bottom-padding: ${composerHeight + 16}px; --chat-composer-height: ${composerHeight}px`}>
+  {#if selectedSession?.control_connected === false}
+    <p class="text-sm text-destructive" role="status">{$t('chat.clientDisconnected')}</p>
+  {/if}
   {#if selectedSession && controlDetails && (selectedSession.capabilities.accept_task || controlDetails.unavailableReason) && (controlDetails.unavailableReason || controlDetails.profile?.error || !sessionSupportsTimeline(selectedSession))}
     <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
       {#if controlDetails.unavailableReason}
