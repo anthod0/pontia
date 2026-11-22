@@ -60,6 +60,8 @@ pub(super) struct Reports {
     writing: std::collections::HashSet<String>,
     pub wake: Arc<Notify>,
     started: Option<String>,
+    pub(super) close_request_id: Option<Value>,
+    closed: bool,
 }
 
 impl Reports {
@@ -120,6 +122,23 @@ impl Reports {
     }
 
     pub fn observe(&mut self, context: &mut Value, frame: &Value) -> bool {
+        if self.closed {
+            // Outstanding RPCs can still receive replies after the Session closes.
+            return frame.get("method").is_none();
+        }
+        // Close takes effect at its successful response in the native stream.
+        if frame.get("method").is_none()
+            && let Some(id) = &self.close_request_id
+            && frame.get("id") == Some(id)
+        {
+            self.close_request_id = None;
+            self.closed = frame.get("error").is_none()
+                && frame.get("result").is_some_and(|result| {
+                    agent_client_protocol::v1::schema::CloseSessionResponse::deserialize(result)
+                        .is_ok()
+                });
+            return true;
+        }
         if frame["method"] == "session/request_permission" {
             self.push(Observation::Permission {
                 frame: frame.clone(),

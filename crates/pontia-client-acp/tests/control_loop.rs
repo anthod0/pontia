@@ -478,7 +478,11 @@ async fn close_fences_late_updates_without_fabricating_an_active_turn_result() {
         "turn.failed",
         "turn.interrupted",
     ] {
-        assert_eq!(h.events(&session, event).await, 0);
+        assert_eq!(
+            h.events(&session, event).await,
+            0,
+            "unexpected {event} after close"
+        );
     }
     assert!(
         h.app
@@ -1205,15 +1209,26 @@ async fn conditional_exit_reports_unknown_when_a_connected_agent_withholds_the_r
 
 #[tokio::test]
 async fn failed_close_does_not_exit_session_or_terminate_peer() {
-    let h = Harness::new(&[("ACP_CLOSE_FAIL", "1")]).await;
+    let h = Harness::new(&[("ACP_HOLD_CLOSE", "1"), ("ACP_CLOSE_FAIL", "1")]).await;
     let session = h.create("first").await.unwrap();
-    assert!(
-        h.app
-            .session_commands()
-            .terminate_session(&session)
-            .await
-            .is_err()
-    );
+    let turn = h
+        .app
+        .turn_commands()
+        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .await
+        .unwrap()
+        .unwrap();
+    let commands = h.app.session_commands();
+    let target = session.clone();
+    let close = tokio::spawn(async move { commands.terminate_session(&target).await });
+    h.wait_requests("session/close", 1).await;
+
+    h.release("update-1");
+    h.wait_turn(&session, &turn.turn_id, "running").await;
+    h.release("release-close");
+    assert!(close.await.unwrap().is_err());
+    h.release("release-1");
+    h.wait_turn(&session, &turn.turn_id, "completed").await;
     assert_eq!(h.events(&session, "session.exited").await, 0);
     let view = h
         .app

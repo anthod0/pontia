@@ -303,6 +303,9 @@ async fn handle(
                         .ok_or_else(|| Error::Domain("Relay write requires bytes".into()))?,
                 )
                 .map_err(|_| Error::Domain("Invalid relay bytes".into()))?;
+            if let Some(id) = request.params.get("close_request_id") {
+                state.lock().await.reports.close_request_id = Some(id.clone());
+            }
             let auth = request.params.get("permission");
             let permission = if let Some(auth) = auth {
                 let key = auth["key"]
