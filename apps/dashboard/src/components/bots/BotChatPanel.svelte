@@ -24,6 +24,8 @@
   import FilePreviewPanel from '../chat/FilePreviewPanel.svelte'
   import FilePreviewResizer from '../chat/FilePreviewResizer.svelte'
   import BotAvatar from './BotAvatar.svelte'
+  import { fileKind } from '../chat/fileKind'
+  import { createRecentFiles, withRecentFile } from '$lib/botRecentFiles'
 
   let { bot, count, onjump, onquote, ontodochange }: {
     bot: Bot
@@ -41,6 +43,9 @@
   let open = $state(false)
   let tab = $state('files')
   let file = $state.raw<FilePreviewTarget | null>(null)
+  // The panel lives as long as its Bot chat page, which is recreated for another Bot.
+  // svelte-ignore state_referenced_locally
+  const recentFiles = createRecentFiles(device.id, bot.bot_id)
   let selected = $state<string | null>(null)
   const context = createQuery(() => ({
     queryKey: ['bot-message-context', bot.bot_id, selected],
@@ -57,6 +62,7 @@
 
   export function openFile(target: FilePreviewTarget) {
     file = target
+    recentFiles.current = withRecentFile(recentFiles.current, { sessionId: target.sessionId, path: target.path })
     tab = 'files'
     open = true
   }
@@ -126,6 +132,33 @@
   </Empty.Root>
 {/snippet}
 
+{#snippet recentFileList()}
+  <section class="min-h-0 flex-1 overflow-auto overscroll-contain p-3" aria-labelledby="bot-recent-files">
+    <div class="flex items-center justify-between gap-2 pb-1 pl-2">
+      <h2 id="bot-recent-files" class="text-xs font-medium text-muted-foreground">{$t('files.recent')}</h2>
+      <Button variant="ghost" size="xs" onclick={() => { recentFiles.current = [] }}>{$t('files.clearRecent')}</Button>
+    </div>
+    <ul>
+      {#each recentFiles.current as recent (recent.path)}
+        {@const slash = recent.path.lastIndexOf('/')}
+        {@const name = recent.path.slice(slash + 1)}
+        {@const dot = name.lastIndexOf('.')}
+        {@const kind = fileKind(dot > 0 ? name.slice(dot + 1) : '')}
+        <li>
+          <button type="button" class="flex w-full items-center gap-3 rounded-lg p-2 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+            title={recent.path} aria-label={$t('files.previewNamed', { name })} onclick={() => openFile({ device, ...recent })}>
+            <span class={['grid size-9 shrink-0 place-items-center rounded-lg', kind.tone]}><kind.icon class="size-5" weight="duotone" /></span>
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-sm font-medium">{name}</span>
+              {#if slash > 0}<span class="block truncate text-xs text-muted-foreground" dir="rtl"><bdi>{recent.path.slice(0, slash)}</bdi></span>{/if}
+            </span>
+          </button>
+        </li>
+      {/each}
+    </ul>
+  </section>
+{/snippet}
+
 {#snippet todoCard(message: BotMessage)}
   {@const done = message.todo?.state === 'done' ? message.todo : null}
   <li class={['rounded-xl border p-3', done ? 'border-transparent bg-muted/50' : 'bg-background']}>
@@ -166,6 +199,8 @@
       <Tabs.Content value="files" class="flex min-h-0 flex-col">
         {#if file}
           {#key file}<FilePreviewPanel embedded target={file} onclose={() => { file = null }} />{/key}
+        {:else if recentFiles.current.length}
+          {@render recentFileList()}
         {:else}
           {@render empty(true)}
         {/if}

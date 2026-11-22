@@ -74,6 +74,8 @@
   "bots.quoted": "Quoted",
   "files.closeFile": "Close file",
   "files.noneOpen": "No open file",
+  "files.recent": "Recently opened",
+  "files.clearRecent": "Clear list",
   "bots.messageActions": "Message actions",
   "bots.removeQuote": "Remove quote: {text}",
   "bots.quoteFrom": "Quote from {speaker}: {text}",
