@@ -4,7 +4,6 @@
   import { clientControlDetails, clientResumeWaitsForIdle } from '../clients'
   import { onDestroy, onMount, tick } from 'svelte'
   import { get } from 'svelte/store'
-  import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import { navigate } from '$lib/navigation'
   import { dashboardScope } from '$lib/dashboardRoutes'
@@ -35,6 +34,7 @@
   import { hasTimelineSnapshot } from "../stores/timeline";
   import SessionComposerDock from '../components/chat/SessionComposerDock.svelte'
   import SessionInteractions from '../components/chat/SessionInteractions.svelte'
+  import ScrollToBottomButton from '../components/chat/ScrollToBottomButton.svelte'
   import { scrollDocumentToBottom } from '../lib/session-chat/autoScroll'
   import { sessionMetadataItems, sessionMetadataSummary, visibleChatInboxMessages } from '../components/chat/sessionMetadata'
   import { isExecutingSessionState, isTerminalSession } from '$lib/sessionState'
@@ -108,10 +108,8 @@
   let liveOutputGeneration = 0
   let liveOutputOverlays: LiveOutputOverlays = {}
   let autofocusComposer = false
-  let showScrollDownButton = false
-  let scrollDownButtonRendered = false
-  let scrollDownButtonHideTimer: ReturnType<typeof setTimeout> | null = null
-  let bottomIntersectionObserver: IntersectionObserver | null = null
+  let bottomSentinel: HTMLElement | null = null
+  let scrollDownButton: ScrollToBottomButton | null = null
   interface PromptScrollRequest {
     sessionId: string
     input: string
@@ -136,7 +134,6 @@
 
   const AUTO_RESUME_IDLE_TIMEOUT_MS = 30_000
   const BRANCH_INTERRUPT_TIMEOUT_MS = 30_000
-  const SCROLL_DOWN_BUTTON_ANIMATION_MS = 200
   const INITIAL_SCROLL_SETTLE_PASSES = 2
 
   onMount(() => {
@@ -167,8 +164,6 @@
     }
     unsubscribeDashboardEvents?.()
     closeLiveOutputStream?.()
-    bottomIntersectionObserver?.disconnect()
-    if (scrollDownButtonHideTimer) clearTimeout(scrollDownButtonHideTimer)
   })
 
   $: selectedSession = selectedSessionId && $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.session : null
@@ -458,50 +453,13 @@
     return submitBranchEdit(message, replacementInput)
   }
 
-  function setScrollDownButtonVisible(visible: boolean): void {
-    if (scrollDownButtonHideTimer) {
-      clearTimeout(scrollDownButtonHideTimer)
-      scrollDownButtonHideTimer = null
-    }
-
-    if (visible) {
-      scrollDownButtonRendered = true
-      showScrollDownButton = true
-      return
-    }
-
-    showScrollDownButton = false
-    scrollDownButtonHideTimer = setTimeout(() => {
-      if (!showScrollDownButton) scrollDownButtonRendered = false
-      scrollDownButtonHideTimer = null
-    }, SCROLL_DOWN_BUTTON_ANIMATION_MS)
-  }
-
-  function observeBottomSentinel(node: HTMLElement): { destroy: () => void } {
-    bottomIntersectionObserver?.disconnect()
-    if (typeof IntersectionObserver === 'undefined') return { destroy: () => undefined }
-    const observer = new IntersectionObserver((entries) => {
-      const entry = entries[0]
-      if (!entry) return
-      setScrollDownButtonVisible(!entry.isIntersecting)
-    }, { threshold: 0.01 })
-    bottomIntersectionObserver = observer
-    observer.observe(node)
-    return {
-      destroy: () => {
-        observer.disconnect()
-        if (bottomIntersectionObserver === observer) bottomIntersectionObserver = null
-      },
-    }
-  }
-
   function nextAnimationFrame(): Promise<void> {
     return new Promise((resolve) => requestAnimationFrame(() => resolve()))
   }
 
   function scrollChatToBottom(): void {
     scrollDocumentToBottom()
-    setScrollDownButtonVisible(false)
+    scrollDownButton?.hide()
   }
 
   function matchingPromptScrolls(
@@ -1181,29 +1139,13 @@
             <Alert.Description>{branchActionError}</Alert.Description>
           </Alert.Root>
         {/if}
-        <div aria-hidden="true" class="absolute bottom-0 h-px w-px" data-chat-bottom-sentinel use:observeBottomSentinel></div>
-
-        {#if scrollDownButtonRendered}
-          <div
-            data-chat-scroll-down-container
-            style="bottom: calc(var(--chat-composer-height) + 0.5rem)"
-            class={`pointer-events-none fixed left-0 right-0 lg:right-[var(--file-preview-width,0px)] z-40 px-4 transition-[left] duration-200 ease-linear md:left-[var(--sidebar-width)] md:px-8 group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)] ${showScrollDownButton ? 'chat-scroll-down-enter' : 'chat-scroll-down-exit'}`}
-          >
-            <div class="mx-auto flex w-full max-w-[760px] justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                class="pointer-events-auto bg-background shadow-none"
-                aria-label={$t('chat.scrollBottom')}
-                title={$t('chat.scrollBottom')}
-                onclick={scrollChatToBottom}
-              >
-                <CaretDownIcon class="size-4" />
-              </Button>
-            </div>
-          </div>
-        {/if}
+        <div aria-hidden="true" class="absolute bottom-0 h-px w-px" data-chat-bottom-sentinel bind:this={bottomSentinel}></div>
+        <ScrollToBottomButton
+          bind:this={scrollDownButton}
+          sentinel={bottomSentinel}
+          onclick={scrollDocumentToBottom}
+          class="fixed bottom-[calc(var(--chat-composer-height)+0.5rem)] left-0 right-0 lg:right-[var(--file-preview-width,0px)] z-40 px-4 transition-[left] duration-200 ease-linear md:left-[var(--sidebar-width)] md:px-8 group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)]"
+        />
 
         {#if sharedFiles}<SessionComposerDock
           sharedFiles={sharedFiles}
@@ -1247,35 +1189,3 @@
     onNavigate={navigateFromRuler}
   />
 {/if}
-
-<style>
-  :global([data-chat-scroll-down-container].chat-scroll-down-enter) {
-    animation: chat-scroll-down-in 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-
-  :global([data-chat-scroll-down-container].chat-scroll-down-exit) {
-    animation: chat-scroll-down-out 160ms cubic-bezier(0.4, 0, 1, 1) both;
-  }
-
-  @keyframes chat-scroll-down-in {
-    from {
-      opacity: 0;
-      translate: 0 0.75rem;
-    }
-    to {
-      opacity: 1;
-      translate: 0 0;
-    }
-  }
-
-  @keyframes chat-scroll-down-out {
-    from {
-      opacity: 1;
-      translate: 0 0;
-    }
-    to {
-      opacity: 0;
-      translate: 0 0.75rem;
-    }
-  }
-</style>

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- In Dashboard, Bot chats show a scroll-to-bottom button after you scroll up, like Session chats.
+
 - Bots can use `pontia bot link-message` to connect an unquoted user message to up to five earlier messages in the same chat. These links appear in message context and Session handoffs.
 
 ### Changed

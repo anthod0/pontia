@@ -3,6 +3,7 @@
   import { get } from 'svelte/store'
   import { createVirtualizer } from '@tanstack/svelte-virtual'
   import { Button } from '$lib/components/ui/button/index.js'
+  import ScrollToBottomButton from '../chat/ScrollToBottomButton.svelte'
   import { t } from '$lib/i18n'
   import { compareBotEntries, type BotTimeline } from '$lib/botTimeline.svelte'
   import type { BotEntry } from '../../api/types'
@@ -15,6 +16,7 @@
     row: Snippet<[BotEntry]>
   } = $props()
   let feed = $state<HTMLDivElement>()
+  let bottom = $state<HTMLDivElement>()
   $effect(() => { root = feed })
   const entries = $derived.by(() => {
     const notice = timeline.generationNotice
@@ -154,31 +156,36 @@
   }
 </script>
 
-<div bind:this={feed} bind:clientHeight={feedHeight} role="log" aria-label={$t('bots.messages')}
-  onwheelcapture={() => intent++} ontouchstartcapture={() => intent++}
-  onpointerdowncapture={() => intent++} onkeydowncapture={() => intent++} onscrollcapture={scroll}
-  class="no-scrollbar min-h-0 flex-1 overflow-y-auto px-1 [overflow-anchor:none]">
-  <!-- Keeps the oldest row clear of the transparent top bar the feed scrolls beneath. -->
-  <div aria-hidden="true" class="h-14 md:h-12" bind:clientHeight={topInset}></div>
-  <div class="relative w-full" style:height={`${totalSize}px`}>
-    {#if timeline.before}
-      <div bind:clientHeight={headerHeight} class="absolute top-1 left-0 flex w-full items-center justify-center gap-2 text-sm">
-        {#if timeline.historyError}<span role="alert">{timeline.historyError}</span>{/if}
-        <Button variant="ghost" size="sm" disabled={timeline.loadingOlder} onclick={() => timeline.loadOlder()}>
-          {timeline.loadingOlder ? $t('chat.loadingEarlier') : timeline.historyError ? $t('common.retry') : $t('common.loadMore')}
-        </Button>
-      </div>
-    {/if}
-    {#each items as item (item.key)}
-      <div class="group/entry absolute top-0 left-0 w-full" style:transform={`translateY(${item.start - topInset}px)`}
-        data-index={item.index} data-bot-entry-id={entries[item.index]?.id}
-        data-highlighted={highlighted !== null && entries[item.index]?.id === highlighted ? '' : undefined} use:measure>
-        {#if entries[item.index]}
-          {@render row(entries[item.index])}
-        {:else if typing}
-          <div aria-hidden="true" class="w-fit rounded-2xl bg-muted px-4 py-3 text-sm text-muted-foreground"><span class="animate-pulse">•••</span></div>
-        {/if}
-      </div>
-    {/each}
+<div class="relative flex min-h-0 flex-1 flex-col">
+  <div bind:this={feed} bind:clientHeight={feedHeight} role="log" aria-label={$t('bots.messages')}
+    onwheelcapture={() => intent++} ontouchstartcapture={() => intent++}
+    onpointerdowncapture={() => intent++} onkeydowncapture={() => intent++} onscrollcapture={scroll}
+    class="no-scrollbar min-h-0 flex-1 overflow-y-auto px-1 [overflow-anchor:none]">
+    <!-- Keeps the oldest row clear of the transparent top bar the feed scrolls beneath. -->
+    <div aria-hidden="true" class="h-14 md:h-12" bind:clientHeight={topInset}></div>
+    <div class="relative w-full" style:height={`${totalSize}px`}>
+      {#if timeline.before}
+        <div bind:clientHeight={headerHeight} class="absolute top-1 left-0 flex w-full items-center justify-center gap-2 text-sm">
+          {#if timeline.historyError}<span role="alert">{timeline.historyError}</span>{/if}
+          <Button variant="ghost" size="sm" disabled={timeline.loadingOlder} onclick={() => timeline.loadOlder()}>
+            {timeline.loadingOlder ? $t('chat.loadingEarlier') : timeline.historyError ? $t('common.retry') : $t('common.loadMore')}
+          </Button>
+        </div>
+      {/if}
+      {#each items as item (item.key)}
+        <div class="group/entry absolute top-0 left-0 w-full" style:transform={`translateY(${item.start - topInset}px)`}
+          data-index={item.index} data-bot-entry-id={entries[item.index]?.id}
+          data-highlighted={highlighted !== null && entries[item.index]?.id === highlighted ? '' : undefined} use:measure>
+          {#if entries[item.index]}
+            {@render row(entries[item.index])}
+          {:else if typing}
+            <div aria-hidden="true" class="w-fit rounded-2xl bg-muted px-4 py-3 text-sm text-muted-foreground"><span class="animate-pulse">•••</span></div>
+          {/if}
+        </div>
+      {/each}
+      <!-- As tall as the follow threshold, so the button appears once new rows stop following. -->
+      <div aria-hidden="true" class="pointer-events-none absolute bottom-0 h-16 w-px" bind:this={bottom}></div>
+    </div>
   </div>
+  <ScrollToBottomButton sentinel={bottom} root={feed} onclick={followSend} class="absolute inset-x-0 bottom-2 z-10 px-1" />
 </div>
