@@ -1,6 +1,5 @@
 import { ApiError } from "../api/errors";
 import type { DeviceRuntime } from "../device/runtime";
-import { isTerminalSession } from "./sessionState";
 
 // A newly opened tab or app window that lands on a device's New Chat page returns
 // to the last Session chat or Bot chat viewed on that device, and so does "Back to chat".
@@ -93,13 +92,13 @@ export function takeLastPage(deviceId: string): LastPage | null {
   return page;
 }
 
-/** The route to reopen, or null after forgetting a Bot that was deleted or a Session that is gone, ended or archived. */
+/** The route to reopen, or null after forgetting a Bot that was deleted or a Session that is gone or archived. */
 export async function lastPagePath(device: DeviceRuntime, page: LastPage): Promise<string | null> {
   const path = `/${page.kind === "chat" ? "chat" : "bots"}/${encodeURIComponent(page.id)}`;
   try {
     if (page.kind === "chat") {
       const session = await device.api.getSession(page.id);
-      if (!isTerminalSession(session) && !session.archived_at) return path;
+      if (!session.archived_at) return path;
       forget(device.id);
       return null;
     }
