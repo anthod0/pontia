@@ -1,3 +1,4 @@
+import type { Locale } from "$lib/i18n";
 import { ApiError } from "./errors";
 
 import type {
@@ -151,12 +152,12 @@ export function createApi(device: DeviceRuntime) {
     return request(`${botPath(id)}/messages/${encodeURIComponent(messageId)}/context`, { signal });
   }
 
-  async function saveBot(input: BotConfiguration, id?: string): Promise<Bot> {
+  async function saveBot(input: BotConfiguration, id?: string, locale?: Locale): Promise<Bot> {
     const path = id ? botPath(id) : "/bots";
     return (
       await request<{ bot: Bot }>(path, {
         method: id ? "PUT" : "POST",
-        body: input,
+        body: id ? input : { ...input, locale },
         retryNetworkErrors: false,
       })
     ).bot;

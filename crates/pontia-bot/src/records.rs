@@ -8,7 +8,34 @@ use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 
+use crate::identity::IdentityError;
+use crate::messages::{MessageKind, append_message};
+
 mod initialization;
+
+const BOT_DESCRIPTION_LIMIT: usize = 2_000;
+
+#[derive(Clone, Copy, Debug, Default, Deserialize)]
+pub enum Locale {
+    #[default]
+    #[serde(rename = "en")]
+    En,
+    #[serde(rename = "zh-CN")]
+    ZhCn,
+}
+
+impl Locale {
+    fn greeting(self, name: &str) -> String {
+        match self {
+            Self::En => format!("Hi, I'm {name}. What would you like me to help with?"),
+            Self::ZhCn => format!("你好，我是 {name}。你想让我帮你做什么？"),
+        }
+    }
+}
+
+fn normalize_description(description: Option<&str>) -> Option<&str> {
+    description.map(str::trim).filter(|text| !text.is_empty())
+}
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, sqlx::Type, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -114,23 +141,34 @@ impl BotService {
     pub async fn create(
         &self,
         configuration: BotConfiguration,
+        locale: Locale,
     ) -> std::result::Result<Bot, CreateError> {
         self.validate(&configuration).await?;
+        let mut tx = self.pool.begin().await.map_err(Error::from)?;
         let bot: Bot = sqlx::query_as(
             "INSERT INTO bots (bot_id, name, description, avatar_shape, avatar_color, client_type, client_key, model)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
         )
         .bind(format!("bot_{}", uuid::Uuid::now_v7()))
-        .bind(configuration.name)
-        .bind(configuration.description)
+        .bind(configuration.name.trim())
+        .bind(normalize_description(configuration.description.as_deref()))
         .bind(configuration.avatar_shape.unwrap_or_default())
         .bind(configuration.avatar_color.unwrap_or_default())
         .bind(configuration.client_type)
         .bind(configuration.client_key)
         .bind(configuration.model)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await
         .map_err(Error::from)?;
+        append_message(
+            &mut *tx,
+            &bot.bot_id,
+            MessageKind::BotReply,
+            &locale.greeting(&bot.name),
+            None,
+        )
+        .await?;
+        tx.commit().await.map_err(Error::from)?;
         self.initialize(&bot.bot_id)
             .await
             .map_err(|source| CreateError::Initialization {
@@ -163,8 +201,8 @@ impl BotService {
              avatar_shape = COALESCE(?, avatar_shape), avatar_color = COALESCE(?, avatar_color),
              updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE bot_id = ? RETURNING *",
         )
-        .bind(configuration.name)
-        .bind(configuration.description)
+        .bind(configuration.name.trim())
+        .bind(normalize_description(configuration.description.as_deref()))
         .bind(configuration.client_type)
         .bind(configuration.client_key)
         .bind(configuration.model)
@@ -173,6 +211,45 @@ impl BotService {
         .bind(bot_id)
         .fetch_one(&self.pool)
         .await?)
+    }
+
+    pub(crate) async fn set_description_if_empty(
+        &self,
+        bot_id: &str,
+        session_id: &str,
+        text: &str,
+    ) -> Result<Bot> {
+        let description = normalize_description(Some(text))
+            .ok_or_else(|| Error::Domain("description cannot be empty".into()))?;
+        if description.chars().count() > BOT_DESCRIPTION_LIMIT {
+            return Err(Error::Domain(format!(
+                "description exceeds {BOT_DESCRIPTION_LIMIT} characters"
+            )));
+        }
+        let bot = sqlx::query_as(
+            "UPDATE bots SET description = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE bot_id = ? AND current_session_id = ?
+               AND (description IS NULL OR trim(description, char(9, 10, 11, 12, 13, 32)) = '')
+             RETURNING *",
+        )
+        .bind(description)
+        .bind(bot_id)
+        .bind(session_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        if let Some(bot) = bot {
+            return Ok(bot);
+        }
+        if self.get(bot_id).await?.current_session_id.as_deref() != Some(session_id) {
+            return Err(Error::Conflict {
+                code: "bot_session_required",
+                message: IdentityError.to_string(),
+            });
+        }
+        Err(Error::Conflict {
+            code: "bot_description_already_set",
+            message: "This Bot already has a description. Only the user can change it.".into(),
+        })
     }
 
     /// Deletes the Bot, its chat and associations, and its directory, all or nothing in the database.

@@ -14,7 +14,7 @@ async fn new_quotes_are_capped_before_storage_and_bot_delivery() {
     let (_root, _pool, client, _control, service) = fixture().await;
     let bot = service
         .records()
-        .create(bot_configuration("Bot", MODEL))
+        .create(bot_configuration("Bot", MODEL), Default::default())
         .await
         .unwrap();
     let cases = [
@@ -76,7 +76,7 @@ async fn file_quotes_and_plain_text_are_unchanged() {
     let (_root, _pool, _client, _control, service) = fixture().await;
     let bot = service
         .records()
-        .create(bot_configuration("Bot", MODEL))
+        .create(bot_configuration("Bot", MODEL), Default::default())
         .await
         .unwrap();
     for content in [
@@ -94,14 +94,14 @@ async fn historical_quotes_are_unchanged_when_read_or_retried() {
     let (_root, pool, client, _control, service) = fixture().await;
     let bot = service
         .records()
-        .create(bot_configuration("Bot", MODEL))
+        .create(bot_configuration("Bot", MODEL), Default::default())
         .await
         .unwrap();
     let content = quoted(&"a".repeat(2100), false);
     sqlx::query("INSERT INTO bot_messages (id, bot_id, kind, content, status) VALUES ('old', ?, 'user_input', ?, 'failed')")
         .bind(&bot.bot_id).bind(&content).execute(&pool).await.unwrap();
     assert_eq!(
-        service.chat(&bot.bot_id).await.unwrap().messages[0].content,
+        service.chat(&bot.bot_id).await.unwrap().messages[1].content,
         content
     );
     assert_eq!(
@@ -119,13 +119,13 @@ async fn saved_user_inputs_link_only_valid_quotes_from_the_same_chat() {
     let (_root, _pool, _client, _control, service) = fixture().await;
     let a = service
         .records()
-        .create(bot_configuration("A", MODEL))
+        .create(bot_configuration("A", MODEL), Default::default())
         .await
         .unwrap()
         .bot_id;
     let b = service
         .records()
-        .create(bot_configuration("B", MODEL))
+        .create(bot_configuration("B", MODEL), Default::default())
         .await
         .unwrap()
         .bot_id;
@@ -173,13 +173,13 @@ async fn bot_replies_and_their_links_are_all_or_nothing() {
     let (_root, _pool, _client, _control, service) = fixture().await;
     let a = service
         .records()
-        .create(bot_configuration("A", MODEL))
+        .create(bot_configuration("A", MODEL), Default::default())
         .await
         .unwrap()
         .bot_id;
     let b = service
         .records()
-        .create(bot_configuration("B", MODEL))
+        .create(bot_configuration("B", MODEL), Default::default())
         .await
         .unwrap()
         .bot_id;
@@ -209,7 +209,7 @@ async fn bot_replies_and_their_links_are_all_or_nothing() {
     ] {
         assert!(service.send_to_user(reply(targets)).await.is_err());
         assert_eq!(
-            service.chat(&a).await.unwrap().messages,
+            service.chat(&a).await.unwrap().messages[1..],
             [first.clone(), second.clone()]
         );
     }

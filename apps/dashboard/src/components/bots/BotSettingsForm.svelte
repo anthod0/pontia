@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createQuery } from '@tanstack/svelte-query'
-  import { t } from '$lib/i18n'
+  import { currentLocale, t } from '$lib/i18n'
   import { useDeviceRuntime } from '../../device/context'
   import type { Bot } from '../../api/types'
   import BotAvatarPicker from './BotAvatarPicker.svelte'
@@ -55,7 +55,7 @@
     saving = true
     error = ''
     try {
-      const saved = await device.api.saveBot({
+      const input = {
         name: name.trim(),
         description: description.trim() || null,
         avatar_shape: avatarShape,
@@ -63,7 +63,10 @@
         client_type: selected.client_type,
         client_key: selected.client_key,
         model: model.trim(),
-      }, bot?.bot_id)
+      }
+      const saved = bot
+        ? await device.api.saveBot(input, bot.bot_id)
+        : await device.api.saveBot(input, undefined, $currentLocale)
       void device.queryClient.invalidateQueries({ queryKey: ['bots'] })
       onsaved(saved)
     } catch (failure) {

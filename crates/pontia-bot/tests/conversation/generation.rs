@@ -27,6 +27,67 @@ async fn reconcile(service: &ConversationService) {
 }
 
 #[tokio::test]
+async fn setting_a_description_refreshes_the_chat_and_reaches_the_next_generation() {
+    let (_root, _pool, client, control, conversation) = fixture().await;
+    let _exits = report_exits(&control);
+    let (id, old) = bot(&conversation).await;
+    let snapshot = instructions(&control, &old).await;
+    let chat = conversation.chat(&id).await.unwrap();
+    let greeting = &chat.messages[0];
+    assert!(snapshot.contains(&greeting.id));
+    assert!(snapshot.contains("Bot (sendToUser)"));
+
+    let mut updates = conversation.subscribe(&id);
+    let delivered = client.inputs.lock().unwrap().len();
+    conversation
+        .set_own_description(&old, "Plan releases")
+        .await
+        .unwrap();
+    assert!(matches!(
+        updates.try_recv(),
+        Ok(ConversationUpdate::Changed)
+    ));
+    assert_eq!(client.inputs.lock().unwrap().len(), delivered);
+    assert_eq!(
+        conversation.chat(&id).await.unwrap().messages,
+        chat.messages
+    );
+    assert_eq!(instructions(&control, &old).await, snapshot);
+    assert!(
+        control
+            .queries()
+            .get_session(&old)
+            .await
+            .unwrap()
+            .unwrap()
+            .description
+            .is_none()
+    );
+
+    usage(&control, &old, 300_000, 1_000_000).await;
+    finish(&control, &old, EventType::TurnCompleted).await;
+    reconcile(&conversation).await;
+    let new = current(&conversation, &id).await.unwrap();
+    assert_ne!(new, old);
+    assert!(
+        instructions(&control, &new)
+            .await
+            .contains("Description: Plan releases")
+    );
+    assert_eq!(
+        control
+            .queries()
+            .get_session(&new)
+            .await
+            .unwrap()
+            .unwrap()
+            .description
+            .as_deref(),
+        Some("Plan releases")
+    );
+}
+
+#[tokio::test]
 async fn both_upper_limits_wait_for_idle_and_keep_helpers_and_work_status() {
     for (limit, window) in [(258_000, 1_000_000), (102_400, 128_000)] {
         let (_root, _pool, client, control, conversation) = fixture().await;
@@ -291,7 +352,7 @@ async fn user_and_helper_inputs_arriving_during_launch_go_only_to_new_session() 
             .await
             .unwrap()
     });
-    while conversation.chat(&id).await.unwrap().messages.len() < 2 {
+    while conversation.chat(&id).await.unwrap().messages.len() < 3 {
         tokio::task::yield_now().await;
     }
     // Poll both tasks while launch is held: neither may complete by routing to the old client.
@@ -458,7 +519,7 @@ async fn failed_handoff_preserves_helper_failure_notice_and_never_replays_origin
             .await
             .unwrap()
     });
-    while conversation.chat(&id).await.unwrap().messages.len() < 2 {
+    while conversation.chat(&id).await.unwrap().messages.len() < 3 {
         tokio::task::yield_now().await;
     }
     assert!(

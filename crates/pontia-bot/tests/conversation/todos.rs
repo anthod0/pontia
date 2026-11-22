@@ -8,7 +8,7 @@ async fn closing_todos_is_atomic_scoped_and_links_the_explanation() {
     for name in ["A", "B"] {
         let bot = service
             .records()
-            .create(bot_configuration(name, MODEL))
+            .create(bot_configuration(name, MODEL), Default::default())
             .await
             .unwrap();
         service.send(&bot.bot_id, "Plan the release").await.unwrap();
@@ -99,7 +99,7 @@ async fn user_todo_changes_notify_once_and_preserve_who_closed_it() {
     let (_root, pool, _client, _control, service) = fixture().await;
     let bot = service
         .records()
-        .create(bot_configuration("Planner", MODEL))
+        .create(bot_configuration("Planner", MODEL), Default::default())
         .await
         .unwrap();
     let id = &bot.bot_id;

@@ -286,7 +286,7 @@ async fn bot_inputs_and_replies_use_the_owned_session_and_visible_chat() {
 
     let a = service
         .records()
-        .create(bot_configuration("A", "missing/model"))
+        .create(bot_configuration("A", "missing/model"), Default::default())
         .await
         .unwrap();
     let a = &a.bot_id;
@@ -299,7 +299,7 @@ async fn bot_inputs_and_replies_use_the_owned_session_and_visible_chat() {
         .unwrap();
     let b = service
         .records()
-        .create(bot_configuration("B", MODEL))
+        .create(bot_configuration("B", MODEL), Default::default())
         .await
         .unwrap();
     let b = &b.bot_id;
@@ -446,7 +446,7 @@ async fn bot_inputs_and_replies_use_the_owned_session_and_visible_chat() {
         .await
         .unwrap();
     assert_eq!(service.chat(a).await.unwrap().status, WorkStatus::Idle);
-    assert_eq!(service.chat(b).await.unwrap().messages.len(), 1);
+    assert_eq!(service.chat(b).await.unwrap().messages.len(), 2);
 
     let a_handoff = instructions(&control, &a_session).await;
     let b_handoff = instructions(&control, &b_session).await;
@@ -456,7 +456,7 @@ async fn bot_inputs_and_replies_use_the_owned_session_and_visible_chat() {
     let delivered = client.inputs.lock().unwrap().len();
     let recovered = test_conversation(control);
     let chat = recovered.chat(a).await.unwrap();
-    assert_eq!(chat.messages[0].status, MessageStatus::Failed);
+    assert_eq!(chat.messages[1].status, MessageStatus::Failed);
     assert_eq!(client.inputs.lock().unwrap().len(), delivered);
     let inputs = client.inputs.lock().unwrap();
     assert_eq!(
@@ -477,7 +477,10 @@ async fn failed_messages_show_processing_only_after_a_successful_retry() {
     let (_root, _pool, _client, _control, service) = fixture().await;
     let bot = service
         .records()
-        .create(bot_configuration("Bot", "missing/model"))
+        .create(
+            bot_configuration("Bot", "missing/model"),
+            Default::default(),
+        )
         .await
         .unwrap();
     let failed = service.send(&bot.bot_id, "hello").await.unwrap();
@@ -498,7 +501,7 @@ async fn processing_shows_until_the_bot_answers_or_its_turn_ends() {
     let (_root, _pool, client, control, service) = fixture().await;
     let bot = service
         .records()
-        .create(bot_configuration("Bot", MODEL))
+        .create(bot_configuration("Bot", MODEL), Default::default())
         .await
         .unwrap();
     let id = bot.bot_id.clone();
@@ -700,7 +703,7 @@ async fn assert_launch_mode(
 async fn bot(service: &ConversationService) -> (String, String) {
     let bot = service
         .records()
-        .create(bot_configuration("Bot", MODEL))
+        .create(bot_configuration("Bot", MODEL), Default::default())
         .await
         .unwrap();
     service.send(&bot.bot_id, "start").await.unwrap();
@@ -1127,7 +1130,7 @@ async fn helper_delivery_results_are_not_retried_and_failed_reports_survive_rest
                 && input.input.contains(reason)));
         }
     }
-    assert_eq!(conversation.chat(&bot_id).await.unwrap().messages.len(), 1);
+    assert_eq!(conversation.chat(&bot_id).await.unwrap().messages.len(), 2);
 }
 
 #[tokio::test]
@@ -1255,7 +1258,10 @@ async fn general_helper_follows_a_corrected_bot_model_and_ignores_legacy_helper_
     let (_root, _pool, client, control, conversation) = fixture().await;
     let bot = conversation
         .records()
-        .create(bot_configuration("Bot", "missing/model"))
+        .create(
+            bot_configuration("Bot", "missing/model"),
+            Default::default(),
+        )
         .await
         .unwrap();
     assert_eq!(

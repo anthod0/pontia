@@ -305,7 +305,7 @@ async fn link_message(
     Ok(result.rows_affected() == 1)
 }
 
-async fn append_message<'a>(
+pub(crate) async fn append_message<'a>(
     executor: impl sqlx::SqliteExecutor<'a>,
     bot_id: &str,
     kind: MessageKind,
