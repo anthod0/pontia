@@ -2,7 +2,8 @@
   import { createQuery } from '@tanstack/svelte-query'
   import { onMount, tick } from 'svelte'
   import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon'
-  import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
+  import ArrowBendUpLeftIcon from 'phosphor-svelte/lib/ArrowBendUpLeftIcon'
+  import EyeSlashIcon from 'phosphor-svelte/lib/EyeSlashIcon'
   import ArrowUUpLeftIcon from 'phosphor-svelte/lib/ArrowUUpLeftIcon'
   import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
   import * as Collapsible from '$lib/components/ui/collapsible/index.js'
@@ -26,13 +27,17 @@
   import BotAvatar from './BotAvatar.svelte'
   import { fileKindOf } from '../chat/fileKind'
   import { createRecentFiles, withRecentFile } from '$lib/botRecentFiles'
+  import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
+  import { promptValueAfterEnter } from '$lib/promptEnterBehavior'
 
-  let { bot, count, onjump, onquote, ontodochange }: {
+  let { bot, count, onjump, onquote, onreply, ontodochange }: {
     bot: Bot
     count: number
     ontodochange: (id: string, action: 'resolve' | 'reopen') => void
     onjump: (id: string) => Promise<void>
     onquote: (quote: BotQuote) => Promise<void>
+    /** Sends `text` quoting `quote`; `retry` resubmits the reply box and returns false when it cannot. */
+    onreply: (quote: BotQuote, text: string, retry: () => boolean) => Promise<boolean>
   } = $props()
   const action = useTopBarAction()
   onMount(() => {
@@ -106,17 +111,53 @@
     await closeOnMobile()
     await onquote(entryQuote(message)!)
   }
+
+  // One todo at a time has its reply box open.
+  let reply = $state<{ message: BotMessage; text: string; sending: boolean } | null>(null)
+
+  function toggleReply(message: BotMessage) {
+    reply = reply?.message.id === message.id ? null : { message, text: '', sending: false }
+  }
+
+  function submitReply(): boolean {
+    const current = reply
+    if (!current || current.sending || !current.text.trim()) return false
+    current.sending = true
+    void onreply(entryQuote(current.message)!, current.text, submitReply).then(sent => {
+      current.sending = false
+      if (sent && reply === current) reply = null
+    })
+    return true
+  }
+
+  function replyKeydown(event: KeyboardEvent) {
+    if (event.isComposing || event.keyCode === 229) return
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      reply = null
+      return
+    }
+    if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return
+    event.preventDefault()
+    const next = promptValueAfterEnter(reply!.text)
+    if (next !== null) reply!.text = next
+    else submitReply()
+  }
+
+  let replyInput = $state<HTMLTextAreaElement | null>(null)
+  $effect(() => { replyInput?.focus() })
 </script>
 
-{#snippet badge()}
-  {#if count > 0}<Badge class="h-4 min-w-4 rounded-full px-1 text-[0.625rem] tabular-nums">{count > 99 ? '99+' : count}</Badge>{/if}
+{#snippet badge(corner = false)}
+  {#if count > 0}<Badge class={['h-4 min-w-4 rounded-full px-1 text-[0.625rem] tabular-nums', corner && 'pointer-events-none absolute top-0.5 right-0.5 md:-top-1 md:-right-1']}>{count > 99 ? '99+' : count}</Badge>{/if}
 {/snippet}
 
 {#snippet todoButton()}
   <div class="pointer-events-auto mr-3 flex h-12 shrink-0 items-center rounded-lg bg-popover px-0.5 ring-1 ring-foreground/10 max-md:mt-2 md:h-8 md:px-1">
-    <Button variant="ghost" size="sm" class={['h-11 gap-1.5 px-3 md:h-7 md:px-2', open && tab === 'todo' && 'bg-muted text-heading']}
-      aria-label={`${$t('bots.todos')} ${count}`} aria-pressed={open && tab === 'todo'} onclick={() => { if (open && tab === 'todo') open = false; else viewTodos() }}>
-      <ListChecksIcon class="size-5 md:size-4" /><span class="max-md:sr-only">{$t('bots.todos')}</span>{@render badge()}
+    <Button variant="ghost" size="icon" class={['relative size-11 md:size-7', open && tab === 'todo' && 'bg-muted text-heading']}
+      aria-label={`${$t('bots.todos')} ${count}`} title={$t('bots.todos')} aria-pressed={open && tab === 'todo'} onclick={() => { if (open && tab === 'todo') open = false; else viewTodos() }}>
+      <ListChecksIcon class="size-5 md:size-4" />{@render badge(true)}
     </Button>
   </div>
 {/snippet}
@@ -172,14 +213,25 @@
       <span class={['text-[13px] leading-5 [overflow-wrap:anywhere]', done ? 'line-clamp-2 text-muted-foreground' : 'line-clamp-3']}>{summary(message)}</span>
     </button>
     <div class={['mt-2 flex items-center gap-1', done && 'text-muted-foreground']}>
-      {#if !done}<Button variant="outline" size="xs" onclick={() => quoteTodo(message)}><QuotesIcon />{$t('bots.quoteReply')}</Button>{/if}
       <Button variant="ghost" size="xs" onclick={() => viewContext(message.id)}><TreeStructureIcon />{$t('bots.context')}</Button>
       {#if !done}
-        <Button variant="ghost" size="xs" class="ml-auto" onclick={() => ontodochange(message.id, 'resolve')}><CheckIcon />{$t('bots.todoDone')}</Button>
+        <Button variant="ghost" size="xs" class="ml-auto" onclick={() => ontodochange(message.id, 'resolve')}><EyeSlashIcon />{$t('bots.ignore')}</Button>
+        <Button variant="ghost" size="xs" onclick={() => quoteTodo(message)}><QuotesIcon />{$t('bots.quote')}</Button>
+        <Button variant="outline" size="xs" aria-expanded={reply?.message.id === message.id} onclick={() => toggleReply(message)}><ArrowBendUpLeftIcon />{$t('bots.reply')}</Button>
       {:else if done.by === 'user'}
-        <Button variant="ghost" size="xs" onclick={() => ontodochange(message.id, 'reopen')}><ArrowUUpLeftIcon />{$t('bots.reopen')}</Button>
+        <Button variant="ghost" size="xs" class="ml-auto" onclick={() => ontodochange(message.id, 'reopen')}><ArrowUUpLeftIcon />{$t('bots.reopen')}</Button>
       {/if}
     </div>
+    {#if !done && reply?.message.id === message.id}
+      {@const current = reply}
+      <PromptInput.Root class="mt-2" aria-label={$t('bots.reply')} onSubmit={submitReply}>
+        <PromptInput.Textarea bind:ref={replyInput} bind:value={current.text} placeholder={$t('bots.message')} aria-label={$t('bots.message')} readonly={current.sending} onkeydown={replyKeydown} class="text-base sm:text-[13px]" />
+        <PromptInput.Toolbar class="justify-end gap-1 px-1 pt-0 pb-1">
+          <Button variant="ghost" size="xs" disabled={current.sending} onclick={() => { reply = null }}>{$t('common.cancel')}</Button>
+          <PromptInput.Submit class="h-6 gap-1 px-2.5 text-xs" busy={current.sending} disabled={!current.text.trim()} />
+        </PromptInput.Toolbar>
+      </PromptInput.Root>
+    {/if}
   </li>
 {/snippet}
 

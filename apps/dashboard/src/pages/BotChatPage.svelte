@@ -125,19 +125,35 @@
       window.removeEventListener('online', resume)
     }
   })
+  // The composer and a todo's reply box both send through here, so a reply matches quoting first and sending from the composer.
+  async function post(content: string, sentQuote: BotQuote | null) {
+    toast.dismiss(actionToastId)
+    feed?.followSend()
+    timeline.message(await device.api.sendBotMessage(botId, sentQuote ? quotedMessage(sentQuote, content) : content))
+  }
+
   async function send(content: string): Promise<boolean> {
     const text = draft
     const sentQuote = quote
     draft = ''
-    toast.dismiss(actionToastId)
-    feed?.followSend()
     try {
-      timeline.message(await device.api.sendBotMessage(botId, sentQuote ? quotedMessage(sentQuote, content) : content))
+      await post(content, sentQuote)
       if (quote === sentQuote) setQuote(null)
       return true
     } catch (failure) {
       draft = draft ? text + '\n\n' + draft : text
       showActionError(failure, event => { if (!composer?.submit()) event.preventDefault() })
+      timeline.refresh()
+      return false
+    }
+  }
+
+  async function replyTodo(todo: BotQuote, text: string, retry: () => boolean): Promise<boolean> {
+    try {
+      await post(text, todo)
+      return true
+    } catch (failure) {
+      showActionError(failure, event => { if (!retry()) event.preventDefault() })
       timeline.refresh()
       return false
     }
@@ -202,7 +218,7 @@
 {/snippet}
 
 {#if timeline.bot}
-  <BotChatPanel bind:this={panel} bot={timeline.bot} count={timeline.openTodoCount} onjump={jumpTo} onquote={addQuote} ontodochange={changeTodo} />
+  <BotChatPanel bind:this={panel} bot={timeline.bot} count={timeline.openTodoCount} onjump={jumpTo} onquote={addQuote} onreply={replyTodo} ontodochange={changeTodo} />
   <!-- The feed scrolls beneath the transparent top bar, like the Session chat page. -->
   <section class="mx-auto -mt-14 flex h-dvh max-w-3xl flex-col md:-mt-12" aria-label={timeline.bot.name}>
     <BotMessageActions root={feedRoot} entry={id => timeline.entries.find(row => row.id === id)} bind:this={actions} onresolve={id => changeTodo(id, 'resolve')} oncontext={id => panel?.viewContext(id)} onquote={quote => void addQuote(quote)} />
