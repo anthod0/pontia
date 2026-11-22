@@ -1,17 +1,17 @@
 import { writable } from "svelte/store";
+import { readStoredWith, writeStored } from "$lib/storage";
 
 const storageKey = "pontia.filePreviewWidth";
 export const FILE_PREVIEW_MIN_WIDTH = 320;
 // Room kept for the sidebar and the conversation next to the preview.
 export const FILE_PREVIEW_RESERVED_WIDTH = 480;
 
-function readWidth(): number | null {
-  if (typeof localStorage === "undefined") return null;
-  const saved = Number(localStorage.getItem(storageKey));
-  return Number.isFinite(saved) && saved > 0 ? saved : null;
+function parseWidth(saved: string): number | undefined {
+  const width = Number(saved);
+  return Number.isFinite(width) && width > 0 ? width : undefined;
 }
 
-const width = writable<number | null>(readWidth());
+const width = writable<number | null>(readStoredWith(storageKey, parseWidth));
 
 export function clampFilePreviewWidth(value: number, viewport: number): number {
   return Math.round(
@@ -27,7 +27,6 @@ export const filePreviewWidth = {
   },
   save(value: number | null): void {
     width.set(value);
-    if (value === null) localStorage.removeItem(storageKey);
-    else localStorage.setItem(storageKey, String(value));
+    writeStored(storageKey, value === null ? null : String(value));
   },
 };

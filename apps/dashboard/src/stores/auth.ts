@@ -1,10 +1,12 @@
 import { writable, type Writable } from "svelte/store";
+import { readStored, writeStored } from "$lib/storage";
 
 const storageKey = "pontia.externalApiToken";
 const value = writable("");
 
+// An empty token is saved as "" rather than removed.
 function persist(next: string): void {
-  if (typeof localStorage !== "undefined") localStorage.setItem(storageKey, next);
+  writeStored(storageKey, next);
 }
 
 export const token: Writable<string> = {
@@ -23,8 +25,7 @@ export const token: Writable<string> = {
 };
 
 export function loadTokenFromStorage(): string {
-  const stored =
-    typeof localStorage === "undefined" ? "" : (localStorage.getItem(storageKey) ?? "");
+  const stored = readStored(storageKey) ?? "";
   value.set(stored);
   return stored;
 }

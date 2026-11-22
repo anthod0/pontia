@@ -1,4 +1,5 @@
 import { translate } from "$lib/i18n";
+import { readStored, scopedKey, writeStored } from "$lib/storage";
 import { writable } from "svelte/store";
 
 import type { InboxMessageView, SubmitInboxMessageInput } from "../api/types";
@@ -18,11 +19,11 @@ export class SubmissionUnconfirmedError extends Error {
   }
 }
 export function createInboxRecovery(device: DeviceRuntime) {
-  const storageKey = `pontia:inbox-submissions:v2:${device.id}`;
+  const storageKey = scopedKey("pontia:inbox-submissions:v2", device.id);
 
+  // Unreadable data throws instead of reading as empty, so a later save cannot drop submissions.
   function readSaved(): UnconfirmedSubmission[] {
-    if (typeof localStorage === "undefined") return [];
-    const saved = localStorage.getItem(storageKey);
+    const saved = readStored(storageKey);
     if (!saved) return [];
     const items: unknown = JSON.parse(saved);
     if (
@@ -43,7 +44,8 @@ export function createInboxRecovery(device: DeviceRuntime) {
   const unconfirmedSubmissions = writable<UnconfirmedSubmission[]>(readSaved());
 
   function save(items: UnconfirmedSubmission[]): void {
-    localStorage.setItem(storageKey, JSON.stringify(items));
+    // A failed write throws, so a submission that cannot be saved is not sent.
+    writeStored(storageKey, JSON.stringify(items), { required: true });
   }
 
   function hide(isHidden: (item: UnconfirmedSubmission) => boolean): void {

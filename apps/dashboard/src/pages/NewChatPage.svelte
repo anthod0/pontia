@@ -12,6 +12,7 @@
   import { isTransientNetworkError } from '../api/client'
   import { claimChatEntryAutofocus } from '$lib/chatEntryAutofocus'
   import { titleFromInitialPrompt } from '$lib/session-chat/sessionChat'
+  import { readStored, scopedKey, writeStored } from '$lib/storage'
   const device = useDeviceRuntime();
   const { createSessionCreationOptionsStore } = device.sessionCreation;
   const { chatDraft, clearChatDraft } = device.chatDraft;
@@ -23,10 +24,10 @@
   onDestroy(() => { mounted = false })
   export let deviceSelector: Snippet<[boolean]> | undefined = undefined
   export let routeScope: string | undefined = undefined
-  const LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY = `pontia.chat.lastWorkspaceId:${device.id}`
-  const LAST_NEW_CHAT_CLIENT_STORAGE_KEY = `pontia.chat.lastCreationOptionId:${device.id}`
+  const LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY = scopedKey('pontia.chat.lastWorkspaceId', device.id)
+  const LAST_NEW_CHAT_CLIENT_STORAGE_KEY = scopedKey('pontia.chat.lastCreationOptionId', device.id)
   let createWorkspaceId = ''
-  let creationOptionId = readStoredValue(LAST_NEW_CHAT_CLIENT_STORAGE_KEY) ?? defaultClientType
+  let creationOptionId = readStored(LAST_NEW_CHAT_CLIENT_STORAGE_KEY) ?? defaultClientType
   let model = ''
   let modelOptionId = creationOptionId
   let modelWorkspaceId = createWorkspaceId
@@ -75,7 +76,7 @@
   $: creationOptions = $creationOptionsQuery.data ?? []
   $: if (creationOptions.length && !creationOptions.some((option) => option.id === creationOptionId)) creationOptionId = creationOptions[0].id
   $: selectedCreationOption = creationOptions.find((option) => option.id === creationOptionId)
-  $: if (selectedCreationOption) writeStoredValue(LAST_NEW_CHAT_CLIENT_STORAGE_KEY, selectedCreationOption.id)
+  $: if (selectedCreationOption) writeStored(LAST_NEW_CHAT_CLIENT_STORAGE_KEY, selectedCreationOption.id)
   $: if (createWorkspaceId && workspaces.length && createWorkspaceId !== queryWorkspaceSelectionId && createWorkspaceId !== availableWorkspaceId(readQueryWorkspaceId())) rememberCreateWorkspaceSelection(createWorkspaceId)
   $: canCreate = Boolean(createWorkspaceId && selectedCreationOption && !$creationOptionsQuery.isError && !creating)
   $: passiveErrorMessage = $creationOptionsQuery.error?.message ?? (workspacesError && !isTransientNetworkError(workspacesError) ? workspacesError : null)
@@ -109,29 +110,13 @@
     return workspaces.some((workspace) => workspace.workspace_id === workspaceId) ? workspaceId : null
   }
 
-  function readStoredValue(key: string): string | null {
-    try {
-      return window.localStorage.getItem(key)
-    } catch {
-      return null
-    }
-  }
-
-  function writeStoredValue(key: string, value: string): void {
-    try {
-      window.localStorage.setItem(key, value)
-    } catch {
-      // Ignore unavailable storage; the selectors should still work.
-    }
-  }
-
   function readRememberedWorkspaceId(): string | null {
-    return readStoredValue(LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY)
+    return readStored(LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY)
   }
 
   function rememberCreateWorkspaceSelection(workspaceId: string): void {
     if (!workspaceId || !workspaces.some((workspace) => workspace.workspace_id === workspaceId)) return
-    writeStoredValue(LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY, workspaceId)
+    writeStored(LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY, workspaceId)
   }
 
   function preferredCreateWorkspaceId(): string {

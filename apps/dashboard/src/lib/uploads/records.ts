@@ -1,3 +1,5 @@
+import { readStored, writeStored } from "../storage";
+
 export type UploadRecord = {
   scope: string;
   draft: string;
@@ -42,9 +44,7 @@ export async function loadUploadRecords(scope: string, draft: string): Promise<U
   const records = await transaction("readonly", (store) =>
     store.getAll(IDBKeyRange.bound([scope, draft], [scope, draft, []])),
   );
-  return (records as UploadRecord[]).filter(
-    (record) => localStorage.getItem(removalKey(record)) === null,
-  );
+  return (records as UploadRecord[]).filter((record) => readStored(removalKey(record)) === null);
 }
 export async function saveUploadRecord(record: UploadRecord): Promise<void> {
   await transaction("readwrite", (store) => store.put(record));
@@ -60,6 +60,6 @@ export async function removeUploadRecord(record: UploadRecord): Promise<void> {
     );
   } catch {
     // A durable marker prevents a sent or removed reference from returning if IndexedDB fails.
-    localStorage.setItem(removalKey(record), "1");
+    writeStored(removalKey(record), "1", { required: true });
   }
 }

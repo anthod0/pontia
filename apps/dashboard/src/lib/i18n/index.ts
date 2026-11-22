@@ -1,7 +1,8 @@
-import { derived, get, writable } from "svelte/store";
+import { derived, get, toStore } from "svelte/store";
 import { addMessages, init, locale, format } from "svelte-i18n";
 import en from "./en.json";
 import zhCN from "./zh-CN.json";
+import { PersistedState } from "../storage";
 
 export type Locale = "en" | "zh-CN";
 export type LanguagePreference = "system" | Locale;
@@ -13,10 +14,10 @@ export type Translator = (
 
 const storageKey = "pontia.locale";
 
-function readPreference(): LanguagePreference {
-  const saved = typeof localStorage === "undefined" ? null : localStorage.getItem(storageKey);
-  return saved === "en" || saved === "zh-CN" ? saved : "system";
-}
+const preference = new PersistedState<LanguagePreference>(storageKey, "system", {
+  parse: (saved) => (saved === "en" || saved === "zh-CN" ? saved : undefined),
+  stringify: (value) => (value === "system" ? null : value),
+});
 
 function browserLocale(): Locale {
   for (const language of typeof navigator === "undefined" ? [] : navigator.languages) {
@@ -26,27 +27,24 @@ function browserLocale(): Locale {
   return "en";
 }
 
-const preference = writable<LanguagePreference>(readPreference());
 addMessages("en", en);
 addMessages("zh-CN", zhCN);
-init({ fallbackLocale: "en", initialLocale: resolveLocale(get(preference)) });
+init({ fallbackLocale: "en", initialLocale: resolveLocale(preference.current) });
 
 function resolveLocale(value: LanguagePreference): Locale {
   return value === "system" ? browserLocale() : value;
 }
 
-export const languagePreference = {
-  subscribe: preference.subscribe,
-  set(value: LanguagePreference): void {
-    if (value === "system") localStorage.removeItem(storageKey);
-    else localStorage.setItem(storageKey, value);
-    preference.set(value);
+export const languagePreference = toStore(
+  () => preference.current,
+  (value) => {
+    preference.current = value;
     locale.set(resolveLocale(value));
   },
-};
+);
 
 export function updateBrowserLanguage(): void {
-  if (get(preference) === "system") locale.set(browserLocale());
+  if (preference.current === "system") locale.set(browserLocale());
 }
 
 export const currentLocale = derived(locale, (value) => value as Locale);

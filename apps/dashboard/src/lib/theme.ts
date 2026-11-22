@@ -1,4 +1,5 @@
-import { derived, readable, writable } from "svelte/store";
+import { derived, readable, toStore } from "svelte/store";
+import { PersistedState } from "./storage";
 
 export type ThemePreference = "system" | "light" | "dark";
 export type ResolvedTheme = "light" | "dark";
@@ -8,13 +9,10 @@ const storageKey = "pontia.theme";
 const themeColors: Record<ResolvedTheme, string> = { light: "#fafaf8", dark: "#1d2021" };
 const darkQuery = "(prefers-color-scheme: dark)";
 
-function readPreference(): ThemePreference {
-  if (typeof localStorage === "undefined") return "system";
-  const saved = localStorage.getItem(storageKey);
-  return saved === "light" || saved === "dark" ? saved : "system";
-}
-
-const preference = writable<ThemePreference>(readPreference());
+const preference = new PersistedState<ThemePreference>(storageKey, "system", {
+  parse: (saved) => (saved === "light" || saved === "dark" ? saved : undefined),
+  stringify: (value) => (value === "system" ? null : value),
+});
 
 const systemTheme = readable<ResolvedTheme>("light", (set) => {
   if (typeof matchMedia === "undefined") return;
@@ -25,16 +23,14 @@ const systemTheme = readable<ResolvedTheme>("light", (set) => {
   return () => query.removeEventListener("change", update);
 });
 
-export const themePreference = {
-  subscribe: preference.subscribe,
-  set(next: ThemePreference): void {
-    if (next === "system") localStorage.removeItem(storageKey);
-    else localStorage.setItem(storageKey, next);
-    preference.set(next);
+export const themePreference = toStore(
+  () => preference.current,
+  (next) => {
+    preference.current = next;
   },
-};
+);
 
-export const resolvedTheme = derived([preference, systemTheme], ([$preference, $system]) =>
+export const resolvedTheme = derived([themePreference, systemTheme], ([$preference, $system]) =>
   $preference === "system" ? $system : $preference,
 );
 
