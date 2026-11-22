@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onMount, type Snippet } from 'svelte'
   import { navigate } from '$lib/navigation'
-  import { lastPagePath, takeLastPage } from '$lib/lastPage'
+  import { endReturnToLastPage, lastPagePath, takeLastPage } from '$lib/lastPage'
   import SessionConversationSkeleton from '$lib/components/session-chat/SessionConversationSkeleton.svelte'
   import BotChatSkeleton from '../components/bots/BotChatSkeleton.svelte'
   import { useDeviceRuntime } from '../device/context'
   import NewChatPage from './NewChatPage.svelte'
 
-  // A newly opened Dashboard reopens the last Session chat or Bot chat; otherwise this is New Chat.
+  // A newly opened Dashboard and "Back to chat" reopen the last Session chat or Bot chat; otherwise this is New Chat.
   let { routeScope, deviceSelector }: { routeScope?: string; deviceSelector?: Snippet<[boolean]> } = $props()
   const device = useDeviceRuntime()
   let restoring = $state(takeLastPage(device.id))
@@ -17,6 +17,7 @@
     let disposed = false
     void lastPagePath(device, restoring).then(path => {
       if (disposed) return
+      endReturnToLastPage()
       if (path) void navigate(path, undefined, { scope: routeScope, replaceState: true })
       else restoring = null
     })

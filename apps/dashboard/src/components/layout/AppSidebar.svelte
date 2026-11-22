@@ -8,6 +8,7 @@
   import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon'
   import { dashboardPath, dashboardRelativePath } from '$lib/dashboardRoutes'
   import { navigate } from '$lib/navigation'
+  import { returnToLastPage } from '$lib/lastPage'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import ShortcutKeys from '$lib/components/shortcuts/ShortcutKeys.svelte'
   import { chatShortcuts } from '$lib/shortcuts/definitions'
@@ -26,6 +27,12 @@
   const sidebar = Sidebar.useSidebar()
   let currentPath = $state(dashboardRelativePath())
   const settingsPath = $derived(isSettingsPath(currentPath))
+
+  // Opens the Bot chat or Session chat last viewed on this device, else New Chat.
+  function backToChat(): void {
+    returnToLastPage()
+    onNewChat()
+  }
 
   function openSection(event: MouseEvent, path: string): void {
     event.preventDefault()
@@ -56,7 +63,7 @@
         <Sidebar.GroupContent>
           <Sidebar.Menu>
             <Sidebar.MenuItem>
-              <Sidebar.MenuButton class="h-9 text-[13px] text-sidebar-foreground/70" tooltipContent={$t('nav.backToChat')} onclick={onNewChat}>
+              <Sidebar.MenuButton class="h-9 text-[13px] text-sidebar-foreground/70" tooltipContent={$t('nav.backToChat')} onclick={backToChat}>
                 <ArrowLeftIcon />
                 <span>{$t('nav.backToChat')}</span>
               </Sidebar.MenuButton>

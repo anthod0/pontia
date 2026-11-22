@@ -112,6 +112,8 @@ beforeEach(async () => {
           created_at: "now",
         },
       });
+    const sessionRead = url.pathname.match(/\/sessions\/(same|last-[\w-]+)$/);
+    if (sessionRead) return response({ session: session(handle, sessionRead[1]) });
     if (url.pathname.endsWith("/sessions/created"))
       return response({ session: session(handle, "created"), turns: [] });
     if (url.pathname.includes("/turns/timeline"))
@@ -441,6 +443,28 @@ test("Alt+M switches back from settings and keeps the section, even to an offlin
   await fireEvent.keyDown(window, { key: "m", code: "KeyM", altKey: true });
   await waitFor(() => expect(location.pathname).toBe("/travel-laptop/settings/clients"));
   await screen.findByText("Travel Laptop is offline");
+});
+
+test("Back to chat returns to the last chat of the device chosen in settings", async () => {
+  localStorage.setItem(
+    "pontia.lastPage:office-mac",
+    JSON.stringify({ kind: "chat", id: "last-office" }),
+  );
+  localStorage.setItem(
+    "pontia.lastPage:travel-laptop",
+    JSON.stringify({ kind: "chat", id: "last-travel" }),
+  );
+  window.history.replaceState({}, "", "/office-mac/settings/common");
+  render(MultiDeviceDashboardHarness);
+  await screen.findByText("Device page");
+  await userEvent.click(sidebar().getByRole("button", { name: /Back to chat/ }));
+  await waitFor(() => expect(location.pathname).toBe("/office-mac/chat/last-office"));
+  await userEvent.click(screen.getByRole("button", { name: "Settings" }));
+  await waitFor(() => expect(location.pathname).toBe("/office-mac/settings/common"));
+  await chooseSidebarDevice("Travel Laptop");
+  await waitFor(() => expect(location.pathname).toBe("/travel-laptop/settings/common"));
+  await userEvent.click(sidebar().getByRole("button", { name: /Back to chat/ }));
+  await waitFor(() => expect(location.pathname).toBe("/travel-laptop/chat/last-travel"));
 });
 
 test("sidebar device selection keeps the settings section and permits an offline target", async () => {

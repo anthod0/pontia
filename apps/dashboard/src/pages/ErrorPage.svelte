@@ -2,11 +2,18 @@
   import { t } from '$lib/i18n';
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
-  import { dashboardPath } from '$lib/dashboardRoutes'
+  import { dashboardPath, navigate } from '$lib/navigation'
+  import { returnToLastPage } from '$lib/lastPage'
 
   let { status, message }: { status: number; message?: string } = $props()
 
   const notFound = $derived(status === 404)
+
+  function backToChat(event: MouseEvent): void {
+    event.preventDefault()
+    returnToLastPage()
+    void navigate('/')
+  }
 </script>
 
 <main class="flex min-h-svh p-6">
@@ -19,7 +26,7 @@
       </Empty.Description>
     </Empty.Header>
     <Empty.Content>
-      <Button href={dashboardPath('/')}>{$t('nav.backToChat')}</Button>
+      <Button href={dashboardPath('/')} onclick={backToChat}>{$t('nav.backToChat')}</Button>
     </Empty.Content>
   </Empty.Root>
 </main>
