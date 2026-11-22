@@ -18,13 +18,12 @@ struct ProcessInfo {
 
 struct ProcessTable {
     processes: HashMap<u32, ProcessInfo>,
-    query_complete: bool,
 }
 
 impl ProcessTable {
     pub(crate) fn refresh_all() -> Self {
         let mut system = System::new();
-        let refreshed_processes = system.refresh_processes_specifics(
+        system.refresh_processes_specifics(
             ProcessesToUpdate::All,
             true,
             ProcessRefreshKind::nothing().without_tasks(),
@@ -43,13 +42,7 @@ impl ProcessTable {
                 )
             })
             .collect();
-        // sysinfo counts PIDs selected for refresh even when reading one PID's
-        // details fails on macOS. Only a complete snapshot can prove absence.
-        let query_complete = !processes.is_empty() && refreshed_processes == processes.len();
-        Self {
-            processes,
-            query_complete,
-        }
+        Self { processes }
     }
 
     pub(crate) fn get(&self, pid: u32) -> Option<&ProcessInfo> {
@@ -58,7 +51,14 @@ impl ProcessTable {
 
     pub(crate) fn observe(&self, identity: ProcessIdentity) -> ProcessObservation {
         let Some(process) = self.get(identity.pid) else {
-            return if self.query_complete {
+            let Ok(pid) = libc::pid_t::try_from(identity.pid) else {
+                return ProcessObservation::Unknown;
+            };
+            // A snapshot can omit live processes on macOS. Probe only the target PID.
+            return if pid > 0
+                && unsafe { libc::kill(pid, 0) } == -1
+                && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
+            {
                 ProcessObservation::Exited
             } else {
                 ProcessObservation::Unknown
@@ -129,5 +129,23 @@ impl ProcessFingerprint {
             pid: self.pid,
             start_time_seconds: self.start_time_seconds,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::{Command, Stdio};
+
+    #[test]
+    fn incomplete_snapshot_confirms_only_a_missing_process_exit() {
+        let mut child = Command::new("cat").stdin(Stdio::piped()).spawn().unwrap();
+        let identity = process_identity(child.id()).unwrap();
+        let incomplete = ProcessTable {
+            processes: HashMap::new(),
+        };
+        assert_eq!(incomplete.observe(identity), ProcessObservation::Unknown);
+        child.wait().unwrap();
+        assert_eq!(incomplete.observe(identity), ProcessObservation::Exited);
     }
 }
