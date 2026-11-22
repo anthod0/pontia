@@ -154,6 +154,7 @@
   "clients.loadFailed": "Could not load agents",
   "workspaces.loadFailed": "Could not load workspaces",
   "common.retry": "Retry",
+  "chat.clientDisconnected": "Agent Client disconnected.",
   "chat.historyUnavailable": "Native history is currently unavailable.",
   "chat.refreshFailed": "Session refresh failed",
   "chat.lastSnapshot": "Showing the last loaded snapshot.",

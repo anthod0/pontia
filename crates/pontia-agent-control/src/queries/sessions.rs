@@ -49,6 +49,21 @@ impl ControlQueryService {
             });
         }
         session.runtimes = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone()).list(&session.session_id).await?;
+        if let Some(entry) = self.clients.get(&session.client_type)
+            && entry.session.is_none()
+            && entry.spec.adapter.dispatch == crate::client_contract::DispatchMode::Connected
+            && let Some(control) = &self.control
+            && let Some(runtime) = session.runtimes.iter().find(|runtime| {
+                Some(runtime.role.as_str()) == entry.spec.adapter.control_runtime_role
+                    && runtime.state == "running"
+            })
+        {
+            session.control_connected = Some(
+                control
+                    .connected_to(&session.session_id, &runtime.runtime_id)
+                    .await,
+            );
+        }
         session.lineage = self.session_lineage(&session.session_id).await?;
         if let Some(client) = self
             .clients

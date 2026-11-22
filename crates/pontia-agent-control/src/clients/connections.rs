@@ -291,6 +291,15 @@ impl ClientControlService {
         Ok(Some(connection.clone()))
     }
 
+    pub(crate) async fn connected_to(&self, session_id: &str, runtime_id: &str) -> bool {
+        let connections = self.connections.lock().await;
+        connections.entries.get(session_id).is_some_and(|current| {
+            current.runtime_id == runtime_id
+                && !current.retired.load(Ordering::SeqCst)
+                && current.channel.available()
+        })
+    }
+
     pub async fn available(&self, session_id: &str) -> Result<bool> {
         Ok(self.connection(session_id).await?.is_some())
     }

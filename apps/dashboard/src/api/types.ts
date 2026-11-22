@@ -373,6 +373,7 @@ export interface SessionView {
   pinned_at: string | null;
   archived_at: string | null;
   capabilities: SessionCapabilities;
+  control_connected?: boolean;
   timeline_unavailable_reason?: string | null;
   model: string | null;
   context_usage: ContextUsageView | null;

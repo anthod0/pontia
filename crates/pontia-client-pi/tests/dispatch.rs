@@ -232,3 +232,67 @@ async fn conditional_exit_uses_the_native_idle_decision_and_waits_for_exit_confi
     );
     server.await.unwrap();
 }
+
+#[tokio::test]
+async fn disconnected_runtime_can_be_explicitly_closed() {
+    let (pool, _root, app) = setup().await;
+    ready(&pool).await;
+    let commands = app.session_commands();
+    assert!(matches!(
+        commands.terminate_session("sess_pi").await,
+        Err(pontia_core::Error::CapabilityUnavailable(_))
+    ));
+    let mut agent = tokio::process::Command::new("sleep")
+        .arg("60")
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let fingerprint = pontia_runtime::ProcessFingerprint::capture(agent.id().unwrap()).unwrap();
+    sqlx::query("UPDATE session_runtimes SET process_fingerprint=? WHERE runtime_id='rtinst_pi'")
+        .bind(serde_json::to_string(&fingerprint).unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    assert!(matches!(
+        commands.exit_if_idle("sess_pi").await,
+        Err(pontia_core::Error::CapabilityUnavailable(_))
+    ));
+    commands.terminate_session("sess_pi").await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), agent.wait())
+        .await
+        .unwrap()
+        .unwrap();
+    app.runtime_observer()
+        .observe_session("sess_pi")
+        .await
+        .unwrap();
+    let session = app.queries().get_session("sess_pi").await.unwrap().unwrap();
+    assert_eq!(session.state, "exited");
+    assert_eq!(session.runtimes[0].state, "exited");
+}
+
+#[tokio::test]
+async fn running_runtime_exposes_its_current_connection_independently_of_session_state() {
+    let (pool, _root, app) = setup().await;
+    ready(&pool).await;
+    let view = || async {
+        let session = app.queries().get_session("sess_pi").await.unwrap().unwrap();
+        assert_eq!(session.state, "idle");
+        assert_eq!(session.runtimes[0].state, "running");
+        session.control_connected
+    };
+    assert_eq!(view().await, Some(false));
+    let (daemon_socket, socket) = UnixStream::pair().unwrap();
+    let (peer, _requests) = pontia_client_pi::rpc::PiRpcPeer::new(daemon_socket);
+    app.client_control()
+        .attach("pi", "sess_pi", "rtinst_pi", "native_pi", peer.clone())
+        .await
+        .unwrap();
+    assert_eq!(view().await, Some(true));
+    drop(socket);
+    tokio::time::timeout(Duration::from_secs(5), peer.closed())
+        .await
+        .unwrap();
+    assert_eq!(view().await, Some(false));
+}

@@ -3,6 +3,7 @@ use crate::client_contract::{ClientExitMode, ClientExitOutcome, TerminateBehavio
 use crate::{control::ControlResult, runtime::ControlTarget};
 use pontia_core::{Error, Result};
 use pontia_runtime::{GenericRuntimeManager, RuntimeStartRequest, RuntimeStartResult};
+use pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository;
 use std::path::Path;
 
 impl ClientAdapter {
@@ -79,8 +80,25 @@ impl ClientAdapter {
                         {
                             return Ok(ClientExitOutcome::Busy);
                         }
-                    } else {
-                        self.control.shutdown(&target.session_id, instance).await?;
+                    } else if let Err(error) =
+                        self.control.shutdown(&target.session_id, instance).await
+                    {
+                        if !matches!(error, Error::CapabilityUnavailable(_)) {
+                            return Err(error);
+                        }
+                        let _guard = self.control.lock_identity().await;
+                        target.validate(&self.pool).await?;
+                        if self
+                            .control
+                            .connected_to(&target.session_id, instance)
+                            .await
+                        {
+                            return Err(error);
+                        }
+                        let Some(fingerprint) = self.exit_process_fingerprint(target).await? else {
+                            return Err(error);
+                        };
+                        GenericRuntimeManager.terminate_process(&fingerprint)?;
                     }
                 }
                 TerminateBehavior::RuntimeManager => {
@@ -221,6 +239,30 @@ impl ClientAdapter {
             });
         }
         self.start_in_process(root, request, count)
+    }
+
+    async fn exit_process_fingerprint(
+        &self,
+        target: &ControlTarget,
+    ) -> Result<Option<pontia_runtime::ProcessFingerprint>> {
+        // Only signal a dedicated process whose observed death confirms Session exit.
+        let Some(observation) = self.spec.adapter.lifecycle.process_observation else {
+            return Ok(None);
+        };
+        if observation.exit_event != crate::PontiaEventType::SessionExited
+            || Some(observation.role) != target.control_runtime_role
+            || !self.spec.adapter.lifecycle.coupled_runtime
+        {
+            return Ok(None);
+        }
+        let runtime = SqliteSessionRuntimeRepository::new(self.pool.clone())
+            .get(target.instance()?)
+            .await?;
+        Ok(runtime
+            .filter(|runtime| runtime.state == "running")
+            .and_then(|runtime| runtime.process_fingerprint)
+            .map(|value| serde_json::from_str(&value))
+            .transpose()?)
     }
 
     pub async fn ensure_exit_available(&self, target: &ControlTarget) -> Result<()> {
