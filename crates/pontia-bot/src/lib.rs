@@ -8,5 +8,6 @@ pub mod messages;
 mod quote;
 pub mod records;
 pub mod session_messages;
+pub mod system_notices;
 pub mod user;
 pub mod workspaces;

@@ -45,7 +45,11 @@ impl HttpState {
         let user_service = UserService::new(app.pontia_home());
         let user_commands = UserCommands::new(user_service.clone(), identity.clone());
         let workspace_commands = WorkspaceCommands::new(
-            WorkspaceService::new(app.db(), app.workspace_browser()),
+            WorkspaceService::new(
+                app.db(),
+                app.workspace_browser(),
+                app.control().control_changes(),
+            ),
             identity.clone(),
         );
         let session_messages = SessionMessages::new(
@@ -96,7 +100,11 @@ impl HttpState {
             identity.clone(),
         );
         self.workspace_commands = WorkspaceCommands::new(
-            WorkspaceService::new(self.app.db(), self.app.workspace_browser()),
+            WorkspaceService::new(
+                self.app.db(),
+                self.app.workspace_browser(),
+                self.app.control().control_changes(),
+            ),
             identity.clone(),
         );
         self.bot_identity = identity;
@@ -109,6 +117,10 @@ impl HttpState {
 
     pub fn helpers(&self) -> &pontia_bot::helpers::HelperService {
         &self.helpers
+    }
+
+    pub fn system_notices(&self) -> pontia_bot::system_notices::SystemNoticeService {
+        self.bots.system_notices()
     }
 
     pub fn dreaming(&self) -> &pontia_bot::dreaming::DreamingService {

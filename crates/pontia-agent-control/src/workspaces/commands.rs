@@ -26,14 +26,27 @@ pub struct RegisterWorkspaceRequest {
 pub struct WorkspaceService {
     pool: SqlitePool,
     config: WorkspaceBrowserConfig,
+    changes: crate::ControlChanges,
 }
 
 impl WorkspaceService {
-    pub fn new(pool: SqlitePool, config: WorkspaceBrowserConfig) -> Self {
-        Self { pool, config }
+    pub fn new(
+        pool: SqlitePool,
+        config: WorkspaceBrowserConfig,
+        changes: crate::ControlChanges,
+    ) -> Self {
+        Self {
+            pool,
+            config,
+            changes,
+        }
     }
 
-    pub async fn register(&self, request: RegisterWorkspaceRequest) -> Result<WorkspaceView> {
+    pub async fn register(
+        &self,
+        request: RegisterWorkspaceRequest,
+        source_session_id: Option<&str>,
+    ) -> Result<WorkspaceView> {
         validate_description(request.description.as_deref())?;
         let root = self
             .config
@@ -51,7 +64,7 @@ impl WorkspaceService {
                 request.path
             )));
         }
-        let record = upsert_canonical_workspace(
+        let (record, registration) = upsert_canonical_workspace(
             &self.pool,
             &workspace_path.display().to_string(),
             request.name.as_deref(),
@@ -62,7 +75,18 @@ impl WorkspaceService {
                 .update_description(&record.workspace_id, Some(&description))
                 .await?;
         }
-        self.get(&record.workspace_id).await
+        let workspace = self.get(&record.workspace_id).await?;
+        if registration != super::WorkspaceRegistration::AlreadyActive {
+            self.changes
+                .publish(crate::ControlChange::WorkspaceRegistered {
+                    workspace_id: workspace.workspace_id.clone(),
+                    canonical_path: workspace.canonical_path.clone(),
+                    name: workspace.name.clone(),
+                    description: workspace.description.clone(),
+                    source_session_id: source_session_id.map(str::to_owned),
+                });
+        }
+        Ok(workspace)
     }
 
     pub async fn update_description(

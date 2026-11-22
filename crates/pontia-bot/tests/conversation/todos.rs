@@ -166,18 +166,12 @@ async fn user_todo_changes_notify_once_and_preserve_who_closed_it() {
         service.change_todo(id, &todo, Reopen).await,
         Err(pontia_core::Error::StateConflict(_))
     ));
-    let notes: Vec<(String,String)> = sqlx::query_as("SELECT id, content FROM bot_notifications WHERE bot_id = ? AND id LIKE 'todo:%' ORDER BY created_at, id")
-        .bind(id).fetch_all(&pool).await.unwrap();
-    assert_eq!(notes.len(), 2);
-    for ((note, content), verb) in notes.iter().zip(["dismissed", "reopened"]) {
-        let uuid = note.strip_prefix(&format!("todo:{todo}:")).unwrap();
-        assert_eq!(uuid::Uuid::parse_str(uuid).unwrap().get_version_num(), 7);
-        assert_eq!(
-            content,
-            &format!(
-                "User {verb} todo message {todo}: \"One {}\"",
-                "字".repeat(76)
-            )
-        );
-    }
+    let persisted: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM bot_notifications WHERE bot_id = ? AND id LIKE 'todo:%'",
+    )
+    .bind(id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(persisted, 0);
 }

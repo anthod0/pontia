@@ -57,7 +57,11 @@ pub async fn rename_workspace(
     Path(workspace_id): Path<String>,
     Json(request): Json<RenameWorkspaceRequest>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = WorkspaceBrowserService::new(state.db(), state.workspace_browser());
+    let service = WorkspaceBrowserService::new(
+        state.db(),
+        state.workspace_browser(),
+        state.control().control_changes(),
+    );
     let workspace = service.rename_workspace(&workspace_id, request).await?;
     Ok(ok(json!({ "workspace": workspace })))
 }
@@ -66,7 +70,11 @@ pub async fn delete_workspace(
     State(state): State<AppState>,
     Path(workspace_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = WorkspaceBrowserService::new(state.db(), state.workspace_browser());
+    let service = WorkspaceBrowserService::new(
+        state.db(),
+        state.workspace_browser(),
+        state.control().control_changes(),
+    );
     let workspace = service.delete_workspace(&workspace_id).await?;
     Ok(ok(json!({ "workspace": workspace })))
 }
@@ -74,7 +82,11 @@ pub async fn delete_workspace(
 pub async fn list_workspace_roots(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = WorkspaceBrowserService::new(state.db(), state.workspace_browser());
+    let service = WorkspaceBrowserService::new(
+        state.db(),
+        state.workspace_browser(),
+        state.control().control_changes(),
+    );
     let roots = service.list_roots().await;
     Ok(ok(json!({ "roots": roots })))
 }
@@ -84,7 +96,11 @@ pub async fn list_workspace_root_entries(
     Path(root_id): Path<String>,
     Query(query): Query<WorkspaceEntriesQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = WorkspaceBrowserService::new(state.db(), state.workspace_browser());
+    let service = WorkspaceBrowserService::new(
+        state.db(),
+        state.workspace_browser(),
+        state.control().control_changes(),
+    );
     let listing = service.list_entries(&root_id, &query.path).await?;
     Ok(ok(json!({
         "root_id": listing.root_id,
@@ -104,6 +120,7 @@ pub async fn pick_workspace_files(
     let service = WorkspaceBrowserService::with_file_picker(
         state.db(),
         state.workspace_browser(),
+        state.control().control_changes(),
         state.file_picker(),
     );
     let result = service
@@ -120,7 +137,11 @@ pub async fn register_workspace(
     State(state): State<AppState>,
     Json(request): Json<RegisterWorkspaceRequest>,
 ) -> Result<Response, ApiError> {
-    let service = WorkspaceBrowserService::new(state.db(), state.workspace_browser());
+    let service = WorkspaceBrowserService::new(
+        state.db(),
+        state.workspace_browser(),
+        state.control().control_changes(),
+    );
     let workspace = service.register_workspace(request).await?;
     Ok((StatusCode::CREATED, ok(json!({ "workspace": workspace }))).into_response())
 }

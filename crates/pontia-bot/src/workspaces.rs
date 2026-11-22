@@ -62,7 +62,11 @@ impl WorkspaceCommands {
             return Err(IdentityError.into());
         }
         Ok(match request.command {
-            WorkspaceCommand::Register(input) => self.service.register(input).await?,
+            WorkspaceCommand::Register(input) => {
+                self.service
+                    .register(input, Some(&request.session_id))
+                    .await?
+            }
             WorkspaceCommand::Describe(input) => {
                 self.service
                     .update_description(&input.workspace_id, input.description.as_deref())
@@ -81,7 +85,8 @@ pub(crate) async fn initialize_default(
     let path = canonical.to_string_lossy();
     match require_active_workspace(pool, &path).await {
         Err(ControlError::NotFound(_) | ControlError::StateConflict(_)) => {
-            upsert_canonical_workspace(pool, &path, None).await
+            // The temporary workspace is supplied by the handoff.
+            Ok(upsert_canonical_workspace(pool, &path, None).await?.0)
         }
         result => result,
     }

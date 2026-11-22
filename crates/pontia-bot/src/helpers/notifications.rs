@@ -1,5 +1,5 @@
 use super::{HelperService, associate, helper_bot};
-use pontia_agent_control::{AgentControl, SessionOwnership};
+use pontia_agent_control::SessionOwnership;
 use pontia_core::Result;
 use serde_json::Value;
 use std::time::Duration;
@@ -138,7 +138,6 @@ impl HelperService {
                 break;
             }
         }
-        self.observe_workspaces().await?;
         let notifications: Vec<(String, String, Option<String>, String)> = sqlx::query_as(
             "SELECT id, bot_id, source_session_id, content FROM bot_notifications WHERE delivered = 0 ORDER BY created_at, id"
         ).fetch_all(&pool).await?;
@@ -172,40 +171,4 @@ impl HelperService {
         }
         Ok(())
     }
-
-    async fn observe_workspaces(&self) -> Result<()> {
-        let workspaces = self.control.queries().list_workspaces().await?;
-        for bot in self.conversation.records().list().await? {
-            let Some(session_id) = bot.current_session_id else {
-                continue;
-            };
-            let Some(session) = self.control.queries().session_snapshot(&session_id).await? else {
-                continue;
-            };
-            if matches!(session.state.as_str(), "exited" | "error") {
-                continue;
-            }
-            for workspace in &workspaces {
-                let mut tx = self.control.db().begin().await?;
-                let inserted = sqlx::query("INSERT INTO bot_known_workspaces(bot_id, workspace_id) VALUES (?, ?) ON CONFLICT DO NOTHING")
-                    .bind(&bot.bot_id).bind(&workspace.workspace_id).execute(&mut *tx).await?.rows_affected();
-                if inserted != 0 {
-                    sqlx::query("INSERT INTO bot_notifications(id, bot_id, content) VALUES (?, ?, ?) ON CONFLICT DO NOTHING")
-                        .bind(format!("workspace:{}:{}", bot.bot_id, workspace.workspace_id)).bind(&bot.bot_id)
-                        .bind(format!("Workspace registered: {}\nPath: {}\nDescription: {}", workspace.workspace_id, workspace.canonical_path, workspace.description.as_deref().unwrap_or("")))
-                        .execute(&mut *tx).await?;
-                }
-                tx.commit().await?;
-            }
-        }
-        Ok(())
-    }
-}
-
-pub(crate) async fn seed_workspaces(control: &AgentControl, bot_id: &str) -> Result<()> {
-    for workspace in control.queries().list_workspaces().await? {
-        sqlx::query("INSERT INTO bot_known_workspaces(bot_id, workspace_id) VALUES (?, ?) ON CONFLICT DO NOTHING")
-            .bind(bot_id).bind(workspace.workspace_id).execute(&control.db()).await?;
-    }
-    Ok(())
 }

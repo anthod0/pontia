@@ -55,6 +55,7 @@ async fn main() -> Result<()> {
 
     let shutdown = state.app().control().shutdown();
     tokio::spawn(state.bots().clone().run_generations(shutdown.subscribe()));
+    tokio::spawn(state.system_notices().run(shutdown.subscribe()));
     tokio::spawn(state.helpers().clone().run(shutdown.subscribe()));
     tokio::spawn(state.dreaming().clone().run(shutdown.subscribe()));
     let cleanup_shutdown = shutdown.clone();
