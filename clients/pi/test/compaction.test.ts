@@ -1,34 +1,10 @@
 import { realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
-import { PiCompaction } from "../src/compaction.js";
 import { createPontiaPiExtension } from "../src/index.js";
 import type { CompactionControl, LifecycleControl } from "../src/control-socket.js";
 import type { InternalEvent } from "../src/events.js";
 import { tempDir } from "./temp-dir.js";
-
-test("compaction reconnect reuses the original report and stops resending a conflict", async () => {
-  const report = vi
-    .fn()
-    .mockResolvedValueOnce({ accepted: false })
-    .mockResolvedValueOnce({ accepted: false, conflict: true });
-  const compaction = new PiCompaction(
-    await tempDir("pc-"),
-    {
-      sessionId: "sess",
-      runtimeId: "original",
-      clientType: "pi",
-    },
-    report,
-  );
-  const signal = new AbortController().signal;
-  await compaction.before({ reason: "threshold", signal } as Parameters<PiCompaction["before"]>[0]);
-  const original = structuredClone(report.mock.calls[0][0]);
-  expect(original.report_key).toMatch(/\S/);
-  await compaction.reconnect();
-  await compaction.reconnect();
-  expect(report.mock.calls).toEqual([[original], [original]]);
-});
 
 async function fixture() {
   const root = await tempDir("pc-");
@@ -177,6 +153,7 @@ test.each(["manual", "threshold", "overflow"])(
     const start = before(reason);
     await f.handlers.session_before_compact(start);
     await f.handlers.session_before_compact(start);
+    await vi.waitFor(() => expect(f.events).toHaveLength(1));
     const operation = f.events[0].data.operation_id;
     expect(f.events).toHaveLength(1);
     await f.handlers.session_shutdown({ reason: "reload" });
@@ -184,7 +161,7 @@ test.each(["manual", "threshold", "overflow"])(
     await f.handlers.session_before_compact(start);
     await f.handlers.session_compact(completed(reason));
     await f.handlers.session_compact(completed(reason));
-    expect(f.events).toHaveLength(1);
+    await vi.waitFor(() => expect(f.events).toHaveLength(1));
     expect(f.events[0].type).toBe("session.compaction_completed");
     expect(f.events[0].data).toEqual({
       runtime_id: "runtime",
@@ -196,7 +173,7 @@ test.each(["manual", "threshold", "overflow"])(
     });
     await f.handlers.session_before_compact(before(reason));
     await f.handlers.session_compact(completed(reason, "second-native"));
-    expect(f.events).toHaveLength(3);
+    await vi.waitFor(() => expect(f.events).toHaveLength(3));
     expect(f.events[1].data.operation_id).not.toBe(operation);
     expect(f.events[1].data.operation_id).toBe(f.events[2].data.operation_id);
   },
@@ -241,7 +218,7 @@ test.each([false, true])(
     f.controls[0].compact("next-attempt");
     await f.handlers.session_before_compact(before("manual"));
     await f.handlers.session_compact_failed({ ...failed });
-    expect(f.events).toHaveLength(4);
+    await vi.waitFor(() => expect(f.events).toHaveLength(4));
   },
 );
 
@@ -266,6 +243,7 @@ test("overflow recovery failure after a completed compaction has its own lifecyc
   const failed = { reason: "overflow", aborted: false, errorMessage: "retry still overflowed" };
   await f.handlers.session_compact_failed(failed);
   await f.handlers.session_compact_failed({ ...failed });
+  await vi.waitFor(() => expect(f.events).toHaveLength(4));
   expect(f.events.map((event) => event.type)).toEqual([
     "session.compaction_started",
     "session.compaction_completed",

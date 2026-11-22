@@ -75,10 +75,8 @@ export function nextReportKey(): string {
   return `${generation}:${++sequence}`;
 }
 
-type ActiveTurnContext = TurnContext & { turnId: string };
-
 function turnFact(
-  context: ActiveTurnContext,
+  context: TurnContext,
   type: InternalEventType,
   data: Record<string, unknown>,
 ): InternalEvent {
@@ -355,14 +353,14 @@ export function buildTurnStartedEvent(
   };
 }
 
-export function buildTurnOutputEvent(context: ActiveTurnContext, output: string): InternalEvent {
+export function buildTurnOutputEvent(context: TurnContext, output: string): InternalEvent {
   return turnFact(context, "turn.output", {
     output_summary: Array.from(output).slice(0, MAX_TURN_OUTPUT_CHARS).join(""),
   });
 }
 
 export function buildTurnCompletedEvent(
-  context: ActiveTurnContext,
+  context: TurnContext,
   terminalLeafId: string | null = null,
 ): InternalEvent {
   return turnFact(context, "turn.completed", {
@@ -371,7 +369,7 @@ export function buildTurnCompletedEvent(
 }
 
 export function buildTurnFailedEvent(
-  context: ActiveTurnContext,
+  context: TurnContext,
   message: string,
   terminalLeafId: string | null = null,
 ): InternalEvent {
@@ -382,7 +380,7 @@ export function buildTurnFailedEvent(
 }
 
 export function buildTurnInterruptedEvent(
-  context: ActiveTurnContext,
+  context: TurnContext,
   terminalLeafId: string | null = null,
 ): InternalEvent {
   return turnFact(context, "turn.interrupted", {

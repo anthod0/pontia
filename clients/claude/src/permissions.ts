@@ -58,6 +58,7 @@ export class Permissions {
       this.emit({
         kind: "permission_settled",
         permission_id: id,
+        authorization_digest,
         outcome: option ? "resolved" : "expired",
       });
       settle(

@@ -1,11 +1,14 @@
-//! Detached ownership of a JSON-lines subprocess. Native protocol state belongs to its client.
-use super::{
+//! Detached ACP Agent process and its in-memory reports.
+mod reports;
+use base64::{Engine, engine::general_purpose::STANDARD};
+use pontia_agent_control::ipc::{
     control_socket_path,
     rpc::{MAX_FRAME_BYTES, PROTOCOL_VERSION, RpcPeer, RpcRequest},
 };
-use base64::{Engine, engine::general_purpose::STANDARD};
 use pontia_core::{Error, Result};
 use pontia_runtime::{GenericRuntimeManager, ProcessFingerprint};
+pub(crate) use reports::{Observation, Report};
+use reports::{Reports, drain, send_frame};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
@@ -34,6 +37,8 @@ pub struct Bootstrap {
 struct State {
     binding: Option<String>,
     context: Value,
+    setup_status: Option<&'static str>,
+    reports: Reports,
 }
 
 pub async fn run_from_stdin() -> Result<()> {
@@ -56,39 +61,42 @@ pub async fn run(config: Bootstrap) -> Result<()> {
         .spawn()?;
     let input = Arc::new(Mutex::new(child.stdin.take().expect("piped stdin")));
     let output = child.stdout.take().expect("piped stdout");
-    let state = Mutex::new(State {
+    let state = Arc::new(Mutex::new(State {
         binding: config.client_session_key.clone(),
         ..Default::default()
-    });
+    }));
     let (attached, mut connection) = watch::channel::<Option<Arc<RpcPeer>>>(None);
+    let reader_state = state.clone();
     let mut reader = tokio::spawn(async move {
         let mut reader = BufReader::new(output);
-        let generation = uuid::Uuid::now_v7();
-        let mut sequence = 0u64;
         let mut frame = Vec::new();
         while reader.read_until(b'\n', &mut frame).await? != 0 {
-            sequence += 1;
+            let native: Value = serde_json::from_slice(&frame)?;
+            let (forward, barrier) = {
+                let mut state = reader_state.lock().await;
+                let State {
+                    context, reports, ..
+                } = &mut *state;
+                let forward = reports.observe(context, &native);
+                (forward, reports.barrier())
+            };
             let peer = connection.borrow_and_update().clone();
-            if let Some(peer) = peer {
-                // A line is forwarded once on its original connection, never across reconnect.
-                let frame_id = format!("{generation}:{sequence}");
-                let count = frame.len().div_ceil(64 * 1024);
-                for (index, chunk) in frame.chunks(64 * 1024).enumerate() {
-                    if peer
-                        .request(
-                            "relay.frame",
-                            json!({"frame_id":frame_id, "chunk":STANDARD.encode(chunk), "last":index + 1 == count}),
-                            MAX_FRAME_BYTES,
-                            false,
-                        )
-                        .await
-                        .is_err()
-                    {
-                        break;
+            if forward && let Some(peer) = peer {
+                if native["method"] != "$/cancel_request"
+                    && let Some(mut barrier) = barrier
+                {
+                    tokio::select! {
+                        _ = barrier.changed() => {},
+                        _ = connection.changed() => { frame.clear(); continue; }
                     }
                 }
+                let id = pontia_core::ids::new_event_id().to_string();
+                let _ = send_frame(&peer, &id, &native).await;
             }
             frame.clear();
+        }
+        while !reader_state.lock().await.reports.is_empty() {
+            tokio::time::sleep(Duration::from_millis(20)).await;
         }
         Ok::<_, Error>(())
     });
@@ -102,14 +110,7 @@ pub async fn run(config: Bootstrap) -> Result<()> {
                 reader_joined = true;
                 result.map_err(|error| Error::ControlUnknown(error.to_string()))?
             },
-            result = child.wait() => {
-                result?;
-                // Drain the final native response before closing its controller connection.
-                let drained = tokio::time::timeout(Duration::from_secs(5), &mut reader).await
-                    .map_err(|_| Error::ControlUnknown("Relay output drain timed out".into()))?;
-                reader_joined = true;
-                drained.map_err(|error| Error::ControlUnknown(error.to_string()))?
-            },
+
         }
     }
     .await;
@@ -136,7 +137,7 @@ pub async fn run(config: Bootstrap) -> Result<()> {
 
 async fn connect(
     config: &Bootstrap,
-    state: &Mutex<State>,
+    state: &Arc<Mutex<State>>,
     input: &Arc<Mutex<ChildStdin>>,
     attached: &watch::Sender<Option<Arc<RpcPeer>>>,
 ) -> Result<()> {
@@ -145,6 +146,7 @@ async fn connect(
     loop {
         if let Ok(stream) = UnixStream::connect(&path).await {
             let (peer, mut requests) = RpcPeer::new(stream);
+            let mut answer = Vec::new();
             let binding = state.lock().await.binding.clone();
             let attach = peer.request(
                 "runtime.attach",
@@ -160,8 +162,8 @@ async fn connect(
                 tokio::select! {
                     result = &mut attach => break result,
                     request = requests.recv() => {
-                        let Some(request) = request else { break Err(Error::ControlUnknown("Relay attachment disconnected".into())); };
-                        match handle(&peer, request, config, state, input).await {
+                        let Some(request) = request else { break attach.await };
+                        match handle(&peer, request, config, state, input, &mut answer).await {
                             Ok(true) => return Ok(()),
                             Ok(false) => {},
                             Err(error) => break Err(error),
@@ -170,7 +172,13 @@ async fn connect(
                 }
             };
             let accepted = match result {
+                Ok(response)
+                    if response.pointer("/error/code").and_then(Value::as_i64) == Some(-32603) =>
+                {
+                    false
+                }
                 Ok(response) if response.get("error").is_some() => {
+                    eprintln!("Discarding queued ACP reports after permanent attachment rejection");
                     return Err(Error::StateConflict("Relay identity was rejected".into()));
                 }
                 Ok(response) => {
@@ -192,11 +200,18 @@ async fn connect(
                     .request("relay.ready", json!({}), MAX_FRAME_BYTES, false)
                     .await;
                 if ready.is_ok_and(|response| response.get("error").is_none()) {
-                    while let Some(request) = requests.recv().await {
-                        match handle(&peer, request, config, state, input).await {
-                            Ok(true) => return Ok(()),
-                            Ok(false) => {}
-                            Err(_) => break,
+                    state.lock().await.reports.reattach();
+                    let sending = drain(&peer, state, input);
+                    tokio::pin!(sending);
+                    loop {
+                        tokio::select! {
+                            _ = &mut sending => break,
+                            request = requests.recv() => {
+                                let Some(request) = request else { break };
+                                match handle(&peer, request, config,state,input, &mut answer).await {
+                                    Ok(true) => return Ok(()), Ok(false) => {}, Err(_) => break,
+                                }
+                            }
                         }
                     }
                 }
@@ -213,17 +228,57 @@ async fn handle(
     peer: &Arc<RpcPeer>,
     request: RpcRequest,
     config: &Bootstrap,
-    state: &Mutex<State>,
+    state: &Arc<Mutex<State>>,
     input: &Arc<Mutex<ChildStdin>>,
+    answer: &mut Vec<u8>,
 ) -> Result<bool> {
     match request.method.as_str() {
         "relay.status" => {
             let state = state.lock().await;
             peer.reply(
                 request.id,
-                json!({"context":state.context,"cwd":config.cwd}),
+                json!({"context":state.context,"setup_status":state.setup_status,"cwd":config.cwd}),
             )
             .await?;
+        }
+        "relay.setup" => {
+            let mut locked = state.lock().await;
+            if locked.setup_status.is_some() {
+                drop(locked);
+                peer.reply_error(
+                    request.id,
+                    -32009,
+                    "ACP setup was already handed to the relay",
+                )
+                .await?;
+                return Ok(false);
+            }
+            let setup = serde_json::from_value(request.params["setup"].clone())?;
+            locked.context = request.params["context"].clone();
+            locked.setup_status = Some("pending");
+            let receipt = locked.reports.push(setup);
+            drop(locked);
+            let peer = peer.clone();
+            let state = state.clone();
+            tokio::spawn(async move {
+                let confirmed = matches!(receipt.await, Ok(Ok(())));
+                state.lock().await.setup_status =
+                    Some(if confirmed { "confirmed" } else { "rejected" });
+                if confirmed {
+                    let _ = peer.reply(request.id, json!({})).await;
+                } else {
+                    let _ = peer
+                        .reply_error(request.id, -32009, "ACP setup rejected")
+                        .await;
+                }
+            });
+        }
+        "relay.bind" => {
+            let key = request.params["client_session_key"]
+                .as_str()
+                .ok_or_else(|| Error::Domain("Missing binding".into()))?;
+            state.lock().await.binding = Some(key.into());
+            peer.reply(request.id, json!({})).await?;
         }
         "relay.state" => {
             let mut state = state.lock().await;
@@ -248,18 +303,61 @@ async fn handle(
                         .ok_or_else(|| Error::Domain("Relay write requires bytes".into()))?,
                 )
                 .map_err(|_| Error::Domain("Invalid relay bytes".into()))?;
+            let auth = request.params.get("permission");
+            let permission = if let Some(auth) = auth {
+                let key = auth["key"]
+                    .as_str()
+                    .ok_or_else(|| Error::Domain("Missing permission identity".into()))?;
+                if !state.lock().await.reports.permission(&auth["id"], key) {
+                    answer.clear();
+                    peer.reply(request.id, json!({"written":false})).await?;
+                    return Ok(false);
+                }
+                answer.extend_from_slice(&bytes);
+                if auth["last"] != true {
+                    peer.reply(request.id, json!({"buffered":true})).await?;
+                    return Ok(false);
+                }
+                let frame: Value = serde_json::from_slice(answer)?;
+                if frame["id"] != auth["id"] {
+                    return Err(Error::Domain("ACP answer identity changed".into()));
+                }
+                let selected = frame
+                    .pointer("/result/outcome/outcome")
+                    .and_then(Value::as_str)
+                    == Some("selected");
+                Some((
+                    auth["id"].clone(),
+                    key.to_owned(),
+                    std::mem::take(answer),
+                    selected,
+                ))
+            } else {
+                None
+            };
             let input = input.clone();
+            let state = state.clone();
             let peer = peer.clone();
             // A blocked native stdin must not prevent status, state updates, output, or exit.
             tokio::spawn(async move {
                 let result = async {
                     let mut input = input.lock().await;
-                    input.write_all(&bytes).await?;
-                    input.flush().await
+                    if let Some((id, key, bytes, selected)) = permission {
+                        let Some(report) = state.lock().await.reports.begin_write(&id, &key) else {
+                            return Ok(false);
+                        };
+                        input.write_all(&bytes).await?;
+                        input.flush().await?;
+                        state.lock().await.reports.flushed(id, report, selected);
+                    } else {
+                        input.write_all(&bytes).await?;
+                        input.flush().await?;
+                    }
+                    Ok::<_, std::io::Error>(true)
                 }
                 .await;
-                if result.is_ok() {
-                    let _ = peer.reply(request.id, json!({})).await;
+                if let Ok(written) = result {
+                    let _ = peer.reply(request.id, json!({"written":written})).await;
                 } else {
                     peer.close();
                 }

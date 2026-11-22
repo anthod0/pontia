@@ -54,7 +54,11 @@ impl Fixture {
                 peers.spawn(async move {
                     let mut wire = accept_async(stream).await.unwrap();
                     let (sender, mut commands) = mpsc::unbounded_channel();
-                    shared.peers.lock().await.push(sender);
+                    let reconnected = {
+                        let mut peers = shared.peers.lock().await;
+                        peers.push(sender);
+                        peers.len() > 1
+                    };
                     loop {
                         tokio::select! {
                             command = commands.recv() => match command {
@@ -73,8 +77,10 @@ impl Fixture {
                                     "thread/resume" | "thread/read" => json!({"thread":{"id":thread,"cwd":cwd,"canAcceptDirectInput":true,"status":{"type":"idle"}},"model":"test-model"}),
                                     "thread/turns/list" => {
                                         let result = json!({"data":shared.turns.lock().await.get(thread).cloned().unwrap_or_default(),"nextCursor":null});
-                                        for event in shared.before_snapshot.lock().await.drain(..) {
-                                            wire.send(Message::Text(event.to_string().into())).await.unwrap();
+                                        if reconnected && thread == "thread-0" {
+                                            for event in shared.before_snapshot.lock().await.drain(..) {
+                                                wire.send(Message::Text(event.to_string().into())).await.unwrap();
+                                            }
                                         }
                                         result
                                     },

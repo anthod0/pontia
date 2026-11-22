@@ -293,7 +293,12 @@ impl CodexObserver {
         let result = self
             .observe_connection(runtime, &connection, shutdown)
             .await;
-        super::interactions::expire_matching(&self.interactions, &connection, |_| true).await?;
+        let associations = connection.interactions.lock().await;
+        let waiting = associations
+            .iter()
+            .map(|(id, native)| (native.session.clone(), id.clone()))
+            .collect();
+        self.interactions.await_reconnect(waiting).await;
         result
     }
 

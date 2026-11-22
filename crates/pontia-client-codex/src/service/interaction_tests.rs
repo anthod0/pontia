@@ -25,6 +25,7 @@ struct Fixture {
     root: tempfile::TempDir,
     commands: mpsc::UnboundedSender<Value>,
     replies: mpsc::UnboundedReceiver<Value>,
+    resumed: watch::Receiver<bool>,
     server: JoinHandle<()>,
     observer: JoinHandle<()>,
     shutdown: watch::Sender<bool>,
@@ -39,17 +40,28 @@ impl Fixture {
         let listener = UnixListener::bind(&socket).unwrap();
         let (commands, mut incoming) = mpsc::unbounded_channel::<Value>();
         let (responses, replies) = mpsc::unbounded_channel();
+        let (resume, resumed) = watch::channel(false);
         let home = root.path().canonicalize().unwrap();
         let server = tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
             let mut wire = accept_async(stream).await.unwrap();
+            let mut reconnected = false;
             let mut unloaded = false;
             let mut turn_status = "inProgress";
             loop {
                 tokio::select! {
                     value = incoming.recv() => {
                         let Some(value) = value else { break };
-                        if value.is_null() { wire.close(None).await.unwrap(); break; }
+                        if value.is_null() {
+                            wire.close(None).await.unwrap();
+                            let (stream, _) = listener.accept().await.unwrap();
+                            wire = accept_async(stream).await.unwrap();
+                            reconnected = true;
+                            continue;
+                        }
+                        if value["method"] == "turn/completed" {
+                            turn_status = "completed";
+                        }
                         wire.send(Message::Text(value.to_string().into())).await.unwrap();
                     }
                     frame = wire.next() => {
@@ -64,6 +76,9 @@ impl Fixture {
                         }
                         let Some(id) = request.get("id") else { continue };
                         let thread = json!({"id":"thread","cwd":home,"status":{"type":if unloaded { "notLoaded" } else { "active" }},"canAcceptDirectInput":true});
+                        if reconnected && request["method"] == "thread/resume" {
+                            resume.send_replace(true);
+                        }
                         let result = match request["method"].as_str().unwrap() {
                             "config/read" => json!({"config":{}}),
                             "initialize" => json!({"codexHome":home,"platformFamily":"unix","platformOs":std::env::consts::OS,"userAgent":"codex/test"}),
@@ -143,6 +158,7 @@ impl Fixture {
             root,
             commands,
             replies,
+            resumed,
             server,
             observer,
             shutdown,
@@ -339,7 +355,7 @@ async fn independent_requests_do_not_block_the_socket_reader_or_merge_by_item() 
 }
 
 #[tokio::test]
-async fn external_resolution_turn_end_and_disconnect_expire_native_requests() {
+async fn native_resolution_and_turn_end_expire_requests_but_disconnect_waits_for_reconnect() {
     let f = Fixture::new().await;
     f.send(request("item/fileChange/requestApproval", json!(1)));
     let i = f.wait(1, InteractionState::Pending).await.remove(0);
@@ -358,8 +374,27 @@ async fn external_resolution_turn_end_and_disconnect_expire_native_requests() {
     f.wait(2, InteractionState::Expired).await;
     f.send(request("item/permissions/requestApproval", json!(3)));
     f.wait(1, InteractionState::Pending).await;
+    let runtime = CodexRuntime::existing(f.root.path()).await.unwrap();
+    let connection = runtime.connection().await.unwrap();
+    let gate = connection.interactions.lock().await;
+    f.send(json!({"method":"ignored/output"}));
     f.send(Value::Null);
-    f.wait(3, InteractionState::Expired).await;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while connection.is_connected() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    drop(gate);
+    super::interactions::reconcile(
+        &f.app.interactions(),
+        &f.app.event_ingest_service(),
+        &connection,
+    )
+    .await
+    .unwrap();
+    assert_eq!(f.wait(1, InteractionState::Pending).await.len(), 1);
     f.stop().await;
 }
 
@@ -374,7 +409,7 @@ async fn lag_keeps_valid_requests_and_discovers_approvals_lost_from_the_event_st
     f.send(request("item/fileChange/requestApproval", json!(2)));
     f.send(request("item/permissions/requestApproval", json!(3)));
     tokio::time::timeout(Duration::from_secs(5), async {
-        while connection.pending_server_requests().await.len() != 3 {
+        while connection.pending_server_requests().await.unwrap().len() != 3 {
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
     })
@@ -441,5 +476,61 @@ async fn confirmed_session_exit_rejects_a_response_even_before_observer_cleanup(
             .state,
         InteractionState::Expired
     );
+    f.stop().await;
+}
+
+#[tokio::test]
+async fn resumed_approval_rebinds_the_original_interaction_before_answer() {
+    use pontia_agent_control::interactions::InteractionError;
+    let mut f = Fixture::new().await;
+    let approval = request("item/fileChange/requestApproval", json!("resume-id"));
+    f.send(approval.clone());
+    let original = f.wait(1, InteractionState::Pending).await.remove(0);
+    let id = original.interaction_id;
+    f.send(Value::Null);
+    tokio::time::timeout(
+        Duration::from_secs(10),
+        f.resumed.wait_for(|resumed| *resumed),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert!(matches!(
+        f.app
+            .interactions()
+            .respond(&f.app, &f.session, &id, "allow")
+            .await,
+        Err(InteractionError::Other(
+            pontia_core::Error::CapabilityUnavailable(_)
+        ))
+    ));
+    f.send(approval);
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            match f
+                .app
+                .interactions()
+                .respond(&f.app, &f.session, &id, "allow")
+                .await
+            {
+                Ok(interaction) => {
+                    assert_eq!(interaction.interaction_id, id);
+                    break;
+                }
+                Err(InteractionError::Other(pontia_core::Error::CapabilityUnavailable(_))) => {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+                other => panic!("unexpected approval result: {other:?}"),
+            }
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(f.response().await["id"], "resume-id");
+    f.wait_facts(&[
+        ("interaction.blocked".into(), id.clone()),
+        ("interaction.unblocked".into(), id),
+    ])
+    .await;
     f.stop().await;
 }

@@ -16,8 +16,7 @@ interface Operation {
   trigger: Trigger;
   started?: InternalEvent;
   terminal?: InternalEvent;
-  settled: Set<string>;
-  reporting: Promise<void>;
+  submitted: Set<string>;
   awaitingNativeResult: boolean;
   failureKey?: string;
 }
@@ -67,12 +66,6 @@ export class PiCompaction {
 
   get running(): boolean {
     return !!this.state.active && !this.state.active.terminal;
-  }
-
-  async reconnect(): Promise<void> {
-    for (const operation of this.state.operations.values()) {
-      if (operation.started) await this.publish(operation, !operation.awaitingNativeResult);
-    }
   }
 
   request(operationId: string, compact: () => void): void {
@@ -173,8 +166,7 @@ export class PiCompaction {
     const operation: Operation = {
       id,
       trigger: reason,
-      settled: new Set(),
-      reporting: Promise.resolve(),
+      submitted: new Set(),
       awaitingNativeResult: false,
     };
     this.state.operations.set(id, operation);
@@ -202,20 +194,14 @@ export class PiCompaction {
 
   private publish(operation: Operation, includeTerminal = true): Promise<void> {
     operation.started ??= this.fact("session.compaction_started", operation);
-    operation.reporting = operation.reporting
-      .catch(() => {})
-      .then(async () => {
-        for (const event of [
-          operation.started!,
-          includeTerminal ? operation.terminal : undefined,
-        ]) {
-          if (!event || operation.settled.has(event.type)) continue;
-          const result = await this.state.report(event);
-          if (!result.accepted && !result.conflict) return;
-          operation.settled.add(event.type);
-        }
-      });
-    return operation.reporting;
+    const receipts = [];
+    for (const event of [operation.started, includeTerminal ? operation.terminal : undefined]) {
+      if (event && !operation.submitted.has(event.type)) {
+        operation.submitted.add(event.type);
+        receipts.push(this.state.report(event));
+      }
+    }
+    return Promise.all(receipts).then(() => {});
   }
 }
 

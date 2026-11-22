@@ -262,12 +262,15 @@ impl Harness {
             .unwrap();
     }
 
-    async fn restart(&mut self) {
+    async fn stop_transport(&mut self) {
         self.app.shutdown().notify();
         tokio::time::timeout(Duration::from_secs(5), self.tasks.take().unwrap().join())
             .await
             .unwrap()
             .unwrap();
+    }
+
+    async fn start_transport(&mut self) {
         let mut clients = ClientRegistry::default();
         clients.register(pontia_client_acp::registration_with_relay(
             self.config.clone(),
@@ -276,12 +279,18 @@ impl Harness {
         self.app = AgentControl::builder(self.app.db(), self.root.path().into())
             .clients(clients.clone())
             .build();
+        self.app.interactions().recover_pending().await.unwrap();
         self.tasks = Some(
             clients
                 .start_services(self.app.clone(), ClientServicePhase::Transport)
                 .await
                 .unwrap(),
         );
+    }
+
+    async fn restart(&mut self) {
+        self.stop_transport().await;
+        self.start_transport().await;
     }
 
     async fn wait_requests(&self, method: &str, count: usize) {
@@ -2282,5 +2291,152 @@ async fn active_prompt_survives_daemon_restart_without_replay_and_releases_the_n
         .unwrap();
     assert_eq!(relay.observe(), pontia_runtime::ProcessObservation::Exited);
     assert_eq!(agent.observe(), pontia_runtime::ProcessObservation::Exited);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn offline_prompt_result_is_delivered_once_without_native_reexecution() {
+    let mut h = Harness::new(&[("ACP_RESULT_MARKER", "1")]).await;
+    let session = h.create("first").await.unwrap();
+    let turn = h
+        .app
+        .turn_commands()
+        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .await
+        .unwrap()
+        .unwrap();
+    h.release("update-1");
+    h.wait_turn(&session, &turn.turn_id, "running").await;
+    h.stop_transport().await;
+    h.release("release-1");
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !h.root.path().join("result-written-1").exists() {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(h.events(&session, "turn.completed").await, 0);
+    h.start_transport().await;
+    h.wait_turn(&session, &turn.turn_id, "completed").await;
+    h.restart().await;
+    h.wait_ready(&session, 2).await;
+    assert_eq!(h.events(&session, "turn.completed").await, 1);
+    assert_eq!(h.requests("session/prompt"), 1);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn reconnected_permission_delivers_the_original_response_once() {
+    let mut h = Harness::new(&[("ACP_PERMISSION", "1")]).await;
+    let session = h.create("first").await.unwrap();
+    h.app
+        .turn_commands()
+        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .await
+        .unwrap()
+        .unwrap();
+    h.release("update-1");
+    let original = h.wait_interactions(&session, 3).await;
+    h.stop_transport().await;
+    // One native request remains open after its durable Interaction expired.
+    h.app
+        .interactions()
+        .expire(&session, &original[1].interaction_id)
+        .await
+        .unwrap();
+    h.start_transport().await;
+    let id = &original[0].interaction_id;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            match h
+                .app
+                .interactions()
+                .respond(&h.app, &session, id, "once:原")
+                .await
+            {
+                Ok(_) => break,
+                Err(pontia_agent_control::interactions::InteractionError::Other(
+                    pontia_core::Error::CapabilityUnavailable(_),
+                )) => tokio::time::sleep(Duration::from_millis(10)).await,
+                Err(e) => panic!("original permission was lost: {e}"),
+            }
+        }
+        while h.events(&session, "interaction.unblocked").await != 1 {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(h.events(&session, "interaction.blocked").await, 3);
+    assert_eq!(
+        h.wire()
+            .iter()
+            .filter(|f| f.pointer("/result/outcome/optionId").is_some())
+            .count(),
+        1
+    );
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let cancellations = h
+                .wire()
+                .into_iter()
+                .filter(|frame| {
+                    frame
+                        .pointer("/result/outcome/outcome")
+                        .and_then(Value::as_str)
+                        == Some("cancelled")
+                })
+                .count();
+            if cancellations == 1 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(h.events(&session, "interaction.unblocked").await, 1);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn terminal_session_rejects_the_relay_and_discards_its_offline_result() {
+    let mut h = Harness::new(&[("ACP_RESULT_MARKER", "1")]).await;
+    let session = h.create("first").await.unwrap();
+    let turn = h
+        .app
+        .turn_commands()
+        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .await
+        .unwrap()
+        .unwrap();
+    h.release("update-1");
+    h.wait_turn(&session, &turn.turn_id, "running").await;
+    h.stop_transport().await;
+    sqlx::query("UPDATE sessions SET state='exited' WHERE session_id=?")
+        .bind(&session)
+        .execute(&h.app.db())
+        .await
+        .unwrap();
+    h.release("release-1");
+    h.start_transport().await;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let log = std::fs::read_to_string(h.root.path().join("state/acp-relay.log")).unwrap();
+            if log.contains("permanent attachment rejection") {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| {
+        panic!(
+            "relay did not retire: {}",
+            std::fs::read_to_string(h.root.path().join("state/acp-relay.log")).unwrap()
+        )
+    });
+    assert_eq!(h.events(&session, "turn.completed").await, 0);
     h.stop().await;
 }

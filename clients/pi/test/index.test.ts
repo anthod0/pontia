@@ -1804,12 +1804,12 @@ describe("pontia pi extension lifecycle", () => {
       report_key: expect.any(String),
       data: { previous_leaf_id: "entry_before_turn" },
     });
-    releaseStarted();
     await starting;
 
     leafId = "entry_after_turn";
     await handlers.agent_end({ messages: [] }, hookContext);
 
+    releaseStarted();
     const completed = report.mock.calls.find(([, event]) => event.type === "turn.completed")?.[1];
     expect(completed?.data).toMatchObject({
       terminal_leaf_id: "entry_after_turn",

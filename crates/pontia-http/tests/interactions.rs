@@ -336,9 +336,10 @@ async fn pages_are_ordered_scoped_and_validate_query_parameters() {
 }
 
 #[tokio::test]
-async fn process_restart_expires_live_records_and_preserves_history() {
+async fn restart_preserves_confirmed_requests_and_expires_unconfirmed_requests_after_grace() {
     let f = Fixture::new().await;
     let pending = f.register("pending").await;
+    let reconfirmed = f.register("reconfirmed").await;
     let resolving = f.register("resolving").await;
     sqlx::query("UPDATE interactions SET state='resolving' WHERE interaction_id=?")
         .bind(&resolving.interaction_id)
@@ -372,9 +373,67 @@ async fn process_restart_expires_live_records_and_preserves_history() {
     restarted
         .control()
         .interactions()
-        .expire_leftovers()
+        .recover_pending()
         .await
         .unwrap();
+    let service = restarted.control().interactions();
+    let (status, body) = request(
+        restarted.clone(),
+        "PUT",
+        &format!("{}/response", f.path(&pending.interaction_id)),
+        Some(json!({"option_key":"proceed-once"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "capability_unavailable");
+    assert_eq!(
+        service
+            .get(&f.session, &pending.interaction_id)
+            .await
+            .unwrap()
+            .state,
+        InteractionState::Pending
+    );
+    assert_eq!(
+        service
+            .register(f.choice("reconfirmed"))
+            .await
+            .unwrap()
+            .interaction_id,
+        reconfirmed.interaction_id
+    );
+    assert_eq!(
+        service
+            .get(&f.session, &resolving.interaction_id)
+            .await
+            .unwrap()
+            .state,
+        InteractionState::Expired
+    );
+    tokio::time::pause();
+    tokio::time::advance(std::time::Duration::from_secs(60)).await;
+    tokio::time::resume();
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while service
+            .get(&f.session, &pending.interaction_id)
+            .await
+            .unwrap()
+            .state
+            == InteractionState::Pending
+        {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        service
+            .get(&f.session, &reconfirmed.interaction_id)
+            .await
+            .unwrap()
+            .state,
+        InteractionState::Pending
+    );
     for i in [pending, resolving] {
         assert_eq!(
             restarted
@@ -559,4 +618,42 @@ async fn concurrent_registrations_share_an_interaction_and_a_notification() {
             .len(),
         1
     );
+}
+
+#[tokio::test]
+async fn settlement_replay_preserves_an_expired_background_interaction() {
+    let f = Fixture::new().await;
+    let service = f.app.control().interactions();
+    let row = f.register("permission").await;
+    service
+        .expire(&f.session, &row.interaction_id)
+        .await
+        .unwrap();
+    let digest = "a".repeat(64);
+    for _ in 0..2 {
+        assert_eq!(
+            service
+                .settle(&f.session, "permission", &digest, "settled", "resolved")
+                .await
+                .unwrap(),
+            row.interaction_id
+        );
+    }
+    assert!(matches!(
+        service
+            .settle(&f.session, "permission", &digest, "settled", "expired")
+            .await,
+        Err(pontia_core::Error::StateConflict(_))
+    ));
+    let saved = service.get(&f.session, &row.interaction_id).await.unwrap();
+    assert_eq!(saved.state, InteractionState::Expired);
+    assert!(saved.response.is_none());
+    let count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM events WHERE session_id=? AND event_type='interaction.unblocked'",
+    )
+    .bind(&f.session)
+    .fetch_one(&f.app.control().db())
+    .await
+    .unwrap();
+    assert_eq!(count, 0);
 }

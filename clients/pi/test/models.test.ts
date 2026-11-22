@@ -92,13 +92,14 @@ async function fixture(failInitialModelReport = false) {
 test("Pi reports provider-qualified models at startup, on native changes and on reconnect", async () => {
   const f = await fixture();
   const control = f.controls[0];
+  await vi.waitFor(() => expect(f.events.at(-1)?.type).toBe("session.model_updated"));
   expect(f.events.at(-1)).toMatchObject({
     type: "session.model_updated",
     report_key: expect.stringMatching(/\S/),
     data: { model: "one/shared/name", runtime_id: "rt_models" },
   });
   await f.nativeSelect(f.available[1]);
-  expect(f.events.at(-1)?.data.model).toBe("two/shared/name");
+  await vi.waitFor(() => expect(f.events.at(-1)?.data.model).toBe("two/shared/name"));
   const selection = structuredClone(f.events.at(-1));
   f.events.length = 0;
   await control();

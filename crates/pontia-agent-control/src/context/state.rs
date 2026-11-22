@@ -127,7 +127,10 @@ impl AgentControl {
                     changes: Default::default(),
                     ingest: ingest.clone(),
                     agent_events: builder.agent_events,
-                    interactions: crate::interactions::InteractionService::new(ingest),
+                    interactions: crate::interactions::InteractionService::new(
+                        ingest,
+                        builder.shutdown.subscribe(),
+                    ),
                     live_output: builder.live_output,
                 },
                 lifecycle: LifecycleState {

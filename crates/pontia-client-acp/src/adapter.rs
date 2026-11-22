@@ -16,7 +16,6 @@ use agent_client_protocol::v1::schema::{
 };
 use pontia_agent_control::{
     AgentBindingService, AgentControl, EventIngestService, PontiaEventType,
-    UpsertAgentBindingRequest,
     client_contract::{
         AgentClientCapabilities, ClientExitMode, ClientExitOutcome, ClientInteractions,
         ClientOperation, ClientService, ClientServicePhase, ClientSession, ClientSessionDetails,
@@ -259,7 +258,7 @@ impl ClientSession for AcpAdapter {
                     definition.new_session_instructions_meta_key.as_deref(),
                 ).await?;
                 if let Some(model) = &request.model {
-                    crate::models::select(&peer, &events, &request.session_id, model, binding.is_some()).await?;
+                    crate::models::select(&peer, model, binding.is_some()).await?;
                 }
                 let key = identity::encode(selected, &native.to_string())?;
                 let mut state = peer.state.lock().await;
@@ -269,49 +268,54 @@ impl ClientSession for AcpAdapter {
                 let terminal: bool = sqlx::query_scalar("SELECT state='exited' FROM sessions WHERE session_id=?")
                     .bind(&request.session_id).fetch_one(&pool).await?;
                 if terminal { return Err(Error::StateConflict("ACP Session exited during recovery".into())); }
-                bindings
-                    .upsert_binding(UpsertAgentBindingRequest {
-                        session_id: request.session_id.clone(),
-                        client_type: "acp".into(),
-                        launch_cwd: cwd.display().to_string(),
-                        client_session_key: key.clone(),
-                        client_session_file: None,
-                        metadata: metadata.clone(),
-                    })
-                    .await?;
                 state.native = Some(native);
                 state.blocked = binding.is_some() && sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM turns WHERE session_id=? AND state IN ('queued','running'))")
                     .bind(&request.session_id).fetch_one(&pool).await?;
-                let setup_key = format!("acp:setup:{}", pontia_core::ids::new_event_id());
-                if let Some(model) = &state.current_model {
-                    crate::models::report(
-                        &events, &request.session_id, &runtime, model, setup_key.clone(),
-                    ).await?;
-                }
                 state.ready = true;
-                peer.remember(&state, Some(&key)).await?;
-                peer::runtime_event(
-                    &events,
-                    &request.session_id,
-                    &runtime,
-                    PontiaEventType::RuntimeReady,
-                    json!({}),
-                )
-                .await?;
-                peer::fact(
-                    &events, &request.session_id, &runtime, None,
-                    pontia_core::domain::EventType::SessionReady, setup_key,
-                    json!({"client_session_key":key,"launch_cwd":cwd.display().to_string(),"binding_metadata":metadata}),
-                ).await?;
-
-                state.refresh_capabilities();
-                Ok(())
+                let params = json!({"context":crate::connection::context(&state),
+                    "setup":crate::relay::Observation::Setup {binding:key, metadata, model:state.current_model.clone(),cwd:cwd.display().to_string()}});
+                drop(state);
+                Ok(params)
             }
             .await;
-            if setup.is_err() {
-                let _ = peer.terminate().await;
+            let params = match setup {
+                Ok(params) => params,
+                Err(error) => {
+                    let _ = peer.terminate().await;
+                    return Err(error);
+                }
+            };
+            if let Err(error) = peer.relay.call("relay.setup", params).await {
+                // A lost receipt can leave the immutable setup in the original relay's FIFO.
+                // Inspect that relay after reattachment without reissuing native setup commands.
+                loop {
+                    if self.stopped.load(Ordering::Acquire)
+                        || peer.relay.process.observe()
+                            == pontia_runtime::ProcessObservation::Exited
+                    {
+                        return Err(error);
+                    }
+                    let current = self.peers.lock().await.get(&request.session_id).cloned();
+                    if let Some(current) = current {
+                        if current.relay.process != peer.relay.process {
+                            return Err(error);
+                        }
+                        if let Ok(status) = current.relay.call("relay.status", json!({})).await {
+                            match status["setup_status"].as_str() {
+                                Some("confirmed") => {
+                                    current.state.lock().await.refresh_capabilities();
+                                    break;
+                                }
+                                Some("pending") => {}
+                                _ => return Err(error),
+                            }
+                        }
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                }
             }
-            setup
+            peer.state.lock().await.refresh_capabilities();
+            Ok(())
         })
     }
 

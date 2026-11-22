@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { HistoryContext } from "./history.js";
 import { PiCompaction } from "./compaction.js";
-import { connectPi, type ControlInput } from "./control-socket.js";
+import { connectPi, type ControlInput, type PiControlBinding } from "./control-socket.js";
 import { RpcError, type RuntimeConnection } from "../shared/control-socket.js";
 import { defaultHookLogFile, type EnvLike, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
@@ -51,7 +51,16 @@ import { isActiveRegisteredWorkspace } from "./workspace.js";
 
 const extensionKey = Symbol.for("pontia.pi.extension");
 const registry = globalThis as typeof globalThis & {
-  [extensionKey]?: { owner?: symbol; forkParentSessionId?: string };
+  [extensionKey]?: {
+    owner?: symbol;
+    forkParentSessionId?: string;
+    reload?: {
+      home: string;
+      context: SessionContext;
+      control: PiControlBinding;
+      reporter?: EventReporter;
+    };
+  };
 };
 const extensionState = (registry[extensionKey] ??= {});
 
@@ -77,10 +86,11 @@ export interface PontiaPiExtensionDependencies {
 }
 
 interface ActiveTurnState {
-  context: TurnContext & { turnId: string };
+  context: TurnContext;
+  start: ReturnType<ReporterLike["report"]>;
   logFile: string;
   reporter: ReporterLike;
-  liveOutput: LiveOutputPublisherLike;
+  liveOutput?: LiveOutputPublisherLike;
   output: string;
   ended: boolean;
   // A prompted run's first user message is the Turn input; later ones were consumed mid-run.
@@ -163,13 +173,18 @@ export function createPontiaPiExtension(
       return controlSocket.request(method, params);
     },
   };
+  const reporters = new WeakMap<RuntimeConnection, EventReporter>();
   const makeReporter =
     dependencies.makeReporter ??
-    ((logFile: string) =>
-      new EventReporter({
-        logFile,
-        connection: rpcConnection,
-      }));
+    ((logFile: string) => {
+      const connection = controlSocket!;
+      let reporter = reporters.get(connection);
+      if (!reporter) {
+        reporter = new EventReporter({ logFile, connection });
+        reporters.set(connection, reporter);
+      }
+      return reporter;
+    });
   const logDiagnostic = dependencies.logDiagnostic ?? appendDiagnostic;
   const makeLiveOutputPublisher =
     dependencies.makeLiveOutputPublisher ??
@@ -184,6 +199,7 @@ export function createPontiaPiExtension(
   let lastContextUsageJson: string | undefined;
   let pendingPrompt: string | undefined;
   let controlSocket: RuntimeConnection | undefined;
+  let binding: PiControlBinding = {};
   let controlGeneration = 0;
   let piContext: ExtensionContext | undefined;
   const compaction = () => {
@@ -231,6 +247,17 @@ export function createPontiaPiExtension(
     if (!result.accepted) throw new Error("Pi model observation was not accepted");
   }
 
+  function reportReady(context: SessionContext, logFile: string): void {
+    readyReported = true;
+    void makeReporter(logFile)
+      .report(context, buildSessionReadyEvent(context))
+      .then((result) => {
+        if (!result.accepted && boundSessionContext === context) readyReported = false;
+      })
+      .catch(controlError);
+    void reportModel().catch(controlError);
+  }
+
   function sendControlInput(submission: ControlInput): void {
     if (!boundSessionContext) throw new Error("Pi session is not bound");
     try {
@@ -265,8 +292,16 @@ export function createPontiaPiExtension(
     controlGeneration += 1;
     queuedControlInput = undefined;
     const socket = controlSocket;
+    binding = {};
     controlSocket = undefined;
-    if (socket) await socket.close().catch(controlError);
+    if (!socket) return;
+    const reporter = reporters.get(socket);
+    if (reporter)
+      void reporter
+        .drained()
+        .then(() => socket.close())
+        .catch(controlError);
+    else await socket.close().catch(controlError);
   }
 
   async function registrationConnection(): Promise<RuntimeConnection> {
@@ -325,10 +360,8 @@ export function createPontiaPiExtension(
         if (idle) dispatchQueuedInput();
       },
       async () => {
-        if (generation !== controlGeneration)
-          throw new Error("Pi session changed during reconnect");
+        if (generation !== controlGeneration) return;
         await reportModel(true);
-        await compaction()?.reconnect();
       },
       (inboxMessageId) => {
         if (generation !== controlGeneration || reportingDisabled || !boundSessionContext) {
@@ -384,6 +417,7 @@ export function createPontiaPiExtension(
           );
         },
       },
+      binding,
     );
     if (generation !== controlGeneration) {
       await socket.close();
@@ -519,9 +553,10 @@ export function createPontiaPiExtension(
     const usageJson = JSON.stringify(observation);
     if (usageJson === lastContextUsageJson) return;
     lastContextUsageJson = usageJson;
-    await activeTurn.reporter.report(
+    void activeTurn.reporter.report(
       activeTurn.context,
       buildSessionContextUsageUpdatedEvent(activeTurn.context, observation.context_usage),
+      activeTurn.start,
     );
   }
 
@@ -561,13 +596,7 @@ export function createPontiaPiExtension(
         if (boundSessionContext && !readyReported) {
           piContext = ctx;
           controlSocket!.registered(boundSessionContext);
-          readyReported = (
-            await makeReporter(logFile).report(
-              boundSessionContext,
-              buildSessionReadyEvent(boundSessionContext),
-            )
-          ).accepted;
-          await reportModel().catch(controlError);
+          reportReady(boundSessionContext, logFile);
         }
       }
       if (!boundSessionContext) return;
@@ -591,17 +620,17 @@ export function createPontiaPiExtension(
 
   pi.on("model_select", async (_event, ctx) => {
     piContext = ctx;
-    await reportModel().catch(controlError);
+    void reportModel().catch(controlError);
   });
 
   pi.on("session_before_compact", async (event) => {
-    await compaction()?.before(event).catch(controlError);
+    void compaction()?.before(event).catch(controlError);
   });
   pi.on("session_compact", async (event) => {
-    await compaction()?.completed(event).catch(controlError);
+    void compaction()?.completed(event).catch(controlError);
   });
   pi.on("session_compact_failed", async (event, ctx) => {
-    await compaction()
+    void compaction()
       ?.failed(event, leafIdFromHookContext(ctx ?? piContext))
       .catch(controlError);
   });
@@ -636,6 +665,31 @@ export function createPontiaPiExtension(
       const logFile = currentHookLogFile();
       let context: SessionContext | undefined;
 
+      const reload = extensionState.reload;
+      delete extensionState.reload;
+      if (
+        reload &&
+        reason === "reload" &&
+        reload.home === currentPontiaHome() &&
+        reload.context.clientSessionKey === sessionDetails.clientSessionKey
+      ) {
+        binding = reload.control;
+        boundSessionContext = reload.context;
+        const socket = await registrationConnection();
+        if (reload.reporter) reporters.set(socket, reload.reporter);
+        piContext = ctx;
+        sourceEnv.PONTIA_SESSION_ID = reload.context.sessionId;
+        sourceEnv.PONTIA_RUNTIME_INSTANCE_ID = reload.context.runtimeId;
+        readyReported = true;
+        void reportModel().catch(controlError);
+        return;
+      }
+      if (reload?.control.socket) {
+        const previous = reload.control.socket;
+        void Promise.resolve(reload.reporter?.drained())
+          .then(() => previous.close())
+          .catch(controlError);
+      }
       const existingSession =
         reason === "fork"
           ? undefined
@@ -752,10 +806,7 @@ export function createPontiaPiExtension(
       sourceEnv.PONTIA_RUNTIME_INSTANCE_ID = context.runtimeId;
       piContext = ctx;
       controlSocket!.registered(context);
-      readyReported = (await makeReporter(logFile).report(context, buildSessionReadyEvent(context)))
-        .accepted;
-      await reportModel().catch(controlError);
-      await compaction()?.reconnect().catch(controlError);
+      reportReady(context, logFile);
     } catch (error) {
       await closeControlSocket();
       const logFile = currentHookLogFile();
@@ -778,15 +829,26 @@ export function createPontiaPiExtension(
     delete sourceEnv.PONTIA_RUNTIME_INSTANCE_ID;
     piContext = undefined;
     readyReported = false;
+    if (event.reason === "reload" && boundSessionContext && controlSocket) {
+      extensionState.reload = {
+        home: currentPontiaHome(),
+        context: boundSessionContext,
+        control: binding,
+        reporter: reporters.get(controlSocket),
+      };
+      controlGeneration++;
+      controlSocket = undefined;
+      binding = {};
+      return;
+    }
     try {
       if (reportingDisabled || !boundSessionContext) return;
       const reason = (event as unknown as Record<string, unknown> | undefined)?.reason;
       if (reason !== "quit" && reason !== "new" && reason !== "resume" && reason !== "fork") return;
       const logFile = currentHookLogFile();
-      await makeReporter(logFile).report(
-        boundSessionContext,
-        buildSessionExitedEvent(boundSessionContext, reason),
-      );
+      void makeReporter(logFile)
+        .report(boundSessionContext, buildSessionExitedEvent(boundSessionContext, reason))
+        .catch(controlError);
     } catch (error) {
       const logFile = currentHookLogFile();
       await logDiagnostic(logFile, {
@@ -839,30 +901,38 @@ export function createPontiaPiExtension(
       const reporter = makeReporter(logFile);
       lastContextUsageJson = undefined;
       // Editing and replaying input can start another run from the same Pi leaf.
-      const started = await reporter.report(
+      const start = reporter.report(
         turnContext,
         buildTurnStartedEvent(turnContext, nextReportKey(), previousLeafId, topologyContext),
       );
-      const canonicalTurnId = started.turnId;
-      if (!started.accepted || !canonicalTurnId) {
-        activeTurn = undefined;
-        await logDiagnostic(logFile, {
-          level: "error",
-          code: "turn_start_not_normalized",
-          message: "pontia did not return a canonical turn_id for turn.started",
-        });
-        return;
-      }
-      const activeContext = { ...turnContext, turnId: canonicalTurnId };
-      activeTurn = {
-        context: activeContext,
+      const state: ActiveTurnState = {
+        context: turnContext,
+        start,
         logFile,
         reporter,
-        liveOutput: makeLiveOutputPublisher(activeContext),
         output: "",
         ended: false,
         awaitingPromptMessage: prompted,
       };
+      activeTurn = state;
+      void start
+        .then(async (receipt) => {
+          if (!receipt.accepted || !receipt.turnId) {
+            if (activeTurn === state) activeTurn = undefined;
+            await logDiagnostic(logFile, {
+              level: "error",
+              code: "turn_start_not_normalized",
+              message: "pontia did not return a canonical turn_id for turn.started",
+            });
+            return;
+          }
+          state.context.turnId = receipt.turnId;
+          if (!state.ended && activeTurn === state) {
+            state.liveOutput = makeLiveOutputPublisher({ ...turnContext, turnId: receipt.turnId });
+            if (state.output) state.liveOutput.appendText(state.output);
+          }
+        })
+        .catch(controlError);
     } catch (error) {
       if (!boundSessionContext) await closeControlSocket();
       pendingPrompt = undefined;
@@ -886,7 +956,7 @@ export function createPontiaPiExtension(
       return;
     }
     const text = userTextFromMessage(message);
-    if (text) activeTurn.liveOutput.appendUserInput(text);
+    if (text) activeTurn.liveOutput?.appendUserInput(text);
   });
 
   pi.on("message_update", async (event, ctx) => {
@@ -894,11 +964,11 @@ export function createPontiaPiExtension(
     await reportContextUsageFromHookEvent(event, ctx);
 
     const thinking = thinkingDeltaFromEvent(event);
-    if (thinking) activeTurn.liveOutput.appendReasoning(thinking);
+    if (thinking) activeTurn.liveOutput?.appendReasoning(thinking);
     const delta = assistantDeltaFromEvent(event);
-    if (delta) activeTurn.liveOutput.appendText(delta);
+    if (delta) activeTurn.liveOutput?.appendText(delta);
     const toolCall = completeToolCallFromMessageUpdate(event);
-    if (toolCall) activeTurn.liveOutput.appendToolCall(toolCall);
+    if (toolCall) activeTurn.liveOutput?.appendToolCall(toolCall);
 
     const fullText = assistantTextFromMessage(
       (event as unknown as Record<string, unknown> | undefined)?.message,
@@ -911,7 +981,7 @@ export function createPontiaPiExtension(
   });
 
   const publishToolExecution = (event: unknown) => {
-    if (activeTurn && !activeTurn.ended) activeTurn.liveOutput.toolExecution(event);
+    if (activeTurn && !activeTurn.ended) activeTurn.liveOutput?.toolExecution(event);
   };
   pi.on("tool_execution_start", publishToolExecution);
   pi.on("tool_execution_update", publishToolExecution);
@@ -937,48 +1007,29 @@ export function createPontiaPiExtension(
     activeTurn.ended = true;
 
     const state = activeTurn;
-    try {
-      const terminalLeafId = leafIdFromHookContext(ctx);
-      if (agentEndWasInterrupted(event, ctx?.signal)) {
-        await state.reporter.report(
-          state.context,
-          buildTurnInterruptedEvent(state.context, terminalLeafId),
-        );
-        return;
+    const terminalLeafId = leafIdFromHookContext(ctx);
+    const report = (event: InternalEvent) => {
+      void state.reporter.report(state.context, event, state.start).catch(controlError);
+    };
+    if (agentEndWasInterrupted(event, ctx?.signal)) {
+      report(buildTurnInterruptedEvent(state.context, terminalLeafId));
+    } else {
+      const failure = errorMessageFromAgentEnd(event);
+      if (failure) {
+        report(buildTurnFailedEvent(state.context, failure, terminalLeafId));
+      } else {
+        const output = (
+          state.output ||
+          lastAssistantTextFromMessages(
+            (event as unknown as Record<string, unknown> | undefined)?.messages,
+          ) ||
+          ""
+        ).trim();
+        if (output) report(buildTurnOutputEvent(state.context, output));
+        report(buildTurnCompletedEvent(state.context, terminalLeafId));
       }
-
-      const failureMessage = errorMessageFromAgentEnd(event);
-      if (failureMessage) {
-        await state.reporter.report(
-          state.context,
-          buildTurnFailedEvent(state.context, failureMessage, terminalLeafId),
-        );
-        return;
-      }
-
-      if (!state.output) {
-        const finalText = lastAssistantTextFromMessages(
-          (event as unknown as Record<string, unknown> | undefined)?.messages,
-        );
-        if (finalText) state.output = finalText;
-      }
-
-      const output = state.output.trim();
-      if (output.length > 0) {
-        const outputResult = await state.reporter.report(
-          state.context,
-          buildTurnOutputEvent(state.context, output),
-        );
-        if (!outputResult.accepted) return;
-      }
-
-      await state.reporter.report(
-        state.context,
-        buildTurnCompletedEvent(state.context, terminalLeafId),
-      );
-    } finally {
-      await state.liveOutput.close();
     }
+    void state.liveOutput?.close().catch(controlError);
   });
 }
 

@@ -24,6 +24,10 @@ fn model_option(
     })
 }
 
+pub(crate) fn current(options: &[SessionConfigOption]) -> Option<String> {
+    model_option(options).map(|(_, select)| select.current_value.to_string())
+}
+
 fn values(select: &SessionConfigSelect) -> impl Iterator<Item = &SessionConfigSelectOption> {
     let (flat, groups) = match &select.options {
         SessionConfigSelectOptions::Ungrouped(options) => (options.as_slice(), &[][..]),
@@ -53,13 +57,7 @@ fn catalog(options: &[SessionConfigOption]) -> AgentClientModels {
     }
 }
 
-pub(crate) async fn select(
-    peer: &std::sync::Arc<Peer>,
-    events: &EventIngestService,
-    session: &str,
-    model: &str,
-    resuming: bool,
-) -> Result<()> {
+pub(crate) async fn select(peer: &std::sync::Arc<Peer>, model: &str, resuming: bool) -> Result<()> {
     let state = peer.state.lock().await;
     let Some((option, select)) = model_option(&state.config_options) else {
         // An Agent may restore its own model without offering a selector on load.
@@ -85,8 +83,6 @@ pub(crate) async fn select(
         ));
     let key = serde_json::to_string(request.id())?;
     let result_peer = peer.clone();
-    let events = events.clone();
-    let session = session.to_owned();
     let model = model.to_owned();
     let (send, receive) = tokio::sync::oneshot::channel();
     request
@@ -99,15 +95,7 @@ pub(crate) async fn select(
                         "ACP connection closed during model selection".into(),
                     ));
                 }
-                replace(
-                    &mut state,
-                    &events,
-                    &session,
-                    &result_peer.runtime,
-                    response.config_options,
-                    response.meta.as_ref(),
-                )
-                .await?;
+                replace(&mut state, response.config_options);
                 if state.current_model.as_deref() != Some(&model) {
                     return Err(Error::Domain(format!(
                         "ACP Agent did not select model: {model}"
@@ -127,31 +115,9 @@ pub(crate) async fn select(
         .map_err(|_| Error::ControlUnknown("ACP model selection response was lost".into()))?
 }
 
-pub(crate) async fn replace(
-    state: &mut SessionState,
-    events: &EventIngestService,
-    session: &str,
-    runtime: &str,
-    options: Vec<SessionConfigOption>,
-    meta: Option<&agent_client_protocol::v1::schema::Meta>,
-) -> Result<()> {
-    let current = model_option(&options).map(|(_, select)| select.current_value.to_string());
-    if state.ready
-        && let Some(model) = &current
-        && state.current_model.as_ref() != Some(model)
-    {
-        report(
-            events,
-            session,
-            runtime,
-            model,
-            crate::transport::frame_key(meta)?,
-        )
-        .await?;
-    }
-    state.current_model = current;
+pub(crate) fn replace(state: &mut SessionState, options: Vec<SessionConfigOption>) {
+    state.current_model = current(&options);
     state.config_options = options;
-    Ok(())
 }
 
 pub(crate) async fn report(

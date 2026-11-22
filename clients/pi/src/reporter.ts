@@ -1,3 +1,4 @@
+import { ReportQueue } from "../shared/report-queue.js";
 import { appendDiagnostic } from "./diagnostics.js";
 import { RpcError, type RuntimeConnection } from "../shared/control-socket.js";
 import type { InternalEvent } from "./events.js";
@@ -15,6 +16,7 @@ export interface EventReporterOptions {
 }
 
 export class EventReporter {
+  private readonly queue = new ReportQueue();
   private readonly connection: Pick<RuntimeConnection, "request">;
   private readonly logFile: string;
 
@@ -23,55 +25,48 @@ export class EventReporter {
     this.logFile = options.logFile;
   }
 
-  async report(context: { runtimeId: string }, event: InternalEvent): Promise<EventReportResult> {
-    const attempts = event.type === "turn.started" ? 3 : 1;
-    let lastError: unknown;
+  drained(): Promise<void> {
+    return this.queue.drained();
+  }
 
-    for (let attempt = 0; attempt < attempts; attempt++) {
-      if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
-      try {
+  async report(
+    context: { runtimeId: string },
+    event: InternalEvent,
+    start?: Promise<EventReportResult>,
+  ): Promise<EventReportResult> {
+    try {
+      return await this.queue.enqueue(async () => {
+        if (start && !event.turn_id) {
+          const { turnId } = await start;
+          if (!turnId) throw new RpcError(-32602, "Pi Turn start was rejected");
+          event.turn_id = turnId;
+        }
         const body = await this.connection.request("event.report", {
           runtime_id: context.runtimeId,
           event,
         });
-        const record =
-          body && typeof body === "object" ? (body as Record<string, unknown>) : undefined;
-        if (record?.accepted !== true) {
-          if (record?.accepted === false) {
-            lastError = new Error("Pi event report was rejected");
-            break;
-          }
-          throw new Error("Pi event RPC returned an invalid acknowledgement");
-        }
-        if (
-          event.type === "turn.started" &&
-          (typeof record.turn_id !== "string" || !record.turn_id)
-        ) {
-          throw new Error("Pi turn.started acknowledgement has no canonical turn_id");
+        const receipt = body as Record<string, unknown> | null;
+        if (receipt?.accepted !== true)
+          throw new RpcError(-32602, "Invalid Pi event acknowledgement");
+        if (event.type === "turn.started" && typeof receipt.turn_id !== "string") {
+          throw new RpcError(-32602, "Pi turn.started acknowledgement has no canonical turn_id");
         }
         return {
           accepted: true,
-          eventId: typeof record.event_id === "string" ? record.event_id : undefined,
-          turnId: typeof record.turn_id === "string" ? record.turn_id : undefined,
+          eventId: typeof receipt.event_id === "string" ? receipt.event_id : undefined,
+          turnId: typeof receipt.turn_id === "string" ? receipt.turn_id : undefined,
         };
-      } catch (error) {
-        lastError = error;
-        if (error instanceof RpcError && error.code !== -32603) break;
-      }
+      });
+    } catch (error) {
+      await appendDiagnostic(this.logFile, {
+        level: "error",
+        code: "pi_event_report_failed",
+        message: `Discarding Pi report ${event.type}`,
+        details: { event_type: event.type, report_key: event.report_key, error: String(error) },
+      });
+      return error instanceof RpcError && error.code === -32009
+        ? { accepted: false, conflict: true }
+        : { accepted: false };
     }
-
-    await appendDiagnostic(this.logFile, {
-      level: "error",
-      code: "pi_event_report_failed",
-      message: `Pi event RPC failed for ${event.type}`,
-      details: {
-        event_type: event.type,
-        report_key: event.report_key,
-        error: lastError instanceof Error ? lastError.message : String(lastError),
-      },
-    });
-    return lastError instanceof RpcError && lastError.code === -32009
-      ? { accepted: false, conflict: true }
-      : { accepted: false };
   }
 }

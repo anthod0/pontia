@@ -1,3 +1,5 @@
+#[path = "support/acp_relay.rs"]
+mod acp_relay;
 use axum::{
     body::Body,
     http::{Request, StatusCode},
@@ -12,10 +14,7 @@ use std::{collections::BTreeMap, time::Duration};
 use tower::ServiceExt;
 
 fn registration(config: AcpAgents) -> pontia_agent_control::clients::ClientRegistration {
-    pontia_client_acp::registration_with_relay(
-        config,
-        env!("CARGO_BIN_EXE_pontia-http-test-relay").into(),
-    )
+    pontia_client_acp::registration_with_relay(config, acp_relay::executable())
 }
 
 async fn call(app: &AppState, method: &str, path: &str, body: Value) -> (StatusCode, Value) {

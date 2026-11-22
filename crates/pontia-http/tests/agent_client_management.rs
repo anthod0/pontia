@@ -1,3 +1,5 @@
+#[path = "support/acp_relay.rs"]
+mod acp_relay;
 use axum::{
     Router,
     body::{Body, to_bytes},
@@ -447,7 +449,7 @@ async fn detection_refreshes_from_files_without_changing_enabled_settings() {
             .insert("PATH".into(), root.display().to_string());
         pontia_client_acp::registration_with_relay(
             pontia_client_acp::AcpAgents::new([("grok".into(), agent)]),
-            env!("CARGO_BIN_EXE_pontia-http-test-relay").into(),
+            acp_relay::executable(),
         )
     })
     .await;

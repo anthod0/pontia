@@ -14,7 +14,7 @@ import {
   contextUsageFromPiEvent,
   contextUsageFromPiHook,
 } from "../src/events.js";
-import { RpcError } from "../shared/control-socket.js";
+import { AttachmentRejected, RpcError } from "../shared/control-socket.js";
 import { EventReporter } from "../src/reporter.js";
 import { tempDir } from "./temp-dir.js";
 
@@ -294,21 +294,38 @@ describe("EventReporter", () => {
     expect(request.mock.calls[0]).toEqual(request.mock.calls[1]);
   });
 
-  test.each([new RpcError(-32603, "server error"), new Error("connection lost")])(
-    "retries uncertain turn.started failures at most three times",
-    async (error) => {
-      const logFile = await tempLogFile();
-      const request = vi.fn(async () => {
-        throw error;
-      });
-      const reporter = new EventReporter({ connection: { request }, logFile });
-      expect(await reporter.report(context, buildTurnStartedEvent(context, "entry_1"))).toEqual({
-        accepted: false,
-      });
-      expect(request).toHaveBeenCalledTimes(3);
-      expect(await readFile(logFile, "utf8")).toContain("pi_event_report_failed");
-    },
-  );
+  test("drains offline facts in order after repeated outages, a lost ACK and a conflict", async () => {
+    const logFile = await tempLogFile();
+    const output = buildTurnOutputEvent(context, "answer");
+    const terminal = buildTurnCompletedEvent(context);
+    const calls: string[] = [];
+    const stored = new Set<string>();
+    const request = vi.fn(async (_method, { event }) => {
+      calls.push(event.report_key);
+      if (calls.length <= 3) throw new Error("offline");
+      if (event === output) throw new RpcError(-32009, "conflict");
+      const duplicate = stored.has(event.report_key);
+      stored.add(event.report_key);
+      if (!duplicate) throw new Error("ack lost");
+      return { accepted: true, duplicate };
+    });
+    const reporter = new EventReporter({ connection: { request }, logFile });
+    const [failed, done] = await Promise.all([
+      reporter.report(context, output),
+      reporter.report(context, terminal),
+    ]);
+    expect(failed.conflict).toBe(true);
+    expect(done.accepted).toBe(true);
+    expect([...stored]).toEqual([terminal.report_key]);
+    expect(calls).toEqual([
+      output.report_key,
+      output.report_key,
+      output.report_key,
+      output.report_key,
+      terminal.report_key,
+      terminal.report_key,
+    ]);
+  });
 
   test("does not retry an explicit turn.started rejection", async () => {
     const request = vi.fn(async () => {
@@ -322,21 +339,15 @@ describe("EventReporter", () => {
     expect(request).toHaveBeenCalledTimes(1);
   });
 
-  test.each([new RpcError(-32603, "server error"), new Error("connection lost")])(
-    "logs report failures without inventing acceptance",
-    async (error) => {
-      const logFile = await tempLogFile();
-      const request = vi.fn(async () => {
-        throw error;
-      });
-      const reporter = new EventReporter({ connection: { request }, logFile });
-      expect(await reporter.report(context, buildTurnCompletedEvent(context))).toEqual({
-        accepted: false,
-      });
-      expect(request).toHaveBeenCalledTimes(1);
-      const log = await readFile(logFile, "utf8");
-      expect(log).toContain("pi_event_report_failed");
-      expect(log).toContain(error.message);
-    },
-  );
+  test("a permanent attachment rejection discards all remaining facts", async () => {
+    const logFile = await tempLogFile();
+    const request = vi.fn().mockRejectedValue(new AttachmentRejected("Session exited"));
+    const reporter = new EventReporter({ connection: { request }, logFile });
+    const events = [buildTurnOutputEvent(context, "answer"), buildTurnCompletedEvent(context)];
+    const results = await Promise.all(events.map((event) => reporter.report(context, event)));
+    expect(results.map((result) => result.accepted)).toEqual([false, false]);
+    expect(request).toHaveBeenCalledTimes(1);
+    const log = await readFile(logFile, "utf8");
+    for (const event of events) expect(log).toContain(event.report_key);
+  });
 });

@@ -2,7 +2,13 @@ use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
-use tokio::sync::broadcast;
+use std::{collections::HashMap, sync::Arc, time::Duration};
+use tokio::{
+    sync::{Mutex, broadcast},
+    time::Instant,
+};
+
+const RECONNECT_GRACE: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -142,6 +148,37 @@ impl ChoiceInteractionRequest {
     }
 }
 
+pub(crate) enum InteractionWrite<'a> {
+    Register(&'a ChoiceInteractionRequest, &'a str),
+    Settle {
+        id: &'a str,
+        key: &'a str,
+        outcome: &'a str,
+    },
+}
+
+impl InteractionWrite<'_> {
+    pub(crate) async fn apply(&self, tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Result<()> {
+        match self {
+            Self::Register(request, id) => request.insert(tx, id).await,
+            Self::Settle { id, key, outcome } => {
+                let updated = sqlx::query("UPDATE interactions SET settlement_report_key=?, settlement_outcome=?, state=CASE WHEN ?='expired' AND state IN ('pending','resolving') THEN 'expired' ELSE state END WHERE interaction_id=? AND (settlement_report_key IS NULL OR (settlement_report_key=? AND settlement_outcome=?))")
+                    .bind(*key).bind(*outcome).bind(*outcome).bind(*id).bind(*key).bind(*outcome).execute(&mut **tx).await;
+                match updated {
+                    Ok(result) if result.rows_affected() > 0 => Ok(()),
+                    Err(sqlx::Error::Database(e)) if e.is_unique_violation() => Err(
+                        Error::StateConflict("Interaction settlement key already used".into()),
+                    ),
+                    Err(error) => Err(error.into()),
+                    Ok(_) => Err(Error::StateConflict(
+                        "Conflicting interaction settlement".into(),
+                    )),
+                }
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct InteractionChanged {
     pub session_id: String,
@@ -222,13 +259,20 @@ pub struct InteractionService {
     pool: SqlitePool,
     events: crate::EventIngestService,
     changed: broadcast::Sender<InteractionChanged>,
+    awaiting_reconnect: Arc<Mutex<HashMap<String, Instant>>>,
+    shutdown: tokio::sync::watch::Receiver<bool>,
 }
 impl InteractionService {
-    pub(crate) fn new(events: crate::EventIngestService) -> Self {
+    pub(crate) fn new(
+        events: crate::EventIngestService,
+        shutdown: tokio::sync::watch::Receiver<bool>,
+    ) -> Self {
         Self {
             pool: events.db(),
             events,
             changed: broadcast::channel(1024).0,
+            awaiting_reconnect: Default::default(),
+            shutdown,
         }
     }
     pub fn subscribe(&self) -> broadcast::Receiver<InteractionChanged> {
@@ -240,13 +284,60 @@ impl InteractionService {
             interaction_id: id.into(),
         });
     }
-    pub async fn expire_leftovers(&self) -> Result<()> {
-        sqlx::query(
-            "UPDATE interactions SET state='expired' WHERE state IN ('pending','resolving')",
+    pub async fn recover_pending(&self) -> Result<()> {
+        sqlx::query("UPDATE interactions SET state='expired' WHERE state='resolving'")
+            .execute(&self.pool)
+            .await?;
+        let pending: Vec<(String, String)> = sqlx::query_as(
+            "SELECT session_id, interaction_id FROM interactions WHERE state='pending'",
         )
-        .execute(&self.pool)
+        .fetch_all(&self.pool)
         .await?;
+        self.await_reconnect(pending).await;
         Ok(())
+    }
+
+    pub async fn await_reconnect(&self, pending: Vec<(String, String)>) {
+        if pending.is_empty() {
+            return;
+        }
+        let deadline = Instant::now() + RECONNECT_GRACE;
+        let mut awaiting = self.awaiting_reconnect.lock().await;
+        awaiting.extend(pending.iter().map(|(_, id)| (id.clone(), deadline)));
+        let service = self.clone();
+        tokio::spawn(async move {
+            let mut shutdown = service.shutdown.clone();
+            if *shutdown.borrow() {
+                return;
+            }
+            tokio::select! {
+                _ = shutdown.changed() => return,
+                _ = tokio::time::sleep_until(deadline) => {}
+            }
+            for (session, id) in pending {
+                loop {
+                    let mut awaiting = service.awaiting_reconnect.lock().await;
+                    if *shutdown.borrow() || awaiting.get(&id) != Some(&deadline) {
+                        break;
+                    }
+                    match service.expire(&session, &id).await {
+                        Ok(()) => {
+                            awaiting.remove(&id);
+                            break;
+                        }
+                        Err(error) if transient_storage_error(&error) => {
+                            tracing::warn!(%session, %id, %error, "Retrying interaction expiry");
+                        }
+                        Err(error) => {
+                            tracing::error!(%session, %id, %error, "Interaction expiry failed");
+                            break;
+                        }
+                    }
+                    drop(awaiting);
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                }
+            }
+        });
     }
     pub async fn register(&self, request: ChoiceInteractionRequest) -> Result<Interaction> {
         if request.authorization_digest.len() != 64
@@ -262,8 +353,12 @@ impl InteractionService {
         if request.report_key.trim().is_empty() {
             return Err(Error::Domain("Missing interaction report_key".into()));
         }
-        if let Some(existing) = self.registered(&request).await? {
-            return Ok(existing);
+        {
+            let mut awaiting = self.awaiting_reconnect.lock().await;
+            if let Some(existing) = self.registered(&request).await? {
+                awaiting.remove(&existing.interaction_id);
+                return Ok(existing);
+            }
         }
         let mut keys = std::collections::HashSet::new();
         if request.title.trim().is_empty()
@@ -277,7 +372,10 @@ impl InteractionService {
         let id = format!("interaction_{}", uuid::Uuid::now_v7());
         let result = if let Some(block) = &request.blocked {
             self.events
-                .register_blocked(block.fact(&request.session_id, &id), &request, &id)
+                .write_interaction(
+                    block.fact(&request.session_id, &id),
+                    InteractionWrite::Register(&request, &id),
+                )
                 .await
         } else {
             let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
@@ -296,6 +394,69 @@ impl InteractionService {
             .fetch_one(&self.pool)
             .await?
             .view()
+    }
+
+    pub async fn settle(
+        &self,
+        session: &str,
+        registration_key: &str,
+        digest: &str,
+        key: &str,
+        outcome: &str,
+    ) -> Result<String> {
+        let (interaction, original) = self
+            .registration(session, registration_key)
+            .await?
+            .ok_or_else(|| Error::StateConflict("Unknown interaction registration".into()))?;
+        if original != digest
+            || key.is_empty()
+            || !matches!(outcome, "resolved" | "expired" | "delivered")
+        {
+            return Err(Error::StateConflict(
+                "Invalid interaction settlement".into(),
+            ));
+        }
+        let id = interaction.interaction_id;
+        let previous: Option<(String,String)> = sqlx::query_as("SELECT settlement_report_key,settlement_outcome FROM interactions WHERE interaction_id=? AND settlement_report_key IS NOT NULL")
+            .bind(&id).fetch_optional(&self.pool).await?;
+        if let Some((stored_key, stored_outcome)) = previous {
+            if stored_key == key && stored_outcome == outcome {
+                return Ok(id);
+            }
+            return Err(Error::StateConflict(
+                "Conflicting interaction settlement".into(),
+            ));
+        }
+        let block: Option<(String, Option<String>, String)> = sqlx::query_as("SELECT report_key,turn_id,payload FROM events WHERE session_id=? AND event_type='interaction.blocked' AND json_extract(payload,'$.interaction_id')=?")
+            .bind(session).bind(&id).fetch_optional(&self.pool).await?;
+        let write = InteractionWrite::Settle {
+            id: &id,
+            key,
+            outcome,
+        };
+        if let Some((blocked_key, turn_id, payload)) = block {
+            let prefix = blocked_key
+                .strip_suffix(":interaction.blocked")
+                .ok_or_else(|| Error::Domain("Invalid blocked event key".into()))?;
+            self.events
+                .write_interaction(
+                    crate::ReportedFact {
+                        session_id: session.into(),
+                        turn_id,
+                        report_key: Some(format!("{prefix}:interaction.unblocked")),
+                        fact_type: pontia_core::domain::EventType::InteractionUnblocked,
+                        data: serde_json::from_str(&payload)?,
+                    },
+                    write,
+                )
+                .await?;
+        } else {
+            let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+            write.apply(&mut tx).await?;
+            tx.commit().await?;
+        }
+        self.notify(session, &id);
+        Ok(id)
     }
 
     pub async fn registration(
@@ -476,6 +637,12 @@ impl InteractionService {
             InteractionState::Expired => return Err(InteractionError::Expired),
             InteractionState::Resolving => return Err(InteractionError::Resolving),
             InteractionState::Pending => {}
+        }
+        if self.awaiting_reconnect.lock().await.contains_key(id) {
+            return Err(Error::CapabilityUnavailable(
+                "Waiting for the client to confirm this interaction".into(),
+            )
+            .into());
         }
         if !interaction.options.iter().any(|o| o.key == option) {
             return Err(InteractionError::InvalidOption);

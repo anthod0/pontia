@@ -310,18 +310,13 @@ impl ClientSession for Adapter {
                 }
                 state.input = Some(Input {
                     id: id.clone(),
-                    inbox: message.map(str::to_owned),
-                    summary: text
-                        .chars()
-                        .take(pontia_core::domain::MAX_TURN_INPUT_SUMMARY_CHARS)
-                        .collect(),
                     turn: None,
                     sequence: 0,
                 });
             }
             let result = peer
                 .connection()?
-                .request(json!({"method":"input","input_id":id,"text":text}))
+                .request(json!({"method":"input","input_id":id,"text":text,"input":{"summary":text.chars().take(pontia_core::domain::MAX_TURN_INPUT_SUMMARY_CHARS).collect::<String>(),"inbox_message_id":message}}))
                 .await;
             if let Err(error) = result {
                 let mut state = peer.state.lock().await;

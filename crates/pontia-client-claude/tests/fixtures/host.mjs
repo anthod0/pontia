@@ -46,6 +46,7 @@ if (process.argv[2] === "history") {
         .filter((v) => v.session === config.session_id && v.method === "input").length
     : 0;
   let ready = false;
+  let pendingReady;
   let connection;
   let connected = false;
   const reports = new Set();
@@ -66,6 +67,10 @@ if (process.argv[2] === "history") {
     let suffix;
     if (event.kind === "started") suffix = event.input_id + ":start";
     else if (event.kind === "permission_requested") suffix = event.permission_id;
+    else if (event.kind === "permission_settled") {
+      event.authorization_digest = "a".repeat(64);
+      return {host_id:host, sequence, event, registration_key:`claude:${host}:${event.permission_id}`,report_key:`claude:${host}:${event.permission_id}:settled`};
+    }
     else if (event.kind === "finished") suffix = event.result_id;
     else if (["ready", "model", "context_usage", "compaction"].includes(event.kind)) suffix = sequence;
     return {host_id: host, sequence, report_key: suffix && `claude:${host}:${suffix}`, event};
@@ -106,13 +111,17 @@ if (process.argv[2] === "history") {
       if (request.method === "input") {
         number++;
         if (request.text === "unknown") process.exit(0);
-        active = { id: request.input_id, text: request.text, number };
+        active = { id: request.input_id, text: request.text, input:request.input, number };
         lastInput = active.id;
         capture = active.text === "capture reports";
         history({ type: "user", uuid: active.id, message: { role: "user", content: active.text } });
         if (!ready) {
-          event({ kind: "ready", native_session_id: native });
-          event({ kind: "model", model: config.model ?? "sonnet" });
+          if (["hold first ready","lose first ready receipt"].includes(active.text)) {
+            pendingReady = hostObservation(host, ++sequence, {kind:"ready",native_session_id:native});
+            if (active.text === "lose first ready receipt") await connection.request("host.event",pendingReady);
+            connection.registered({sessionId:config.session_id,runtimeId:config.runtime_id,clientSessionKey:native});
+          } else event({ kind: "ready", native_session_id: native });
+          if (!pendingReady) event({ kind: "model", model: config.model ?? "sonnet" });
           ready = true;
         }
         // Receipt is deliberately delivered before execution begins.
@@ -259,7 +268,7 @@ if (process.argv[2] === "history") {
           confidence: "estimated",
         },
       });
-      event({ kind: "started", input_id: active.id });
+      event({ kind: "started", input_id: active.id, input:active.input });
       event({ kind: "text", input_id: active.id, item_id: "reply", delta: active.text });
       if (active.text.startsWith("approval")) {
         for (let n = 0; n < (active.text === "approval-pair" ? 2 : 1); n++) {
@@ -319,13 +328,19 @@ if (process.argv[2] === "history") {
       active = undefined;
     }
   }, 5);
-  connection = await connectRuntime(config.pontia_home, () => {}, (method, params, reply, error) => {
+  connection = await connectRuntime(config.pontia_home, error => record({method:"attach_error",code:error.code}), (method, params, reply, error) => {
     if (method === "host.status") {
-      reply({ result: { host_id: host, native_session_id: ready ? native : null, input_id: active?.id ?? lastInput ?? null, started: !!active?.started, finished: !active, closed, closing: closed, unavailable: null,
+      reply({ result: { host_id: host, pending_ready: pendingReady && {report_key:pendingReady.report_key,native_session_id:native}, native_session_id: ready ? native : null, input_id: active?.id ?? lastInput ?? null, started: !!active?.started, finished: !active, closed, closing: closed, unavailable: null,
         launch: {cwd: config.cwd, config_dir: process.env.CLAUDE_CONFIG_DIR, model: config.model, resume: config.resume} } });
     } else if (method === "host.command") { connected = true; void command(params, reply).catch(() => error(-32603, "failed")); }
     else error(-32601, "unknown");
-  }, async () => { connected = true; record({method:"attached"}); }, () => { connected = false; expire(); }, true);
+  }, async () => { connected = true; record({method:"attached"});
+    if (pendingReady) {
+      await connection.request("host.event", pendingReady);
+      pendingReady = undefined;
+      record({method:"ready_replayed"});
+    }
+  }, () => { connected = false; expire(); }, true);
   await connection.request("runtime.attach", {version: CONTROL_VERSION, session_id: config.session_id, runtime_id: config.runtime_id, client_session_key: undefined});
   connection.registered({sessionId: config.session_id, runtimeId: config.runtime_id, clientSessionKey: undefined});
   connected = true;

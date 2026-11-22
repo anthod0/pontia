@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Pi, Claude Code and ACP report completed Turns after pontiad reconnects, including Turns that finish during an outage. After a restart, pending approvals can be answered again once the client confirms the request. Unconfirmed approvals expire after 60 seconds.
+
 - Repeated permission requests reuse the original Interaction. When storage is temporarily unavailable, a blocking permission request appears after its registration and blocked event can both be saved. Conflicting replays cancel the pending approval, and later selections report that it has expired.
 
 - In Dashboard, the Todo button at the top right of a Bot chat shows only its icon, with the number of open todos as a badge.
