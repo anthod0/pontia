@@ -515,7 +515,9 @@ async fn failed_handoff_preserves_helper_failure_notice_and_never_replays_origin
     );
     let notifications: Vec<_> = inputs
         .iter()
-        .filter(|input| input.session_id == new && input.input.starts_with("Source: System"))
+        .filter(|input| {
+            input.session_id == new && input.input.starts_with("Source: System Notification\n")
+        })
         .collect();
     assert_eq!(notifications.len(), 1);
     assert!(notifications[0].input.contains(&worker));
