@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { testDevice } from "../deviceFixture";
 import { ApiError } from "../../src/api/errors";
 import type { Bot, SessionView } from "../../src/api/types";
-import { openDashboardTab, rememberLastPage } from "../../src/lib/lastPage";
+import { openDashboardTab, rememberLastPage, returnToLastPage } from "../../src/lib/lastPage";
 import DashboardEntryPage from "../../src/pages/DashboardEntryPage.svelte";
 
 const goto = vi.hoisted(() => vi.fn(async () => {}));
@@ -113,4 +113,101 @@ test("returning to New Chat later in the same tab keeps New Chat", async () => {
   first.unmount();
   render(DashboardEntryPage);
   expect(screen.getByText("New Chat")).toBeInTheDocument();
+});
+
+test.each([
+  ["Bot chat", { kind: "bot", id: "pontia" }, "/dashboard/bots/pontia"],
+  ["Session chat", { kind: "chat", id: "sess-1" }, "/dashboard/chat/sess-1"],
+] as const)(
+  "Back to chat reopens the last %s after settings was reloaded",
+  async (_name, page, path) => {
+    rememberLastPage("local", page);
+    vi.spyOn(testDevice.api, "listBots").mockResolvedValue([bot]);
+    vi.spyOn(testDevice.api, "getSession").mockResolvedValue({
+      session_id: "sess-1",
+    } as SessionView);
+    openTab("/dashboard/settings/common");
+    // A reload keeps only storage; the tab already showed the Dashboard, so only Back to chat restores.
+    sessionStorage.clear();
+    sessionStorage.setItem("pontia.tabOpened", "1");
+    openDashboardTab();
+    returnToLastPage();
+    window.history.replaceState({}, "", "/dashboard");
+    render(DashboardEntryPage);
+    await waitFor(() => expect(goto).toHaveBeenCalledWith(path, { replaceState: true }));
+  },
+);
+
+test.each([
+  ["an exited Session", { session_id: "sess-1", state: "exited", archived_at: null }],
+  ["a failed Session", { session_id: "sess-1", state: "error", archived_at: null }],
+  ["an archived Session", { session_id: "sess-1", state: "idle", archived_at: "now" }],
+])("Back to chat opens New Chat and forgets %s", async (_name, session) => {
+  rememberLastPage("local", { kind: "chat", id: "sess-1" });
+  vi.spyOn(testDevice.api, "getSession").mockResolvedValue(session as SessionView);
+  openTab("/dashboard/settings/common");
+  returnToLastPage();
+  window.history.replaceState({}, "", "/dashboard");
+  render(DashboardEntryPage);
+  expect(await screen.findByText("New Chat")).toBeInTheDocument();
+  expect(savedPage()).toBeNull();
+  expect(goto).not.toHaveBeenCalled();
+});
+
+test("Back to chat without a last page opens New Chat", async () => {
+  openTab("/dashboard/settings/common");
+  returnToLastPage();
+  window.history.replaceState({}, "", "/dashboard");
+  render(DashboardEntryPage);
+  expect(screen.getByText("New Chat")).toBeInTheDocument();
+});
+
+test("Back to chat to a device that connects later still reopens its last page", async () => {
+  rememberLastPage("local", { kind: "chat", id: "sess-1" });
+  vi.spyOn(testDevice.api, "getSession").mockResolvedValue({ session_id: "sess-1" } as SessionView);
+  openTab("/dashboard/settings/common");
+  returnToLastPage();
+  window.history.pushState({}, "", "/dashboard");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  render(DashboardEntryPage);
+  await waitFor(() =>
+    expect(goto).toHaveBeenCalledWith("/dashboard/chat/sess-1", { replaceState: true }),
+  );
+});
+
+test("a Back to chat request ends when the user navigates elsewhere", async () => {
+  rememberLastPage("local", { kind: "chat", id: "sess-1" });
+  const getSession = vi.spyOn(testDevice.api, "getSession");
+  openTab("/dashboard/settings/common");
+  returnToLastPage();
+  window.history.pushState({}, "", "/dashboard");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  window.history.pushState({}, "", "/dashboard/sessions");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  window.history.pushState({}, "", "/dashboard");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  render(DashboardEntryPage);
+  expect(screen.getByText("New Chat")).toBeInTheDocument();
+  expect(getSession).not.toHaveBeenCalled();
+});
+
+test("a handled Back to chat request does not redirect New Chat when it mounts again", async () => {
+  vi.spyOn(testDevice.api, "getSession").mockResolvedValue({
+    session_id: "sess-1",
+    state: "exited",
+    archived_at: null,
+  } as SessionView);
+  rememberLastPage("local", { kind: "chat", id: "sess-1" });
+  openTab("/dashboard/settings/common");
+  returnToLastPage();
+  window.history.pushState({}, "", "/dashboard");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  const first = render(DashboardEntryPage);
+  expect(await screen.findByText("New Chat")).toBeInTheDocument();
+  first.unmount();
+  // Another tab opens a chat; a reconnect mounts New Chat again on the same path.
+  rememberLastPage("local", { kind: "chat", id: "sess-2" });
+  render(DashboardEntryPage);
+  expect(screen.getByText("New Chat")).toBeInTheDocument();
+  expect(goto).not.toHaveBeenCalled();
 });

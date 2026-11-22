@@ -7,7 +7,8 @@
   import ComposerDeviceSelect from './ComposerDeviceSelect.svelte';
   import SpinnerGapIcon from 'phosphor-svelte/lib/SpinnerGapIcon';
   import { Button } from '$lib/components/ui/button/index.js';
-  import { dashboardRelativePath, dashboardScope, navigate } from '$lib/navigation';
+  import { dashboardRelativePath, navigate } from '$lib/navigation';
+  import { returnToLastPage } from '$lib/lastPage';
   import { matchChatShortcut } from '$lib/shortcuts/definitions';
   import DeviceStatus, { type DeviceStatusView } from '../../components/devices/DeviceStatus.svelte';
   import AppShell from '../../components/layout/AppShell.svelte';
@@ -121,28 +122,15 @@
     try { window.localStorage.setItem(previousDeviceStorageKey, target); } catch { /* Storage is optional. */ }
   }
 
-  $effect(() => {
-    const sessionId = currentPath.match(/^\/chat\/([^/]+)$/)?.[1];
-    const target = $devices.find(target => `/${target.handle}` === dashboardScope(currentLocation));
-    if (!sessionId || !target) return;
-    try {
-      window.sessionStorage.setItem(`pontia.lastSession:${target.deviceId}`, sessionId);
-    } catch (error) {
-      if (!(error instanceof DOMException)) throw error;
-    }
-  });
-
+  // Settings keep their section; elsewhere the target device reopens its last chat.
   function selectDevice(target: string): void {
     const path = dashboardRelativePath();
-    const targetDevice = $devices.find(device => device.handle === target)!;
-    let sessionId: string | null = null;
-    try {
-      sessionId = window.sessionStorage.getItem(`pontia.lastSession:${targetDevice.deviceId}`);
-    } catch (error) {
-      if (!(error instanceof DOMException)) throw error;
+    if (handle && path.startsWith('/settings/')) {
+      void navigate(path, undefined, { scope: `/${target}` });
+      return;
     }
-    const destination = handle && path.startsWith('/settings/') ? path : sessionId ? `/chat/${sessionId}` : '/';
-    void navigate(destination, undefined, { scope: `/${target}` });
+    returnToLastPage();
+    void navigate('/', undefined, { scope: `/${target}` });
   }
 
   function handleDeviceShortcut(event: KeyboardEvent): void {
