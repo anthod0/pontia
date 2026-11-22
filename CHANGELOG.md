@@ -35,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Pi can repeat an event report after reconnecting and receive its original acknowledgement. Repeated Turn endings and Session exits appear once in history. Bots receive one notification when a helper Turn fails or its Session exits.
+
 - Dashboard keeps working when the browser blocks or fills its local storage. Theme, language, file preview width and Bot quote drafts then last only until the page closes.
 
 - In Dashboard, "Back to chat" in settings returns to the Bot chat or Session chat last opened on the current device, also after reloading settings. It opens New Chat when that Bot was deleted, or that Session is missing or archived.

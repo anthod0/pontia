@@ -14,6 +14,42 @@ struct Harness {
 }
 
 #[tokio::test]
+async fn replayed_terminal_report_compares_only_persisted_claude_evidence() {
+    use pontia_agent_control::ReportedFact;
+    use pontia_core::domain::EventType;
+    let h = Harness::new().await;
+    let session = h.create("work").await;
+    h.gate(&session, 1, "start");
+    let turns = h.wait_states(&session, &["running"]).await;
+    let runtime = h
+        .app
+        .queries()
+        .session_snapshot(&session)
+        .await
+        .unwrap()
+        .unwrap()
+        .runtimes[0]
+        .runtime_id
+        .clone();
+    let ingest = h.app.event_ingest_service();
+    let report = |anchor: &str| ReportedFact {
+        session_id: session.clone(),
+        turn_id: Some(turns[0].0.clone()),
+        report_key: Some("result-1".into()),
+        fact_type: EventType::TurnCompleted,
+        data: json!({"runtime_id":runtime, "claude_result_id":"result-1", "claude_history_anchor":anchor}),
+    };
+    let first = ingest.report_fact(report("anchor")).await.unwrap();
+    assert!(!first.duplicate);
+    for anchor in ["anchor", "different-anchor"] {
+        let duplicate = ingest.report_fact(report(anchor)).await.unwrap();
+        assert!(duplicate.duplicate);
+        assert_eq!(duplicate.event_id, first.event_id);
+    }
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn replanner_commands_keep_the_original_workflow_and_patch_after_resume() {
     let h = Harness::new().await;
     let mut sessions = Vec::new();

@@ -1,10 +1,34 @@
 import { realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
+import { PiCompaction } from "../src/compaction.js";
 import { createPontiaPiExtension } from "../src/index.js";
 import type { CompactionControl, LifecycleControl } from "../src/control-socket.js";
 import type { InternalEvent } from "../src/events.js";
 import { tempDir } from "./temp-dir.js";
+
+test("compaction reconnect reuses the original report and stops resending a conflict", async () => {
+  const report = vi
+    .fn()
+    .mockResolvedValueOnce({ accepted: false })
+    .mockResolvedValueOnce({ accepted: false, conflict: true });
+  const compaction = new PiCompaction(
+    await tempDir("pc-"),
+    {
+      sessionId: "sess",
+      runtimeId: "original",
+      clientType: "pi",
+    },
+    report,
+  );
+  const signal = new AbortController().signal;
+  await compaction.before({ reason: "threshold", signal } as Parameters<PiCompaction["before"]>[0]);
+  const original = structuredClone(report.mock.calls[0][0]);
+  expect(original.report_key).toMatch(/\S/);
+  await compaction.reconnect();
+  await compaction.reconnect();
+  expect(report.mock.calls).toEqual([[original], [original]]);
+});
 
 async function fixture() {
   const root = await tempDir("pc-");
@@ -73,7 +97,9 @@ async function fixture() {
                 return { session: { session_id: "sess" }, runtime: { runtime_id: "runtime" } };
               }
               if (method === "event.report") {
-                events.push((params as any).event);
+                const event = (params as any).event;
+                expect(event.report_key).toMatch(/\S/);
+                events.push(event);
                 return { accepted: true };
               }
               throw new Error(`Unexpected method ${method}`);
@@ -128,6 +154,7 @@ test("manual native compaction correlates hooks and callbacks with the accepted 
   ]);
   expect(f.events.map((event) => event.data.operation_id)).toEqual(["compact-api", "compact-api"]);
   expect(f.events[1].data).toEqual({
+    runtime_id: "runtime",
     operation_id: "compact-api",
     trigger: "manual",
     native_compaction_id: "compact-native",
@@ -160,6 +187,7 @@ test.each(["manual", "threshold", "overflow"])(
     expect(f.events).toHaveLength(1);
     expect(f.events[0].type).toBe("session.compaction_completed");
     expect(f.events[0].data).toEqual({
+      runtime_id: "runtime",
       operation_id: operation,
       trigger: reason,
       native_compaction_id: "compact-native",
@@ -204,6 +232,7 @@ test.each([false, true])(
     f.context.compact.mock.calls[0][0].onError(new Error("callback error"));
     await vi.waitFor(() => expect(f.events).toHaveLength(2));
     expect(f.events[1].data).toEqual({
+      runtime_id: "runtime",
       operation_id: "compact-failed",
       trigger: "manual",
       aborted,

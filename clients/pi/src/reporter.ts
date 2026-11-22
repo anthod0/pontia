@@ -4,6 +4,7 @@ import type { InternalEvent } from "./events.js";
 
 export interface EventReportResult {
   accepted: boolean;
+  conflict?: true;
   eventId?: string;
   turnId?: string;
 }
@@ -69,6 +70,8 @@ export class EventReporter {
         error: lastError instanceof Error ? lastError.message : String(lastError),
       },
     });
-    return { accepted: false };
+    return lastError instanceof RpcError && lastError.code === -32009
+      ? { accepted: false, conflict: true }
+      : { accepted: false };
   }
 }

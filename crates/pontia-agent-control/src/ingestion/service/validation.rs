@@ -51,7 +51,7 @@ pub(super) async fn ensure_runtime_fence_in_tx(
     }
     let native_turn = native_turn_identity && event.event_type.is_turn_event();
     if !is_confirmed_runtime_source(event.source)
-        || !(runtime_id_required_for_event(event.event_type) || native_turn)
+        || !(runtime_id_required_for_event(event) || native_turn)
     {
         return Ok(());
     }
@@ -177,7 +177,7 @@ pub(super) async fn ensure_confirmed_event_matches_session_boundary(
         .map(str::trim)
         .filter(|value| !value.is_empty());
 
-    if runtime_id_required_for_event(event.event_type) {
+    if runtime_id_required_for_event(event) {
         let Some(provided_runtime_id) = provided_runtime_id else {
             return Err(Error::Domain(format!(
                 "{} from {} requires payload.runtime_id for runtime-bound session {}",
@@ -242,22 +242,23 @@ fn is_confirmed_runtime_source(source: EventSource) -> bool {
     )
 }
 
-fn runtime_id_required_for_event(event_type: EventType) -> bool {
-    matches!(
-        event_type,
-        EventType::InteractionBlocked
-            | EventType::InteractionUnblocked
-            | EventType::SessionReady
-            | EventType::SessionResuming
-            | EventType::SessionModelUpdated
-            | EventType::SessionTitleUpdated
-            | EventType::SessionCompactionStarted
-            | EventType::SessionCompactionCompleted
-            | EventType::SessionCompactionFailed
-            | EventType::SessionExited
-            | EventType::SessionError
-            | EventType::TurnStarted
-    )
+fn runtime_id_required_for_event(event: &DomainEvent) -> bool {
+    (event.report_key.is_some() && event.payload.get("runtime_id").is_some())
+        || matches!(
+            event.event_type,
+            EventType::InteractionBlocked
+                | EventType::InteractionUnblocked
+                | EventType::SessionReady
+                | EventType::SessionResuming
+                | EventType::SessionModelUpdated
+                | EventType::SessionTitleUpdated
+                | EventType::SessionCompactionStarted
+                | EventType::SessionCompactionCompleted
+                | EventType::SessionCompactionFailed
+                | EventType::SessionExited
+                | EventType::SessionError
+                | EventType::TurnStarted
+        )
 }
 
 fn event_type_can_create_turn(event_type: EventType) -> bool {

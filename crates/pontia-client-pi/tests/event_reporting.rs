@@ -181,7 +181,7 @@ async fn normalized_summaries_are_bounded_before_size_validation_and_broadcast_a
     assert_eq!(event.payload["input"]["summary"], "中😀".repeat(100));
     assert_eq!(event.payload["metadata"]["inbox_message_id"], "message");
     assert_eq!(event.topology, Some(TurnTopology::Unknown));
-    assert!(event.payload.get("topology_context").is_none());
+    assert_eq!(event.payload["topology_context"], json!({"kind":"root"}));
     fixture
         .report(
             EventType::TurnOutput,
@@ -298,40 +298,86 @@ async fn repeated_turn_start_rejects_changed_fact_content() {
 }
 
 #[tokio::test]
-async fn stale_runtime_cannot_reuse_a_committed_report_key() {
+async fn terminal_reports_keep_the_first_event_and_do_not_broadcast_again() {
     let fixture = Fixture::new("pi").await;
-    fixture
+    let turn = fixture.start().await;
+    let first = fixture
         .report_with_key(
-            EventType::TurnStarted,
-            None,
-            Some("entry-1"),
-            json!({"runtime_id":"runtime"}),
+            EventType::TurnCompleted,
+            Some(&turn),
+            Some("done"),
+            json!({"terminal_leaf_id":"last"}),
         )
         .await
         .unwrap();
-    sqlx::query("UPDATE session_runtimes SET runtime_id='replacement' WHERE session_id='session'")
-        .execute(&fixture.state.db())
-        .await
-        .unwrap();
-
-    let stale = fixture
-        .report_with_key(
-            EventType::TurnStarted,
-            None,
-            Some("entry-1"),
-            json!({"runtime_id":"runtime"}),
-        )
-        .await
-        .unwrap_err();
-
-    assert!(stale.is_permanent_rejection());
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM events WHERE session_id='session' AND event_type='turn.started'",
-    )
-    .fetch_one(&fixture.state.db())
-    .await
-    .unwrap();
-    assert_eq!(count, 1);
+    let mut events = fixture.state.agent_events().subscribe();
+    for (kind, key) in [
+        (EventType::TurnCompleted, "done"),
+        (EventType::TurnFailed, "late-failure"),
+        (EventType::TurnInterrupted, "late-interrupt"),
+    ] {
+        let duplicate = fixture
+            .report_with_key(
+                kind,
+                Some(&turn),
+                Some(key),
+                json!({"terminal_leaf_id":"last"}),
+            )
+            .await
+            .unwrap();
+        assert!(duplicate.duplicate);
+        assert_eq!(duplicate.event_id, first.event_id);
+        assert_eq!(duplicate.state_version, first.state_version);
+    }
+    for kind in [
+        PontiaEventType::TurnDispatchFailed,
+        PontiaEventType::TurnAbandoned,
+    ] {
+        let ignored = fixture
+            .state
+            .event_ingest_service()
+            .ingest_pontia_event(PontiaEvent::new(
+                "session",
+                Some(turn.clone()),
+                PontiaEventSource::RuntimeManager,
+                "pi",
+                kind,
+                json!({}),
+            ))
+            .await
+            .unwrap();
+        assert!(ignored.duplicate);
+        assert_eq!(ignored.event_id, first.event_id);
+        assert_eq!(ignored.state_version, first.state_version);
+    }
+    for (supplied_turn, leaf) in [(turn.as_str(), "different"), ("different-turn", "last")] {
+        let conflict = fixture
+            .report_with_key(
+                EventType::TurnCompleted,
+                Some(supplied_turn),
+                Some("done"),
+                json!({"terminal_leaf_id":leaf}),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            conflict,
+            EventReportError::Ingestion(pontia_core::Error::StateConflict(_))
+        ));
+    }
+    assert!(matches!(events.try_recv(), Err(TryRecvError::Empty)));
+    assert_eq!(
+        fixture
+            .state
+            .event_ingest_service()
+            .list_events("session")
+            .await
+            .unwrap()
+            .last()
+            .unwrap()
+            .event_id,
+        first.event_id
+    );
 }
 
 #[tokio::test]

@@ -94,14 +94,16 @@ test("Pi reports provider-qualified models at startup, on native changes and on 
   const control = f.controls[0];
   expect(f.events.at(-1)).toMatchObject({
     type: "session.model_updated",
+    report_key: expect.stringMatching(/\S/),
     data: { model: "one/shared/name", runtime_id: "rt_models" },
   });
   await f.nativeSelect(f.available[1]);
   expect(f.events.at(-1)?.data.model).toBe("two/shared/name");
+  const selection = structuredClone(f.events.at(-1));
   f.events.length = 0;
   await control();
   expect(f.events).toHaveLength(1);
-  expect(f.events[0].data.model).toBe("two/shared/name");
+  expect(f.events[0]).toEqual(selection);
 });
 
 test("failed startup model reporting preserves the registered connection for resynchronization", async () => {

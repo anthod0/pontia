@@ -261,7 +261,7 @@ fn fact(session: &str, runtime: &str, kind: &str, data: serde_json::Value) -> se
     json!({"runtime_id":runtime,"event":{
         "session_id":session,
         "type":kind,
-        "report_key":(kind == "turn.started").then_some("entry-1"),
+        "report_key":pontia_core::ids::new_event_id().to_string(),
         "data":data
     }})
 }
@@ -492,12 +492,7 @@ async fn reporting_rejects_unregistered_cross_session_and_stale_identities_and_i
         "session.context_usage_updated",
         json!({"context_usage":{"used_tokens":1}}),
     );
-    let mut missing_report_key = fact(
-        &session,
-        &runtime,
-        "turn.started",
-        json!({"runtime_id":runtime}),
-    );
+    let mut missing_report_key = valid.clone();
     missing_report_key["event"]
         .as_object_mut()
         .unwrap()
@@ -579,6 +574,70 @@ async fn repeated_started_reports_return_the_first_canonical_identity() {
     .unwrap();
     assert_eq!(count, 1);
     pi.close();
+}
+
+#[tokio::test]
+async fn replacement_connection_can_only_acknowledge_committed_facts_of_the_previous_runtime() {
+    let (state, root) = state().await;
+    let (old, _requests) = client(&state);
+    let (session, original_runtime) = register(&old, root.path()).await;
+    let mut request = fact(
+        &session,
+        &original_runtime,
+        "session.ready",
+        json!({"runtime_id":original_runtime,"client_session_key":"native"}),
+    );
+    let first = old.call("event.report", request.clone()).await.unwrap();
+    let mut model = fact(
+        &session,
+        &original_runtime,
+        "session.model_updated",
+        json!({"runtime_id":original_runtime,"model":"example"}),
+    );
+    let model_ack = old.call("event.report", model.clone()).await.unwrap();
+    old.close();
+    sqlx::query("UPDATE session_runtimes SET runtime_id='replacement' WHERE runtime_id=?")
+        .bind(&original_runtime)
+        .execute(&state.db())
+        .await
+        .unwrap();
+    let (new, _requests) = client(&state);
+    new.call("runtime.attach", json!({"version":PROTOCOL_VERSION,"session_id":session,"runtime_id":"replacement","client_session_key":"native"})).await.unwrap();
+    request["runtime_id"] = json!("replacement");
+    let mut broadcasts = state.agent_events().subscribe();
+    let count = || {
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM events WHERE session_id=?")
+            .bind(&session)
+    };
+    let before = count().fetch_one(&state.db()).await.unwrap();
+    let duplicate = new.call("event.report", request.clone()).await.unwrap();
+    assert_eq!(duplicate["accepted"], true);
+    assert_eq!(duplicate["duplicate"], true);
+    assert_eq!(duplicate["event_id"], first["event_id"]);
+    assert_eq!(duplicate["state_version"], first["state_version"]);
+    model["runtime_id"] = json!("replacement");
+    let model_replay = new.call("event.report", model).await.unwrap();
+    assert_eq!(model_replay["event_id"], model_ack["event_id"]);
+    assert_eq!(model_replay["duplicate"], true);
+    let mut changed = request.clone();
+    changed["event"]["data"]["client_session_key"] = json!("changed");
+    let error = new.call("event.report", changed).await.unwrap_err();
+    assert!(error.to_string().contains("-32009"), "{error}");
+    request["event"]["report_key"] = json!("uncommitted");
+    assert!(new.call("event.report", request).await.is_err());
+    let old_usage = fact(
+        &session,
+        "replacement",
+        "session.context_usage_updated",
+        json!({"runtime_id":original_runtime,"context_usage":{"used_tokens":2}}),
+    );
+    assert!(new.call("event.report", old_usage).await.is_err());
+    assert_eq!(before, count().fetch_one(&state.db()).await.unwrap());
+    assert!(matches!(
+        broadcasts.try_recv(),
+        Err(tokio::sync::broadcast::error::TryRecvError::Empty)
+    ));
+    new.close();
 }
 
 #[tokio::test]

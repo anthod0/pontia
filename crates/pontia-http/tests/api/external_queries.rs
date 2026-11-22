@@ -133,7 +133,7 @@ async fn seed_session_turn(state: &AppState) {
         .await
         .unwrap();
     sqlx::query(
-        "UPDATE events SET created_at = '2026-04-24T12:00:00.000Z' WHERE event_id IN ('evt_external_queries_4', 'evt_external_queries_0')",
+        "UPDATE events SET created_at = '2026-04-24T12:00:00.000Z' WHERE event_id IN ('evt_external_queries_3', 'evt_external_queries_4')",
     )
     .execute(&state.db())
     .await
@@ -549,7 +549,7 @@ async fn external_api_lists_session_and_turn_events() {
     .await;
 
     assert_eq!(session_status, StatusCode::OK);
-    assert_eq!(session_body["data"]["events"].as_array().unwrap().len(), 6);
+    assert_eq!(session_body["data"]["events"].as_array().unwrap().len(), 4);
     assert_eq!(session_body["data"]["events"][0]["type"], "session.created");
     assert_eq!(session_body["data"]["events"][0]["source"], "agent_adapter");
     for event in session_body["data"]["events"].as_array().unwrap() {
@@ -558,7 +558,15 @@ async fn external_api_lists_session_and_turn_events() {
     }
 
     assert_eq!(turn_status, StatusCode::OK);
-    assert_eq!(turn_body["data"]["events"].as_array().unwrap().len(), 4);
+    assert_eq!(
+        turn_body["data"]["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|event| event["type"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["turn.started", "turn.completed"]
+    );
     assert_eq!(
         turn_body["data"]["events"][0]["turn_id"],
         "turn_external_queries_1"

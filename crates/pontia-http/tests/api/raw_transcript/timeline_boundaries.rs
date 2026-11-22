@@ -344,7 +344,10 @@ async fn hook_lifecycle_events_capture_and_replay_entry_boundaries_without_histo
         .iter()
         .find(|event| event.event_type == EventType::TurnStarted)
         .expect("started event");
-    assert!(started_event.payload.get("timeline_anchor").is_none());
+    assert_eq!(
+        started_event.payload["timeline_anchor"]["previous_leaf_id"],
+        "previous_leaf"
+    );
     assert_eq!(
         started_event.timeline_boundary,
         Some(TimelineBoundary::head(expected_head.clone()))
@@ -475,7 +478,10 @@ async fn interrupted_pi_turn_captures_tail_boundary_and_remains_timeline_readabl
         interrupted.timeline_boundary,
         Some(TimelineBoundary::tail(expected_tail))
     );
-    assert!(interrupted.payload.get("timeline_anchor").is_none());
+    assert_eq!(
+        interrupted.payload["timeline_anchor"]["terminal_leaf_id"],
+        "terminal_leaf"
+    );
 }
 
 #[tokio::test]

@@ -3,6 +3,9 @@ import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import {
   buildSessionContextUsageUpdatedEvent,
+  buildSessionReadyEvent,
+  buildSessionExitedEvent,
+  buildTurnInterruptedEvent,
   buildTurnCompletedEvent,
   buildTurnFailedEvent,
   buildTurnOutputEvent,
@@ -62,24 +65,42 @@ describe("event builders", () => {
       session_id: "sess_1",
       turn_id: "turn_1",
       type: "turn.output",
-      data: { output_summary: "hello" },
+      report_key: expect.stringMatching(/\S/),
+      data: { runtime_id: context.runtimeId, output_summary: "hello" },
     });
     expect(buildTurnCompletedEvent(context)).toMatchObject({
       turn_id: "turn_1",
       type: "turn.completed",
       data: { terminal_leaf_id: null },
     });
-    expect(buildTurnCompletedEvent(context).data).not.toHaveProperty("runtime_id");
+    expect(buildTurnCompletedEvent(context).data.runtime_id).toBe(context.runtimeId);
     expect(buildTurnFailedEvent(context, "boom")).toMatchObject({
       type: "turn.failed",
       data: { failure_message: "boom" },
     });
-    expect(buildTurnFailedEvent(context, "boom").data).not.toHaveProperty("runtime_id");
+    expect(buildTurnFailedEvent(context, "boom").data.runtime_id).toBe(context.runtimeId);
   });
 
   test("truncates turn.output summaries to 200 Unicode characters", () => {
     const event = buildTurnOutputEvent(context, "界".repeat(201));
-    expect(event.data).toEqual({ output_summary: "界".repeat(200) });
+    expect(event.data).toEqual({ runtime_id: context.runtimeId, output_summary: "界".repeat(200) });
+  });
+
+  test("assigns distinct keys and captures the runtime when each observation is made", () => {
+    const events = [
+      buildSessionReadyEvent(context),
+      buildSessionExitedEvent(context, "quit"),
+      buildTurnOutputEvent(context, "a"),
+      buildTurnOutputEvent(context, "a"),
+      buildTurnCompletedEvent(context),
+      buildTurnInterruptedEvent(context),
+      buildTurnFailedEvent(context, "failure"),
+    ];
+    for (const event of events) {
+      expect(event.report_key).toMatch(/\S/);
+      expect(event.data.runtime_id).toBe(context.runtimeId);
+    }
+    expect(new Set(events.map((event) => event.report_key)).size).toBe(events.length);
   });
 
   test("builds session.context_usage_updated observation without null usage fields", () => {
@@ -102,6 +123,7 @@ describe("event builders", () => {
       session_id: "sess_1",
       turn_id: "turn_1",
       type: "session.context_usage_updated",
+      report_key: expect.stringMatching(/\S/),
       data: {
         context_usage: {
           used_tokens: 42,
@@ -295,6 +317,7 @@ describe("EventReporter", () => {
     const reporter = new EventReporter({ connection: { request }, logFile: await tempLogFile() });
     expect(await reporter.report(context, buildTurnStartedEvent(context, "entry_1"))).toEqual({
       accepted: false,
+      conflict: true,
     });
     expect(request).toHaveBeenCalledTimes(1);
   });

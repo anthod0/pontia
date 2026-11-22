@@ -1757,7 +1757,7 @@ describe("pontia pi extension lifecycle", () => {
         previous_leaf_id: "entry_1",
       },
     });
-    expect(reported[1].data).toEqual({ output_summary: "hello world" });
+    expect(reported[1].data).toEqual({ runtime_id: "rtinst_1", output_summary: "hello world" });
   });
 
   test("does not report turn.started when Pi exposes no triggering entry id", async () => {
@@ -1898,7 +1898,7 @@ describe("pontia pi extension lifecycle", () => {
       "turn.output",
       "turn.completed",
     ]);
-    expect(reported[1].data).toEqual({ output_summary: "final answer" });
+    expect(reported[1].data).toEqual({ runtime_id: "rtinst_1", output_summary: "final answer" });
   });
 
   test("publishes assistant deltas and only complete tool calls to the turn live stream", async () => {
@@ -2028,6 +2028,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(appendReasoning.mock.calls).toEqual([["Reading"]]);
     expect(appendText.mock.calls).toEqual([["answer"]]);
     expect(reported.find((event) => event.type === "turn.output")?.data).toEqual({
+      runtime_id: "rtinst_1",
       output_summary: "answer",
     });
   });
@@ -2227,7 +2228,7 @@ describe("pontia pi extension lifecycle", () => {
     );
 
     expect(reported.map((event) => event.type)).toEqual(["turn.started", "turn.interrupted"]);
-    expect(reported[1].data).toEqual({ terminal_leaf_id: null });
+    expect(reported[1].data).toEqual({ runtime_id: "rtinst_1", terminal_leaf_id: null });
   });
 
   test("reports turn.interrupted when Pi surfaces an aborted operation as an error", async () => {
@@ -2251,7 +2252,7 @@ describe("pontia pi extension lifecycle", () => {
     );
 
     expect(reported.map((event) => event.type)).toEqual(["turn.started", "turn.interrupted"]);
-    expect(reported[1].data).toEqual({ terminal_leaf_id: null });
+    expect(reported[1].data).toEqual({ runtime_id: "rtinst_1", terminal_leaf_id: null });
   });
 
   test("reports turn.failed when Pi ends with an errored assistant message", async () => {
@@ -2274,6 +2275,7 @@ describe("pontia pi extension lifecycle", () => {
 
     expect(reported.map((event) => event.type)).toEqual(["turn.started", "turn.failed"]);
     expect(reported[1].data).toEqual({
+      runtime_id: "rtinst_1",
       failure_message: "model failed",
       terminal_leaf_id: null,
     });
