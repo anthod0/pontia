@@ -339,7 +339,7 @@ async fn independent_requests_do_not_block_the_socket_reader_or_merge_by_item() 
 }
 
 #[tokio::test]
-async fn external_resolution_turn_end_and_disconnect_expire_native_requests() {
+async fn native_resolution_and_turn_end_expire_requests_but_disconnect_waits_for_reconnect() {
     let f = Fixture::new().await;
     f.send(request("item/fileChange/requestApproval", json!(1)));
     let i = f.wait(1, InteractionState::Pending).await.remove(0);
@@ -358,8 +358,27 @@ async fn external_resolution_turn_end_and_disconnect_expire_native_requests() {
     f.wait(2, InteractionState::Expired).await;
     f.send(request("item/permissions/requestApproval", json!(3)));
     f.wait(1, InteractionState::Pending).await;
+    let runtime = CodexRuntime::existing(f.root.path()).await.unwrap();
+    let connection = runtime.connection().await.unwrap();
+    let gate = connection.interactions.lock().await;
+    f.send(json!({"method":"ignored/output"}));
     f.send(Value::Null);
-    f.wait(3, InteractionState::Expired).await;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while connection.is_connected() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    drop(gate);
+    super::interactions::reconcile(
+        &f.app.interactions(),
+        &f.app.event_ingest_service(),
+        &connection,
+    )
+    .await
+    .unwrap();
+    assert_eq!(f.wait(1, InteractionState::Pending).await.len(), 1);
     f.stop().await;
 }
 
@@ -374,7 +393,7 @@ async fn lag_keeps_valid_requests_and_discovers_approvals_lost_from_the_event_st
     f.send(request("item/fileChange/requestApproval", json!(2)));
     f.send(request("item/permissions/requestApproval", json!(3)));
     tokio::time::timeout(Duration::from_secs(5), async {
-        while connection.pending_server_requests().await.len() != 3 {
+        while connection.pending_server_requests().await.unwrap().len() != 3 {
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
     })

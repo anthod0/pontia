@@ -498,16 +498,14 @@ impl Connection {
         }
     }
 
-    pub(crate) async fn pending_server_requests(&self) -> Vec<Notification> {
-        let mut requests: Vec<_> = self
-            .server_requests
-            .lock()
-            .await
-            .values()
-            .cloned()
-            .collect();
-        requests.sort_by_key(|request| request.sequence);
-        requests
+    pub(crate) async fn pending_server_requests(&self) -> Option<Vec<Notification>> {
+        let requests = self.server_requests.lock().await;
+        if !self.is_connected() {
+            return None;
+        }
+        let mut snapshot: Vec<_> = requests.values().cloned().collect();
+        snapshot.sort_by_key(|request| request.sequence);
+        Some(snapshot)
     }
 
     pub(crate) async fn reply(&self, id: Value, digest: String, result: Value) -> Result<()> {

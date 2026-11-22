@@ -24,7 +24,14 @@ impl Adapter {
         let (peer, connection) = match setup {
             Ok(value) => value,
             Err(error) => {
-                let _ = rpc.reply_error(first.id, -32009, &error.to_string()).await;
+                let code = match error {
+                    Error::StateConflict(_)
+                    | Error::NotFound(_)
+                    | Error::Domain(_)
+                    | Error::Serialization(_) => -32009,
+                    _ => -32603,
+                };
+                let _ = rpc.reply_error(first.id, code, &error.to_string()).await;
                 return Err(error);
             }
         };
@@ -56,7 +63,9 @@ impl Adapter {
                             next <= sequence,
                         )
                         .await?;
-                    sequence = sequence.max(next);
+                    if request.params["report_key"].is_string() {
+                        sequence = sequence.max(next);
+                    }
                     Ok(result)
                 }
                 .await;
@@ -137,9 +146,7 @@ impl Adapter {
                 .and_then(ProcessFingerprint::capture)
                 .ok_or_else(crate::unavailable)?,
         });
-        identity
-            .attach(app, "claude-agent", connection.clone())
-            .await?;
+        attach_host(app, &identity, &status, connection.clone()).await?;
         let mut peers = self.peers.lock().await;
         let peer = match peers.get(&identity.session_id) {
             Some(peer) if peer.runtime == identity.runtime_id => peer.clone(),
@@ -187,8 +194,6 @@ impl Adapter {
                         state.input = Some(Input {
                             id: id.into(),
                             turn: Some(turn),
-                            inbox: None,
-                            summary: String::new(),
                             sequence: 0,
                         });
                     }
@@ -223,4 +228,62 @@ impl Adapter {
         app.inbox_commands().notify_available(&peer.session);
         Ok((peer, connection))
     }
+}
+
+async fn attach_host(
+    app: &AgentControl,
+    identity: &RuntimeAttachment,
+    status: &Value,
+    connection: Arc<Connection>,
+) -> Result<()> {
+    use pontia_agent_control::ipc::identity::{BindingConfirmation, version};
+    let Some(native) = identity.client_session_key.as_deref() else {
+        return identity.attach(app, "claude-agent", connection).await;
+    };
+    version(identity.version)?;
+    let control = app.client_control();
+    let guard = control.lock_identity().await;
+    let pending = &status["pending_ready"];
+    let key = pending["report_key"].as_str().unwrap_or_default();
+    let sequence = key
+        .strip_prefix(&format!("claude:{}:", connection.host_id))
+        .and_then(|suffix| suffix.parse::<u64>().ok())
+        .filter(|seq| *seq > 0);
+    let recovery = if sequence.is_some()
+        && pending["native_session_id"] == native
+        && status["native_session_id"] == native
+    {
+        // Only a previously attached process can have generated an unconfirmed ready.
+        let fingerprint: Option<String> = sqlx::query_scalar(
+            "SELECT r.process_fingerprint FROM session_runtimes r JOIN sessions s USING(session_id)
+             WHERE s.session_id=? AND s.client_type='claude-agent' AND s.state IN ('created','starting')
+             AND r.runtime_id=? AND r.state='starting' AND r.process_fingerprint IS NOT NULL
+             AND NOT EXISTS (SELECT 1 FROM agent_bindings b WHERE b.client_type='claude-agent'
+                             AND (b.session_id=s.session_id OR b.client_session_key=?))")
+            .bind(&identity.session_id).bind(&identity.runtime_id).bind(native)
+            .fetch_optional(&app.db()).await?;
+        fingerprint
+            .as_deref()
+            .map(serde_json::from_str::<ProcessFingerprint>)
+            .transpose()?
+            .as_ref()
+            == Some(&connection.process)
+    } else {
+        false
+    };
+    let binding = if recovery {
+        BindingConfirmation::Launch
+    } else {
+        BindingConfirmation::Native(native)
+    };
+    control
+        .attach_binding_locked(
+            &guard,
+            "claude-agent",
+            &identity.session_id,
+            &identity.runtime_id,
+            binding,
+            connection,
+        )
+        .await
 }

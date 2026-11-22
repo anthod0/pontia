@@ -15,6 +15,8 @@ export interface ControlIdentity {
   runtimeId: string;
   clientSessionKey?: string;
 }
+export class AttachmentRejected extends Error {}
+
 export interface RuntimeConnection {
   request(method: string, params: object): Promise<unknown>;
   registered(identity: ControlIdentity): void;
@@ -206,7 +208,7 @@ export async function connectRuntime(
   let current: RpcSocket | undefined;
   const connecting = new Set<Socket>();
   const peers = new Set<RpcSocket>();
-  let reconnectRejected = false;
+  let reconnectRejected: AttachmentRejected | undefined;
   let attached = false;
   let delay = 250;
   const waiting = new Set<() => void>();
@@ -295,12 +297,12 @@ export async function connectRuntime(
         attached = true;
         delay = 250;
         wakeRequests();
-        await onReconnect?.();
+        void onReconnect?.().catch(onError);
       } catch (error) {
         onError(error instanceof Error ? error : new Error(String(error)));
         // A rejected identity cannot be repaired by repeating registration.
         if (error instanceof RpcError && error.code !== -32603) {
-          reconnectRejected = true;
+          reconnectRejected = new AttachmentRejected(error.message);
           wakeRequests();
         }
         current?.close();
@@ -315,9 +317,11 @@ export async function connectRuntime(
   current = await open();
   return {
     async request(method, params) {
-      await ready();
-      if (!current || stopped)
-        return Promise.reject(new Error("Control connection is unavailable"));
+      if (method === "event.report" || method === "host.event") await ready();
+      else if (identity && !attached) throw new Error("Control connection is unavailable");
+      if (reconnectRejected) throw reconnectRejected;
+      if (stopped) throw new AttachmentRejected("Control connection closed");
+      if (!current) return Promise.reject(new Error("Control connection is unavailable"));
       return current.request(method, params);
     },
     registered(value) {

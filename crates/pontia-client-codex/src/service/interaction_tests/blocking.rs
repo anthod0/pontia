@@ -90,6 +90,24 @@ async fn turn_end_and_delivery_expiry_retain_correlation_without_synthesizing_re
     f.send(resolved("thread", json!("old")));
     facts.push(("interaction.unblocked".into(), interaction.interaction_id));
     f.wait_facts(&facts).await;
+    // Native interaction expiry and the completed Turn are observed separately.
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let completed: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM turns WHERE session_id=? AND state='completed')",
+            )
+            .bind(&f.session)
+            .fetch_one(&f.app.db())
+            .await
+            .unwrap();
+            if completed {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
     f.assert_state("idle").await;
     f.stop().await;
 }
@@ -162,14 +180,23 @@ async fn late_native_resolution_does_not_reactivate_an_exited_session() {
 }
 
 #[tokio::test]
-async fn disconnect_expires_delivery_but_does_not_claim_native_wait_ended() {
+async fn disconnect_preserves_delivery_during_grace_without_claiming_native_wait_ended() {
     let f = Fixture::with_native_resolution(false).await;
     f.send(request("applyPatchApproval", json!(1)));
     let interaction = f.wait(1, InteractionState::Pending).await.remove(0);
     let facts = vec![("interaction.blocked".into(), interaction.interaction_id)];
     f.wait_facts(&facts).await;
+    let runtime = CodexRuntime::existing(f.root.path()).await.unwrap();
+    let connection = runtime.connection().await.unwrap();
     f.send(Value::Null);
-    f.wait(1, InteractionState::Expired).await;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while connection.is_connected() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    f.wait(1, InteractionState::Pending).await;
     assert_eq!(f.facts().await, facts);
     f.assert_state("waiting_for_interaction").await;
     f.stop().await;

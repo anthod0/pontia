@@ -11,8 +11,6 @@ use tokio::sync::Mutex;
 
 pub(crate) struct Input {
     pub id: String,
-    pub inbox: Option<String>,
-    pub summary: String,
     pub turn: Option<String>,
     pub sequence: u64,
 }
@@ -71,7 +69,16 @@ impl Peer {
         {
             state.unavailable = Some(reason.into());
         }
-        crate::interactions::expire_all(self, &mut state).await;
+        if reason == "control_connection_lost" {
+            let pending = state
+                .permissions
+                .keys()
+                .map(|id| (self.session.clone(), id.clone()))
+                .collect();
+            self.interactions.await_reconnect(pending).await;
+        } else {
+            crate::interactions::expire_all(self, &mut state).await;
+        }
     }
     pub fn connection(&self) -> Result<Arc<Connection>> {
         self.connection
@@ -133,7 +140,7 @@ impl Peer {
         }
         match event["kind"].as_str() {
             Some("permission_requested" | "permission_settled") => {
-                return crate::interactions::event(self, &mut state, events, host, params).await;
+                return crate::interactions::event(self, &mut state, host, params).await;
             }
             Some("closed") => {
                 state.closed = true;

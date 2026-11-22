@@ -88,7 +88,7 @@ test.each(["tui", "rpc"])(
     expect(calls).toEqual(["one:abort", "one:abort", "one:shutdown"]);
     expect(events.map((event) => event.type)).toEqual(["session.ready"]);
     await handlers.session_shutdown({ reason: "new" });
-    expect(closes[0]).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(closes[0]).toHaveBeenCalledOnce());
     await handlers.session_start({ reason: "new" }, context("two"));
     expect(() => controls[0].interrupt()).toThrow();
     expect(() => controls[0].shutdown()).toThrow();
@@ -277,6 +277,9 @@ test("the default extension streams over its registered connection and closes th
       expect(calls.filter((call) => call.method === "liveOutput.publish")).toHaveLength(1),
     );
     await handlers.agent_end({ messages: [] }, context);
+    await vi.waitFor(() =>
+      expect(calls.some((call) => call.params.type === "stream_closed")).toBe(true),
+    );
     const liveCalls = calls.filter((call) => call.method === "liveOutput.publish");
     expect(liveCalls.map((call) => call.params)).toEqual([
       expect.objectContaining({

@@ -312,7 +312,11 @@ pub(crate) async fn reconcile(
     connection: &Connection,
 ) -> Result<()> {
     // Discover requests received before their Session binding became available.
-    for request in connection.pending_server_requests().await {
+    for request in connection
+        .pending_server_requests()
+        .await
+        .unwrap_or_default()
+    {
         if connection
             .interactions
             .lock()
@@ -328,7 +332,9 @@ pub(crate) async fn reconcile(
         }
     }
     observe_native(service, ingest, connection).await?;
-    let requests = connection.pending_server_requests().await;
+    let Some(requests) = connection.pending_server_requests().await else {
+        return Ok(());
+    };
     expire_matching(service, connection, |i| {
         !requests.iter().any(|r| r["id"] == i.request_id)
     })

@@ -17,6 +17,7 @@ async function setup(t: TestContext, rejectKind?: string, transient = false) {
   const fixture = sdk();
   let socket: Socket;
   let count = 0;
+  let terminal = false;
   let nextId = 1;
   const facts: Frame[] = [];
   const replies = new Map<number, (frame: Frame) => void>();
@@ -36,7 +37,14 @@ async function setup(t: TestContext, rejectKind?: string, transient = false) {
             JSON.stringify({
               jsonrpc: "2.0",
               id: frame.id,
-              result: { session_id: frame.params.session_id, runtime_id: frame.params.runtime_id },
+              ...(terminal
+                ? { error: { code: -32009, message: "Session exited" } }
+                : {
+                    result: {
+                      session_id: frame.params.session_id,
+                      runtime_id: frame.params.runtime_id,
+                    },
+                  }),
             }) + "\n",
           );
         } else if (frame.method === "host.event") {
@@ -106,7 +114,16 @@ async function setup(t: TestContext, rejectKind?: string, transient = false) {
     facts,
     wait,
     reconnect,
-    command: (params: object) => call("host.command", params),
+    endSession: () => {
+      terminal = true;
+    },
+    command: (params: { method: string; text?: string; [key: string]: unknown }) =>
+      call(
+        "host.command",
+        params.method === "input"
+          ? { ...params, input: { summary: params.text, inbox_message_id: null } }
+          : params,
+      ),
     status: () => call("host.status", {}),
   };
 }
@@ -183,7 +200,7 @@ test(
 );
 
 test(
-  "missed facts are not replayed and a sequence gap does not disable control",
+  "a Turn finishing offline is reported once after reconnection",
   { timeout: 5000 },
   async (t) => {
     const h = await setup(t);
@@ -195,10 +212,8 @@ test(
       h.fixture.messages.push(result());
       await new Promise((resolve) => setTimeout(resolve, 100));
     });
-    assert.equal(
-      h.facts.some((f) => f.event.kind === "finished"),
-      false,
-    );
+    await h.wait(() => h.facts.some((f) => f.event.kind === "finished"));
+    assert.equal(h.facts.filter((f) => f.event.kind === "finished").length, 1);
     assert.equal(
       (await h.command({ method: "input", input_id: second, text: "next" })).status,
       "accepted",
@@ -395,5 +410,57 @@ test(
     await h.wait(() => settlements().length === 2);
     assert.deepEqual(settlements()[0], settlements()[1]);
     assert.equal(h.facts.filter((f) => f.event.kind === "permission_requested").length, 1);
+  },
+);
+
+test(
+  "a terminal Session discards facts produced during the outage",
+  { timeout: 5000 },
+  async (t) => {
+    const h = await setup(t);
+    await h.command({ method: "input", input_id: first, text: "task" });
+    h.fixture.messages.push(init());
+    h.fixture.messages.push(assistant());
+    await h.wait(() => h.facts.some((f) => f.event.kind === "started"));
+    await h.reconnect(async () => {
+      h.endSession();
+      h.fixture.messages.push(result());
+    });
+    assert.ok(!h.facts.some((f) => f.event.kind === "finished"));
+  },
+);
+
+test(
+  "pending and newly arrived offline permissions keep the original SDK callbacks",
+  { timeout: 5000 },
+  async (t) => {
+    const h = await setup(t);
+    await h.command({ method: "input", input_id: first, text: "task" });
+    h.fixture.messages.push(init());
+    h.fixture.messages.push(assistant());
+    await h.wait(() => h.facts.some((f) => f.event.kind === "started"));
+    const request = (id: string) =>
+      h.fixture.options!.canUseTool!(
+        "Write",
+        { file_path: id },
+        { signal: new AbortController().signal, toolUseID: id, requestId: id },
+      );
+    const firstAnswer = request("before");
+    await h.wait(() => h.facts.some((f) => f.event.permission_id === "before"));
+    let secondAnswer: ReturnType<typeof request>;
+    await h.reconnect(async () => {
+      secondAnswer = request("during");
+    });
+    await h.wait(() => h.facts.filter((f) => f.event.kind === "permission_requested").length === 3);
+    const before = h.facts.filter((f) => f.event.permission_id === "before");
+    assert.deepEqual(before[0], before[1]);
+    for (const id of ["before", "during"]) {
+      assert.equal(
+        (await h.command({ method: "permission", permission_id: id, option: "allow" })).status,
+        "accepted",
+      );
+    }
+    for (const answer of [firstAnswer, secondAnswer!])
+      assert.equal((await answer)?.behavior, "allow");
   },
 );

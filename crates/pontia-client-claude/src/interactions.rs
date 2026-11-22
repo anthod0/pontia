@@ -1,25 +1,20 @@
-use pontia_agent_control::{
-    EventIngestService, ReportedFact,
-    interactions::{
-        ChoiceInteractionRequest, InteractionBlock, InteractionIntent, InteractionOption,
-        InteractionState,
-    },
+use pontia_agent_control::interactions::{
+    ChoiceInteractionRequest, InteractionBlock, InteractionIntent, InteractionOption,
+    InteractionState,
 };
-use pontia_core::{Error, Result, domain::EventType};
+use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 
 use crate::peer::{Peer, State, field};
 
 pub(crate) struct Permission {
     native: String,
-    blocking: bool,
     resolving: bool,
 }
 
 pub(crate) async fn event(
     peer: &Peer,
     state: &mut State,
-    events: &EventIngestService,
     host: &str,
     params: &Value,
 ) -> Result<Value> {
@@ -61,12 +56,7 @@ pub(crate) async fn event(
                     },
                 ],
             };
-            let interaction = if state.closed || state.unavailable.is_some() {
-                peer.interactions
-                    .registered(&request)
-                    .await?
-                    .ok_or_else(expired)?
-            } else {
+            let interaction = {
                 match peer.interactions.register(request).await {
                     Ok(stored) => stored,
                     Err(error @ Error::StateConflict(_)) => {
@@ -87,6 +77,14 @@ pub(crate) async fn event(
                     Err(error) => return Err(error),
                 }
             };
+            if state.closed || state.unavailable.is_some() {
+                peer.interactions
+                    .expire(&peer.session, &interaction.interaction_id)
+                    .await?;
+                return Ok(
+                    json!({"accepted":true,"interaction_id":interaction.interaction_id,"ended":true}),
+                );
+            }
             if matches!(
                 interaction.state,
                 InteractionState::Pending | InteractionState::Resolving
@@ -96,7 +94,6 @@ pub(crate) async fn event(
                     .entry(interaction.interaction_id.clone())
                     .or_insert_with(|| Permission {
                         native: native.into(),
-                        blocking,
                         resolving: false,
                     });
             }
@@ -106,45 +103,32 @@ pub(crate) async fn event(
             );
         }
         Some("permission_settled") => {
-            let id = state
-                .permissions
-                .iter()
-                .find(|(_, p)| p.native == native)
-                .map(|(id, _)| id.clone())
-                .ok_or_else(expired)?;
-            let permission = state.permissions.get(&id).expect("located permission");
-            match event["outcome"].as_str() {
-                Some("expired") => peer.interactions.expire(&peer.session, &id).await?,
-                Some("resolved") if permission.resolving => {}
-                _ => return Err(expired()),
+            let registration = field(params, "registration_key")?;
+            let key = field(params, "report_key")?;
+            let outcome = field(event, "outcome")?;
+            if registration != format!("claude:{host}:{native}")
+                || key != format!("{registration}:settled")
+                || !matches!(outcome, "resolved" | "expired")
+            {
+                return Err(Error::StateConflict(
+                    "Invalid Claude permission settlement".into(),
+                ));
             }
-            if permission.blocking {
-                report_unblocked(peer, events, host, &id).await?;
-            }
+            let id = peer
+                .interactions
+                .settle(
+                    &peer.session,
+                    registration,
+                    field(event, "authorization_digest")?,
+                    key,
+                    outcome,
+                )
+                .await?;
             state.permissions.remove(&id);
         }
         _ => return Err(expired()),
     }
     Ok(json!({"accepted": true}))
-}
-
-async fn report_unblocked(
-    peer: &Peer,
-    events: &EventIngestService,
-    host: &str,
-    id: &str,
-) -> Result<()> {
-    events
-        .report_fact(ReportedFact {
-            session_id: peer.session.clone(),
-            turn_id: None,
-            report_key: Some(format!("claude:{host}:{id}:interaction.unblocked")),
-            fact_type: EventType::InteractionUnblocked,
-            data: json!({"runtime_id":peer.runtime,"interaction_id":id}),
-        })
-        .await
-        .map_err(crate::reports::report_error)?;
-    Ok(())
 }
 
 pub(crate) async fn resolve(peer: &Peer, id: &str, option: &str) -> Result<()> {

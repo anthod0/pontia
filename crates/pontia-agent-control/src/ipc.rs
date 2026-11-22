@@ -1,6 +1,5 @@
 pub mod identity;
 mod listener;
-pub mod relay;
 pub mod rpc;
 use crate::AgentControl;
 pub use listener::{ControlListener, control_socket_path};

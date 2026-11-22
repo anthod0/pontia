@@ -101,14 +101,23 @@ test("pending approval leaves output and interrupt live without fabricating a Tu
   );
 });
 
-for (const action of ["disconnect", "close", "sdk-failure"] as const) {
+test("a disconnected host keeps existing and new SDK callbacks until control returns", async (t) => {
+  const { host, request } = await setup(t);
+  const first = request();
+  host.controlLost();
+  const second = request("background-agent");
+  host.controlRestored();
+  for (const pending of [first, second]) {
+    host.resolvePermission(pending.id, "allow");
+    assert.equal((await pending.response)?.behavior, "allow");
+  }
+});
+
+for (const action of ["close", "sdk-failure"] as const) {
   test(`${action} expires approvals without allowing replay`, async (t) => {
     const { fixture, host, request } = await setup(t);
     const a = request();
-    if (action === "disconnect") {
-      host.controlLost();
-      host.controlRestored();
-    } else if (action === "close") await host.close();
+    if (action === "close") await host.close();
     else {
       fixture.messages.failure = new Error("fixture failure");
       fixture.messages.end();

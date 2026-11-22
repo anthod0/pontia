@@ -1,4 +1,5 @@
 use pontia_agent_control::{client_contract::ClientIntegration, clients::ClientRegistry};
+pub use pontia_client_acp::relay::run_from_stdin as run_stdio_relay;
 use std::sync::Arc;
 
 pub fn integrations() -> Vec<Arc<dyn ClientIntegration>> {

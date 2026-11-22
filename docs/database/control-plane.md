@@ -452,6 +452,8 @@ CREATE TABLE interactions (
   resolved_at TEXT,
   report_key TEXT,
   authorization_digest TEXT,
+  settlement_report_key TEXT,
+  settlement_outcome TEXT,
   CHECK (
     (state = 'resolved' AND response_option_key IS NOT NULL AND resolved_at IS NOT NULL)
     OR (state <> 'resolved' AND response_option_key IS NULL AND resolved_at IS NULL)
@@ -459,6 +461,7 @@ CREATE TABLE interactions (
 );
 
 CREATE UNIQUE INDEX idx_interactions_report_key ON interactions (session_id, report_key) WHERE report_key IS NOT NULL;
+CREATE UNIQUE INDEX idx_interactions_settlement_key ON interactions(session_id, settlement_report_key) WHERE settlement_report_key IS NOT NULL;
 CREATE INDEX idx_interactions_session_order ON interactions (session_id, requested_at, interaction_id);
 CREATE INDEX idx_interactions_session_state_order ON interactions (session_id, state, requested_at, interaction_id);
 

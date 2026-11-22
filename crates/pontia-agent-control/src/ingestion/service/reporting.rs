@@ -77,11 +77,10 @@ impl EventIngestService {
         self.process_fact(fact).await
     }
 
-    pub(crate) async fn register_blocked(
+    pub(crate) async fn write_interaction(
         &self,
         fact: ReportedFact,
-        request: &crate::interactions::ChoiceInteractionRequest,
-        id: &str,
+        write: crate::interactions::InteractionWrite<'_>,
     ) -> pontia_core::Result<()> {
         let event = EventReportNormalizer::new(self.pool.clone())
             .with_clients(self.clients.clone())
@@ -94,7 +93,7 @@ impl EventIngestService {
         self.ensure_confirmed_event_matches_session_boundary(&event)
             .await?;
         let outcome = super::commit::EventCommitter::new(self.pool.clone(), self.clients.clone())
-            .commit(event, None, true, None, Some((request, id)))
+            .commit(event, None, true, None, Some(write))
             .await?;
         self.apply_outcome(outcome).await?;
         Ok(())

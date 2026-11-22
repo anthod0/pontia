@@ -21,6 +21,7 @@ struct Written {
     keys: HashSet<String>,
     responses: HashSet<String>,
     closed: bool,
+    rejected: HashSet<String>,
 }
 
 pub(crate) struct Receipts {
@@ -42,6 +43,9 @@ impl Receipts {
                 if state.keys.remove(&key) {
                     return Ok(());
                 }
+                if state.rejected.remove(&key) {
+                    return Err(Error::StateConflict("ACP permission was withdrawn".into()));
+                }
                 if state.closed {
                     return Err(Error::ControlUnknown(
                         "ACP delivery could not be confirmed".into(),
@@ -58,6 +62,14 @@ impl Receipts {
         let key = format!("response:{}", serde_json::to_string(id)?);
         self.state.lock().unwrap().responses.insert(key.clone());
         Ok(key)
+    }
+    fn rejected(&self, id: &Value) {
+        let key = format!("response:{id}");
+        let mut state = self.state.lock().unwrap();
+        if state.responses.remove(&key) {
+            state.rejected.insert(key);
+            self.changed.send_modify(|version| *version += 1);
+        }
     }
     pub fn close(&self) {
         self.state.lock().unwrap().closed = true;
@@ -174,6 +186,7 @@ pub(crate) async fn bridge(
     ready: watch::Sender<bool>,
 ) -> Result<()> {
     let (mut writer, reader) = streams;
+    let permission_keys = Mutex::new(std::collections::HashMap::<String, String>::new());
     let outgoing = async {
         let mut reader = BufReader::new(reader);
         loop {
@@ -182,20 +195,71 @@ pub(crate) async fn bridge(
                 return Ok(());
             }
             let frame: Value = serde_json::from_slice(&bytes)?;
-            for chunk in bytes.chunks(64 * 1024) {
-                relay
-                    .call("relay.write", json!({"chunk":STANDARD.encode(chunk)}))
-                    .await?;
+            let permission = if frame.get("method").is_none() {
+                permission_keys
+                    .lock()
+                    .unwrap()
+                    .remove(&frame["id"].to_string())
+            } else {
+                None
+            };
+            let count = bytes.len().div_ceil(64 * 1024);
+            let mut written = true;
+            for (i, chunk) in bytes.chunks(64 * 1024).enumerate() {
+                let mut params = json!({"chunk":STANDARD.encode(chunk)});
+                if let Some(key) = &permission {
+                    params["permission"] = json!({"id":frame["id"],"key":key,"last":i+1==count});
+                }
+                if relay.call("relay.write", params).await?["written"] == false {
+                    written = false;
+                    break;
+                }
             }
-            receipts.written(&frame);
+            if written {
+                receipts.written(&frame);
+            } else {
+                receipts.rejected(&frame["id"]);
+            }
         }
     };
     let incoming = async {
-        let mut bytes = Vec::new();
+        let mut partial = std::collections::HashMap::<String, Vec<u8>>::new();
         while let Some(request) = requests.recv().await {
             if request.method == "relay.ready" {
                 ready.send_replace(true);
                 relay.rpc.reply(request.id, json!({})).await?;
+                continue;
+            }
+            if request.method == "relay.report" {
+                let result = match associated.get().and_then(std::sync::Weak::upgrade) {
+                    Some(peer) => match serde_json::from_value(request.params) {
+                        Ok(report) => peer.apply_report(report).await,
+                        Err(error) => Err(error.into()),
+                    },
+                    None => Err(Error::ControlUnknown("ACP peer unavailable".into())),
+                };
+                match result {
+                    Ok(()) => {
+                        relay
+                            .rpc
+                            .reply(request.id, json!({"accepted":true}))
+                            .await?
+                    }
+                    Err(error) => {
+                        let code = match error {
+                            Error::StateConflict(_)
+                            | Error::Domain(_)
+                            | Error::NotFound(_)
+                            | Error::Serialization(_) => -32009,
+                            _ => -32603,
+                        };
+                        tracing::warn!(%error,"ACP report rejected");
+                        relay
+                            .rpc
+                            .reply_error(request.id, code, &error.to_string())
+                            .await?;
+                    }
+                }
                 continue;
             }
             if request.method != "relay.frame" {
@@ -208,8 +272,12 @@ pub(crate) async fn bridge(
                         .ok_or_else(|| Error::Domain("Relay output requires bytes".into()))?,
                 )
                 .map_err(|_| Error::Domain("Invalid relay output bytes".into()))?;
-            bytes.extend(chunk);
+            let id = request.params["frame_id"]
+                .as_str()
+                .ok_or_else(|| Error::Domain("Missing ACP frame identity".into()))?;
+            partial.entry(id.into()).or_default().extend(chunk);
             if request.params["last"] == true {
+                let mut bytes = partial.remove(id).expect("current frame");
                 let mut frame: Value = serde_json::from_slice(&bytes)?;
                 if frame["method"] == "session/request_permission" {
                     let peer = associated
@@ -225,17 +293,61 @@ pub(crate) async fn bridge(
                         .ok_or_else(|| Error::Domain("Missing permission frame identity".into()))?;
                     let key = format!("acp:frame:{key}");
                     match crate::interactions::permission_frame(&peer, &key, &mut frame).await {
-                        Ok(Some(id)) => {
+                        Ok(Some((id, ended))) => {
                             relay
                                 .rpc
-                                .reply(request.id, json!({"interaction_id": id}))
+                                .reply(request.id, json!({"interaction_id": id, "ended":ended}))
                                 .await?;
                             bytes.clear();
                             continue;
                         }
                         Ok(None) => {
+                            permission_keys
+                                .lock()
+                                .unwrap()
+                                .insert(frame["id"].to_string(), key.clone());
+                            let registering = peer
+                                .registering_permissions
+                                .lock()
+                                .unwrap()
+                                .get(&key)
+                                .map(|done| done.subscribe());
                             bytes = serde_json::to_vec(&frame)?;
                             bytes.push(b'\n');
+                            writer.write_all(&bytes).await?;
+                            if let Some(mut done) = registering {
+                                let _ = done.changed().await;
+                                match peer.interactions.registration(&peer.session, &key).await {
+                                    Ok(Some((stored, _))) => {
+                                        relay
+                                            .rpc
+                                            .reply(
+                                                request.id,
+                                                json!({"interaction_id":stored.interaction_id}),
+                                            )
+                                            .await?
+                                    }
+                                    Ok(None) => {
+                                        relay
+                                            .rpc
+                                            .reply_error(
+                                                request.id,
+                                                -32009,
+                                                "ACP permission registration rejected",
+                                            )
+                                            .await?
+                                    }
+                                    Err(error) => {
+                                        relay
+                                            .rpc
+                                            .reply_error(request.id, -32603, &error.to_string())
+                                            .await?
+                                    }
+                                }
+                            } else {
+                                relay.rpc.reply(request.id, json!({})).await?;
+                            }
+                            continue;
                         }
                         Err(error) => {
                             tracing::warn!(session=%peer.session, %key, %error, "ACP permission frame rejected");
@@ -256,32 +368,7 @@ pub(crate) async fn bridge(
                         }
                     }
                 }
-                let tagged = if frame["method"] == "session/update"
-                    && matches!(
-                        frame
-                            .pointer("/params/update/sessionUpdate")
-                            .and_then(Value::as_str),
-                        Some("usage_update" | "config_option_update")
-                    ) {
-                    frame.get_mut("params")
-                } else if frame.pointer("/result/configOptions").is_some() {
-                    frame.get_mut("result")
-                } else {
-                    None
-                };
-                if let Some(body) = tagged {
-                    let id = request.params["frame_id"].as_str().ok_or_else(|| {
-                        Error::Domain("Relay output requires a frame identity".into())
-                    })?;
-                    // Carry the trusted relay identity through the SDK's typed responses.
-                    let meta = &mut body["_meta"];
-                    if !meta.is_object() {
-                        *meta = json!({});
-                    }
-                    meta[FRAME_KEY] = json!(format!("acp:frame:{id}"));
-                    bytes = serde_json::to_vec(&frame)?;
-                    bytes.push(b'\n');
-                } else if recovered_request
+                if recovered_request
                     .as_ref()
                     .is_some_and(|id| frame.get("id") == Some(id))
                     && frame.get("method").is_none()
@@ -302,56 +389,4 @@ pub(crate) async fn bridge(
     receipts.close();
     relay.rpc.close();
     result
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use agent_client_protocol::v1::schema::SessionNotification;
-    use tokio::net::UnixStream;
-
-    #[tokio::test]
-    async fn replayed_usage_frame_keeps_its_identity_and_native_contents() {
-        let (client, server) = UnixStream::pair().unwrap();
-        let (remote, _) = RpcPeer::new(client);
-        let (rpc, requests) = RpcPeer::new(server);
-        let relay = Arc::new(Relay {
-            rpc,
-            process: ProcessFingerprint::capture(std::process::id()).unwrap(),
-        });
-        let (sdk, stream) = tokio::io::duplex(4096);
-        let (reader, writer) = tokio::io::split(stream);
-        let task = tokio::spawn(bridge(
-            relay,
-            requests,
-            Receipts::new(),
-            (writer, reader),
-            Arc::default(),
-            None,
-            watch::channel(false).0,
-        ));
-        let mut frames = BufReader::new(sdk).lines();
-        let update = json!({"sessionUpdate":"usage_update","used":9,"size":10});
-        let frame = json!({"jsonrpc":"2.0","method":"session/update","params":{
-            "sessionId":"native","update":update,"_meta":{FRAME_KEY:"agent-value"}
-        }});
-        let input = json!({"frame_id":"generation:17","last":true,"chunk":STANDARD.encode(frame.to_string())});
-        for _ in 0..2 {
-            remote
-                .request("relay.frame", input.clone(), MAX_FRAME_BYTES, false)
-                .await
-                .unwrap();
-            let frame: Value =
-                serde_json::from_str(&frames.next_line().await.unwrap().unwrap()).unwrap();
-            assert_eq!(frame["params"]["update"], update);
-            let notification: SessionNotification =
-                serde_json::from_value(frame["params"].clone()).unwrap();
-            assert_eq!(
-                frame_key(notification.meta.as_ref()).unwrap(),
-                "acp:frame:generation:17"
-            );
-        }
-        remote.close();
-        task.await.unwrap().unwrap();
-    }
 }

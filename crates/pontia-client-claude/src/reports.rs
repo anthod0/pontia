@@ -88,8 +88,8 @@ impl Peer {
         let HostReport { kind, key, event } = report;
         // The host identifies input and result messages. Pontia supplied the input
         // summary, inbox association and canonical Turn, which can outlive this Peer.
-        let existing: Option<(Option<String>, Option<String>)> = sqlx::query_as(
-            "SELECT turn_id,json_extract(payload,'$.input') FROM events
+        let existing: Option<Option<String>> = sqlx::query_scalar(
+            "SELECT turn_id FROM events
              WHERE session_id=? AND event_type=? AND report_key=?",
         )
         .bind(&self.session)
@@ -112,25 +112,28 @@ impl Peer {
             }
             EventType::TurnStarted => {
                 let id = field(event, "input_id")?;
-                let input = if let Some((_, Some(stored))) = &existing {
-                    serde_json::from_str(stored)?
-                } else {
-                    let input = state
+                let input = &event["input"];
+                if !input["summary"].is_string()
+                    || !(input["inbox_message_id"].is_null()
+                        || input["inbox_message_id"].is_string())
+                {
+                    return Err(invalid());
+                }
+                if !replay
+                    && state
                         .input
                         .as_ref()
-                        .filter(|i| !state.closed && i.id == id && i.turn.is_none())
-                        .ok_or_else(invalid)?;
-                    json!({"summary":input.summary,"inbox_message_id":input.inbox})
-                };
+                        .is_some_and(|i| i.id != id || i.turn.is_some())
+                {
+                    return Err(invalid());
+                }
                 json!({"claude_input_id":id, "claude_history_anchor":id, "input":input})
             }
             EventType::TurnCompleted | EventType::TurnFailed | EventType::TurnInterrupted => {
                 let id = field(event, "input_id")?;
-                turn_id = if let Some((turn, _)) = &existing {
+                turn_id = if let Some(turn) = &existing {
                     turn.clone()
-                } else if let Some(input) =
-                    state.input.as_ref().filter(|i| !state.closed && i.id == id)
-                {
+                } else if let Some(input) = state.input.as_ref().filter(|i| i.id == id) {
                     Some(input.turn.clone().ok_or_else(invalid)?)
                 } else {
                     // A later result for an already finished input belongs to the
@@ -154,7 +157,7 @@ impl Peer {
                 json!({"claude_input_id":id,"claude_result_id":event["result_id"],"claude_history_anchor":event["history_anchor"]})
             }
             _ => {
-                if existing.is_none() && (state.native.is_none() || state.closed) {
+                if existing.is_none() && state.native.is_none() {
                     return Err(invalid());
                 }
                 match kind {
@@ -192,13 +195,19 @@ impl Peer {
                 state.native = Some(field(event, "native_session_id")?.into());
             }
             EventType::TurnStarted => {
+                if state.input.is_none() && !replay {
+                    state.input = Some(crate::peer::Input {
+                        id: field(event, "input_id")?.into(),
+                        turn: ack.turn_id.clone(),
+                        sequence: 0,
+                    });
+                }
                 if let Some(input) = state
                     .input
                     .as_mut()
                     .filter(|input| event["input_id"] == input.id)
                 {
                     input.turn = ack.turn_id.clone();
-                    input.summary.clear();
                 }
             }
             EventType::TurnCompleted | EventType::TurnFailed | EventType::TurnInterrupted

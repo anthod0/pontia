@@ -2099,3 +2099,130 @@ async fn running_host_reattaches_its_turn_then_accepts_input_approvals_interrupt
     );
     h.stop().await;
 }
+
+#[tokio::test]
+async fn first_ready_reconnects_before_commit_and_after_a_lost_receipt() {
+    for (input, starting) in [
+        ("hold first ready", false),
+        ("hold first ready", true),
+        ("lose first ready receipt", false),
+    ] {
+        let h = Harness::new().await;
+        let session = h.create(input).await;
+        h.wait_inputs(&session, 1).await;
+        if starting {
+            sqlx::query("UPDATE sessions SET state='starting' WHERE session_id=?")
+                .bind(&session)
+                .execute(&h.app.db())
+                .await
+                .unwrap();
+        }
+        if input == "lose first ready receipt" {
+            h.wait_session(&session, "idle").await;
+        }
+        let h = h.restart().await;
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while !h
+                .wire(&session)
+                .iter()
+                .any(|f| f["method"] == "ready_replayed")
+            {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        h.wait_session(&session, "idle").await;
+        h.gate(&session, 1, "start");
+        h.gate(&session, 1, "finish");
+        h.wait_states(&session, &["completed"]).await;
+        let ready: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM events WHERE session_id=? AND event_type='session.ready'",
+        )
+        .bind(&session)
+        .fetch_one(&h.app.db())
+        .await
+        .unwrap();
+        assert_eq!(ready, 1);
+        h.stop().await;
+    }
+}
+
+#[tokio::test]
+async fn unconfirmed_first_ready_requires_the_original_unbound_launch() {
+    for condition in [
+        "idle",
+        "exited",
+        "runtime_running",
+        "fingerprint",
+        "foreign_binding",
+    ] {
+        let h = Harness::new().await;
+        let session = h.create("hold first ready").await;
+        h.wait_inputs(&session, 1).await;
+        let pool = h.app.db();
+        let original: String = sqlx::query_scalar(
+            "SELECT process_fingerprint FROM session_runtimes WHERE session_id=?",
+        )
+        .bind(&session)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        match condition {
+            "runtime_running" => {
+                sqlx::query("UPDATE session_runtimes SET state='running' WHERE session_id=?")
+                    .bind(&session)
+                    .execute(&pool)
+                    .await
+                    .unwrap();
+            }
+            "fingerprint" => {
+                sqlx::query("UPDATE session_runtimes SET process_fingerprint=json_set(process_fingerprint,'$.start_time_seconds',0) WHERE session_id=?")
+                    .bind(&session).execute(&pool).await.unwrap();
+            }
+            "foreign_binding" => {
+                let native = h
+                    .wire(&session)
+                    .into_iter()
+                    .find(|f| f["method"] == "spawn")
+                    .unwrap()["native"]
+                    .clone();
+                let other = h.create("work").await;
+                h.wait_session(&other, "idle").await;
+                sqlx::query("UPDATE agent_bindings SET client_session_key=? WHERE session_id=?")
+                    .bind(native.as_str().unwrap())
+                    .bind(other)
+                    .execute(&pool)
+                    .await
+                    .unwrap();
+            }
+            state => {
+                sqlx::query("UPDATE sessions SET state=? WHERE session_id=?")
+                    .bind(state)
+                    .bind(&session)
+                    .execute(&pool)
+                    .await
+                    .unwrap();
+            }
+        }
+        let h = h.restart().await;
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while !h
+                .wire(&session)
+                .iter()
+                .any(|f| f["method"] == "attach_error" && f["code"] == -32009)
+            {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("expected permanent rejection for {condition}"));
+        sqlx::query("UPDATE session_runtimes SET process_fingerprint=? WHERE session_id=?")
+            .bind(original)
+            .bind(&session)
+            .execute(&pool)
+            .await
+            .unwrap();
+        h.stop().await;
+    }
+}

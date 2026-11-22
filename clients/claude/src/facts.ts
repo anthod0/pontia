@@ -35,13 +35,20 @@ export type HostEvent =
       blocking: boolean;
       authorization_digest: string;
     }
-  | { kind: "permission_settled"; permission_id: string; outcome: "resolved" | "expired" }
+  | {
+      kind: "permission_settled";
+      permission_id: string;
+      authorization_digest: string;
+      outcome: "resolved" | "expired";
+    }
   | { kind: "closed"; history_anchor?: string };
 
 function reportKey(host: string, sequence: number, event: HostEvent): string | undefined {
   switch (event.kind) {
     case "permission_requested":
       return `claude:${host}:${event.permission_id}`;
+    case "permission_settled":
+      return `claude:${host}:${event.permission_id}:settled`;
     case "started":
       return `claude:${host}:${event.input_id}:start`;
     case "finished":
@@ -55,7 +62,15 @@ function reportKey(host: string, sequence: number, event: HostEvent): string | u
 }
 
 export function hostObservation(host: string, sequence: number, event: HostEvent) {
-  return { host_id: host, sequence, report_key: reportKey(host, sequence, event), event };
+  return {
+    host_id: host,
+    sequence,
+    report_key: reportKey(host, sequence, event),
+    ...(event.kind === "permission_settled"
+      ? { registration_key: `claude:${host}:${event.permission_id}` }
+      : {}),
+    event,
+  };
 }
 
 export type Emit = (event: HostEvent) => void;

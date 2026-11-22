@@ -94,7 +94,6 @@ pub(crate) struct Peer {
     pub receipts: Arc<Receipts>,
     pub registering_permissions: std::sync::Mutex<HashMap<String, watch::Sender<()>>>,
     pub interactions: pontia_agent_control::interactions::InteractionService,
-    pub permission_events: crate::interactions::PermissionEvents,
     pub runtime: String,
     pub stop: watch::Sender<bool>,
     pub done: watch::Receiver<bool>,
@@ -262,9 +261,9 @@ impl Peer {
         let permission_service = interactions.clone();
         let cleanup_service = interactions.clone();
         let permission_state = state.clone();
-        let permission_events =
-            crate::interactions::PermissionEvents::new(events.clone(), &session, runtime);
-        let permission_facts = permission_events.clone();
+        let permission_runtime = runtime.to_owned();
+        let permission_session = session.clone();
+        let permission_relay = relay.clone();
         let permission_log_session = session.clone();
         let model_events = events.clone();
         let model_session = session.clone();
@@ -276,7 +275,7 @@ impl Peer {
                     async move |request: RequestPermissionRequest, responder, _cx| {
                         let key = crate::transport::frame_key(request.meta.as_ref());
                         if let Err(error) = crate::interactions::register(
-                            &permission_service, &permission_facts, &permission_state, request, responder,
+                            &permission_service, &permission_session, &permission_runtime, &permission_relay.rpc, &permission_state, request, responder,
                         ).await {
                             tracing::warn!(session=%permission_log_session, %error, "ACP permission registration failed");
                         }
@@ -358,11 +357,11 @@ impl Peer {
                 state.active = None;
                 (std::mem::take(&mut state.permissions), recover)
             };
-            if let Err(error) =
-                crate::interactions::expire(&cleanup_service, &session, permissions, None).await
-            {
-                tracing::warn!(%session, %error, "ACP permission cleanup failed");
-            }
+            let waiting = permissions
+                .keys()
+                .map(|id| (session.clone(), id.clone()))
+                .collect();
+            cleanup_service.await_reconnect(waiting).await;
             if let Some(output) = events.live_output() {
                 output.discard_session(&session);
             }
@@ -374,6 +373,12 @@ impl Peer {
                     break;
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+            if exited
+                && let Err(error) =
+                    crate::interactions::expire(&cleanup_service, &session, permissions, None).await
+            {
+                tracing::warn!(%session,%error,"ACP permission cleanup failed");
             }
             if exited
                 && let Err(error) = runtime_event(
@@ -411,7 +416,6 @@ impl Peer {
             state,
             receipts,
             interactions,
-            permission_events,
             registering_permissions: Default::default(),
             runtime: runtime.into(),
             stop,
@@ -531,15 +535,7 @@ impl Peer {
                 request.meta = new_session_meta;
                 let response = self.call(request).await?;
                 if let Some(options) = response.config_options {
-                    crate::models::replace(
-                        &mut *self.state.lock().await,
-                        &self.events,
-                        &self.session,
-                        &self.runtime,
-                        options,
-                        response.meta.as_ref(),
-                    )
-                    .await?;
+                    crate::models::replace(&mut *self.state.lock().await, options);
                 }
                 response.session_id
             }
@@ -603,9 +599,6 @@ impl Peer {
         let request = self.connection.prepare_request(load);
         let key = serde_json::to_string(request.id())?;
         let shared = self.state.clone();
-        let events = self.events.clone();
-        let session = self.session.clone();
-        let runtime = self.runtime.clone();
         let (send, receive) = oneshot::channel();
         // Completion belongs to the connection, not to the HTTP/read future.
         // Dropping a reader cannot strand replay or let late history become live output.
@@ -619,18 +612,9 @@ impl Peer {
                     let result = match result {
                         Ok(response) => {
                             if let Some(options) = response.config_options {
-                                crate::models::replace(
-                                    &mut state,
-                                    &events,
-                                    &session,
-                                    &runtime,
-                                    options,
-                                    response.meta.as_ref(),
-                                )
-                                .await
-                            } else {
-                                Ok(())
+                                crate::models::replace(&mut state, options);
                             }
+                            Ok(())
                         }
                         Err(error) => Err(protocol_error(error)),
                     };
@@ -723,45 +707,6 @@ pub(crate) async fn fact(
     Ok(())
 }
 
-async fn turn_fact(
-    events: &EventIngestService,
-    session: &str,
-    runtime: &str,
-    turn: &str,
-    kind: EventType,
-    data: Value,
-) -> Result<()> {
-    let key = format!("acp:{turn}:{kind}");
-    match fact(events, session, runtime, Some(turn), kind, key, data).await {
-        Err(Error::StateConflict(error)) => {
-            tracing::warn!(session, turn, %kind, %error, "Discarding conflicting ACP Turn report");
-            Ok(())
-        }
-        result => result,
-    }
-}
-
-pub(crate) async fn started(
-    events: &EventIngestService,
-    session: &str,
-    runtime: &str,
-    prompt: &mut Prompt,
-) -> Result<()> {
-    if !prompt.started {
-        turn_fact(
-            events,
-            session,
-            runtime,
-            &prompt.turn,
-            EventType::TurnStarted,
-            json!({"acp_history_anchor":prompt.history_index}),
-        )
-        .await?;
-        prompt.started = true;
-    }
-    Ok(())
-}
-
 async fn update(
     events: &EventIngestService,
     session: &str,
@@ -785,36 +730,8 @@ async fn update(
         if state.closing {
             return Ok(());
         }
-        return crate::models::replace(
-            &mut state,
-            events,
-            session,
-            runtime,
-            config.config_options,
-            notification.meta.as_ref(),
-        )
-        .await;
-    }
-    if let SessionUpdate::UsageUpdate(usage) = notification.update {
-        if state.closing || usage.size == 0 {
-            return Ok(());
-        }
-        return fact(
-            events,
-            session,
-            runtime,
-            None,
-            EventType::SessionContextUsageUpdated,
-            crate::transport::frame_key(notification.meta.as_ref())?,
-            json!({"context_usage": {
-                "used_tokens": usage.used,
-                "max_tokens": usage.size,
-                "remaining_tokens": usage.size.saturating_sub(usage.used),
-                "usage_ratio": (usage.used as f64 / usage.size as f64).min(1.0),
-                "confidence": "exact"
-            }}),
-        )
-        .await;
+        crate::models::replace(&mut state, config.config_options);
+        return Ok(());
     }
     // Retain field presence: schema serialization omits empty collections and
     // JSON null, which are meaningful replacement/return values for live tools.
@@ -842,7 +759,7 @@ async fn update(
             | "tool_call"
             | "tool_call_update"
             | "plan",
-        ) => started(events, session, runtime, prompt).await?,
+        ) => {}
         _ => return Ok(()),
     }
     if let Some(output) = events.live_output() {
@@ -852,8 +769,8 @@ async fn update(
 }
 
 pub(crate) async fn finish(
-    events: &EventIngestService,
-    session: &str,
+    _events: &EventIngestService,
+    _session: &str,
     peer: &Peer,
     turn: &str,
     result: std::result::Result<PromptResponse, agent_client_protocol::Error>,
@@ -862,43 +779,9 @@ pub(crate) async fn finish(
     if !state.current || state.active.as_ref().map(|prompt| prompt.turn.as_str()) != Some(turn) {
         return Ok(());
     }
-    let response = match result {
-        Ok(response) => response,
-        Err(error) => {
-            // A lost/failed response does not prove an execution result. Fence the
-            // connection; never allow the unknown prompt to be replayed or bypassed.
-            peer.invalidate(&mut state);
-            return Err(protocol_error(error));
-        }
-    };
-    let reason = serde_json::to_value(response.stop_reason)?;
-    let terminal = match reason.as_str() {
-        Some("end_turn") => EventType::TurnCompleted,
-        Some("cancelled") => EventType::TurnInterrupted,
-        Some("max_tokens" | "max_turn_requests" | "refusal") => EventType::TurnFailed,
-        _ => {
-            peer.invalidate(&mut state);
-            return Err(Error::Domain(format!(
-                "Unknown ACP prompt stop reason: {reason}"
-            )));
-        }
-    };
-    let prompt = state.active.as_mut().expect("checked active prompt");
-    started(events, session, &peer.runtime, prompt).await?;
-    // The state lock fences the next submission until this confirmed result has
-    // committed and the active prompt has been cleared.
-    let data = if terminal == EventType::TurnFailed {
-        json!({"failure":{"message":format!("ACP prompt stopped: {}", reason.as_str().unwrap())}})
-    } else {
-        json!({})
-    };
-    let mut data = data;
-    data["acp_history_anchor"] = json!(prompt.history_end);
-    turn_fact(events, session, &peer.runtime, turn, terminal, data).await?;
-    state.active = None;
-    peer.remember(&state, None).await?;
-    let permissions = std::mem::take(&mut state.permissions);
-    state.refresh_capabilities();
-    drop(state);
-    crate::interactions::expire(&peer.interactions, session, permissions, None).await
+    if let Err(error) = result {
+        peer.invalidate(&mut state);
+        return Err(protocol_error(error));
+    }
+    Ok(())
 }

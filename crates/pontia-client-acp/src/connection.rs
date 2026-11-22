@@ -34,6 +34,11 @@ struct Context {
     active: Option<Prompt>,
 }
 
+pub(crate) fn context(state: &SessionState) -> Value {
+    json!({"ready":state.ready,"blocked":state.blocked,"native":state.native,"steer":state.negotiated.steer,
+        "system_prompt":state.system_prompt,"current_model":state.current_model,"config_options":state.config_options,"active":state.active})
+}
+
 impl Peer {
     pub fn remember<'a>(
         &'a self,
@@ -42,11 +47,7 @@ impl Peer {
     ) -> pontia_agent_control::client_contract::ClientOperation<'a, ()> {
         let params = json!({
             "client_session_key":binding,
-            "context":{
-                "ready":state.ready, "blocked":state.blocked, "native":state.native, "steer":state.negotiated.steer,
-                "system_prompt":state.system_prompt, "current_model":state.current_model,
-                "config_options":state.config_options, "active":state.active,
-            },
+            "context": context(state),
         });
         Box::pin(async move { self.relay.call("relay.state", params).await.map(|_| ()) })
     }
@@ -176,7 +177,7 @@ impl AcpAdapter {
                 .lock()
                 .await
                 .insert(identity.session_id.clone(), peer.clone());
-            if !status["context"].is_null() && peer.state.lock().await.active.is_none() {
+            if status["setup_status"] == "confirmed" && peer.state.lock().await.active.is_none() {
                 let history = peer.clone();
                 tokio::spawn(async move {
                     let _ = history.load().await;
@@ -189,7 +190,14 @@ impl AcpAdapter {
         let peer = match setup {
             Ok(peer) => peer,
             Err(error) => {
-                let _ = rpc.reply_error(first.id, -32009, &error.to_string()).await;
+                let code = match error {
+                    Error::StateConflict(_)
+                    | Error::Domain(_)
+                    | Error::Serialization(_)
+                    | Error::NotFound(_) => -32009,
+                    _ => -32603,
+                };
+                let _ = rpc.reply_error(first.id, code, &error.to_string()).await;
                 return Err(error);
             }
         };
@@ -211,7 +219,7 @@ impl AcpAdapter {
             .clone()
             .map(Ok)
             .unwrap_or_else(std::env::current_exe)?;
-        let bootstrap = pontia_agent_control::ipc::relay::Bootstrap {
+        let bootstrap = crate::relay::Bootstrap {
             pontia_home: root.into(),
             session_id: session.into(),
             runtime_id: runtime.into(),

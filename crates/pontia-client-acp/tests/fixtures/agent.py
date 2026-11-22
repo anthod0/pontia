@@ -136,6 +136,8 @@ def prompt(request, ordinal, cancellation):
     reason = "cancelled" if cancellation.is_set() else os.environ.get("ACP_STOP_REASON", request["params"]["prompt"][0]["text"])
     active = None
     response(request, {"stopReason": reason})
+    if os.environ.get("ACP_RESULT_MARKER") == "1":
+        (root / f"result-written-{ordinal}").touch()
     if os.environ.get("ACP_EXIT_AFTER_RESULT") == "1":
         os._exit(0)
 

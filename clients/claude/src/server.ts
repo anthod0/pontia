@@ -1,3 +1,4 @@
+import { ReportQueue } from "../shared/report-queue.js";
 import { randomUUID } from "node:crypto";
 import {
   connectRuntime,
@@ -68,7 +69,7 @@ export function bootstrap(value: unknown): Bootstrap {
 export async function serve(config: Bootstrap, factory?: QueryFactory) {
   const generation = randomUUID();
   let connected = false;
-  let closing = false;
+  let generationOfConnection = 0;
   let sequence = 0;
   let connection: RuntimeConnection;
   const reports = new Set<Promise<unknown>>();
@@ -77,59 +78,73 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
     runtimeId: config.runtime_id,
     clientSessionKey: undefined as string | undefined,
   };
+  const queue = new ReportQueue();
+  type Observation = ReturnType<typeof hostObservation>;
+  const acknowledged = new Map<string, Observation>();
+  let pendingReady: { report_key: string; native_session_id: string } | undefined;
+  let submitted: { id: string; metadata: ObjectValue } | undefined;
+
+  function deliver(params: Observation) {
+    const event = params.event;
+    const report = queue
+      .enqueue(async () => {
+        const receipt = object(await connection.request("host.event", params));
+        if (receipt.accepted !== true)
+          throw new RpcError(-32602, "Invalid Claude fact acknowledgement");
+        if (event.kind === "ready") pendingReady = undefined;
+        if (event.kind === "permission_requested" && host.hasPermission(event.permission_id)) {
+          if (receipt.ended === true) host.cancelPermission(event.permission_id);
+          else acknowledged.set(event.permission_id, params);
+        }
+      })
+      .catch((error) => {
+        console.error("Claude host fact discarded", params.report_key, String(error));
+        if (event.kind === "permission_requested") host.cancelPermission(event.permission_id);
+      });
+    reports.add(report);
+    void report.finally(() => reports.delete(report));
+  }
+
   const host = new Host(
     config,
     (event: HostEvent) => {
       const params = hostObservation(generation, ++sequence, event);
-      if (event.kind === "ready") identity.clientSessionKey = event.native_session_id;
-      if (!connected) return;
-      const deliver = async () => {
-        for (;;) {
-          try {
-            const receipt = await connection.request("host.event", params);
-            if (event.kind === "permission_requested" && object(receipt).ended === true)
-              host.cancelPermission(event.permission_id);
-            return;
-          } catch (error) {
-            if (
-              (event.kind !== "permission_requested" && event.kind !== "permission_settled") ||
-              !(error instanceof RpcError)
-            )
-              throw error;
-            if (error.code !== -32603) {
-              if (event.kind === "permission_requested") host.cancelPermission(event.permission_id);
-              throw error;
-            }
-            console.error("Claude permission report temporarily failed", event.permission_id);
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-            if (
-              closing ||
-              !connected ||
-              (event.kind === "permission_requested" && !host.hasPermission(event.permission_id))
-            )
-              return;
-          }
-        }
-      };
-      const report = deliver();
-      reports.add(report);
-      void report
-        .catch((error: unknown) => {
-          if (error instanceof RpcError && error.code === -32009)
-            console.error("Claude host fact rejected", params.report_key);
-          else console.error("Claude host fact delivery failed");
-        })
-        .finally(() => reports.delete(report));
-      connection.registered(identity);
+      if (event.kind === "started" && submitted?.id === event.input_id) {
+        Object.assign(params.event, { input: submitted.metadata });
+        submitted = undefined;
+      }
+      if (event.kind === "ready") {
+        identity.clientSessionKey = event.native_session_id;
+        pendingReady = {
+          report_key: params.report_key!,
+          native_session_id: event.native_session_id,
+        };
+      }
+      if (event.kind === "permission_settled") acknowledged.delete(event.permission_id);
+      if (params.report_key || event.kind === "closed" || event.kind === "unavailable") {
+        deliver(params);
+      } else if (connected) {
+        const current = generationOfConnection;
+        void queue
+          .drained()
+          .then(() => {
+            if (connected && current === generationOfConnection)
+              return connection.request("host.event", params);
+          })
+          .catch(() => {});
+      }
     },
     factory,
   );
   const invoke = async (request: ObjectValue): Promise<ObjectValue> => {
     try {
       switch (request.method) {
-        case "input":
-          host.submit(string(request.input_id), string(request.text));
+        case "input": {
+          const input = { id: string(request.input_id), metadata: object(request.input) };
+          host.submit(input.id, string(request.text));
+          submitted = input;
           break;
+        }
         case "steer":
           host.steer(
             string(request.target_input_id),
@@ -149,7 +164,6 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
         case "is_idle":
           return { status: "accepted", idle: host.isIdle() };
         case "close":
-          closing = true;
           await host.close();
           break;
         default:
@@ -172,6 +186,7 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
           result: {
             host_id: generation,
             ...host.status(),
+            pending_ready: pendingReady,
             launch: {
               cwd: config.cwd,
               config_dir: process.env.CLAUDE_CONFIG_DIR,
@@ -202,9 +217,11 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
     async () => {
       connected = true;
       host.controlRestored();
+      for (const params of acknowledged.values()) deliver(params);
     },
     () => {
       connected = false;
+      generationOfConnection++;
       host.controlLost();
     },
     true,
@@ -230,7 +247,6 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
   };
   process.once("SIGTERM", terminate);
   async function close() {
-    closing = true;
     process.off("SIGTERM", terminate);
     try {
       await host.close();

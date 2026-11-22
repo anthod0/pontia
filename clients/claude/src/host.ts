@@ -122,7 +122,7 @@ export class Host {
           ...(policy?.disable_mcp ? ["mcp__*"] : []),
         ],
         canUseTool: (tool, input, context) => {
-          if (!this.acceptsControl())
+          if (this.closed || this.closing || this.unavailable)
             return Promise.resolve({ behavior: "deny", message: "Tool approval is unavailable." });
           if (policy?.yolo) return Promise.resolve({ behavior: "allow", updatedInput: input });
           return this.permissions.request(tool, input, context);
@@ -234,7 +234,6 @@ export class Host {
 
   controlLost(): void {
     this.controlConnected = false;
-    this.permissions.expire();
   }
 
   controlRestored(): void {
