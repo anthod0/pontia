@@ -34,6 +34,7 @@
   let feed = $state<BotMessageFeed>()
   let feedRoot = $state<HTMLElement>()
   let actions = $state<BotMessageActions>()
+  let menuOpenFor = $state<string | null>(null)
   let panel = $state<BotChatPanel>()
   provideFilePreviewNavigator({ open: file => panel?.openFile(file) })
   let composer = $state<MessageComposer>()
@@ -192,17 +193,17 @@
   </div>
 {/snippet}
 
-<!-- A long press on touch selects text, so touch rows open their menu from this button. -->
+<!-- A long press on touch selects text, so touch rows always show this button; with a mouse it appears on hover or focus. -->
 {#snippet menuButton(id: string)}
-  <Button variant="ghost" size="icon-sm" class="hidden shrink-0 self-end text-muted-foreground pointer-coarse:inline-flex" aria-label={$t('bots.messageActions')}
-    onclick={(event: MouseEvent) => actions?.openMenu(id, event.currentTarget as HTMLElement)}><DotsThreeIcon weight="bold" /></Button>
+  <Button variant="ghost" size="icon-sm" class={['shrink-0 self-end text-muted-foreground transition-opacity pointer-coarse:opacity-100', menuOpenFor === id ? 'opacity-100' : 'opacity-0 group-hover/entry:opacity-100 group-focus-within/entry:opacity-100']} aria-label={$t('bots.messageActions')}
+    onclick={(event: MouseEvent) => actions?.openMenu(id, event)}><DotsThreeIcon weight="bold" /></Button>
 {/snippet}
 
 {#if timeline.bot}
   <BotChatPanel bind:this={panel} bot={timeline.bot} count={timeline.openTodoCount} onjump={jumpTo} onquote={addQuote} ontodochange={changeTodo} />
   <!-- The feed scrolls beneath the transparent top bar, like the Session chat page. -->
   <section class="mx-auto -mt-14 flex h-dvh max-w-3xl flex-col md:-mt-12" aria-label={timeline.bot.name}>
-    <BotMessageActions root={feedRoot} entry={id => timeline.entries.find(row => row.id === id)} bind:this={actions} onresolve={id => changeTodo(id, 'resolve')} oncontext={id => panel?.viewContext(id)} onquote={quote => void addQuote(quote)} />
+    <BotMessageActions root={feedRoot} entry={id => timeline.entries.find(row => row.id === id)} bind:this={actions} bind:openId={menuOpenFor} onresolve={id => changeTodo(id, 'resolve')} oncontext={id => panel?.viewContext(id)} onquote={quote => void addQuote(quote)} />
     <BotMessageFeed bind:this={feed} bind:root={feedRoot} {timeline} {typing} highlighted={highlighted && timeline.entries.some(row => row.id === highlighted) ? highlighted : null}>
       {#snippet row(entry)}
         {#if 'content' in entry}

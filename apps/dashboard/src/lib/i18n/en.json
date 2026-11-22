@@ -52,6 +52,7 @@
   "bots.executionFailed": "Bot execution failed",
   "bots.sessionExited": "Bot Session exited",
   "bots.processing": "Working on your message",
+  "bots.reply": "Reply",
   "bots.quote": "Quote",
   "bots.files": "Files",
   "bots.context": "Context",

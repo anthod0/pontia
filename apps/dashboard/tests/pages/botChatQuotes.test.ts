@@ -84,9 +84,20 @@ function sent() {
     .mockImplementation(async (_bot, content) => message(99, "user_input", content));
 }
 
+// A message's menu offers Reply; a file's offers Quote file or Quote image.
 async function quoteFromMenu(row: HTMLElement) {
   await fireEvent.contextMenu(row, { clientX: 10, clientY: 10 });
-  await fireEvent.click(await screen.findByRole("menuitem", { name: /Quote/ }));
+  await fireEvent.click(
+    await screen.findByRole("menuitem", { name: /^(Reply|Quote file|Quote image)/ }),
+  );
+}
+
+// A tap reaches the button as a click whose pointer is a touch.
+async function tap(element: Element) {
+  await fireEvent(
+    element,
+    new PointerEvent("click", { bubbles: true, cancelable: true, pointerType: "touch" }),
+  );
 }
 
 // The closing menu briefly leaves pointer-events: none on the body in jsdom.
@@ -379,18 +390,42 @@ test("a touch long press keeps the native text selection instead of opening the 
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
 
-test("the message actions button opens the touch menu to quote the whole message", async () => {
+test("the message actions button opens the touch menu to reply to the whole message", async () => {
   serve([reply, file]);
   render(BotChatPage, { botId: bot.bot_id });
   await screen.findByText("certificate");
   const [replyMenu, fileMenu] = screen.getAllByRole("button", { name: "Message actions" });
-  await fireEvent.click(fileMenu);
+  await tap(fileMenu);
   const sheet = within(await screen.findByRole("dialog"));
   await fireEvent.click(sheet.getByRole("menuitem", { name: /Quote file/ }));
   await screen.findByRole("button", { name: /^Remove quote.*checklist/ });
-  await fireEvent.click(replyMenu);
+  await tap(replyMenu);
   const replySheet = within(await screen.findByRole("dialog"));
-  await fireEvent.click(replySheet.getByRole("menuitem", { name: "Quote" }));
+  await fireEvent.click(replySheet.getByRole("menuitem", { name: "Reply" }));
+  await screen.findByRole("button", { name: /^Remove quote.*certificate/ });
+});
+
+test("with a mouse, the message actions button opens the same menu as a right-click", async () => {
+  serve([reply]);
+  render(BotChatPage, { botId: bot.bot_id });
+  await screen.findByText("certificate");
+  const button = screen.getByRole("button", { name: "Message actions" });
+  expect(button).toHaveClass("opacity-0", "group-hover/entry:opacity-100");
+  await userEvent.click(button);
+  const menu = await screen.findByRole("menu");
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(
+    within(menu)
+      .getAllByRole("menuitem")
+      .map((item) => item.textContent),
+  ).toEqual(["ReplyR", "Copy", "View context"]);
+  // The button stays visible while its menu is open.
+  expect(button).toHaveClass("opacity-100");
+  await userEvent.keyboard("{Escape}");
+  await waitFor(() => expect(button).toHaveFocus());
+  expect(button).toHaveClass("opacity-0");
+  await userEvent.click(button);
+  await fireEvent.click(await screen.findByRole("menuitem", { name: /Reply/ }));
   await screen.findByRole("button", { name: /^Remove quote.*certificate/ });
 });
 
@@ -445,7 +480,7 @@ test.each([false, true])(
     );
     const selected = images[6];
     const row = document.querySelector(`[data-bot-file-id="${selected.file_id}"]`)! as HTMLElement;
-    await fireEvent.click(within(row).getByRole("button", { name: "Message actions" }));
+    await tap(within(row).getByRole("button", { name: "Message actions" }));
     const sheet = within(await screen.findByRole("dialog"));
     await fireEvent.click(sheet.getByRole("menuitem", { name: /Quote image/ }));
     await userEvent.type(screen.getByRole("textbox"), "This one");

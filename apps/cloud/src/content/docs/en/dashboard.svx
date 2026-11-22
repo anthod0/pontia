@@ -54,7 +54,7 @@ When a Bot shares files, they appear in the Bot chat as a card with each file's 
 
 ## Quote a Bot chat message
 
-In a Bot chat, right-click a message or one shared file or image and choose **Quote**, or select part of a message and choose **Quote** above the selection. On a phone, press and hold a message; the menu also offers **Copy** and **Select text**. Shift+right-click opens the browser's own menu.
+In a Bot chat, right-click a message, or click the **⋯** button that appears next to it when you hover over it, and choose **Reply**. For one shared file or image, choose **Quote file** or **Quote image** from the same menu. To quote part of a message, select it and choose **Quote** above the selection. On a phone, press and hold a message; the menu also offers **Copy** and **Select text**. Shift+right-click opens the browser's own menu.
 
 The quote appears above the composer; click **×** to remove it. Quoting another message replaces it, and a message needs text to be sent with a quote. The Bot receives the full quoted text. Click a quote in a sent message to scroll back to the original, even when it is in older history.
 

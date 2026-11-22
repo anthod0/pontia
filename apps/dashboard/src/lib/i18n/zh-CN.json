@@ -52,6 +52,7 @@
   "bots.executionFailed": "Bot 执行失败",
   "bots.sessionExited": "Bot Session 已退出",
   "bots.processing": "正在处理消息",
+  "bots.reply": "回复",
   "bots.quote": "引用",
   "bots.files": "文件",
   "bots.context": "上下文",

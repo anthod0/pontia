@@ -54,7 +54,7 @@ Quando um Bot compartilhar arquivos, eles aparecem na conversa com o Bot em um c
 
 ## Citar uma mensagem na conversa com um Bot
 
-Na conversa com um Bot, clique com o botão direito em uma mensagem ou em um arquivo ou imagem compartilhado e escolha **Quote**, ou selecione parte de uma mensagem e escolha **Quote** acima da seleção. No celular, toque e segure a mensagem; o menu também oferece **Copy** e **Select text**. Shift+clique com o botão direito abre o menu do próprio navegador.
+Na conversa com um Bot, clique com o botão direito em uma mensagem, ou no botão **⋯** que aparece ao lado dela quando você passa o mouse, e escolha **Reply**. Para um arquivo ou imagem compartilhado, escolha **Quote file** ou **Quote image** no mesmo menu. Para citar parte de uma mensagem, selecione o trecho e escolha **Quote** acima da seleção. No celular, toque e segure a mensagem; o menu também oferece **Copy** e **Select text**. Shift+clique com o botão direito abre o menu do próprio navegador.
 
 A citação aparece acima do compositor; clique em **×** para removê-la. Citar outra mensagem substitui a atual, e é preciso escrever um texto para enviar uma citação. O Bot recebe o texto citado completo. Clique em uma citação em uma mensagem enviada para voltar à original, mesmo que ela esteja no histórico mais antigo.
 

@@ -8,6 +8,7 @@
   import * as Sheet from '$lib/components/ui/sheet/index.js'
   import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon'
   import QuotesIcon from 'phosphor-svelte/lib/QuotesIcon'
+  import ArrowBendUpLeftIcon from 'phosphor-svelte/lib/ArrowBendUpLeftIcon'
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
@@ -16,9 +17,11 @@
   import { useDeviceRuntime } from '../../device/context'
   import type { BotEntry, SharedFile } from '../../api/types'
 
-  let { root, entry, onquote, oncontext, onresolve }: {
+  let { root, entry, onquote, oncontext, onresolve, openId = $bindable(null) }: {
     /** Element containing the feed rows; events are delegated from it. */
     root: HTMLElement | undefined
+    /** The row whose menu is open. */
+    openId?: string | null
     entry: (id: string) => BotEntry | undefined
     onresolve: (messageId: string) => void
     oncontext: (messageId: string) => void
@@ -30,6 +33,8 @@
   const device = useDeviceRuntime()
 
   let target = $state<Target | null>(null)
+  /** The menu button that opened the menu; focus returns to it on close. */
+  let opener: HTMLElement | null = null
   let menuOpen = $state(false)
   let sheetOpen = $state(false)
   let anchor = $state({ x: 0, y: 0 })
@@ -69,7 +74,8 @@
     return Boolean(native && !(native.tagName === 'IMG' && native.closest('[data-bot-file-id]')))
   }
 
-  function open(next: Target, touch: boolean, point: { x: number; y: number }) {
+  function open(next: Target, touch: boolean, point: { x: number; y: number }, from: HTMLElement | null = null) {
+    opener = from
     selection = null
     target = next
     anchor = point
@@ -96,13 +102,15 @@
     updateSelection()
   }
 
-  /** Opens the touch menu for a row from its menu button. */
-  export function openMenu(id: string, button: HTMLElement) {
+  /** Opens a row's menu from its menu button: a sheet on touch, a dropdown with a mouse or keyboard. */
+  export function openMenu(id: string, event: MouseEvent) {
+    const button = event.currentTarget as HTMLElement
     const element = button.closest<HTMLElement>('[data-bot-quotable]') ?? button.closest('[data-bot-entry-id]')?.querySelector<HTMLElement>('[data-bot-quotable]')
     const row = rowOf(element ?? null)
     if (!row || row.entry.id !== id) return
     const rect = button.getBoundingClientRect()
-    open({ ...row, excerpt: null }, true, { x: rect.left, y: rect.bottom })
+    const touch = (event instanceof PointerEvent && event.pointerType === 'touch') || matchMedia('(pointer: coarse)').matches
+    open({ ...row, excerpt: null }, touch, { x: rect.left, y: rect.bottom }, button)
   }
 
   function updateSelection() {
@@ -183,10 +191,11 @@
     else toast.error($t('files.copyFailed'))
   }
 
-  // Keyboard users return to the message the menu acted on.
+  // Keyboard users return to the menu button or message the menu acted on.
   function restoreFocus(event: Event) {
     event.preventDefault()
-    if (target?.element.isConnected && target.element.tabIndex >= 0) target.element.focus()
+    if (opener?.isConnected) opener.focus()
+    else if (target?.element.isConnected && target.element.tabIndex >= 0) target.element.focus()
   }
 
   const openTodo = $derived.by(() => {
@@ -194,7 +203,10 @@
     return row && 'content' in row && row.todo?.state === 'open'
   })
   const isMessage = $derived(target !== null && 'content' in target.entry)
-  const quoteLabel = $derived(target?.file ? (canPreviewImage(target.file) ? $t('bots.quoteImage') : $t('bots.quoteFile')) : $t('bots.quote'))
+  $effect(() => { openId = (menuOpen || sheetOpen) && target ? target.entry.id : null })
+  // A whole message is quoted as a reply; a file keeps its quote label.
+  const quoteLabel = $derived(target?.file ? (canPreviewImage(target.file) ? $t('bots.quoteImage') : $t('bots.quoteFile')) : $t('bots.reply'))
+  const QuoteIcon = $derived(target?.file ? QuotesIcon : ArrowBendUpLeftIcon)
   // Touch: below the selection, clear of the system selection menu. Mouse: above it.
   // Both stay inside the viewport when the selection runs past an edge.
   const selectionStyle = $derived.by(() => {
@@ -213,7 +225,7 @@
       {#if current.file}
         <DropdownMenu.Label class="max-w-64 truncate text-xs font-normal text-muted-foreground" title={current.file.name}>{current.file.name}</DropdownMenu.Label>
       {/if}
-      <DropdownMenu.Item onSelect={() => quote(current)}><QuotesIcon />{quoteLabel}<DropdownMenu.Shortcut>R</DropdownMenu.Shortcut></DropdownMenu.Item>
+      <DropdownMenu.Item onSelect={() => quote(current)}><QuoteIcon />{quoteLabel}<DropdownMenu.Shortcut>R</DropdownMenu.Shortcut></DropdownMenu.Item>
       {#if isMessage}
         <DropdownMenu.Item onSelect={() => void copy(current)}><CopyIcon />{$t('common.copy')}</DropdownMenu.Item>
         <DropdownMenu.Item onSelect={() => viewContext(current)}><TreeStructureIcon />{$t('bots.viewContext')}</DropdownMenu.Item>
@@ -239,7 +251,7 @@
         <Sheet.Description class="mx-2 mb-2 rounded-xl bg-muted px-3 py-2 text-[13px] leading-5"><span class="line-clamp-2 [overflow-wrap:anywhere]">{quoteSummary(preview)}</span></Sheet.Description>
       {/if}
       <div class="flex flex-col" role="menu" aria-label={$t('bots.messageActions')}>
-        <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => quote(current)}><QuotesIcon class="size-5" />{quoteLabel}</button>
+        <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => quote(current)}><QuoteIcon class="size-5" />{quoteLabel}</button>
         {#if current.file}
           <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => download(current)}><DownloadSimpleIcon class="size-5" />{$t('files.download')}</button>
         {/if}
