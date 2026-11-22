@@ -14,6 +14,7 @@ pub trait ClientConfiguration: Send + Sync {
 
     fn validate_execution_policy(
         &self,
+        _key: &str,
         policy: &pontia_core::execution_policy::ExecutionPolicy,
     ) -> Result<()> {
         if policy != &Default::default() {

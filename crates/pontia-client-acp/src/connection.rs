@@ -137,9 +137,15 @@ impl AcpAdapter {
                 .as_deref()
                 .map(crate::identity::decode)
                 .transpose()?;
-            let definition = binding
-                .as_ref()
-                .and_then(|id| self.config.agents.get(&id[0]));
+            let agent_key = match &binding {
+                Some(id) => id[0].clone(),
+                None => sqlx::query_scalar::<_, String>(
+                    "SELECT json_extract(metadata, '$.acp_agent_id') FROM sessions WHERE session_id=?",
+                ).bind(&identity.session_id).fetch_one(&app.db()).await?,
+            };
+            let definition = self.config.agents.get(&agent_key);
+            let policy = app.queries().session_execution_policy(&identity.session_id).await?;
+            let policy = crate::restrictions::SessionPolicy::resolve(definition.and_then(|agent| agent.restricted_execution), &policy)?;
             let peer = Peer::connect(
                 &app,
                 &identity,
@@ -149,6 +155,7 @@ impl AcpAdapter {
                 status["context"].clone(),
                 crate::peer::PeerOwner {
                     agent: crate::capabilities::AgentBounds::of(definition),
+                    policy,
                     peers: Arc::downgrade(&self.peers),
                     reconnect: self.reconnect.clone(),
                 },

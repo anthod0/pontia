@@ -1783,12 +1783,12 @@ async fn restricted_execution_policy_defaults_yolo_false_and_accepts_explicit_yo
         );
     }
     configuration
-        .validate_execution_policy(&restricted)
+        .validate_execution_policy("default", &restricted)
         .unwrap();
     let mut approval_free = restricted.clone();
     approval_free.yolo = true;
     configuration
-        .validate_execution_policy(&approval_free)
+        .validate_execution_policy("default", &approval_free)
         .unwrap();
 
     let h = Harness::new().await;

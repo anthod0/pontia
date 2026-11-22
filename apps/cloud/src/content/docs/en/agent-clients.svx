@@ -34,6 +34,8 @@ Install Grok Build so that `grok` is on the Pontia service user’s PATH. Pontia
 pontia client enable grok
 ```
 
+Choose Grok Build for a Bot, a helper, or dreaming. In these Sessions, Grok keeps its terminal and read tools. Its dedicated tools for file edits, media output, worktrees, subagents, workflows, scheduling, background tasks, monitoring, and MCP tool calls are disabled. Bots, retrieval helpers, and dreaming also turn off automatic skill discovery. Pontia queues messages sent to a busy Grok Bot or helper and delivers them after its current turn.
+
 Run `pontia setup pi`, `pontia setup codex`, or `pontia setup claude` to install or repair a local integration. Omit the Client to select interactively. Setup also enables the Client.
 
 In the Dashboard, open **Settings → Agent Clients**, select Pi, Codex, or Claude Code, and click **Initialize** to perform the same setup on that device. The page shows the latest setup output and result, including after reconnecting.

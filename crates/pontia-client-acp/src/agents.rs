@@ -1,8 +1,7 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use pontia_core::{
-    client_capabilities::AgentClientCapabilities, execution_policy::ExecutionPolicy,
-};
+use crate::restrictions::RestrictedExecution;
+use pontia_core::client_capabilities::AgentClientCapabilities;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -18,7 +17,7 @@ pub struct AcpAgentDefinition {
     pub launch: AcpLaunch,
     pub new_session_instructions_meta_key: Option<String>,
     pub capabilities: AgentClientCapabilities,
-    pub restricted_execution: Option<ExecutionPolicy>,
+    pub restricted_execution: Option<&'static RestrictedExecution>,
 }
 
 #[derive(Clone)]
@@ -37,7 +36,7 @@ impl AcpAgents {
                 },
                 new_session_instructions_meta_key: Some("rules".into()),
                 capabilities: crate::ACP_MAX_CAPABILITIES,
-                restricted_execution: None,
+                restricted_execution: Some(&GROK_RESTRICTED),
             },
         )])
     }
@@ -54,3 +53,41 @@ impl AcpAgents {
         self.0.keys().map(String::as_str)
     }
 }
+
+const GROK_RESTRICTED: RestrictedExecution = RestrictedExecution {
+    profile_key: "agentProfile",
+    profile_name: ("name", "pontia-restricted"),
+    profile_description: ("description", "Pontia restricted Session"),
+    deny_key: "disallowedTools",
+    disabled_tools: &[
+        "Agent",
+        "workflow",
+        "send_subagent_message",
+        "get_task_output",
+        "wait_tasks",
+        "kill_task",
+        "scheduler_create",
+        "scheduler_delete",
+        "scheduler_list",
+        "monitor",
+        "search_replace",
+        "write",
+        "image_gen",
+        "image_edit",
+        "image_to_video",
+        "reference_to_video",
+        "search_tool",
+        "use_tool",
+    ],
+    deny_dependencies: &[("get_task_output", "Agent"), ("kill_task", "Agent")],
+    discover_skills_key: Some("discoverSkills"),
+    yolo_key: Some("yoloMode"),
+    startup_model_key: "modelId",
+    list_method: "_x.ai/models/list",
+    catalog_path: "/result",
+    agent_type_path: "/_meta/agentType",
+    allowed_types: &["grok-build-plan"],
+    info_method: "_x.ai/session/info",
+    profile_path: "/result/agentName",
+    model_path: "/result/model",
+};

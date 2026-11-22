@@ -61,41 +61,6 @@ impl TurnCommandService {
         Ok(Some(turn))
     }
 
-    /// Selects the current native input entry point without creating an Inbox message.
-    pub async fn submit_live_input(&self, session_id: &str, input: String) -> Result<()> {
-        use std::time::Duration;
-        use tokio::time::{Instant, sleep};
-
-        let lock = self.scheduler.session_lock(session_id);
-        let _guard = lock.lock().await;
-        let deadline = Instant::now() + Duration::from_secs(5);
-        let metadata = json!({});
-        loop {
-            let active = SqliteTurnRepository::new(self.pool.clone())
-                .active_turn(session_id)
-                .await?;
-            let intent = match active {
-                Some(turn) => InputIntent::Steer {
-                    turn_id: turn.turn_id,
-                },
-                None => InputIntent::Start,
-            };
-            let result = self
-                .submit_input(session_id, input.clone(), metadata.clone(), intent, None)
-                .await
-                .and_then(|(_, receipt)| receipt.into_result());
-            match result {
-                Err(Error::Conflict {
-                    code: "input_busy" | "steer_target_changed",
-                    ..
-                }) if Instant::now() < deadline => {
-                    sleep(Duration::from_millis(25)).await;
-                }
-                result => return result.map(|_| ()),
-            }
-        }
-    }
-
     pub(crate) async fn submit_input(
         &self,
         session_id: &str,

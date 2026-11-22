@@ -13,6 +13,8 @@ mod models;
 mod observations;
 mod peer;
 pub mod relay;
+mod restrictions;
+pub use restrictions::RestrictedExecution;
 mod spec;
 mod steering;
 mod transport;

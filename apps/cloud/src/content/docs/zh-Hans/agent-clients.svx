@@ -34,6 +34,8 @@ pontia init
 pontia client enable grok
 ```
 
+Bot、助手和 dreaming 均可选用 Grok Build。这些会话保留终端和读取工具，关闭 Grok 专门用于编辑文件、媒体落盘、工作树、子 Agent、工作流、定时、后台任务、监控和调用 MCP 的工具。Bot、检索助手和 dreaming 还会关闭技能自动发现。发送给运行中 Grok Bot 或助手的消息由 Pontia 排队，在当前轮结束后投递。
+
 运行 `pontia setup pi`、`pontia setup codex` 或 `pontia setup claude` 来安装或修复本地集成。省略 Client 名称即可交互式选择。Setup 也会启用该 Client。
 
 也可以在 Dashboard 的 **设置 → Agent Clients** 中选择 Pi、Codex 或 Claude Code，点击 **初始化**，在该设备上执行相同的配置。页面会显示最近一次初始化的输出和结果，重新连接后仍可查看。

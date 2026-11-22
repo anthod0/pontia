@@ -34,6 +34,7 @@ impl ClientConfiguration for PiConfiguration {
 
     fn validate_execution_policy(
         &self,
+        _key: &str,
         policy: &pontia_core::execution_policy::ExecutionPolicy,
     ) -> Result<()> {
         for tool in policy.tools.iter().flatten().chain(&policy.disabled_tools) {

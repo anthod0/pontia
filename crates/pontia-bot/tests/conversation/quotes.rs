@@ -44,7 +44,8 @@ async fn new_quotes_are_capped_before_storage_and_bot_delivery() {
             let message = service
                 .send(&bot.bot_id, &quoted(&original, already_excerpt))
                 .await
-                .unwrap();
+                .unwrap()
+                .message;
             assert_eq!(message.status, MessageStatus::Normal);
             assert_eq!(message.content, expected);
             assert_eq!(
@@ -66,7 +67,12 @@ async fn new_quotes_are_capped_before_storage_and_bot_delivery() {
     }
     let capped = quoted(&format!("{}…", "😀".repeat(2000)), true);
     assert_eq!(
-        service.send(&bot.bot_id, &capped).await.unwrap().content,
+        service
+            .send(&bot.bot_id, &capped)
+            .await
+            .unwrap()
+            .message
+            .content,
         capped
     );
 }
@@ -85,7 +91,7 @@ async fn file_quotes_and_plain_text_are_unchanged() {
         format!("Example:\n{}", quoted(&"a".repeat(2100), false)),
         quoted(&"a".repeat(2100), false).replace("speaker=\"Bot\"", "speaker=\"Other\""),
     ] {
-        assert_eq!(service.send(&bot.bot_id, &content).await.unwrap().content, content);
+        assert_eq!(service.send(&bot.bot_id, &content).await.unwrap().message.content, content);
     }
 }
 
@@ -105,7 +111,12 @@ async fn historical_quotes_are_unchanged_when_read_or_retried() {
         content
     );
     assert_eq!(
-        service.retry(&bot.bot_id, "old").await.unwrap().content,
+        service
+            .retry(&bot.bot_id, "old")
+            .await
+            .unwrap()
+            .message
+            .content,
         content
     );
     assert_eq!(
@@ -129,13 +140,13 @@ async fn saved_user_inputs_link_only_valid_quotes_from_the_same_chat() {
         .await
         .unwrap()
         .bot_id;
-    let target = service.send(&a, "Original").await.unwrap();
+    let target = service.send(&a, "Original").await.unwrap().message;
     for excerpt in [false, true] {
         let content = quoted("Original", excerpt).replace(MESSAGE_ID, &target.id);
-        let input = service.send(&a, &content).await.unwrap();
+        let input = service.send(&a, &content).await.unwrap().message;
         let context = service.message_context(&a, &input.id).await.unwrap();
         assert_eq!(context.messages, [target.clone(), input]);
-        let foreign = service.send(&b, &content).await.unwrap();
+        let foreign = service.send(&b, &content).await.unwrap().message;
         assert_eq!(
             service
                 .message_context(&b, &foreign.id)
@@ -156,7 +167,7 @@ async fn saved_user_inputs_link_only_valid_quotes_from_the_same_chat() {
             .replace(MESSAGE_ID, &target.id)
             .replace("message_id=", "file_id="),
     ] {
-        let input = service.send(&a, &content).await.unwrap();
+        let input = service.send(&a, &content).await.unwrap().message;
         assert_eq!(
             service
                 .message_context(&a, &input.id)
@@ -183,9 +194,9 @@ async fn bot_replies_and_their_links_are_all_or_nothing() {
         .await
         .unwrap()
         .bot_id;
-    let first = service.send(&a, "First").await.unwrap();
-    let second = service.send(&a, "Second").await.unwrap();
-    let foreign = service.send(&b, "Other chat").await.unwrap();
+    let first = service.send(&a, "First").await.unwrap().message;
+    let second = service.send(&a, "Second").await.unwrap().message;
+    let foreign = service.send(&b, "Other chat").await.unwrap().message;
     let session = service
         .records()
         .get(&a)

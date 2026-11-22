@@ -48,6 +48,7 @@
   "bots.noClients": "Enable a Bot-capable Agent Client in Settings to continue.",
   "bots.messages": "Messages",
   "bots.message": "Message",
+  "bots.queuedAfterTurn": "Message queued for the next turn",
   "bots.sendFailed": "Message failed to send",
   "bots.executionFailed": "Bot execution failed",
   "bots.sessionExited": "Bot Session exited",

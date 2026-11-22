@@ -52,22 +52,24 @@ impl SessionCommandService {
             request.client_type = self.clients.registry().default_client_type()?.to_string();
         }
         self.clients.for_client(&request.client_type)?;
-        match self
+        let client_key = match self
             .clients
             .registry()
             .get(&request.client_type)
             .and_then(|entry| entry.configuration.as_ref())
         {
             Some(configuration) => {
-                configuration.validate_execution_policy(&request.execution_policy)?
+                let key = configuration.key(&request.metadata)?;
+                configuration.validate_execution_policy(&key, &request.execution_policy)?;
+                key
             }
             None if request.execution_policy != Default::default() => {
                 return Err(Error::CapabilityUnavailable(
                     "Client cannot enforce the requested execution policy".into(),
                 ));
             }
-            None => (),
-        }
+            None => "default".into(),
+        };
         if let Some(model) = &request.model {
             if model.trim().is_empty() {
                 return Err(Error::Domain("model must be non-empty".into()));
@@ -89,7 +91,7 @@ impl SessionCommandService {
             self.clients.registry().clone(),
         );
         let configuration = client_settings
-            .for_creation(&request.client_type, &request.metadata)
+            .for_creation_key(&request.client_type, &client_key)
             .await?;
 
         let instructions = crate::SessionInstructionsService::new(self.pool.clone())

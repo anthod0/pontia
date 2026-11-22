@@ -70,7 +70,7 @@ def prompt(request, ordinal, cancellation):
     wait_for(f"update-{ordinal}")
     if os.environ.get("ACP_READ_SESSION_ENV") == "1":
         value = subprocess.check_output(["sh", "-c", 'printf %s "$PONTIA_SESSION_ID"'], text=True)
-        log({"session_environment": value, "native": native_id})
+        log({"session_environment": value, "native": native_id, "test_marker": os.environ.get("ACP_SESSION_MARKER")})
     if os.environ.get("ACP_PERMISSION") == "1":
         options = [
             {"optionId": "once:原", "name": "Allow once", "kind": "allow_once"},
@@ -160,6 +160,17 @@ for line in sys.stdin:
         response(request, {"protocolVersion": 1, "agentCapabilities": caps,
                            **({"_meta": {"steering": {"supported": os.environ["ACP_STEERING"] == "1"}}} if "ACP_STEERING" in os.environ else {}),
                            "agentInfo": {"name": "fixture", "title": "Test Agent", "version": "arbitrary-release", "_meta": {"build": "fixture-build"}}})
+    elif method == "_x.ai/models/list":
+        kind = (root / "model-kind").read_text() if (root / "model-kind").exists() else "grok-build-plan"
+        response(request, {"result": {"currentModelId": "fast", "availableModels": [
+            {"modelId": "fast", "_meta": {"agentType": kind}},
+            {"modelId": "deep", "_meta": {"agentType": "codex" if (root / "strict-deep").exists() else kind}},
+            {"modelId": "unclassified"},
+        ]}})
+    elif method == "_x.ai/session/info":
+        profile = "other" if (root / "wrong-profile").exists() else "pontia-restricted"
+        model = (root / "model.txt").read_text() if (root / "model.txt").exists() else "fast"
+        response(request, {"result": {"agentName": profile, "model": model}})
     elif method == "session/options":
         if os.environ.get("ACP_OPTIONS") == "error":
             send({"id": request["id"], "error": {"code": -32000, "message": "Authentication required"}})
