@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { TurnContext } from "./context.js";
 import type { SessionContext } from "./session.js";
 
@@ -61,10 +62,17 @@ export interface PiTopologyContext {
 export interface InternalEvent {
   session_id: string;
   turn_id?: string;
-  report_key?: string;
+  report_key: string;
   type: InternalEventType;
   data: Record<string, unknown>;
   [legacyField: string]: any;
+}
+
+const generation = randomUUID();
+let sequence = 0;
+
+export function nextReportKey(): string {
+  return `${generation}:${++sequence}`;
 }
 
 type ActiveTurnContext = TurnContext & { turnId: string };
@@ -74,7 +82,13 @@ function turnFact(
   type: InternalEventType,
   data: Record<string, unknown>,
 ): InternalEvent {
-  return { session_id: context.sessionId, turn_id: context.turnId, type, data };
+  return {
+    session_id: context.sessionId,
+    turn_id: context.turnId,
+    report_key: nextReportKey(),
+    type,
+    data: { ...data, runtime_id: context.runtimeId },
+  };
 }
 
 export function buildSessionContextUsageUpdatedEvent(
@@ -86,10 +100,14 @@ export function buildSessionContextUsageUpdatedEvent(
   for (const [key, value] of Object.entries(usage)) {
     if (value !== null) contextUsage[key] = value;
   }
-  const payload: Record<string, unknown> = { context_usage: contextUsage };
+  const payload: Record<string, unknown> = {
+    context_usage: contextUsage,
+    runtime_id: context.runtimeId,
+  };
   if (model !== undefined && model !== null) payload.model = model;
   return {
     session_id: context.sessionId,
+    report_key: nextReportKey(),
     ...(context.turnId ? { turn_id: context.turnId } : {}),
     type: "session.context_usage_updated",
     data: payload,
@@ -383,6 +401,7 @@ export function buildSessionReadyEvent(context: SessionContext): InternalEvent {
 
   return {
     session_id: context.sessionId,
+    report_key: nextReportKey(),
     type: "session.ready",
     data: payload,
   };
@@ -391,6 +410,7 @@ export function buildSessionReadyEvent(context: SessionContext): InternalEvent {
 export function buildSessionExitedEvent(context: SessionContext, reason: string): InternalEvent {
   return {
     session_id: context.sessionId,
+    report_key: nextReportKey(),
     type: "session.exited",
     data: {
       reason,

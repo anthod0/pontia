@@ -21,7 +21,7 @@ describe("pontia pi extension startup boundary", () => {
     const connect = vi.fn(async () => {
       throw new Error("unexpected connection");
     });
-    const makeReporter = vi.fn(() => ({ report: vi.fn(async () => true) }));
+    const makeReporter = vi.fn(() => ({ report: vi.fn(async () => ({ accepted: true })) }));
 
     createPontiaPiExtension(pi as any, {
       env: { PONTIA_HOME: "" },

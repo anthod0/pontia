@@ -18,6 +18,7 @@ import {
   buildTurnOutputEvent,
   buildTurnStartedEvent,
   contextUsageFromPiHook,
+  nextReportKey,
   type InternalEvent,
   type PiTopologyContext,
   type PiTopologyEntryKind,
@@ -38,7 +39,7 @@ import {
   userTextFromMessage,
 } from "./pi-message.js";
 import { loadSessionSystemPrompt } from "./instructions.js";
-import { EventReporter, type EventReportResult } from "./reporter.js";
+import { EventReporter } from "./reporter.js";
 import {
   bindSession,
   loadExistingSessionContext,
@@ -54,16 +55,7 @@ const registry = globalThis as typeof globalThis & {
 };
 const extensionState = (registry[extensionKey] ??= {});
 
-interface ReporterLike {
-  report(
-    context: { runtimeId: string },
-    event: InternalEvent,
-  ): Promise<EventReportResult | boolean>;
-}
-
-function reportAccepted(result: EventReportResult | boolean): boolean {
-  return typeof result === "boolean" ? result : result.accepted;
-}
+type ReporterLike = Pick<EventReporter, "report">;
 
 function isPersistentSessionContext(ctx: unknown): boolean {
   if (!ctx || typeof ctx !== "object") return false;
@@ -197,8 +189,8 @@ export function createPontiaPiExtension(
   const compaction = () => {
     const context = boundSessionContext;
     if (!context || reportingDisabled || !readyReported) return undefined;
-    return new PiCompaction(currentPontiaHome(), context, async (event) =>
-      reportAccepted(await makeReporter(currentHookLogFile()).report(context, event)),
+    return new PiCompaction(currentPontiaHome(), context, (event) =>
+      makeReporter(currentHookLogFile()).report(context, event),
     );
   };
   const directInput = new AsyncLocalStorage<{
@@ -210,16 +202,33 @@ export function createPontiaPiExtension(
 
   const modelId = (model: { provider: string; id: string }) => `${model.provider}/${model.id}`;
 
-  async function reportModel(): Promise<void> {
+  let lastModelReport: { event: InternalEvent; conflict?: boolean } | undefined;
+
+  async function reportModel(reconnecting = false): Promise<void> {
     const context = boundSessionContext;
     const model = piContext?.model;
     if (!context || !model || !readyReported || reportingDisabled) return;
-    const result = await makeReporter(currentHookLogFile()).report(context, {
-      session_id: context.sessionId,
-      type: "session.model_updated",
-      data: { model: modelId(model), runtime_id: context.runtimeId },
-    });
-    if (!reportAccepted(result)) throw new Error("Pi model observation was not accepted");
+    const name = modelId(model);
+    if (
+      !reconnecting ||
+      lastModelReport?.event.session_id !== context.sessionId ||
+      lastModelReport.event.data.runtime_id !== context.runtimeId ||
+      lastModelReport.event.data.model !== name
+    ) {
+      lastModelReport = {
+        event: {
+          session_id: context.sessionId,
+          report_key: nextReportKey(),
+          type: "session.model_updated",
+          data: { model: name, runtime_id: context.runtimeId },
+        },
+      };
+    }
+    const report = lastModelReport;
+    if (report.conflict) return;
+    const result = await makeReporter(currentHookLogFile()).report(context, report.event);
+    if (result.conflict) report.conflict = true;
+    if (!result.accepted) throw new Error("Pi model observation was not accepted");
   }
 
   function sendControlInput(submission: ControlInput): void {
@@ -318,7 +327,7 @@ export function createPontiaPiExtension(
       async () => {
         if (generation !== controlGeneration)
           throw new Error("Pi session changed during reconnect");
-        await reportModel();
+        await reportModel(true);
         await compaction()?.reconnect();
       },
       (inboxMessageId) => {
@@ -552,12 +561,12 @@ export function createPontiaPiExtension(
         if (boundSessionContext && !readyReported) {
           piContext = ctx;
           controlSocket!.registered(boundSessionContext);
-          readyReported = reportAccepted(
+          readyReported = (
             await makeReporter(logFile).report(
               boundSessionContext,
               buildSessionReadyEvent(boundSessionContext),
-            ),
-          );
+            )
+          ).accepted;
           await reportModel().catch(controlError);
         }
       }
@@ -743,9 +752,8 @@ export function createPontiaPiExtension(
       sourceEnv.PONTIA_RUNTIME_INSTANCE_ID = context.runtimeId;
       piContext = ctx;
       controlSocket!.registered(context);
-      readyReported = reportAccepted(
-        await makeReporter(logFile).report(context, buildSessionReadyEvent(context)),
-      );
+      readyReported = (await makeReporter(logFile).report(context, buildSessionReadyEvent(context)))
+        .accepted;
       await reportModel().catch(controlError);
       await compaction()?.reconnect().catch(controlError);
     } catch (error) {
@@ -833,10 +841,10 @@ export function createPontiaPiExtension(
       // Editing and replaying input can start another run from the same Pi leaf.
       const started = await reporter.report(
         turnContext,
-        buildTurnStartedEvent(turnContext, randomUUID(), previousLeafId, topologyContext),
+        buildTurnStartedEvent(turnContext, nextReportKey(), previousLeafId, topologyContext),
       );
-      const canonicalTurnId = typeof started === "boolean" ? turnContext.turnId : started.turnId;
-      if (!reportAccepted(started) || !canonicalTurnId) {
+      const canonicalTurnId = started.turnId;
+      if (!started.accepted || !canonicalTurnId) {
         activeTurn = undefined;
         await logDiagnostic(logFile, {
           level: "error",
@@ -961,7 +969,7 @@ export function createPontiaPiExtension(
           state.context,
           buildTurnOutputEvent(state.context, output),
         );
-        if (!reportAccepted(outputResult)) return;
+        if (!outputResult.accepted) return;
       }
 
       await state.reporter.report(

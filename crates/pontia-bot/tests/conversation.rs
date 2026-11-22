@@ -1144,6 +1144,21 @@ async fn reliable_helper_failures_are_durable_and_event_replay_does_not_duplicat
     assert_eq!(before, 0);
     *client.blocked.lock().unwrap() = Some(session.clone());
     finish(&control, &helper, EventType::TurnFailed).await;
+    let snapshot = control
+        .queries()
+        .session_snapshot(&helper)
+        .await
+        .unwrap()
+        .unwrap();
+    let turns = control.queries().list_turns(&helper).await.unwrap();
+    report(
+        &control.event_ingest_service(),
+        &helper,
+        &snapshot.runtimes[0].runtime_id,
+        &turns.last().unwrap().turn_id,
+        EventType::TurnFailed,
+    )
+    .await;
     helpers.reconcile().await.unwrap();
     let count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM bot_notifications WHERE delivered = 0")
@@ -1165,11 +1180,34 @@ async fn reliable_helper_failures_are_durable_and_event_replay_does_not_duplicat
     assert_eq!(contents.len(), 1);
     let content = &contents[0];
     assert!(content.contains("turn.failed"));
-    let inputs = client.inputs.lock().unwrap();
-    assert_eq!(
-        inputs.last().unwrap().input,
-        format!("Source: System Notification\nHelper Session: {helper}\n{content}")
-    );
+    {
+        let inputs = client.inputs.lock().unwrap();
+        assert_eq!(
+            inputs.last().unwrap().input,
+            format!("Source: System Notification\nHelper Session: {helper}\n{content}")
+        );
+    }
+    for _ in 0..2 {
+        control
+            .event_ingest_service()
+            .report_client_fact(
+                &helper,
+                Some(&snapshot.runtimes[0].runtime_id),
+                EventType::SessionExited,
+                json!({"reason":"quit"}),
+            )
+            .await
+            .unwrap();
+        recovered.reconcile().await.unwrap();
+    }
+    let notices: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM bot_notifications WHERE source_session_id=? AND delivered=1",
+    )
+    .bind(&helper)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(notices, 2);
 }
 
 #[path = "conversation/system_notices.rs"]

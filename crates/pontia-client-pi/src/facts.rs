@@ -18,7 +18,8 @@ pub fn normalize_payload(event_type: EventType, data: Value) -> Result<Value> {
             return Err(Error::Domain("invalid Pi native timeline anchor".into()));
         }
     }
-    let payload = match event_type {
+    let runtime_id = object.get("runtime_id").cloned();
+    let mut payload = match event_type {
         EventType::TurnStarted => {
             let input_summary = object
                 .get("input_summary")
@@ -31,7 +32,6 @@ pub fn normalize_payload(event_type: EventType, data: Value) -> Result<Value> {
                 .cloned()
                 .unwrap_or(Value::Null);
             let mut payload = json!({
-                "runtime_id": object.get("runtime_id").cloned().unwrap_or(Value::Null),
                 "input": { "summary": input_summary },
                 "timeline_anchor": { "previous_leaf_id": previous_leaf_id },
             });
@@ -82,5 +82,8 @@ pub fn normalize_payload(event_type: EventType, data: Value) -> Result<Value> {
         }),
         _ => data,
     };
+    if let Some(runtime_id) = runtime_id {
+        payload["runtime_id"] = runtime_id;
+    }
     Ok(payload)
 }

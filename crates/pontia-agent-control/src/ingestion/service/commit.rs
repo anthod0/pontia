@@ -127,23 +127,21 @@ impl EventCommitter {
                 )
                 .await?;
             }
-            if enforce_runtime_fence {
-                let spec = self.clients.spec(&event.client_type);
-                ensure_runtime_fence_in_tx(
-                    &mut tx,
-                    &event,
-                    spec.is_some_and(|spec| spec.adapter.native_turn_identity),
-                    spec.is_some_and(|spec| {
-                        spec.adapter.runtime_binding.requires_session_runtime()
-                    }),
-                    spec.and_then(|spec| spec.adapter.control_runtime_role),
-                )
-                .await?;
-            }
         }
-        if let Some(outcome) = duplicate_report_in_tx(&mut tx, &event).await? {
+        if let Some(result) = duplicate_report(&mut tx, &event).await? {
             tx.commit().await?;
-            return Ok(outcome);
+            return Ok(CommitOutcome::Duplicate { result });
+        }
+        if enforce_runtime_fence && event.event_type != EventType::SessionCreated {
+            let spec = self.clients.spec(&event.client_type);
+            ensure_runtime_fence_in_tx(
+                &mut tx,
+                &event,
+                spec.is_some_and(|spec| spec.adapter.native_turn_identity),
+                spec.is_some_and(|spec| spec.adapter.runtime_binding.requires_session_runtime()),
+                spec.and_then(|spec| spec.adapter.control_runtime_role),
+            )
+            .await?;
         }
         if sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM events WHERE event_id=?")
             .bind(&event.event_id)
@@ -214,8 +212,7 @@ impl EventCommitter {
                 "Terminal runtime-coupled session cannot become ready".into(),
             ));
         }
-        if lifecycle.coupled_runtime
-            && event.event_type == EventType::SessionExited
+        if event.event_type == EventType::SessionExited
             && sessions
                 .first()
                 .is_some_and(|session| session.state == SessionState::Exited)
@@ -257,6 +254,29 @@ impl EventCommitter {
             .into_iter()
             .map(turn_from_row)
             .collect::<Result<Vec<_>>>()?;
+        if matches!(
+            event.event_type,
+            EventType::TurnCompleted
+                | EventType::TurnFailed
+                | EventType::TurnInterrupted
+                | EventType::TurnAbandoned
+                | EventType::TurnDispatchFailed
+        ) && let Some(turn) = turns
+            .iter()
+            .find(|turn| Some(&turn.turn_id) == event.turn_id.as_ref() && turn.state.is_terminal())
+        {
+            let existing: String = if let Some(id) = turn
+                .metadata
+                .pointer("/terminal_provenance/event_id")
+                .and_then(serde_json::Value::as_str)
+            {
+                id.to_owned()
+            } else {
+                sqlx::query_scalar("SELECT event_id FROM events WHERE session_id=? AND turn_id=? AND event_type IN ('turn.completed','turn.failed','turn.interrupted','turn.dispatch_failed','turn.abandoned') ORDER BY rowid LIMIT 1")
+                    .bind(&event.session_id).bind(&turn.turn_id).fetch_one(&mut *tx).await?
+            };
+            return duplicate_without_effects(&mut tx, event, existing).await;
+        }
         enrich_topology(
             &self.clients,
             &mut event,
@@ -425,41 +445,44 @@ async fn project_runtime_in_tx(
     Ok(())
 }
 
-async fn duplicate_report_in_tx(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(super) async fn duplicate_report(
+    connection: &mut sqlx::SqliteConnection,
     event: &DomainEvent,
-) -> Result<Option<CommitOutcome>> {
+) -> Result<Option<EventIngestResult>> {
     let Some(report_key) = event.report_key.as_deref() else {
         return Ok(None);
     };
-    let existing: Option<(String, Option<String>, String)> = sqlx::query_as(
-        "SELECT event_id, turn_id, payload FROM events WHERE session_id=? AND event_type=? AND report_key=?",
+    let existing: Option<(String, Option<String>, String, i64)> = sqlx::query_as(
+        "SELECT e.event_id, e.turn_id, e.payload,
+                (SELECT COUNT(*) FROM events WHERE session_id=e.session_id AND rowid <=
+                    COALESCE((SELECT rowid FROM events WHERE rowid=e.rowid+1
+                              AND json_extract(payload,'$.session_event_id')=e.event_id
+                              AND event_type LIKE 'runtime.%'), e.rowid))
+         FROM events e WHERE e.session_id=? AND e.event_type=? AND e.report_key=?",
     )
     .bind(&event.session_id)
     .bind(event.event_type.to_string())
     .bind(report_key)
-    .fetch_optional(&mut **tx)
+    .fetch_optional(connection)
     .await?;
-    let Some((event_id, turn_id, payload)) = existing else {
+    let Some((event_id, turn_id, payload, state_version)) = existing else {
         return Ok(None);
     };
     let existing_payload: serde_json::Value = serde_json::from_str(&payload)?;
-    if existing_payload != event.payload {
+    if existing_payload != event.payload
+        || (event.event_type != EventType::TurnStarted && turn_id != event.turn_id)
+    {
         return Err(Error::StateConflict(format!(
             "report_key {report_key} was already committed with different fact content"
         )));
     }
-    let state_version =
-        SqliteEventRepository::session_event_count_in_tx(tx, &event.session_id).await?;
-    Ok(Some(CommitOutcome::Duplicate {
-        result: EventIngestResult {
-            accepted: true,
-            duplicate: true,
-            event_id,
-            session_id: event.session_id.clone(),
-            turn_id,
-            state_version,
-        },
+    Ok(Some(EventIngestResult {
+        accepted: true,
+        duplicate: true,
+        event_id,
+        session_id: event.session_id.clone(),
+        turn_id,
+        state_version,
     }))
 }
 

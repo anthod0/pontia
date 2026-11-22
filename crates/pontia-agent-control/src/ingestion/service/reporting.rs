@@ -118,9 +118,6 @@ impl EventIngestService {
                 MAX_TURN_OUTPUT_SUMMARY_CHARS,
             );
         }
-        if reported_event.event_type == EventType::SessionContextUsageUpdated {
-            validate_context_usage_payload(&reported_event.payload)?;
-        }
         if reported_event.event_type == EventType::SessionTitleUpdated
             && let Some(title) = reported_event.payload["title"].as_str()
         {
@@ -137,6 +134,13 @@ impl EventIngestService {
                 &mut reported_event.payload,
             );
         }
+        let event = DomainEvent::from(reported_event.clone());
+        if let Some(result) = self.committed_report(&event).await? {
+            return Ok(result);
+        }
+        if reported_event.event_type == EventType::SessionContextUsageUpdated {
+            validate_context_usage_payload(&reported_event.payload)?;
+        }
         let payload_size = serde_json::to_vec(&reported_event.payload)
             .map_err(Error::from)?
             .len();
@@ -145,15 +149,49 @@ impl EventIngestService {
                 "payload exceeds maximum size of {MAX_EVENT_PAYLOAD_BYTES} bytes"
             )));
         }
-        let event = DomainEvent::from(reported_event.clone());
         InternalEventValidationService::new()
             .with_clients(self.clients.clone())
             .validate(&event)
             .map_err(EventReportError::validation)?;
-        self.ensure_confirmed_event_matches_session_boundary(&event)
-            .await
-            .map_err(EventReportError::validation)?;
+        if let Some(result) = self.validate_report_boundary(&event).await? {
+            return Ok(result);
+        }
         Ok(self.ingest_confirmed_event(reported_event).await?)
+    }
+
+    async fn validate_report_boundary(
+        &self,
+        event: &DomainEvent,
+    ) -> Result<Option<EventIngestResult>, EventReportError> {
+        match self
+            .ensure_confirmed_event_matches_session_boundary(event)
+            .await
+        {
+            Ok(()) => Ok(None),
+            Err(error) => {
+                // A concurrent commit can precede the binding change that invalidated this report.
+                if let Some(result) = self.committed_report(event).await? {
+                    Ok(Some(result))
+                } else {
+                    Err(EventReportError::validation(error))
+                }
+            }
+        }
+    }
+
+    async fn committed_report(
+        &self,
+        event: &DomainEvent,
+    ) -> pontia_core::Result<Option<EventIngestResult>> {
+        if event.report_key.is_none() {
+            return Ok(None);
+        }
+        let mut persisted = event.clone();
+        if let Some(data) = self.clients.data(&event.client_type) {
+            data.take_evidence(&mut persisted);
+        }
+        let mut connection = self.pool.acquire().await?;
+        super::commit::duplicate_report(&mut connection, &persisted).await
     }
 }
 
@@ -231,4 +269,57 @@ fn validate_context_usage_payload(payload: &Value) -> Result<(), EventReportErro
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pontia_core::domain::{EventSource, ReportedEvent};
+    use pontia_storage_sqlite::{connect_sqlite, run_migrations};
+
+    #[tokio::test]
+    async fn commit_between_key_lookup_and_boundary_rejection_is_acknowledged() {
+        let db = connect_sqlite("sqlite::memory:").await.unwrap();
+        run_migrations(&db).await.unwrap();
+        let service = EventIngestService::for_projection_tests(db.clone());
+        service
+            .ingest_pontia_event(crate::PontiaEvent::new(
+                "session",
+                None,
+                crate::PontiaEventSource::ExternalApi,
+                "test",
+                crate::PontiaEventType::SessionCreated,
+                json!({}),
+            ))
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO session_runtimes(runtime_id,session_id,role,state,created_at) VALUES ('original','session','tui','running','2026-01-01')")
+            .execute(&db).await.unwrap();
+        let report = ReportedEvent::new(
+            "first".into(),
+            "session".into(),
+            None,
+            EventSource::AgentClient,
+            "test".into(),
+            EventType::SessionModelUpdated,
+            json!({"runtime_id":"original","model":"model"}),
+        )
+        .with_report_key(Some("observation".into()));
+        let replay = DomainEvent::from(report.clone());
+        assert!(service.committed_report(&replay).await.unwrap().is_none());
+        service.ingest_reported_event(report).await.unwrap();
+        sqlx::query(
+            "UPDATE session_runtimes SET runtime_id='replacement' WHERE session_id='session'",
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        let result = service
+            .validate_report_boundary(&replay)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(result.duplicate);
+        assert_eq!(result.event_id, "first");
+    }
 }

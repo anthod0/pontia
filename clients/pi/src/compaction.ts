@@ -5,6 +5,7 @@ import type {
   SessionCompactFailedEvent,
   CompactionResult,
 } from "@earendil-works/pi-coding-agent";
+import type { EventReportResult } from "./reporter.js";
 import type { InternalEvent } from "./events.js";
 import type { SessionContext } from "./session.js";
 import { RpcError } from "../shared/rpc-error.js";
@@ -15,13 +16,13 @@ interface Operation {
   trigger: Trigger;
   started?: InternalEvent;
   terminal?: InternalEvent;
-  acknowledged: Set<string>;
+  settled: Set<string>;
   reporting: Promise<void>;
   awaitingNativeResult: boolean;
   failureKey?: string;
 }
 interface State {
-  report: (event: InternalEvent) => Promise<boolean>;
+  report: (event: InternalEvent) => Promise<EventReportResult>;
   active?: Operation;
   operations: Map<string, Operation>;
   signals: WeakMap<AbortSignal, Operation>;
@@ -41,7 +42,7 @@ export class PiCompaction {
   constructor(
     home: string,
     private readonly context: SessionContext,
-    report: (event: InternalEvent) => Promise<boolean>,
+    report: (event: InternalEvent) => Promise<EventReportResult>,
   ) {
     const key = JSON.stringify([
       home,
@@ -94,7 +95,7 @@ export class PiCompaction {
       operation = this.running ? this.state.active! : this.create(trigger(event.reason));
       this.state.signals.set(event.signal, operation);
     }
-    await this.publish(operation);
+    await this.publish(operation, !operation.awaitingNativeResult);
   }
 
   async completed(event: SessionCompactEvent): Promise<void> {
@@ -151,17 +152,14 @@ export class PiCompaction {
 
   async callbackComplete(operationId: string, result: CompactionResult): Promise<void> {
     const operation = this.state.operations.get(operationId);
-    if (!operation) return;
+    if (!operation?.awaitingNativeResult) return;
     operation.awaitingNativeResult = false;
     operation.terminal ??= this.fact("session.compaction_completed", operation, {
       native_compaction_id: null,
       tokens_before: tokens(result.tokensBefore),
       tokens_after: null,
     });
-    if (
-      !operation.acknowledged.has(operation.terminal.type) &&
-      operation.terminal.type === "session.compaction_completed"
-    ) {
+    if (operation.terminal.type === "session.compaction_completed") {
       operation.terminal.data.tokens_after = tokens(result.estimatedTokensAfter);
     }
     await this.publish(operation);
@@ -175,7 +173,7 @@ export class PiCompaction {
     const operation: Operation = {
       id,
       trigger: reason,
-      acknowledged: new Set(),
+      settled: new Set(),
       reporting: Promise.resolve(),
       awaitingNativeResult: false,
     };
@@ -192,7 +190,13 @@ export class PiCompaction {
     return {
       session_id: this.context.sessionId,
       type,
-      data: { operation_id: operation.id, trigger: operation.trigger, ...metadata },
+      report_key: `compaction:${operation.id}`,
+      data: {
+        runtime_id: this.context.runtimeId,
+        operation_id: operation.id,
+        trigger: operation.trigger,
+        ...metadata,
+      },
     };
   }
 
@@ -205,9 +209,10 @@ export class PiCompaction {
           operation.started!,
           includeTerminal ? operation.terminal : undefined,
         ]) {
-          if (!event || operation.acknowledged.has(event.type)) continue;
-          if (!(await this.state.report(event))) return;
-          operation.acknowledged.add(event.type);
+          if (!event || operation.settled.has(event.type)) continue;
+          const result = await this.state.report(event);
+          if (!result.accepted && !result.conflict) return;
+          operation.settled.add(event.type);
         }
       });
     return operation.reporting;

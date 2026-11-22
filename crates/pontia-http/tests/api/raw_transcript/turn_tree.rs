@@ -496,8 +496,8 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
         .collect();
     assert_eq!(started_events.len(), 7);
     assert!(started_events.iter().all(|event| {
-        event.payload.get("topology_context").is_none()
-            && event.payload.get("timeline_anchor").is_none()
+        event.payload["topology_context"].is_object()
+            && event.payload["timeline_anchor"].is_object()
     }));
     assert!(started_events.iter().all(|event| event.topology.is_some()));
 

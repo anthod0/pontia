@@ -62,7 +62,7 @@ impl Session {
             "event.report",
             json!({
                 "runtime_id": runtime,
-                "event": {"session_id": session, "type": "session.ready", "data": {
+                "event": {"session_id": session, "type": "session.ready", "report_key": "ready", "data": {
                     "runtime_id": runtime, "client_session_key": "native"
                 }}
             }),
@@ -337,7 +337,7 @@ async fn terminal_facts_clear_live_output_and_reject_further_updates() {
             "event.report",
             json!({
                 "runtime_id": session.runtime,
-                "event": {"session_id": session.session, "turn_id": session.turn,
+                "event": {"session_id": session.session, "turn_id": session.turn, "report_key": "terminal",
                     "type": "turn.completed", "data": {"terminal_leaf_id": null}}
             }),
         )
