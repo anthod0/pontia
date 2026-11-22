@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   listener: null as null | ((event: DashboardStreamEvent) => void),
 }));
 vi.mock("svelte-sonner", () => ({
-  toast: { error: mocks.toastError },
+  toast: { error: mocks.toastError, dismiss: vi.fn() },
 }));
 vi.mock("../src/api/client", async (importOriginal) => {
   const original = await importOriginal();

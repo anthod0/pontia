@@ -2,12 +2,29 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 import { testDevice } from "../deviceFixture";
+import type { BotEntry } from "../../src/api/types";
 import BotChatPage from "../../src/pages/BotChatPage.svelte";
 import { loadUploadRecords, saveUploadRecord } from "../../src/lib/uploads/records";
 
-afterEach(() => vi.restoreAllMocks());
+const toast = vi.hoisted(() => ({
+  error: vi.fn(),
+  success: vi.fn(),
+  warning: vi.fn(),
+  dismiss: vi.fn(),
+}));
+vi.mock("svelte-sonner", () => ({ toast }));
 
-async function openChat() {
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.clearAllMocks();
+});
+
+type ToastAction = { label: string; onClick: (event: MouseEvent) => void };
+function lastToastAction(): ToastAction {
+  return (toast.error.mock.lastCall![1] as { action: ToastAction }).action;
+}
+
+async function openChat(entries: BotEntry[] = []) {
   const botId = crypto.randomUUID();
   const scope = `bot-test:${botId}`;
   const draft = `bot:${botId}`;
@@ -23,7 +40,7 @@ async function openChat() {
       client_key: "default",
       model: "test",
     },
-    entries: [],
+    entries,
     next_before: null,
     file_link_session: null,
     open_todo_count: 0,
@@ -87,7 +104,6 @@ test("keeps text and attachments after a rejected send so the user can retry", a
   const editor = screen.getByRole("textbox");
   await userEvent.type(editor, "Read this report");
   await fireEvent.click(submit);
-  await screen.findByRole("alert");
   await waitFor(() => expect(submit).toBeEnabled());
   expect(editor).toHaveTextContent("Read this report");
   expect(editor).not.toHaveTextContent("user_upload");
@@ -96,4 +112,82 @@ test("keeps text and attachments after a rejected send so the user can retry", a
   await waitFor(async () => expect(await loadUploadRecords(scope, draft)).toEqual([]));
   expect(send).toHaveBeenNthCalledWith(2, botId, `${attachment}\nRead this report`);
   expect(editor.textContent).toBe("");
+});
+
+test("reports a rejected send in a toast whose Retry action sends the kept draft again", async () => {
+  const { botId, send, submit } = await openChat();
+  send.mockRejectedValueOnce(new Error("Offline")).mockResolvedValueOnce({
+    id: "m3",
+    status: "normal",
+    kind: "user_input",
+    content: attachment,
+    created_at: "2026-11-18T00:00:03Z",
+  });
+  await fireEvent.click(submit);
+  await waitFor(() =>
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith(
+      "Offline",
+      expect.objectContaining({ id: "bot-action-error" }),
+    ),
+  );
+  expect(screen.queryByText("Offline")).not.toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  await waitFor(() => expect(submit).toBeEnabled());
+  const action = lastToastAction();
+  expect(action.label).toBe("Retry");
+  action.onClick(new MouseEvent("click"));
+  await waitFor(() => expect(send).toHaveBeenNthCalledWith(2, botId, attachment));
+});
+
+test("reports a failed message retry in a toast with a Retry action", async () => {
+  const failed: BotEntry = {
+    id: "m4",
+    status: "failed",
+    kind: "user_input",
+    content: "Hello",
+    created_at: "2026-11-18T00:00:04Z",
+  };
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(56);
+  vi.spyOn(Element.prototype, "clientHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.getAttribute("role") === "log" ? 640 : 56;
+  });
+  const { botId } = await openChat([failed]);
+  const retry = vi
+    .spyOn(testDevice.api, "retryBotMessage")
+    .mockRejectedValueOnce(new Error("Still offline"))
+    .mockResolvedValueOnce({ ...failed, status: "normal" });
+  await fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+  await waitFor(() =>
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith(
+      "Still offline",
+      expect.objectContaining({ id: "bot-action-error" }),
+    ),
+  );
+  expect(screen.queryByText("Still offline")).not.toBeInTheDocument();
+  lastToastAction().onClick(new MouseEvent("click"));
+  await waitFor(() => expect(retry).toHaveBeenNthCalledWith(2, botId, "m4"));
+});
+
+test("keeps a refresh failure in one persistent toast with a Retry action", async () => {
+  const { send, submit } = await openChat();
+  const messages = vi.mocked(testDevice.api.getBotMessages);
+  const page = await messages.mock.results[0].value;
+  messages.mockRejectedValue(new Error("Refresh failed"));
+  send.mockRejectedValue(new Error("Offline"));
+  await fireEvent.click(submit);
+  await waitFor(() =>
+    expect(toast.error).toHaveBeenCalledWith(
+      "Refresh failed",
+      expect.objectContaining({ id: "bot-refresh-error", duration: Number.POSITIVE_INFINITY }),
+    ),
+  );
+  expect(screen.queryByText("Refresh failed")).not.toBeInTheDocument();
+  const refreshToast = toast.error.mock.calls.find(([message]) => message === "Refresh failed")!;
+  messages.mockResolvedValue(page);
+  const event = new MouseEvent("click", { cancelable: true });
+  (refreshToast[1] as { action: ToastAction }).action.onClick(event);
+  expect(event.defaultPrevented).toBe(true);
+  await waitFor(() => expect(toast.dismiss).toHaveBeenCalledWith("bot-refresh-error"));
 });

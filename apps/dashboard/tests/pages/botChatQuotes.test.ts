@@ -7,7 +7,12 @@ import { ApiError } from "../../src/api/errors";
 import BotChatPage from "../../src/pages/BotChatPage.svelte";
 import { saveUploadRecord } from "../../src/lib/uploads/records";
 
-const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn(), warning: vi.fn() }));
+const toast = vi.hoisted(() => ({
+  error: vi.fn(),
+  success: vi.fn(),
+  warning: vi.fn(),
+  dismiss: vi.fn(),
+}));
 vi.mock("svelte-sonner", () => ({ toast }));
 vi.mock("../../src/services/botChatStream", () => ({ openBotChatStream: () => () => {} }));
 
@@ -215,7 +220,7 @@ test("keeps the quote when sending fails", async () => {
   await quoteFromMenu(rows()[0]);
   await userEvent.type(screen.getByRole("textbox"), "hi");
   await fireEvent.click(screen.getByRole("button", { name: "Send" }));
-  await screen.findByRole("alert");
+  await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Offline", expect.anything()));
   expect(screen.getByRole("button", { name: /^Remove quote/ })).toBeInTheDocument();
 });
 

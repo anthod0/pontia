@@ -30,7 +30,6 @@
   const timeline = new BotTimeline(device, untrack(() => botId))
   let draft = $state('')
   let typing = $state(false)
-  let actionError = $state('')
   let retrying = $state<string[]>([])
   let feed = $state<BotMessageFeed>()
   let feedRoot = $state<HTMLElement>()
@@ -43,7 +42,34 @@
   let jumping = $state<string | null>(null)
   let missingQuotes = $state<string[]>([])
   let highlightTimer: ReturnType<typeof setTimeout> | undefined
-  onDestroy(() => clearTimeout(highlightTimer))
+  const actionToastId = 'bot-action-error'
+  const refreshToastId = 'bot-refresh-error'
+  onDestroy(() => {
+    clearTimeout(highlightTimer)
+    toast.dismiss(actionToastId)
+  })
+
+  // The feed stays usable after a failed refresh, so the error stays up until a refresh succeeds.
+  $effect(() => {
+    const message = timeline.bot ? timeline.refreshError : ''
+    if (!message) return
+    toast.error(message, {
+      id: refreshToastId,
+      duration: Number.POSITIVE_INFINITY,
+      dismissible: false,
+      important: true,
+      action: { label: $t('common.retry'), onClick: event => { event.preventDefault(); timeline.refresh(true) } },
+    })
+    return () => toast.dismiss(refreshToastId)
+  })
+
+  function showActionError(failure: unknown, retry: (event: MouseEvent) => void) {
+    toast.error(failure instanceof Error ? failure.message : String(failure), {
+      id: actionToastId,
+      important: true,
+      action: { label: $t('common.retry'), onClick: retry },
+    })
+  }
 
   function setQuote(next: BotQuote | null) {
     quote = next
@@ -103,7 +129,7 @@
     const text = draft
     const sentQuote = quote
     draft = ''
-    actionError = ''
+    toast.dismiss(actionToastId)
     feed?.followSend()
     try {
       timeline.message(await device.api.sendBotMessage(botId, sentQuote ? quotedMessage(sentQuote, content) : content))
@@ -111,7 +137,7 @@
       return true
     } catch (failure) {
       draft = draft ? text + '\n\n' + draft : text
-      actionError = failure instanceof Error ? failure.message : String(failure)
+      showActionError(failure, event => { if (!composer?.submit()) event.preventDefault() })
       timeline.refresh()
       return false
     }
@@ -147,11 +173,11 @@
 
   async function retry(id: string) {
     retrying = [...retrying, id]
-    actionError = ''
+    toast.dismiss(actionToastId)
     try {
       timeline.message(await device.api.retryBotMessage(botId, id))
     } catch (failure) {
-      actionError = failure instanceof Error ? failure.message : String(failure)
+      showActionError(failure, () => { if (!retrying.includes(id)) void retry(id) })
       timeline.refresh()
     } finally {
       retrying = retrying.filter((messageId) => messageId !== id)
@@ -255,8 +281,6 @@
           <span class="shimmer line-clamp-2 min-w-0 [overflow-wrap:anywhere]" title={timeline.status.title}>{timeline.status.title}</span>
         </p>
       {/if}
-      {#if timeline.refreshError}{@render refreshFailure()}{/if}
-      {#if actionError}<p role="alert" class="mb-2 text-sm text-destructive">{actionError}</p>{/if}
       <div aria-live="polite">
         {#if quote}<BotQuoteBlock {quote} speaker={quoteSpeaker(quote)} image={quoteImage(quote)} onremove={() => setQuote(null)} />{/if}
       </div>

@@ -343,7 +343,7 @@ vi.mock("../../../src/services/liveOutputStream", async (importOriginal) => {
 vi.mock("$lib/navigation", () => ({ navigate: mocks.navigate }));
 
 vi.mock("svelte-sonner", () => ({
-  toast: { error: mocks.toastError },
+  toast: { error: mocks.toastError, dismiss: vi.fn() },
 }));
 
 export const session = (overrides: Partial<SessionView> = {}): SessionView => ({
