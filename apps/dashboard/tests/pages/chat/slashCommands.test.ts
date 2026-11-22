@@ -311,6 +311,52 @@ test.each([{ state: "exited" }, { state: "error" }])(
   },
 );
 
+function menuLayout(menu: HTMLElement): string[] {
+  return Array.from(
+    menu.querySelectorAll(
+      '[data-slot="dropdown-menu-item"], [data-slot="dropdown-menu-separator"]',
+    ),
+    (element) =>
+      element.getAttribute("data-slot") === "dropdown-menu-separator"
+        ? "---"
+        : (element.querySelector(".flex-1")?.textContent?.trim() ?? ""),
+  );
+}
+
+test("chat actions group session operations with shared files next to compaction and exit last", async () => {
+  renderChat("", { capabilities: { manual_compaction: true } });
+  await openChatActions();
+  const menu = await screen.findByRole("menu", { hidden: true });
+  expect(menuLayout(menu)).toEqual([
+    "New chat",
+    "---",
+    "Rename",
+    "Pin",
+    "Archive",
+    "---",
+    "Shared files",
+    "Compact context",
+    "---",
+    "Exit",
+  ]);
+  expect(
+    within(menu).getByText("Exit").closest('[data-slot="dropdown-menu-item"]'),
+  ).toHaveAttribute("data-variant", "destructive");
+});
+
+test("chat actions drop empty groups without leaving extra separators", async () => {
+  renderChat("", { state: "exited", archived_at: "2026-05-14T00:00:00Z" });
+  await openChatActions();
+  expect(menuLayout(await screen.findByRole("menu", { hidden: true }))).toEqual([
+    "New chat",
+    "---",
+    "Rename",
+    "Unarchive",
+    "---",
+    "Shared files",
+  ]);
+});
+
 test("a model fact refreshes session metadata even when native history is available", async () => {
   const selected = renderChat("", { model: "model-a" });
   await screen.findByRole("textbox");

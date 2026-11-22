@@ -265,3 +265,28 @@ test("an unknown slash command does not consume Escape in the fullscreen compose
 
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 });
+
+test("chat actions use fixed groups regardless of command order and skip unavailable groups", async () => {
+  const run = vi.fn();
+  render(MessageComposer, {
+    value: "",
+    onSubmit: vi.fn(),
+    commands: [
+      { name: "/exit", description: "End", run },
+      { name: "/compact", description: "Compact", disabledReason: "Busy", run },
+      { name: "/archive", description: "Archive", run },
+      { name: "/rename", description: "Rename", run },
+      { name: "/new", description: "New", run },
+      { name: "/pin", description: "Pin", run },
+    ],
+  });
+  await userEvent.click(screen.getByRole("button", { name: "Chat actions" }));
+  const menu = await screen.findByRole("menu", { hidden: true });
+  const layout = Array.from(
+    menu.querySelectorAll(
+      '[data-slot="dropdown-menu-item"], [data-slot="dropdown-menu-separator"]',
+    ),
+    (element) => element.querySelector(".font-mono")?.textContent ?? "---",
+  );
+  expect(layout).toEqual(["/new", "---", "/rename", "/pin", "/archive", "---", "/exit"]);
+});

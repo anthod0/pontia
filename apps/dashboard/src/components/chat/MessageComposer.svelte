@@ -118,6 +118,19 @@
   let editor = $state<{ focusEnd: () => void } | null>(null)
   let focusCommandInput = false
   const availableCommands = $derived(startSession ? [] : commands.filter((item) => !item.disabledReason))
+  // Fixed menu layout; `menuItems` opens the session tools group ahead of /compact.
+  const menuGroups: { names: ChatCommand['name'][]; extras?: boolean }[] = [
+    { names: ['/new'] },
+    { names: ['/rename', '/pin', '/archive'] },
+    { names: ['/compact'], extras: true },
+    { names: ['/exit'] },
+  ]
+  const visibleMenuGroups = $derived(menuGroups
+    .map(group => ({
+      extras: Boolean(group.extras && menuItems),
+      commands: group.names.flatMap(name => availableCommands.filter(item => item.name === name)),
+    }))
+    .filter(group => group.extras || group.commands.length > 0))
   const command = $derived(findChatCommand(value, commands))
   const commandAction = $derived(command ? commandActionFor(command) : undefined)
   const commandArgument = $derived(command ? value.trim().slice(command.name.length).trim() : '')
@@ -267,7 +280,7 @@
 {/snippet}
 
 {#snippet actions()}
-  {#if menuItems || availableCommands.length > 0}
+  {#if visibleMenuGroups.length > 0}
     <div class="shrink-0">
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
@@ -278,19 +291,19 @@
           {/snippet}
         </DropdownMenu.Trigger>
         <DropdownMenu.Content side="top" align="end" class="w-64" preventScroll={false} onCloseAutoFocus={restoreCommandFocus}>
-          {#if menuItems}
-            {@render menuItems()}
-            {#if availableCommands.length > 0}<DropdownMenu.Separator />{/if}
-          {/if}
-          {#each availableCommands as item (item.name)}
-            {@const action = commandActionFor(item)}
-            <DropdownMenu.Item variant={item.name === '/exit' ? 'destructive' : 'default'} onSelect={() => chooseMenuCommand(item)}>
-              <action.icon class="size-4" />
-              <span class="min-w-0 flex-1">
-                <span class="block">{action.label}</span>
-              </span>
-              <span class="font-mono text-xs text-muted-foreground">{item.name}</span>
-            </DropdownMenu.Item>
+          {#each visibleMenuGroups as group, index}
+            {#if index > 0}<DropdownMenu.Separator />{/if}
+            {#if group.extras}{@render menuItems?.()}{/if}
+            {#each group.commands as item (item.name)}
+              {@const action = commandActionFor(item)}
+              <DropdownMenu.Item variant={item.name === '/exit' ? 'destructive' : 'default'} onSelect={() => chooseMenuCommand(item)}>
+                <action.icon class="size-4" />
+                <span class="min-w-0 flex-1">
+                  <span class="block">{action.label}</span>
+                </span>
+                <span class="font-mono text-xs text-muted-foreground">{item.name}</span>
+              </DropdownMenu.Item>
+            {/each}
           {/each}
         </DropdownMenu.Content>
       </DropdownMenu.Root>
@@ -298,7 +311,7 @@
   {/if}
 {/snippet}
 
-{#if header || menuItems || availableCommands.length > 0}
+{#if header || visibleMenuGroups.length > 0}
   <div class="mb-1 flex min-w-0 items-center justify-end gap-2">
     {@render header?.()}
     {@render actions()}
