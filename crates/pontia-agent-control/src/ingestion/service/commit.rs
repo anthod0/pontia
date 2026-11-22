@@ -63,6 +63,13 @@ impl EventCommitter {
                 }
             }
         }
+        let reported_turn_id = event.turn_id.clone();
+        if event.event_type == EventType::TurnStarted
+            && event.report_key.is_some()
+            && event.turn_id.is_none()
+        {
+            event.turn_id = Some(pontia_core::ids::new_turn_id().to_string());
+        }
         if event.event_type.is_turn_event() && event.turn_id.is_none() {
             return Err(Error::Domain(format!(
                 "{} must carry turn_id",
@@ -128,7 +135,8 @@ impl EventCommitter {
                 .await?;
             }
         }
-        if let Some(result) = duplicate_report(&mut tx, &event).await? {
+        if let Some(result) = duplicate_report(&mut tx, &event, reported_turn_id.as_deref()).await?
+        {
             tx.commit().await?;
             return Ok(CommitOutcome::Duplicate { result });
         }
@@ -448,6 +456,7 @@ async fn project_runtime_in_tx(
 pub(super) async fn duplicate_report(
     connection: &mut sqlx::SqliteConnection,
     event: &DomainEvent,
+    reported_turn_id: Option<&str>,
 ) -> Result<Option<EventIngestResult>> {
     let Some(report_key) = event.report_key.as_deref() else {
         return Ok(None);
@@ -470,7 +479,8 @@ pub(super) async fn duplicate_report(
     };
     let existing_payload: serde_json::Value = serde_json::from_str(&payload)?;
     if existing_payload != event.payload
-        || (event.event_type != EventType::TurnStarted && turn_id != event.turn_id)
+        || ((event.event_type != EventType::TurnStarted || reported_turn_id.is_some())
+            && turn_id.as_deref() != reported_turn_id)
     {
         return Err(Error::StateConflict(format!(
             "report_key {report_key} was already committed with different fact content"

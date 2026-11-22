@@ -154,6 +154,15 @@ impl ClientControlChannel for Relay {
     }
 }
 
+const FRAME_KEY: &str = "pontia.dev/relay-frame";
+
+pub(crate) fn frame_key(meta: Option<&agent_client_protocol::v1::schema::Meta>) -> Result<String> {
+    meta.and_then(|meta| meta.get(FRAME_KEY))
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .ok_or_else(|| Error::Domain("Missing ACP observation frame identity".into()))
+}
+
 // The SDK sees native ACP frames. Only the relay's confirmed pipe flush releases a receipt.
 pub(crate) async fn bridge(
     relay: Arc<Relay>,
@@ -200,14 +209,41 @@ pub(crate) async fn bridge(
                 .map_err(|_| Error::Domain("Invalid relay output bytes".into()))?;
             bytes.extend(chunk);
             if request.params["last"] == true {
-                if let Some(id) = &recovered_request {
-                    let frame: Value = serde_json::from_slice(&bytes)?;
-                    if frame.get("id") == Some(id) && frame.get("method").is_none() {
-                        bytes = serde_json::to_vec(
-                            &json!({"jsonrpc":"2.0","method":"pontia/recovered-result","params":frame}),
-                        )?;
-                        bytes.push(b'\n');
+                let mut frame: Value = serde_json::from_slice(&bytes)?;
+                let tagged = if frame["method"] == "session/update"
+                    && matches!(
+                        frame
+                            .pointer("/params/update/sessionUpdate")
+                            .and_then(Value::as_str),
+                        Some("usage_update" | "config_option_update")
+                    ) {
+                    frame.get_mut("params")
+                } else if frame.pointer("/result/configOptions").is_some() {
+                    frame.get_mut("result")
+                } else {
+                    None
+                };
+                if let Some(body) = tagged {
+                    let id = request.params["frame_id"].as_str().ok_or_else(|| {
+                        Error::Domain("Relay output requires a frame identity".into())
+                    })?;
+                    // Carry the trusted relay identity through the SDK's typed responses.
+                    let meta = &mut body["_meta"];
+                    if !meta.is_object() {
+                        *meta = json!({});
                     }
+                    meta[FRAME_KEY] = json!(format!("acp:frame:{id}"));
+                    bytes = serde_json::to_vec(&frame)?;
+                    bytes.push(b'\n');
+                } else if recovered_request
+                    .as_ref()
+                    .is_some_and(|id| frame.get("id") == Some(id))
+                    && frame.get("method").is_none()
+                {
+                    bytes = serde_json::to_vec(
+                        &json!({"jsonrpc":"2.0","method":"pontia/recovered-result","params":frame}),
+                    )?;
+                    bytes.push(b'\n');
                 }
                 writer.write_all(&bytes).await?;
                 bytes.clear();
@@ -220,4 +256,56 @@ pub(crate) async fn bridge(
     receipts.close();
     relay.rpc.close();
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_client_protocol::v1::schema::SessionNotification;
+    use tokio::net::UnixStream;
+
+    #[tokio::test]
+    async fn replayed_usage_frame_keeps_its_identity_and_native_contents() {
+        let (client, server) = UnixStream::pair().unwrap();
+        let (remote, _) = RpcPeer::new(client);
+        let (rpc, requests) = RpcPeer::new(server);
+        let relay = Arc::new(Relay {
+            rpc,
+            process: ProcessFingerprint::capture(std::process::id()).unwrap(),
+        });
+        let (sdk, stream) = tokio::io::duplex(4096);
+        let (reader, writer) = tokio::io::split(stream);
+        let task = tokio::spawn(bridge(
+            relay,
+            requests,
+            Receipts::new(),
+            writer,
+            reader,
+            None,
+            watch::channel(false).0,
+        ));
+        let mut frames = BufReader::new(sdk).lines();
+        let update = json!({"sessionUpdate":"usage_update","used":9,"size":10});
+        let frame = json!({"jsonrpc":"2.0","method":"session/update","params":{
+            "sessionId":"native","update":update,"_meta":{FRAME_KEY:"agent-value"}
+        }});
+        let input = json!({"frame_id":"generation:17","last":true,"chunk":STANDARD.encode(frame.to_string())});
+        for _ in 0..2 {
+            remote
+                .request("relay.frame", input.clone(), MAX_FRAME_BYTES, false)
+                .await
+                .unwrap();
+            let frame: Value =
+                serde_json::from_str(&frames.next_line().await.unwrap().unwrap()).unwrap();
+            assert_eq!(frame["params"]["update"], update);
+            let notification: SessionNotification =
+                serde_json::from_value(frame["params"].clone()).unwrap();
+            assert_eq!(
+                frame_key(notification.meta.as_ref()).unwrap(),
+                "acp:frame:generation:17"
+            );
+        }
+        remote.close();
+        task.await.unwrap().unwrap();
+    }
 }

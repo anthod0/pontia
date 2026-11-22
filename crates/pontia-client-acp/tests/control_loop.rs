@@ -17,6 +17,9 @@ mod configuration;
 #[path = "control_loop/live_output.rs"]
 mod live_output;
 
+#[path = "control_loop/report_keys.rs"]
+mod report_keys;
+
 #[path = "control_loop/models.rs"]
 mod models;
 
@@ -872,6 +875,17 @@ async fn input_is_async_streams_without_persisting_output_and_uses_standard_stop
         );
         h.release(&format!("release-{index}"));
         h.wait_turn(&session, &turn.turn_id, expected).await;
+        for kind in ["turn.started".to_string(), format!("turn.{expected}")] {
+            let report_key: String = sqlx::query_scalar(
+                "SELECT report_key FROM events WHERE turn_id=? AND event_type=?",
+            )
+            .bind(&turn.turn_id)
+            .bind(&kind)
+            .fetch_one(&h.app.db())
+            .await
+            .unwrap();
+            assert_eq!(report_key, format!("acp:{}:{kind}", turn.turn_id));
+        }
         assert!(
             !h.app
                 .queries()

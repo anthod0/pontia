@@ -14,6 +14,41 @@ struct Harness {
 }
 
 #[tokio::test]
+async fn replayed_start_without_a_turn_id_returns_the_allocated_claude_turn() {
+    use pontia_agent_control::ReportedFact;
+    use pontia_core::domain::EventType;
+
+    let h = Harness::new().await;
+    let session = h.create("work").await;
+    h.gate(&session, 1, "start");
+    let turns = h.wait_states(&session, &["running"]).await;
+    let events = h.app.event_ingest_service();
+    let history = events.list_events(&session).await.unwrap();
+    let start = history
+        .iter()
+        .find(|e| e.event_type == EventType::TurnStarted)
+        .unwrap();
+    let replay = events
+        .report_fact(ReportedFact {
+            session_id: session.clone(),
+            turn_id: None,
+            report_key: start.report_key.clone(),
+            fact_type: EventType::TurnStarted,
+            data: start.payload.clone(),
+        })
+        .await
+        .unwrap();
+    assert!(replay.duplicate);
+    assert_eq!(replay.event_id, start.event_id);
+    assert_eq!(replay.turn_id.as_deref(), Some(turns[0].0.as_str()));
+    assert_eq!(
+        events.list_events(&session).await.unwrap().len(),
+        history.len()
+    );
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn replayed_terminal_report_compares_only_persisted_claude_evidence() {
     use pontia_agent_control::ReportedFact;
     use pontia_core::domain::EventType;
