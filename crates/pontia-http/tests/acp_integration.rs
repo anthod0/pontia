@@ -190,6 +190,7 @@ async fn acp_tools_use_existing_http_snapshot_updates_reconnect_and_closed_event
             name: "test".into(),
             capabilities: ACP_MAX_CAPABILITIES,
             restricted_execution: None,
+            new_session_instructions_meta_key: None,
             launch: AcpLaunch {
                 command: "python3".into(),
                 args: vec![format!(
@@ -301,6 +302,7 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
         name: "Company Agent".into(),
         capabilities: ACP_MAX_CAPABILITIES,
         restricted_execution: None,
+        new_session_instructions_meta_key: None,
         launch: AcpLaunch {
             command: "python3".into(),
             args: vec![format!(

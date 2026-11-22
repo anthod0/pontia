@@ -255,7 +255,8 @@ impl ClientSession for AcpAdapter {
                 let (native, metadata) = peer.initialize(
                     &cwd,
                     bound_identity.as_ref().map(|identity| identity[1].as_str()),
-                    binding.as_ref().map(|binding| binding.metadata["system_prompt_injected"] == true),
+                    binding.as_ref().map(|binding| &binding.metadata),
+                    definition.new_session_instructions_meta_key.as_deref(),
                 ).await?;
                 if let Some(model) = &request.model {
                     crate::models::select(&peer, &events, &request.session_id, model, binding.is_some()).await?;

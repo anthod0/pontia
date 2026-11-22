@@ -16,6 +16,7 @@ pub struct AcpLaunch {
 pub struct AcpAgentDefinition {
     pub name: String,
     pub launch: AcpLaunch,
+    pub new_session_instructions_meta_key: Option<String>,
     pub capabilities: AgentClientCapabilities,
     pub restricted_execution: Option<ExecutionPolicy>,
 }
@@ -34,6 +35,7 @@ impl AcpAgents {
                     args: vec!["agent".into(), "stdio".into()],
                     env: BTreeMap::new(),
                 },
+                new_session_instructions_meta_key: Some("rules".into()),
                 capabilities: crate::ACP_MAX_CAPABILITIES,
                 restricted_execution: None,
             },

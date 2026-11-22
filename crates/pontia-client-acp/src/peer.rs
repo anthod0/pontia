@@ -468,7 +468,8 @@ impl Peer {
         &self,
         cwd: &Path,
         existing: Option<&str>,
-        previously_injected: Option<bool>,
+        binding_metadata: Option<&Value>,
+        new_session_instructions_meta_key: Option<&str>,
     ) -> Result<(SessionId, Value)> {
         let initialize = self
             .call(InitializeRequest::new(ProtocolVersion::V1))
@@ -490,24 +491,36 @@ impl Peer {
             .session_capabilities
             .system_prompt
             .is_some();
-        let inject = match previously_injected {
-            Some(injected) => injected,
-            None => instructions.system_prompt.is_some() && (supported || instructions.required),
+        // A native creation-only prompt persists with the Session, even if a later
+        // initialize advertises different capabilities.
+        let meta_key = match binding_metadata {
+            Some(binding) => binding["new_session_instructions_meta_key"].as_str(),
+            None if !supported => new_session_instructions_meta_key,
+            None => None,
         };
-        if inject && !supported {
-            return Err(Error::CapabilityUnavailable(
-                "ACP Agent lacks sessionCapabilities.systemPrompt; create a Session without system_instructions".into(),
-            ));
-        }
-        let system_prompt = if inject {
+        let inject = match binding_metadata {
+            Some(binding) => binding["system_prompt_injected"] == true,
+            None => {
+                instructions.system_prompt.is_some()
+                    && (supported || meta_key.is_some() || instructions.required)
+            }
+        };
+        let (system_prompt, new_session_meta) = if inject {
             let text = instructions.system_prompt.ok_or_else(|| {
                 Error::StateConflict("ACP Session is missing its bound instructions".into())
             })?;
-            Some(SystemPrompt::new(vec![ContentBlock::Text(
-                TextContent::new(text),
-            )]))
+            match meta_key {
+                Some(key) => (None, Some(Meta::from_iter([(key.to_owned(), Value::String(text))]))),
+                None if supported => (
+                    Some(SystemPrompt::new(vec![ContentBlock::Text(TextContent::new(text))])),
+                    None,
+                ),
+                None => return Err(Error::CapabilityUnavailable(
+                    "ACP Agent lacks sessionCapabilities.systemPrompt; create a Session without system_instructions".into(),
+                )),
+            }
         } else {
-            None
+            (None, None)
         };
         self.state.lock().await.system_prompt = system_prompt.clone();
         let native = match existing {
@@ -515,6 +528,7 @@ impl Peer {
             None => {
                 let mut request = NewSessionRequest::new(cwd.to_path_buf());
                 request.system_prompt = system_prompt;
+                request.meta = new_session_meta;
                 let response = self.call(request).await?;
                 if let Some(options) = response.config_options {
                     crate::models::replace(
@@ -546,6 +560,9 @@ impl Peer {
             json!({})
         };
         metadata["system_prompt_injected"] = json!(inject);
+        if inject && let Some(key) = meta_key {
+            metadata["new_session_instructions_meta_key"] = json!(key);
+        }
         {
             let mut state = self.state.lock().await;
             if !state.current {

@@ -62,6 +62,7 @@ impl Harness {
             name: "Controlled Agent".into(),
             capabilities: ACP_MAX_CAPABILITIES,
             restricted_execution: None,
+            new_session_instructions_meta_key: None,
             launch: AcpLaunch {
                 command: command.into(),
                 args: vec![
@@ -72,7 +73,15 @@ impl Harness {
             },
         };
         let mut clients = ClientRegistry::default();
-        let config = AcpAgents::new([("first".into(), config.clone()), ("second".into(), config)]);
+        let second = AcpAgentDefinition {
+            new_session_instructions_meta_key: AcpAgents::builtin()
+                .get("grok")
+                .unwrap()
+                .new_session_instructions_meta_key
+                .clone(),
+            ..config.clone()
+        };
+        let config = AcpAgents::new([("first".into(), config), ("second".into(), second)]);
         clients.register(pontia_client_acp::registration_with_relay(
             config.clone(),
             env!("CARGO_BIN_EXE_pontia-acp-test-relay").into(),
