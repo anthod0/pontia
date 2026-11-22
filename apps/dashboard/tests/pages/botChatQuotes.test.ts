@@ -564,25 +564,121 @@ test("opens context from the message menu and reveals an earlier linked message"
   expect(pages.mock.calls.some(([, page]) => page.before === "older")).toBe(true);
 });
 
-test("opens an outstanding todo from the feed and quotes it into the composer", async () => {
-  const todo = { ...reply, todo: { state: "open" as const } };
-  serve([todo]);
+const todo = { ...reply, todo: { state: "open" as const } };
+const quotedTodo = (text: string) =>
+  `<user_quote message_id="${reply.id}" speaker="Bot">${reply.content}</user_quote>\n${text}`;
+
+async function openTodos() {
   vi.spyOn(testDevice.api, "getBotTodos").mockResolvedValue({
     open: [todo],
     recently_resolved: [],
   });
-  const send = sent();
   render(BotChatPage, { botId: bot.bot_id });
   await fireEvent.click(await screen.findByRole("button", { name: "Todo" }));
-  await fireEvent.click(await screen.findByRole("button", { name: "Quote reply" }));
+  const item = (await within(screen.getByRole("complementary")).findAllByRole("listitem"))[0];
+  return within(item);
+}
+
+test("lists a todo's actions with context first, then Ignore, Quote and Reply", async () => {
+  serve([todo]);
+  const item = await openTodos();
+  const actions = ["Context", "Ignore", "Quote", "Reply"].map((name) =>
+    item.getByRole("button", { name }),
+  );
+  for (const [before, after] of actions.slice(0, -1).map((button, i) => [button, actions[i + 1]]))
+    expect(before.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test("ignoring a todo resolves it like marking it done", async () => {
+  serve([todo]);
+  const change = vi.spyOn(testDevice.api, "changeBotTodo").mockResolvedValue({
+    ...todo,
+    todo: { state: "done", by: "user", at: new Date().toISOString() },
+  });
+  const item = await openTodos();
+  await fireEvent.click(item.getByRole("button", { name: "Ignore" }));
+  await waitFor(() => expect(change).toHaveBeenCalledWith(bot.bot_id, todo.id, "resolve"));
+});
+
+test("opens an outstanding todo from the feed and quotes it into the composer", async () => {
+  serve([todo]);
+  const send = sent();
+  const item = await openTodos();
+  await fireEvent.click(item.getByRole("button", { name: "Quote" }));
   const textbox = screen.getByRole("textbox");
   await waitFor(() => expect(textbox).toHaveFocus());
   await userEvent.type(textbox, "Approved");
   await fireEvent.click(screen.getByRole("button", { name: "Send" }));
-  await waitFor(() =>
-    expect(send).toHaveBeenCalledWith(
-      bot.bot_id,
-      `<user_quote message_id="${reply.id}" speaker="Bot">${reply.content}</user_quote>\nApproved`,
-    ),
-  );
+  await waitFor(() => expect(send).toHaveBeenCalledWith(bot.bot_id, quotedTodo("Approved")));
+});
+
+test("replies to a todo from its own box with the same request as quoting it, leaving the composer alone", async () => {
+  serve([todo, message(2, "bot_reply", "Other answer")]);
+  const send = sent();
+  const item = await openTodos();
+  await quoteFromMenu(rows()[1]);
+  const composer = () =>
+    within(screen.getByRole("region", { name: bot.name })).getByRole("textbox");
+  await userEvent.type(composer(), "Composer draft");
+
+  await fireEvent.click(item.getByRole("button", { name: "Reply" }));
+  const box = item.getByRole("textbox", { name: "Message" });
+  await waitFor(() => expect(box).toHaveFocus());
+  await userEvent.type(box, "Approved{Enter}");
+  await waitFor(() => expect(send).toHaveBeenCalledWith(bot.bot_id, quotedTodo("Approved")));
+  await waitFor(() => expect(item.queryByRole("textbox")).not.toBeInTheDocument());
+
+  expect(composer()).toHaveTextContent("Composer draft");
+  expect(screen.getByRole("button", { name: /^Remove quote: Other answer/ })).toBeInTheDocument();
+});
+
+test("keeps the reply text after a failed send, retries it from the toast, and closes with Escape", async () => {
+  serve([todo]);
+  let fail!: (error: Error) => void;
+  const send = vi
+    .spyOn(testDevice.api, "sendBotMessage")
+    .mockImplementationOnce(() => new Promise((_resolve, reject) => (fail = reject)))
+    .mockRejectedValueOnce(new Error("still offline"));
+  const item = await openTodos();
+  await fireEvent.click(item.getByRole("button", { name: "Reply" }));
+  const box = item.getByRole("textbox", { name: "Message" });
+  await userEvent.type(box, "Approved");
+  await fireEvent.click(item.getByRole("button", { name: "Send" }));
+  await waitFor(() => expect(box).toHaveAttribute("readonly"));
+  expect(item.getByRole("button", { name: "Cancel" })).toBeDisabled();
+  await userEvent.keyboard("{Escape}");
+  expect(box).toBeInTheDocument();
+
+  fail(new Error("offline"));
+  await waitFor(() => expect(toast.error).toHaveBeenCalledWith("offline", expect.anything()));
+  expect(box).toHaveValue("Approved");
+  expect(box).not.toHaveAttribute("readonly");
+
+  const retry = toast.error.mock.calls[0][1].action.onClick;
+  retry(new MouseEvent("click"));
+  await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+  expect(send.mock.calls.map(([, content]) => content)).toEqual([
+    quotedTodo("Approved"),
+    quotedTodo("Approved"),
+  ]);
+  await waitFor(() => expect(box).not.toHaveAttribute("readonly"));
+
+  box.focus();
+  await userEvent.keyboard("{Escape}");
+  expect(item.queryByRole("textbox")).not.toBeInTheDocument();
+  expect(item.getByRole("button", { name: "Reply" })).toHaveFocus();
+});
+
+test("cancels a todo reply without sending it", async () => {
+  serve([todo]);
+  const send = sent();
+  const item = await openTodos();
+  const button = item.getByRole("button", { name: "Reply" });
+  await fireEvent.click(button);
+  expect(button).toHaveAttribute("aria-expanded", "true");
+  await userEvent.type(item.getByRole("textbox", { name: "Message" }), "Not yet");
+  await fireEvent.click(item.getByRole("button", { name: "Cancel" }));
+  expect(item.queryByRole("textbox")).not.toBeInTheDocument();
+  expect(button).toHaveAttribute("aria-expanded", "false");
+  expect(send).not.toHaveBeenCalled();
 });

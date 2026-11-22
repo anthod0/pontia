@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Repeated permission requests reuse the original Interaction. When storage is temporarily unavailable, a blocking permission request appears after its registration and blocked event can both be saved. Conflicting replays cancel the pending approval, and later selections report that it has expired.
 
+- In Dashboard, the Todo button at the top right of a Bot chat shows only its icon, with the number of open todos as a badge.
+
+- In Dashboard, each todo in a Bot chat shows Context on the left and Ignore, Quote and Reply on the right. Ignore marks the todo as done. Quote adds the todo as a quote above the chat input. Reply opens a box under the todo, so you can answer without leaving the list. The answer appears in the chat with the todo quoted.
+
 - In Dashboard, the Session chat actions menu next to the input lists New chat first, then Rename, Pin and Archive, then Shared files and Compact context, with Exit in its own group at the bottom.
 
 - In Dashboard, Bot chat messages and shared files show their **⋯** actions button on desktop while you hover over them or focus them with the keyboard. Phones still show it all the time. The menu item that quotes a whole message is now called Reply. Quote is still the name for quoting a selection, a file or an image.
