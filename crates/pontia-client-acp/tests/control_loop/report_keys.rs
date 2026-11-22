@@ -129,3 +129,23 @@ async fn keyed_start_requires_the_same_preallocated_turn_in_its_session() {
     assert_eq!(h.events(&session, "turn.started").await, 2);
     h.stop().await;
 }
+
+#[tokio::test]
+async fn each_close_of_a_resumed_session_records_its_own_exit() {
+    let h = Harness::new(&[]).await;
+    let session = h.create("first").await.unwrap();
+    let commands = h.app.session_commands();
+    commands.terminate_session(&session).await.unwrap();
+    commands
+        .resume_session(&session, h.root.path())
+        .await
+        .unwrap();
+    commands.terminate_session(&session).await.unwrap();
+    let exits: Vec<String> = sqlx::query_scalar(
+        "SELECT report_key FROM events WHERE session_id=? AND event_type='session.exited' ORDER BY rowid"
+    ).bind(&session).fetch_all(&h.app.db()).await.unwrap();
+    assert_eq!(exits.len(), 2);
+    assert_ne!(exits[0], exits[1]);
+    h.wait_session_state(&session, "exited").await;
+    h.stop().await;
+}

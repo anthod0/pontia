@@ -699,6 +699,24 @@ pub(crate) async fn fact(
     Ok(())
 }
 
+async fn turn_fact(
+    events: &EventIngestService,
+    session: &str,
+    runtime: &str,
+    turn: &str,
+    kind: EventType,
+    data: Value,
+) -> Result<()> {
+    let key = format!("acp:{turn}:{kind}");
+    match fact(events, session, runtime, Some(turn), kind, key, data).await {
+        Err(Error::StateConflict(error)) => {
+            tracing::warn!(session, turn, %kind, %error, "Discarding conflicting ACP Turn report");
+            Ok(())
+        }
+        result => result,
+    }
+}
+
 pub(crate) async fn started(
     events: &EventIngestService,
     session: &str,
@@ -706,21 +724,15 @@ pub(crate) async fn started(
     prompt: &mut Prompt,
 ) -> Result<()> {
     if !prompt.started {
-        let result = fact(
+        turn_fact(
             events,
             session,
             runtime,
-            Some(&prompt.turn),
+            &prompt.turn,
             EventType::TurnStarted,
-            format!("acp:{}:turn.started", prompt.turn),
             json!({"acp_history_anchor":prompt.history_index}),
         )
-        .await;
-        if let Err(Error::StateConflict(error)) = &result {
-            tracing::warn!(session, turn=%prompt.turn, %error, "Discarding conflicting ACP turn start");
-        } else {
-            result?;
-        }
+        .await?;
         prompt.started = true;
     }
     Ok(())
@@ -858,16 +870,7 @@ pub(crate) async fn finish(
     };
     let mut data = data;
     data["acp_history_anchor"] = json!(prompt.history_end);
-    fact(
-        events,
-        session,
-        &peer.runtime,
-        Some(turn),
-        terminal,
-        format!("acp:{turn}:{terminal}"),
-        data,
-    )
-    .await?;
+    turn_fact(events, session, &peer.runtime, turn, terminal, data).await?;
     state.active = None;
     peer.remember(&state, None).await?;
     let permissions = std::mem::take(&mut state.permissions);

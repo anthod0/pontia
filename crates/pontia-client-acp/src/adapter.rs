@@ -466,6 +466,7 @@ impl ClientSession for AcpAdapter {
             let session = target.session_id.clone();
             let close = async move {
                 peer.close_session(native).await?;
+                let exit_key = format!("acp:close:{}", pontia_core::ids::new_event_id());
                 peer.terminate().await?;
                 peer::fact(
                     &events,
@@ -473,7 +474,7 @@ impl ClientSession for AcpAdapter {
                     &peer.runtime,
                     None,
                     pontia_core::domain::EventType::SessionExited,
-                    format!("acp:{}:exit", peer.runtime),
+                    exit_key,
                     json!({"reason":"acp_session_closed"}),
                 )
                 .await?;

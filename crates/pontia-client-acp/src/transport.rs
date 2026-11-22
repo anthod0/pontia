@@ -257,3 +257,55 @@ pub(crate) async fn bridge(
     relay.rpc.close();
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_client_protocol::v1::schema::SessionNotification;
+    use tokio::net::UnixStream;
+
+    #[tokio::test]
+    async fn replayed_usage_frame_keeps_its_identity_and_native_contents() {
+        let (client, server) = UnixStream::pair().unwrap();
+        let (remote, _) = RpcPeer::new(client);
+        let (rpc, requests) = RpcPeer::new(server);
+        let relay = Arc::new(Relay {
+            rpc,
+            process: ProcessFingerprint::capture(std::process::id()).unwrap(),
+        });
+        let (sdk, stream) = tokio::io::duplex(4096);
+        let (reader, writer) = tokio::io::split(stream);
+        let task = tokio::spawn(bridge(
+            relay,
+            requests,
+            Receipts::new(),
+            writer,
+            reader,
+            None,
+            watch::channel(false).0,
+        ));
+        let mut frames = BufReader::new(sdk).lines();
+        let update = json!({"sessionUpdate":"usage_update","used":9,"size":10});
+        let frame = json!({"jsonrpc":"2.0","method":"session/update","params":{
+            "sessionId":"native","update":update,"_meta":{FRAME_KEY:"agent-value"}
+        }});
+        let input = json!({"frame_id":"generation:17","last":true,"chunk":STANDARD.encode(frame.to_string())});
+        for _ in 0..2 {
+            remote
+                .request("relay.frame", input.clone(), MAX_FRAME_BYTES, false)
+                .await
+                .unwrap();
+            let frame: Value =
+                serde_json::from_str(&frames.next_line().await.unwrap().unwrap()).unwrap();
+            assert_eq!(frame["params"]["update"], update);
+            let notification: SessionNotification =
+                serde_json::from_value(frame["params"].clone()).unwrap();
+            assert_eq!(
+                frame_key(notification.meta.as_ref()).unwrap(),
+                "acp:frame:generation:17"
+            );
+        }
+        remote.close();
+        task.await.unwrap().unwrap();
+    }
+}
