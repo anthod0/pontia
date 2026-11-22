@@ -192,10 +192,13 @@
   </div>
 {/snippet}
 
-<!-- A long press on touch selects text, so touch rows open their menu from this button. -->
-{#snippet menuButton(id: string)}
-  <Button variant="ghost" size="icon-sm" class="hidden shrink-0 self-end text-muted-foreground pointer-coarse:inline-flex" aria-label={$t('bots.messageActions')}
-    onclick={(event: MouseEvent) => actions?.openMenu(id, event.currentTarget as HTMLElement)}><DotsThreeIcon weight="bold" /></Button>
+<!-- A long press on touch selects text, so touch rows always show this button.
+     With a mouse it appears while its message or file is hovered or keyboard-focused, and while its menu is open. -->
+{#snippet menuButton(id: string, file = false)}
+  <Button variant="ghost" size="icon-sm" aria-haspopup="menu" aria-label={$t('bots.messageActions')}
+    class={['shrink-0 self-end text-muted-foreground opacity-0 transition-opacity focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100',
+      file ? 'group-hover/file:opacity-100 group-has-focus-visible/file:opacity-100' : 'group-hover/entry:opacity-100 group-has-focus-visible/entry:opacity-100']}
+    onclick={(event: MouseEvent) => actions?.openMenu(id, event)}><DotsThreeIcon weight="bold" /></Button>
 {/snippet}
 
 {#if timeline.bot}
@@ -255,8 +258,8 @@
         {:else if entry.kind === 'shared_files'}
           <div class="max-w-[90%]">
             <SharedFiles files={entry.files} sessionId={entry.session_id} highlighted={highlighted}
-              itemProps={file => ({ ...quotableProps, 'data-bot-file-id': file.file_id })}>
-              {#snippet itemActions()}{@render menuButton(entry.id)}{/snippet}
+              itemProps={file => ({ ...quotableProps, class: 'group/file', 'data-bot-file-id': file.file_id })}>
+              {#snippet itemActions()}{@render menuButton(entry.id, true)}{/snippet}
             </SharedFiles>
           </div>
         {:else}
