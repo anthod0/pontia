@@ -422,3 +422,44 @@ test("hides the scroll-down button at the bottom of the Bot feed", async () => {
     expect(screen.queryByRole("button", { name: /scroll to bottom/i })).not.toBeInTheDocument(),
   );
 });
+
+test("shows the files opened before in an empty Files tab and reopens one from the list", async () => {
+  localStorage.clear();
+  const read = vi
+    .spyOn(testDevice.fileApi, "pathFileContent")
+    .mockImplementation(async (_session, path) => new Response(`# ${path.slice(6, -3)}\n`));
+  sharedFiles([sharedFile("notes.md"), sharedFile("plan.md")]);
+  const first = render(BotChatPreviewHarness, { botId: bot.bot_id });
+
+  await fireEvent.click(await screen.findByRole("button", { name: "Todo 0" }));
+  await fireEvent.click(screen.getByRole("tab", { name: "Files" }));
+  expect(await screen.findByText("No open file")).toBeVisible();
+
+  await fireEvent.click(screen.getByRole("button", { name: "Preview notes.md" }));
+  const panel = screen.getByRole("complementary");
+  await within(panel).findByRole("heading", { name: "notes" });
+  await fireEvent.click(screen.getByRole("button", { name: "Preview plan.md" }));
+  await within(panel).findByRole("heading", { name: "plan" });
+  await fireEvent.click(within(panel).getByRole("button", { name: "Close file" }));
+
+  // After a reload the list is still there, newest first.
+  first.unmount();
+  render(BotChatPreviewHarness, { botId: bot.bot_id });
+  await fireEvent.click(await screen.findByRole("button", { name: "Todo 0" }));
+  await fireEvent.click(screen.getByRole("tab", { name: "Files" }));
+  const list = await screen.findByRole("region", { name: "Recently opened" });
+  expect(
+    within(list)
+      .getAllByRole("button", { name: /^Preview/ })
+      .map((button) => button.getAttribute("title")),
+  ).toEqual(["/work/plan.md", "/work/notes.md"]);
+
+  read.mockClear();
+  await fireEvent.click(within(list).getByRole("button", { name: "Preview notes.md" }));
+  await within(screen.getByRole("complementary")).findByRole("heading", { name: "notes" });
+  expect(read).toHaveBeenCalledWith("main", "/work/notes.md", expect.any(AbortSignal));
+
+  await fireEvent.click(screen.getByRole("button", { name: "Close file" }));
+  await fireEvent.click(await screen.findByRole("button", { name: "Clear list" }));
+  expect(await screen.findByText("No open file")).toBeVisible();
+});

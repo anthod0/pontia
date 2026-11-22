@@ -77,6 +77,17 @@ test("a Bot quote draft is saved as JSON per device and Bot and removed when cle
   expect(localStorage.getItem(key)).toBeNull();
 });
 
+test("recent Bot files are saved as a JSON list per device and Bot and removed when cleared", async () => {
+  const { createRecentFiles } = await import("../../../src/lib/botRecentFiles");
+  const key = 'pontia.botRecentFiles:["local","bot-1"]';
+  const files = [{ sessionId: "main", path: "/work/a.md" }];
+  const recent = createRecentFiles("local", "bot-1");
+  recent.current = files;
+  expect(localStorage.getItem(key)).toBe(JSON.stringify(files));
+  recent.current = [];
+  expect(localStorage.getItem(key)).toBeNull();
+});
+
 test("history forks are saved as a JSON list per device", async () => {
   const { createHistoryForks } = await import("../../../src/stores/historyForks");
   const api = { forkSession: vi.fn().mockRejectedValue(new Error("offline")) };

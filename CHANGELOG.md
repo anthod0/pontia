@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- In Dashboard, the Files tab of a Bot chat's side panel lists the last 10 files you opened in that Bot chat on that device. Click one to open it again, or clear the list.
+
 - In Dashboard, Bot chats show a scroll-to-bottom button after you scroll up, like Session chats.
 
 - Bots can use `pontia bot link-message` to connect an unquoted user message to up to five earlier messages in the same chat. These links appear in message context and Session handoffs.

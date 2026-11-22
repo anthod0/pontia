@@ -74,6 +74,8 @@
   "bots.quoted": "引用",
   "files.closeFile": "关闭文件",
   "files.noneOpen": "没有打开的文件",
+  "files.recent": "最近打开",
+  "files.clearRecent": "清空列表",
   "bots.messageActions": "消息操作",
   "bots.removeQuote": "移除引用：{text}",
   "bots.quoteFrom": "引用 {speaker}：{text}",

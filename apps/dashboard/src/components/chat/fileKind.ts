@@ -98,8 +98,13 @@ export function fileKind(extension: string): FileKind {
   return kinds.find(([extensions]) => extensions.includes(lower))?.[1] ?? fallback;
 }
 
+/** The kind of the named file, by the extension after its last dot. */
+export function fileKindOf(name: string): FileKind {
+  const dot = name.lastIndexOf(".");
+  return fileKind(dot > 0 ? name.slice(dot + 1) : "");
+}
+
 /** Whether the file preview panel can show the named file; other files are download-only. */
 export function canPreviewText(name: string): boolean {
-  const dot = name.lastIndexOf(".");
-  return fileKind(dot > 0 ? name.slice(dot + 1) : "").text;
+  return fileKindOf(name).text;
 }
