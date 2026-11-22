@@ -138,13 +138,30 @@ test.each([
   },
 );
 
-test.each([
-  ["an exited Session", { session_id: "sess-1", state: "exited", archived_at: null }],
-  ["a failed Session", { session_id: "sess-1", state: "error", archived_at: null }],
-  ["an archived Session", { session_id: "sess-1", state: "idle", archived_at: "now" }],
-])("Back to chat opens New Chat and forgets %s", async (_name, session) => {
+test.each(["exited", "error"])("Back to chat reopens an unarchived %s Session", async (state) => {
   rememberLastPage("local", { kind: "chat", id: "sess-1" });
-  vi.spyOn(testDevice.api, "getSession").mockResolvedValue(session as SessionView);
+  vi.spyOn(testDevice.api, "getSession").mockResolvedValue({
+    session_id: "sess-1",
+    state,
+    archived_at: null,
+  } as SessionView);
+  openTab("/dashboard/settings/common");
+  returnToLastPage();
+  window.history.replaceState({}, "", "/dashboard");
+  render(DashboardEntryPage);
+  await waitFor(() =>
+    expect(goto).toHaveBeenCalledWith("/dashboard/chat/sess-1", { replaceState: true }),
+  );
+  expect(savedPage()).not.toBeNull();
+});
+
+test("Back to chat opens New Chat and forgets an archived Session", async () => {
+  rememberLastPage("local", { kind: "chat", id: "sess-1" });
+  vi.spyOn(testDevice.api, "getSession").mockResolvedValue({
+    session_id: "sess-1",
+    state: "idle",
+    archived_at: "now",
+  } as SessionView);
   openTab("/dashboard/settings/common");
   returnToLastPage();
   window.history.replaceState({}, "", "/dashboard");
@@ -195,7 +212,7 @@ test("a handled Back to chat request does not redirect New Chat when it mounts a
   vi.spyOn(testDevice.api, "getSession").mockResolvedValue({
     session_id: "sess-1",
     state: "exited",
-    archived_at: null,
+    archived_at: "now",
   } as SessionView);
   rememberLastPage("local", { kind: "chat", id: "sess-1" });
   openTab("/dashboard/settings/common");

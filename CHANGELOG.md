@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- In Dashboard, "Back to chat" in settings returns to the Bot chat or Session chat last opened on the current device, also after reloading settings. It opens New Chat when that Bot was deleted, or that Session ended or was archived.
+- In Dashboard, "Back to chat" in settings returns to the Bot chat or Session chat last opened on the current device, also after reloading settings. It opens New Chat when that Bot was deleted, or that Session is missing or archived.
 
 - Dashboard and helper listings report when a running Session loses its Client connection. An explicit close can now stop its dedicated agent process and confirm exit.
 
