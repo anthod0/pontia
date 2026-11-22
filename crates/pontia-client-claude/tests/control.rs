@@ -1490,7 +1490,7 @@ async fn restricted_execution_policy_defaults_yolo_false_and_accepts_explicit_yo
         .configuration
         .expect("Claude configuration");
     let restricted = configuration
-        .restricted_execution_policy()
+        .restricted_execution_policy("default")
         .expect("Claude restricted execution policy");
     assert_eq!(restricted.tools, None);
     assert!(restricted.disable_mcp);

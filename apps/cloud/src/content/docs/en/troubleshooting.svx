@@ -72,9 +72,9 @@ Command, file-change, and permission approvals appear in the Dashboard. An agent
 
 Check that `node --version` and `npm --version` work for the user that runs Pontia, then run `pontia setup claude` to re-run the dependency check. If the Dashboard reports an authentication failure while the SDK retries, fix Claude Code's own login or provider settings for that user. See [Claude Code](/docs/agent-clients/claude) to update the client package.
 
-## An ACP agent cannot start
+## Grok Build cannot start
 
-Confirm that the entry's `command` runs for the Pontia service user, and inspect its `effective_config` with `pontia client show AGENT_ID`. The agent must support loading and closing sessions; otherwise the Session reports the missing capability.
+Check that the Pontia service user can run `grok agent stdio` and inspect the client with `pontia client show grok`. Grok Build must advertise session loading and closing.
 
 ## A remote device is offline
 

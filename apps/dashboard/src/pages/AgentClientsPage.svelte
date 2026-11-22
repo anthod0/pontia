@@ -5,7 +5,6 @@
   import { toast } from 'svelte-sonner'
   import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon'
   import ArrowCounterClockwiseIcon from 'phosphor-svelte/lib/ArrowCounterClockwiseIcon'
-  import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import WrenchIcon from 'phosphor-svelte/lib/WrenchIcon'
   import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon'
@@ -14,10 +13,8 @@
   import ClientIcon from '../components/chat/ClientIcon.svelte'
   import { isTransientNetworkError } from '../api/client'
   import type { AgentClientView, AgentClientSetupOperation, JsonObject } from '../api/types'
-  import { customClientEntries } from '../clients'
   import { formatDateTime } from '../lib/format'
   import { Button } from '$lib/components/ui/button/index.js'
-  import { Input } from '$lib/components/ui/input/index.js'
   import { Label } from '$lib/components/ui/label/index.js'
   import { Switch } from '$lib/components/ui/switch/index.js'
   import { Textarea } from '$lib/components/ui/textarea/index.js'
@@ -40,21 +37,10 @@
   let selectedSetup = $derived(setupOperation?.client_type === selected?.client_type && setupOperation?.client_key === selected?.client_key ? setupOperation : null)
   let loading = $state(true)
   let resetOpen = $state(false)
-  let custom = $state<(typeof customClientEntries)[number] | null>(null)
-  let customKey = $state('')
 
   function select(client: AgentClientView) {
     selected = client
-    custom = null
     draft = JSON.stringify(client.config_overrides, null, 2)
-    error = ''
-  }
-
-  function startCustom(entry: (typeof customClientEntries)[number]) {
-    custom = entry
-    selected = null
-    customKey = ''
-    draft = '{}'
     error = ''
   }
 
@@ -120,16 +106,11 @@
     finally { saving = false }
   }
 
-  function save() {
+  function save(client: AgentClientView) {
     return perform(async () => {
       const overrides: unknown = JSON.parse(draft)
       if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) throw new Error($t('clients.objectRequired'))
-      const target = custom ? { client_type: custom.clientType, client_key: customKey.trim() } : selected
-      if (!target || !target.client_key) throw new Error($t('clients.idRequired'))
-      const keyError = custom?.validateKey(target.client_key)
-      if (keyError) throw new Error(keyError)
-      if (custom && clients.some((client) => client.client_type === target.client_type && client.client_key === target.client_key)) throw new Error($t('clients.alreadyExists'))
-      const saved = await patchAgentClient(target, { config_overrides: overrides as JsonObject })
+      const saved = await patchAgentClient(client, { config_overrides: overrides as JsonObject })
       clients = await listAgentClients()
       select(saved)
       toast.success($t('clients.saved'), { description: $t('clients.environmentPriority') })
@@ -150,16 +131,17 @@
     return perform(async () => {
       await resetAgentClient(client)
       await refresh()
-      toast.success($t('clients.restored'), { description: $t('clients.defaultsApplied') })
+      toast.success($t('clients.restored'), { description: client.client_type === 'acp' ? undefined : $t('clients.defaultsApplied') })
     })
   }
 </script>
 
+{#snippet restoreButton()}
+  <Button type="button" variant="ghost" disabled={busy} onclick={() => resetOpen = true}><ArrowCounterClockwiseIcon class="size-4" /> {$t('clients.restoreInheritance')}</Button>
+{/snippet}
+
 <section class="space-y-6">
   <div class="flex flex-wrap justify-end gap-2">
-    {#each customClientEntries as entry}
-      <Button disabled={busy} onclick={() => startCustom(entry)}><PlusIcon class="size-4" /> {entry.label}</Button>
-    {/each}
     <Button variant="outline" disabled={busy || loading} onclick={() => perform(refresh)}><ArrowsClockwiseIcon class="size-4" /> {$t('common.refresh')}</Button>
   </div>
 
@@ -195,43 +177,31 @@
         {/each}
       </nav>
 
-      {#if selected || custom}
+      {#if selected}
         <div class="min-w-0 space-y-6">
-          {#if selected}
-            <div class="flex items-start justify-between gap-4">
-              <div class="min-w-0 space-y-1">
-                <h3 class="truncate text-lg font-semibold text-heading">{selected.name}</h3>
-                <p class="text-xs text-muted-foreground">
-                  {selected.client_type} / {selected.short_id} · {selected.has_record ? $t('clients.databaseUpdated', { date: formatDateTime(selected.updated_at, $currentLocale) }) : $t('clients.inherited')}
+          <div class="flex items-start justify-between gap-4">
+            <div class="min-w-0 space-y-1">
+              <h3 class="truncate text-lg font-semibold text-heading">{selected.name}</h3>
+              <p class="text-xs text-muted-foreground">
+                {selected.client_type} / {selected.short_id} · {selected.has_record ? $t('clients.databaseUpdated', { date: formatDateTime(selected.updated_at, $currentLocale) }) : $t('clients.inherited')}
+              </p>
+              <p class="break-all font-mono text-xs text-muted-foreground" title={$t('clients.uniqueId')}>{selected.id}</p>
+              <div role="status" class="space-y-1 pt-2 text-sm">
+                <p class="flex items-center gap-1.5">
+                  {#if selected.detection.status === 'detected'}<CheckCircleIcon class="size-4 text-success" />
+                  {:else if selected.detection.status === 'not_detected'}<WarningCircleIcon class="size-4 text-muted-foreground" />{/if}
+                  {$t(`clients.detection.${selected.detection.status}`)}
                 </p>
-                <p class="break-all font-mono text-xs text-muted-foreground" title={$t('clients.uniqueId')}>{selected.id}</p>
-                <div role="status" class="space-y-1 pt-2 text-sm">
-                  <p class="flex items-center gap-1.5">
-                    {#if selected.detection.status === 'detected'}<CheckCircleIcon class="size-4 text-success" />
-                    {:else if selected.detection.status === 'not_detected'}<WarningCircleIcon class="size-4 text-muted-foreground" />{/if}
-                    {$t(`clients.detection.${selected.detection.status}`)}
-                  </p>
-                  {#if selected.detection.detail}<p class="break-words text-xs text-muted-foreground">{selected.detection.detail}</p>{/if}
-                </div>
-              </div>
-              <div class="flex shrink-0 items-center gap-2 pt-1">
-                <Label for="client-enabled" class="text-sm text-muted-foreground">{$t('common.enabled')}</Label>
-                <Switch id="client-enabled" checked={selected.enabled} disabled={busy} onCheckedChange={() => selected && toggle(selected)} />
+                {#if selected.detection.detail}<p class="break-words text-xs text-muted-foreground">{selected.detection.detail}</p>{/if}
               </div>
             </div>
-          {:else if custom}
-            <div class="space-y-1">
-              <h3 class="text-lg font-semibold text-heading">{$t('clients.newCustom')}</h3>
-              <p class="text-sm text-muted-foreground">{$t('clients.registerDescription')}</p>
+            <div class="flex shrink-0 items-center gap-2 pt-1">
+              <Label for="client-enabled" class="text-sm text-muted-foreground">{$t('common.enabled')}</Label>
+              <Switch id="client-enabled" checked={selected.enabled} disabled={busy} onCheckedChange={() => selected && toggle(selected)} />
             </div>
-            <div class="max-w-md space-y-2">
-              <Label for="client-key">{custom.keyLabel}</Label>
-              <Input id="client-key" bind:value={customKey} disabled={busy} class="font-mono" />
-              <p class="text-xs text-muted-foreground">{$t('clients.idDescription')}</p>
-            </div>
-          {/if}
+          </div>
 
-          {#if selected?.setup_command}
+          {#if selected.setup_command}
             <section class="space-y-4 rounded-lg border bg-card p-4" aria-label={$t('clients.setup')}>
               <div class="flex flex-wrap items-start justify-between gap-4">
                 <div class="space-y-1.5">
@@ -261,26 +231,29 @@
             </section>
           {/if}
 
-          <div class="grid gap-6 {selected ? 'xl:grid-cols-2' : ''}">
-            <form class="space-y-2" onsubmit={(event) => { event.preventDefault(); save() }}>
-              <Label for="client-overrides">{$t('clients.overrides')}</Label>
-              <Textarea id="client-overrides" bind:value={draft} rows={12} spellcheck={false} class="min-h-56 font-mono text-xs" disabled={busy} />
-              <p class="text-xs text-muted-foreground">{$t('clients.overridesDescription')}</p>
-              <div class="flex flex-wrap items-center gap-2 pt-2">
-                <Button type="submit" disabled={busy}>{$t('clients.saveOverrides')}</Button>
-                {#if selected?.has_record}
-                  <Button variant="ghost" disabled={busy} onclick={() => resetOpen = true}><ArrowCounterClockwiseIcon class="size-4" /> {$t('clients.restoreInheritance')}</Button>
-                {/if}
-              </div>
-            </form>
-            {#if selected}
-              <div class="space-y-2">
-                <h4 class="text-sm leading-none font-medium">{$t('clients.effectiveConfiguration')}</h4>
-                <pre class="max-h-[22rem] min-h-56 overflow-auto rounded-md bg-muted p-3 font-mono text-xs leading-5">{JSON.stringify(selected.effective_config, null, 2)}</pre>
-                <p class="text-xs text-muted-foreground">{$t('clients.configurationDescription')}</p>
-              </div>
+          <div class="grid gap-6 {selected.client_type !== 'acp' ? 'xl:grid-cols-2' : ''}">
+            {#if selected.client_type !== 'acp'}
+              <form class="space-y-2" onsubmit={(event) => { event.preventDefault(); if (selected) save(selected) }}>
+                <Label for="client-overrides">{$t('clients.overrides')}</Label>
+                <Textarea id="client-overrides" bind:value={draft} rows={12} spellcheck={false} class="min-h-56 font-mono text-xs" disabled={busy} />
+                <p class="text-xs text-muted-foreground">{$t('clients.overridesDescription')}</p>
+                <div class="flex flex-wrap items-center gap-2 pt-2">
+                  <Button type="submit" disabled={busy}>{$t('clients.saveOverrides')}</Button>
+                  {#if selected.has_record}{@render restoreButton()}{/if}
+                </div>
+              </form>
             {/if}
+            <div class="space-y-2">
+              <h4 class="text-sm leading-none font-medium">{$t('clients.effectiveConfiguration')}</h4>
+              <pre class="max-h-[22rem] min-h-56 overflow-auto rounded-md bg-muted p-3 font-mono text-xs leading-5">{JSON.stringify(selected.effective_config, null, 2)}</pre>
+              {#if selected.client_type !== 'acp'}
+                <p class="text-xs text-muted-foreground">{$t('clients.configurationDescription')}</p>
+              {/if}
+            </div>
           </div>
+          {#if selected.client_type === 'acp' && selected.has_record}
+            {@render restoreButton()}
+          {/if}
         </div>
       {:else}
         <p class="py-2 text-sm text-muted-foreground">{$t('clients.selectClient')}</p>

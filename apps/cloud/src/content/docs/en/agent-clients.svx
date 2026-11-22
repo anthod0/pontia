@@ -14,7 +14,7 @@ Pontia includes these Agent Clients:
 | [Pi](/docs/agent-clients/pi) | `pi` and `tmux` | Pontia's Pi plugin |
 | [Codex](/docs/codex) | A Codex CLI with app-server daemon support | Per-user Codex daemon startup, launcher, and shell PATH |
 | [Claude Code](/docs/agent-clients/claude) | Node.js LTS, npm, and Claude Code authentication | The `@pontia/claude-client` package from npm |
-| ACP agents | An agent that speaks the Agent Client Protocol over stdio | None; enable the entry after installing the agent |
+| Grok Build | `grok` | Enable in Agent Clients (ACP) |
 
 ## Choose Clients during initialization
 
@@ -26,24 +26,13 @@ pontia init
 
 The initializer checks your selected Clients before applying the configuration. Pi is selected by default; Codex and `claude-agent` are optional. Selected Clients are enabled for new Sessions.
 
-<h2 id="enable-an-acp-agent">Enable an ACP agent</h2>
+<h2 id="enable-an-acp-agent">Enable Grok Build</h2>
 
-Pontia provides ACP entries for Grok Build (`grok agent stdio`) and OpenCode (`opencode acp`). Install the agent, then enable its entry in the Dashboard under **Settings → Agent Clients**, or run:
+Install Grok Build so that `grok` is on the Pontia service user’s PATH. Pontia launches it with `grok agent stdio`. Enable Grok Build under **Settings → Agent Clients** in the Dashboard, or run:
 
 ```sh
-pontia client enable opencode
+pontia client enable grok
 ```
-
-To add another agent, use **Add custom client** in the same settings page, or define it in `$PONTIA_HOME/config.toml`:
-
-```toml
-[acp.agents.company-agent]
-name = "Company Agent"
-command = "/opt/company-agent/bin/agent"
-args = ["--acp"]
-```
-
-Instead of `command` and `args`, an entry can set `registry_id` to launch an agent from the ACP registry. The agent must support loading and closing sessions; Pontia reports a missing capability when the Session starts.
 
 Run `pontia setup pi`, `pontia setup codex`, or `pontia setup claude` to install or repair a local integration. Omit the Client to select interactively. Setup also enables the Client.
 

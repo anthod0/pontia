@@ -67,7 +67,11 @@ struct Client {
 impl ClientConfiguration for Client {
     fn restricted_execution_policy(
         &self,
+        key: &str,
     ) -> Option<pontia_core::execution_policy::ExecutionPolicy> {
+        if key != "default" {
+            return None;
+        }
         match *self.policy_support.lock().unwrap() {
             PolicySupport::NoRestriction => None,
             PolicySupport::Restricted
@@ -1294,11 +1298,9 @@ async fn profile_helper_uses_the_profile_launch_config_and_keeps_its_instruction
         .create(profile("specialist", MODEL, Some("Review only")))
         .await
         .unwrap();
-    conversation
-        .records()
-        .update(&id, bot_configuration("changed", "missing/model"))
-        .await
-        .unwrap();
+    let mut changed = bot_configuration("changed", "missing/model");
+    changed.client_key = "unconfigured".into();
+    conversation.records().update(&id, changed).await.unwrap();
     let response = create_helper(&helpers, &session, Some("specialist"))
         .await
         .unwrap();

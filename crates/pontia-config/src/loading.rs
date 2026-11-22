@@ -113,10 +113,6 @@ impl AppConfig {
                     })
                 })
                 .collect(),
-            acp_file: file
-                .and_then(|config| config.acp.as_ref())
-                .map(|config| config.agents.clone())
-                .unwrap_or_default(),
         };
 
         Ok(Self {

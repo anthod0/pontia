@@ -36,15 +36,17 @@ const peer = (key: string): AgentClientView => ({
   updated_at: null,
 });
 
+const pi = { ...peer("pi"), client_type: "pi", client_key: "default" };
+
 beforeEach(() => {
   vi.resetAllMocks();
   api.getAgentClientSetup.mockResolvedValue(null);
-  api.listAgentClients.mockResolvedValue([peer("grok"), peer("opencode")]);
+  api.listAgentClients.mockResolvedValue([peer("grok"), pi]);
 });
 
 test("a client that is not detected remains configurable and saves only its database overrides", async () => {
   api.listAgentClients.mockResolvedValue([
-    { ...peer("opencode"), detection: { status: "not_detected", detail: null } },
+    { ...pi, detection: { status: "not_detected", detail: null } },
   ]);
   const user = userEvent.setup();
   api.patchAgentClient.mockImplementation(async (target, patch) => ({
@@ -52,16 +54,16 @@ test("a client that is not detected remains configurable and saves only its data
     config_overrides: patch.config_overrides,
   }));
   render(AgentClientsPage);
-  await user.click(await screen.findByRole("button", { name: /opencode/ }));
+  await user.click(await screen.findByRole("button", { name: /pi/ }));
   const editor = screen.getByLabelText("Database overrides (JSON)");
-  expect(editor).toHaveValue(JSON.stringify({ name: "opencode" }, null, 2));
+  expect(editor).toHaveValue(JSON.stringify({ name: "pi" }, null, 2));
   await user.clear(editor);
   await user.click(editor);
   await user.paste('{"name":"Renamed"}');
   await user.click(screen.getByRole("button", { name: "Save overrides" }));
   await waitFor(() =>
     expect(api.patchAgentClient).toHaveBeenCalledWith(
-      expect.objectContaining({ client_type: "acp", client_key: "opencode" }),
+      expect.objectContaining({ client_type: "pi", client_key: "default" }),
       { config_overrides: { name: "Renamed" } },
     ),
   );
@@ -71,7 +73,7 @@ test("disable preserves the edited override draft and reset removes the entire s
   const user = userEvent.setup();
   api.patchAgentClient.mockImplementation(async (target, patch) => ({ ...target, ...patch }));
   render(AgentClientsPage);
-  await user.click(await screen.findByRole("button", { name: /grok/ }));
+  await user.click(await screen.findByRole("button", { name: /pi/ }));
   const editor = screen.getByLabelText("Database overrides (JSON)");
   await user.clear(editor);
   await user.click(editor);
@@ -79,7 +81,7 @@ test("disable preserves the edited override draft and reset removes the entire s
   await user.click(screen.getByRole("switch", { name: "Enabled" }));
   await waitFor(() =>
     expect(api.patchAgentClient).toHaveBeenCalledWith(
-      expect.objectContaining({ client_key: "grok" }),
+      expect.objectContaining({ client_key: "default" }),
       { enabled: false },
     ),
   );
@@ -89,7 +91,7 @@ test("disable preserves the edited override draft and reset removes the entire s
   await user.click(within(dialog).getByRole("button", { name: "Restore inheritance" }));
   await waitFor(() =>
     expect(api.resetAgentClient).toHaveBeenCalledWith(
-      expect.objectContaining({ client_key: "grok" }),
+      expect.objectContaining({ client_key: "default" }),
     ),
   );
 });
@@ -97,7 +99,7 @@ test("disable preserves the edited override draft and reset removes the entire s
 test("invalid JSON and failed saves keep the user draft without modifying another peer", async () => {
   const user = userEvent.setup();
   render(AgentClientsPage);
-  await user.click(await screen.findByRole("button", { name: /grok/ }));
+  await user.click(await screen.findByRole("button", { name: /pi/ }));
   const editor = screen.getByLabelText("Database overrides (JSON)");
   await user.clear(editor);
   await user.click(editor);
@@ -114,38 +116,20 @@ test("invalid JSON and failed saves keep the user draft without modifying anothe
   expect(editor).toHaveValue('{"command":null}');
 });
 
-test("reserved dot IDs are rejected before a custom client request is sent", async () => {
+test("Grok can be enabled and reset without a launch overrides editor", async () => {
   const user = userEvent.setup();
   render(AgentClientsPage);
-  await screen.findByRole("button", { name: /grok/ });
-  await user.click(screen.getByRole("button", { name: "Add custom client" }));
-  const key = screen.getByLabelText("ACP Agent ID");
-  for (const id of [".", ".."]) {
-    await user.clear(key);
-    await user.type(key, id);
-    await user.click(screen.getByRole("button", { name: "Save overrides" }));
-    await screen.findByRole("alert");
-    expect(api.patchAgentClient).not.toHaveBeenCalled();
-    expect(key).toHaveValue(id);
-  }
-});
-
-test("custom clients use their stable key rather than their display name", async () => {
-  const user = userEvent.setup();
-  api.patchAgentClient.mockResolvedValue(peer("company-agent"));
-  render(AgentClientsPage);
-  await screen.findByRole("button", { name: /grok/ });
-  await user.click(screen.getByRole("button", { name: "Add custom client" }));
-  await user.type(screen.getByLabelText("ACP Agent ID"), "company-agent");
-  const editor = screen.getByLabelText("Database overrides (JSON)");
-  await user.clear(editor);
-  await user.click(editor);
-  await user.paste('{"name":"Company Agent","command":"agent"}');
-  await user.click(screen.getByRole("button", { name: "Save overrides" }));
+  await user.click(await screen.findByRole("button", { name: /grok/ }));
+  expect(screen.queryByRole("button", { name: "Add custom client" })).toBeNull();
+  expect(screen.queryByRole("textbox")).toBeNull();
+  expect(screen.getByRole("switch", { name: "Enabled" })).toBeEnabled();
+  await user.click(screen.getByRole("button", { name: "Restore inheritance" }));
+  await user.click(
+    within(screen.getByRole("alertdialog")).getByRole("button", { name: "Restore inheritance" }),
+  );
   await waitFor(() =>
-    expect(api.patchAgentClient).toHaveBeenCalledWith(
-      { client_type: "acp", client_key: "company-agent" },
-      { config_overrides: { name: "Company Agent", command: "agent" } },
+    expect(api.resetAgentClient).toHaveBeenCalledWith(
+      expect.objectContaining({ client_key: "grok" }),
     ),
   );
 });

@@ -6,7 +6,7 @@ use pontia_agent_control::{
     clients::{ClientRegistry, ClientServiceTasks},
 };
 use pontia_client_acp::identity;
-use pontia_client_acp::{AcpAgentConfig, AcpConfig};
+use pontia_client_acp::{ACP_MAX_CAPABILITIES, AcpAgentDefinition, AcpAgents, AcpLaunch};
 use pontia_core::{Error, Result};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
@@ -36,7 +36,7 @@ struct Harness {
     app: AgentControl,
     tasks: Option<ClientServiceTasks>,
     root: tempfile::TempDir,
-    config: AcpConfig,
+    config: AcpAgents,
 }
 
 impl Harness {
@@ -55,23 +55,23 @@ impl Harness {
                 .iter()
                 .map(|(key, value)| (key.to_string(), value.to_string())),
         );
-        let config = AcpAgentConfig {
-            name: Some("Controlled Agent".into()),
-            registry_id: None,
-            command: command.into(),
-            args: vec![
-                format!("{}/tests/fixtures/agent.py", env!("CARGO_MANIFEST_DIR")),
-                "argument with spaces; not a shell".into(),
-            ],
-            env,
+        let config = AcpAgentDefinition {
+            name: "Controlled Agent".into(),
+            capabilities: ACP_MAX_CAPABILITIES,
+            restricted_execution: None,
+            launch: AcpLaunch {
+                command: command.into(),
+                args: vec![
+                    format!("{}/tests/fixtures/agent.py", env!("CARGO_MANIFEST_DIR")),
+                    "argument with spaces; not a shell".into(),
+                ],
+                env,
+            },
         };
         let mut clients = ClientRegistry::default();
-        let config = AcpConfig {
-            agents: BTreeMap::from([("first".into(), config.clone()), ("second".into(), config)]),
-        };
+        let config = AcpAgents::new([("first".into(), config.clone()), ("second".into(), config)]);
         clients.register(pontia_client_acp::registration_with_relay(
             config.clone(),
-            Default::default(),
             env!("CARGO_BIN_EXE_pontia-acp-test-relay").into(),
         ));
         let db = connect_sqlite(&format!(
@@ -259,7 +259,6 @@ impl Harness {
         let mut clients = ClientRegistry::default();
         clients.register(pontia_client_acp::registration_with_relay(
             self.config.clone(),
-            Default::default(),
             env!("CARGO_BIN_EXE_pontia-acp-test-relay").into(),
         ));
         self.app = AgentControl::builder(self.app.db(), self.root.path().into())

@@ -14,7 +14,6 @@ export interface ClientControlDetails {
 
 export interface DashboardClient {
   clientType: string;
-  customEntry?: { label: string; keyLabel: string; validateKey(key: string): string | null };
   defaultForCreation: boolean;
   resumeWaitsForIdle?: boolean;
   controlDetails(session: SessionView): ClientControlDetails | null;

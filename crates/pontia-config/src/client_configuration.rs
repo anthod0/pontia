@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 
-use serde::Deserialize;
 use serde_json::{Value, json};
 
 /// File and process-environment snapshots captured when pontiad loads configuration.
@@ -9,14 +8,6 @@ use serde_json::{Value, json};
 pub struct ClientConfigurationSources {
     pub runtime_file: BTreeMap<String, Value>,
     pub runtime_environment: BTreeMap<String, Value>,
-    pub acp_file: BTreeMap<String, Value>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct AcpFileConfig {
-    #[serde(default)]
-    pub agents: BTreeMap<String, Value>,
 }
 
 #[derive(Debug, Clone, Default)]

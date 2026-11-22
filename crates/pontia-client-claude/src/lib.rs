@@ -64,6 +64,7 @@ struct Configuration {
 impl ClientConfiguration for Configuration {
     fn restricted_execution_policy(
         &self,
+        _key: &str,
     ) -> Option<pontia_core::execution_policy::ExecutionPolicy> {
         Some(pontia_core::execution_policy::ExecutionPolicy {
             disabled_tools: [

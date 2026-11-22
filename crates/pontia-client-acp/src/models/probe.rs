@@ -12,9 +12,9 @@ use serde_json::json;
 use tokio::process::Command;
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
-use crate::{AcpAgentConfig, peer::protocol_error};
+use crate::{AcpLaunch, peer::protocol_error};
 
-pub(crate) async fn list(config: &AcpAgentConfig, cwd: &Path) -> Result<AgentClientModels> {
+pub(crate) async fn list(config: &AcpLaunch, cwd: &Path) -> Result<AgentClientModels> {
     let mut child = Command::new(&config.command)
         .args(&config.args)
         .envs(&config.env)

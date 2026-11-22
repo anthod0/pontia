@@ -14,7 +14,7 @@ O Pontia inclui estes Agent Clients:
 | [Pi](/docs/agent-clients/pi) | `pi` e `tmux` | Plugin do Pi do Pontia |
 | [Codex](/docs/codex) | Um Codex CLI com suporte ao daemon app-server | Inicialização do daemon do Codex por usuário, launcher e PATH do shell |
 | [Claude Code](/docs/agent-clients/claude) | Node.js LTS, npm e autenticação do Claude Code | O pacote `@pontia/claude-client` do npm |
-| Agentes ACP | Um agente que fala o Agent Client Protocol via stdio | Nenhuma; ative a entrada depois de instalar o agente |
+| Grok Build | `grok` | Ative em Agent Clients (ACP) |
 
 ## Escolha os Clients durante a inicialização
 
@@ -26,24 +26,13 @@ pontia init
 
 O inicializador verifica os Clients selecionados antes de aplicar a configuração. O Pi vem selecionado por padrão; Codex e `claude-agent` são opcionais. Os Clients selecionados ficam ativados para novas Sessions.
 
-<h2 id="enable-an-acp-agent">Ativar um agente ACP</h2>
+<h2 id="enable-an-acp-agent">Ativar o Grok Build</h2>
 
-O Pontia oferece entradas ACP para Grok Build (`grok agent stdio`) e OpenCode (`opencode acp`). Instale o agente e depois ative a entrada dele no Dashboard em **Settings → Agent Clients**, ou execute:
+Instale o Grok Build e confira se `grok` está no PATH do usuário que executa o serviço Pontia. O Pontia o inicia com `grok agent stdio`. Ative o Grok Build em **Settings → Agent Clients** no Dashboard ou execute:
 
 ```sh
-pontia client enable opencode
+pontia client enable grok
 ```
-
-Para adicionar outro agente, use **Add custom client** na mesma página de configurações, ou defina-o em `$PONTIA_HOME/config.toml`:
-
-```toml
-[acp.agents.company-agent]
-name = "Company Agent"
-command = "/opt/company-agent/bin/agent"
-args = ["--acp"]
-```
-
-Em vez de `command` e `args`, uma entrada pode definir `registry_id` para iniciar um agente a partir do registro ACP. O agente precisa suportar carregar e fechar sessões; o Pontia informa um recurso ausente quando a Session é iniciada.
 
 Execute `pontia setup pi`, `pontia setup codex` ou `pontia setup claude` para instalar ou reparar uma integração local. Omita o Client para selecioná-lo de forma interativa. O setup também ativa o Client.
 

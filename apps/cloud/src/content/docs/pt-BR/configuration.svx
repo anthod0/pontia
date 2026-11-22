@@ -39,7 +39,6 @@ roots = [
 | `dashboard.source` | Diretório de build do Dashboard local ou arquivo remoto `.tar.gz`, `.tgz` ou `.zip` contendo exatamente um `index.html` |
 | `runtime.pi.tui_command` | Executável ou comando do Pi usado nas Sessions do Pi iniciadas |
 | `runtime.codex.tui_command` | Executável do Codex usado ao abrir uma Session do Codex na TUI nativa; o padrão é `codex` |
-| `acp.agents.ID` | Uma entrada de agente ACP; veja [Agent Clients](/docs/agent-clients#enable-an-acp-agent) |
 | `workspace_browser.roots` | Diretórios que o Dashboard pode navegar para ativar Workspaces |
 
 O padrão de `dashboard.source` na versão de release é o arquivo do Dashboard correspondente à versão instalada do Pontia. Arquivos remotos do Dashboard ficam em cache em `$PONTIA_HOME/cache/dashboard`; um cache existente ainda pode ser servido se a atualização falhar.

@@ -14,7 +14,7 @@ Pontia には次の Agent Client が含まれています。
 | [Pi](/docs/agent-clients/pi) | `pi` と `tmux` | Pontia の Pi プラグイン |
 | [Codex](/docs/codex) | app-server デーモンに対応した Codex CLI | ユーザーごとの Codex デーモンの起動、ランチャー、シェルの PATH |
 | [Claude Code](/docs/agent-clients/claude) | Node.js LTS、npm、Claude Code の認証 | npm の `@pontia/claude-client` パッケージ |
-| ACP エージェント | stdio 経由で Agent Client Protocol を話すエージェント | なし。エージェントをインストールした後にエントリを有効にします |
+| Grok Build | `grok` | Agent Clients で有効にする (ACP) |
 
 ## 初期化時に Client を選択する
 
@@ -26,24 +26,13 @@ pontia init
 
 初期化ツールは、設定を適用する前に選択した Client を確認します。Pi はデフォルトで選択されており、Codex と `claude-agent` は任意です。選択した Client は新しい Session で有効になります。
 
-<h2 id="enable-an-acp-agent">ACP エージェントを有効にする</h2>
+<h2 id="enable-an-acp-agent">Grok Build を有効にする</h2>
 
-Pontia は、Grok Build（`grok agent stdio`）と OpenCode（`opencode acp`）の ACP エントリを提供しています。エージェントをインストールし、Dashboard の **Settings → Agent Clients** でそのエントリを有効にするか、次を実行します。
+Grok Build をインストールし、Pontia のサービスユーザーの PATH に `grok` を追加します。Pontia は `grok agent stdio` で起動します。Dashboard の **Settings → Agent Clients** で Grok Build を有効にするか、次を実行します。
 
 ```sh
-pontia client enable opencode
+pontia client enable grok
 ```
-
-別のエージェントを追加するには、同じ設定ページの **Add custom client** を使うか、`$PONTIA_HOME/config.toml` で定義します。
-
-```toml
-[acp.agents.company-agent]
-name = "Company Agent"
-command = "/opt/company-agent/bin/agent"
-args = ["--acp"]
-```
-
-`command` と `args` の代わりに、エントリで `registry_id` を設定して ACP レジストリからエージェントを起動することもできます。エージェントは Session の読み込みと終了に対応している必要があります。ケイパビリティが不足している場合、Pontia は Session の開始時に報告します。
 
 ローカルの連携をインストールまたは修復するには、`pontia setup pi`、`pontia setup codex`、`pontia setup claude` を実行します。Client を省略すると対話形式で選択できます。セットアップでは Client も有効になります。
 

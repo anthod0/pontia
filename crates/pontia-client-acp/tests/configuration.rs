@@ -1,140 +1,32 @@
 use pontia_agent_control::client_contract::ClientConfiguration;
-use pontia_client_acp::AcpAgentConfig;
-use pontia_client_acp::configuration::AcpConfiguration;
+use pontia_client_acp::{AcpAgents, configuration::AcpConfiguration};
 use serde_json::json;
-use std::collections::BTreeMap;
 
 #[test]
-fn reserved_dot_ids_are_rejected_in_configuration_and_session_selection() {
-    for id in [".", ".."] {
-        let configuration =
-            AcpConfiguration::new(BTreeMap::from([(id.into(), json!({"command":"agent"}))]));
-        assert!(configuration.resolve(id, &json!({})).is_err());
-        assert!(
-            configuration
-                .resolve(id, &json!({"command":"agent"}))
-                .is_err()
-        );
-        assert!(configuration.key(&json!({"acp_agent_id":id})).is_err());
-        let config: pontia_client_acp::AcpConfig =
-            serde_json::from_value(json!({"agents":{id:{"command":"agent"}}})).unwrap();
-        assert!(config.validate().is_err());
-    }
-    let configuration = AcpConfiguration::new(Default::default());
-    for id in [
-        "company.agent",
-        "company-agent",
-        ".company",
-        "company..agent",
-    ] {
-        assert!(
-            configuration
-                .resolve(id, &json!({"command":"agent"}))
-                .is_ok()
-        );
-        assert_eq!(configuration.key(&json!({"acp_agent_id":id})).unwrap(), id);
-    }
-}
-
-#[test]
-fn partial_overrides_inherit_and_arrays_replace_without_affecting_other_peers() {
-    let configuration = AcpConfiguration::new(BTreeMap::from([(
-        "grok".into(),
-        json!({"env":{"A":"file", "B":"keep"},"name":"File name"}),
-    )]));
-    let value = configuration
-        .resolve("grok", &json!({"args":[],"env":{"A":"db"}}))
-        .unwrap();
-    assert_eq!(value["command"], "grok");
-    assert_eq!(value["name"], "File name");
-    assert_eq!(value["args"], json!([]));
-    assert_eq!(value["env"], json!({"A":"db","B":"keep"}));
+fn grok_launch_and_management_settings() {
+    let configuration = AcpConfiguration::new(AcpAgents::builtin());
+    assert_eq!(configuration.keys(), ["grok"]);
     assert_eq!(
-        configuration.resolve("grok", &json!({"env":{}})).unwrap()["env"],
-        json!({"A":"file","B":"keep"})
+        configuration.resolve("grok", &json!({})).unwrap(),
+        json!({"name":"Grok Build","command":"grok","args":["agent","stdio"],"env":{}})
     );
-    assert_eq!(
-        configuration.resolve("opencode", &json!({})).unwrap()["args"],
-        json!(["acp"])
-    );
-    assert_eq!(
-        configuration.resolve("grok", &json!({})).unwrap()["args"],
-        json!(["agent", "stdio"])
-    );
-}
-
-#[test]
-fn explicit_clear_switches_launch_source_and_removes_inherited_environment() {
-    let configuration = AcpConfiguration::new(BTreeMap::from([(
-        "grok".into(),
-        json!({"env":{"A":"file", "B":"keep"}}),
-    )]));
     assert!(
         configuration
-            .resolve("grok", &json!({"registry_id":"registry-grok"}))
+            .resolve("grok", &json!({"command":"other"}))
             .is_err()
     );
-    let value = configuration
-        .resolve(
-            "grok",
-            &json!({"command":null,"args":null,"registry_id":"registry-grok","env":{"A":null}}),
-        )
-        .unwrap();
-    let effective: AcpAgentConfig = serde_json::from_value(value.clone()).unwrap();
-    assert_eq!(value["command"], json!(null));
-    assert_eq!(effective.registry_id.as_deref(), Some("registry-grok"));
-    assert!(effective.command.is_empty());
-    assert_eq!(effective.env, BTreeMap::from([("B".into(), "keep".into())]));
-    let value = configuration.resolve("grok", &json!({"env":null})).unwrap();
-    assert!(
-        serde_json::from_value::<AcpAgentConfig>(value)
-            .unwrap()
-            .env
-            .is_empty()
-    );
-}
-
-#[test]
-fn database_only_peer_requires_one_valid_source_after_merging() {
-    let configuration = AcpConfiguration::new(Default::default());
-    let value = configuration
-        .resolve("company", &json!({"command":"agent","args":["--acp"]}))
-        .unwrap();
-    assert_eq!(value["command"], "agent");
-    for overrides in [
-        json!({}),
-        json!({"registry_id":""}),
-        json!({"registry_id":"gemini","args":[]}),
-        json!({"registry_id":"gemini","command":"agent"}),
-        json!({"command":"agent","transport":"http"}),
-        json!({"command":"agent","capabilities":{}}),
-        json!({"command":"agent","cwd":"/fixed"}),
-        json!({"command":""}),
-        json!({"args":["--acp"]}),
-        json!({"command":null}),
-    ] {
-        assert!(
-            configuration.resolve("company", &overrides).is_err(),
-            "accepted {overrides}"
-        );
+    assert!(configuration.resolve("unknown", &json!({})).is_err());
+    for key in [".", "..", ""] {
+        assert!(configuration.key(&json!({"acp_agent_id":key})).is_err());
+        assert!(configuration.resolve(key, &json!({})).is_err());
     }
-    assert!(
-        configuration
-            .resolve("", &json!({"command":"agent"}))
-            .is_err()
-    );
-    assert_eq!(
-        configuration
-            .key(&json!({"acp_agent_id":"company"}))
-            .unwrap(),
-        "company"
-    );
 }
 
 #[test]
 fn acp_omits_restricted_execution_policy_and_rejects_yolo() {
-    let configuration = AcpConfiguration::new(Default::default());
-    assert_eq!(configuration.restricted_execution_policy(), None);
+    let configuration = AcpConfiguration::new(AcpAgents::builtin());
+    assert_eq!(configuration.restricted_execution_policy("grok"), None);
+    assert_eq!(configuration.restricted_execution_policy("unknown"), None);
     configuration
         .validate_execution_policy(&Default::default())
         .unwrap();

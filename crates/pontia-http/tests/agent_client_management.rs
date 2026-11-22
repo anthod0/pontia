@@ -11,6 +11,12 @@ use std::sync::Arc;
 use tower::ServiceExt;
 
 async fn app() -> (Router, tempfile::TempDir) {
+    app_with_acp(|_| pontia_client_acp::registration()).await
+}
+
+async fn app_with_acp(
+    registration: impl FnOnce(&std::path::Path) -> pontia_agent_control::clients::ClientRegistration,
+) -> (Router, tempfile::TempDir) {
     let root = tempfile::tempdir().unwrap();
     let db = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&db).await.unwrap();
@@ -23,12 +29,7 @@ async fn app() -> (Router, tempfile::TempDir) {
     )));
     clients.register(pi);
     clients.register(pontia_client_codex::registration());
-    clients.register(pontia_client_acp::registration_from_sources(
-        std::collections::BTreeMap::from([(
-            "file-peer".into(),
-            json!({"name":"File peer", "command":"agent", "args":[]}),
-        )]),
-    ));
+    clients.register(registration(root.path()));
     let state = AppState::builder(
         pontia_agent_control::AgentControl::builder(db, root.path().into())
             .clients(clients)
@@ -155,7 +156,7 @@ async fn all_management_operations_require_authentication() {
 }
 
 #[tokio::test]
-async fn defaults_files_and_database_entries_share_stable_flat_identity() {
+async fn management_lists_builtin_entries_and_rejects_unknown_acp_clients() {
     let (app, _root) = app().await;
     let (_, result) = request(&app, "GET", "", None, true).await;
     let entries = result["data"]["agent_clients"].as_array().unwrap();
@@ -175,45 +176,26 @@ async fn defaults_files_and_database_entries_share_stable_flat_identity() {
             .filter(|(client_type, _)| *client_type == "acp")
             .map(|(_, key)| *key)
             .collect::<Vec<_>>(),
-        vec!["file-peer", "grok", "opencode"]
+        vec!["grok"]
     );
-    for identity in [
-        ("pi", "default"),
-        ("codex", "default"),
-        ("acp", "file-peer"),
-    ] {
+    for identity in [("pi", "default"), ("codex", "default"), ("acp", "grok")] {
         assert!(identities.contains(&identity));
     }
     assert!(entries.iter().all(|entry| entry["has_record"] == false
         && entry["enabled"] == false
         && entry["created_at"].is_null()
         && entry["updated_at"].is_null()));
-    let (status, created) = request(
-        &app,
-        "PATCH",
-        "/acp/pi",
-        Some(json!({"config_overrides":{"name":"Custom", "command":"custom-agent", "args":[]}})),
-        true,
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    let created = &created["data"]["agent_client"];
-    assert_eq!(created["short_id"], "pi");
-    assert_eq!(created["enabled"], true);
-    let (_, renamed) = request(
-        &app,
-        "PATCH",
-        "/acp/pi",
-        Some(json!({"config_overrides":{"name":"Renamed", "command":"custom-agent", "args":[]}})),
-        true,
-    )
-    .await;
-    let renamed = &renamed["data"]["agent_client"];
-    assert_eq!(renamed["name"], "Renamed");
-    assert_eq!(renamed["id"], created["id"]);
-    assert_eq!(renamed["short_id"], created["short_id"]);
-    let (_, pi) = request(&app, "GET", "/pi/default", None, true).await;
-    assert_ne!(pi["data"]["agent_client"]["id"], created["id"]);
+    for path in ["/acp/pi", "/acp/grok"] {
+        let (status, _) = request(
+            &app,
+            "PATCH",
+            path,
+            Some(json!({"config_overrides":{"command":"other"}})),
+            true,
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
 }
 
 #[tokio::test]
@@ -222,7 +204,7 @@ async fn unconfigured_clients_cannot_create_sessions() {
     for (client, metadata) in [
         ("pi", json!({})),
         ("codex", json!({})),
-        ("acp", json!({"acp_agent_id":"file-peer"})),
+        ("acp", json!({"acp_agent_id":"grok"})),
     ] {
         let response = app
             .clone()
@@ -410,50 +392,6 @@ async fn invalid_patches_are_atomic_and_unknown_queries_are_not_found() {
 }
 
 #[tokio::test]
-async fn null_clears_inherited_launch_source_and_delete_removes_database_only_peer() {
-    let (app, _root) = app().await;
-    let (status, _) = request(
-        &app,
-        "PATCH",
-        "/acp/file-peer",
-        Some(json!({"config_overrides":{"registry_id":"test-agent"}})),
-        true,
-    )
-    .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    let (status, response) = request(
-        &app,
-        "PATCH",
-        "/acp/file-peer",
-        Some(json!({"config_overrides":{"command":null,"args":null,"registry_id":"test-agent"}})),
-        true,
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    let config = &response["data"]["agent_client"]["effective_config"];
-    assert!(config["command"].is_null());
-    assert_eq!(config["registry_id"], "test-agent");
-    request(
-        &app,
-        "PATCH",
-        "/acp/only-db",
-        Some(json!({"config_overrides":{"command":"agent","args":[]}})),
-        true,
-    )
-    .await;
-    for _ in 0..2 {
-        assert_eq!(
-            request(&app, "DELETE", "/acp/only-db", None, true).await.0,
-            StatusCode::OK
-        );
-    }
-    assert_eq!(
-        request(&app, "GET", "/acp/only-db", None, true).await.0,
-        StatusCode::NOT_FOUND
-    );
-}
-
-#[tokio::test]
 async fn setup_is_advertised_only_for_registered_integrations_and_rejects_other_targets() {
     let (app, root) = app().await;
     let (_, pi) = request(&app, "GET", "/pi/default", None, true).await;
@@ -498,14 +436,28 @@ async fn setup_is_advertised_only_for_registered_integrations_and_rejects_other_
 #[tokio::test]
 async fn detection_refreshes_from_files_without_changing_enabled_settings() {
     use std::{fs, os::unix::fs::PermissionsExt};
-    let (app, root) = app().await;
-    let program = root.path().join("local-agent");
+    let (app, root) = app_with_acp(|root| {
+        let mut agent = pontia_client_acp::AcpAgents::builtin()
+            .get("grok")
+            .unwrap()
+            .clone();
+        agent
+            .launch
+            .env
+            .insert("PATH".into(), root.display().to_string());
+        pontia_client_acp::registration_with_relay(
+            pontia_client_acp::AcpAgents::new([("grok".into(), agent)]),
+            env!("CARGO_BIN_EXE_pontia-http-test-relay").into(),
+        )
+    })
+    .await;
+    let program = root.path().join("grok");
     let (status, missing) = request(
         &app,
         "PATCH",
-        "/acp/local",
+        "/acp/grok",
         Some(json!({
-            "enabled":true, "config_overrides":{"command":program}
+            "enabled":true
         })),
         true,
     )
@@ -522,12 +474,12 @@ async fn detection_refreshes_from_files_without_changing_enabled_settings() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|c| c["client_key"] == "local")
+        .find(|c| c["client_key"] == "grok")
         .unwrap();
     assert_eq!(found["detection"]["status"], "detected");
     assert_eq!(found["enabled"], true);
     fs::remove_file(&program).unwrap();
-    let (_, missing_again) = request(&app, "GET", "/acp/local", None, true).await;
+    let (_, missing_again) = request(&app, "GET", "/acp/grok", None, true).await;
     assert_eq!(
         missing_again["data"]["agent_client"]["detection"]["status"],
         "not_detected"

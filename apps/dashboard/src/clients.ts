@@ -6,9 +6,6 @@ import type { SessionView } from "./api/types";
 import { clientDisplayName } from "./lib/clientName";
 
 const clients = [pi, codex, acp, claude];
-export const customClientEntries = clients.flatMap((client) =>
-  client.customEntry ? [{ clientType: client.clientType, ...client.customEntry }] : [],
-);
 const defaultClient = clients.find((client) => client.defaultForCreation);
 if (!defaultClient) throw new Error("No default Agent Client is registered");
 

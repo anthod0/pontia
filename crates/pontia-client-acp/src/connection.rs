@@ -43,7 +43,7 @@ impl Peer {
         let params = json!({
             "client_session_key":binding,
             "context":{
-                "ready":state.ready, "blocked":state.blocked, "native":state.native, "steer":state.steer,
+                "ready":state.ready, "blocked":state.blocked, "native":state.native, "steer":state.negotiated.steer,
                 "system_prompt":state.system_prompt, "current_model":state.current_model,
                 "config_options":state.config_options, "active":state.active,
             },
@@ -74,7 +74,7 @@ pub(crate) async fn restore(
     let context: Context = serde_json::from_value(value.clone())?;
     state.ready = context.ready;
     state.native = context.native;
-    state.steer = context.steer;
+    state.negotiated.steer = context.steer;
     state.system_prompt = context.system_prompt;
     state.current_model = context.current_model;
     state.config_options = context.config_options;
@@ -131,6 +131,14 @@ impl AcpAdapter {
             let cwd = status["cwd"]
                 .as_str()
                 .ok_or_else(|| Error::Domain("ACP relay omitted its launch directory".into()))?;
+            let binding = identity
+                .client_session_key
+                .as_deref()
+                .map(crate::identity::decode)
+                .transpose()?;
+            let definition = binding
+                .as_ref()
+                .and_then(|id| self.config.agents.get(&id[0]));
             let peer = Peer::connect(
                 &app,
                 &identity,
@@ -139,22 +147,20 @@ impl AcpAdapter {
                 requests,
                 status["context"].clone(),
                 crate::peer::PeerOwner {
+                    agent: crate::capabilities::AgentBounds::of(definition),
                     peers: Arc::downgrade(&self.peers),
                     reconnect: self.reconnect.clone(),
                 },
             )
             .await?;
-            {
+            if let Some(native) = binding {
                 let state = peer.state.lock().await;
-                if let Some(key) = identity.client_session_key.as_deref() {
-                    let native = crate::identity::decode(key)?;
-                    if state.native.as_ref().map(ToString::to_string).as_deref()
-                        != Some(native[1].as_str())
-                    {
-                        return Err(Error::StateConflict(
-                            "ACP relay native binding changed".into(),
-                        ));
-                    }
+                if state.native.as_ref().map(ToString::to_string).as_deref()
+                    != Some(native[1].as_str())
+                {
+                    return Err(Error::StateConflict(
+                        "ACP relay native binding changed".into(),
+                    ));
                 }
             }
             rpc.reply(
@@ -198,9 +204,8 @@ impl AcpAdapter {
         session: &str,
         runtime: &str,
         cwd: &Path,
-        config: &crate::AcpAgentConfig,
+        config: crate::AcpLaunch,
     ) -> Result<Arc<Peer>> {
-        let config = crate::peer::resolve_command(config, cwd)?;
         let executable = self
             .relay_executable
             .clone()

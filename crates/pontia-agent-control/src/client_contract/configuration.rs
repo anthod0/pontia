@@ -7,6 +7,7 @@ pub trait ClientConfiguration: Send + Sync {
     /// agent orchestration; callers opt into approval/sandbox bypass (`yolo`) explicitly.
     fn restricted_execution_policy(
         &self,
+        _key: &str,
     ) -> Option<pontia_core::execution_policy::ExecutionPolicy> {
         None
     }

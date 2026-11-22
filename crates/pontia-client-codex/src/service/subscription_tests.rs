@@ -220,7 +220,7 @@ impl Fixture {
 async fn restricted_session_starts_with_native_agents_disabled() {
     use pontia_agent_control::client_contract::ClientConfiguration;
     let config = crate::configuration::CodexConfiguration::new(json!({}));
-    let base = config.restricted_execution_policy().unwrap();
+    let base = config.restricted_execution_policy("default").unwrap();
     assert_eq!(base.tools, None);
     assert_eq!(base.disabled_tools, vec!["spawn_agent"]);
     assert!(!base.disable_mcp);

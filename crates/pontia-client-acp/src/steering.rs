@@ -29,7 +29,9 @@ pub(crate) async fn send(
             "ACP connection unavailable".into(),
         ));
     }
-    if !state.steer || state.active.as_ref().map(|prompt| prompt.turn.as_str()) != Some(turn) {
+    if !state.capabilities.as_ref().is_some_and(|caps| caps.steer)
+        || state.active.as_ref().map(|prompt| prompt.turn.as_str()) != Some(turn)
+    {
         return Err(prompt_required());
     }
     let request = peer.connection.prepare_request(

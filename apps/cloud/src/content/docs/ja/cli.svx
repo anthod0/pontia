@@ -68,7 +68,7 @@ pontia completions powershell | Out-String | Invoke-Expression
 | `pontia client disable CLIENT` | 新しい Session でそのエントリを使えないようにします。既存の Session は変わりません |
 | `pontia client reset CLIENT` | エントリの保存済み設定を削除します。これによりエントリも無効になります |
 
-`CLIENT` は `pi`、`codex`、`claude-agent`、または ACP エージェント ID などの短縮 ID です。短縮 ID があいまいな場合は、`pontia client list --json` で得た ID を `--id ID` で指定してください。
+`CLIENT` は `pi`、`codex`、`claude-agent`、または `grok` などの短縮 ID です。短縮 ID があいまいな場合は、`pontia client list --json` で得た ID を `--id ID` で指定してください。
 
 ## エージェントツール
 
