@@ -49,9 +49,9 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Trigger {id} type="button" data-size="default" class={cn(selectTriggerClass, className)} {disabled}
+  <Dialog.Trigger {id} type="button" data-size="default" data-placeholder={selected || current ? undefined : ''} class={cn(selectTriggerClass, className)} {disabled}
     onclick={() => { search = '' }}>
-    <span class="min-w-0 truncate text-left">{selected?.name ?? (current || (allowDefault ? $t('model.default') : $t('model.choose')))}</span>
+    <span class="min-w-0 truncate">{selected?.name ?? (current || (allowDefault ? $t('model.default') : $t('model.choose')))}</span>
     <CaretDownIcon class="size-4 shrink-0 text-muted-foreground" />
   </Dialog.Trigger>
   {#if !allowDefault}

@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- In Dashboard, the Agent Profiles page has its New profile button at the top right, as on the Agent Clients page. The edit form keeps Delete and Save together on the right, and the model picker matches the client picker.
+- In Dashboard, the Agent Profiles page has its New profile button at the top right, as on the Agent Clients page, and its edit form shows Delete next to Save on the right. Model pickers in Agent Profiles, Bot settings and the new-chat toolbar now look like the client picker.
 
 - In Dashboard, a button next to the sidebar device menu switches back to the previously used device. Alt+M now does the same instead of cycling through devices.
 

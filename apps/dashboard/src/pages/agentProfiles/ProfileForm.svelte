@@ -5,6 +5,7 @@
   import type { AgentClientView, AgentProfileView } from '../../api/types'
   import ClientIcon from '../../components/chat/ClientIcon.svelte'
   import ClientModelSelect from '../../components/chat/ClientModelSelect.svelte'
+  import ModelSelectPlaceholder from '../../components/chat/ModelSelectPlaceholder.svelte'
   import { copyText } from '../../lib/copyText'
   import { dashboardPath } from '$lib/navigation'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -12,8 +13,6 @@
   import { Label } from '$lib/components/ui/label/index.js'
   import { Textarea } from '$lib/components/ui/textarea/index.js'
   import * as Select from '$lib/components/ui/select/index.js'
-  import { cn } from '$lib/utils.js'
-  import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
   import TrashIcon from 'phosphor-svelte/lib/TrashIcon'
@@ -138,10 +137,7 @@
       {#if selectedClient}
         {#key selectedClient.id}<ClientModelSelect id={`${id}-model`} client={selectedClient} bind:value={draft.model} bind:available={modelAvailable} disabled={saving} />{/key}
       {:else}
-        <button id={`${id}-model`} type="button" data-size="default" class={cn(Select.selectTriggerClass, 'w-full')} disabled>
-          <span class="min-w-0 truncate">{draft.model || $t('model.choose')}</span>
-          <CaretDownIcon class="size-4 text-muted-foreground" />
-        </button>
+        <ModelSelectPlaceholder id={`${id}-model`} label={draft.model || $t('model.choose')} />
       {/if}
     </div>
   </div>

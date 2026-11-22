@@ -44,7 +44,7 @@
 </script>
 
 <section class="space-y-6">
-  <div class="flex flex-wrap justify-end gap-2">
+  <div class="flex flex-wrap justify-end gap-2 {editorOpen ? 'max-lg:hidden' : ''}">
     <Button disabled={saving || loading || !profiles.data} onclick={() => selectedId = ''}><PlusIcon class="size-4" /> {$t('profiles.new')}</Button>
   </div>
 

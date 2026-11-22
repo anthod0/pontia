@@ -59,7 +59,7 @@ async function chooseModel(index: number) {
   await fireEvent.click(models.getAllByRole("button")[index]);
 }
 
-test("creates a profile from the empty state with an ID suggested from its name", async () => {
+test("creates the first profile with an ID suggested from its name", async () => {
   const user = userEvent.setup();
   device.data.agentProfiles = [];
   render(AgentProfilesPage);
