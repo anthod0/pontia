@@ -1,7 +1,5 @@
 use agent_client_protocol::v1::schema::InitializeResponse;
-use pontia_core::{
-    Error, Result, client_capabilities::AgentClientCapabilities, execution_policy::ExecutionPolicy,
-};
+use pontia_core::{Error, Result, client_capabilities::AgentClientCapabilities};
 
 use crate::{ACP_MAX_CAPABILITIES, AcpAgentDefinition};
 
@@ -13,12 +11,6 @@ impl AgentBounds {
             agent.capabilities.intersection(&ACP_MAX_CAPABILITIES)
         }))
     }
-}
-
-pub(crate) fn restricted_execution(
-    definition: Option<&AcpAgentDefinition>,
-) -> Option<ExecutionPolicy> {
-    definition.and_then(|agent| agent.restricted_execution.clone())
 }
 
 #[derive(Default, Clone, Copy)]

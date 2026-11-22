@@ -20,7 +20,20 @@ async fn commands_keep_the_session_environment_after_resume() {
         ("PONTIA_SESSION_ID", "wrong-configured-session"),
     ])
     .await;
-    let session = h.create("first").await.unwrap();
+    let mut request: CreateSessionRequest = serde_json::from_value(json!({
+        "client_type":"acp","workspace":h.root.path(),"metadata":{"acp_agent_id":"first"}
+    }))
+    .unwrap();
+    request
+        .runtime_environment
+        .insert("ACP_SESSION_MARKER".into(), "owned-by-session".into());
+    let result = h
+        .app
+        .session_commands()
+        .create_session(request)
+        .await
+        .unwrap();
+    let session = result.session_id().unwrap().to_owned();
     read_environment(&h, &session).await;
     h.app
         .session_commands()
@@ -33,6 +46,16 @@ async fn commands_keep_the_session_environment_after_resume() {
         .await
         .unwrap();
     read_environment(&h, &session).await;
+    let markers: Vec<_> = h
+        .wire()
+        .into_iter()
+        .filter(|frame| frame.get("session_environment").is_some())
+        .map(|frame| frame["test_marker"].clone())
+        .collect();
+    assert_eq!(
+        markers,
+        [json!("owned-by-session"), json!("owned-by-session")]
+    );
     let values: Vec<_> = h
         .wire()
         .into_iter()

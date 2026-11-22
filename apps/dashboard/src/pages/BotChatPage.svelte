@@ -125,11 +125,15 @@
       window.removeEventListener('online', resume)
     }
   })
+  function showDelivery(message: Awaited<ReturnType<typeof device.api.sendBotMessage>>) {
+    timeline.message(message)
+    if (message.delivery === 'queued') toast.info($t('bots.queuedAfterTurn'))
+  }
   // The composer and a todo's reply box both send through here, so a reply matches quoting first and sending from the composer.
   async function post(content: string, sentQuote: BotQuote | null) {
     toast.dismiss(actionToastId)
     feed?.followSend()
-    timeline.message(await device.api.sendBotMessage(botId, sentQuote ? quotedMessage(sentQuote, content) : content))
+    showDelivery(await device.api.sendBotMessage(botId, sentQuote ? quotedMessage(sentQuote, content) : content))
   }
 
   async function send(content: string): Promise<boolean> {
@@ -191,7 +195,7 @@
     retrying = [...retrying, id]
     toast.dismiss(actionToastId)
     try {
-      timeline.message(await device.api.retryBotMessage(botId, id))
+      showDelivery(await device.api.retryBotMessage(botId, id))
     } catch (failure) {
       showActionError(failure, () => { if (!retrying.includes(id)) void retry(id) })
       timeline.refresh()

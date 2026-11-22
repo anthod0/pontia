@@ -89,6 +89,7 @@ impl ClientConfiguration for Client {
 
     fn validate_execution_policy(
         &self,
+        _key: &str,
         policy: &pontia_core::execution_policy::ExecutionPolicy,
     ) -> Result<()> {
         if matches!(
@@ -290,7 +291,7 @@ async fn bot_inputs_and_replies_use_the_owned_session_and_visible_chat() {
         .await
         .unwrap();
     let a = &a.bot_id;
-    let failed = service.send(a, "historical failure").await.unwrap();
+    let failed = service.send(a, "historical failure").await.unwrap().message;
     assert_eq!(failed.status, MessageStatus::Failed);
     service
         .records()
@@ -303,7 +304,7 @@ async fn bot_inputs_and_replies_use_the_owned_session_and_visible_chat() {
         .await
         .unwrap();
     let b = &b.bot_id;
-    let wake = service.send(a, "wake A").await.unwrap();
+    let wake = service.send(a, "wake A").await.unwrap().message;
     assert_eq!(wake.status, MessageStatus::Normal);
     service.send(b, "wake B").await.unwrap();
     let a_session = service
@@ -343,10 +344,10 @@ async fn bot_inputs_and_replies_use_the_owned_session_and_visible_chat() {
     let ingest = control.event_ingest_service();
     report(&ingest, &a_session, runtime, turn, EventType::TurnStarted).await;
     for content in ["reject once", "uncertain once"] {
-        let failed = service.send(a, content).await.unwrap();
+        let failed = service.send(a, content).await.unwrap().message;
         assert_eq!(failed.status, MessageStatus::Failed);
         assert!(service.retry(b, &failed.id).await.is_err());
-        let retried = service.retry(a, &failed.id).await.unwrap();
+        let retried = service.retry(a, &failed.id).await.unwrap().message;
         assert_eq!(retried.id, failed.id);
         assert_eq!(retried.status, MessageStatus::Normal);
     }
@@ -483,7 +484,7 @@ async fn failed_messages_show_processing_only_after_a_successful_retry() {
         )
         .await
         .unwrap();
-    let failed = service.send(&bot.bot_id, "hello").await.unwrap();
+    let failed = service.send(&bot.bot_id, "hello").await.unwrap().message;
     assert_eq!(failed.status, MessageStatus::Failed);
     assert!(service.chat(&bot.bot_id).await.unwrap().status != WorkStatus::Processing);
 
@@ -1269,6 +1270,7 @@ async fn general_helper_follows_a_corrected_bot_model_and_ignores_legacy_helper_
             .send(&bot.bot_id, "start")
             .await
             .unwrap()
+            .message
             .status,
         MessageStatus::Failed
     );

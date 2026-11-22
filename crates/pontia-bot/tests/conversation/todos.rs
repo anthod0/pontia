@@ -46,7 +46,7 @@ async fn closing_todos_is_atomic_scoped_and_links_the_explanation() {
         .await
         .unwrap()
         .message;
-    let answer = service.send(a, "Yes").await.unwrap();
+    let answer = service.send(a, "Yes").await.unwrap().message;
     let before = service.chat(a).await.unwrap().messages;
     for invalid in [&other.id, &answer.id, "missing"] {
         assert!(

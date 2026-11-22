@@ -217,7 +217,7 @@ impl ClientSession for AcpAdapter {
                 json!({"start_command":peer::start_command(&definition.launch)}),
             )
             .await?;
-            let config = match peer::resolve_command(&definition.launch, &cwd) {
+            let mut config = match peer::resolve_command(&definition.launch, &cwd) {
                 Ok(config) => config,
                 Err(error) => {
                     peer::runtime_event(
@@ -231,6 +231,7 @@ impl ClientSession for AcpAdapter {
                     return Err(error);
                 }
             };
+            config.env.extend(request.environment);
             drop(peers);
             let peer = match self
                 .launch(&root, &request.session_id, &runtime, &cwd, config)
@@ -256,6 +257,7 @@ impl ClientSession for AcpAdapter {
                     bound_identity.as_ref().map(|identity| identity[1].as_str()),
                     binding.as_ref().map(|binding| &binding.metadata),
                     definition.new_session_instructions_meta_key.as_deref(),
+                    request.model.as_deref(),
                 ).await?;
                 if let Some(model) = &request.model {
                     crate::models::select(&peer, model, binding.is_some()).await?;
@@ -345,6 +347,27 @@ impl ClientSession for AcpAdapter {
                 peer.load().await?;
             }
             let mut state = peer.state.lock().await;
+            if let Some(profile) = peer.policy.profile
+                && state.verified_model.is_none()
+            {
+                let native = state.native.clone().ok_or_else(unavailable)?;
+                drop(state);
+                if let Err(error) = profile.verify(&peer, &native).await {
+                    peer.terminate().await?;
+                    return Err(error);
+                }
+                state = peer.state.lock().await;
+            }
+            if peer.policy.profile.is_some()
+                && (state.verified_model.is_none()
+                    || state.current_model.is_some() && state.current_model != state.verified_model)
+            {
+                drop(state);
+                peer.terminate().await?;
+                return Err(Error::CapabilityUnavailable(
+                    "ACP Session model changed during verification".into(),
+                ));
+            }
             target.validate(&events.db()).await?;
             if !state.current || state.closing || state.capabilities.is_none() {
                 return Err(unavailable());
@@ -592,8 +615,8 @@ impl ClientSession for AcpAdapter {
         Box::pin(async move {
             let pool = events.db();
             target.validate(&pool).await?;
-            let model = sqlx::query_scalar(
-                "SELECT json_extract(metadata, '$.model') FROM sessions WHERE session_id = ?",
+            let (model, environment): (Option<String>, String) = sqlx::query_as(
+                "SELECT json_extract(metadata, '$.model'), runtime_environment FROM sessions WHERE session_id = ?",
             )
             .bind(&target.session_id)
             .fetch_one(&pool)
@@ -613,7 +636,7 @@ impl ClientSession for AcpAdapter {
                     handle: None,
                     role: None,
                     start_command: None,
-                    environment: Default::default(),
+                    environment: serde_json::from_str(&environment)?,
                 },
             )
             .await

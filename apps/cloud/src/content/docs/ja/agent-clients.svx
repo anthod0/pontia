@@ -34,6 +34,8 @@ Grok Build をインストールし、Pontia のサービスユーザーの PATH
 pontia client enable grok
 ```
 
+Bot、ヘルパー、dreaming に Grok Build を選べます。これらのセッションではターミナルと読み取りツールを利用できます。ファイル編集、メディア保存、ワークツリー、サブエージェント、ワークフロー、スケジュール、バックグラウンドタスク、監視、MCP 呼び出し用の Grok 専用ツールは無効になります。Bot、検索ヘルパー、dreaming ではスキルの自動検出も無効になります。実行中の Grok Bot やヘルパーに送ったメッセージは、現在のターンが終わると届きます。
+
 ローカルの連携をインストールまたは修復するには、`pontia setup pi`、`pontia setup codex`、`pontia setup claude` を実行します。Client を省略すると対話形式で選択できます。セットアップでは Client も有効になります。
 
 Dashboard の **Settings → Agent Clients** で Pi、Codex、Claude Code を選び、**Initialize** をクリックすると、そのデバイスで同じセットアップを実行できます。最新のセットアップの出力と結果は、再接続後も確認できます。

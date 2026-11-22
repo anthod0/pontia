@@ -58,6 +58,9 @@ fn catalog(options: &[SessionConfigOption]) -> AgentClientModels {
 }
 
 pub(crate) async fn select(peer: &std::sync::Arc<Peer>, model: &str, resuming: bool) -> Result<()> {
+    if let Some(profile) = peer.policy.profile {
+        profile.check_model(peer, Some(model)).await?;
+    }
     let state = peer.state.lock().await;
     let Some((option, select)) = model_option(&state.config_options) else {
         // An Agent may restore its own model without offering a selector on load.
@@ -68,16 +71,18 @@ pub(crate) async fn select(peer: &std::sync::Arc<Peer>, model: &str, resuming: b
             "ACP Agent did not provide model options".into(),
         ));
     };
-    if resuming && state.current_model.as_deref() == Some(model) {
+    if (resuming || peer.policy.profile.is_some()) && state.current_model.as_deref() == Some(model)
+    {
         return Ok(());
     }
     if !values(select).any(|value| value.value.to_string() == model) {
         return Err(Error::Domain(format!("ACP model is unavailable: {model}")));
     }
+    let native = state.native.clone().expect("initialized ACP Session");
     let request = peer
         .connection
         .prepare_request(SetSessionConfigOptionRequest::new(
-            state.native.clone().expect("initialized ACP Session"),
+            native.clone(),
             option.id.clone(),
             model,
         ));
@@ -112,11 +117,19 @@ pub(crate) async fn select(peer: &std::sync::Arc<Peer>, model: &str, resuming: b
     peer.receipts.wait(key).await?;
     receive
         .await
-        .map_err(|_| Error::ControlUnknown("ACP model selection response was lost".into()))?
+        .map_err(|_| Error::ControlUnknown("ACP model selection response was lost".into()))??;
+    if let Some(profile) = peer.policy.profile {
+        profile.verify(peer, &native).await?;
+    }
+    Ok(())
 }
 
 pub(crate) fn replace(state: &mut SessionState, options: Vec<SessionConfigOption>) {
-    state.current_model = current(&options);
+    let model = current(&options);
+    if state.current_model != model {
+        state.verified_model = None;
+    }
+    state.current_model = model;
     state.config_options = options;
 }
 

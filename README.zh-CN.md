@@ -33,7 +33,7 @@
 - 🤖 **把工作交给 Bot**：像和助理聊天一样和设备上的 Bot 对话。它为每件事开启 Session，多件事同时推进，完成后向你汇报，长期对话里也记得你的项目。
 - 🔒 **端到端加密**：只有你的浏览器和你的设备能读到会话内容。用官方 Edge 或自己部署都行，Edge 只转发密文。
 
-支持 pi、Codex、Claude Code，以及通过 ACP 接入的 Grok Build，可在 Linux 和 macOS 上运行。
+在 Linux 和 macOS 上，你可以选择 pi、Codex、Claude Code 或 Grok Build（通过 ACP）运行 Bot 和助手。
 
 ## 快速开始
 

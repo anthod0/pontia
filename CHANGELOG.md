@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - New Bots greet you in your Dashboard language and can fill in an empty description once they understand their role. You can edit or clear the description in Bot settings.
 
+- Grok Build can run device Bots, helpers, and dreaming sessions with restricted native tools. Messages sent to a busy Grok Bot or helper are queued until the current turn ends.
+
 - Each Bot receives its own description as its identity when a new Bot Session starts.
 
 - In Dashboard, the Files tab of a Bot chat's side panel lists the last 10 files you opened in that Bot chat on that device. Click one to open it again, or clear the list.

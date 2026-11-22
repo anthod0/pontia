@@ -33,7 +33,7 @@ Leave your desk, not your agents. Pontia lets you run coding agents such as pi, 
 - 🤖 **Hand off work to a Bot** — chat with a Bot on your device the way you would with an assistant. It starts Sessions for each task, runs several at once, reports back, and remembers your projects across long conversations.
 - 🔒 **Encrypted end to end** — only your browser and your device can read a session. Use an official Edge or run your own; either way, the Edge only relays ciphertext.
 
-Pontia supports pi, Codex, Claude Code, and Grok Build (via ACP) on Linux and macOS.
+On Linux and macOS, you can choose pi, Codex, Claude Code, or Grok Build (via ACP) for your Bots and helpers.
 
 ## Quick start
 

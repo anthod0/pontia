@@ -171,9 +171,11 @@ export function createApi(device: DeviceRuntime) {
     await request(botPath(id), { method: "DELETE", idempotency: false, retryNetworkErrors: false });
   }
 
-  async function sendBotMessage(id: string, content: string): Promise<BotMessage> {
+  type SentBotMessage = BotMessage & { delivery?: "accepted" | "queued" };
+
+  async function sendBotMessage(id: string, content: string): Promise<SentBotMessage> {
     return (
-      await request<{ message: BotMessage }>(`${botPath(id)}/messages`, {
+      await request<{ message: SentBotMessage }>(`${botPath(id)}/messages`, {
         method: "POST",
         body: { content },
         retryNetworkErrors: false,
@@ -181,9 +183,9 @@ export function createApi(device: DeviceRuntime) {
     ).message;
   }
 
-  async function retryBotMessage(id: string, messageId: string): Promise<BotMessage> {
+  async function retryBotMessage(id: string, messageId: string): Promise<SentBotMessage> {
     return (
-      await request<{ message: BotMessage }>(
+      await request<{ message: SentBotMessage }>(
         `${botPath(id)}/messages/${encodeURIComponent(messageId)}/retry`,
         {
           method: "POST",

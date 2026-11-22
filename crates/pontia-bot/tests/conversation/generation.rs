@@ -267,7 +267,8 @@ async fn launch_failure_keeps_old_pointer_and_failed_input_requires_explicit_ret
     let failed = conversation
         .send(&id, "not automatically replayed")
         .await
-        .unwrap();
+        .unwrap()
+        .message;
     assert_eq!(failed.status, MessageStatus::Failed);
     assert_eq!(
         current(&conversation, &id).await.as_deref(),
@@ -303,7 +304,12 @@ async fn launch_failure_keeps_old_pointer_and_failed_input_requires_explicit_ret
             .contains("not automatically replayed")
     );
     assert_eq!(
-        recovered.retry(&id, &failed.id).await.unwrap().status,
+        recovered
+            .retry(&id, &failed.id)
+            .await
+            .unwrap()
+            .message
+            .status,
         MessageStatus::Normal
     );
     assert_eq!(
@@ -368,7 +374,7 @@ async fn user_and_helper_inputs_arriving_during_launch_go_only_to_new_session() 
     );
     release.send(()).unwrap();
     rotating.await.unwrap();
-    assert_eq!(user.await.unwrap().status, MessageStatus::Normal);
+    assert_eq!(user.await.unwrap().message.status, MessageStatus::Normal);
     assert_eq!(reply.await.unwrap()["delivery"]["status"], "accepted");
     let new = current(&conversation, &id).await.unwrap();
     assert_ne!(new, old);
@@ -447,7 +453,7 @@ async fn resumed_execution_rejects_the_switch_and_recovery_cleans_the_unused_rep
     let rotating = tokio::spawn(async move { reconcile(&runner).await });
     waiting.await.unwrap();
     control
-        .turn_commands()
+        .inbox_commands()
         .submit_live_input(&old, "already in native queue".into())
         .await
         .unwrap();
@@ -534,7 +540,7 @@ async fn failed_handoff_preserves_helper_failure_notice_and_never_replays_origin
     );
     release.send(()).unwrap();
     rotating.await.unwrap();
-    let user = user.await.unwrap();
+    let user = user.await.unwrap().message;
     assert_eq!(user.status, MessageStatus::Failed);
     assert_eq!(reply.await.unwrap()["delivery"]["status"], "failed");
     let pending: i64 =

@@ -340,8 +340,8 @@ impl DreamingService {
                 if message.trim().is_empty() {
                     return Err(Error::Domain("message must not be empty".into()));
                 }
-                self.conversation.deliver_input(&bot_id, &format!("Source: Dreaming\nSession: {}\n\n{message}\n\nRecord any clarified facts as new memories for the next Dreaming round.", request.session_id)).await?;
-                Ok(json!({"delivery": "accepted"}))
+                let delivery = self.conversation.deliver_input(&bot_id, &format!("Source: Dreaming\nSession: {}\n\n{message}\n\nRecord any clarified facts as new memories for the next Dreaming round.", request.session_id)).await?;
+                Ok(json!({"delivery": delivery}))
             }
         }
     }

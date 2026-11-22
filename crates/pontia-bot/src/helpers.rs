@@ -84,14 +84,16 @@ pub enum HelperLocation {
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum Delivery {
     Accepted,
+    Queued,
     Failed { reason: String },
     Unknown { reason: String },
 }
 
 impl Delivery {
-    fn from_result(result: Result<()>) -> Self {
+    fn from_result(result: Result<pontia_agent_control::LiveInputDelivery>) -> Self {
         match result {
-            Ok(()) => Self::Accepted,
+            Ok(pontia_agent_control::LiveInputDelivery::Accepted) => Self::Accepted,
+            Ok(pontia_agent_control::LiveInputDelivery::Queued) => Self::Queued,
             Err(Error::ControlUnknown(reason)) => Self::Unknown { reason },
             Err(error) => Self::Failed {
                 reason: error.to_string(),
@@ -166,7 +168,7 @@ impl HelperService {
                 nonempty(&message)?;
                 let result = self
                     .control
-                    .turn_commands()
+                    .inbox_commands()
                     .submit_live_input(&session_id, format!("Source: Bot\n\n{message}"))
                     .await;
                 Ok(json!({"delivery": Delivery::from_result(result)}))
@@ -371,20 +373,12 @@ impl HelperService {
                     .session_commands()
                     .exit_when_done(session_id)
                     .await?;
-                let message = &outcome.data["inbox_message"];
-                if let Some(reason) = message["failure_message"].as_str() {
-                    return Err(if message["state"] == "unknown" {
-                        Error::ControlUnknown(reason.into())
-                    } else {
-                        Error::Domain(reason.into())
-                    });
-                }
-                Ok(())
+                outcome.live_delivery()
             }
             .await
         } else {
             self.control
-                .turn_commands()
+                .inbox_commands()
                 .submit_live_input(session_id, message)
                 .await
         };
@@ -408,7 +402,7 @@ impl HelperService {
             )
             .await;
         let delivery = Delivery::from_result(result);
-        if delivery != Delivery::Accepted {
+        if matches!(delivery, Delivery::Unknown { .. } | Delivery::Failed { .. }) {
             self.enqueue(&format!("reply:{}", uuid::Uuid::now_v7()), &bot_id, Some(source),
                 &format!("Helper reply delivery result: {}. This describes delivery, not helper execution. The original reply will not be resent.", serde_json::to_string(&delivery)?)).await?;
         }

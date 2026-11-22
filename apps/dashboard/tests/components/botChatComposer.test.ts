@@ -8,6 +8,7 @@ import { loadUploadRecords, saveUploadRecord } from "../../src/lib/uploads/recor
 
 const toast = vi.hoisted(() => ({
   error: vi.fn(),
+  info: vi.fn(),
   success: vi.fn(),
   warning: vi.fn(),
   dismiss: vi.fn(),
@@ -90,6 +91,22 @@ test("sends a file without text to the Bot and clears the attachment draft", asy
   await waitFor(() => expect(send).toHaveBeenCalledExactlyOnceWith(botId, attachment));
   await waitFor(async () => expect(await loadUploadRecords(scope, draft)).toEqual([]));
   expect(submit).toBeDisabled();
+});
+
+test("acknowledges queued Bot input without offering a failed-send retry", async () => {
+  const { send, submit } = await openChat();
+  send.mockResolvedValue({
+    id: "queued",
+    status: "normal",
+    delivery: "queued",
+    kind: "user_input",
+    content: attachment,
+    created_at: "2026-11-18T00:00:01Z",
+  });
+  await fireEvent.click(submit);
+  await waitFor(() => expect(toast.info).toHaveBeenCalledOnce());
+  expect(toast.error).not.toHaveBeenCalled();
+  expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
 });
 
 test("keeps text and attachments after a rejected send so the user can retry", async () => {

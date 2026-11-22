@@ -49,6 +49,7 @@ pub(crate) struct SessionState {
     pub native: Option<SessionId>,
     pub capabilities: Option<pontia_core::client_capabilities::AgentClientCapabilities>,
     pub current_model: Option<String>,
+    pub verified_model: Option<String>,
     pub config_options: Vec<SessionConfigOption>,
     pub active: Option<Prompt>,
     pub closing: bool,
@@ -62,12 +63,57 @@ pub(crate) struct SessionState {
 pub(crate) type Peers = Arc<Mutex<HashMap<String, Arc<Peer>>>>;
 
 pub(crate) struct PeerOwner {
+    pub policy: crate::restrictions::SessionPolicy,
     pub agent: AgentBounds,
     pub reconnect: tokio::sync::mpsc::UnboundedSender<String>,
     pub peers: Weak<Mutex<HashMap<String, Arc<Peer>>>>,
 }
 
 impl SessionState {
+    fn finish_load(
+        &mut self,
+        result: std::result::Result<LoadSessionResponse, agent_client_protocol::Error>,
+    ) -> Result<()> {
+        if !self.current {
+            Err(crate::history::unavailable())
+        } else {
+            let replay = self.replay.take().unwrap_or_default();
+            let result = match result {
+                Ok(response) => {
+                    if let Some(options) = response.config_options {
+                        crate::models::replace(self, options);
+                    }
+                    Ok(())
+                }
+                Err(error) => Err(protocol_error(error)),
+            };
+            if let Err(error) = result {
+                self.history_error = Some(format!("ACP session/load failed: {error}"));
+            } else if self.history_error.is_none()
+                && !self.history.iter().enumerate().all(|(index, known)| {
+                    replay.get(index).is_some_and(|loaded| {
+                        loaded.role == known.role
+                            && (loaded.text == known.text
+                                || (known.role == "assistant"
+                                    && index + 1 == self.history.len()
+                                    && loaded.text.starts_with(&known.text)))
+                    })
+                })
+            {
+                self.history_error =
+                    Some("ACP replay did not preserve the known native message history".into());
+            }
+            let result = if let Some(reason) = self.history_error.clone() {
+                Err(Error::CapabilityUnavailable(reason))
+            } else {
+                self.history = replay;
+                Ok(())
+            };
+            self.refresh_capabilities();
+            result
+        }
+    }
+
     pub fn refresh_capabilities(&mut self) {
         self.capabilities = capabilities::live(
             &self.agent,
@@ -87,6 +133,7 @@ impl SessionState {
 }
 
 pub(crate) struct Peer {
+    pub policy: crate::restrictions::SessionPolicy,
     pub connection: ConnectionTo<Agent>,
     pub relay: Arc<Relay>,
     pub attached: watch::Receiver<bool>,
@@ -212,6 +259,7 @@ impl Peer {
             negotiated: Negotiated::default(),
             system_prompt: None,
             current_model: None,
+            verified_model: None,
             config_options: Vec::new(),
             active: None,
             closing: false,
@@ -410,6 +458,7 @@ impl Peer {
             .await
             .map_err(|_| Error::ControlUnknown("ACP connection startup failed".into()))?;
         let peer = Arc::new(Self {
+            policy: owner.policy,
             relay,
             attached,
             connection,
@@ -469,11 +518,12 @@ impl Peer {
     }
 
     pub async fn initialize(
-        &self,
+        self: &Arc<Self>,
         cwd: &Path,
         existing: Option<&str>,
         binding_metadata: Option<&Value>,
         new_session_instructions_meta_key: Option<&str>,
+        model: Option<&str>,
     ) -> Result<(SessionId, Value)> {
         let initialize = self
             .call(InitializeRequest::new(ProtocolVersion::V1))
@@ -532,8 +582,17 @@ impl Peer {
             None => {
                 let mut request = NewSessionRequest::new(cwd.to_path_buf());
                 request.system_prompt = system_prompt;
-                request.meta = new_session_meta;
+                let mut meta = self.policy.meta.clone();
+                meta.extend(new_session_meta.into_iter().flatten());
+                if let Some(profile) = self.policy.profile {
+                    let selected = profile.check_model(self, model).await?;
+                    meta.insert(profile.startup_model_key.into(), json!(selected));
+                }
+                request.meta = (!meta.is_empty()).then_some(meta);
                 let response = self.call(request).await?;
+                if let Some(profile) = self.policy.profile {
+                    profile.verify(self, &response.session_id).await?;
+                }
                 if let Some(options) = response.config_options {
                     crate::models::replace(&mut *self.state.lock().await, options);
                 }
@@ -570,7 +629,7 @@ impl Peer {
         Ok((native, metadata))
     }
 
-    pub async fn load(&self) -> Result<()> {
+    pub async fn load(self: &Arc<Self>) -> Result<()> {
         let (native, cwd, system_prompt) = {
             let mut state = self.state.lock().await;
             if !state.current || state.closing {
@@ -594,57 +653,43 @@ impl Peer {
             state.refresh_capabilities();
             (native, state.cwd.clone(), state.system_prompt.clone())
         };
-        let mut load = LoadSessionRequest::new(native, cwd);
+        let mut load = LoadSessionRequest::new(native.clone(), cwd);
+        load.meta = (!self.policy.meta.is_empty()).then(|| self.policy.meta.clone());
         load.system_prompt = system_prompt;
         let request = self.connection.prepare_request(load);
         let key = serde_json::to_string(request.id())?;
         let shared = self.state.clone();
+        let peer = self.clone();
         let (send, receive) = oneshot::channel();
         // Completion belongs to the connection, not to the HTTP/read future.
         // Dropping a reader cannot strand replay or let late history become live output.
+        let verify = self.policy.profile.is_some();
         request
             .on_receiving_result(async move |result| {
-                let mut state = shared.lock().await;
-                let result = if !state.current {
-                    Err(crate::history::unavailable())
-                } else {
-                    let replay = state.replay.take().unwrap_or_default();
-                    let result = match result {
-                        Ok(response) => {
-                            if let Some(options) = response.config_options {
-                                crate::models::replace(&mut state, options);
-                            }
-                            Ok(())
-                        }
-                        Err(error) => Err(protocol_error(error)),
-                    };
-                    if let Err(error) = result {
-                        state.history_error = Some(format!("ACP session/load failed: {error}"));
-                    } else if state.history_error.is_none()
-                        && !state.history.iter().enumerate().all(|(index, known)| {
-                            replay.get(index).is_some_and(|loaded| {
-                                loaded.role == known.role
-                                    && (loaded.text == known.text
-                                        || (known.role == "assistant"
-                                            && index + 1 == state.history.len()
-                                            && loaded.text.starts_with(&known.text)))
-                            })
-                        })
+                let complete = async move {
+                    if result.is_ok()
+                        && let Some(profile) = peer.policy.profile
+                        && let Err(error) = profile.verify(&peer, &native).await
                     {
-                        state.history_error = Some(
-                            "ACP replay did not preserve the known native message history".into(),
-                        );
+                        {
+                            let mut state = shared.lock().await;
+                            state.current = false;
+                            state.refresh_capabilities();
+                        }
+                        let _ = send.send(Err(error));
+                        let _ = peer.terminate().await;
+                        return;
                     }
-                    let result = if let Some(reason) = state.history_error.clone() {
-                        Err(Error::CapabilityUnavailable(reason))
-                    } else {
-                        state.history = replay;
-                        Ok(())
-                    };
-                    state.refresh_capabilities();
-                    result
+                    let result = shared.lock().await.finish_load(result);
+                    let _ = send.send(result);
                 };
-                let _ = send.send(result);
+                // Verification sends another request on this connection. Let its reader
+                // dispatch that response while replay keeps new prompts fenced.
+                if verify {
+                    tokio::spawn(complete);
+                } else {
+                    complete.await;
+                }
                 Ok(())
             })
             .map_err(protocol_error)?;

@@ -228,7 +228,9 @@ async fn restricted_session_starts_with_native_agents_disabled() {
     for yolo in [false, true] {
         let mut policy = base.clone();
         policy.yolo = yolo;
-        config.validate_execution_policy(&policy).unwrap();
+        config
+            .validate_execution_policy("default", &policy)
+            .unwrap();
         let fixture = Fixture::with_policy(None, json!(policy)).await;
         fixture.dispatch_first_input().await;
         {
