@@ -3,18 +3,20 @@
 	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
 	import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon';
 	import ArrowBendUpLeftIcon from 'phosphor-svelte/lib/ArrowBendUpLeftIcon';
+	import AgentBadge from './AgentBadge.svelte';
+	import StoryState from './StoryState.svelte';
 	import BotAvatarMark from './BotAvatarMark.svelte';
-	import type { Story } from '$lib/bot-stories';
+	import type { Chat, Story } from '$lib/bot-stories';
 	import { m } from '$lib/paraglide/messages';
 
-	let { story, step }: { story: Story; step: number } = $props();
-	const status = $derived(story.status[step]);
-	const todoCount = $derived(story.todos[step]);
-	const sessions = $derived(story.sessions.filter((session) => session.states[step] !== 'hidden'));
+	let { story, chat, step }: { story: Story; chat: Chat; step: number } = $props();
+	const status = $derived(chat.status[step]);
+	const todoCount = $derived(chat.todos[step]);
+	const sessions = $derived(chat.sessions.filter((session) => session.states[step] !== 'hidden'));
 </script>
 
 <!-- A scripted Bot chat on the left and the Sessions it runs on the right. -->
-<div class="stage" aria-hidden="true">
+<div class="demo">
 	<div class="chat" style:--bot={story.color}>
 		<div class="chat-bar">
 			<span class="avatar"><BotAvatarMark shape={story.shape} color={story.color} /></span>
@@ -25,7 +27,7 @@
 			</span>
 		</div>
 		<ol class="feed">
-			{#each story.lines as line, index (index)}
+			{#each chat.lines as line, index (index)}
 				{#if index <= step}
 					{#if line.kind === 'divider'}
 						<li class="divider"><span>{line.text()}</span></li>
@@ -40,7 +42,7 @@
 								<span>{line.text()}</span>
 							</span>
 							{#if line.todo}
-								{@const closed = story.todoClosedAt !== undefined && step >= story.todoClosedAt}
+								{@const closed = chat.todoClosedAt !== undefined && step >= chat.todoClosedAt}
 								<span class={['todo-tag', closed && 'closed']}>
 									{#if closed}<CheckIcon size={10} weight="bold" />{story.name} · {m.story_todo_closed()}{:else}<i></i>{m.story_todo_badge()}{/if}
 								</span>
@@ -58,25 +60,17 @@
 	<ul class="sessions">
 		{#each sessions as session (session.title())}
 			{@const state = session.states[step]}
-			<li class={['session', state]}>
-				<span class="client">
-					<img class:light-logo={session.darkLogo} src={session.logo} alt="" width="14" height="14" loading="lazy" />
-					{#if session.darkLogo}<img class="dark-logo" src={session.darkLogo} alt="" width="14" height="14" loading="lazy" />{/if}
-					{session.client}
-				</span>
+			<li class={['session card enter', state]}>
+				<AgentBadge agent={session} />
 				<span class="title">{session.title()}</span>
-				<span class="state">
-					{#if state === 'running'}<span class="dot"></span>{m.story_state_running()}
-					{:else if state === 'done'}<CheckIcon size={11} weight="bold" />{m.story_state_done()}
-					{:else}<WarningCircleIcon size={11} weight="bold" />{m.story_state_error()}{/if}
-				</span>
+				<span class="state-cell"><StoryState {state} /></span>
 			</li>
 		{/each}
 	</ul>
 </div>
 
 <style>
-	.stage { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 40px; align-items: center; min-height: 420px; padding: 28px 36px; border: 1px solid var(--border); border-radius: 14px; background: radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0) 0 0 / 22px 22px, var(--surface); }
+	.demo { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 40px; align-items: center; }
 
 	.chat { display: flex; flex-direction: column; height: 364px; border: 1px solid var(--border); border-radius: 12px; background: var(--background); box-shadow: 0 20px 40px -32px rgb(60 56 54 / 45%); overflow: hidden; }
 	.chat-bar { display: flex; align-items: center; gap: 8px; height: 42px; padding-inline: 14px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 500; color: var(--heading); }
@@ -110,29 +104,19 @@
 	.status-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 	.sessions { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; }
-	.session { display: grid; grid-template-columns: 1fr auto; gap: 4px 14px; align-items: center; padding: 12px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--background); box-shadow: 0 16px 32px -26px rgb(60 56 54 / 35%); animation: enter 360ms var(--ease-out) both; transition: border-color 200ms; }
+	.session { display: grid; grid-template-columns: 1fr auto; gap: 4px 14px; align-items: center; padding: 12px 16px; }
 	.session.error { border-color: color-mix(in srgb, var(--coverage-partial) 45%, var(--border)); }
-	.client { display: inline-flex; align-items: center; gap: 7px; font: 11px var(--font-mono); color: var(--muted-foreground); }
-	.client img { width: 14px; height: 14px; object-fit: contain; }
-	.client img.dark-logo { display: none; }
-	:global(.dark) .client img.light-logo { display: none; }
-	:global(.dark) .client img.dark-logo { display: block; }
 	.title { grid-column: 1; font-size: 14px; font-weight: 500; color: var(--heading); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-	.state { grid-column: 2; grid-row: 1 / 3; display: inline-flex; align-items: center; gap: 6px; font: 11px var(--font-mono); }
-	.running .state { color: var(--color-busy); }
-	.done .state { color: var(--coverage-supported); }
-	.error .state { color: var(--coverage-partial); }
-	.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-busy); animation: pulse 1.6s ease-out infinite; }
+	.state-cell { grid-column: 2; grid-row: 1 / 3; }
 
 	@keyframes enter { from { opacity: 0; translate: 0 6px; } }
 	@keyframes pop { from { scale: 0.4; } }
 	@keyframes bob { 50% { translate: 0 -2px; } }
-	@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgb(215 153 33 / 50%); } 100% { box-shadow: 0 0 0 6px rgb(215 153 33 / 0%); } }
-	@media (prefers-reduced-motion: reduce) { .line, .session, .divider, .count, .working, .dot { animation: none; } }
+	@media (prefers-reduced-motion: reduce) { .line, .divider, .count, .working { animation: none; } }
 
 	/* Narrow screens: the chat fills the width and the Sessions follow as a compact list. */
 	@media (max-width: 760px) {
-		.stage { grid-template-columns: 1fr; gap: 14px; min-height: 0; padding: 14px; }
+		.demo { grid-template-columns: 1fr; gap: 14px; }
 		.chat { height: 340px; }
 		.sessions { gap: 8px; }
 		.session { padding: 9px 12px; }
