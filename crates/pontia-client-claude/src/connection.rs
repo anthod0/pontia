@@ -103,15 +103,11 @@ impl Adapter {
         }
         .await;
         // Socket loss alone is not a runtime or execution exit.
-        if peer
-            .connection()
-            .is_ok_and(|current| Arc::ptr_eq(&current, &connection))
-        {
-            peer.unavailable("control_connection_lost").await;
-        }
+        peer.unavailable(&connection, "control_connection_lost")
+            .await;
         for _ in 0..25 {
             if connection.process.observe() == ProcessObservation::Exited {
-                peer.unavailable("host_unavailable").await;
+                peer.unavailable(&connection, "host_unavailable").await;
                 peer.runtime_event(
                     &app.event_ingest_service(),
                     PontiaEventType::RuntimeExited,
@@ -218,13 +214,13 @@ impl Adapter {
                 .map(str::to_owned);
             state.closed = status["closed"] == true;
             state.closing = status["closing"] == true;
+            rpc.reply(
+                first.id.clone(),
+                json!({"session_id":identity.session_id,"runtime_id":identity.runtime_id}),
+            )
+            .await?;
+            *peer.connection.write().unwrap() = Some(connection.clone());
         }
-        rpc.reply(
-            first.id.clone(),
-            json!({"session_id":identity.session_id,"runtime_id":identity.runtime_id}),
-        )
-        .await?;
-        *peer.connection.write().unwrap() = Some(connection.clone());
         app.inbox_commands().notify_available(&peer.session);
         Ok((peer, connection))
     }

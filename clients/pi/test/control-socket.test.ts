@@ -2,6 +2,7 @@ import { mkdir, rmdir } from "node:fs/promises";
 import { createServer, type Socket } from "node:net";
 import { dirname, join } from "node:path";
 import { onTestFinished, expect, test, vi } from "vitest";
+import { createPontiaPiExtension } from "../src/index.js";
 import { connectPi } from "../src/control-socket.js";
 import { controlSocketPath, MAX_RPC_FRAME_BYTES, RpcError } from "../shared/control-socket.js";
 import { LiveOutputPublisher } from "../src/live-output.js";
@@ -596,4 +597,76 @@ test("conditional shutdown reports native rejection without terminating the chan
   await client.request("begin", {});
   await vi.waitFor(() => expect(responses).toHaveLength(2));
   expect(responses[1].result).toEqual({ accepted: true });
+});
+
+test("extension reload retains the socket and FIFO while a ready receipt is outstanding", async () => {
+  const sockets = new Set<Socket>();
+  const facts: string[] = [];
+  let acknowledge: (() => void) | undefined;
+  const root = await server((socket, { method, id, params }) => {
+    sockets.add(socket);
+    if (method === "session.context")
+      return reply(socket, id, {
+        session_context: {
+          session_id: "sess_reload",
+          runtime_id: "rt_reload",
+          client_type: "pi",
+          session_state: "starting",
+        },
+      });
+    if (method === "workspaces.list")
+      return reply(socket, id, {
+        workspaces: [{ canonical_path: root, state: "active" }],
+      });
+    if (method === "runtime.register")
+      return reply(socket, id, {
+        session: { session_id: "sess_reload" },
+        runtime: { runtime_id: "rt_reload" },
+      });
+    if (method === "event.report") {
+      facts.push(params.event.type);
+      if (params.event.type === "session.ready") {
+        acknowledge = () => reply(socket, id, { accepted: true });
+        return;
+      }
+      return reply(socket, id, { accepted: true, turn_id: "turn_reloaded" });
+    }
+    reply(socket, id, {});
+  });
+  const handlers: Record<string, (event: any, ctx?: any) => Promise<void>> = {};
+  const install = () =>
+    createPontiaPiExtension(
+      {
+        on(name: string, handler: any) {
+          handlers[name] = handler;
+        },
+        registerCommand() {},
+      } as any,
+      { env: { PONTIA_HOME: root } },
+    );
+  const context = {
+    mode: "tui",
+    sessionManager: {
+      getSessionId: () => "native",
+      getSessionFile: () => join(root, "session.jsonl"),
+      getCwd: () => root,
+      getLeafId: () => "native-entry",
+    },
+  };
+  install();
+  await handlers.session_start({ reason: "startup" }, context);
+  await vi.waitFor(() => expect(acknowledge).toBeDefined());
+  await handlers.session_shutdown({ reason: "reload" }, context);
+  install();
+  await handlers.session_start({ reason: "reload" }, context);
+  await handlers.agent_start({}, context);
+  await handlers.agent_end({ messages: [] }, context);
+  expect(facts).toEqual(["session.ready"]);
+  acknowledge!();
+  await vi.waitFor(() =>
+    expect(facts).toEqual(["session.ready", "turn.started", "turn.completed"]),
+  );
+  await handlers.session_shutdown({ reason: "quit" }, context);
+  await vi.waitFor(() => expect(facts.at(-1)).toBe("session.exited"));
+  expect(sockets.size).toBe(1);
 });

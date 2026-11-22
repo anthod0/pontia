@@ -2338,7 +2338,14 @@ async fn reconnected_permission_delivers_the_original_response_once() {
         .unwrap();
     h.release("update-1");
     let original = h.wait_interactions(&session, 3).await;
-    h.restart().await;
+    h.stop_transport().await;
+    // One native request remains open after its durable Interaction expired.
+    h.app
+        .interactions()
+        .expire(&session, &original[1].interaction_id)
+        .await
+        .unwrap();
+    h.start_transport().await;
     let id = &original[0].interaction_id;
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
@@ -2369,6 +2376,27 @@ async fn reconnected_permission_delivers_the_original_response_once() {
             .count(),
         1
     );
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let cancellations = h
+                .wire()
+                .into_iter()
+                .filter(|frame| {
+                    frame
+                        .pointer("/result/outcome/outcome")
+                        .and_then(Value::as_str)
+                        == Some("cancelled")
+                })
+                .count();
+            if cancellations == 1 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(h.events(&session, "interaction.unblocked").await, 1);
     h.stop().await;
 }
 

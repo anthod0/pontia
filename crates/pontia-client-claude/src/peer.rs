@@ -60,8 +60,15 @@ impl Peer {
         }
     }
 
-    pub async fn unavailable(&self, reason: &str) {
+    pub async fn unavailable(&self, connection: &Arc<Connection>, reason: &str) {
         let mut state = self.state.lock().await;
+        if reason == "control_connection_lost"
+            && !self
+                .connection()
+                .is_ok_and(|current| Arc::ptr_eq(&current, connection))
+        {
+            return;
+        }
         if !state.closed
             && (state.unavailable.is_none()
                 || (reason == "host_unavailable"
