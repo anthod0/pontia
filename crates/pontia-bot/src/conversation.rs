@@ -724,6 +724,18 @@ impl ConversationService {
             })
     }
 
+    pub async fn link_message(
+        &self,
+        session_id: &str,
+        links: &crate::messages::MessageLinks,
+    ) -> Result<()> {
+        let bot = self.require_bot(session_id).await?;
+        self.messages.replace_links(&bot.bot_id, links).await?;
+        self.activity(&bot.bot_id)
+            .notify(ConversationUpdate::Changed);
+        Ok(())
+    }
+
     pub async fn send_to_user(&self, request: ReplyRequest) -> Result<SentReply> {
         let bot = self
             .bot_for_session(&request.session_id)

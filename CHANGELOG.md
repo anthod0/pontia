@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Bots can use `pontia bot link-message` to connect an unquoted user message to up to five earlier messages in the same chat. These links appear in message context and Session handoffs.
+
 ### Changed
 
 - In Dashboard, a button next to the sidebar device menu switches back to the previously used device. Alt+M now does the same instead of cycling through devices.

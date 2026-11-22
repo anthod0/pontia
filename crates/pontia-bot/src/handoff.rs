@@ -117,7 +117,7 @@ impl HandoffService {
         .await?;
         let messages: Vec<HistoryMessage> = sqlx::query_as(
             &format!("SELECT {MESSAGE_COLUMNS}, (SELECT json_group_array(target_id ORDER BY target_id) FROM bot_message_links
-                            WHERE m.kind = 'bot_reply' AND message_id = m.id) AS related_to
+                            WHERE message_id = m.id AND (m.kind = 'bot_reply' OR m.link_source = 'bot')) AS related_to
              FROM bot_messages m WHERE bot_id = ?
              AND id NOT IN (SELECT value FROM json_each(?))
              ORDER BY created_at DESC, id DESC LIMIT 60"),

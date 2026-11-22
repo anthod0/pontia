@@ -4,17 +4,22 @@ const QUOTE_CHARACTER_LIMIT: usize = 2000;
 const OPEN: &str = "<user_quote ";
 const CLOSE: &str = "</user_quote>";
 
+pub(crate) enum Target {
+    Message(String),
+    File,
+}
+
 /// Normalize new user input only; stored messages and retries keep their original content.
-pub(crate) fn user_input(content: &str) -> (Cow<'_, str>, Option<String>) {
+pub(crate) fn user_input(content: &str) -> (Cow<'_, str>, Option<Target>) {
     match parse_quote(content) {
         Some((normalized, id)) => (normalized, Some(id)),
         None => (Cow::Borrowed(content), None),
     }
 }
 
-fn parse_quote(content: &str) -> Option<(Cow<'_, str>, String)> {
+fn parse_quote(content: &str) -> Option<(Cow<'_, str>, Target)> {
     let (attributes, rest) = content.strip_prefix(OPEN)?.split_once('>')?;
-    let (id, excerpt) = message_attributes(attributes)?;
+    let (target, excerpt) = quote_attributes(attributes)?;
     let (text, after) = rest.split_once(CLOSE)?;
     if text.is_empty() || after.strip_prefix('\n')?.trim().is_empty() {
         return None;
@@ -31,8 +36,8 @@ fn parse_quote(content: &str) -> Option<(Cow<'_, str>, String)> {
         remaining = next_character(remaining)?.1;
         count += 1;
     }
-    let Some(end) = end else {
-        return Some((Cow::Borrowed(content), id));
+    let Some(end) = end.filter(|_| matches!(target, Target::Message(_))) else {
+        return Some((Cow::Borrowed(content), target));
     };
     let flag = if excerpt { "" } else { " excerpt=\"true\"" };
     Some((
@@ -40,14 +45,14 @@ fn parse_quote(content: &str) -> Option<(Cow<'_, str>, String)> {
             "{OPEN}{attributes}{flag}>{}…{CLOSE}{after}",
             &text[..end]
         )),
-        id,
+        target,
     ))
 }
 
-// Match the Dashboard's text-only message quote format; file quotes remain metadata.
-fn message_attributes(mut attributes: &str) -> Option<(String, bool)> {
-    let mut message = None;
-    let mut speaker = false;
+fn quote_attributes(mut attributes: &str) -> Option<(Target, bool)> {
+    let mut target = None;
+    let mut speaker = None;
+    let mut file_path = false;
     let mut excerpt = false;
     while !attributes.trim().is_empty() {
         let (name, rest) = attributes.trim_start().split_once('=')?;
@@ -65,8 +70,9 @@ fn message_attributes(mut attributes: &str) -> Option<(String, bool)> {
             encoded = rest;
         }
         match name.trim_end() {
-            "message_id" if message.is_none() => {
-                let id = value.strip_prefix("bmsg_")?;
+            "message_id" | "file_id" if target.is_none() => {
+                let is_message = name.trim_end() == "message_id";
+                let id = value.strip_prefix(if is_message { "bmsg_" } else { "file_" })?;
                 let uuid = uuid::Uuid::parse_str(id).ok()?;
                 if uuid.get_version_num() != 7
                     || uuid.get_variant() != uuid::Variant::RFC4122
@@ -74,9 +80,16 @@ fn message_attributes(mut attributes: &str) -> Option<(String, bool)> {
                 {
                     return None;
                 }
-                message = Some(value);
+                target = Some(if is_message {
+                    Target::Message(value)
+                } else {
+                    Target::File
+                });
             }
-            "speaker" if !speaker && matches!(value.as_str(), "User" | "Bot") => speaker = true,
+            "speaker" if speaker.is_none() && matches!(value.as_str(), "User" | "Bot") => {
+                speaker = Some(value)
+            }
+            "path" if !file_path && value.starts_with('/') => file_path = true,
             "excerpt" if !excerpt && value == "true" => excerpt = true,
             _ => return None,
         }
@@ -85,7 +98,11 @@ fn message_attributes(mut attributes: &str) -> Option<(String, bool)> {
         }
         attributes = rest;
     }
-    speaker.then_some((message?, excerpt))
+    match (target?, speaker?.as_str()) {
+        (target @ Target::Message(_), _) if !file_path => Some((target, excerpt)),
+        (Target::File, "Bot") if file_path && !excerpt => Some((Target::File, false)),
+        _ => None,
+    }
 }
 
 fn next_character(text: &str) -> Option<(char, &str)> {
