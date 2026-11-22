@@ -95,13 +95,12 @@ impl HandoffService {
         pending_message_ids: &[String],
         default_workspace_id: &str,
     ) -> Result<String, Error> {
-        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM bots WHERE bot_id = ?)")
-            .bind(bot_id)
-            .fetch_one(&self.pool)
-            .await?;
-        if !exists {
-            return Err(pontia_core::Error::NotFound(format!("Bot {bot_id} not found")).into());
-        }
+        let description: Option<String> =
+            sqlx::query_scalar("SELECT description FROM bots WHERE bot_id = ?")
+                .bind(bot_id)
+                .fetch_optional(&self.pool)
+                .await?
+                .ok_or_else(|| pontia_core::Error::NotFound(format!("Bot {bot_id} not found")))?;
         let user = self.user.read_for_handoff().await?;
         let mut workspaces = self.queries.list_workspaces().await?;
         workspaces.sort_by(|a, b| a.workspace_id.cmp(&b.workspace_id));
@@ -142,6 +141,7 @@ impl HandoffService {
         helpers.sort_by(|a, b| a.session_id.cmp(&b.session_id));
         Ok(render::document(
             &user,
+            description.as_deref(),
             &workspaces,
             default_workspace_id,
             &self.roots,

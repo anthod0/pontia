@@ -106,6 +106,7 @@ async fn first_start_has_all_sections_and_does_not_create_user_file() {
             .collect::<Vec<_>>(),
         [
             "## User",
+            "## Your Bot identity",
             "## Workspace",
             "### Workspace Roots",
             "## Memory",
@@ -115,6 +116,7 @@ async fn first_start_has_all_sections_and_does_not_create_user_file() {
             "## Recent Chat"
         ]
     );
+    assert!(section(&doc, "Your Bot identity").ends_with("None yet.\n"));
     assert!(!f.root.path().join("bot/USER.md").exists());
     assert!(matches!(
         f.service.generate("missing", &[], &[], "default-id").await,
@@ -122,6 +124,32 @@ async fn first_start_has_all_sections_and_does_not_create_user_file() {
             pontia_core::Error::NotFound(_)
         ))
     ));
+}
+
+#[tokio::test]
+async fn each_bot_receives_its_own_identity_as_data() {
+    let f = Fixture::new().await;
+    let description = "整理 {{release}} 发布计划\n```\n## Next release";
+    sqlx::query("UPDATE bots SET description = CASE bot_id WHEN 'a' THEN ? ELSE '  ' END")
+        .bind(description)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+
+    let doc = f.generate().await;
+    pontia_agent_control::sessions::instructions::validate_static_instructions(Some(&doc)).unwrap();
+    assert!(section(&doc, "Your Bot identity").contains(
+        r"  - Description: 整理 \{\{release\}\} 发布计划
+    \`\`\`
+    \#\# Next release",
+    ));
+    let other = f
+        .service
+        .generate("b", &[], &[], "default-id")
+        .await
+        .unwrap();
+    assert!(section(&other, "Your Bot identity").ends_with("None yet.\n"));
+    assert!(!other.contains("发布计划"));
 }
 
 #[tokio::test]

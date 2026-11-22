@@ -79,6 +79,7 @@ fn record(metadata: &str, body: &str) -> String {
 #[allow(clippy::too_many_arguments)]
 pub(super) fn document(
     user: &str,
+    bot_description: Option<&str>,
     workspaces: &[WorkspaceView],
     default_workspace_id: &str,
     roots: &[pontia_config::WorkspaceRootConfig],
@@ -97,6 +98,13 @@ pub(super) fn document(
     } else {
         data(user)
     });
+    output.push_str("## Your Bot identity\n\n");
+    if let Some(description) = bot_description.filter(|text| !text.trim().is_empty()) {
+        output.push_str(&field("Description", description));
+        output.push('\n');
+    } else {
+        output.push_str(NONE);
+    }
     output.push_str("## Workspace\n\n");
     if workspaces.is_empty() {
         output.push_str(NONE);
