@@ -315,8 +315,12 @@ impl CodexObserver {
         };
         self.reconcile_all(&runtime, connection, &mut observation)
             .await?;
+        let mut permission_retry = tokio::time::interval(Duration::from_secs(1));
         loop {
             tokio::select! {
+                _ = permission_retry.tick(), if !connection.interaction_events.lock().await.is_empty() => {
+                    super::interactions::observe_native(&self.interactions, &self.service.event_ingest, connection).await?;
+                }
                 _ = shutdown.changed() => return Ok(()),
                 change = self.changes.recv() => {
                     match change {
@@ -354,7 +358,6 @@ impl CodexObserver {
                     };
                     if event["method"] == "pontia/disconnected" { return Err(Error::CapabilityUnavailable("Codex disconnected".into())); }
                     let result: Result<()> = async {
-                    super::interactions::observe_native(&self.interactions, &self.service.event_ingest, connection).await?;
                     super::interactions::reconcile(&self.interactions, &self.service.event_ingest, connection).await?;
                     let Some(thread) = event.pointer("/params/threadId").and_then(Value::as_str) else { return Ok(()) };
                     let session = match observation.threads.get(thread) {

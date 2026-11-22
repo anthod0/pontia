@@ -68,6 +68,7 @@ export function bootstrap(value: unknown): Bootstrap {
 export async function serve(config: Bootstrap, factory?: QueryFactory) {
   const generation = randomUUID();
   let connected = false;
+  let closing = false;
   let sequence = 0;
   let connection: RuntimeConnection;
   const reports = new Set<Promise<unknown>>();
@@ -82,7 +83,35 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
       const params = hostObservation(generation, ++sequence, event);
       if (event.kind === "ready") identity.clientSessionKey = event.native_session_id;
       if (!connected) return;
-      const report = connection.request("host.event", params);
+      const deliver = async () => {
+        for (;;) {
+          try {
+            const receipt = await connection.request("host.event", params);
+            if (event.kind === "permission_requested" && object(receipt).ended === true)
+              host.cancelPermission(event.permission_id);
+            return;
+          } catch (error) {
+            if (
+              (event.kind !== "permission_requested" && event.kind !== "permission_settled") ||
+              !(error instanceof RpcError)
+            )
+              throw error;
+            if (error.code !== -32603) {
+              if (event.kind === "permission_requested") host.cancelPermission(event.permission_id);
+              throw error;
+            }
+            console.error("Claude permission report temporarily failed", event.permission_id);
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            if (
+              closing ||
+              !connected ||
+              (event.kind === "permission_requested" && !host.hasPermission(event.permission_id))
+            )
+              return;
+          }
+        }
+      };
+      const report = deliver();
       reports.add(report);
       void report
         .catch((error: unknown) => {
@@ -120,6 +149,7 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
         case "is_idle":
           return { status: "accepted", idle: host.isIdle() };
         case "close":
+          closing = true;
           await host.close();
           break;
         default:
@@ -200,6 +230,7 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
   };
   process.once("SIGTERM", terminate);
   async function close() {
+    closing = true;
     process.off("SIGTERM", terminate);
     try {
       await host.close();

@@ -58,12 +58,88 @@ pub struct Interaction {
     pub resolved_at: Option<String>,
 }
 
+/// Hash authorization JSON with sorted object keys and the original array order.
+pub fn authorization_digest(mut content: serde_json::Value) -> String {
+    use sha2::{Digest, Sha256};
+    content.sort_all_objects();
+    format!("{:x}", Sha256::digest(content.to_string().as_bytes()))
+}
+
+pub fn transient_storage_error(error: &Error) -> bool {
+    match error {
+        Error::Database(sqlx::Error::PoolTimedOut | sqlx::Error::Io(_)) => true,
+        Error::Database(sqlx::Error::Database(db)) => {
+            // SQLite extended result codes retain the primary code in their low byte.
+            // BUSY, LOCKED, IOERR, FULL and CANTOPEN can recover without changing the request.
+            db.code()
+                .and_then(|code| code.parse::<u32>().ok())
+                .is_some_and(|code| matches!(code & 0xff, 5 | 6 | 10 | 13 | 14))
+        }
+        _ => false,
+    }
+}
+
+#[derive(Clone)]
 pub struct ChoiceInteractionRequest {
+    pub report_key: String,
+    pub authorization_digest: String,
+    pub blocked: Option<InteractionBlock>,
     pub session_id: String,
     pub turn_id: Option<String>,
     pub title: String,
     pub description: Option<String>,
     pub options: Vec<InteractionOption>,
+}
+
+#[derive(Clone)]
+pub struct InteractionBlock {
+    pub key_prefix: String,
+    pub runtime_id: Option<String>,
+    pub turn_id: Option<String>,
+}
+
+impl InteractionBlock {
+    fn fact(&self, session: &str, id: &str) -> crate::ReportedFact {
+        let mut data = serde_json::json!({"interaction_id": id});
+        if let Some(runtime) = &self.runtime_id {
+            data["runtime_id"] = serde_json::json!(runtime);
+        }
+        crate::ReportedFact {
+            session_id: session.into(),
+            turn_id: self.turn_id.clone(),
+            report_key: Some(format!("{}:{id}:interaction.blocked", self.key_prefix)),
+            fact_type: pontia_core::domain::EventType::InteractionBlocked,
+            data,
+        }
+    }
+}
+
+impl ChoiceInteractionRequest {
+    pub(crate) async fn insert(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        id: &str,
+    ) -> Result<()> {
+        if let Some(turn) = &self.turn_id {
+            let exists: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM turns WHERE turn_id=? AND session_id=?)",
+            )
+            .bind(turn)
+            .bind(&self.session_id)
+            .fetch_one(&mut **tx)
+            .await?;
+            if !exists {
+                return Err(Error::Domain(
+                    "Interaction Turn does not belong to Session".into(),
+                ));
+            }
+        }
+        sqlx::query("INSERT INTO interactions(interaction_id,session_id,turn_id,type,title,description,options,state,requested_at,report_key,authorization_digest) VALUES(?,?,?,'choice',?,?,?,'pending',?,?,?)")
+            .bind(id).bind(&self.session_id).bind(&self.turn_id).bind(&self.title).bind(&self.description)
+            .bind(serde_json::to_string(&self.options)?).bind(timestamp()).bind(&self.report_key).bind(&self.authorization_digest)
+            .execute(&mut **tx).await?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -93,6 +169,7 @@ impl From<sqlx::Error> for InteractionError {
 
 #[derive(FromRow)]
 struct InteractionRow {
+    authorization_digest: Option<String>,
     interaction_id: String,
     session_id: String,
     turn_id: Option<String>,
@@ -143,12 +220,14 @@ pub struct InteractionPage {
 #[derive(Clone)]
 pub struct InteractionService {
     pool: SqlitePool,
+    events: crate::EventIngestService,
     changed: broadcast::Sender<InteractionChanged>,
 }
 impl InteractionService {
-    pub(crate) fn new(pool: SqlitePool) -> Self {
+    pub(crate) fn new(events: crate::EventIngestService) -> Self {
         Self {
-            pool,
+            pool: events.db(),
+            events,
             changed: broadcast::channel(1024).0,
         }
     }
@@ -170,6 +249,22 @@ impl InteractionService {
         Ok(())
     }
     pub async fn register(&self, request: ChoiceInteractionRequest) -> Result<Interaction> {
+        if request.authorization_digest.len() != 64
+            || !request
+                .authorization_digest
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            return Err(Error::Domain(
+                "Invalid interaction authorization digest".into(),
+            ));
+        }
+        if request.report_key.trim().is_empty() {
+            return Err(Error::Domain("Missing interaction report_key".into()));
+        }
+        if let Some(existing) = self.registered(&request).await? {
+            return Ok(existing);
+        }
         let mut keys = std::collections::HashSet::new();
         if request.title.trim().is_empty()
             || request.options.is_empty()
@@ -179,39 +274,94 @@ impl InteractionService {
         {
             return Err(Error::Domain("Invalid choice interaction".into()));
         }
-        // Do not attach an interaction to a Turn owned by another Session.
-        if let Some(turn) = &request.turn_id {
-            let exists: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM turns WHERE turn_id=? AND session_id=?)",
-            )
-            .bind(turn)
-            .bind(&request.session_id)
-            .fetch_one(&self.pool)
-            .await?;
-            if !exists {
-                return Err(Error::Domain(
-                    "Interaction Turn does not belong to Session".into(),
-                ));
-            }
-        }
         let id = format!("interaction_{}", uuid::Uuid::now_v7());
-        let now = timestamp();
-        sqlx::query("INSERT INTO interactions(interaction_id,session_id,turn_id,type,title,description,options,state,requested_at) VALUES(?,?,?,'choice',?,?,?,'pending',?)")
-            .bind(&id).bind(&request.session_id).bind(&request.turn_id).bind(&request.title).bind(&request.description).bind(serde_json::to_string(&request.options)?).bind(&now).execute(&self.pool).await?;
+        let result = if let Some(block) = &request.blocked {
+            self.events
+                .register_blocked(block.fact(&request.session_id, &id), &request, &id)
+                .await
+        } else {
+            let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+            match request.insert(&mut tx, &id).await {
+                Ok(()) => tx.commit().await.map_err(Into::into),
+                Err(error) => Err(error),
+            }
+        };
+        if let Err(error) = result {
+            // A concurrent registration can win the unique key while this writer waits.
+            return self.registered(&request).await?.ok_or(error);
+        }
         self.notify(&request.session_id, &id);
-        Ok(Interaction {
-            interaction_id: id,
-            session_id: request.session_id,
-            turn_id: request.turn_id,
-            interaction_type: "choice".into(),
-            state: InteractionState::Pending,
-            title: request.title,
-            description: request.description,
-            options: request.options,
-            response: None,
-            requested_at: now,
-            resolved_at: None,
-        })
+        sqlx::query_as::<_, InteractionRow>("SELECT * FROM interactions WHERE interaction_id=?")
+            .bind(id)
+            .fetch_one(&self.pool)
+            .await?
+            .view()
+    }
+
+    pub async fn registration(
+        &self,
+        session: &str,
+        key: &str,
+    ) -> Result<Option<(Interaction, String)>> {
+        let Some(mut row) = sqlx::query_as::<_, InteractionRow>(
+            "SELECT * FROM interactions WHERE session_id=? AND report_key=?",
+        )
+        .bind(session)
+        .bind(key)
+        .fetch_optional(&self.pool)
+        .await?
+        else {
+            return Ok(None);
+        };
+        let digest = row
+            .authorization_digest
+            .take()
+            .ok_or_else(|| Error::Domain("Missing stored authorization digest".into()))?;
+        Ok(Some((row.view()?, digest)))
+    }
+
+    pub async fn registered(
+        &self,
+        request: &ChoiceInteractionRequest,
+    ) -> Result<Option<Interaction>> {
+        let Some((stored, digest)) = self
+            .registration(&request.session_id, &request.report_key)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let block: Option<(String, Option<String>, Option<String>)> = sqlx::query_as(
+            "SELECT report_key, turn_id, json_extract(payload,'$.runtime_id') FROM events
+             WHERE session_id=? AND event_type='interaction.blocked'
+               AND json_extract(payload,'$.interaction_id')=?",
+        )
+        .bind(&request.session_id)
+        .bind(&stored.interaction_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        let expected = request.blocked.as_ref().map(|b| {
+            (
+                format!(
+                    "{}:{}:interaction.blocked",
+                    b.key_prefix, stored.interaction_id
+                ),
+                b.turn_id.clone(),
+                b.runtime_id.clone(),
+            )
+        });
+        if digest != request.authorization_digest
+            || stored.turn_id != request.turn_id
+            || stored.title != request.title
+            || stored.description != request.description
+            || stored.options != request.options
+            || block != expected
+        {
+            return Err(Error::StateConflict(format!(
+                "Different interaction content for report_key {}",
+                request.report_key
+            )));
+        }
+        Ok(Some(stored))
     }
     pub async fn get(
         &self,

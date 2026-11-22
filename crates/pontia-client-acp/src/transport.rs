@@ -154,7 +154,7 @@ impl ClientControlChannel for Relay {
     }
 }
 
-const FRAME_KEY: &str = "pontia.dev/relay-frame";
+pub(crate) const FRAME_KEY: &str = "pontia.dev/relay-frame";
 
 pub(crate) fn frame_key(meta: Option<&agent_client_protocol::v1::schema::Meta>) -> Result<String> {
     meta.and_then(|meta| meta.get(FRAME_KEY))
@@ -168,11 +168,12 @@ pub(crate) async fn bridge(
     relay: Arc<Relay>,
     mut requests: Requests,
     receipts: Arc<Receipts>,
-    mut writer: WriteHalf<DuplexStream>,
-    reader: ReadHalf<DuplexStream>,
+    streams: (WriteHalf<DuplexStream>, ReadHalf<DuplexStream>),
+    associated: Arc<std::sync::OnceLock<std::sync::Weak<crate::peer::Peer>>>,
     recovered_request: Option<Value>,
     ready: watch::Sender<bool>,
 ) -> Result<()> {
+    let (mut writer, reader) = streams;
     let outgoing = async {
         let mut reader = BufReader::new(reader);
         loop {
@@ -210,6 +211,51 @@ pub(crate) async fn bridge(
             bytes.extend(chunk);
             if request.params["last"] == true {
                 let mut frame: Value = serde_json::from_slice(&bytes)?;
+                if frame["method"] == "session/request_permission" {
+                    let peer = associated
+                        .get()
+                        .and_then(std::sync::Weak::upgrade)
+                        .ok_or_else(|| {
+                            Error::ControlUnknown(
+                                "Permission arrived before relay attachment".into(),
+                            )
+                        })?;
+                    let key = request.params["frame_id"]
+                        .as_str()
+                        .ok_or_else(|| Error::Domain("Missing permission frame identity".into()))?;
+                    let key = format!("acp:frame:{key}");
+                    match crate::interactions::permission_frame(&peer, &key, &mut frame).await {
+                        Ok(Some(id)) => {
+                            relay
+                                .rpc
+                                .reply(request.id, json!({"interaction_id": id}))
+                                .await?;
+                            bytes.clear();
+                            continue;
+                        }
+                        Ok(None) => {
+                            bytes = serde_json::to_vec(&frame)?;
+                            bytes.push(b'\n');
+                        }
+                        Err(error) => {
+                            tracing::warn!(session=%peer.session, %key, %error, "ACP permission frame rejected");
+                            let code =
+                                if pontia_agent_control::interactions::transient_storage_error(
+                                    &error,
+                                ) {
+                                    -32603
+                                } else {
+                                    -32009
+                                };
+                            relay
+                                .rpc
+                                .reply_error(request.id, code, &error.to_string())
+                                .await?;
+                            bytes.clear();
+                            continue;
+                        }
+                    }
+                }
                 let tagged = if frame["method"] == "session/update"
                     && matches!(
                         frame
@@ -279,8 +325,8 @@ mod tests {
             relay,
             requests,
             Receipts::new(),
-            writer,
-            reader,
+            (writer, reader),
+            Arc::default(),
             None,
             watch::channel(false).0,
         ));

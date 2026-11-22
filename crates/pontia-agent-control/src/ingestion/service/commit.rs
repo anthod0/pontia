@@ -43,6 +43,7 @@ impl EventCommitter {
         initial_agent_binding: Option<UpsertAgentBindingRequest>,
         enforce_runtime_fence: bool,
         expected_session_state: Option<SessionState>,
+        interaction: Option<(&crate::interactions::ChoiceInteractionRequest, &str)>,
     ) -> Result<CommitOutcome> {
         // Launch settings belong to the Session, not its durable or broadcast events.
         let runtime_environment = if event.event_type == EventType::SessionCreated {
@@ -134,6 +135,9 @@ impl EventCommitter {
                 )
                 .await?;
             }
+        }
+        if let Some((request, id)) = interaction {
+            request.insert(&mut tx, id).await?;
         }
         if let Some(result) = duplicate_report(&mut tx, &event, reported_turn_id.as_deref()).await?
         {

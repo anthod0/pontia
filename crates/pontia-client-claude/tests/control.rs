@@ -1034,6 +1034,20 @@ async fn parallel_approvals_are_claimed_once_and_never_release_the_turn_boundary
         .collect();
     assert_eq!(interaction_reports.len(), 4);
     let host = h.host_id(&session);
+    let keys: Vec<String> = sqlx::query_scalar(
+        "SELECT report_key FROM interactions WHERE session_id=? ORDER BY report_key",
+    )
+    .bind(&session)
+    .fetch_all(&h.app.db())
+    .await
+    .unwrap();
+    assert_eq!(
+        keys,
+        [
+            format!("claude:{host}:permission-1-0"),
+            format!("claude:{host}:permission-1-1")
+        ]
+    );
     for event in interaction_reports {
         let id = event.payload["interaction_id"].as_str().unwrap();
         assert_eq!(
@@ -1065,6 +1079,32 @@ async fn parallel_approvals_are_claimed_once_and_never_release_the_turn_boundary
     h.gate(&session, 1, "finish");
     h.wait_states(&session, &["completed"]).await;
     h.wait_inputs(&session, 2).await;
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn conflicting_authorization_expires_the_original_and_releases_the_wait() {
+    let h = Harness::new().await;
+    let session = h.create("approval-conflict").await;
+    h.gate(&session, 1, "start");
+    let approvals = h.interactions(&session, &["expired"]).await;
+    let id = approvals[0]["interaction_id"].as_str().unwrap();
+    h.wait_session(&session, "busy").await;
+    assert!(matches!(
+        h.app
+            .interactions()
+            .respond(&h.app, &session, id, "allow")
+            .await,
+        Err(pontia_agent_control::interactions::InteractionError::Expired)
+    ));
+    let wire = h.wire(&session);
+    assert_eq!(
+        wire.iter()
+            .filter(|v| v["method"] == "permission_conflict" && v["code"] == -32009)
+            .count(),
+        1
+    );
+    assert!(!wire.iter().any(|v| v["method"] == "permission"));
     h.stop().await;
 }
 

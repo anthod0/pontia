@@ -65,6 +65,7 @@ if (process.argv[2] === "history") {
   function hostObservation(host, sequence, event) {
     let suffix;
     if (event.kind === "started") suffix = event.input_id + ":start";
+    else if (event.kind === "permission_requested") suffix = event.permission_id;
     else if (event.kind === "finished") suffix = event.result_id;
     else if (["ready", "model", "context_usage", "compaction"].includes(event.kind)) suffix = sequence;
     return {host_id: host, sequence, report_key: suffix && `claude:${host}:${suffix}`, event};
@@ -80,6 +81,7 @@ if (process.argv[2] === "history") {
     reports.add(report);
     void report.catch(() => {}).finally(() => reports.delete(report));
     if (value.kind === "ready") connection.registered({sessionId: config.session_id, runtimeId: config.runtime_id, clientSessionKey: native});
+    return report;
   };
   record({
     method: "spawn",
@@ -263,12 +265,20 @@ if (process.argv[2] === "history") {
         for (let n = 0; n < (active.text === "approval-pair" ? 2 : 1); n++) {
           const id = `permission-${active.number}-${n}`;
           permissions.add(id);
-          event({
+          const request = {
             kind: "permission_requested",
+            authorization_digest: "a".repeat(64),
             permission_id: id,
             tool: "Write",
             blocking: active.text !== "approval-background",
-          });
+          };
+          event(request);
+          if (active.text === "approval-conflict") {
+            event({ ...request, authorization_digest: "b".repeat(64) }).catch((error) => {
+              record({ method: "permission_conflict", code: error.code });
+              expire();
+            });
+          }
         }
       }
       if (active.text === "tool") {

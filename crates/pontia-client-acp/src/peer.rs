@@ -92,6 +92,7 @@ pub(crate) struct Peer {
     pub attached: watch::Receiver<bool>,
     pub state: Arc<Mutex<SessionState>>,
     pub receipts: Arc<Receipts>,
+    pub registering_permissions: std::sync::Mutex<HashMap<String, watch::Sender<()>>>,
     pub interactions: pontia_agent_control::interactions::InteractionService,
     pub permission_events: crate::interactions::PermissionEvents,
     pub runtime: String,
@@ -234,16 +235,17 @@ impl Peer {
         let bridge_relay = relay.clone();
         let bridge_receipts = receipts.clone();
         let (ready, attached) = watch::channel(false);
+        let associated = Arc::new(std::sync::OnceLock::<Weak<Peer>>::new());
         let bridge = tokio::spawn(crate::transport::bridge(
             bridge_relay,
             requests,
             bridge_receipts,
-            incoming,
-            outgoing,
+            (incoming, outgoing),
+            associated.clone(),
             recovered_request,
             ready,
         ));
-        let associated = Arc::new(std::sync::OnceLock::<Weak<Peer>>::new());
+        let permission_peer = associated.clone();
         let recovered_peer = associated.clone();
         let (connected, connection) = oneshot::channel();
         let (stop, mut stopping) = watch::channel(false);
@@ -272,10 +274,14 @@ impl Peer {
                 .v1()
                 .on_receive_request(
                     async move |request: RequestPermissionRequest, responder, _cx| {
+                        let key = crate::transport::frame_key(request.meta.as_ref());
                         if let Err(error) = crate::interactions::register(
                             &permission_service, &permission_facts, &permission_state, request, responder,
                         ).await {
                             tracing::warn!(session=%permission_log_session, %error, "ACP permission registration failed");
+                        }
+                        if let Ok(key) = key && let Some(peer) = permission_peer.get().and_then(Weak::upgrade) {
+                            peer.registering_permissions.lock().unwrap().remove(&key);
                         }
                         Ok(())
                     },
@@ -406,6 +412,7 @@ impl Peer {
             receipts,
             interactions,
             permission_events,
+            registering_permissions: Default::default(),
             runtime: runtime.into(),
             stop,
             done: completion,

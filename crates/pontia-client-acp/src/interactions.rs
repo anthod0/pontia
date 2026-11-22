@@ -2,11 +2,12 @@ use std::{collections::HashMap, sync::Arc};
 
 use agent_client_protocol::v1::{Responder, schema::*};
 use pontia_agent_control::interactions::{
-    ChoiceInteractionRequest, InteractionIntent, InteractionOption, InteractionService,
+    ChoiceInteractionRequest, InteractionBlock, InteractionIntent, InteractionOption,
+    InteractionService, InteractionState, authorization_digest, transient_storage_error,
 };
 use pontia_agent_control::{EventIngestService, ReportedFact};
 use pontia_core::{Error, Result, domain::EventType};
-use serde_json::json;
+use serde_json::{Value, json};
 use tokio::sync::{Mutex, mpsc, oneshot};
 
 use crate::{
@@ -34,12 +35,8 @@ impl PermissionEvents {
                         Ok(_) => break,
                         Err(error) => {
                             tracing::warn!(session=%fact.session_id, %error, "ACP permission fact reporting failed");
-                            if matches!(
-                                error,
-                                pontia_agent_control::EventReportError::Ingestion(
-                                    Error::StateConflict(_)
-                                )
-                            ) {
+                            if !matches!(&error, pontia_agent_control::EventReportError::Ingestion(e) if transient_storage_error(e))
+                            {
                                 break;
                             }
                             if events.db().is_closed() {
@@ -58,12 +55,12 @@ impl PermissionEvents {
         }
     }
 
-    fn report(&self, turn: &str, id: &str, kind: EventType) {
+    fn unblocked(&self, turn: &str, id: &str) {
         let fact = ReportedFact {
             session_id: self.session.clone(),
             turn_id: Some(turn.into()),
-            report_key: Some(format!("acp:{id}:{kind}")),
-            fact_type: kind,
+            report_key: Some(format!("acp:{id}:interaction.unblocked")),
+            fact_type: EventType::InteractionUnblocked,
             data: json!({"runtime_id":self.runtime,"interaction_id":id}),
         };
         if self.sender.send(fact).is_err() {
@@ -78,6 +75,101 @@ pub(crate) struct Permission {
     options: HashMap<String, PermissionOptionId>,
     // Dropping the association also releases its native cancellation observer.
     _done: oneshot::Sender<()>,
+}
+
+const DIGEST: &str = "pontia.dev/authorization-digest";
+
+// Inspect the original JSON before the SDK constructs its single-use responder.
+// The typed JSON-RPC id and all params, including toolCall and native options,
+// identify the authorization. Relay-owned metadata is added only after hashing.
+pub(crate) async fn permission_frame(
+    peer: &Peer,
+    key: &str,
+    frame: &mut Value,
+) -> Result<Option<String>> {
+    let digest = authorization_digest(json!([frame["id"], frame["params"]]));
+    let registering = peer
+        .registering_permissions
+        .lock()
+        .unwrap()
+        .get(key)
+        .map(|done| done.subscribe());
+    if let Some(mut registering) = registering {
+        // The first frame was forwarded, but its asynchronous SDK handler may not yet have committed.
+        let _ = registering.changed().await;
+    }
+    let registration = loop {
+        match peer.interactions.registration(&peer.session, key).await {
+            Err(error) if transient_storage_error(&error) => {
+                tracing::warn!(session=%peer.session, %error, "ACP permission lookup will retry");
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
+            result => break result?,
+        }
+    };
+    if let Some((stored, original)) = registration {
+        if original == digest {
+            return Ok(Some(stored.interaction_id));
+        }
+        let id = stored.interaction_id;
+        let permission = peer.state.lock().await.permissions.remove(&id);
+        if let Some(permission) = permission {
+            let receipt = peer.receipts.response(permission.responder.id())?;
+            permission
+                .responder
+                .respond(RequestPermissionResponse::new(
+                    RequestPermissionOutcome::Cancelled,
+                ))
+                .map_err(crate::peer::protocol_error)?;
+            let receipts = peer.receipts.clone();
+            let facts = peer.permission_events.clone();
+            let cancelled_id = id.clone();
+            tokio::spawn(async move {
+                if receipts.wait(receipt).await.is_ok() {
+                    facts.unblocked(&permission.turn, &cancelled_id);
+                }
+            });
+            let service = peer.interactions.clone();
+            let session = peer.session.clone();
+            if let Err(error) = service.expire(&session, &id).await {
+                tracing::warn!(%session, %error, "ACP permission conflict expiry failed");
+                if transient_storage_error(&error) {
+                    // Native approval has been revoked. Storage recovery must not stall the relay.
+                    tokio::spawn(async move {
+                        loop {
+                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                            match service.expire(&session, &id).await {
+                                Err(error) if transient_storage_error(&error) => continue,
+                                Err(error) => {
+                                    tracing::warn!(%session, %error, "ACP permission expiry rejected")
+                                }
+                                Ok(()) => (),
+                            }
+                            break;
+                        }
+                    });
+                }
+            }
+        }
+        return Err(Error::StateConflict(format!(
+            "Conflicting ACP permission frame {key}"
+        )));
+    }
+
+    // An ill-formed request must reach the SDK's ordinary invalid-params handler.
+    if serde_json::from_value::<RequestPermissionRequest>(frame["params"].clone()).is_ok() {
+        let meta = &mut frame["params"]["_meta"];
+        if !meta.is_object() {
+            *meta = json!({});
+        }
+        meta[crate::transport::FRAME_KEY] = json!(key);
+        meta[DIGEST] = json!(digest);
+        peer.registering_permissions
+            .lock()
+            .unwrap()
+            .insert(key.into(), tokio::sync::watch::channel(()).0);
+    }
+    Ok(None)
 }
 
 pub(crate) async fn register(
@@ -106,6 +198,7 @@ pub(crate) async fn register(
             .map_err(crate::peer::protocol_error)?;
         return Ok(());
     }
+    let turn = prompt.turn.clone();
     let Some((options, native)) = choice_options(request.options) else {
         responder
             .respond_with_error(agent_client_protocol::Error::invalid_params())
@@ -119,25 +212,71 @@ pub(crate) async fn register(
         .fields
         .title
         .filter(|title| !title.trim().is_empty());
-    let registration = service
-        .register(ChoiceInteractionRequest {
-            session_id: session.into(),
-            turn_id: Some(prompt.turn.clone()),
-            title: "Tool permission".into(),
-            description,
-            options,
-        })
-        .await;
-    let interaction = match registration {
-        Ok(interaction) => interaction,
-        Err(error) => {
+    let registration = ChoiceInteractionRequest {
+        report_key: crate::transport::frame_key(request.meta.as_ref())?,
+        authorization_digest: request
+            .meta
+            .as_ref()
+            .and_then(|meta| meta.get(DIGEST))
+            .and_then(Value::as_str)
+            .ok_or_else(|| Error::Domain("Missing ACP permission digest".into()))?
+            .into(),
+        blocked: Some(InteractionBlock {
+            key_prefix: "acp".into(),
+            runtime_id: Some(facts.runtime.clone()),
+            turn_id: Some(turn.clone()),
+        }),
+        session_id: session.into(),
+        turn_id: Some(turn.clone()),
+        title: "Tool permission".into(),
+        description,
+        options,
+    };
+    let interaction = loop {
+        if responder.cancellation().is_cancelled()
+            || !state.current
+            || state.closing
+            || !state
+                .active
+                .as_ref()
+                .is_some_and(|p| p.turn == turn && !p.cancelled)
+        {
             responder
-                .respond_with_internal_error("Permission registration failed")
+                .respond(RequestPermissionResponse::new(
+                    RequestPermissionOutcome::Cancelled,
+                ))
                 .map_err(crate::peer::protocol_error)?;
-            return Err(error);
+            return Ok(());
+        }
+        match service.register(registration.clone()).await {
+            Ok(interaction) => break interaction,
+            Err(error) if transient_storage_error(&error) => {
+                drop(state);
+                tracing::warn!(%session, %error, "ACP permission registration will retry");
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                state = shared.lock().await;
+            }
+            Err(error) => {
+                responder
+                    .respond(RequestPermissionResponse::new(
+                        RequestPermissionOutcome::Cancelled,
+                    ))
+                    .map_err(crate::peer::protocol_error)?;
+                return Err(error);
+            }
         }
     };
-    let turn = prompt.turn.clone();
+    if !matches!(
+        interaction.state,
+        InteractionState::Pending | InteractionState::Resolving
+    ) {
+        responder
+            .respond(RequestPermissionResponse::new(
+                RequestPermissionOutcome::Cancelled,
+            ))
+            .map_err(crate::peer::protocol_error)?;
+        return Ok(());
+    }
     let cancellation = responder.cancellation();
     let (done, completed) = oneshot::channel();
     let id = interaction.interaction_id;
@@ -150,9 +289,6 @@ pub(crate) async fn register(
             _done: done,
         },
     );
-    // Enqueue under the lock before a selection can consume the responder;
-    // ingestion itself must not delay cancellation or native response delivery.
-    facts.report(&turn, &id, EventType::InteractionBlocked);
     let shared = Arc::downgrade(shared);
     let service = service.clone();
     let session = session.to_owned();
@@ -238,7 +374,7 @@ pub(crate) async fn resolve(peer: &Peer, id: &str, option: &str) -> Result<()> {
     tokio::spawn(async move {
         let result = receipts.wait(key).await;
         if result.is_ok() {
-            facts.report(&permission.turn, &id, EventType::InteractionUnblocked);
+            facts.unblocked(&permission.turn, &id);
         }
         let _ = sent.send(result);
     });
@@ -279,3 +415,6 @@ pub(crate) async fn expire(
     }
     first_error.map_or(Ok(()), Err)
 }
+
+#[cfg(test)]
+mod replay_tests;

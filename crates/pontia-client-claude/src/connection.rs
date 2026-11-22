@@ -64,11 +64,25 @@ impl Adapter {
                     Ok(result) => rpc.reply(request.id, result).await?,
                     Err(error) => {
                         tracing::warn!(session=%peer.session, %error, "Claude host fact rejected");
+                        let permission = matches!(
+                            request
+                                .params
+                                .pointer("/event/kind")
+                                .and_then(Value::as_str),
+                            Some("permission_requested" | "permission_settled")
+                        );
                         let code = match error {
                             Error::Domain(_) => -32602,
                             Error::StateConflict(_)
                             | Error::CapabilityUnavailable(_)
                             | Error::NotFound(_) => -32009,
+                            _ if permission
+                                && !pontia_agent_control::interactions::transient_storage_error(
+                                    &error,
+                                ) =>
+                            {
+                                -32009
+                            }
                             _ => -32603,
                         };
                         rpc.reply_error(request.id, code, &error.to_string())
