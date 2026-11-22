@@ -7,9 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.9] - 2026-11-23
+
 ### Added
 
-- New Bots greet you in your Dashboard language and can fill in an empty description once they understand their role. You can edit or clear the description in Bot settings.
+- New Bots greet you in your Dashboard language and can fill in an empty description with `pontia bot set-description` once they understand their role. You can edit or clear the description in Bot settings.
 
 - Grok Build can run device Bots, helpers, and dreaming sessions with restricted native tools. Messages sent to a busy Grok Bot or helper are queued until the current turn ends.
 
@@ -52,6 +54,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bot system notifications start with `Source: System Notification` and identify the source helper with `Helper Session:` when present. The message body follows immediately, without a notification ID or blank line.
 
 ### Fixed
+
+- Grok Build receives Session instructions through its native rules (`_meta.rules`) when it does not advertise ACP system prompt support. The instructions persist when the Session resumes.
+
+- Closing an ACP Session now discards late output and permission requests after the Agent confirms the close. If the close fails, the active Turn can still finish.
 
 - Repeated ACP Session, Turn and permission event reports return their original acknowledgement. Conflicting permission reports no longer delay later updates.
 
