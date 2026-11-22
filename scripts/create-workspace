@@ -62,6 +62,9 @@ copy_paths=(
 # Each shared path is authoritative in the primary checkout; missing paths are skipped.
 shared_paths=(
   specs
+  docker/e2e/.local/auth/device docker/e2e/.local/auth/browser
+  docker/e2e/.local/cloud.dev.vars docker/e2e/.local/openai-api-key
+  docker/e2e/.local/tls
 )
 
 git -C "$calling_checkout" worktree add -b "$branch" "$destination" "$base" >&2
@@ -145,7 +148,8 @@ for offset in range(0, len(files), 128):
     )
 for relative in shared:
     target = destination / relative
-    target.parent.mkdir(parents=True, exist_ok=True)
+    for parent in reversed(relative.parents):
+        (destination / parent).mkdir(mode=0o700, exist_ok=True)
     target.symlink_to(source / relative)
 
 
