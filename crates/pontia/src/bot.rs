@@ -43,6 +43,9 @@ pub(crate) async fn run(command: BotCommand, config: &AppConfig) -> Result<(), S
         BotTool::Workspace(input) => ("workspace", json!(input), true),
         BotTool::SessionMessages(input) => ("session-messages", json!(input), false),
         BotTool::UpdateUser(input) => ("user", json!(input), false),
+        BotTool::SetDescription { description } => {
+            ("description", json!({ "description": description }), false)
+        }
         BotTool::LinkMessage {
             message_id,
             related_to,

@@ -157,7 +157,7 @@ impl HelperService {
                 )
                 .await
             {
-                Ok(()) => {
+                Ok(_) => {
                     sqlx::query("UPDATE bot_notifications SET delivered = 1 WHERE id = ?")
                         .bind(&id)
                         .execute(&pool)

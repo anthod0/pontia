@@ -56,11 +56,15 @@ fn execution_policy_accepts_native_patterns_but_rejects_ambiguous_cli_entries() 
     use pontia_agent_control::client_contract::ClientConfiguration;
     use serde_json::json;
     let config = pontia_client_pi::config::PiConfiguration::new(json!({}), json!({}));
-    config.validate_execution_policy(&serde_json::from_value(json!({"tools":["grep","custom_tool"],"disabled_tools":["mcp__remote__*"],"disable_mcp":true})).unwrap()).unwrap();
+    config.validate_execution_policy("default", &serde_json::from_value(json!({"tools":["grep","custom_tool"],"disabled_tools":["mcp__remote__*"],"disable_mcp":true})).unwrap()).unwrap();
     for tool in ["", "  ", "read,bash", "+read", "-write"] {
         for field in ["tools", "disabled_tools"] {
             let policy = serde_json::from_value(json!({field:[tool]})).unwrap();
-            assert!(config.validate_execution_policy(&policy).is_err());
+            assert!(
+                config
+                    .validate_execution_policy("default", &policy)
+                    .is_err()
+            );
         }
     }
 }
@@ -95,10 +99,14 @@ fn execution_policy_is_applied_on_initial_launch_and_resume_without_accumulating
     assert_eq!(restricted.disabled_tools, vec!["edit", "write"]);
     assert!(restricted.disable_mcp);
     assert!(!restricted.yolo);
-    config.validate_execution_policy(&restricted).unwrap();
+    config
+        .validate_execution_policy("default", &restricted)
+        .unwrap();
     let mut approval_free = restricted.clone();
     approval_free.yolo = true;
-    config.validate_execution_policy(&approval_free).unwrap();
+    config
+        .validate_execution_policy("default", &approval_free)
+        .unwrap();
     for (policy, expected) in [
         (
             serde_json::json!(restricted),

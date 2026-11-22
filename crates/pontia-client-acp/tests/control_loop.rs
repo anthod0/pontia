@@ -74,6 +74,10 @@ impl Harness {
         };
         let mut clients = ClientRegistry::default();
         let second = AcpAgentDefinition {
+            restricted_execution: AcpAgents::builtin()
+                .get("grok")
+                .unwrap()
+                .restricted_execution,
             new_session_instructions_meta_key: AcpAgents::builtin()
                 .get("grok")
                 .unwrap()

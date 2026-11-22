@@ -32,6 +32,10 @@
 
 停止 `pontiad` 会停止观察、输入接收和 Workflow 调度。Agent Client 会单独管理其原生对话的生命周期。
 
+## 设置 Bot 描述
+
+在 Bot 的当前主 Session 中，运行 `pontia bot set-description --description TEXT` 可填写该 Bot 的空白描述，最多 2,000 个字符。用户可以在 Bot 设置中修改或清空描述。
+
 ## Bot 助手上下文压缩
 
 在当前 Bot Session 中运行 `pontia bot helper compact --session-id ID`，可请求压缩该 Bot 所关联助手的上下文。助手必须处于 idle 或 interrupted 状态，且客户端当前具备手动压缩能力。助手正在工作时，请等它空闲后再试。

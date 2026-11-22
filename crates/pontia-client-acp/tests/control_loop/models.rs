@@ -328,3 +328,127 @@ async fn failed_probe_close_is_reported_and_the_process_is_reaped() {
     assert_probe_exited(&h);
     h.stop().await;
 }
+
+async fn restricted_request(h: &Harness, model: &str, skills: bool) -> Result<String> {
+    let request: CreateSessionRequest = serde_json::from_value(json!({
+        "client_type":"acp", "workspace":h.root.path(), "metadata":{"acp_agent_id":"second"},
+        "model":model, "system_instructions":"Bound rules",
+        "execution_policy":{"disabled_tools":["Agent","workflow"],"yolo":true,"disable_skills":skills}
+    })).unwrap();
+    let outcome = h.app.session_commands().create_session(request).await?;
+    Ok(outcome.session_id().unwrap().to_owned())
+}
+
+#[tokio::test]
+async fn restricted_session_merges_rules_and_retains_policy_on_resume() {
+    let h = Harness::new(&[("ACP_MODELS", "flat")]).await;
+    let session = restricted_request(&h, "deep", true).await.unwrap();
+    h.app
+        .session_commands()
+        .terminate_session(&session)
+        .await
+        .unwrap();
+    h.app
+        .session_commands()
+        .resume_session(&session, h.root.path())
+        .await
+        .unwrap();
+    let wire = h.wire();
+    let creation = wire.iter().find(|v| v["method"] == "session/new").unwrap();
+    let meta = &creation["params"]["_meta"];
+    assert_eq!(meta["modelId"], "deep");
+    assert!(meta["rules"].as_str().unwrap().contains("Bound rules"));
+    assert_eq!(meta["yoloMode"], true);
+    assert_eq!(meta["agentProfile"]["discoverSkills"], false);
+    assert_eq!(
+        meta["agentProfile"]["disallowedTools"],
+        json!(["Agent", "workflow"])
+    );
+    assert!(h.requests("session/load") >= 2);
+    for load in wire.iter().filter(|v| v["method"] == "session/load") {
+        let loaded = &load["params"]["_meta"];
+        assert_eq!(loaded["agentProfile"], meta["agentProfile"]);
+        assert_eq!(loaded["yoloMode"], true);
+        assert!(loaded.get("rules").is_none());
+    }
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn unverified_model_types_fail_before_native_session_creation() {
+    let h = Harness::new(&[("ACP_MODELS", "flat")]).await;
+    for (model, kind) in [
+        ("deep", "codex"),
+        ("fast", "grok-build-orchestrator"),
+        ("unclassified", "grok-build-plan"),
+    ] {
+        std::fs::write(h.root.path().join("model-kind"), kind).unwrap();
+        assert!(restricted_request(&h, model, false).await.is_err());
+    }
+    assert_eq!(h.requests("session/new"), 0);
+    assert_eq!(h.requests("session/prompt"), 0);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn changed_profile_blocks_resume_before_prompt() {
+    let h = Harness::new(&[("ACP_MODELS", "flat")]).await;
+    let session = restricted_request(&h, "fast", false).await.unwrap();
+    let wire = h.wire();
+    let new = wire.iter().find(|v| v["method"] == "session/new").unwrap();
+    assert!(
+        new["params"]["_meta"]["agentProfile"]
+            .get("discoverSkills")
+            .is_none()
+    );
+    h.app
+        .session_commands()
+        .terminate_session(&session)
+        .await
+        .unwrap();
+    h.release("wrong-profile");
+    assert!(
+        h.app
+            .session_commands()
+            .resume_session(&session, h.root.path())
+            .await
+            .is_err()
+    );
+    assert_eq!(h.requests("session/prompt"), 0);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn model_type_is_checked_again_before_switching_on_resume() {
+    let h = Harness::new(&[("ACP_MODELS", "flat")]).await;
+    let session = restricted_request(&h, "deep", false).await.unwrap();
+    h.app
+        .session_commands()
+        .terminate_session(&session)
+        .await
+        .unwrap();
+    let switches = h.requests("session/set_config_option");
+    std::fs::write(h.root.path().join("model.txt"), "fast").unwrap();
+    h.release("strict-deep");
+    assert!(
+        h.app
+            .session_commands()
+            .resume_session(&session, h.root.path())
+            .await
+            .is_err()
+    );
+    assert_eq!(h.requests("session/set_config_option"), switches);
+    assert_eq!(h.requests("session/prompt"), 0);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn effective_model_must_be_verified_even_when_requested_model_is_allowed() {
+    let h = Harness::new(&[("ACP_MODELS", "flat")]).await;
+    std::fs::write(h.root.path().join("model.txt"), "deep").unwrap();
+    h.release("strict-deep");
+    assert!(restricted_request(&h, "fast", false).await.is_err());
+    assert_eq!(h.requests("session/new"), 1);
+    assert_eq!(h.requests("session/prompt"), 0);
+    h.stop().await;
+}

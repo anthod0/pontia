@@ -521,3 +521,26 @@ async fn link_message_requires_targets_and_forwards_all_of_them() {
         })
     );
 }
+
+#[tokio::test]
+async fn set_description_requires_and_forwards_the_description() {
+    let mut fixture =
+        Fixture::new("description", json!({"description":"- Release planning"})).await;
+    let missing = fixture.cli(&["set-description"]).await;
+    assert!(!missing.status.success());
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("--description"));
+    let result = fixture
+        .cli(&["set-description", "--description", "- Release planning"])
+        .await;
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert_eq!(
+        fixture.requests.recv().await.unwrap(),
+        json!({
+            "session_id":"caller-session", "input":{"description":"- Release planning"}
+        })
+    );
+}

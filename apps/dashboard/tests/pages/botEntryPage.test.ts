@@ -82,6 +82,7 @@ test("creates the first Bot from client and model and opens it on the selected d
       avatar_color: "rose",
     },
     undefined,
+    "en",
   );
 });
 

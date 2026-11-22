@@ -22,6 +22,11 @@ pub(super) enum BotTool {
     SessionMessages(SessionMessages),
     /// Update shared USER.md (at most 2,000 characters)
     UpdateUser(UpdateUser),
+    /// Set this Bot's description while it is empty (at most 2,000 characters)
+    SetDescription {
+        #[arg(long, value_name = "TEXT", allow_hyphen_values = true)]
+        description: String,
+    },
     /// Replace the links from an unquoted user message to earlier messages in this chat
     LinkMessage {
         #[arg(long, value_name = "ID")]

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- New Bots greet you in your Dashboard language and can fill in an empty description once they understand their role. You can edit or clear the description in Bot settings.
+
+- Grok Build can run device Bots, helpers, and dreaming sessions with restricted native tools. Messages sent to a busy Grok Bot or helper are queued until the current turn ends.
+
 - Agents and Bots attach files to a reply with an attachments block, a fenced code block with the language `attachments` and one absolute path per line. Dashboard shows the files as one card below the reply in Session chats and Bot chats, with the same download, preview and quote actions as before. The built-in Session, helper and Bot instructions describe the block and Markdown file links.
 
 - Each Bot receives its own description as its identity when a new Bot Session starts.

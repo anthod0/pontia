@@ -99,6 +99,15 @@ async fn creation_options_follow_enabled_settings_for_native_and_acp_clients() {
         assert_eq!(options["options"][0]["metadata"], metadata);
         assert_eq!(options["options"][0]["model_catalog_key"], json!(key));
 
+        let bots = get(&app, "/api/v1/bots/clients").await;
+        assert!(
+            bots["clients"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|item| { item["client_type"] == client && item["client_key"] == key })
+        );
+
         let (status, body) = call(&app, "PATCH", &path, json!({"enabled":false})).await;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(get(&app, options_path).await["options"], json!([]));

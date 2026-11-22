@@ -18,6 +18,7 @@ struct Launcher(Mutex<Vec<RuntimeStartRequest>>);
 impl pontia_agent_control::client_contract::ClientConfiguration for Launcher {
     fn validate_execution_policy(
         &self,
+        _key: &str,
         _: &pontia_core::execution_policy::ExecutionPolicy,
     ) -> Result<()> {
         Ok(())

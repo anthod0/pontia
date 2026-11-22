@@ -59,6 +59,10 @@ Os arquivos aparecem em um único card abaixo da resposta, onde você pode baixa
 
 Quando um Bot anexar arquivos a uma resposta, eles aparecem na conversa com o Bot em um card com o tipo e o tamanho de cada arquivo. Imagens aparecem na própria conversa e abrem em tamanho real ao clicar; o visualizador navega pelas outras imagens do mesmo card; clique em um arquivo de texto ou código para visualizá-lo. Clique no botão de download para salvar qualquer arquivo.
 
+## Iniciar uma conversa com um Bot
+
+Um novo Bot cumprimenta você no idioma do Dashboard e aguarda sua primeira mensagem. Quando entende em que você precisa de ajuda, ele pode preencher a própria descrição se ela estiver vazia. Você pode editar a descrição nas configurações do Bot a qualquer momento. Apague o texto para que o Bot possa escrever outra descrição.
+
 ## Citar uma mensagem na conversa com um Bot
 
 Na conversa com um Bot, clique com o botão direito em uma mensagem, ou no botão **⋯** que aparece ao lado dela quando você passa o mouse, e escolha **Reply**. Para um arquivo ou imagem anexado, escolha **Quote file** ou **Quote image** no mesmo menu. Para citar parte de uma mensagem, selecione o trecho e escolha **Quote** acima da seleção. No celular, toque e segure a mensagem; o menu também oferece **Copy** e **Select text**. Shift+clique com o botão direito abre o menu do próprio navegador.

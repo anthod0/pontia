@@ -212,3 +212,53 @@ async fn lost_steering_receipt_is_unknown_and_not_replayed() {
     );
     h.stop().await;
 }
+
+#[tokio::test]
+async fn live_input_queues_only_when_the_busy_peer_lacks_steering() {
+    use pontia_agent_control::LiveInputDelivery;
+    for supported in [false, true] {
+        let h = Harness::new(&[("ACP_STEERING", if supported { "1" } else { "0" })]).await;
+        let session = h.create("first").await.unwrap();
+        let inbox = h.app.inbox_commands();
+        assert_eq!(
+            inbox
+                .submit_live_input(&session, "end_turn".into())
+                .await
+                .unwrap(),
+            LiveInputDelivery::Accepted
+        );
+        h.release("update-1");
+        h.wait_requests("session/prompt", 1).await;
+        let turn = sqlx::query_scalar::<_, String>("SELECT turn_id FROM turns WHERE session_id=?")
+            .bind(&session)
+            .fetch_one(&h.app.db())
+            .await
+            .unwrap();
+        h.wait_turn(&session, &turn, "running").await;
+        let receipt = inbox
+            .submit_live_input(&session, "end_turn".into())
+            .await
+            .unwrap();
+        assert_eq!(h.requests("session/prompt"), 1);
+        let messages = inbox.list_messages(&session).await.unwrap();
+        if supported {
+            assert_eq!(receipt, LiveInputDelivery::Accepted);
+            assert_eq!(h.requests("_session/steering"), 1);
+            assert!(messages.is_empty());
+            h.release("release-1");
+            h.wait_turn(&session, &turn, "completed").await;
+        } else {
+            assert_eq!(receipt, LiveInputDelivery::Queued);
+            assert_eq!(messages.len(), 1);
+            assert_eq!(messages[0].state, "pending");
+            finish_queued(
+                &h,
+                &session,
+                &turn,
+                &serde_json::to_value(&messages[0]).unwrap(),
+            )
+            .await;
+        }
+        h.stop().await;
+    }
+}

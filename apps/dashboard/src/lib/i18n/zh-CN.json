@@ -48,6 +48,7 @@
   "bots.noClients": "请在设置中启用可运行 Bot 的 Agent Client。",
   "bots.messages": "聊天记录",
   "bots.message": "输入消息",
+  "bots.queuedAfterTurn": "消息已排队，将在当前轮结束后投递",
   "bots.sendFailed": "消息发送失败",
   "bots.executionFailed": "Bot 执行失败",
   "bots.sessionExited": "Bot Session 已退出",

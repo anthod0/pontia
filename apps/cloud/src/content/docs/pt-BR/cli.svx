@@ -32,6 +32,10 @@ Veja [Inicialização](/docs/initialization) para a configuração interativa e 
 
 Parar o `pontiad` interrompe a observação, o recebimento de entradas e o agendamento de Workflows. Os Agent Clients gerenciam o ciclo de vida das suas conversas nativas separadamente.
 
+## Definir a descrição de um Bot
+
+Na Session principal atual do Bot, execute `pontia bot set-description --description TEXT` para preencher a descrição se ela estiver vazia. O comando aceita até 2.000 caracteres. O usuário pode editar ou apagar a descrição nas configurações do Bot.
+
 ## Autocompletar no shell
 
 `pontia completions` oferece suporte a `bash`, `zsh`, `fish`, `elvish` e `powershell`. Adicione a linha do seu shell ao arquivo de configuração dele e abra um novo terminal:

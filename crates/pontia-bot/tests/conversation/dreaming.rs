@@ -425,7 +425,7 @@ async fn dreaming_uses_the_oldest_bots_current_model_and_built_in_instructions()
     let (_root, pool, client, control, conversation) = fixture().await;
     let first = conversation
         .records()
-        .create(bot_configuration("First", "old-model"))
+        .create(bot_configuration("First", "old-model"), Default::default())
         .await
         .unwrap();
     let (second_id, second_session) = bot(&conversation).await;

@@ -59,6 +59,10 @@ The files appear as one card below the reply, where you can download each file o
 
 When a Bot attaches files to a reply, they appear in the Bot chat as a card with each file's type and size. Images are shown inline and open full size when clicked; the viewer pages through the other images of the same card. Click a text or code file to preview it. Click the download button to save any file.
 
+## Start a Bot chat
+
+A new Bot greets you in your Dashboard language and waits for your first message. Once it understands what you want help with, it can fill in its description if it is empty. You can edit the description in Bot settings at any time. Clear it to let the Bot write a new one.
+
 ## Quote a Bot chat message
 
 In a Bot chat, right-click a message, or click the **⋯** button that appears next to it when you hover over it, and choose **Reply**. For one attached file or image, choose **Quote file** or **Quote image** from the same menu. To quote part of a message, select it and choose **Quote** above the selection. On a phone, press and hold a message; the menu also offers **Copy** and **Select text**. Shift+right-click opens the browser's own menu.

@@ -5,7 +5,7 @@ use std::{
 };
 
 use pontia_agent_control::{
-    AgentControl, CreateSessionRequest, LaunchableAgentProfile, SessionOwnership,
+    AgentControl, CreateSessionRequest, LaunchableAgentProfile, LiveInputDelivery, SessionOwnership,
 };
 use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -36,6 +36,14 @@ enum DeliveryMode {
 }
 
 const APPLICATION_ID: &str = "bot";
+
+#[derive(Debug, Serialize)]
+pub struct SentBotMessage {
+    #[serde(flatten)]
+    pub message: BotMessage,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery: Option<LiveInputDelivery>,
+}
 
 #[derive(Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -221,7 +229,7 @@ impl ConversationService {
             })?;
         policy.yolo = true;
         policy.disable_skills = disable_skills;
-        configuration.validate_execution_policy(&policy)?;
+        configuration.validate_execution_policy(client_key, &policy)?;
         Ok(policy)
     }
 
@@ -386,7 +394,7 @@ impl ConversationService {
         })
     }
 
-    pub async fn send(&self, bot_id: &str, content: &str) -> Result<BotMessage> {
+    pub async fn send(&self, bot_id: &str, content: &str) -> Result<SentBotMessage> {
         self.start_delivery(bot_id, Input::New(content.to_owned()))
             .await
     }
@@ -434,12 +442,12 @@ impl ConversationService {
         self.messages.context(bot_id, id).await
     }
 
-    pub async fn retry(&self, bot_id: &str, message_id: &str) -> Result<BotMessage> {
+    pub async fn retry(&self, bot_id: &str, message_id: &str) -> Result<SentBotMessage> {
         self.start_delivery(bot_id, Input::Retry(message_id.into()))
             .await
     }
 
-    async fn start_delivery(&self, bot_id: &str, input: Input) -> Result<BotMessage> {
+    async fn start_delivery(&self, bot_id: &str, input: Input) -> Result<SentBotMessage> {
         let service = self.clone();
         let bot_id = bot_id.to_owned();
         tokio::spawn(async move { service.submit(&bot_id, input).await })
@@ -447,7 +455,7 @@ impl ConversationService {
             .map_err(|error| Error::Domain(format!("Bot delivery task failed: {error}")))?
     }
 
-    async fn submit(&self, bot_id: &str, input: Input) -> Result<BotMessage> {
+    async fn submit(&self, bot_id: &str, input: Input) -> Result<SentBotMessage> {
         self.records.get(bot_id).await?;
         let activity = self.activity(bot_id);
         let recording = activity.recording.lock().await;
@@ -483,28 +491,35 @@ impl ConversationService {
         let _recording = activity.recording.lock().await;
         drop(pending);
         match result {
-            Ok(()) => activity.notify(ConversationUpdate::Changed),
+            Ok(delivery) => {
+                activity.notify(ConversationUpdate::Changed);
+                Ok(SentBotMessage { message, delivery })
+            }
             Err(error) => {
                 tracing::warn!(%bot_id, message_id = %message.id, %error, "Bot input delivery failed");
                 let failed = self.messages.fail(&message).await?;
                 activity.notify(ConversationUpdate::Message {
                     message: failed.clone(),
                 });
-                return Ok(failed);
+                Ok(SentBotMessage {
+                    message: failed,
+                    delivery: None,
+                })
             }
         }
-        Ok(message)
     }
 
     /// Routes input by stable Bot identity, resolving the current Session at delivery time.
-    pub async fn deliver_input(&self, bot_id: &str, input: &str) -> Result<()> {
+    pub async fn deliver_input(&self, bot_id: &str, input: &str) -> Result<LiveInputDelivery> {
         self.deliver_notification(bot_id, input, DeliveryMode::StartIfNeeded)
             .await
+            .map(|delivery| delivery.expect("StartIfNeeded resolves a Bot Session"))
     }
 
     pub(crate) async fn deliver_system_notice(&self, bot_id: &str, input: &str) -> Result<()> {
         self.deliver_notification(bot_id, input, DeliveryMode::LiveOnly)
             .await
+            .map(|_| ())
     }
 
     async fn deliver_notification(
@@ -512,18 +527,18 @@ impl ConversationService {
         bot_id: &str,
         input: &str,
         mode: DeliveryMode,
-    ) -> Result<()> {
+    ) -> Result<Option<LiveInputDelivery>> {
         let activity = self.activity(bot_id);
         let revision = activity.switch_failure.lock().unwrap().0;
         let _guard = activity.delivery.lock().await;
         let bot = self.records.get(bot_id).await?;
         if mode == DeliveryMode::LiveOnly {
             let Some(id) = bot.current_session_id else {
-                return Ok(());
+                return Ok(None);
             };
             let session = self.control.queries().session_snapshot(&id).await?;
             if !session.is_some_and(|s| !matches!(s.state.as_str(), "exited" | "error")) {
-                return Ok(());
+                return Ok(None);
             }
         }
         let id = uuid::Uuid::now_v7().to_string();
@@ -543,7 +558,7 @@ impl ConversationService {
         activity: &Activity,
         revision: u64,
         mode: DeliveryMode,
-    ) -> Result<()> {
+    ) -> Result<Option<LiveInputDelivery>> {
         {
             let failure = activity.switch_failure.lock().unwrap();
             if failure.0 != revision {
@@ -560,7 +575,7 @@ impl ConversationService {
         let bot = self.records.get(bot_id).await?;
         let session_id = if mode == DeliveryMode::LiveOnly {
             let Some(session) = bot.current_session_id else {
-                return Ok(());
+                return Ok(None);
             };
             session
         } else {
@@ -588,7 +603,7 @@ impl ConversationService {
         .await?;
         let result = self
             .control
-            .turn_commands()
+            .inbox_commands()
             .submit_live_input(&session_id, input.into())
             .await;
         if result.is_err() && !matches!(&result, Err(Error::ControlUnknown(_))) {
@@ -597,7 +612,7 @@ impl ConversationService {
                 .execute(&self.control.db())
                 .await?;
         }
-        result
+        result.map(Some)
     }
 
     async fn current_session(&self, bot: Bot, activity: &Activity) -> Result<String> {
@@ -736,6 +751,17 @@ impl ConversationService {
                 code: "bot_session_required",
                 message: IdentityError.to_string(),
             })
+    }
+
+    pub async fn set_own_description(&self, session_id: &str, description: &str) -> Result<Bot> {
+        let bot = self.require_bot(session_id).await?;
+        let updated = self
+            .records
+            .set_description_if_empty(&bot.bot_id, session_id, description)
+            .await?;
+        self.activity(&bot.bot_id)
+            .notify(ConversationUpdate::Changed);
+        Ok(updated)
     }
 
     pub async fn link_message(

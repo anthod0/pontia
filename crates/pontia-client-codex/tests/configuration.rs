@@ -52,11 +52,11 @@ async fn tool_selection_denials_and_mcp_disabling_are_rejected_before_creation()
     assert!(!restricted.disable_mcp);
     assert!(!restricted.yolo);
     configuration
-        .validate_execution_policy(&restricted)
+        .validate_execution_policy("default", &restricted)
         .unwrap();
     restricted.yolo = true;
     configuration
-        .validate_execution_policy(&restricted)
+        .validate_execution_policy("default", &restricted)
         .unwrap();
 }
 

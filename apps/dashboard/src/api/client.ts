@@ -1,3 +1,4 @@
+import type { Locale } from "$lib/i18n";
 import { ApiError } from "./errors";
 
 import type {
@@ -151,12 +152,12 @@ export function createApi(device: DeviceRuntime) {
     return request(`${botPath(id)}/messages/${encodeURIComponent(messageId)}/context`, { signal });
   }
 
-  async function saveBot(input: BotConfiguration, id?: string): Promise<Bot> {
+  async function saveBot(input: BotConfiguration, id?: string, locale?: Locale): Promise<Bot> {
     const path = id ? botPath(id) : "/bots";
     return (
       await request<{ bot: Bot }>(path, {
         method: id ? "PUT" : "POST",
-        body: input,
+        body: id ? input : { ...input, locale },
         retryNetworkErrors: false,
       })
     ).bot;
@@ -170,9 +171,11 @@ export function createApi(device: DeviceRuntime) {
     await request(botPath(id), { method: "DELETE", idempotency: false, retryNetworkErrors: false });
   }
 
-  async function sendBotMessage(id: string, content: string): Promise<BotMessage> {
+  type SentBotMessage = BotMessage & { delivery?: "accepted" | "queued" };
+
+  async function sendBotMessage(id: string, content: string): Promise<SentBotMessage> {
     return (
-      await request<{ message: BotMessage }>(`${botPath(id)}/messages`, {
+      await request<{ message: SentBotMessage }>(`${botPath(id)}/messages`, {
         method: "POST",
         body: { content },
         retryNetworkErrors: false,
@@ -180,9 +183,9 @@ export function createApi(device: DeviceRuntime) {
     ).message;
   }
 
-  async function retryBotMessage(id: string, messageId: string): Promise<BotMessage> {
+  async function retryBotMessage(id: string, messageId: string): Promise<SentBotMessage> {
     return (
-      await request<{ message: BotMessage }>(
+      await request<{ message: SentBotMessage }>(
         `${botPath(id)}/messages/${encodeURIComponent(messageId)}/retry`,
         {
           method: "POST",

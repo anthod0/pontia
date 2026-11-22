@@ -23,19 +23,52 @@ fn grok_launch_and_management_settings() {
 }
 
 #[test]
-fn acp_omits_restricted_execution_policy_and_rejects_yolo() {
-    let configuration = AcpConfiguration::new(AcpAgents::builtin());
-    assert_eq!(configuration.restricted_execution_policy("grok"), None);
-    assert_eq!(configuration.restricted_execution_policy("unknown"), None);
-    configuration
-        .validate_execution_policy(&Default::default())
+fn acp_validates_the_selected_definition() {
+    use pontia_core::execution_policy::ExecutionPolicy;
+    let agents = AcpAgents::builtin();
+    let mut other = agents.get("grok").unwrap().clone();
+    other.restricted_execution = None;
+    let configuration = AcpConfiguration::new(AcpAgents::new([
+        ("restricted".into(), agents.get("grok").unwrap().clone()),
+        ("plain".into(), other),
+    ]));
+    let mut restricted = configuration
+        .restricted_execution_policy("restricted")
         .unwrap();
-    let yolo = pontia_agent_control::ExecutionPolicy {
-        yolo: true,
-        ..Default::default()
-    };
-    assert!(matches!(
-        configuration.validate_execution_policy(&yolo),
-        Err(pontia_core::Error::CapabilityUnavailable(_))
-    ));
+    assert_eq!(restricted.disabled_tools.len(), 18);
+    restricted.disable_skills = true;
+    restricted.yolo = true;
+    configuration
+        .validate_execution_policy("restricted", &restricted)
+        .unwrap();
+    assert!(configuration.restricted_execution_policy("plain").is_none());
+    assert!(
+        configuration
+            .validate_execution_policy("plain", &restricted)
+            .is_err()
+    );
+    for policy in [
+        ExecutionPolicy {
+            disable_mcp: true,
+            ..Default::default()
+        },
+        ExecutionPolicy {
+            tools: Some(vec![]),
+            ..Default::default()
+        },
+        ExecutionPolicy {
+            disabled_tools: vec!["kill_task".into()],
+            ..Default::default()
+        },
+        ExecutionPolicy {
+            disabled_tools: vec!["unknown".into()],
+            ..Default::default()
+        },
+    ] {
+        assert!(
+            configuration
+                .validate_execution_policy("restricted", &policy)
+                .is_err()
+        );
+    }
 }
