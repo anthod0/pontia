@@ -15,8 +15,8 @@ export interface HistoryFork {
 
 export function createHistoryForks(device: DeviceRuntime) {
   const storageKey = scopedKey("pontia:history-forks:v1", device.id);
-  // Unreadable data throws instead of reading as empty, so a later save cannot drop forks.
-  const saved = readStored(storageKey);
+  // Unreadable storage or data throws instead of reading as empty, so a later save cannot drop forks.
+  const saved = readStored(storageKey, { required: true });
   const pending = writable<HistoryFork[]>(saved ? JSON.parse(saved) : []);
 
   // A failed write throws, so a fork that cannot be saved does not proceed.

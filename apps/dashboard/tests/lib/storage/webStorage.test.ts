@@ -37,7 +37,7 @@ test("scoped keys append one scope as is and several as JSON", () => {
 });
 
 test("reads and writes local or session storage and removes the key for null", () => {
-  expect(writeStored("pontia.a", "1")).toBe(true);
+  writeStored("pontia.a", "1");
   writeStored("pontia.b", "2", { area: "session" });
   expect(readStored("pontia.a")).toBe("1");
   expect(readStored("pontia.b")).toBeNull();
@@ -59,15 +59,18 @@ test("unreadable data falls back to null", () => {
 
 test("unavailable storage reads as empty and ignores writes unless they are required", () => {
   storageUnavailable();
+  storageUnavailable("sessionStorage");
   expect(readStored("pontia.a")).toBeNull();
-  expect(writeStored("pontia.a", "1")).toBe(false);
-  expect(writeStored("pontia.a", null)).toBe(false);
+  expect(readStored("pontia.a", { area: "session" })).toBeNull();
+  expect(() => writeStored("pontia.a", "1")).not.toThrow();
+  expect(() => writeStored("pontia.a", null)).not.toThrow();
+  expect(() => readStored("pontia.a", { required: true })).toThrow(DOMException);
   expect(() => writeStored("pontia.a", "1", { required: true })).toThrow(DOMException);
 });
 
 test("full storage ignores writes unless they are required", () => {
   storageFull();
-  expect(writeStored("pontia.a", "1")).toBe(false);
+  expect(() => writeStored("pontia.a", "1")).not.toThrow();
   expect(() => writeStored("pontia.a", "1", { required: true })).toThrow("Quota exceeded");
 });
 

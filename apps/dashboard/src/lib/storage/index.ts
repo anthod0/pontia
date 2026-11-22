@@ -1,2 +1,2 @@
-export { readStored, readStoredWith, scopedKey, writeStored, type StorageArea } from "./webStorage";
+export { readStored, readStoredWith, scopedKey, writeStored } from "./webStorage";
 export { PersistedState, textSerializer, type Serializer } from "./persistedState.svelte";

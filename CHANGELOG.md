@@ -31,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Dashboard keeps working when the browser blocks or fills its local storage. Theme, language, preview width and Bot quote drafts then last until the page closes; settings saved earlier are still read after upgrading.
+- Dashboard keeps working when the browser blocks or fills its local storage. Theme, language, file preview width and Bot quote drafts then last only until the page closes.
 
 - In Dashboard, "Back to chat" in settings returns to the Bot chat or Session chat last opened on the current device, also after reloading settings. It opens New Chat when that Bot was deleted, or that Session is missing or archived.
 

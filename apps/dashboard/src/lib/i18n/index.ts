@@ -1,8 +1,8 @@
-import { derived, get, toStore } from "svelte/store";
+import { derived, get, writable } from "svelte/store";
 import { addMessages, init, locale, format } from "svelte-i18n";
 import en from "./en.json";
 import zhCN from "./zh-CN.json";
-import { PersistedState } from "../storage";
+import { readStoredWith, writeStored } from "../storage";
 
 export type Locale = "en" | "zh-CN";
 export type LanguagePreference = "system" | Locale;
@@ -14,10 +14,11 @@ export type Translator = (
 
 const storageKey = "pontia.locale";
 
-const preference = new PersistedState<LanguagePreference>(storageKey, "system", {
-  parse: (saved) => (saved === "en" || saved === "zh-CN" ? saved : undefined),
-  stringify: (value) => (value === "system" ? null : value),
-});
+const preference = writable<LanguagePreference>(
+  readStoredWith(storageKey, (saved) =>
+    saved === "en" || saved === "zh-CN" ? saved : undefined,
+  ) ?? "system",
+);
 
 function browserLocale(): Locale {
   for (const language of typeof navigator === "undefined" ? [] : navigator.languages) {
@@ -29,22 +30,23 @@ function browserLocale(): Locale {
 
 addMessages("en", en);
 addMessages("zh-CN", zhCN);
-init({ fallbackLocale: "en", initialLocale: resolveLocale(preference.current) });
+init({ fallbackLocale: "en", initialLocale: resolveLocale(get(preference)) });
 
 function resolveLocale(value: LanguagePreference): Locale {
   return value === "system" ? browserLocale() : value;
 }
 
-export const languagePreference = toStore(
-  () => preference.current,
-  (value) => {
-    preference.current = value;
+export const languagePreference = {
+  subscribe: preference.subscribe,
+  set(value: LanguagePreference): void {
+    writeStored(storageKey, value === "system" ? null : value);
+    preference.set(value);
     locale.set(resolveLocale(value));
   },
-);
+};
 
 export function updateBrowserLanguage(): void {
-  if (preference.current === "system") locale.set(browserLocale());
+  if (get(preference) === "system") locale.set(browserLocale());
 }
 
 export const currentLocale = derived(locale, (value) => value as Locale);

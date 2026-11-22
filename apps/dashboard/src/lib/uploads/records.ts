@@ -44,7 +44,10 @@ export async function loadUploadRecords(scope: string, draft: string): Promise<U
   const records = await transaction("readonly", (store) =>
     store.getAll(IDBKeyRange.bound([scope, draft], [scope, draft, []])),
   );
-  return (records as UploadRecord[]).filter((record) => readStored(removalKey(record)) === null);
+  // An unreadable removal marker fails the load rather than restoring a removed reference.
+  return (records as UploadRecord[]).filter(
+    (record) => readStored(removalKey(record), { required: true }) === null,
+  );
 }
 export async function saveUploadRecord(record: UploadRecord): Promise<void> {
   await transaction("readwrite", (store) => store.put(record));

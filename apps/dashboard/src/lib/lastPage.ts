@@ -42,11 +42,8 @@ window.addEventListener("popstate", () => arriveAt(trimSlash(location.pathname))
 
 /** Records the path a tab opened on, unless it already showed the Dashboard before a reload. */
 export function openDashboardTab(): void {
-  // Without session storage a reload cannot be told apart from a new tab, so neither reopens.
-  const opened = readStored(tabKey, { area: "session" });
-  if (writeStored(tabKey, "1", { area: "session" }) && !opened) {
-    entryPath = trimSlash(location.pathname);
-  }
+  if (!readStored(tabKey, { area: "session" })) entryPath = trimSlash(location.pathname);
+  writeStored(tabKey, "1", { area: "session" });
 }
 
 export function rememberLastPage(deviceId: string, page: LastPage): void {

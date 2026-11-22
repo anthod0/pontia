@@ -1,5 +1,5 @@
 import { get } from "svelte/store";
-import { beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { DeviceRuntime } from "../../../src/device/runtime";
 
 // Saved data from earlier releases must stay readable, so every key keeps its name and format.
@@ -7,6 +7,10 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   vi.resetModules();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 test("theme and language save the choice as text and remove the key for system", async () => {
@@ -111,5 +115,49 @@ test("a removed upload is marked with 1 when IndexedDB cannot delete it", async 
   });
   await removeUploadRecord(record);
   expect(localStorage.getItem('pontia-upload-removed:["s","d","k"]')).toBe("1");
-  vi.restoreAllMocks();
+});
+
+test("New Chat remembers the client and workspace per device as text", async () => {
+  // Formats written by NewChatPage, which tests/pages/chat/newChatPage.test.ts drives.
+  const { readStored, scopedKey } = await import("../../../src/lib/storage");
+  expect(scopedKey("pontia.chat.lastWorkspaceId", "local")).toBe(
+    "pontia.chat.lastWorkspaceId:local",
+  );
+  localStorage.setItem("pontia.chat.lastCreationOptionId:local", "codex");
+  expect(readStored(scopedKey("pontia.chat.lastCreationOptionId", "local"))).toBe("codex");
+});
+
+test("device handles are saved as text", async () => {
+  // The keys DashboardModeLayout uses; tests/public/multiDeviceDashboard.test.ts covers the behavior.
+  const { PersistedState, textSerializer } = await import("../../../src/lib/storage");
+  localStorage.setItem("pontia.previousDeviceHandle", "office-mac");
+  const last = new PersistedState("pontia.lastDeviceHandle", null, textSerializer);
+  expect(new PersistedState("pontia.previousDeviceHandle", null, textSerializer).current).toBe(
+    "office-mac",
+  );
+  last.current = "travel-laptop";
+  expect(localStorage.getItem("pontia.lastDeviceHandle")).toBe("travel-laptop");
+});
+
+test.each([
+  ["Inbox submissions", "../../../src/stores/inboxRecovery"],
+  ["history forks", "../../../src/stores/historyForks"],
+])("%s fail instead of reading as empty when storage is unavailable", async (_name, path) => {
+  const module = await import(/* @vite-ignore */ path);
+  const create = module.createInboxRecovery ?? module.createHistoryForks;
+  vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
+    throw new DOMException("denied", "SecurityError");
+  });
+  expect(() => create({ id: "local" } as DeviceRuntime)).toThrow(DOMException);
+});
+
+test("an Inbox submission that cannot be saved is not remembered", async () => {
+  const { createInboxRecovery } = await import("../../../src/stores/inboxRecovery");
+  const recovery = createInboxRecovery({ id: "local" } as DeviceRuntime);
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new DOMException("full", "QuotaExceededError");
+  });
+  expect(() =>
+    recovery.rememberSubmission({ messageId: "m", sessionId: "s", input: { input: "x" } }),
+  ).toThrow(DOMException);
 });

@@ -21,9 +21,9 @@ export class SubmissionUnconfirmedError extends Error {
 export function createInboxRecovery(device: DeviceRuntime) {
   const storageKey = scopedKey("pontia:inbox-submissions:v2", device.id);
 
-  // Unreadable data throws instead of reading as empty, so a later save cannot drop submissions.
+  // Unreadable storage or data throws instead of reading as empty, so a later save cannot drop submissions.
   function readSaved(): UnconfirmedSubmission[] {
-    const saved = readStored(storageKey);
+    const saved = readStored(storageKey, { required: true });
     if (!saved) return [];
     const items: unknown = JSON.parse(saved);
     if (
