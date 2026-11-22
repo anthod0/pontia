@@ -582,12 +582,11 @@ async function openTodos() {
 test("lists a todo's actions with context first, then Ignore, Quote and Reply", async () => {
   serve([todo]);
   const item = await openTodos();
-  expect(
-    item
-      .getAllByRole("button")
-      .slice(1)
-      .map((button) => button.textContent),
-  ).toEqual(["Context", "Ignore", "Quote", "Reply"]);
+  const actions = ["Context", "Ignore", "Quote", "Reply"].map((name) =>
+    item.getByRole("button", { name }),
+  );
+  for (const [before, after] of actions.slice(0, -1).map((button, i) => [button, actions[i + 1]]))
+    expect(before.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 test("ignoring a todo resolves it like marking it done", async () => {
@@ -618,7 +617,9 @@ test("replies to a todo from its own box with the same request as quoting it, le
   const send = sent();
   const item = await openTodos();
   await quoteFromMenu(rows()[1]);
-  await userEvent.type(screen.getAllByRole("textbox")[0], "Composer draft");
+  const composer = () =>
+    within(screen.getByRole("region", { name: bot.name })).getByRole("textbox");
+  await userEvent.type(composer(), "Composer draft");
 
   await fireEvent.click(item.getByRole("button", { name: "Reply" }));
   const box = item.getByRole("textbox", { name: "Message" });
@@ -627,23 +628,57 @@ test("replies to a todo from its own box with the same request as quoting it, le
   await waitFor(() => expect(send).toHaveBeenCalledWith(bot.bot_id, quotedTodo("Approved")));
   await waitFor(() => expect(item.queryByRole("textbox")).not.toBeInTheDocument());
 
-  expect(screen.getByRole("textbox")).toHaveTextContent("Composer draft");
+  expect(composer()).toHaveTextContent("Composer draft");
   expect(screen.getByRole("button", { name: /^Remove quote: Other answer/ })).toBeInTheDocument();
 });
 
-test("keeps the reply text after a failed send and closes the box with Escape", async () => {
+test("keeps the reply text after a failed send, retries it from the toast, and closes with Escape", async () => {
   serve([todo]);
-  const send = vi.spyOn(testDevice.api, "sendBotMessage").mockRejectedValue(new Error("offline"));
+  let fail!: (error: Error) => void;
+  const send = vi
+    .spyOn(testDevice.api, "sendBotMessage")
+    .mockImplementationOnce(() => new Promise((_resolve, reject) => (fail = reject)))
+    .mockRejectedValueOnce(new Error("still offline"));
   const item = await openTodos();
   await fireEvent.click(item.getByRole("button", { name: "Reply" }));
   const box = item.getByRole("textbox", { name: "Message" });
   await userEvent.type(box, "Approved");
   await fireEvent.click(item.getByRole("button", { name: "Send" }));
+  await waitFor(() => expect(box).toHaveAttribute("readonly"));
+  expect(item.getByRole("button", { name: "Cancel" })).toBeDisabled();
+  await userEvent.keyboard("{Escape}");
+  expect(box).toBeInTheDocument();
+
+  fail(new Error("offline"));
   await waitFor(() => expect(toast.error).toHaveBeenCalledWith("offline", expect.anything()));
-  expect(send).toHaveBeenCalledWith(bot.bot_id, quotedTodo("Approved"));
   expect(box).toHaveValue("Approved");
   expect(box).not.toHaveAttribute("readonly");
 
-  await fireEvent.keyDown(box, { key: "Escape" });
+  const retry = toast.error.mock.calls[0][1].action.onClick;
+  retry(new MouseEvent("click"));
+  await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+  expect(send.mock.calls.map(([, content]) => content)).toEqual([
+    quotedTodo("Approved"),
+    quotedTodo("Approved"),
+  ]);
+  await waitFor(() => expect(box).not.toHaveAttribute("readonly"));
+
+  box.focus();
+  await userEvent.keyboard("{Escape}");
   expect(item.queryByRole("textbox")).not.toBeInTheDocument();
+  expect(item.getByRole("button", { name: "Reply" })).toHaveFocus();
+});
+
+test("cancels a todo reply without sending it", async () => {
+  serve([todo]);
+  const send = sent();
+  const item = await openTodos();
+  const button = item.getByRole("button", { name: "Reply" });
+  await fireEvent.click(button);
+  expect(button).toHaveAttribute("aria-expanded", "true");
+  await userEvent.type(item.getByRole("textbox", { name: "Message" }), "Not yet");
+  await fireEvent.click(item.getByRole("button", { name: "Cancel" }));
+  expect(item.queryByRole("textbox")).not.toBeInTheDocument();
+  expect(button).toHaveAttribute("aria-expanded", "false");
+  expect(send).not.toHaveBeenCalled();
 });

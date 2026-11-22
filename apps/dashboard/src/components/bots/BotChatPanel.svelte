@@ -112,41 +112,48 @@
     await onquote(entryQuote(message)!)
   }
 
-  // One todo at a time has its reply box open.
-  let reply = $state<{ message: BotMessage; text: string; sending: boolean } | null>(null)
+  // One todo at a time has its reply box open; it stays open while sending so a failure keeps the text.
+  type Reply = { message: BotMessage; text: string; sending: boolean }
+  let reply = $state<Reply | null>(null)
 
   function toggleReply(message: BotMessage) {
+    if (reply?.sending) return
     reply = reply?.message.id === message.id ? null : { message, text: '', sending: false }
   }
 
-  function submitReply(): boolean {
-    const current = reply
-    if (!current || current.sending || !current.text.trim()) return false
+  function closeReply() {
+    if (!reply || reply.sending) return
+    const id = reply.message.id
+    reply = null
+    document.getElementById(`bot-todo-reply-${id}`)?.focus()
+  }
+
+  // Retrying from the error toast resends the reply that failed, and only while its box is still open.
+  function submitReply(current: Reply): boolean {
+    if (reply !== current || current.sending || !current.text.trim()) return false
     current.sending = true
-    void onreply(entryQuote(current.message)!, current.text, submitReply).then(sent => {
+    void onreply(entryQuote(current.message)!, current.text, () => submitReply(current)).then(sent => {
       current.sending = false
-      if (sent && reply === current) reply = null
+      if (sent) closeReply()
     })
     return true
   }
 
-  function replyKeydown(event: KeyboardEvent) {
+  function replyKeydown(event: KeyboardEvent, current: Reply) {
     if (event.isComposing || event.keyCode === 229) return
     if (event.key === 'Escape') {
       event.preventDefault()
       event.stopPropagation()
-      reply = null
+      closeReply()
       return
     }
-    if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return
+    // Alt+Enter sends too, as in the chat input.
+    if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.metaKey || current.sending) return
     event.preventDefault()
-    const next = promptValueAfterEnter(reply!.text)
-    if (next !== null) reply!.text = next
-    else submitReply()
+    const next = event.altKey ? null : promptValueAfterEnter(current.text)
+    if (next !== null) current.text = next
+    else submitReply(current)
   }
-
-  let replyInput = $state<HTMLTextAreaElement | null>(null)
-  $effect(() => { replyInput?.focus() })
 </script>
 
 {#snippet badge(corner = false)}
@@ -217,17 +224,17 @@
       {#if !done}
         <Button variant="ghost" size="xs" class="ml-auto" onclick={() => ontodochange(message.id, 'resolve')}><EyeSlashIcon />{$t('bots.ignore')}</Button>
         <Button variant="ghost" size="xs" onclick={() => quoteTodo(message)}><QuotesIcon />{$t('bots.quote')}</Button>
-        <Button variant="outline" size="xs" aria-expanded={reply?.message.id === message.id} onclick={() => toggleReply(message)}><ArrowBendUpLeftIcon />{$t('bots.reply')}</Button>
+        <Button id="bot-todo-reply-{message.id}" variant="outline" size="xs" aria-expanded={reply?.message.id === message.id} aria-controls="bot-todo-reply-box-{message.id}" onclick={() => toggleReply(message)}><ArrowBendUpLeftIcon />{$t('bots.reply')}</Button>
       {:else if done.by === 'user'}
         <Button variant="ghost" size="xs" class="ml-auto" onclick={() => ontodochange(message.id, 'reopen')}><ArrowUUpLeftIcon />{$t('bots.reopen')}</Button>
       {/if}
     </div>
-    {#if !done && reply?.message.id === message.id}
+    {#if reply?.message.id === message.id}
       {@const current = reply}
-      <PromptInput.Root class="mt-2" aria-label={$t('bots.reply')} onSubmit={submitReply}>
-        <PromptInput.Textarea bind:ref={replyInput} bind:value={current.text} placeholder={$t('bots.message')} aria-label={$t('bots.message')} readonly={current.sending} onkeydown={replyKeydown} class="text-base sm:text-[13px]" />
+      <PromptInput.Root id="bot-todo-reply-box-{message.id}" class="mt-2" aria-label={$t('bots.reply')} onSubmit={() => submitReply(current)}>
+        <PromptInput.Textarea {@attach node => node.focus()} bind:value={current.text} placeholder={$t('bots.message')} aria-label={$t('bots.message')} readonly={current.sending} onkeydown={(event: KeyboardEvent) => replyKeydown(event, current)} class="text-base sm:text-[13px]" />
         <PromptInput.Toolbar class="justify-end gap-1 px-1 pt-0 pb-1">
-          <Button variant="ghost" size="xs" disabled={current.sending} onclick={() => { reply = null }}>{$t('common.cancel')}</Button>
+          <Button variant="ghost" size="xs" disabled={current.sending} onclick={closeReply}>{$t('common.cancel')}</Button>
           <PromptInput.Submit class="h-6 gap-1 px-2.5 text-xs" busy={current.sending} disabled={!current.text.trim()} />
         </PromptInput.Toolbar>
       </PromptInput.Root>
