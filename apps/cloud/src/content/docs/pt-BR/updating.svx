@@ -21,7 +21,7 @@ pontia update
 
 Se o serviço em execução informar tarefas ativas, interações pendentes ou entradas pendentes ou não confirmadas, a atualização para e lista as Sessions afetadas. Conclua ou resolva essas atividades e execute `pontia update` de novo. Se a verificação de atividade falhar, a atualização também para sem substituir os binários nem reiniciar o serviço.
 
-Evite iniciar novas tarefas durante a atualização. Essa verificação não pausa entradas nem agendamentos, então atividades iniciadas depois da verificação ainda podem ser interrompidas pela reinicialização.
+A verificação considera as atividades em andamento naquele momento. Inicie novas tarefas depois que o comando `pontia update` terminar.
 
 O atualizador:
 

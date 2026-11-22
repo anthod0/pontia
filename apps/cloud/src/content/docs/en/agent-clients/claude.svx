@@ -63,7 +63,7 @@ Setup checks the updated installation and enables the Client.
 
 ## How Claude Code Sessions run
 
-Active execution may not continue across a Pontia service restart or update. After a Session exits, you can still browse its history and send another message to resume the same conversation.
+Claude Code can keep working on the same task while the Pontia service restarts. After a Session exits, you can still browse its history and send another message to resume the same conversation.
 
 When a request fails, the Claude Agent SDK may retry it. The Dashboard shows the failure, such as an authentication error, while the SDK retries. A retry notification does not mean the task has completed or failed. You can exit the Session while it is retrying.
 

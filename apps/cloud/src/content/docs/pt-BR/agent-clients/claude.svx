@@ -63,7 +63,7 @@ A configuração verifica a instalação atualizada e ativa o Client.
 
 ## Como as Sessions do Claude Code funcionam
 
-Uma execução em andamento pode não continuar após uma reinicialização ou atualização do serviço do Pontia. Depois que uma Session sai, você ainda pode navegar pelo histórico dela e enviar outra mensagem para retomar a mesma conversa.
+O Claude Code pode continuar a mesma tarefa enquanto o serviço do Pontia reinicia. Depois que uma Session sai, você ainda pode navegar pelo histórico dela e enviar outra mensagem para retomar a mesma conversa.
 
 Quando uma solicitação falha, o Claude Agent SDK pode tentar novamente. Enquanto o SDK tenta novamente, o Dashboard mostra a falha, como um erro de autenticação. Um aviso de nova tentativa não significa que a tarefa foi concluída ou falhou. Você pode sair da Session enquanto ela tenta novamente.
 
