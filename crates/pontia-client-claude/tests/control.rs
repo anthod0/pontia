@@ -49,6 +49,99 @@ async fn replayed_start_without_a_turn_id_returns_the_allocated_claude_turn() {
 }
 
 #[tokio::test]
+async fn replayed_host_observations_return_original_receipts_after_turn_and_peer_replacement() {
+    for reconnect in [false, true] {
+        let h = Harness::new().await;
+        let session = h.create("capture reports").await;
+        h.gate(&session, 1, "start");
+        h.gate(&session, 1, "finish");
+        h.wait_states(&session, &["completed"]).await;
+
+        for gate in ["compact", "compact-fail"] {
+            h.app
+                .session_commands()
+                .compact_session(&session)
+                .await
+                .unwrap();
+            h.wait_session(&session, "busy").await;
+            h.gate(&session, 1, gate);
+            h.wait_session(&session, "idle").await;
+            std::fs::remove_file(h.root.path().join(format!("{gate}-{session}-1"))).unwrap();
+        }
+        let h = if reconnect { h.restart().await } else { h };
+        h.submit(&session, "replay reports").await;
+        let wire = tokio::time::timeout(Duration::from_secs(8), async {
+            loop {
+                let wire = h.wire(&session);
+                if wire.iter().any(|f| f["method"] == "late_result") {
+                    break wire;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("missing replay receipts: {:?}", h.wire(&session)));
+        let replays: Vec<_> = wire.iter().filter(|f| f["method"] == "replayed").collect();
+        let mut types = Vec::new();
+        for frame in &replays {
+            let params = &frame["params"];
+            let event = &params["event"];
+            let host = params["host_id"].as_str().unwrap();
+            let kind = event["kind"].as_str().unwrap();
+            let suffix = match kind {
+                "started" => format!("{}:start", event["input_id"].as_str().unwrap()),
+                "finished" => event["result_id"].as_str().unwrap().to_owned(),
+                _ => params["sequence"].as_u64().unwrap().to_string(),
+            };
+            let key = format!("claude:{host}:{suffix}");
+            assert_eq!(params["report_key"], key);
+            let original = &frame["original"];
+            assert_eq!(original["duplicate"], false);
+            let mut expected = original.clone();
+            expected["duplicate"] = json!(true);
+            assert_eq!(frame["replay"], expected);
+            let row: (String, String) =
+                sqlx::query_as("SELECT event_type, report_key FROM events WHERE event_id=?")
+                    .bind(original["event_id"].as_str().unwrap())
+                    .fetch_one(&h.app.db())
+                    .await
+                    .unwrap();
+            assert_eq!(row.1, key);
+            types.push(row.0);
+        }
+        assert_eq!(
+            types,
+            [
+                "session.ready",
+                "session.model_updated",
+                "session.context_usage_updated",
+                "turn.started",
+                "turn.completed",
+                "session.compaction_started",
+                "session.compaction_completed",
+                "session.compaction_started",
+                "session.compaction_failed"
+            ]
+        );
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE session_id=? AND (report_key IS NOT NULL OR event_type='runtime.ready')")
+            .bind(&session).fetch_one(&h.app.db()).await.unwrap();
+        assert_eq!(count, replays.len() as i64 + 1);
+        assert!(
+            wire.iter()
+                .any(|f| f["method"] == "replay_conflict" && f["code"] == -32009)
+        );
+        let late = wire.iter().find(|f| f["method"] == "late_result").unwrap();
+        assert_eq!(late["late"], late["repeated"]);
+        assert_eq!(late["late"]["duplicate"], true);
+        assert_eq!(late["late"]["event_id"], replays[4]["original"]["event_id"]);
+        h.gate(&session, 2, "start");
+        h.gate(&session, 2, "finish");
+        h.wait_states(&session, &["completed", "completed"]).await;
+        h.stop().await;
+    }
+}
+
+#[tokio::test]
 async fn replayed_terminal_report_compares_only_persisted_claude_evidence() {
     use pontia_agent_control::ReportedFact;
     use pontia_core::domain::EventType;
@@ -326,6 +419,20 @@ impl Harness {
             .map(|line| serde_json::from_str::<Value>(line).unwrap())
             .filter(|value| value["session"] == session)
             .collect()
+    }
+    fn host_id(&self, session: &str) -> String {
+        self.wire(session)
+            .iter()
+            .find(|f| f["method"] == "spawn")
+            .unwrap()["host"]
+            .as_str()
+            .unwrap()
+            .into()
+    }
+    async fn assert_terminal_key(&self, session: &str, outcome: &str) {
+        let (key, result): (String, String) = sqlx::query_as("SELECT report_key,json_extract(payload,'$.claude_result_id') FROM events WHERE session_id=? AND event_type=?")
+            .bind(session).bind(format!("turn.{outcome}")).fetch_one(&self.app.db()).await.unwrap();
+        assert_eq!(key, format!("claude:{}:{result}", self.host_id(session)));
     }
     async fn turns(&self, session: &str) -> Vec<(String, String)> {
         sqlx::query_as("SELECT turn_id,state FROM turns WHERE session_id=? ORDER BY rowid")
@@ -906,6 +1013,14 @@ async fn parallel_approvals_are_claimed_once_and_never_release_the_turn_boundary
     assert_ne!(choices[0]["permission_id"], choices[1]["permission_id"]);
     assert_eq!(choices[0]["option"], resolved[0]["response"]["option_key"]);
     assert_eq!(choices[1]["option"], "deny");
+    let interaction_reports: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT event_type,report_key,json_extract(payload,'$.interaction_id') FROM events WHERE session_id=? AND event_type IN ('interaction.blocked','interaction.unblocked')",
+    ).bind(&session).fetch_all(&h.app.db()).await.unwrap();
+    assert_eq!(interaction_reports.len(), 4);
+    let host = h.host_id(&session);
+    for (kind, key, id) in interaction_reports {
+        assert_eq!(key, format!("claude:{host}:{id}:{kind}"));
+    }
     assert_eq!(h.turns(&session).await.len(), 1);
     assert_eq!(h.turns(&session).await[0].1, "running");
     assert_eq!(
@@ -1126,6 +1241,7 @@ async fn interruption_receipt_waits_for_result_and_normal_completion_can_win() {
         );
         h.gate(&session, 1, "finish");
         h.wait_states(&session, &[expected]).await;
+        h.assert_terminal_key(&session, expected).await;
         h.wait_inputs(&session, 2).await;
         h.stop().await;
     }
@@ -1178,6 +1294,27 @@ async fn conditional_exit_waits_for_host_and_process_closure() {
         "exited"
     );
     assert!(commands.exit_if_idle(&session).await.unwrap());
+    let original: (String, String) = sqlx::query_as(
+        "SELECT event_id,payload FROM events WHERE session_id=? AND event_type='session.exited'",
+    )
+    .bind(&session)
+    .fetch_one(&h.app.db())
+    .await
+    .unwrap();
+    let duplicate = h
+        .app
+        .event_ingest_service()
+        .report_fact(pontia_agent_control::ReportedFact {
+            session_id: session.clone(),
+            turn_id: None,
+            report_key: None,
+            fact_type: pontia_core::domain::EventType::SessionExited,
+            data: serde_json::from_str(&original.1).unwrap(),
+        })
+        .await
+        .unwrap();
+    assert!(duplicate.duplicate);
+    assert_eq!(duplicate.event_id, original.0);
     h.stop().await;
 }
 
@@ -1316,6 +1453,7 @@ async fn failed_tool_does_not_fail_turn_and_explicit_failure_does() {
         h.wait_states(&session, &["running"]).await;
         h.gate(&session, 1, "finish");
         h.wait_states(&session, &[expected]).await;
+        h.assert_terminal_key(&session, expected).await;
         h.stop().await;
     }
 }

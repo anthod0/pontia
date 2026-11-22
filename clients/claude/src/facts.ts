@@ -32,6 +32,24 @@ export type HostEvent =
   | { kind: "permission_settled"; permission_id: string; outcome: "resolved" | "expired" }
   | { kind: "closed"; history_anchor?: string };
 
+function reportKey(host: string, sequence: number, event: HostEvent): string | undefined {
+  switch (event.kind) {
+    case "started":
+      return `claude:${host}:${event.input_id}:start`;
+    case "finished":
+      return `claude:${host}:${event.result_id}`;
+    case "model":
+    case "context_usage":
+    case "compaction":
+    case "ready":
+      return `claude:${host}:${sequence}`;
+  }
+}
+
+export function hostObservation(host: string, sequence: number, event: HostEvent) {
+  return { host_id: host, sequence, report_key: reportKey(host, sequence, event), event };
+}
+
 export type Emit = (event: HostEvent) => void;
 export type ResultDiagnostic = Pick<
   SDKResultMessage,

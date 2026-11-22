@@ -105,7 +105,7 @@ async fn report(
             data: json!({"runtime_id":peer.runtime,"interaction_id":id}),
         })
         .await
-        .map_err(|error| Error::Domain(error.to_string()))?;
+        .map_err(crate::reports::report_error)?;
     Ok(())
 }
 

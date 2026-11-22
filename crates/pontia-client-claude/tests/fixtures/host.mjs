@@ -62,16 +62,28 @@ if (process.argv[2] === "history") {
       JSON.stringify({ session: config.session_id, ...value }) + "\n",
     );
   const send = (value) => respond({result: value});
+  function hostObservation(host, sequence, event) {
+    let suffix;
+    if (event.kind === "started") suffix = event.input_id + ":start";
+    else if (event.kind === "finished") suffix = event.result_id;
+    else if (["ready", "model", "context_usage", "compaction"].includes(event.kind)) suffix = sequence;
+    return {host_id: host, sequence, report_key: suffix && `claude:${host}:${suffix}`, event};
+  }
+  const captured = [];
+  let capture = false;
   const event = (value) => {
     sequence++;
     if (!connected) return;
-    const report = connection.request("host.event", {host_id: host, sequence, event: value});
+    const params = hostObservation(host, sequence, value);
+    const report = connection.request("host.event", params);
+    if (capture && params.report_key) captured.push({ params, report });
     reports.add(report);
     void report.catch(() => {}).finally(() => reports.delete(report));
     if (value.kind === "ready") connection.registered({sessionId: config.session_id, runtimeId: config.runtime_id, clientSessionKey: native});
   };
   record({
     method: "spawn",
+    host,
     system_prompt: config.system_prompt ?? null,
     execution_policy: config.execution_policy,
     resume: config.resume ?? null,
@@ -94,6 +106,7 @@ if (process.argv[2] === "history") {
         if (request.text === "unknown") process.exit(0);
         active = { id: request.input_id, text: request.text, number };
         lastInput = active.id;
+        capture = active.text === "capture reports";
         history({ type: "user", uuid: active.id, message: { role: "user", content: active.text } });
         if (!ready) {
           event({ kind: "ready", native_session_id: native });
@@ -102,6 +115,26 @@ if (process.argv[2] === "history") {
         }
         // Receipt is deliberately delivered before execution begins.
         send({ type: "response", id: request.id, status: "accepted" });
+        if (active.text === "replay reports") {
+          for (const { params, report } of captured) {
+            const original = await report;
+            const replay = await connection.request("host.event", params);
+            record({method: "replayed", params, original, replay});
+          }
+          const model = captured.find(({ params }) => params.event.kind === "model").params;
+          try {
+            await connection.request("host.event", {...model, event: {kind: "model", model: "changed"}});
+          } catch (error) {
+            record({method: "replay_conflict", code: error.code});
+          }
+          const finished = captured.find(({ params }) => params.event.kind === "finished").params;
+          const lateParams = hostObservation(host, ++sequence, {
+            ...finished.event, outcome: "failed", result_id: randomUUID(),
+          });
+          const late = await connection.request("host.event", lateParams);
+          const repeated = await connection.request("host.event", lateParams);
+          record({method: "late_result", late, repeated});
+        }
       } else if (request.method === "compact") {
         if (active || compacting || !ready) {
           send({ type: "response", id: request.id, status: "rejected" });
@@ -171,6 +204,10 @@ if (process.argv[2] === "history") {
   };
   const timer = setInterval(() => {
     if (!existsSync(config.cwd)) process.exit(0);
+    if (compacting && existsSync(join(config.cwd, `compact-fail-${config.session_id}-1`))) {
+      event({ kind: "compaction", phase: "failed", data: { operation_id: compacting, trigger: "manual", aborted: false } });
+      compacting = undefined;
+    }
     if (compacting && existsSync(join(config.cwd, `compact-${config.session_id}-1`))) {
       event({ kind: "compaction", phase: "completed", data: { operation_id: compacting, trigger: "manual", native_compaction_id: randomUUID(), tokens_before: 20000, tokens_after: 2000 } });
       compacting = undefined;

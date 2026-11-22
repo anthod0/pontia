@@ -10,7 +10,7 @@ import { controlSocketPath } from "../shared/control-socket.js";
 import { assistant, first, init, result, sdk, second } from "./fixture.js";
 
 type Frame = Record<string, any>;
-async function setup(t: TestContext) {
+async function setup(t: TestContext, rejectKind?: string) {
   const sandbox = await mkdtempDisposable(join(tmpdir(), "pontia-host-test-"));
   const path = controlSocketPath(sandbox.path);
   await mkdir(dirname(path), { mode: 0o700 });
@@ -42,7 +42,13 @@ async function setup(t: TestContext) {
         } else if (frame.method === "host.event") {
           facts.push(frame.params);
           client.write(
-            JSON.stringify({ jsonrpc: "2.0", id: frame.id, result: { accepted: true } }) + "\n",
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: frame.id,
+              ...(frame.params.event.kind === rejectKind
+                ? { error: { code: -32009, message: "conflicting fact" } }
+                : { result: { accepted: true } }),
+            }) + "\n",
           );
         } else {
           const resolve = replies.get(frame.id);
@@ -298,3 +304,29 @@ test("an outstanding interrupt does not prevent closing the SDK", { timeout: 500
     release();
   }
 });
+
+test(
+  "a report conflict is final and later observations retain their own keys",
+  { timeout: 5000 },
+  async (t) => {
+    const h = await setup(t, "model");
+    await h.command({ method: "input", input_id: first, text: "task" });
+    h.fixture.messages.push(init());
+    h.fixture.messages.push(assistant());
+    await h.wait(() => h.facts.some((f) => f.event.kind === "started"));
+    await h.reconnect();
+    h.fixture.messages.push(result());
+    await h.wait(() => h.facts.some((f) => f.event.kind === "finished"));
+    assert.equal(h.facts.filter((f) => f.event.kind === "model").length, 1);
+    for (const kind of ["ready", "model", "started", "finished"]) {
+      const fact = h.facts.find((f) => f.event.kind === kind)!;
+      const suffix =
+        kind === "started"
+          ? first + ":start"
+          : kind === "finished"
+            ? "result-" + first
+            : fact.sequence;
+      assert.equal(fact.report_key, `claude:${fact.host_id}:${suffix}`);
+    }
+  },
+);
