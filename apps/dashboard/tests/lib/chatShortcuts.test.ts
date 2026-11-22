@@ -26,13 +26,15 @@ describe("matchChatShortcut", () => {
     expect(matchChatShortcut(keydown({ altKey: true, code: "KeyL", key: "l" }))).toEqual({
       action: "focusInput",
     });
+    expect(matchChatShortcut(keydown({ altKey: true, code: "KeyM", key: "µ" }))).toEqual({
+      action: "previousDevice",
+    });
+    expect(
+      matchChatShortcut(keydown({ altKey: true, shiftKey: true, code: "KeyM", key: "M" })),
+    ).toBeNull();
   });
 
   test("matches switch shortcuts, with Shift reversing the direction", () => {
-    expect(matchChatShortcut(keydown({ altKey: true, code: "KeyM", key: "m" }))).toEqual({
-      action: "switchDevice",
-      direction: 1,
-    });
     expect(
       matchChatShortcut(keydown({ altKey: true, shiftKey: true, code: "KeyC", key: "C" })),
     ).toEqual({ action: "switchAgentClient", direction: -1 });

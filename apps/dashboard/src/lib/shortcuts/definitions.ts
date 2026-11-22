@@ -7,7 +7,7 @@ export type ChatShortcutAction =
   | "openChatByPosition"
   | "newChat"
   | "focusInput"
-  | "switchDevice"
+  | "previousDevice"
   | "switchAgentClient"
   | "switchWorkspace"
   | "showHelp";
@@ -20,7 +20,7 @@ export type ShortcutDefinition = {
   label: MessageKey;
 };
 
-type SwitchAction = "switchDevice" | "switchAgentClient" | "switchWorkspace";
+type SwitchAction = "switchAgentClient" | "switchWorkspace";
 
 export type ChatShortcutMatch =
   | { action: Exclude<ChatShortcutAction, "openChatByPosition" | SwitchAction> }
@@ -33,7 +33,7 @@ export const chatShortcuts: Record<ChatShortcutAction, ShortcutDefinition> = {
   openChatByPosition: { keys: ["Alt", "1-9"], label: "shortcuts.openByPosition" },
   newChat: { keys: ["Alt", "N"], label: "chat.new" },
   focusInput: { keys: ["Alt", "L"], label: "shortcuts.focusInput" },
-  switchDevice: { keys: ["Alt", "M"], label: "shortcuts.switchDevice" },
+  previousDevice: { keys: ["Alt", "M"], label: "shortcuts.previousDevice" },
   switchAgentClient: { keys: ["Alt", "C"], label: "shortcuts.switchAgentClient" },
   switchWorkspace: { keys: ["Alt", "W"], label: "shortcuts.switchWorkspace" },
   showHelp: { keys: ["Alt", "?"], label: "shortcuts.title" },
@@ -71,11 +71,11 @@ const letterActions: Record<
   KeyK: "previousChat",
   KeyN: "newChat",
   KeyL: "focusInput",
+  KeyM: "previousDevice",
 };
 
 // Shift reverses the direction.
 const switchActions: Record<string, SwitchAction> = {
-  KeyM: "switchDevice",
   KeyC: "switchAgentClient",
   KeyW: "switchWorkspace",
 };

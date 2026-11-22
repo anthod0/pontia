@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- In Dashboard, a button next to the sidebar device menu switches back to the previously used device. Alt+M now does the same instead of cycling through devices.
+
 - Bot system notifications start with `Source: System Notification` and identify the source helper with `Helper Session:` when present. The message body follows immediately, without a notification ID or blank line.
 
 ### Fixed

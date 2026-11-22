@@ -66,7 +66,7 @@
       return
     }
     // The dashboard layout switches devices and New Chat selectors switch the rest; consume the key here so Option+letter does not type a symbol.
-    if (shortcut.action === 'switchDevice' || shortcut.action === 'switchAgentClient' || shortcut.action === 'switchWorkspace') {
+    if (shortcut.action === 'previousDevice' || shortcut.action === 'switchAgentClient' || shortcut.action === 'switchWorkspace') {
       event.preventDefault()
       return
     }
