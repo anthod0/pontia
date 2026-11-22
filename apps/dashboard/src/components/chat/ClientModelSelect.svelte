@@ -4,12 +4,14 @@
   import { useDeviceRuntime } from '../../device/context'
   import type { AgentClientView } from '../../api/types'
   import * as Dialog from '$lib/components/ui/dialog/index.js'
-  import { Button, buttonVariants } from '$lib/components/ui/button/index.js'
+  import { Button } from '$lib/components/ui/button/index.js'
+  import { selectTriggerClass } from '$lib/components/ui/select/index.js'
+  import { cn } from '$lib/utils.js'
   import { Input } from '$lib/components/ui/input/index.js'
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
 
-  let { id, client, workspaceId, value = $bindable(''), available = $bindable(false), allowDefault = false, disabled = false, class: className = 'w-full justify-between' }: {
+  let { id, client, workspaceId, value = $bindable(''), available = $bindable(false), allowDefault = false, disabled = false, class: className = 'w-full' }: {
     id: string
     class?: string
     client: Pick<AgentClientView, "name" | "client_type" | "client_key">
@@ -47,7 +49,7 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Trigger {id} type="button" class={buttonVariants({ variant: 'outline', class: className })} {disabled}
+  <Dialog.Trigger {id} type="button" data-size="default" data-placeholder={selected || current ? undefined : ''} class={cn(selectTriggerClass, className)} {disabled}
     onclick={() => { search = '' }}>
     <span class="min-w-0 truncate">{selected?.name ?? (current || (allowDefault ? $t('model.default') : $t('model.choose')))}</span>
     <CaretDownIcon class="size-4 shrink-0 text-muted-foreground" />

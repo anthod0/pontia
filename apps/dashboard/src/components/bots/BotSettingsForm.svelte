@@ -7,6 +7,7 @@
   import { randomAvatar } from './avatar'
   import ClientIcon from '../chat/ClientIcon.svelte'
   import ClientModelSelect from '../chat/ClientModelSelect.svelte'
+  import ModelSelectPlaceholder from '../chat/ModelSelectPlaceholder.svelte'
   import * as Select from '$lib/components/ui/select/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import { Input } from '$lib/components/ui/input/index.js'
@@ -119,7 +120,7 @@
         <ClientModelSelect id={`${id}-model`} client={selected} bind:value={model} bind:available={modelAvailable} disabled={saving} />
       {/key}
     {:else}
-      <Button id={`${id}-model`} variant="outline" type="button" disabled>{$t('model.choose')}</Button>
+      <ModelSelectPlaceholder id={`${id}-model`} label={$t('model.choose')} />
     {/if}
   </div>
   {#if error}<p class="text-sm text-destructive" role="alert">{error}</p>{/if}

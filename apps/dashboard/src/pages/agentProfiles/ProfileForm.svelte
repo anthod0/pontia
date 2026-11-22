@@ -5,6 +5,7 @@
   import type { AgentClientView, AgentProfileView } from '../../api/types'
   import ClientIcon from '../../components/chat/ClientIcon.svelte'
   import ClientModelSelect from '../../components/chat/ClientModelSelect.svelte'
+  import ModelSelectPlaceholder from '../../components/chat/ModelSelectPlaceholder.svelte'
   import { copyText } from '../../lib/copyText'
   import { dashboardPath } from '$lib/navigation'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -104,7 +105,6 @@
         <Input id={`${id}-id`} bind:value={draft.profile_id} class="font-mono" autocapitalize="off" spellcheck={false} disabled={saving} aria-invalid={!!errors.profile_id} oninput={() => idEdited = draft.profile_id !== ''} />
         {#if errors.profile_id}<p role="alert" class="text-sm text-destructive">{errors.profile_id}</p>{/if}
       {/if}
-      <p class="text-xs text-muted-foreground">{$t('profiles.idHint')}</p>
     </div>
   </div>
 
@@ -137,7 +137,7 @@
       {#if selectedClient}
         {#key selectedClient.id}<ClientModelSelect id={`${id}-model`} client={selectedClient} bind:value={draft.model} bind:available={modelAvailable} disabled={saving} />{/key}
       {:else}
-        <Button id={`${id}-model`} variant="outline" type="button" disabled>{draft.model || $t('model.choose')}</Button>
+        <ModelSelectPlaceholder id={`${id}-model`} label={draft.model || $t('model.choose')} />
       {/if}
     </div>
   </div>
@@ -152,13 +152,11 @@
   </div>
 
   {#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
-  <div class="flex flex-wrap items-center gap-2">
+  <div class="flex flex-wrap justify-end gap-2">
     {#if profile && ondelete}
       <Button type="button" variant="ghost" class="text-destructive hover:text-destructive" disabled={saving} aria-label={$t('profiles.deleteNamed', { name: profile.name })} onclick={() => profile && ondelete?.(profile)}><TrashIcon class="size-4" />{$t('common.delete')}</Button>
     {/if}
-    <div class="ml-auto flex gap-2">
-      {#if oncancel}<Button type="button" variant="outline" disabled={saving} onclick={oncancel}>{$t('common.cancel')}</Button>{/if}
-      <Button type="submit" disabled={saving || (!profile && !clients.length)}>{$t(profile ? 'common.save' : 'profiles.create')}</Button>
-    </div>
+    {#if oncancel}<Button type="button" variant="outline" disabled={saving} onclick={oncancel}>{$t('common.cancel')}</Button>{/if}
+    <Button type="submit" disabled={saving || (!profile && !clients.length)}>{$t(profile ? 'common.save' : 'profiles.create')}</Button>
   </div>
 </form>
