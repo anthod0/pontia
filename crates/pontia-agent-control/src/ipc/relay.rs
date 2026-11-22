@@ -63,17 +63,21 @@ pub async fn run(config: Bootstrap) -> Result<()> {
     let (attached, mut connection) = watch::channel::<Option<Arc<RpcPeer>>>(None);
     let mut reader = tokio::spawn(async move {
         let mut reader = BufReader::new(output);
+        let generation = uuid::Uuid::now_v7();
+        let mut sequence = 0u64;
         let mut frame = Vec::new();
         while reader.read_until(b'\n', &mut frame).await? != 0 {
+            sequence += 1;
             let peer = connection.borrow_and_update().clone();
             if let Some(peer) = peer {
                 // A line is forwarded once on its original connection, never across reconnect.
+                let frame_id = format!("{generation}:{sequence}");
                 let count = frame.len().div_ceil(64 * 1024);
                 for (index, chunk) in frame.chunks(64 * 1024).enumerate() {
                     if peer
                         .request(
                             "relay.frame",
-                            json!({"chunk":STANDARD.encode(chunk), "last":index + 1 == count}),
+                            json!({"frame_id":frame_id, "chunk":STANDARD.encode(chunk), "last":index + 1 == count}),
                             MAX_FRAME_BYTES,
                             false,
                         )

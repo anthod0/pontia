@@ -154,6 +154,15 @@ impl ClientControlChannel for Relay {
     }
 }
 
+const FRAME_KEY: &str = "pontia.dev/relay-frame";
+
+pub(crate) fn frame_key(meta: Option<&agent_client_protocol::v1::schema::Meta>) -> Result<String> {
+    meta.and_then(|meta| meta.get(FRAME_KEY))
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .ok_or_else(|| Error::Domain("Missing ACP observation frame identity".into()))
+}
+
 // The SDK sees native ACP frames. Only the relay's confirmed pipe flush releases a receipt.
 pub(crate) async fn bridge(
     relay: Arc<Relay>,
@@ -200,14 +209,41 @@ pub(crate) async fn bridge(
                 .map_err(|_| Error::Domain("Invalid relay output bytes".into()))?;
             bytes.extend(chunk);
             if request.params["last"] == true {
-                if let Some(id) = &recovered_request {
-                    let frame: Value = serde_json::from_slice(&bytes)?;
-                    if frame.get("id") == Some(id) && frame.get("method").is_none() {
-                        bytes = serde_json::to_vec(
-                            &json!({"jsonrpc":"2.0","method":"pontia/recovered-result","params":frame}),
-                        )?;
-                        bytes.push(b'\n');
+                let mut frame: Value = serde_json::from_slice(&bytes)?;
+                let tagged = if frame["method"] == "session/update"
+                    && matches!(
+                        frame
+                            .pointer("/params/update/sessionUpdate")
+                            .and_then(Value::as_str),
+                        Some("usage_update" | "config_option_update")
+                    ) {
+                    frame.get_mut("params")
+                } else if frame.pointer("/result/configOptions").is_some() {
+                    frame.get_mut("result")
+                } else {
+                    None
+                };
+                if let Some(body) = tagged {
+                    let id = request.params["frame_id"].as_str().ok_or_else(|| {
+                        Error::Domain("Relay output requires a frame identity".into())
+                    })?;
+                    // Carry the trusted relay identity through the SDK's typed responses.
+                    let meta = &mut body["_meta"];
+                    if !meta.is_object() {
+                        *meta = json!({});
                     }
+                    meta[FRAME_KEY] = json!(format!("acp:frame:{id}"));
+                    bytes = serde_json::to_vec(&frame)?;
+                    bytes.push(b'\n');
+                } else if recovered_request
+                    .as_ref()
+                    .is_some_and(|id| frame.get("id") == Some(id))
+                    && frame.get("method").is_none()
+                {
+                    bytes = serde_json::to_vec(
+                        &json!({"jsonrpc":"2.0","method":"pontia/recovered-result","params":frame}),
+                    )?;
+                    bytes.push(b'\n');
                 }
                 writer.write_all(&bytes).await?;
                 bytes.clear();

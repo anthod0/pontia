@@ -281,8 +281,11 @@ impl ClientSession for AcpAdapter {
                 state.native = Some(native);
                 state.blocked = binding.is_some() && sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM turns WHERE session_id=? AND state IN ('queued','running'))")
                     .bind(&request.session_id).fetch_one(&pool).await?;
+                let setup_key = format!("acp:setup:{}", pontia_core::ids::new_event_id());
                 if let Some(model) = &state.current_model {
-                    crate::models::report(&events, &request.session_id, &runtime, model).await?;
+                    crate::models::report(
+                        &events, &request.session_id, &runtime, model, setup_key.clone(),
+                    ).await?;
                 }
                 state.ready = true;
                 peer.remember(&state, Some(&key)).await?;
@@ -294,14 +297,11 @@ impl ClientSession for AcpAdapter {
                     json!({}),
                 )
                 .await?;
-                events
-                    .report_client_fact(
-                        &request.session_id,
-                        Some(&runtime),
-                        pontia_core::domain::EventType::SessionReady,
-                        json!({"client_session_key":key,"launch_cwd":cwd.display().to_string(),"binding_metadata":metadata}),
-                    )
-                    .await?;
+                peer::fact(
+                    &events, &request.session_id, &runtime, None,
+                    pontia_core::domain::EventType::SessionReady, setup_key,
+                    json!({"client_session_key":key,"launch_cwd":cwd.display().to_string(),"binding_metadata":metadata}),
+                ).await?;
 
                 state.refresh_capabilities();
                 Ok(())
@@ -467,14 +467,16 @@ impl ClientSession for AcpAdapter {
             let close = async move {
                 peer.close_session(native).await?;
                 peer.terminate().await?;
-                events
-                    .report_client_fact(
-                        &session,
-                        Some(&peer.runtime),
-                        pontia_core::domain::EventType::SessionExited,
-                        json!({"reason":"acp_session_closed"}),
-                    )
-                    .await?;
+                peer::fact(
+                    &events,
+                    &session,
+                    &peer.runtime,
+                    None,
+                    pontia_core::domain::EventType::SessionExited,
+                    format!("acp:{}:exit", peer.runtime),
+                    json!({"reason":"acp_session_closed"}),
+                )
+                .await?;
                 Ok(ClientExitOutcome::Requested)
             };
             if mode == ClientExitMode::Unconditional {

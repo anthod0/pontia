@@ -34,6 +34,14 @@ impl PermissionEvents {
                         Ok(_) => break,
                         Err(error) => {
                             tracing::warn!(session=%fact.session_id, %error, "ACP permission fact reporting failed");
+                            if matches!(
+                                error,
+                                pontia_agent_control::EventReportError::Ingestion(
+                                    Error::StateConflict(_)
+                                )
+                            ) {
+                                break;
+                            }
                             if events.db().is_closed() {
                                 return;
                             }

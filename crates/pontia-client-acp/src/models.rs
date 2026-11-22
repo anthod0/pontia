@@ -105,6 +105,7 @@ pub(crate) async fn select(
                     &session,
                     &result_peer.runtime,
                     response.config_options,
+                    response.meta.as_ref(),
                 )
                 .await?;
                 if state.current_model.as_deref() != Some(&model) {
@@ -132,13 +133,21 @@ pub(crate) async fn replace(
     session: &str,
     runtime: &str,
     options: Vec<SessionConfigOption>,
+    meta: Option<&agent_client_protocol::v1::schema::Meta>,
 ) -> Result<()> {
     let current = model_option(&options).map(|(_, select)| select.current_value.to_string());
     if state.ready
         && let Some(model) = &current
         && state.current_model.as_ref() != Some(model)
     {
-        report(events, session, runtime, model).await?;
+        report(
+            events,
+            session,
+            runtime,
+            model,
+            crate::transport::frame_key(meta)?,
+        )
+        .await?;
     }
     state.current_model = current;
     state.config_options = options;
@@ -150,13 +159,16 @@ pub(crate) async fn report(
     session: &str,
     runtime: &str,
     model: &str,
+    key: String,
 ) -> Result<()> {
-    events
-        .report_client_fact(
-            session,
-            Some(runtime),
-            EventType::SessionModelUpdated,
-            json!({"model":model}),
-        )
-        .await
+    crate::peer::fact(
+        events,
+        session,
+        runtime,
+        None,
+        EventType::SessionModelUpdated,
+        key,
+        json!({"model":model}),
+    )
+    .await
 }

@@ -55,6 +55,19 @@ impl EventReportNormalizer {
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {} not found", fact.session_id)))?;
 
+        if fact.fact_type == EventType::TurnStarted
+            && fact.report_key.is_some()
+            && fact.turn_id.is_some()
+            && self.clients.spec(&session.client_type).is_none_or(|spec| {
+                spec.adapter.turn_lifecycle
+                    != crate::client_contract::TurnLifecycleBehavior::BackendManaged
+            })
+        {
+            return Err(Error::Domain(
+                "reported turn.started cannot supply a canonical turn_id".into(),
+            ));
+        }
+
         if event_type_can_create_turn(fact.fact_type)
             && let Some(turn_id) = fact.turn_id.as_deref()
         {
@@ -96,6 +109,8 @@ impl EventReportNormalizer {
             fact.turn_id = native_turn_id;
         }
         let turn_id = match (fact.fact_type, fact.turn_id) {
+            // Keep an omitted identity absent for keyed-start comparison until commit.
+            (EventType::TurnStarted, None) if fact.report_key.is_some() => None,
             (EventType::TurnStarted, None) => Some(new_turn_id().to_string()),
             (event_type, None) if event_type.requires_turn_id() => {
                 return Err(Error::Domain(format!(

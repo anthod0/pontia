@@ -454,3 +454,76 @@ async fn disconnect_or_close_never_synthesizes_successful_selection() {
         h.stop().await;
     }
 }
+
+#[tokio::test]
+async fn conflicting_permission_report_does_not_block_later_reports() {
+    use pontia_agent_control::ReportedFact;
+    use pontia_core::domain::EventType;
+
+    let h = Harness::new(&[("ACP_PERMISSION", "1")]).await;
+    let session = h.create("first").await.unwrap();
+    let turn = h
+        .app
+        .turn_commands()
+        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .await
+        .unwrap()
+        .unwrap();
+    h.release("update-1");
+    let records = h.wait_interactions(&session, 3).await;
+    h.wait_permission_facts(&session, 3).await;
+    let events = h.app.event_ingest_service();
+    let blocked: Vec<_> = events
+        .list_events(&session)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|e| e.event_type == EventType::InteractionBlocked)
+        .collect();
+    for event in &blocked {
+        let id = event.payload["interaction_id"].as_str().unwrap();
+        assert_eq!(
+            event.report_key,
+            Some(format!("acp:{id}:interaction.blocked"))
+        );
+    }
+    let id = &records[0].interaction_id;
+    let data =
+        json!({"runtime_id":blocked[0].payload["runtime_id"],"interaction_id":id,"different":true});
+    let prior = events
+        .report_fact(ReportedFact {
+            session_id: session.clone(),
+            turn_id: Some(turn.turn_id.clone()),
+            report_key: Some(format!("acp:{id}:interaction.unblocked")),
+            fact_type: EventType::InteractionUnblocked,
+            data,
+        })
+        .await
+        .unwrap();
+    for record in &records[..2] {
+        h.app
+            .interactions()
+            .respond(&h.app, &session, &record.interaction_id, "reject-once")
+            .await
+            .unwrap();
+    }
+    h.wait_permission_facts(&session, 5).await;
+    let unblocked: Vec<_> = events
+        .list_events(&session)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|e| e.event_type == EventType::InteractionUnblocked)
+        .collect();
+    assert_eq!(unblocked[0].event_id, prior.event_id);
+    assert_eq!(
+        unblocked[1].report_key,
+        Some(format!(
+            "acp:{}:interaction.unblocked",
+            records[1].interaction_id
+        ))
+    );
+    h.release("release-1");
+    h.wait_turn(&session, &turn.turn_id, "completed").await;
+    h.stop().await;
+}

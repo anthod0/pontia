@@ -91,14 +91,6 @@ impl EventIngestService {
         {
             return Err(invalid_fact("report_key must not be empty"));
         }
-        if fact.report_key.is_some()
-            && fact.fact_type == EventType::TurnStarted
-            && fact.turn_id.is_some()
-        {
-            return Err(invalid_fact(
-                "reported turn.started cannot supply a canonical turn_id",
-            ));
-        }
         let mut reported_event = EventReportNormalizer::new(self.pool.clone())
             .with_clients(self.clients.clone())
             .normalize(fact)
@@ -191,7 +183,8 @@ impl EventIngestService {
             data.take_evidence(&mut persisted);
         }
         let mut connection = self.pool.acquire().await?;
-        super::commit::duplicate_report(&mut connection, &persisted).await
+        super::commit::duplicate_report(&mut connection, &persisted, persisted.turn_id.as_deref())
+            .await
     }
 }
 
@@ -276,6 +269,48 @@ mod tests {
     use super::*;
     use pontia_core::domain::{EventSource, ReportedEvent};
     use pontia_storage_sqlite::{connect_sqlite, run_migrations};
+
+    #[tokio::test]
+    async fn transaction_compares_the_supplied_start_identity_before_projection() {
+        let db = connect_sqlite("sqlite::memory:").await.unwrap();
+        run_migrations(&db).await.unwrap();
+        let service = EventIngestService::for_projection_tests(db);
+        service
+            .ingest_pontia_event(crate::PontiaEvent::new(
+                "session",
+                None,
+                crate::PontiaEventSource::ExternalApi,
+                "test",
+                crate::PontiaEventType::SessionCreated,
+                json!({}),
+            ))
+            .await
+            .unwrap();
+        let report = ReportedEvent::new(
+            "start".into(),
+            "session".into(),
+            Some("allocated".into()),
+            EventSource::AgentAdapter,
+            "test".into(),
+            EventType::TurnStarted,
+            json!({}),
+        )
+        .with_report_key(Some("observation".into()));
+        let first = service.ingest_reported_event(report.clone()).await.unwrap();
+        let mut replay = report;
+        replay.event_id = "replay".into();
+        let duplicate = service.ingest_reported_event(replay.clone()).await.unwrap();
+        assert!(duplicate.duplicate);
+        assert_eq!(duplicate.event_id, first.event_id);
+        assert_eq!(duplicate.state_version, first.state_version);
+
+        replay.turn_id = Some("different".into());
+        assert!(matches!(
+            service.ingest_reported_event(replay).await,
+            Err(Error::StateConflict(_))
+        ));
+        assert_eq!(service.list_events("session").await.unwrap().len(), 2);
+    }
 
     #[tokio::test]
     async fn commit_between_key_lookup_and_boundary_rejection_is_acknowledged() {

@@ -516,6 +516,7 @@ impl Peer {
                         &self.session,
                         &self.runtime,
                         options,
+                        response.meta.as_ref(),
                     )
                     .await?;
                 }
@@ -595,7 +596,12 @@ impl Peer {
                         Ok(response) => {
                             if let Some(options) = response.config_options {
                                 crate::models::replace(
-                                    &mut state, &events, &session, &runtime, options,
+                                    &mut state,
+                                    &events,
+                                    &session,
+                                    &runtime,
+                                    options,
+                                    response.meta.as_ref(),
                                 )
                                 .await
                             } else {
@@ -670,8 +676,9 @@ pub(crate) async fn fact(
     events: &EventIngestService,
     session: &str,
     runtime: &str,
-    turn: &str,
+    turn: Option<&str>,
     kind: EventType,
+    key: String,
     data: Value,
 ) -> Result<()> {
     let mut data = data;
@@ -679,13 +686,16 @@ pub(crate) async fn fact(
     events
         .report_fact(ReportedFact {
             session_id: session.into(),
-            turn_id: Some(turn.into()),
-            report_key: None,
+            turn_id: turn.map(str::to_owned),
+            report_key: Some(key),
             fact_type: kind,
             data,
         })
         .await
-        .map_err(|error| Error::Domain(error.to_string()))?;
+        .map_err(|error| match error {
+            pontia_agent_control::EventReportError::InvalidFact(message) => Error::Domain(message),
+            pontia_agent_control::EventReportError::Ingestion(error) => error,
+        })?;
     Ok(())
 }
 
@@ -696,15 +706,21 @@ pub(crate) async fn started(
     prompt: &mut Prompt,
 ) -> Result<()> {
     if !prompt.started {
-        fact(
+        let result = fact(
             events,
             session,
             runtime,
-            &prompt.turn,
+            Some(&prompt.turn),
             EventType::TurnStarted,
+            format!("acp:{}:turn.started", prompt.turn),
             json!({"acp_history_anchor":prompt.history_index}),
         )
-        .await?;
+        .await;
+        if let Err(Error::StateConflict(error)) = &result {
+            tracing::warn!(session, turn=%prompt.turn, %error, "Discarding conflicting ACP turn start");
+        } else {
+            result?;
+        }
         prompt.started = true;
     }
     Ok(())
@@ -733,27 +749,36 @@ async fn update(
         if state.closing {
             return Ok(());
         }
-        return crate::models::replace(&mut state, events, session, runtime, config.config_options)
-            .await;
+        return crate::models::replace(
+            &mut state,
+            events,
+            session,
+            runtime,
+            config.config_options,
+            notification.meta.as_ref(),
+        )
+        .await;
     }
     if let SessionUpdate::UsageUpdate(usage) = notification.update {
         if state.closing || usage.size == 0 {
             return Ok(());
         }
-        return events
-            .report_client_fact(
-                session,
-                Some(runtime),
-                EventType::SessionContextUsageUpdated,
-                json!({"context_usage": {
-                    "used_tokens": usage.used,
-                    "max_tokens": usage.size,
-                    "remaining_tokens": usage.size.saturating_sub(usage.used),
-                    "usage_ratio": (usage.used as f64 / usage.size as f64).min(1.0),
-                    "confidence": "exact"
-                }}),
-            )
-            .await;
+        return fact(
+            events,
+            session,
+            runtime,
+            None,
+            EventType::SessionContextUsageUpdated,
+            crate::transport::frame_key(notification.meta.as_ref())?,
+            json!({"context_usage": {
+                "used_tokens": usage.used,
+                "max_tokens": usage.size,
+                "remaining_tokens": usage.size.saturating_sub(usage.used),
+                "usage_ratio": (usage.used as f64 / usage.size as f64).min(1.0),
+                "confidence": "exact"
+            }}),
+        )
+        .await;
     }
     // Retain field presence: schema serialization omits empty collections and
     // JSON null, which are meaningful replacement/return values for live tools.
@@ -833,7 +858,16 @@ pub(crate) async fn finish(
     };
     let mut data = data;
     data["acp_history_anchor"] = json!(prompt.history_end);
-    fact(events, session, &peer.runtime, turn, terminal, data).await?;
+    fact(
+        events,
+        session,
+        &peer.runtime,
+        Some(turn),
+        terminal,
+        format!("acp:{turn}:{terminal}"),
+        data,
+    )
+    .await?;
     state.active = None;
     peer.remember(&state, None).await?;
     let permissions = std::mem::take(&mut state.permissions);
