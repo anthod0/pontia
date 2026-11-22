@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- In Dashboard, the Agent Profiles page has its New profile button at the top right, as on the Agent Clients page. The edit form keeps Delete and Save together on the right, and the model picker matches the client picker.
+
 - In Dashboard, a button next to the sidebar device menu switches back to the previously used device. Alt+M now does the same instead of cycling through devices.
 
 - Bots with a live Session receive workspace registrations, Agent Profile creations, deletions and description changes, and their own todo updates in three-second batches. Reopening a todo for an offline Bot takes effect in its next handoff.

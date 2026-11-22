@@ -12,6 +12,8 @@
   import { Label } from '$lib/components/ui/label/index.js'
   import { Textarea } from '$lib/components/ui/textarea/index.js'
   import * as Select from '$lib/components/ui/select/index.js'
+  import { cn } from '$lib/utils.js'
+  import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
   import TrashIcon from 'phosphor-svelte/lib/TrashIcon'
@@ -104,7 +106,6 @@
         <Input id={`${id}-id`} bind:value={draft.profile_id} class="font-mono" autocapitalize="off" spellcheck={false} disabled={saving} aria-invalid={!!errors.profile_id} oninput={() => idEdited = draft.profile_id !== ''} />
         {#if errors.profile_id}<p role="alert" class="text-sm text-destructive">{errors.profile_id}</p>{/if}
       {/if}
-      <p class="text-xs text-muted-foreground">{$t('profiles.idHint')}</p>
     </div>
   </div>
 
@@ -137,7 +138,10 @@
       {#if selectedClient}
         {#key selectedClient.id}<ClientModelSelect id={`${id}-model`} client={selectedClient} bind:value={draft.model} bind:available={modelAvailable} disabled={saving} />{/key}
       {:else}
-        <Button id={`${id}-model`} variant="outline" type="button" disabled>{draft.model || $t('model.choose')}</Button>
+        <button id={`${id}-model`} type="button" data-size="default" class={cn(Select.selectTriggerClass, 'w-full')} disabled>
+          <span class="min-w-0 truncate">{draft.model || $t('model.choose')}</span>
+          <CaretDownIcon class="size-4 text-muted-foreground" />
+        </button>
       {/if}
     </div>
   </div>
@@ -152,13 +156,11 @@
   </div>
 
   {#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
-  <div class="flex flex-wrap items-center gap-2">
+  <div class="flex flex-wrap justify-end gap-2">
     {#if profile && ondelete}
       <Button type="button" variant="ghost" class="text-destructive hover:text-destructive" disabled={saving} aria-label={$t('profiles.deleteNamed', { name: profile.name })} onclick={() => profile && ondelete?.(profile)}><TrashIcon class="size-4" />{$t('common.delete')}</Button>
     {/if}
-    <div class="ml-auto flex gap-2">
-      {#if oncancel}<Button type="button" variant="outline" disabled={saving} onclick={oncancel}>{$t('common.cancel')}</Button>{/if}
-      <Button type="submit" disabled={saving || (!profile && !clients.length)}>{$t(profile ? 'common.save' : 'profiles.create')}</Button>
-    </div>
+    {#if oncancel}<Button type="button" variant="outline" disabled={saving} onclick={oncancel}>{$t('common.cancel')}</Button>{/if}
+    <Button type="submit" disabled={saving || (!profile && !clients.length)}>{$t(profile ? 'common.save' : 'profiles.create')}</Button>
   </div>
 </form>

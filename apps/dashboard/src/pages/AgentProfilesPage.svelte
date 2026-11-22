@@ -44,7 +44,9 @@
 </script>
 
 <section class="space-y-6">
-  <p class="max-w-prose text-sm text-muted-foreground">{$t('profiles.pageDescription')}</p>
+  <div class="flex flex-wrap justify-end gap-2">
+    <Button disabled={saving || loading || !profiles.data} onclick={() => selectedId = ''}><PlusIcon class="size-4" /> {$t('profiles.new')}</Button>
+  </div>
 
   {#if profiles.isError}
     <Alert.Root variant="destructive"><WarningCircleIcon class="size-4" /><Alert.Description>{profiles.error.message}</Alert.Description></Alert.Root>
@@ -57,12 +59,10 @@
         <Empty.Title>{$t('profiles.emptyTitle')}</Empty.Title>
         <Empty.Description>{$t('profiles.emptyDescription')}</Empty.Description>
       </Empty.Header>
-      <Empty.Content><Button onclick={() => selectedId = ''}><PlusIcon class="size-4" />{$t('profiles.new')}</Button></Empty.Content>
     </Empty.Root>
   {:else}
     <div class="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
       <nav aria-label={$t('profiles.title')} class="space-y-1 {editorOpen ? 'max-lg:hidden' : ''}">
-        <Button variant="outline" class="mb-2 w-full justify-start" disabled={saving} onclick={() => selectedId = ''}><PlusIcon class="size-4" />{$t('profiles.new')}</Button>
         {#each profiles.data as profile (profile.profile_id)}
           <button type="button"
             class="flex w-full items-start gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60 {selectedId === profile.profile_id ? 'bg-muted' : ''}"

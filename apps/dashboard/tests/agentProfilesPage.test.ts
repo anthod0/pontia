@@ -207,7 +207,9 @@ test("does not save a profile whose saved client is no longer available", async 
 test("cannot create a profile while no client is enabled", async () => {
   for (const client of device.data.agentClients) client.enabled = false;
   render(AgentProfilesPage);
-  await fireEvent.click(await screen.findByRole("button", { name: "New profile" }));
+  const newProfile = await screen.findByRole("button", { name: "New profile" });
+  await waitFor(() => expect(newProfile).toBeEnabled());
+  await fireEvent.click(newProfile);
   expect(screen.getByRole("button", { name: "Create profile" })).toBeDisabled();
 });
 
