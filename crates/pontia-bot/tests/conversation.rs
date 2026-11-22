@@ -1117,7 +1117,7 @@ async fn helper_delivery_results_are_not_retried_and_failed_reports_survive_rest
         );
         for (status, reason) in [("failed", "rejected"), ("unknown", "acknowledgement lost")] {
             assert!(inputs.iter().any(|input| input.session_id == session
-                && input.input.starts_with("Source: System")
+                && input.input.starts_with("Source: System Notification\n")
                 && input.input.contains(&helper)
                 && input.input.contains(status)
                 && input.input.contains(reason)));
@@ -1154,14 +1154,18 @@ async fn reliable_helper_failures_are_durable_and_event_replay_does_not_duplicat
     let recovered = HelperService::new(control.clone(), test_conversation(control.clone()));
     *client.blocked.lock().unwrap() = None;
     recovered.reconcile().await.unwrap();
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM bot_notifications")
-        .fetch_one(&pool)
+    let contents: Vec<String> = sqlx::query_scalar("SELECT content FROM bot_notifications")
+        .fetch_all(&pool)
         .await
         .unwrap();
-    assert_eq!(count, 1);
+    assert_eq!(contents.len(), 1);
+    let content = &contents[0];
+    assert!(content.contains("turn.failed"));
     let inputs = client.inputs.lock().unwrap();
-    assert!(inputs.last().unwrap().input.contains(&helper));
-    assert!(inputs.last().unwrap().input.contains("turn.failed"));
+    assert_eq!(
+        inputs.last().unwrap().input,
+        format!("Source: System Notification\nHelper Session: {helper}\n{content}")
+    );
 }
 
 #[tokio::test]
@@ -1198,12 +1202,12 @@ async fn running_bots_receive_new_workspaces_once_and_initial_context_does_not_w
         let inputs = client.inputs.lock().unwrap();
         assert_eq!(inputs.len(), before + 1);
         assert_eq!(inputs.last().unwrap().session_id, session);
-        assert!(
-            inputs
-                .last()
-                .unwrap()
-                .input
-                .contains(&workspace.workspace_id)
+        assert_eq!(
+            inputs.last().unwrap().input,
+            format!(
+                "Source: System Notification\nWorkspace registered: {}\nPath: {}\nDescription: project",
+                workspace.workspace_id, workspace.canonical_path
+            )
         );
     }
     workspace_service.register(register("new")).await.unwrap();

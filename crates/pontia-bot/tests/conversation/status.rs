@@ -230,7 +230,7 @@ async fn helper_replies_and_system_notifications_process_until_answer_or_turn_en
         WorkStatus::Idle
     );
     conversation
-        .deliver_input(&id, "Source: System\n\nWorkspace registered")
+        .deliver_input(&id, "Source: System Notification\nWorkspace registered")
         .await
         .unwrap();
     assert_eq!(
@@ -243,7 +243,7 @@ async fn helper_replies_and_system_notifications_process_until_answer_or_turn_en
         WorkStatus::Idle
     );
     conversation
-        .deliver_input(&id, "Source: System\n\nAnother notification")
+        .deliver_input(&id, "Source: System Notification\nAnother notification")
         .await
         .unwrap();
     finish(&control, &session, EventType::TurnFailed).await;

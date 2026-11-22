@@ -148,13 +148,13 @@ impl HelperService {
                 continue;
             }
             let source = source
-                .map(|session| format!("\nSession: {session}"))
+                .map(|session| format!("\nHelper Session: {session}"))
                 .unwrap_or_default();
             match self
                 .conversation
                 .deliver_input(
                     &bot_id,
-                    &format!("Source: System{source}\nNotification: {id}\n\n{content}"),
+                    &format!("Source: System Notification{source}\n{content}"),
                 )
                 .await
             {
