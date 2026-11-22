@@ -37,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Repeated ACP Session, Turn and permission event reports return their original acknowledgement. Conflicting permission reports no longer delay later updates.
 
+- Claude Code can repeat a Session or Turn report and receive its original acknowledgement without duplicating history.
+
 - Pi can repeat an event report after reconnecting and receive its original acknowledgement. Repeated Turn endings and Session exits appear once in history. Bots receive one notification when a helper Turn fails or its Session exits.
 
 - Dashboard keeps working when the browser blocks or fills its local storage. Theme, language, file preview width and Bot quote drafts then last only until the page closes.

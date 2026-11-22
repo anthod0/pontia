@@ -1,8 +1,6 @@
 use crate::transport::Connection;
-use pontia_agent_control::{
-    EventIngestService, PontiaEvent, PontiaEventSource, PontiaEventType, ReportedFact,
-};
-use pontia_core::{Error, Result, domain::EventType};
+use pontia_agent_control::{EventIngestService, PontiaEvent, PontiaEventSource, PontiaEventType};
+use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 use std::{
     collections::HashMap,
@@ -115,69 +113,20 @@ impl Peer {
         &self,
         events: &EventIngestService,
         host: &str,
-        event: &Value,
-    ) -> Result<()> {
+        params: &Value,
+        stale: bool,
+    ) -> Result<Value> {
+        let event = &params["event"];
         let mut state = self.state.lock().await;
+        if let Some(report) = crate::reports::HostReport::parse(host, params)? {
+            return self.report(events, &mut state, host, report, stale).await;
+        }
+        if stale {
+            return Err(Error::StateConflict(
+                "Claude host sequence already processed".into(),
+            ));
+        }
         match event["kind"].as_str() {
-            Some("ready") => {
-                let native = field(event, "native_session_id")?;
-                if state.native.as_deref().is_some_and(|id| id != native)
-                    || self.resume.as_deref().is_some_and(|id| id != native)
-                {
-                    return Err(invalid());
-                }
-                events.report_client_fact(&self.session, Some(&self.runtime), EventType::SessionReady,
-                    json!({"client_session_key":native,"launch_cwd":self.cwd,"binding_metadata":{"claude_config_dir":self.config_dir,"launch_model":self.model}})).await?;
-                self.runtime_event(events, PontiaEventType::RuntimeReady, json!({}))
-                    .await?;
-                state.native = Some(native.into());
-            }
-            Some("model") => {
-                if state.native.is_none() || state.closed {
-                    return Err(invalid());
-                }
-                let model = field(event, "model")?;
-                events
-                    .report_client_fact(
-                        &self.session,
-                        Some(&self.runtime),
-                        EventType::SessionModelUpdated,
-                        json!({"model": model}),
-                    )
-                    .await?;
-            }
-            Some("compaction") => {
-                if state.native.is_none() || state.closed {
-                    return Err(invalid());
-                }
-                let kind = match event["phase"].as_str() {
-                    Some("started") => EventType::SessionCompactionStarted,
-                    Some("completed") => EventType::SessionCompactionCompleted,
-                    Some("failed") => EventType::SessionCompactionFailed,
-                    _ => return Err(invalid()),
-                };
-                events
-                    .report_client_fact(
-                        &self.session,
-                        Some(&self.runtime),
-                        kind,
-                        event["data"].clone(),
-                    )
-                    .await?;
-            }
-            Some("context_usage") => {
-                if state.native.is_none() || state.closed {
-                    return Err(invalid());
-                }
-                events
-                    .report_client_fact(
-                        &self.session,
-                        Some(&self.runtime),
-                        EventType::SessionContextUsageUpdated,
-                        json!({"context_usage": event["context_usage"]}),
-                    )
-                    .await?;
-            }
             Some("permission_requested" | "permission_settled") => {
                 crate::interactions::event(self, &mut state, events, host, event).await?;
             }
@@ -202,7 +151,7 @@ impl Peer {
                     _ => return Err(invalid()),
                 };
             }
-            Some(kind @ ("started" | "finished" | "text" | "input" | "tool" | "tool_result")) => {
+            Some("text" | "input" | "tool" | "tool_result") => {
                 if state.closed {
                     return Err(invalid());
                 }
@@ -210,38 +159,11 @@ impl Peer {
                 if event["input_id"] != input.id {
                     return Err(invalid());
                 }
-                if kind == "started" {
-                    if input.turn.is_some() {
-                        return Err(invalid());
-                    }
-                    let result = events.report_fact(ReportedFact {
-                        session_id: self.session.clone(), turn_id: None,
-                        report_key: Some(format!("claude:{host}:{}:start", input.id)), fact_type: EventType::TurnStarted,
-                        data: json!({"runtime_id":self.runtime,"claude_input_id":input.id,"claude_history_anchor":input.id,"input":{"summary":input.summary,"inbox_message_id":input.inbox}}),
-                    }).await.map_err(|error| Error::Domain(error.to_string()))?;
-                    input.turn = Some(result.turn_id.ok_or_else(invalid)?);
-                    input.summary.clear();
-                } else if kind == "finished" {
-                    let turn = input.turn.as_ref().ok_or_else(invalid)?;
-                    let kind = match event["outcome"].as_str() {
-                        Some("completed") => EventType::TurnCompleted,
-                        Some("failed") => EventType::TurnFailed,
-                        Some("interrupted") => EventType::TurnInterrupted,
-                        _ => return Err(invalid()),
-                    };
-                    events.report_fact(ReportedFact {
-                        session_id: self.session.clone(), turn_id: Some(turn.clone()),
-                        report_key: Some(format!("claude:{host}:{}", field(event,"result_id")?)), fact_type: kind,
-                        data: json!({"runtime_id":self.runtime,"claude_input_id":input.id,"claude_result_id":event["result_id"],"claude_history_anchor":event["history_anchor"]}),
-                    }).await.map_err(|error| Error::Domain(error.to_string()))?;
-                    state.input = None;
-                } else {
-                    crate::output::publish(events, self, input, event).await?;
-                }
+                crate::output::publish(events, self, input, event).await?;
             }
             _ => return Err(invalid()),
         }
-        Ok(())
+        Ok(json!({"accepted":true}))
     }
 }
 pub(crate) fn field<'a>(value: &'a Value, name: &str) -> Result<&'a str> {
@@ -250,6 +172,6 @@ pub(crate) fn field<'a>(value: &'a Value, name: &str) -> Result<&'a str> {
         .filter(|value| !value.is_empty())
         .ok_or_else(invalid)
 }
-fn invalid() -> Error {
+pub(crate) fn invalid() -> Error {
     Error::Domain("Claude Code fact is invalid or unassociated".into())
 }

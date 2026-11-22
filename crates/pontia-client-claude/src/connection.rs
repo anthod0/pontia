@@ -43,26 +43,35 @@ impl Adapter {
                     let next = request.params["sequence"]
                         .as_u64()
                         .ok_or_else(crate::unavailable)?;
-                    if request.params["host_id"] != connection.host_id || next <= sequence {
+                    if request.params["host_id"] != connection.host_id || next == 0 {
                         return Err(Error::StateConflict(
                             "Claude host fact identity changed".into(),
                         ));
                     }
-                    sequence = next;
-                    peer.event(
-                        &app.event_ingest_service(),
-                        &connection.host_id,
-                        &request.params["event"],
-                    )
-                    .await?;
-                    Ok(json!({"accepted":true}))
+                    let result = peer
+                        .event(
+                            &app.event_ingest_service(),
+                            &connection.host_id,
+                            &request.params,
+                            next <= sequence,
+                        )
+                        .await?;
+                    sequence = sequence.max(next);
+                    Ok(result)
                 }
                 .await;
                 match result {
                     Ok(result) => rpc.reply(request.id, result).await?,
                     Err(error) => {
                         tracing::warn!(session=%peer.session, %error, "Claude host fact rejected");
-                        rpc.reply_error(request.id, -32009, &error.to_string())
+                        let code = match error {
+                            Error::Domain(_) => -32602,
+                            Error::StateConflict(_)
+                            | Error::CapabilityUnavailable(_)
+                            | Error::NotFound(_) => -32009,
+                            _ => -32603,
+                        };
+                        rpc.reply_error(request.id, code, &error.to_string())
                             .await?;
                     }
                 }

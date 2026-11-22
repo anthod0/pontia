@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import {
   connectRuntime,
+  RpcError,
   CONTROL_VERSION,
   type RuntimeConnection,
 } from "../shared/control-socket.js";
 import { Host, ControlError, type QueryFactory, type ExecutionPolicy } from "./host.js";
-import type { HostEvent } from "./facts.js";
+import { hostObservation, type HostEvent } from "./facts.js";
 
 export interface Bootstrap {
   session_id: string;
@@ -78,14 +79,16 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
   const host = new Host(
     config,
     (event: HostEvent) => {
-      sequence++;
+      const params = hostObservation(generation, ++sequence, event);
       if (event.kind === "ready") identity.clientSessionKey = event.native_session_id;
       if (!connected) return;
-      const report = connection.request("host.event", { host_id: generation, sequence, event });
+      const report = connection.request("host.event", params);
       reports.add(report);
       void report
-        .catch(() => {
-          console.error("Claude host fact delivery failed");
+        .catch((error: unknown) => {
+          if (error instanceof RpcError && error.code === -32009)
+            console.error("Claude host fact rejected", params.report_key);
+          else console.error("Claude host fact delivery failed");
         })
         .finally(() => reports.delete(report));
       connection.registered(identity);

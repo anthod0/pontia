@@ -5,6 +5,7 @@ mod interactions;
 mod models;
 mod output;
 mod peer;
+mod reports;
 mod resume;
 pub mod setup;
 mod spec;
@@ -46,7 +47,7 @@ pub fn registration_with_host(host: Option<PathBuf>) -> ClientRegistration {
             host: adapter.host.clone(),
         })),
         interactions: Some(adapter.clone()),
-        events: None,
+        events: Some(adapter.clone()),
         service: Some(adapter.clone()),
         instructions: Some(Arc::new(instructions::InstructionsPolicy)),
         in_process: None,
