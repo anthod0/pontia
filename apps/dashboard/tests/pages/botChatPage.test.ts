@@ -351,3 +351,73 @@ test("shows message bubble placeholders until the first page of messages arrives
   await screen.findByRole("log", { name: "Messages" });
   expect(screen.queryByRole("status", { name: "Loading conversation" })).not.toBeInTheDocument();
 });
+
+class BottomObserver {
+  static instances: BottomObserver[] = [];
+  target: Element | null = null;
+  constructor(
+    private readonly callback: IntersectionObserverCallback,
+    readonly options?: IntersectionObserverInit,
+  ) {
+    BottomObserver.instances.push(this);
+  }
+  observe(target: Element) {
+    this.target = target;
+  }
+  disconnect() {}
+  trigger(isIntersecting: boolean) {
+    this.callback(
+      [{ isIntersecting, target: this.target } as IntersectionObserverEntry],
+      this as never,
+    );
+  }
+}
+
+async function feedBottom(log: HTMLElement) {
+  await waitFor(() =>
+    expect(BottomObserver.instances.some((item) => item.options?.root === log)).toBe(true),
+  );
+  return BottomObserver.instances.findLast((item) => item.options?.root === log)!;
+}
+
+test("shows a scroll-down button away from the bottom of the Bot feed and follows to the end when clicked", async () => {
+  BottomObserver.instances = [];
+  vi.stubGlobal("IntersectionObserver", BottomObserver);
+  const scrollTo = vi.fn();
+  Object.defineProperty(HTMLElement.prototype, "scrollTo", { configurable: true, value: scrollTo });
+  vi.spyOn(Element.prototype, "scrollHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.getAttribute("role") === "log" ? 4000 : 56;
+  });
+  const log = await chatWith(false, 50);
+  const bottom = await feedBottom(log);
+
+  bottom.trigger(false);
+  const button = await screen.findByRole("button", { name: /scroll to bottom/i });
+  scrollTo.mockClear();
+  await fireEvent.click(button);
+
+  expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: 4000 - 640 }));
+  await waitFor(() =>
+    expect(screen.queryByRole("button", { name: /scroll to bottom/i })).not.toBeInTheDocument(),
+  );
+  Reflect.deleteProperty(HTMLElement.prototype, "scrollTo");
+  vi.unstubAllGlobals();
+});
+
+test("hides the scroll-down button at the bottom of the Bot feed", async () => {
+  BottomObserver.instances = [];
+  vi.stubGlobal("IntersectionObserver", BottomObserver);
+  const log = await chatWith(false, 3);
+  const bottom = await feedBottom(log);
+
+  bottom.trigger(false);
+  await screen.findByRole("button", { name: /scroll to bottom/i });
+  bottom.trigger(true);
+
+  await waitFor(() =>
+    expect(screen.queryByRole("button", { name: /scroll to bottom/i })).not.toBeInTheDocument(),
+  );
+  vi.unstubAllGlobals();
+});
