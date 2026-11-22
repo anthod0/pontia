@@ -165,7 +165,7 @@ if (process.argv[2] === "history") {
         expire();
         closed = true;
         event({ kind: "closed", history_anchor: active?.reply ?? active?.id });
-        await Promise.allSettled([...reports]);
+        await Promise.allSettled(reports);
         reply({ result: {status: "accepted"} }, () => { void connection.close(); });
       }
   };

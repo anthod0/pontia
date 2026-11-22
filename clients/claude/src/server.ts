@@ -198,8 +198,9 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
   process.once("SIGTERM", terminate);
   async function close() {
     process.off("SIGTERM", terminate);
-    try { await host.close(); }
-    finally {
+    try {
+      await host.close();
+    } finally {
       await Promise.allSettled(reports);
       await connection.close();
     }

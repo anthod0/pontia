@@ -262,12 +262,19 @@ test(
   },
 );
 
-test("reconnect before first input leaves the SDK launch available", { timeout: 5000 }, async (t) => {
-  const h = await setup(t);
-  await h.reconnect();
-  assert.equal((await h.command({ method: "input", input_id: first, text: "task" })).status, "accepted");
-  assert.equal(h.fixture.calls, 1);
-});
+test(
+  "reconnect before first input leaves the SDK launch available",
+  { timeout: 5000 },
+  async (t) => {
+    const h = await setup(t);
+    await h.reconnect();
+    assert.equal(
+      (await h.command({ method: "input", input_id: first, text: "task" })).status,
+      "accepted",
+    );
+    assert.equal(h.fixture.calls, 1);
+  },
+);
 
 test("an outstanding interrupt does not prevent closing the SDK", { timeout: 5000 }, async (t) => {
   const h = await setup(t);
@@ -276,7 +283,12 @@ test("an outstanding interrupt does not prevent closing the SDK", { timeout: 500
   h.fixture.messages.push(assistant());
   await h.wait(() => h.facts.some((f) => f.event.kind === "started"));
   let release!: () => void;
-  h.fixture.onInterrupt(() => new Promise<void>((resolve) => { release = resolve; }));
+  h.fixture.onInterrupt(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+  );
   void h.command({ method: "interrupt", input_id: first });
   await h.wait(() => h.fixture.interrupts === 1);
   try {
