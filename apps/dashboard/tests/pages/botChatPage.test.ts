@@ -33,7 +33,11 @@ beforeEach(() => {
     return this.getAttribute("role") === "log" ? 640 : 56;
   });
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  Reflect.deleteProperty(HTMLElement.prototype, "scrollTo");
+});
 
 test("renders Bot replies as markdown while keeping user messages as plain text", async () => {
   vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue({
@@ -402,8 +406,6 @@ test("shows a scroll-down button away from the bottom of the Bot feed and follow
   await waitFor(() =>
     expect(screen.queryByRole("button", { name: /scroll to bottom/i })).not.toBeInTheDocument(),
   );
-  Reflect.deleteProperty(HTMLElement.prototype, "scrollTo");
-  vi.unstubAllGlobals();
 });
 
 test("hides the scroll-down button at the bottom of the Bot feed", async () => {
@@ -419,5 +421,4 @@ test("hides the scroll-down button at the bottom of the Bot feed", async () => {
   await waitFor(() =>
     expect(screen.queryByRole("button", { name: /scroll to bottom/i })).not.toBeInTheDocument(),
   );
-  vi.unstubAllGlobals();
 });

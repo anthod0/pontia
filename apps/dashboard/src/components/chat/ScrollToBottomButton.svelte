@@ -6,14 +6,13 @@
 
   const ANIMATION_MS = 200
 
-  let { sentinel, root = null, onclick, class: className, style }: {
+  let { sentinel, root = null, onclick, class: className }: {
     /** Shown while this element is outside the scroll viewport. */
     sentinel: HTMLElement | null | undefined
     /** The scroll container, or null for the document viewport. */
     root?: Element | null
     onclick: () => void
     class?: string
-    style?: string
   } = $props()
 
   let visible = $state(false)
@@ -37,7 +36,7 @@
   }
 
   $effect(() => {
-    if (!sentinel || typeof IntersectionObserver === 'undefined') return
+    if (!sentinel) return
     const observer = new IntersectionObserver(([entry]) => {
       if (entry) setVisible(!entry.isIntersecting)
     }, { root, threshold: 0.01 })
@@ -49,7 +48,7 @@
 </script>
 
 {#if rendered}
-  <div {style} class={cn('pointer-events-none', visible ? 'scroll-down-enter' : 'scroll-down-exit', className)}>
+  <div class={cn('pointer-events-none', visible ? 'scroll-down-enter' : 'scroll-down-exit', className)}>
     <div class="mx-auto flex w-full max-w-[760px] justify-end">
       <Button
         type="button"
