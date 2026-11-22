@@ -207,6 +207,9 @@ pub(crate) async fn bridge(
             let mut written = true;
             for (i, chunk) in bytes.chunks(64 * 1024).enumerate() {
                 let mut params = json!({"chunk":STANDARD.encode(chunk)});
+                if i == 0 && frame["method"] == "session/close" {
+                    params["close_request_id"] = frame["id"].clone();
+                }
                 if let Some(key) = &permission {
                     params["permission"] = json!({"id":frame["id"],"key":key,"last":i+1==count});
                 }
