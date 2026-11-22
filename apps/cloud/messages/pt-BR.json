@@ -26,6 +26,7 @@
   "sign_out": "Sair",
   "continue_with_google": "Continuar com Google",
   "continue_with_github": "Continuar com GitHub",
+
   "home_title": "Pontia — Execute agentes de programação localmente e controle-os de qualquer lugar",
   "home_description": "Controle remoto de código aberto para agentes de programação. Execute Pi, Codex, Claude Code e outros no seu próprio dispositivo e acompanhe e direcione-os de qualquer navegador.",
   "home_closing_title": "Seus agentes, onde quer que você esteja.",
@@ -96,8 +97,8 @@
   "story_memory_title": "Memória",
   "story_files_label": "Envia arquivos",
   "story_files_caption": "Relatórios, capturas de tela e builds chegam no chat. Imagens e textos abrem numa prévia.",
-  "story_files_ask": "Me mande as capturas de tela e o build.",
-  "story_files_reply": "Aqui estão as capturas, o relatório e o build.",
+  "story_files_ask": "Me mande a captura de tela e o build.",
+  "story_files_reply": "Aqui estão a captura de tela, o relatório e o build.",
   "story_files_preview": "Prévia",
   "story_files_report_title": "Página de configurações",
   "story_files_report_line1": "Temas claro e escuro",
@@ -146,6 +147,7 @@
   "faq_getting_started_link": "Primeiros passos",
   "faq_cost_question": "Quanto custa o Pontia?",
   "faq_cost_answer": "O serviço hospedado não cobra taxa de uso no momento. Você continua pagando seus provedores de modelos diretamente pelas suas próprias contas de agentes.",
+
   "login_title": "Entrar — Pontia",
   "login_showcase_title_first": "Saia da sua mesa,",
   "login_showcase_title_second": "não dos seus agentes.",
@@ -160,6 +162,7 @@
   "auth_error_account_conflict": "Esta conta já está vinculada, ou você já tem uma conta com este provedor.",
   "auth_error_provider_failed": "Não foi possível concluir o login com este provedor. Tente novamente.",
   "auth_error_unknown": "Não foi possível concluir o login. Tente novamente.",
+
   "device_title": "Confirmar dispositivo — Pontia",
   "device_heading": "Confirme o acesso do dispositivo.",
   "device_approved": "Acesso aprovado. Você pode voltar ao terminal.",
@@ -172,18 +175,21 @@
   "device_deny": "Negar",
   "device_error_sign_in": "Entre antes de confirmar esta solicitação.",
   "device_error_rate_limited": "Muitas tentativas. Aguarde alguns minutos e tente novamente.",
+
   "conflict_title": "Escolha sua conta — Pontia",
   "conflict_heading": "Este e-mail já está cadastrado.",
   "conflict_text": "{#email}{email}{/email} já está associado a uma conta {provider} verificada. Verifique essa conta para usar os dois métodos de login com a mesma conta Pontia, ou crie uma conta separada.",
   "conflict_connect": "Conectar à conta existente",
   "conflict_create": "Criar uma conta separada",
   "conflict_expires": "Esta escolha expira em cinco minutos.",
+
   "settings_heading": "Configurações",
   "settings_sections": "Seções de configurações",
   "settings_account": "Conta",
   "settings_sessions": "Sessões",
   "settings_devices": "Dispositivos",
   "settings_edges": "Edges",
+
   "account_title": "Configurações da conta — Pontia",
   "account_intro": "Gerencie seu perfil e as contas que você usa para entrar no Pontia.",
   "account_first_device_heading": "Conecte seu primeiro dispositivo",
@@ -201,6 +207,7 @@
   "account_error_sign_in": "Entre para gerenciar os métodos de login.",
   "account_error_select": "Selecione um método de login para desvincular.",
   "account_error_last_method": "Mantenha pelo menos um método de login vinculado à sua conta.",
+
   "sessions_title": "Configurações de sessões — Pontia",
   "sessions_intro": "Revise e revogue sessões do navegador.",
   "sessions_current": "Navegador atual",
@@ -216,6 +223,7 @@
   "sessions_sign_out_others_text": "Isso revoga todas as sessões de navegador, exceto a que você está usando agora.",
   "sessions_error_sign_in": "Entre para gerenciar sessões.",
   "sessions_error_select": "Selecione uma sessão para revogar.",
+
   "devices_title": "Configurações de dispositivos — Pontia",
   "devices_intro": "Gerencie os dispositivos registrados para acesso remoto ao Dashboard.",
   "devices_open": "Abrir {name} no Dashboard",
@@ -238,6 +246,7 @@
   "devices_error_handle_taken": "Esse identificador de dispositivo já está em uso.",
   "devices_error_not_found": "Dispositivo não encontrado.",
   "devices_error_select_remove": "Selecione um dispositivo para remover.",
+
   "edges_title": "Configurações de Edges — Pontia",
   "edges_intro": "Implante e gerencie registros de Edges auto-hospedados.",
   "edges_health_checking": "Verificando",
@@ -276,6 +285,7 @@
   "edges_error_select_delete": "Selecione um Edge para excluir.",
   "edges_error_invalid_network": "Este Edge tem uma configuração de rede inválida.",
   "edges_error_dns_cleanup": "A limpeza de DNS falhou. O registro do Edge foi mantido para que você possa tentar novamente.",
+
   "deploy_title": "Comando de implantação do Edge — Pontia",
   "deploy_run": "Execute este comando no seu servidor Linux público.",
   "deploy_expires": "Este comando expira às {time}.",
@@ -289,6 +299,7 @@
   "deploy_back": "Voltar para Edges",
   "deploy_error_sign_in": "Entre para criar uma implantação de Edge.",
   "deploy_error_unavailable": "A implantação de Edges está temporariamente indisponível.",
+
   "docs_heading": "Documentação",
   "docs_sections": "Seções da documentação",
   "docs_contents": "Conteúdo",
@@ -309,11 +320,13 @@
   "docs_updating": "Atualização",
   "docs_troubleshooting": "Solução de problemas",
   "docs_faq": "FAQ",
+
   "blog_title": "Blog — Pontia",
   "blog_heading": "Blog",
   "blog_description": "Guias para executar agentes de programação como Codex e Pi nas suas próprias máquinas e controlá-los pelo navegador.",
   "blog_updated": "Atualizado em {date}",
   "blog_cta": "O Pontia é gratuito e de código aberto. Instale no Linux ou macOS em poucos minutos.",
+
   "code_copy": "Copiar",
   "code_copy_label": "Copiar código",
   "code_copied": "Copiado",

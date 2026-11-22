@@ -4,12 +4,12 @@
 	import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon';
 	import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon';
 	import BotAvatarMark from './BotAvatarMark.svelte';
-	import { stories, type Story } from '$lib/bot-stories';
+	import { storyByName, type Story } from '$lib/bot-stories';
 	import { m } from '$lib/paraglide/messages';
 
 	let { story, step }: { story: Story; step: number } = $props();
-	// The other Bots on the same device read the same USER.md and memory.
-	const others = stories.filter((other) => other !== story).slice(0, 3);
+	// The other Bots on the same device read the same USER.md and memory. They match the MacBook in DevicesVisual.
+	const others = ['Pip', 'Kai', 'Ivy'].map(storyByName);
 </script>
 
 <div class="memory" style:--bot={story.color}>

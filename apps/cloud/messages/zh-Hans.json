@@ -26,6 +26,7 @@
   "sign_out": "退出登录",
   "continue_with_google": "使用 Google 继续",
   "continue_with_github": "使用 GitHub 继续",
+
   "home_title": "Pontia — 在本地运行编程 Agent，随时随地掌控",
   "home_description": "开源的编程 Agent 远程控制工具。在你自己的设备上运行 Pi、Codex、Claude Code 等，然后在任意浏览器中跟进和引导它们。",
   "home_closing_title": "无论身在何处，Agent 都在身边。",
@@ -146,6 +147,7 @@
   "faq_getting_started_link": "快速开始",
   "faq_cost_question": "Pontia 收费吗？",
   "faq_cost_answer": "托管服务目前不收取使用费。你继续通过自己的 Agent 账户直接向模型提供商付费。",
+
   "login_title": "登录 — Pontia",
   "login_showcase_title_first": "离开工位，",
   "login_showcase_title_second": "Agent 不停工。",
@@ -160,6 +162,7 @@
   "auth_error_account_conflict": "该账户已被关联，或你已有使用此提供商的账户。",
   "auth_error_provider_failed": "无法通过此提供商完成登录，请重试。",
   "auth_error_unknown": "无法完成登录，请重试。",
+
   "device_title": "确认设备 — Pontia",
   "device_heading": "确认设备访问。",
   "device_approved": "已批准访问。你可以返回终端。",
@@ -172,18 +175,21 @@
   "device_deny": "拒绝",
   "device_error_sign_in": "请先登录再确认此请求。",
   "device_error_rate_limited": "尝试次数过多。请等待几分钟后重试。",
+
   "conflict_title": "选择账户 — Pontia",
   "conflict_heading": "此邮箱已被注册。",
   "conflict_text": "{#email}{email}{/email} 已关联到一个已验证的 {provider} 账户。验证该账户即可在同一个 Pontia 账户中使用两种登录方式，或者创建一个单独的账户。",
   "conflict_connect": "关联到现有账户",
   "conflict_create": "创建单独的账户",
   "conflict_expires": "此选择将在五分钟后失效。",
+
   "settings_heading": "设置",
   "settings_sections": "设置分区",
   "settings_account": "账户",
   "settings_sessions": "会话",
   "settings_devices": "设备",
   "settings_edges": "Edge",
+
   "account_title": "账户设置 — Pontia",
   "account_intro": "管理你的个人资料以及用于登录 Pontia 的账户。",
   "account_first_device_heading": "连接你的第一台设备",
@@ -201,6 +207,7 @@
   "account_error_sign_in": "登录以管理登录方式。",
   "account_error_select": "请选择要取消关联的登录方式。",
   "account_error_last_method": "账户至少需要保留一种已关联的登录方式。",
+
   "sessions_title": "会话设置 — Pontia",
   "sessions_intro": "查看和撤销浏览器会话。",
   "sessions_current": "当前浏览器",
@@ -216,6 +223,7 @@
   "sessions_sign_out_others_text": "这将撤销除当前正在使用的浏览器之外的所有浏览器会话。",
   "sessions_error_sign_in": "登录以管理会话。",
   "sessions_error_select": "请选择要撤销的会话。",
+
   "devices_title": "设备设置 — Pontia",
   "devices_intro": "管理已注册用于远程 Dashboard 访问的设备。",
   "devices_open": "在 Dashboard 中打开 {name}",
@@ -238,6 +246,7 @@
   "devices_error_handle_taken": "该设备标识已被使用。",
   "devices_error_not_found": "未找到设备。",
   "devices_error_select_remove": "请选择要移除的设备。",
+
   "edges_title": "Edge 设置 — Pontia",
   "edges_intro": "部署和管理自托管的 Edge 注册。",
   "edges_health_checking": "检查中",
@@ -276,6 +285,7 @@
   "edges_error_select_delete": "请选择要删除的 Edge。",
   "edges_error_invalid_network": "此 Edge 的网络配置无效。",
   "edges_error_dns_cleanup": "DNS 清理失败。已保留该 Edge 注册，以便你重试。",
+
   "deploy_title": "Edge 部署命令 — Pontia",
   "deploy_run": "在你的公网 Linux 服务器上运行此命令。",
   "deploy_expires": "此命令将于 {time} 过期。",
@@ -289,6 +299,7 @@
   "deploy_back": "返回 Edge",
   "deploy_error_sign_in": "登录以创建 Edge 部署。",
   "deploy_error_unavailable": "Edge 部署暂时不可用。",
+
   "docs_heading": "文档",
   "docs_sections": "文档分区",
   "docs_contents": "目录",
@@ -309,11 +320,13 @@
   "docs_updating": "更新",
   "docs_troubleshooting": "故障排除",
   "docs_faq": "FAQ",
+
   "blog_title": "博客 — Pontia",
   "blog_heading": "博客",
   "blog_description": "介绍如何在自己的机器上运行 Codex、Pi 等编程 Agent，并通过浏览器控制它们的指南。",
   "blog_updated": "更新于 {date}",
   "blog_cta": "Pontia 免费且开源。几分钟即可在 Linux 或 macOS 上完成安装。",
+
   "code_copy": "复制",
   "code_copy_label": "复制代码",
   "code_copied": "已复制",

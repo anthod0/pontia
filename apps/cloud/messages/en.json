@@ -26,6 +26,7 @@
   "sign_out": "Sign out",
   "continue_with_google": "Continue with Google",
   "continue_with_github": "Continue with GitHub",
+
   "home_title": "Pontia — Run coding agents locally, control them anywhere",
   "home_description": "Open-source remote control for coding agents. Run Pi, Codex, Claude Code, and more on your own device, then follow and steer them from any browser.",
   "home_closing_title": "Your agents, wherever you are.",
@@ -96,8 +97,8 @@
   "story_memory_title": "Memory",
   "story_files_label": "Sends you files",
   "story_files_caption": "Reports, screenshots, and builds arrive in the chat. Images and text open in a preview.",
-  "story_files_ask": "Send me the screenshots and the build.",
-  "story_files_reply": "Here are the screenshots, the report, and the build.",
+  "story_files_ask": "Send me the screenshot and the build.",
+  "story_files_reply": "Here's the screenshot, the report, and the build.",
   "story_files_preview": "Preview",
   "story_files_report_title": "Settings page",
   "story_files_report_line1": "Light and dark themes",
@@ -146,6 +147,7 @@
   "faq_getting_started_link": "Getting started",
   "faq_cost_question": "How much does Pontia cost?",
   "faq_cost_answer": "The hosted service currently has no usage fee. You keep paying your model providers directly through your own agent accounts.",
+
   "login_title": "Sign in — Pontia",
   "login_showcase_title_first": "Leave your desk,",
   "login_showcase_title_second": "not your agents.",
@@ -160,6 +162,7 @@
   "auth_error_account_conflict": "This account is already linked, or you already have an account with this provider.",
   "auth_error_provider_failed": "We could not complete sign-in with this provider. Please try again.",
   "auth_error_unknown": "Sign-in could not be completed. Please try again.",
+
   "device_title": "Confirm device — Pontia",
   "device_heading": "Confirm device access.",
   "device_approved": "Access approved. You can return to the terminal.",
@@ -172,18 +175,21 @@
   "device_deny": "Deny",
   "device_error_sign_in": "Sign in before confirming this request.",
   "device_error_rate_limited": "Too many attempts. Wait a few minutes and try again.",
+
   "conflict_title": "Choose your account — Pontia",
   "conflict_heading": "This email is already registered.",
   "conflict_text": "{#email}{email}{/email} is already associated with a verified {provider} account. Verify that account to use both sign-in methods with the same Pontia account, or create a separate account.",
   "conflict_connect": "Connect to existing account",
   "conflict_create": "Create a separate account",
   "conflict_expires": "This choice expires in five minutes.",
+
   "settings_heading": "Settings",
   "settings_sections": "Settings sections",
   "settings_account": "Account",
   "settings_sessions": "Sessions",
   "settings_devices": "Devices",
   "settings_edges": "Edges",
+
   "account_title": "Account settings — Pontia",
   "account_intro": "Manage your profile and the accounts you use to sign in to Pontia.",
   "account_first_device_heading": "Connect your first device",
@@ -201,6 +207,7 @@
   "account_error_sign_in": "Sign in to manage sign-in methods.",
   "account_error_select": "Select a sign-in method to unlink.",
   "account_error_last_method": "Keep at least one sign-in method linked to your account.",
+
   "sessions_title": "Session settings — Pontia",
   "sessions_intro": "Review and revoke browser sessions.",
   "sessions_current": "Current browser",
@@ -216,6 +223,7 @@
   "sessions_sign_out_others_text": "This revokes every browser session except the one you are using now.",
   "sessions_error_sign_in": "Sign in to manage sessions.",
   "sessions_error_select": "Select a session to revoke.",
+
   "devices_title": "Device settings — Pontia",
   "devices_intro": "Manage devices registered for remote Dashboard access.",
   "devices_open": "Open {name} in Dashboard",
@@ -238,6 +246,7 @@
   "devices_error_handle_taken": "That device handle is already in use.",
   "devices_error_not_found": "Device not found.",
   "devices_error_select_remove": "Select a device to remove.",
+
   "edges_title": "Edge settings — Pontia",
   "edges_intro": "Deploy and manage self-hosted Edge registrations.",
   "edges_health_checking": "Checking",
@@ -276,6 +285,7 @@
   "edges_error_select_delete": "Select an edge to delete.",
   "edges_error_invalid_network": "This edge has an invalid network configuration.",
   "edges_error_dns_cleanup": "DNS cleanup failed. The edge registration was kept so you can try again.",
+
   "deploy_title": "Edge deployment command — Pontia",
   "deploy_run": "Run this command on your public Linux server.",
   "deploy_expires": "This command expires at {time}.",
@@ -289,6 +299,7 @@
   "deploy_back": "Back to edges",
   "deploy_error_sign_in": "Sign in to create an edge deployment.",
   "deploy_error_unavailable": "Edge deployment is temporarily unavailable.",
+
   "docs_heading": "Documentation",
   "docs_sections": "Documentation sections",
   "docs_contents": "Contents",
@@ -309,11 +320,13 @@
   "docs_updating": "Updating",
   "docs_troubleshooting": "Troubleshooting",
   "docs_faq": "FAQ",
+
   "blog_title": "Blog — Pontia",
   "blog_heading": "Blog",
   "blog_description": "Guides for running coding agents such as Codex and Pi on your own machines and controlling them from a browser.",
   "blog_updated": "Updated {date}",
   "blog_cta": "Pontia is free and open source. Install it on Linux or macOS in a few minutes.",
+
   "code_copy": "Copy",
   "code_copy_label": "Copy code",
   "code_copied": "Copied",

@@ -26,6 +26,7 @@
   "sign_out": "サインアウト",
   "continue_with_google": "Google で続行",
   "continue_with_github": "GitHub で続行",
+
   "home_title": "Pontia — コーディングエージェントをローカルで実行し、どこからでも操作",
   "home_description": "コーディングエージェント向けのオープンソースのリモートコントロールです。Pi、Codex、Claude Code などを自分のデバイスで実行し、任意のブラウザーから状況を確認して指示できます。",
   "home_closing_title": "どこにいても、あなたのエージェントを。",
@@ -97,7 +98,7 @@
   "story_files_label": "ファイルを届ける",
   "story_files_caption": "レポートやスクリーンショット、ビルド成果物がチャットに届きます。画像とテキストはプレビューで開けます。",
   "story_files_ask": "スクリーンショットとビルドを送って。",
-  "story_files_reply": "スクリーンショット、レポート、ビルドです。",
+  "story_files_reply": "スクリーンショットとレポート、ビルドです。",
   "story_files_preview": "プレビュー",
   "story_files_report_title": "設定画面",
   "story_files_report_line1": "ライトとダークのテーマに対応",
@@ -146,6 +147,7 @@
   "faq_getting_started_link": "はじめに",
   "faq_cost_question": "Pontia の料金はいくらですか？",
   "faq_cost_answer": "ホスト型サービスの利用料金は現在かかりません。モデルプロバイダーへの支払いは、これまでどおり自分のエージェントアカウントから直接行います。",
+
   "login_title": "サインイン — Pontia",
   "login_showcase_title_first": "デスクを離れても、",
   "login_showcase_title_second": "エージェントは手放さない。",
@@ -160,6 +162,7 @@
   "auth_error_account_conflict": "このアカウントはすでにリンクされているか、このプロバイダーのアカウントをすでにお持ちです。",
   "auth_error_provider_failed": "このプロバイダーでのサインインを完了できませんでした。もう一度お試しください。",
   "auth_error_unknown": "サインインを完了できませんでした。もう一度お試しください。",
+
   "device_title": "デバイスの確認 — Pontia",
   "device_heading": "デバイスのアクセスを確認します。",
   "device_approved": "アクセスを承認しました。ターミナルに戻ってください。",
@@ -172,18 +175,21 @@
   "device_deny": "拒否",
   "device_error_sign_in": "このリクエストを確認する前にサインインしてください。",
   "device_error_rate_limited": "試行回数が多すぎます。数分待ってからもう一度お試しください。",
+
   "conflict_title": "アカウントの選択 — Pontia",
   "conflict_heading": "このメールアドレスはすでに登録されています。",
   "conflict_text": "{#email}{email}{/email} は、確認済みの {provider} アカウントにすでに関連付けられています。そのアカウントを確認すると、同じ Pontia アカウントで両方のサインイン方法を使えます。または、別のアカウントを作成してください。",
   "conflict_connect": "既存のアカウントに接続",
   "conflict_create": "別のアカウントを作成",
   "conflict_expires": "この選択は 5 分で期限切れになります。",
+
   "settings_heading": "設定",
   "settings_sections": "設定のセクション",
   "settings_account": "アカウント",
   "settings_sessions": "Session",
   "settings_devices": "デバイス",
   "settings_edges": "Edge",
+
   "account_title": "アカウント設定 — Pontia",
   "account_intro": "プロフィールと、Pontia へのサインインに使うアカウントを管理します。",
   "account_first_device_heading": "最初のデバイスを接続",
@@ -201,6 +207,7 @@
   "account_error_sign_in": "サインイン方法を管理するにはサインインしてください。",
   "account_error_select": "リンクを解除するサインイン方法を選択してください。",
   "account_error_last_method": "アカウントには少なくとも 1 つのサインイン方法をリンクしておく必要があります。",
+
   "sessions_title": "Session 設定 — Pontia",
   "sessions_intro": "ブラウザーの Session を確認して取り消します。",
   "sessions_current": "現在のブラウザー",
@@ -216,6 +223,7 @@
   "sessions_sign_out_others_text": "現在使用中のもの以外、すべてのブラウザーの Session を取り消します。",
   "sessions_error_sign_in": "Session を管理するにはサインインしてください。",
   "sessions_error_select": "取り消す Session を選択してください。",
+
   "devices_title": "デバイス設定 — Pontia",
   "devices_intro": "リモートでの Dashboard アクセス用に登録されたデバイスを管理します。",
   "devices_open": "{name} を Dashboard で開く",
@@ -238,6 +246,7 @@
   "devices_error_handle_taken": "このデバイスのハンドルはすでに使用されています。",
   "devices_error_not_found": "デバイスが見つかりません。",
   "devices_error_select_remove": "削除するデバイスを選択してください。",
+
   "edges_title": "Edge 設定 — Pontia",
   "edges_intro": "セルフホストの Edge 登録をデプロイして管理します。",
   "edges_health_checking": "確認中",
@@ -276,6 +285,7 @@
   "edges_error_select_delete": "削除する Edge を選択してください。",
   "edges_error_invalid_network": "この Edge のネットワーク構成が無効です。",
   "edges_error_dns_cleanup": "DNS のクリーンアップに失敗しました。再試行できるよう、Edge の登録は保持されています。",
+
   "deploy_title": "Edge デプロイコマンド — Pontia",
   "deploy_run": "公開 Linux サーバーでこのコマンドを実行してください。",
   "deploy_expires": "このコマンドは {time} に期限切れになります。",
@@ -289,6 +299,7 @@
   "deploy_back": "Edge に戻る",
   "deploy_error_sign_in": "Edge のデプロイを作成するにはサインインしてください。",
   "deploy_error_unavailable": "Edge のデプロイは一時的に利用できません。",
+
   "docs_heading": "ドキュメント",
   "docs_sections": "ドキュメントのセクション",
   "docs_contents": "目次",
@@ -309,11 +320,13 @@
   "docs_updating": "アップデート",
   "docs_troubleshooting": "トラブルシューティング",
   "docs_faq": "FAQ",
+
   "blog_title": "ブログ — Pontia",
   "blog_heading": "ブログ",
   "blog_description": "Codex や Pi などのコーディングエージェントを自分のマシンで実行し、ブラウザーから操作するためのガイドです。",
   "blog_updated": "{date} に更新",
   "blog_cta": "Pontia は無料のオープンソースです。Linux または macOS に数分でインストールできます。",
+
   "code_copy": "コピー",
   "code_copy_label": "コードをコピー",
   "code_copied": "コピーしました",

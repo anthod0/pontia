@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - In Dashboard, Bot chat errors for a failed send, a failed message retry, or a failed refresh now appear as a toast with a Retry button instead of a line above the input. Chat input errors after sending attachments also appear as a toast.
 
-- The homepage combines the two Bot sections into one. Pick a Bot to watch it keep context across days, turn decisions into todos, or report a failed agent; a short list of other Bot features follows.
+- The homepage combines the two Bot sections into one. Pick one of nine Bots to watch a Bot feature play out: keeping context across days, turning decisions into todos, reporting a failed agent, choosing agents by Agent Profile, working in separate git worktrees, learning your preferences, sending files, switching devices, and keeping agents running through a pontiad restart.
 
 - In Dashboard, the Agent Profiles page has its New profile button at the top right, as on the Agent Clients page, and its edit form shows Delete next to Save on the right. Model pickers in Agent Profiles, Bot settings and the new-chat toolbar now look like the client picker.
 

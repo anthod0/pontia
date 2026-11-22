@@ -15,7 +15,7 @@
 		{ agent: claude, title: m.story_task_api },
 		{ agent: pi, title: m.story_task_tests }
 	];
-	const restarting = $derived(step === 1 || step === 2);
+	const restarting = $derived(step === 1);
 	const linked = $derived(step === 0 || step === 3);
 	const progress = $derived([30, 50, 70, 88][step]);
 	const daemonState = $derived(step === 1 ? 'restarting' : step === 3 ? 'reconnected' : 'running');
@@ -84,12 +84,10 @@
 		.restart { grid-template-columns: 1fr; min-height: 0; padding-top: 34px; }
 		.daemon { grid-template-columns: auto 1fr; grid-template-rows: auto auto; justify-items: start; gap: 2px 12px; padding: 12px 14px; }
 		.avatar { grid-row: 1 / 3; width: 36px; height: 36px; }
-		.agents { gap: 10px; padding-left: 20px; border-left: 2px solid transparent; }
 		.link { grid-template-columns: 1fr; position: relative; }
 		.wire { position: absolute; left: -20px; top: -10px; bottom: 50%; width: 20px; height: auto; border-top: 0; border-left: 2px dashed var(--border-stronger); border-bottom: 2px dashed var(--border-stronger); border-bottom-left-radius: 8px; }
 		.link.on .wire { border-left-style: solid; border-bottom-style: solid; border-color: var(--bot); }
-		.link:first-child .wire { top: -10px; }
-		.agents { margin-left: 26px; padding-left: 20px; padding-top: 10px; }
+		.agents { gap: 10px; margin-left: 26px; padding: 10px 0 0 20px; }
 		.agent { padding: 9px 12px; }
 	}
 </style>

@@ -5,18 +5,18 @@
 	import AgentBadge from './AgentBadge.svelte';
 	import BotAvatarMark from './BotAvatarMark.svelte';
 	import StoryState from './StoryState.svelte';
-	import { claude, codex, pi, storyByName, type SessionState, type Story } from '$lib/bot-stories';
+	import { claude, codex, pi, storyByName, type Agent, type SessionState, type Story } from '$lib/bot-stories';
 	import { m } from '$lib/paraglide/messages';
 
 	let { story, step }: { story: Story; step: number } = $props();
 
 	// The Dashboard switches devices one per step. Each device lists its own Bots and Sessions.
-	const devices = [
-		{ icon: DesktopIcon, name: m.story_device_desk, bots: ['Tova', 'Atlas', 'Mika'], sessions: [{ agent: codex, title: m.story_task_ui, state: 'running' as SessionState }, { agent: pi, title: m.story_task_tests, state: 'done' as SessionState }] },
-		{ icon: LaptopIcon, name: m.story_device_laptop, bots: ['Remy', 'Pip'], sessions: [{ agent: claude, title: m.story_task_login, state: 'running' as SessionState }] },
-		{ icon: HardDrivesIcon, name: m.story_device_server, bots: ['Juno', 'Sol'], sessions: [{ agent: claude, title: m.story_task_api, state: 'done' as SessionState }, { agent: codex, title: m.story_context_task, state: 'running' as SessionState }] }
+	type Device = { icon: typeof DesktopIcon; name: () => string; bots: string[]; sessions: { agent: Agent; title: () => string; state: SessionState }[] };
+	const devices: Device[] = [
+		{ icon: DesktopIcon, name: m.story_device_desk, bots: ['Tova', 'Atlas', 'Mika'], sessions: [{ agent: codex, title: m.story_task_ui, state: 'running' }, { agent: pi, title: m.story_task_tests, state: 'done' }] },
+		{ icon: LaptopIcon, name: m.story_device_laptop, bots: ['Remy', 'Pip', 'Kai', 'Ivy'], sessions: [{ agent: claude, title: m.story_task_login, state: 'running' }] },
+		{ icon: HardDrivesIcon, name: m.story_device_server, bots: ['Juno', 'Sol'], sessions: [{ agent: claude, title: m.story_task_api, state: 'done' }, { agent: codex, title: m.story_context_task, state: 'running' }] }
 	];
-	const current = $derived(step);
 	const device = $derived(devices[step]);
 </script>
 
@@ -27,10 +27,10 @@
 			<ul class="switcher">
 				{#each devices as d, i (i)}
 					{@const Icon = d.icon}
-					<li class={['device', i === current && 'active']}><Icon size={15} /><span>{d.name()}</span></li>
+					<li class={['device', i === step && 'active']}><Icon size={15} /><span>{d.name()}</span></li>
 				{/each}
 			</ul>
-			{#key current}
+			{#key step}
 				<div class="content enter">
 					<span class="heading">{m.story_devices_bots()}</span>
 					<ul class="bots">

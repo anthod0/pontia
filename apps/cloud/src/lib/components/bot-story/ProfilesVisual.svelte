@@ -66,7 +66,7 @@
 	@media (max-width: 760px) {
 		.profiles { grid-template-columns: 1fr; gap: 14px; }
 		.hub { flex-direction: row; justify-content: flex-start; flex-wrap: wrap; padding: 0; gap: 10px; }
-		.hub .msg { order: 2; flex-basis: 100%; align-self: flex-end; text-align: left; max-width: 86%; margin-left: auto; flex-basis: auto; }
+		.hub .msg { order: 2; align-self: flex-end; text-align: left; max-width: 86%; margin-left: auto; flex-basis: auto; }
 		.avatar { width: 32px; height: 32px; }
 		.lanes { gap: 8px; padding-left: 22px; }
 		.lanes::before { left: 0; top: 33px; bottom: 33px; }
