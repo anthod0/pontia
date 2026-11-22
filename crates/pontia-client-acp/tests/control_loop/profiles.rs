@@ -52,6 +52,7 @@ fn assert_prompts(h: &Harness, expected: Option<&str>) {
     assert!(!requests.is_empty());
     for request in requests {
         assert_eq!(request["params"]["systemPrompt"], expected);
+        assert!(request["params"]["_meta"].get("rules").is_none());
     }
 }
 
@@ -61,6 +62,7 @@ async fn explicit_instructions_are_appended_and_pinned_across_history_and_restar
     let session = create(
         &h,
         json!({
+            "metadata":{"acp_agent_id":"second"},
             "system_instructions":"profile-marker\n\ncaller-marker",
             "include_standalone_session_instructions": true,
         }),
@@ -82,6 +84,39 @@ async fn explicit_instructions_are_appended_and_pinned_across_history_and_restar
     assert_prompts(&h, Some(&expected));
     assert_eq!(h.requests("session/new"), 1);
     assert!(h.requests("session/load") >= 2);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn native_instructions_are_sent_only_on_creation_and_remain_bound_on_recovery() {
+    let h = Harness::new(&[]).await;
+    let session = create(
+        &h,
+        json!({
+            "metadata":{"acp_agent_id":"second"}, "system_instructions":"native-marker"
+        }),
+    )
+    .await
+    .unwrap();
+    h.release("system-prompt");
+    h.crash_agent(&session);
+    h.wait_ready(&session, 2).await;
+    assert!(injected(&h, &session).await);
+    assert_eq!(h.requests("session/new"), 1);
+    for request in h.wire() {
+        let params = &request["params"];
+        match request["method"].as_str() {
+            Some("session/new") => {
+                assert_eq!(params["_meta"]["rules"], "native-marker");
+                assert!(params.get("systemPrompt").is_none());
+            }
+            Some("session/load") => {
+                assert!(params["_meta"].get("rules").is_none());
+                assert!(params.get("systemPrompt").is_none());
+            }
+            _ => {}
+        }
+    }
     h.stop().await;
 }
 
