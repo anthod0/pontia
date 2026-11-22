@@ -9,7 +9,7 @@
   import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon'
   import QuotesIcon from 'phosphor-svelte/lib/QuotesIcon'
   import ArrowBendUpLeftIcon from 'phosphor-svelte/lib/ArrowBendUpLeftIcon'
-  import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
+  import EyeSlashIcon from 'phosphor-svelte/lib/EyeSlashIcon'
   import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
   import { downloads } from '$lib/downloads/manager'
@@ -236,7 +236,7 @@
         <DropdownMenu.Item onSelect={() => viewContext(current)}><TreeStructureIcon />{$t('bots.viewContext')}</DropdownMenu.Item>
         {#if openTodo}
           <DropdownMenu.Separator />
-          <DropdownMenu.Item onSelect={() => resolveTodo(current)}><CheckIcon />{$t('bots.markDone')}</DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={() => resolveTodo(current)}><EyeSlashIcon />{$t('bots.ignore')}</DropdownMenu.Item>
         {/if}
       {:else if current.file}
         <DropdownMenu.Item onSelect={() => download(current)}><DownloadSimpleIcon />{$t('files.download')}</DropdownMenu.Item>
@@ -265,7 +265,7 @@
           <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => viewContext(current)}><TreeStructureIcon class="size-5" />{$t('bots.viewContext')}</button>
           {#if openTodo}
             <Separator class="mx-2 my-1 data-[orientation=horizontal]:w-auto" />
-            <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => resolveTodo(current)}><CheckIcon class="size-5" />{$t('bots.markDone')}</button>
+            <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => resolveTodo(current)}><EyeSlashIcon class="size-5" />{$t('bots.ignore')}</button>
           {/if}
         {/if}
       </div>
