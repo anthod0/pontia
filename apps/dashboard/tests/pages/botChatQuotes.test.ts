@@ -411,6 +411,7 @@ test("with a mouse, the message actions button opens the same menu as a right-cl
   await screen.findByText("certificate");
   const button = screen.getByRole("button", { name: "Message actions" });
   expect(button).toHaveClass("opacity-0", "group-hover/entry:opacity-100");
+  expect(button).not.toHaveAttribute("aria-expanded");
   await userEvent.click(button);
   const menu = await screen.findByRole("menu");
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -420,10 +421,10 @@ test("with a mouse, the message actions button opens the same menu as a right-cl
       .map((item) => item.textContent),
   ).toEqual(["ReplyR", "Copy", "View context"]);
   // The button stays visible while its menu is open.
-  expect(button).toHaveClass("opacity-100");
+  expect(button).toHaveAttribute("aria-expanded", "true");
   await userEvent.keyboard("{Escape}");
   await waitFor(() => expect(button).toHaveFocus());
-  expect(button).toHaveClass("opacity-0");
+  expect(button).not.toHaveAttribute("aria-expanded");
   await userEvent.click(button);
   await fireEvent.click(await screen.findByRole("menuitem", { name: /Reply/ }));
   await screen.findByRole("button", { name: /^Remove quote.*certificate/ });

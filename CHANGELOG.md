@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- In Dashboard, Bot chat messages show their **⋯** actions button on desktop when you hover over a message, as on phones. The menu item that quotes a whole message is now called Reply. Quote is still the name for quoting a selection, a file or an image.
+- In Dashboard, Bot chat messages and shared files show their **⋯** actions button on desktop while you hover over them or focus them with the keyboard. Phones still show it all the time. The menu item that quotes a whole message is now called Reply. Quote is still the name for quoting a selection, a file or an image.
 
 - In Dashboard, Bot chat errors for a failed send, a failed message retry, or a failed refresh now appear as a toast with a Retry button instead of a line above the input. Chat input errors after sending attachments also appear as a toast.
 

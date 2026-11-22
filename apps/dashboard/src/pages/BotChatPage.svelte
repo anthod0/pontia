@@ -34,7 +34,6 @@
   let feed = $state<BotMessageFeed>()
   let feedRoot = $state<HTMLElement>()
   let actions = $state<BotMessageActions>()
-  let menuOpenFor = $state<string | null>(null)
   let panel = $state<BotChatPanel>()
   provideFilePreviewNavigator({ open: file => panel?.openFile(file) })
   let composer = $state<MessageComposer>()
@@ -193,9 +192,12 @@
   </div>
 {/snippet}
 
-<!-- A long press on touch selects text, so touch rows always show this button; with a mouse it appears on hover or focus. -->
-{#snippet menuButton(id: string)}
-  <Button variant="ghost" size="icon-sm" class={['shrink-0 self-end text-muted-foreground transition-opacity pointer-coarse:opacity-100', menuOpenFor === id ? 'opacity-100' : 'opacity-0 group-hover/entry:opacity-100 group-focus-within/entry:opacity-100']} aria-label={$t('bots.messageActions')}
+<!-- A long press on touch selects text, so touch rows always show this button.
+     With a mouse it appears while its message or file is hovered or keyboard-focused, and while its menu is open. -->
+{#snippet menuButton(id: string, file = false)}
+  <Button variant="ghost" size="icon-sm" aria-haspopup="menu" aria-label={$t('bots.messageActions')}
+    class={['shrink-0 self-end text-muted-foreground opacity-0 transition-opacity focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100',
+      file ? 'group-hover/file:opacity-100 group-has-focus-visible/file:opacity-100' : 'group-hover/entry:opacity-100 group-has-focus-visible/entry:opacity-100']}
     onclick={(event: MouseEvent) => actions?.openMenu(id, event)}><DotsThreeIcon weight="bold" /></Button>
 {/snippet}
 
@@ -203,7 +205,7 @@
   <BotChatPanel bind:this={panel} bot={timeline.bot} count={timeline.openTodoCount} onjump={jumpTo} onquote={addQuote} ontodochange={changeTodo} />
   <!-- The feed scrolls beneath the transparent top bar, like the Session chat page. -->
   <section class="mx-auto -mt-14 flex h-dvh max-w-3xl flex-col md:-mt-12" aria-label={timeline.bot.name}>
-    <BotMessageActions root={feedRoot} entry={id => timeline.entries.find(row => row.id === id)} bind:this={actions} bind:openId={menuOpenFor} onresolve={id => changeTodo(id, 'resolve')} oncontext={id => panel?.viewContext(id)} onquote={quote => void addQuote(quote)} />
+    <BotMessageActions root={feedRoot} entry={id => timeline.entries.find(row => row.id === id)} bind:this={actions} onresolve={id => changeTodo(id, 'resolve')} oncontext={id => panel?.viewContext(id)} onquote={quote => void addQuote(quote)} />
     <BotMessageFeed bind:this={feed} bind:root={feedRoot} {timeline} {typing} highlighted={highlighted && timeline.entries.some(row => row.id === highlighted) ? highlighted : null}>
       {#snippet row(entry)}
         {#if 'content' in entry}
@@ -256,8 +258,8 @@
         {:else if entry.kind === 'shared_files'}
           <div class="max-w-[90%]">
             <SharedFiles files={entry.files} sessionId={entry.session_id} highlighted={highlighted}
-              itemProps={file => ({ ...quotableProps, 'data-bot-file-id': file.file_id })}>
-              {#snippet itemActions()}{@render menuButton(entry.id)}{/snippet}
+              itemProps={file => ({ ...quotableProps, class: 'group/file', 'data-bot-file-id': file.file_id })}>
+              {#snippet itemActions()}{@render menuButton(entry.id, true)}{/snippet}
             </SharedFiles>
           </div>
         {:else}

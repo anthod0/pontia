@@ -17,11 +17,9 @@
   import { useDeviceRuntime } from '../../device/context'
   import type { BotEntry, SharedFile } from '../../api/types'
 
-  let { root, entry, onquote, oncontext, onresolve, openId = $bindable(null) }: {
+  let { root, entry, onquote, oncontext, onresolve }: {
     /** Element containing the feed rows; events are delegated from it. */
     root: HTMLElement | undefined
-    /** The row whose menu is open. */
-    openId?: string | null
     entry: (id: string) => BotEntry | undefined
     onresolve: (messageId: string) => void
     oncontext: (messageId: string) => void
@@ -33,8 +31,8 @@
   const device = useDeviceRuntime()
 
   let target = $state<Target | null>(null)
-  /** The menu button that opened the menu; focus returns to it on close. */
-  let opener: HTMLElement | null = null
+  /** The row's menu button that opened the menu, if any. */
+  let opener = $state<HTMLElement | null>(null)
   let menuOpen = $state(false)
   let sheetOpen = $state(false)
   let anchor = $state({ x: 0, y: 0 })
@@ -191,10 +189,18 @@
     else toast.error($t('files.copyFailed'))
   }
 
-  // Keyboard users return to the menu button or message the menu acted on.
-  function restoreFocus(event: Event) {
+  // The menu button reports whether its menu is open; the page styles it from that.
+  $effect(() => {
+    const button = opener
+    if (!button || !(menuOpen || sheetOpen)) return
+    button.setAttribute('aria-expanded', 'true')
+    return () => button.removeAttribute('aria-expanded')
+  })
+
+  // Keyboard users return to the message the menu acted on, or to the button that opened the dropdown.
+  function restoreFocus(event: Event, toOpener = false) {
     event.preventDefault()
-    if (opener?.isConnected) opener.focus()
+    if (toOpener && opener?.isConnected) opener.focus()
     else if (target?.element.isConnected && target.element.tabIndex >= 0) target.element.focus()
   }
 
@@ -203,7 +209,6 @@
     return row && 'content' in row && row.todo?.state === 'open'
   })
   const isMessage = $derived(target !== null && 'content' in target.entry)
-  $effect(() => { openId = (menuOpen || sheetOpen) && target ? target.entry.id : null })
   // A whole message is quoted as a reply; a file keeps its quote label.
   const quoteLabel = $derived(target?.file ? (canPreviewImage(target.file) ? $t('bots.quoteImage') : $t('bots.quoteFile')) : $t('bots.reply'))
   const QuoteIcon = $derived(target?.file ? QuotesIcon : ArrowBendUpLeftIcon)
@@ -219,7 +224,7 @@
 </script>
 
 <DropdownMenu.Root bind:open={menuOpen}>
-  <DropdownMenu.Content customAnchor={menuAnchor} side="bottom" align="start" sideOffset={2} class="w-auto min-w-40" aria-label={$t('bots.messageActions')} onCloseAutoFocus={restoreFocus}>
+  <DropdownMenu.Content customAnchor={menuAnchor} side="bottom" align="start" sideOffset={2} class="w-auto min-w-40" aria-label={$t('bots.messageActions')} onCloseAutoFocus={event => restoreFocus(event, true)}>
     {#if target}
       {@const current = target}
       {#if current.file}
