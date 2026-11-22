@@ -177,7 +177,7 @@
       const message = await device.api.changeBotTodo(botId, id, action)
       timeline.message(message)
       if (action === 'resolve' && message.todo?.state === 'done' && message.todo.by === 'user') {
-        toast.success($t('bots.markedDone'), { id: message.id, action: { label: $t('common.undo'), onClick: () => void changeTodo(id, 'reopen') } })
+        toast.success($t('bots.ignored'), { id: message.id, action: { label: $t('common.undo'), onClick: () => void changeTodo(id, 'reopen') } })
       }
     } catch (failure) {
       toast.error(failure instanceof Error ? failure.message : String(failure))

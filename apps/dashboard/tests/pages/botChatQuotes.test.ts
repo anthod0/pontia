@@ -119,6 +119,7 @@ afterEach(() => {
   delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
   vi.restoreAllMocks();
   toast.error.mockReset();
+  toast.success.mockReset();
 });
 
 test("sends a quoted Bot reply as a user_quote element before the typed text", async () => {
@@ -598,6 +599,12 @@ test("ignoring a todo resolves it like marking it done", async () => {
   const item = await openTodos();
   await fireEvent.click(item.getByRole("button", { name: "Ignore" }));
   await waitFor(() => expect(change).toHaveBeenCalledWith(bot.bot_id, todo.id, "resolve"));
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledWith(
+      "Ignored",
+      expect.objectContaining({ action: expect.objectContaining({ label: "Undo" }) }),
+    ),
+  );
 });
 
 test("ignores an open todo from its message menu", async () => {
@@ -610,6 +617,12 @@ test("ignores an open todo from its message menu", async () => {
   await fireEvent.contextMenu(await screen.findByText("certificate"), { clientX: 10, clientY: 10 });
   await fireEvent.click(await screen.findByRole("menuitem", { name: "Ignore" }));
   await waitFor(() => expect(change).toHaveBeenCalledWith(bot.bot_id, todo.id, "resolve"));
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledWith(
+      "Ignored",
+      expect.objectContaining({ action: expect.objectContaining({ label: "Undo" }) }),
+    ),
+  );
 });
 
 test("opens an outstanding todo from the feed and quotes it into the composer", async () => {

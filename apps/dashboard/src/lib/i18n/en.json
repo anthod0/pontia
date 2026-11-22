@@ -59,7 +59,7 @@
   "bots.viewContext": "View context",
   "bots.noSelection": "No message selected",
   "bots.todos": "Todo",
-  "bots.markedDone": "Marked as done",
+  "bots.ignored": "Ignored",
   "common.undo": "Undo",
   "bots.recentlyResolved": "Recently resolved",
   "bots.resolvedByYou": "Resolved by you",
