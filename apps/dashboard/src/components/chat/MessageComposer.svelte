@@ -118,19 +118,19 @@
   let editor = $state<{ focusEnd: () => void } | null>(null)
   let focusCommandInput = false
   const availableCommands = $derived(startSession ? [] : commands.filter((item) => !item.disabledReason))
-  // Fixed menu layout; `menuItems` opens the session tools group ahead of /compact.
-  const menuGroups: { names: ChatCommand['name'][]; extras?: boolean }[] = [
+  // Fixed menu groups; `menuItems` renders at the start of the /compact group.
+  const menuGroups: { names: ChatCommand['name'][]; withMenuItems?: boolean }[] = [
     { names: ['/new'] },
     { names: ['/rename', '/pin', '/archive'] },
-    { names: ['/compact'], extras: true },
+    { names: ['/compact'], withMenuItems: true },
     { names: ['/exit'] },
   ]
   const visibleMenuGroups = $derived(menuGroups
     .map(group => ({
-      extras: Boolean(group.extras && menuItems),
+      withMenuItems: Boolean(group.withMenuItems && menuItems),
       commands: group.names.flatMap(name => availableCommands.filter(item => item.name === name)),
     }))
-    .filter(group => group.extras || group.commands.length > 0))
+    .filter(group => group.withMenuItems || group.commands.length > 0))
   const command = $derived(findChatCommand(value, commands))
   const commandAction = $derived(command ? commandActionFor(command) : undefined)
   const commandArgument = $derived(command ? value.trim().slice(command.name.length).trim() : '')
@@ -293,7 +293,7 @@
         <DropdownMenu.Content side="top" align="end" class="w-64" preventScroll={false} onCloseAutoFocus={restoreCommandFocus}>
           {#each visibleMenuGroups as group, index}
             {#if index > 0}<DropdownMenu.Separator />{/if}
-            {#if group.extras}{@render menuItems?.()}{/if}
+            {#if group.withMenuItems}{@render menuItems?.()}{/if}
             {#each group.commands as item (item.name)}
               {@const action = commandActionFor(item)}
               <DropdownMenu.Item variant={item.name === '/exit' ? 'destructive' : 'default'} onSelect={() => chooseMenuCommand(item)}>

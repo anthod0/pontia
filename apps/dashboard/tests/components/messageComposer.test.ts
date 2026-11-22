@@ -286,7 +286,10 @@ test("chat actions use fixed groups regardless of command order and skip unavail
     menu.querySelectorAll(
       '[data-slot="dropdown-menu-item"], [data-slot="dropdown-menu-separator"]',
     ),
-    (element) => element.querySelector(".font-mono")?.textContent ?? "---",
+    (element) =>
+      element.getAttribute("data-slot") === "dropdown-menu-separator"
+        ? "---"
+        : element.querySelector(".font-mono")?.textContent,
   );
   expect(layout).toEqual(["/new", "---", "/rename", "/pin", "/archive", "---", "/exit"]);
 });
