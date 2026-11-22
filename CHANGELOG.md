@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- In Dashboard, the Session chat actions menu next to the input lists New chat first, then Rename, Pin and Archive, then Shared files and Compact context, with Exit in its own group at the bottom.
+
 - In Dashboard, Bot chat messages and shared files show their **⋯** actions button on desktop while you hover over them or focus them with the keyboard. Phones still show it all the time. The menu item that quotes a whole message is now called Reply. Quote is still the name for quoting a selection, a file or an image.
 
 - In Dashboard, Bot chat errors for a failed send, a failed message retry, or a failed refresh now appear as a toast with a Retry button instead of a line above the input. Chat input errors after sending attachments also appear as a toast.
