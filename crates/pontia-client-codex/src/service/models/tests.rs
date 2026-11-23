@@ -25,12 +25,12 @@ async fn model_catalog_follows_pagination_and_filters_hidden_models() {
         for (cursor, data, next) in [
             (
                 Value::Null,
-                json!([{"id":"catalog-a","model":"model-a","displayName":"Model A","description":"First"}]),
+                json!([{"id":"catalog-a","model":"model-a","displayName":"Model A","description":"First","supportedReasoningEfforts":[{"reasoningEffort":"adaptive","description":"Choose the depth automatically"}],"defaultReasoningEffort":"adaptive"}]),
                 json!("page-2"),
             ),
             (
                 json!("page-2"),
-                json!([{"model":"hidden","displayName":"Hidden","hidden":true},{"id":"catalog-b","model":"model-b","displayName":"Model B"}]),
+                json!([{"model":"hidden","displayName":"Hidden","hidden":true},{"id":"catalog-b","model":"model-b","displayName":"Model B","supportedReasoningEfforts":[]}]),
                 Value::Null,
             ),
         ] {
@@ -61,6 +61,16 @@ async fn model_catalog_follows_pagination_and_filters_hidden_models() {
     );
     assert_eq!(models.models[0].name, "Model A");
     assert_eq!(models.models[0].description, "First");
+    assert_eq!(
+        serde_json::to_value(&models.models[0].reasoning_efforts).unwrap(),
+        json!([{"id":"adaptive","name":"adaptive","description":"Choose the depth automatically"}])
+    );
+    assert_eq!(
+        models.models[0].default_reasoning_effort.as_deref(),
+        Some("adaptive")
+    );
+    assert!(models.models[1].reasoning_efforts.is_empty());
+    assert_eq!(models.models[1].default_reasoning_effort, None);
     server.await.unwrap();
 }
 
