@@ -69,14 +69,16 @@ impl CodexService {
         root: &Path,
         cwd: &Path,
         model: Option<&str>,
+        reasoning_effort: Option<&str>,
         environment: &std::collections::BTreeMap<String, String>,
     ) -> Result<()> {
         let root = root.canonicalize()?;
-        sqlx::query("UPDATE sessions SET metadata=json_set(CASE WHEN json_type(metadata)='object' THEN metadata ELSE '{}' END,'$.codex_control_root',?,'$.codex_environment',json(?),'$.codex_launch_cwd',?,'$.codex_launch_model',?) WHERE session_id=?")
+        sqlx::query("UPDATE sessions SET metadata=json_set(CASE WHEN json_type(metadata)='object' THEN metadata ELSE '{}' END,'$.codex_control_root',?,'$.codex_environment',json(?),'$.codex_launch_cwd',?,'$.codex_launch_model',?,'$.codex_launch_reasoning_effort',?) WHERE session_id=?")
             .bind(root.display().to_string())
             .bind(serde_json::to_string(environment)?)
             .bind(cwd.display().to_string())
             .bind(model)
+            .bind(reasoning_effort)
             .bind(session_id)
             .execute(&self.pool).await?;
         let _ = observation_changes().send((
@@ -184,11 +186,22 @@ impl CodexService {
                 (snapshot["thread"].clone(), turns)
             }
             None => {
-                let (cwd, model): (Option<String>, Option<String>) = sqlx::query_as("SELECT COALESCE(workspace_ref,json_extract(metadata,'$.codex_launch_cwd')),json_extract(metadata,'$.codex_launch_model') FROM sessions WHERE session_id=?")
-                    .bind(session_id).fetch_one(&self.pool).await?;
+                let (cwd, model, effort): (Option<String>, Option<String>, Option<String>) =
+                    sqlx::query_as(
+                        "SELECT COALESCE(workspace_ref,json_extract(metadata,'$.codex_launch_cwd')),
+                                json_extract(metadata,'$.codex_launch_model'),
+                                json_extract(metadata,'$.codex_launch_reasoning_effort')
+                         FROM sessions WHERE session_id=?",
+                    )
+                    .bind(session_id)
+                    .fetch_one(&self.pool)
+                    .await?;
                 let cwd =
                     cwd.ok_or_else(|| Error::StateConflict("Codex launch cwd is missing".into()))?;
-                let config = self.session_config(session_id, &connection, &cwd).await?;
+                let mut config = self.session_config(session_id, &connection, &cwd).await?;
+                if let Some(effort) = effort {
+                    config["model_reasoning_effort"] = effort.into();
+                }
                 let mut params = json!({"cwd":cwd,"historyMode":"legacy","config":config});
                 if let Some(model) = model {
                     params["model"] = model.into();

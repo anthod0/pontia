@@ -28,10 +28,14 @@ impl Fixture {
     }
 
     async fn with_instructions(system_instructions: Option<&str>) -> Self {
-        Self::with_policy(system_instructions, json!({})).await
+        Self::create(system_instructions, json!({}), None).await
     }
 
-    async fn with_policy(system_instructions: Option<&str>, execution_policy: Value) -> Self {
+    async fn create(
+        system_instructions: Option<&str>,
+        execution_policy: Value,
+        effort: Option<&str>,
+    ) -> Self {
         let root = tempfile::tempdir().unwrap();
         let socket = root.path().join("app-server.sock");
         let listener = UnixListener::bind(&socket).unwrap();
@@ -115,7 +119,7 @@ impl Fixture {
                                 .await
                                 .unwrap();
                         }
-                        json!({"thread":thread,"model":"model-one"})
+                        json!({"thread":thread,"model":"model-one","reasoningEffort":if method == "thread/start" { "medium" } else { "low" }})
                     }
                     "thread/read" => json!({"thread":thread}),
                     "thread/turns/list" => {
@@ -127,7 +131,7 @@ impl Fixture {
                         json!({"turn":{"id":"turn-one"}})
                     }
                     "model/list" => {
-                        json!({"data":[{"model":"model-one","displayName":"Model One","description":"test","hidden":false,"isDefault":true}],"nextCursor":null})
+                        json!({"data":[{"model":"model-one","displayName":"Model One","description":"test","hidden":false,"isDefault":true,"supportedReasoningEfforts":[]}],"nextCursor":null})
                     }
                     "thread/archive" => {
                         materialized = true;
@@ -177,7 +181,7 @@ impl Fixture {
             .session_commands()
             .create_session(
                 serde_json::from_value::<CreateSessionRequest>(
-                    json!({"client_type":"codex","workspace":root.path(),"system_instructions":system_instructions,"include_standalone_session_instructions":true,"execution_policy":execution_policy}),
+                    json!({"client_type":"codex","workspace":root.path(),"system_instructions":system_instructions,"include_standalone_session_instructions":true,"execution_policy":execution_policy,"reasoning_effort":effort}),
                 )
                 .unwrap(),
             )
@@ -209,11 +213,95 @@ impl Fixture {
             .unwrap();
     }
 
+    async fn start_observer(&self) -> (tokio::sync::watch::Sender<bool>, JoinHandle<()>) {
+        self.methods.lock().await.clear();
+        let (shutdown, receiver) = tokio::sync::watch::channel(false);
+        let observer = tokio::spawn(
+            super::CodexObserver::new(&self.app, self.root.path().into()).run(receiver),
+        );
+        // Wait for the observer's initial snapshot before sending a live notification.
+        tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            loop {
+                if self
+                    .methods
+                    .lock()
+                    .await
+                    .iter()
+                    .any(|method| method == "thread/read")
+                {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        (shutdown, observer)
+    }
+
     async fn shutdown(self) {
         self.app.inbox_commands().stop_scheduling().await;
         CodexRuntime::shutdown(self.root.path()).await;
         self.server.abort();
     }
+}
+
+#[tokio::test]
+async fn reasoning_effort_applies_only_at_launch_and_tracks_native_settings() {
+    use pontia_core::domain::EventType;
+    let fixture = Fixture::create(None, json!({}), Some("high")).await;
+    let observed = || async {
+        fixture
+            .app
+            .queries()
+            .get_session(&fixture.session)
+            .await
+            .unwrap()
+            .unwrap()
+            .reasoning_effort
+    };
+    fixture.dispatch_first_input().await;
+    assert_eq!(
+        fixture.thread_requests.lock().await[0]["params"]["config"]["model_reasoning_effort"],
+        "high"
+    );
+    assert_eq!(observed().await.as_deref(), Some("medium"));
+
+    fixture
+        .app
+        .session_commands()
+        .terminate_session(&fixture.session)
+        .await
+        .unwrap();
+    fixture
+        .app
+        .session_commands()
+        .resume_session(&fixture.session, fixture.root.path())
+        .await
+        .unwrap();
+    let requests = fixture.thread_requests.lock().await;
+    assert_eq!(requests[1]["method"], "thread/resume");
+    assert!(
+        requests[1]["params"]["config"]
+            .get("model_reasoning_effort")
+            .is_none()
+    );
+    drop(requests);
+    assert_eq!(observed().await.as_deref(), Some("low"));
+
+    let (shutdown, observer) = fixture.start_observer().await;
+    for effort in [Some("adaptive"), None] {
+        let mut events = fixture.app.agent_events().subscribe();
+        fixture.notifications.send(json!({
+            "method":"thread/settings/updated",
+            "params":{"threadId":"thread-one","threadSettings":{"model":"model-one","effort":effort}}
+        })).unwrap();
+        wait_for(&mut events, EventType::SessionReasoningEffortUpdated, None).await;
+        assert_eq!(observed().await.as_deref(), effort);
+    }
+    shutdown.send(true).unwrap();
+    observer.await.unwrap();
+    fixture.shutdown().await;
 }
 
 #[tokio::test]
@@ -231,7 +319,7 @@ async fn restricted_session_starts_with_native_agents_disabled() {
         config
             .validate_execution_policy("default", &policy)
             .unwrap();
-        let fixture = Fixture::with_policy(None, json!(policy)).await;
+        let fixture = Fixture::create(None, json!(policy), None).await;
         fixture.dispatch_first_input().await;
         {
             let requests = fixture.thread_requests.lock().await;
@@ -266,7 +354,7 @@ async fn restricted_session_starts_with_native_agents_disabled() {
 #[tokio::test]
 async fn yolo_is_scoped_to_the_session_and_preserved_on_resume() {
     for yolo in [false, true] {
-        let fixture = Fixture::with_policy(None, json!({"yolo":yolo})).await;
+        let fixture = Fixture::create(None, json!({"yolo":yolo}), None).await;
         *fixture.configuration.lock().await =
             json!({"approval_policy":"on-request","sandbox_mode":"workspace-write"});
         fixture.dispatch_first_input().await;
@@ -312,7 +400,7 @@ async fn yolo_is_scoped_to_the_session_and_preserved_on_resume() {
 #[tokio::test]
 async fn skill_instructions_are_disabled_only_for_the_requested_session_across_resume() {
     for disable_skills in [false, true] {
-        let fixture = Fixture::with_policy(None, json!({"disable_skills":disable_skills})).await;
+        let fixture = Fixture::create(None, json!({"disable_skills":disable_skills}), None).await;
         *fixture.configuration.lock().await = json!({"skills":{"include_instructions":true}});
         fixture.dispatch_first_input().await;
         fixture
@@ -379,6 +467,7 @@ async fn start_and_resume_preserve_environment_filters_and_override_session_iden
                 fixture.root.path(),
                 fixture.root.path(),
                 Some("model-two"),
+                None,
                 &environment,
             )
             .await
@@ -1006,27 +1095,7 @@ async fn native_title_notifications_update_sessions_without_overriding_manual_na
     let fixture = Fixture::new().await;
     fixture.dispatch_first_input().await;
     let mut events = fixture.app.agent_events().subscribe();
-    let (shutdown, receiver) = tokio::sync::watch::channel(false);
-    let observer = tokio::spawn(
-        super::CodexObserver::new(&fixture.app, fixture.root.path().into()).run(receiver),
-    );
-    // Wait for the observer's initial snapshot before sending a live notification.
-    tokio::time::timeout(std::time::Duration::from_secs(3), async {
-        loop {
-            if fixture
-                .methods
-                .lock()
-                .await
-                .iter()
-                .any(|method| method == "thread/read")
-            {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-        }
-    })
-    .await
-    .unwrap();
+    let (shutdown, observer) = fixture.start_observer().await;
     let send = |method: &str, params: Value| {
         let mut params = params;
         params["threadId"] = json!("thread-one");

@@ -206,6 +206,7 @@ impl ClientSession for CodexClient {
                     root,
                     &cwd,
                     request.model.as_deref(),
+                    request.reasoning_effort.as_deref(),
                     &request.environment,
                 )
                 .await

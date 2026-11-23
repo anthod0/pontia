@@ -26,7 +26,7 @@ Workspace 是 Agent 运行时所在的项目目录。创建 Session 之前，请
 1. 打开 [New chat](https://app.pontia.dev/)。
 2. 选择一个已激活的 Workspace。
 3. 选择一个已启用的 Agent Client，例如 Pi、Codex、Claude Code 或Grok Build。
-4. 使用 Pi、Codex 或 Claude Code 时，可以选择模型，也可以沿用客户端默认模型。如果 Pi 或 Claude Code 的模型支持推理，还可以选择推理强度。
+4. 使用 Pi、Codex 或 Claude Code 时，可以选择模型，也可以沿用客户端默认模型。如果模型提供推理档位，还可以选择推理强度。
 5. 描述任务并提交提示词。
 
 Pontia 会创建一个持久的 Session，并在你的设备上启动所选的 Agent Client。即使你离开聊天页面，该 Session 仍会保留在 Pontia 中。

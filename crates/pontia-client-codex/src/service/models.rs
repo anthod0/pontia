@@ -6,7 +6,14 @@ use serde_json::{Value, json};
 
 use super::{CodexService, string};
 use pontia_agent_control::agent_clients::AgentClientModels;
-use pontia_agent_control::sessions::SessionModel;
+use pontia_agent_control::sessions::{ReasoningEffortOption, SessionModel};
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeEffortOption {
+    reasoning_effort: String,
+    description: String,
+}
 
 impl CodexService {
     pub(crate) async fn available_models(root: &std::path::Path) -> Result<AgentClientModels> {
@@ -34,7 +41,21 @@ impl CodexService {
                 EventType::SessionModelUpdated,
                 json!({"model":model}),
             )
-            .await
+            .await?;
+        if let Some(effort) = settings
+            .get("effort")
+            .or_else(|| settings.get("reasoningEffort"))
+        {
+            self.event_ingest
+                .report_client_fact(
+                    session,
+                    None,
+                    EventType::SessionReasoningEffortUpdated,
+                    json!({"reasoning_effort":effort}),
+                )
+                .await?;
+        }
+        Ok(())
     }
 
     pub(super) async fn model_snapshot(
@@ -70,9 +91,20 @@ async fn list_models(connection: &Connection) -> Result<AgentClientModels> {
             if model["isDefault"] == true {
                 default_model = Some(string(model, "model")?.into());
             }
+            let efforts: Vec<NativeEffortOption> =
+                serde_json::from_value(model["supportedReasoningEfforts"].clone())?;
             models.push(SessionModel {
-                reasoning_efforts: vec![],
-                default_reasoning_effort: None,
+                reasoning_efforts: efforts
+                    .into_iter()
+                    .map(|option| ReasoningEffortOption {
+                        name: option.reasoning_effort.clone(),
+                        id: option.reasoning_effort,
+                        description: option.description,
+                    })
+                    .collect(),
+                default_reasoning_effort: serde_json::from_value(
+                    model["defaultReasoningEffort"].clone(),
+                )?,
                 id: string(model, "model")?.into(),
                 name: string(model, "displayName")?.into(),
                 description: model["description"].as_str().unwrap_or_default().into(),
