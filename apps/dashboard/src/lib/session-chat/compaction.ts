@@ -1,5 +1,44 @@
 import { translate as defaultTranslate, type Translator } from "$lib/i18n";
-import type { EventView, SessionView, TurnTimelineItem } from "../../api/types";
+import { formatTokenCount } from "$lib/contextUsage";
+import type { EventView, SessionView, TimelineItem, TurnTimelineItem } from "../../api/types";
+
+export interface CompactionTokens {
+  before: number | null;
+  after: number | null;
+}
+
+/** A checkpoint synthesized from a completion fact carries the reported token counts. */
+export type CompactionCheckpointItem = TimelineItem & { compaction_tokens?: CompactionTokens };
+type CompactionTimelineItem = TurnTimelineItem & CompactionCheckpointItem;
+
+function tokenCount(value: unknown): number | null {
+  return typeof value === "number" ? value : null;
+}
+
+export function compactionTokens(event: EventView): CompactionTokens {
+  return {
+    before: tokenCount(event.payload.tokens_before),
+    after: tokenCount(event.payload.tokens_after),
+  };
+}
+
+export function compactionCompletedLabel(
+  tokens: CompactionTokens | undefined,
+  translate: Translator = defaultTranslate,
+): string {
+  const before = tokens?.before ?? null;
+  const after = tokens?.after ?? null;
+  if (before !== null && after !== null)
+    return translate("compaction.tokenChange", {
+      before: formatTokenCount(before),
+      after: formatTokenCount(after),
+    });
+  if (before !== null)
+    return translate("compaction.tokensBefore", { before: formatTokenCount(before) });
+  if (after !== null)
+    return translate("compaction.tokensAfter", { after: formatTokenCount(after) });
+  return translate("compaction.completed");
+}
 
 export function compactionDisabledReason(
   session: SessionView,
@@ -55,28 +94,26 @@ export function compactionStatus(
       busy: false,
     };
   }
-  const before = event.payload.tokens_before;
-  const after = event.payload.tokens_after;
-  const message =
-    typeof before === "number" && typeof after === "number"
-      ? translate("compaction.tokenChange", { before, after })
-      : translate("compaction.completed");
-  return { phase: "completed", message, busy: false };
+  return {
+    phase: "completed",
+    message: compactionCompletedLabel(compactionTokens(event), translate),
+    busy: false,
+  };
 }
 
 // These clients report durable completion facts but cannot read native checkpoints.
 export function compactionEventItems(
   items: TurnTimelineItem[],
   events: EventView[],
-): TurnTimelineItem[] {
+): CompactionTimelineItem[] {
   const completed = new Map<string, EventView>();
   for (const event of events) {
     if (event.type === "session.compaction_completed")
       completed.set(event.payload.operation_id as string, event);
   }
-  const result = [...items];
+  const result: CompactionTimelineItem[] = [...items];
   for (const event of [...completed.values()].sort((a, b) => a.time.localeCompare(b.time))) {
-    const checkpoint: TurnTimelineItem = {
+    const checkpoint: CompactionTimelineItem = {
       item_id: `compaction-event:${event.event_id}`,
       turn_id: null,
       kind: "context_compaction",
@@ -86,6 +123,7 @@ export function compactionEventItems(
       status: "completed",
       occurred_at: event.time,
       content_preview: "",
+      compaction_tokens: compactionTokens(event),
     };
     const next = result.findIndex((item) => item.occurred_at && item.occurred_at > event.time);
     result.splice(next < 0 ? result.length : next, 0, checkpoint);
