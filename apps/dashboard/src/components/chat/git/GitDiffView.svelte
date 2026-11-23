@@ -24,7 +24,8 @@
     /** The file's entry in the change list, when it is still listed. */
     change: GitChangedFile | undefined
     onback: () => void
-    onclose: () => void
+    /** Closes the surrounding panel; the close button shows only with it. */
+    onclose?: () => void
   } = $props()
 
   const skeletonLines = [42, 68, 55, 0, 74, 61, 83, 36, 0, 58, 70, 47]
@@ -73,7 +74,7 @@
   <Button variant="ghost" size="icon-sm" class="max-lg:size-11" disabled={diffQuery.isFetching} onclick={() => diffQuery.refetch()} aria-label={$t('common.refresh')} title={$t('common.refresh')}>
     <ArrowClockwiseIcon class={['size-4 max-lg:size-5', diffQuery.isFetching && 'animate-spin']} />
   </Button>
-  <Button variant="ghost" size="icon-sm" class="max-lg:size-11" onclick={onclose} aria-label={$t('common.close')} title={`${$t('common.close')} (Alt G)`}><XIcon class="size-4 max-lg:size-5" /></Button>
+  {#if onclose}<Button variant="ghost" size="icon-sm" class="max-lg:size-11" onclick={onclose} aria-label={$t('common.close')} title={`${$t('common.close')} (Alt G)`}><XIcon class="size-4 max-lg:size-5" /></Button>{/if}
 </header>
 <div class="flex shrink-0 items-center gap-2 border-b px-3 py-1.5 text-xs">
   <Badge variant="outline" class={['font-normal', group.tone]}>{$t(group.label)}</Badge>
