@@ -9,7 +9,7 @@ use tower::ServiceExt;
 use pontia_application::AppState;
 use pontia_http as http;
 
-async fn test_state() -> AppState {
+async fn test_state() -> (AppState, tempfile::TempDir) {
     TestApp::builder()
         .database_name("health.db")
         .external_api_token(Some("test-token".into()))
@@ -19,7 +19,8 @@ async fn test_state() -> AppState {
 
 #[tokio::test]
 async fn healthz_returns_ok_json() {
-    let response = http::router(test_state().await)
+    let (state, _pontia_home) = test_state().await;
+    let response = http::router(state)
         .oneshot(
             Request::builder()
                 .uri("/healthz")
@@ -44,7 +45,8 @@ async fn healthz_returns_ok_json() {
 
 #[tokio::test]
 async fn legacy_session_list_method_is_removed() {
-    let response = http::router(test_state().await)
+    let (state, _pontia_home) = test_state().await;
+    let response = http::router(state)
         .oneshot(
             Request::builder()
                 .uri("/api/v1/sessions")
@@ -60,7 +62,7 @@ async fn legacy_session_list_method_is_removed() {
 
 #[tokio::test]
 async fn obsolete_http_endpoints_are_removed() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     for (method, path) in [
         ("POST", "/internal/v1/events"),
         ("POST", "/internal/v1/workflows"),

@@ -34,7 +34,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
  {
     let temp = tempdir().unwrap();
 
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     let session_id = "sess_pi_linear_topology";
     let session_key = "pi-linear-topology";
     let cwd = temp.path().join("workspace");

@@ -16,14 +16,14 @@ mod admission;
 mod availability;
 mod git;
 
-async fn test_state(roots: Vec<WorkspaceRootConfig>) -> AppState {
+async fn test_state(roots: Vec<WorkspaceRootConfig>) -> (AppState, tempfile::TempDir) {
     test_state_with_file_picker(roots, FilePickerConfig::default()).await
 }
 
 async fn test_state_with_file_picker(
     roots: Vec<WorkspaceRootConfig>,
     file_picker: FilePickerConfig,
-) -> AppState {
+) -> (AppState, tempfile::TempDir) {
     TestApp::builder()
         .database_name("workspace_api.db")
         .external_api_token(Some(TOKEN.to_string()))
@@ -142,7 +142,7 @@ async fn git_status_read_returns_unknown_until_workspace_is_observed() {
     let root = tempfile::tempdir().expect("root");
     let app = root.path().join("app");
     std::fs::create_dir(&app).expect("app");
-    let state = test_state(vec![WorkspaceRootConfig {
+    let (state, _pontia_home) = test_state(vec![WorkspaceRootConfig {
         root_id: "projects".to_string(),
         label: "Projects".to_string(),
         path: root.path().display().to_string(),
@@ -191,7 +191,7 @@ async fn refreshing_git_status_updates_sqlite_projection_read_by_get() {
     );
     std::fs::write(app.join("README.md"), "hello changed\n").expect("modify tracked file");
     std::fs::write(app.join("notes.txt"), "untracked\n").expect("untracked file");
-    let state = test_state(vec![WorkspaceRootConfig {
+    let (state, _pontia_home) = test_state(vec![WorkspaceRootConfig {
         root_id: "projects".to_string(),
         label: "Projects".to_string(),
         path: root.path().display().to_string(),
@@ -242,7 +242,7 @@ async fn file_picker_returns_directories_and_files_and_respects_ignore_config() 
         "module.exports = {}\n",
     )
     .expect("dep");
-    let state = test_state(vec![WorkspaceRootConfig {
+    let (state, _pontia_home) = test_state(vec![WorkspaceRootConfig {
         root_id: "projects".to_string(),
         label: "Projects".to_string(),
         path: root.path().display().to_string(),
@@ -304,7 +304,7 @@ async fn file_picker_can_include_hidden_and_normally_ignored_files_from_config()
         ignore_globs: vec![],
         ..FilePickerConfig::default()
     };
-    let state = test_state_with_file_picker(
+    let (state, _pontia_home) = test_state_with_file_picker(
         vec![WorkspaceRootConfig {
             root_id: "projects".to_string(),
             label: "Projects".to_string(),
@@ -341,7 +341,7 @@ async fn file_picker_can_include_hidden_and_normally_ignored_files_from_config()
 async fn lists_configured_workspace_roots_without_persisting_them() {
     let root = tempfile::tempdir().expect("root");
     let canonical = std::fs::canonicalize(root.path()).expect("canonical");
-    let state = test_state(vec![WorkspaceRootConfig {
+    let (state, _pontia_home) = test_state(vec![WorkspaceRootConfig {
         root_id: "projects".to_string(),
         label: "Projects".to_string(),
         path: root.path().display().to_string(),
@@ -365,7 +365,7 @@ async fn browses_only_directories_inside_configured_root() {
     std::fs::create_dir(root.path().join("app")).expect("app");
     std::fs::write(root.path().join("README.md"), "ignored").expect("file");
     std::fs::create_dir(root.path().join("node_modules")).expect("ignored dir");
-    let state = test_state(vec![WorkspaceRootConfig {
+    let (state, _pontia_home) = test_state(vec![WorkspaceRootConfig {
         root_id: "projects".to_string(),
         label: "Projects".to_string(),
         path: root.path().display().to_string(),
@@ -386,7 +386,7 @@ async fn browses_only_directories_inside_configured_root() {
 #[tokio::test]
 async fn rejects_directory_browsing_that_escapes_root() {
     let root = tempfile::tempdir().expect("root");
-    let state = test_state(vec![WorkspaceRootConfig {
+    let (state, _pontia_home) = test_state(vec![WorkspaceRootConfig {
         root_id: "projects".to_string(),
         label: "Projects".to_string(),
         path: root.path().display().to_string(),
@@ -405,7 +405,7 @@ async fn registers_existing_directory_under_allowed_root_without_storing_root_id
     let app = root.path().join("app");
     std::fs::create_dir(&app).expect("app");
     let canonical = std::fs::canonicalize(&app).expect("canonical");
-    let state = test_state(vec![WorkspaceRootConfig {
+    let (state, _pontia_home) = test_state(vec![WorkspaceRootConfig {
         root_id: "projects".to_string(),
         label: "Projects".to_string(),
         path: root.path().display().to_string(),
@@ -438,7 +438,7 @@ async fn renames_workspace_without_changing_path() {
     let app = root.path().join("app");
     std::fs::create_dir(&app).expect("app");
     let canonical = std::fs::canonicalize(&app).expect("canonical");
-    let state = test_state(vec![WorkspaceRootConfig {
+    let (state, _pontia_home) = test_state(vec![WorkspaceRootConfig {
         root_id: "projects".to_string(),
         label: "Projects".to_string(),
         path: root.path().display().to_string(),
@@ -482,7 +482,7 @@ async fn list_workspaces_returns_only_active_workspaces() {
     let archived_app = root.path().join("archived-app");
     std::fs::create_dir(&active_app).expect("active app");
     std::fs::create_dir(&archived_app).expect("archived app");
-    let state = test_state(vec![WorkspaceRootConfig {
+    let (state, _pontia_home) = test_state(vec![WorkspaceRootConfig {
         root_id: "projects".to_string(),
         label: "Projects".to_string(),
         path: root.path().display().to_string(),
@@ -535,7 +535,7 @@ async fn soft_deletes_workspace_hiding_it_from_list_but_preserving_direct_lookup
     let root = tempfile::tempdir().expect("root");
     let app = root.path().join("app");
     std::fs::create_dir(&app).expect("app");
-    let state = test_state(vec![WorkspaceRootConfig {
+    let (state, _pontia_home) = test_state(vec![WorkspaceRootConfig {
         root_id: "projects".to_string(),
         label: "Projects".to_string(),
         path: root.path().display().to_string(),
@@ -573,7 +573,7 @@ async fn soft_deletes_workspace_hiding_it_from_list_but_preserving_direct_lookup
 #[tokio::test]
 async fn does_not_register_missing_directory() {
     let root = tempfile::tempdir().expect("root");
-    let state = test_state(vec![WorkspaceRootConfig {
+    let (state, _pontia_home) = test_state(vec![WorkspaceRootConfig {
         root_id: "projects".to_string(),
         label: "Projects".to_string(),
         path: root.path().display().to_string(),
@@ -598,7 +598,7 @@ async fn creates_session_from_known_workspace_id() {
     let app = root.path().join("app");
     std::fs::create_dir(&app).expect("app");
     let canonical = std::fs::canonicalize(&app).expect("canonical");
-    let state = test_state(vec![WorkspaceRootConfig {
+    let (state, _pontia_home) = test_state(vec![WorkspaceRootConfig {
         root_id: "projects".to_string(),
         label: "Projects".to_string(),
         path: root.path().display().to_string(),

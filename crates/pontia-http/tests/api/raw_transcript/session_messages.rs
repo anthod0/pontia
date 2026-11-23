@@ -10,7 +10,7 @@ struct Fixture {
 
 async fn fixture() -> Fixture {
     let root = tempdir().unwrap();
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     seed_session(&state, "sess_messages").await;
     let transcript = root.path().join("history.jsonl");
     let mut entries = [
@@ -379,7 +379,7 @@ async fn helper_check_reads_paginated_native_history_without_changing_execution(
 #[tokio::test]
 async fn startup_failure_can_be_checked_without_history_and_closed_without_a_control_channel() {
     use pontia_agent_control::{PontiaEvent, PontiaEventSource, PontiaEventType};
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     seed_session(&state, "caller").await;
     seed_session(&state, "failed-helper").await;
     let pool = state.db();

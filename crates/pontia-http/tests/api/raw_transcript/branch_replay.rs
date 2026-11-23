@@ -71,7 +71,7 @@ async fn post_external_json(
 #[tokio::test]
 async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without_mutation() {
     let temp = tempdir().unwrap();
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     let session_id = "sess_branch_resolve";
     let runtime_id = "runtime_sess_branch_resolve";
     let cwd = temp.path().join("workspace");
@@ -486,7 +486,7 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
 
 #[tokio::test]
 async fn branch_resolution_requires_registered_connection_identity() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     let (pi, _requests) = rpc_client(&state).await;
     let error = pi
         .call(
@@ -505,7 +505,7 @@ async fn branch_resolution_requires_registered_connection_identity() {
 #[tokio::test]
 async fn branch_inbox_delivery_is_opaque_idempotent_and_does_not_fabricate_a_turn() {
     let temp = tempdir().unwrap();
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     let session_id = "sess_branch_dispatch";
     let target_turn_id = "turn_branch_dispatch_target";
     let runtime_id = "runtime_sess_branch_dispatch";
@@ -651,7 +651,7 @@ async fn branch_inbox_delivery_is_opaque_idempotent_and_does_not_fabricate_a_tur
 #[tokio::test]
 async fn branch_resolve_requests_paginated_history_on_its_own_connection_without_a_file() {
     let root = tempdir().unwrap();
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     let session = "sess_branch_rpc";
     let runtime = "runtime_sess_branch_rpc";
     let native = "branch-native";

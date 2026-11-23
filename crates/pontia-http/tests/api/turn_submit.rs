@@ -13,14 +13,14 @@ use crate::common::generic_client::GenericClientTestScope;
 
 const TOKEN: &str = "test-token";
 
-async fn test_state() -> (AppState, tempfile::TempDir) {
-    let state = TestApp::builder()
+async fn test_state() -> (AppState, tempfile::TempDir, tempfile::TempDir) {
+    let (state, pontia_home) = TestApp::builder()
         .database_name("turn_submit.db")
         .external_api_token(Some(TOKEN.to_string()))
         .build_state()
         .await;
     let workspace = crate::common::test_app::registered_workspace(&state).await;
-    (state, workspace)
+    (state, workspace, pontia_home)
 }
 
 async fn request(
@@ -106,7 +106,7 @@ fn event_body(_event_id: &str, event_type: &str, session_id: &str, turn_id: &str
 #[tokio::test]
 async fn post_turn_external_endpoint_is_removed() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
     let session_id = create_session(state.clone()).await;
 
     let (status, _) = request(
@@ -123,7 +123,7 @@ async fn post_turn_external_endpoint_is_removed() {
 #[tokio::test]
 async fn inbox_submission_still_creates_turns_and_turn_events_are_queryable() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
     let session_id = create_session(state.clone()).await;
 
     let turn_id = submit_inbox_message(state.clone(), &session_id, "continue work").await;
@@ -166,7 +166,7 @@ async fn inbox_submission_still_creates_turns_and_turn_events_are_queryable() {
 #[tokio::test]
 async fn internal_events_advance_inbox_submitted_turn_and_session_projection() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
     let session_id = create_session(state.clone()).await;
     let turn_id = submit_inbox_message(state.clone(), &session_id, "run").await;
 

@@ -68,7 +68,7 @@ pub(super) async fn attach(
 #[tokio::test]
 async fn http_timeline_and_tree_use_runtime_history_when_the_bound_file_does_not_exist() {
     let root = tempdir().unwrap();
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     let session = "sess_rpc_only";
     let native = "native-rpc-only";
     seed_session(&state, session).await;
@@ -159,7 +159,7 @@ async fn http_timeline_and_tree_use_runtime_history_when_the_bound_file_does_not
 #[tokio::test]
 async fn terminal_capture_preserves_an_existing_legacy_turn_then_new_turns_use_entry_locators() {
     let root = tempdir().unwrap();
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     let session = "sess_upgrade";
     seed_session(&state, session).await;
     let path = root.path().join("legacy.jsonl");

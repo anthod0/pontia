@@ -18,7 +18,7 @@ fn request(path: &str, token: Option<&str>) -> Request<Body> {
 
 #[tokio::test]
 async fn local_http_entrypoint_requires_the_configured_bearer_token() {
-    let state = TestApp::builder()
+    let (state, _pontia_home) = TestApp::builder()
         .external_api_token(Some(TOKEN.to_string()))
         .build_state()
         .await;
@@ -47,7 +47,7 @@ async fn local_http_entrypoint_requires_the_configured_bearer_token() {
 
 #[tokio::test]
 async fn local_http_headers_cannot_claim_trusted_tunnel_access() {
-    let state = TestApp::builder()
+    let (state, _pontia_home) = TestApp::builder()
         .external_api_token(Some(TOKEN.to_string()))
         .build_state()
         .await;

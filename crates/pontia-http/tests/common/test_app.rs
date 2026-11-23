@@ -128,11 +128,14 @@ impl TestAppBuilder {
         }
     }
 
-    pub(crate) async fn build_state(self) -> AppState {
+    pub(crate) async fn build_state(self) -> (AppState, tempfile::TempDir) {
+        let pontia_home = tempfile::tempdir().expect("pontia home");
         let db = connect_sqlite("sqlite::memory:").await.expect("connect");
         run_migrations(&db).await.expect("migrate");
-        self.build_app_state(db, "/nonexistent/pontia-test-home".into())
-            .await
+        let state = self
+            .build_app_state(db, pontia_home.path().to_path_buf())
+            .await;
+        (state, pontia_home)
     }
 
     async fn open_database(&self, pontia_home: Option<&std::path::Path>) -> SqlitePool {

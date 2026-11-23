@@ -10,7 +10,7 @@ use crate::common::reporting::report_fact_result as report_fact;
 
 #[tokio::test]
 async fn reporting_service_normalizes_started_fact_into_a_domain_event() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     create_session(&state, "sess_normalized", "pi").await;
     bind_runtime(&state, "sess_normalized", "rtinst_normalized").await;
 
@@ -62,7 +62,7 @@ async fn reporting_service_normalizes_started_fact_into_a_domain_event() {
 
 #[tokio::test]
 async fn reporting_service_allows_started_fact_to_reference_an_existing_turn() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     create_session(&state, "sess_existing_started_turn", "pi").await;
     bind_runtime(
         &state,
@@ -103,7 +103,7 @@ async fn reporting_service_allows_started_fact_to_reference_an_existing_turn() {
 
 #[tokio::test]
 async fn reporting_service_uses_returned_turn_id_for_followup_facts() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     create_session(&state, "sess_followup", "pi").await;
     bind_runtime(&state, "sess_followup", "rtinst_followup").await;
     let started = report_fact(
@@ -152,7 +152,7 @@ async fn reporting_service_uses_returned_turn_id_for_followup_facts() {
 
 #[tokio::test]
 async fn reporting_service_accepts_agent_client_reported_turn_interrupted() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     create_session(&state, "sess_interrupted", "pi").await;
     bind_runtime(&state, "sess_interrupted", "rtinst_interrupted").await;
 
@@ -192,7 +192,7 @@ async fn reporting_service_accepts_agent_client_reported_turn_interrupted() {
 
 #[tokio::test]
 async fn reporting_service_derives_client_type_and_source_from_session_and_fact() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     create_session(&state, "sess_ready", "pi").await;
     bind_runtime(&state, "sess_ready", "rtinst_ready").await;
 

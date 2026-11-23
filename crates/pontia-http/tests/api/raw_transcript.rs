@@ -62,7 +62,7 @@ impl<'writer> MakeWriter<'writer> for CapturedLogWriter {
     }
 }
 
-async fn test_state() -> AppState {
+async fn test_state() -> (AppState, tempfile::TempDir) {
     TestApp::builder()
         .database_name("raw-transcript-api.db")
         .external_api_token(Some(TOKEN.to_string()))

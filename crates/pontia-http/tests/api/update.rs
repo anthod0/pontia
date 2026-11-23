@@ -43,7 +43,7 @@ async fn session(state: &AppState, id: &str, status: &str) {
 
 #[tokio::test]
 async fn update_checks_require_authentication() {
-    let state = TestApp::builder().build_state().await;
+    let (state, _pontia_home) = TestApp::builder().build_state().await;
     let response = pontia_http::router(state)
         .oneshot(
             Request::builder()
@@ -58,7 +58,7 @@ async fn update_checks_require_authentication() {
 
 #[tokio::test]
 async fn active_execution_is_reported_without_session_visibility_filters() {
-    let state = TestApp::builder().build_state().await;
+    let (state, _pontia_home) = TestApp::builder().build_state().await;
     for (id, status) in [
         ("starting", "starting"),
         ("busy", "busy"),
@@ -98,7 +98,7 @@ async fn active_execution_is_reported_without_session_visibility_filters() {
 
 #[tokio::test]
 async fn interactions_block_updates_even_when_the_session_is_idle() {
-    let state = TestApp::builder().build_state().await;
+    let (state, _pontia_home) = TestApp::builder().build_state().await;
     for status in ["pending", "resolving", "expired"] {
         session(&state, status, "idle").await;
         sqlx::query("INSERT INTO interactions(interaction_id,session_id,type,title,options,state,requested_at) VALUES (?,?,'choice','Approval','[]',?,'2026-11-12T00:00:00Z')")
@@ -112,7 +112,7 @@ async fn interactions_block_updates_even_when_the_session_is_idle() {
 
 #[tokio::test]
 async fn pending_and_unconfirmed_inputs_block_but_completed_history_does_not() {
-    let state = TestApp::builder().build_state().await;
+    let (state, _pontia_home) = TestApp::builder().build_state().await;
     for status in [
         "pending",
         "resuming",

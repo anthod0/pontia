@@ -17,7 +17,7 @@ use tower::ServiceExt;
 
 #[tokio::test]
 async fn verified_e2e_and_local_token_access_the_same_business_router() {
-    let state = TestApp::builder()
+    let (state, _pontia_home) = TestApp::builder()
         .external_api_token(Some("local-secret".into()))
         .build_state()
         .await;

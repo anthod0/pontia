@@ -17,7 +17,7 @@ use tower::ServiceExt;
 const TOKEN: &str = "test-token";
 const STREAM_ONCE_HEADER: &str = "x-pontia-test-stream-once";
 
-async fn test_state(name: &str) -> AppState {
+async fn test_state(name: &str) -> (AppState, tempfile::TempDir) {
     TestApp::builder()
         .database_name(format!("{name}.db"))
         .external_api_token(Some(TOKEN.to_string()))
@@ -120,7 +120,7 @@ async fn stream_get(
 #[tokio::test]
 async fn interaction_facts_reach_queries_subscribers_and_cursor_replay() {
     use pontia_agent_control::ReportedFact;
-    let state = test_state("blocking").await;
+    let (state, _pontia_home) = test_state("blocking").await;
     seed_session_events(&state).await;
     sqlx::query("INSERT INTO session_runtimes(session_id,runtime_id,role,state,created_at) VALUES ('sess_stream_1','blocking-runtime','tui','running','2026-01-01T00:00:00Z')")
         .execute(&state.db()).await.unwrap();
@@ -200,7 +200,7 @@ async fn interaction_facts_reach_queries_subscribers_and_cursor_replay() {
 #[tokio::test]
 async fn interaction_reporting_rejects_invalid_ids_and_foreign_turns_without_committing() {
     use pontia_agent_control::{EventReportError, ReportedFact};
-    let state = test_state("blocking-invalid").await;
+    let (state, _pontia_home) = test_state("blocking-invalid").await;
     seed_session_events(&state).await;
     let service = state.control().event_ingest_service();
     let before = service.list_events("sess_stream_1").await.unwrap().len();
@@ -262,7 +262,7 @@ async fn interaction_reporting_rejects_invalid_ids_and_foreign_turns_without_com
 
 #[tokio::test]
 async fn event_stream_rejects_missing_or_wrong_bearer_token() {
-    let state = test_state("auth").await;
+    let (state, _pontia_home) = test_state("auth").await;
 
     let missing = stream_get(
         state.clone(),
@@ -285,7 +285,7 @@ async fn event_stream_rejects_missing_or_wrong_bearer_token() {
 
 #[tokio::test]
 async fn dashboard_event_stream_rejects_missing_or_wrong_bearer_token() {
-    let state = test_state("dashboard_auth").await;
+    let (state, _pontia_home) = test_state("dashboard_auth").await;
 
     let missing = stream_get(state.clone(), "/api/v1/dashboard/events/stream", None).await;
     let wrong = stream_get(
@@ -303,7 +303,7 @@ async fn dashboard_event_stream_rejects_missing_or_wrong_bearer_token() {
 
 #[tokio::test]
 async fn dashboard_event_stream_without_cursor_starts_at_current_tail() {
-    let state = test_state("dashboard_tail").await;
+    let (state, _pontia_home) = test_state("dashboard_tail").await;
     seed_session_events(&state).await;
 
     let (status, content_type, body) =
@@ -317,7 +317,7 @@ async fn dashboard_event_stream_without_cursor_starts_at_current_tail() {
 
 #[tokio::test]
 async fn dashboard_event_stream_emits_session_events_after_explicit_zero_cursor() {
-    let state = test_state("dashboard_session").await;
+    let (state, _pontia_home) = test_state("dashboard_session").await;
     seed_session_events(&state).await;
 
     let (status, content_type, body) = stream_get(
@@ -338,7 +338,7 @@ async fn dashboard_event_stream_emits_session_events_after_explicit_zero_cursor(
 
 #[tokio::test]
 async fn dashboard_event_stream_after_cursor_does_not_repeat_read_events() {
-    let state = test_state("dashboard_after").await;
+    let (state, _pontia_home) = test_state("dashboard_after").await;
     seed_session_events(&state).await;
 
     let (status, _, first_body) = stream_get(
@@ -368,7 +368,7 @@ async fn dashboard_event_stream_after_cursor_does_not_repeat_read_events() {
 
 #[tokio::test]
 async fn dashboard_event_stream_replays_batches_and_resumes_in_persistence_order() {
-    let state = test_state("dashboard_batches").await;
+    let (state, _pontia_home) = test_state("dashboard_batches").await;
     for index in 0..105 {
         let mut reported = event(
             &format!("evt_batch_{index}"),
@@ -432,7 +432,7 @@ async fn dashboard_event_stream_replays_batches_and_resumes_in_persistence_order
 
 #[tokio::test]
 async fn dashboard_event_stream_rejects_invalid_cursors() {
-    let state = test_state("dashboard_invalid_cursor").await;
+    let (state, _pontia_home) = test_state("dashboard_invalid_cursor").await;
     for cursor in [
         "invalid",
         "session:",
@@ -453,7 +453,7 @@ async fn dashboard_event_stream_rejects_invalid_cursors() {
 
 #[tokio::test]
 async fn session_event_stream_emits_existing_events_as_sse_frames() {
-    let state = test_state("session_frames").await;
+    let (state, _pontia_home) = test_state("session_frames").await;
     seed_session_events(&state).await;
 
     let (status, content_type, body) = stream_get(
@@ -474,7 +474,7 @@ async fn session_event_stream_emits_existing_events_as_sse_frames() {
 
 #[tokio::test]
 async fn session_event_stream_after_cursor_resumes_with_later_events_only() {
-    let state = test_state("after_cursor").await;
+    let (state, _pontia_home) = test_state("after_cursor").await;
     seed_session_events(&state).await;
 
     let (status, _, body) = stream_get(
@@ -491,7 +491,7 @@ async fn session_event_stream_after_cursor_resumes_with_later_events_only() {
 
 #[tokio::test]
 async fn turn_event_stream_only_emits_events_for_requested_turn() {
-    let state = test_state("turn_scope").await;
+    let (state, _pontia_home) = test_state("turn_scope").await;
     seed_session_events(&state).await;
     ingest(
         &state,
@@ -542,7 +542,7 @@ async fn turn_event_stream_only_emits_events_for_requested_turn() {
 
 #[tokio::test]
 async fn event_stream_rejects_cursor_outside_requested_scope() {
-    let state = test_state("invalid_cursor").await;
+    let (state, _pontia_home) = test_state("invalid_cursor").await;
     seed_session_events(&state).await;
     ingest(
         &state,
@@ -569,7 +569,7 @@ async fn event_stream_rejects_cursor_outside_requested_scope() {
 
 #[tokio::test]
 async fn graceful_shutdown_closes_event_stream_without_waiting_for_timeout() {
-    let state = test_state("shutdown_with_stream").await;
+    let (state, _pontia_home) = test_state("shutdown_with_stream").await;
     seed_session_events(&state).await;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await

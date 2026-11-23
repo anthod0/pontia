@@ -37,7 +37,7 @@ async fn listed_workspace(state: &AppState, id: &str) -> Value {
 async fn availability_is_consistent_across_workspace_responses() {
     let root = tempfile::tempdir().unwrap();
     fs::create_dir(root.path().join("app")).unwrap();
-    let state = test_state(vec![root_config("projects", root.path())]).await;
+    let (state, _pontia_home) = test_state(vec![root_config("projects", root.path())]).await;
     let workspace = register(&state, "app").await;
     let id = workspace["workspace_id"].as_str().unwrap();
     let available = json!({"status": "available", "root_id": "projects", "path": "app"});
@@ -64,7 +64,7 @@ async fn refresh_distinguishes_missing_directory_file_and_restored_directory() {
     let root = tempfile::tempdir().unwrap();
     let app = root.path().join("app");
     fs::create_dir(&app).unwrap();
-    let state = test_state(vec![root_config("projects", root.path())]).await;
+    let (state, _pontia_home) = test_state(vec![root_config("projects", root.path())]).await;
     let workspace = register(&state, "app").await;
     let id = workspace["workspace_id"].as_str().unwrap();
     fs::remove_dir(&app).unwrap();
@@ -93,7 +93,7 @@ async fn unavailable_root_does_not_mean_outside_root() {
     let projects = root.path().join("projects");
     let moved = root.path().join("moved");
     fs::create_dir(&projects).unwrap();
-    let state = test_state(vec![root_config("projects", &projects)]).await;
+    let (state, _pontia_home) = test_state(vec![root_config("projects", &projects)]).await;
     let workspace = register(&state, "").await;
     let id = workspace["workspace_id"].as_str().unwrap();
     fs::rename(&projects, &moved).unwrap();
@@ -116,7 +116,7 @@ async fn uses_deepest_root_and_does_not_match_path_prefix_siblings() {
     let sibling = root.path().join("projects-other");
     fs::create_dir_all(&app).unwrap();
     fs::create_dir(&sibling).unwrap();
-    let state = test_state(vec![
+    let (state, _pontia_home) = test_state(vec![
         root_config("projects", &projects),
         root_config("nested", &app),
     ])
@@ -143,7 +143,7 @@ async fn uses_deepest_root_and_does_not_match_path_prefix_siblings() {
 async fn filesystem_root_supports_workspace_navigation() {
     let root = tempfile::tempdir().unwrap();
     let path = fs::canonicalize(root.path()).unwrap();
-    let state = test_state(vec![root_config("projects", Path::new("/"))]).await;
+    let (state, _pontia_home) = test_state(vec![root_config("projects", Path::new("/"))]).await;
     let workspace = register(&state, path.strip_prefix("/").unwrap().to_str().unwrap()).await;
     assert_eq!(
         workspace["availability"],
@@ -161,7 +161,7 @@ async fn symlink_escape_and_resolution_failure_are_not_available() {
     let outside = root.path().join("outside");
     fs::create_dir_all(&app).unwrap();
     fs::create_dir(&outside).unwrap();
-    let state = test_state(vec![root_config("projects", &projects)]).await;
+    let (state, _pontia_home) = test_state(vec![root_config("projects", &projects)]).await;
     let workspace = register(&state, "app").await;
     let id = workspace["workspace_id"].as_str().unwrap();
     fs::remove_dir(&app).unwrap();
@@ -185,7 +185,7 @@ async fn unreadable_directory_reports_permission_denied_without_hiding_other_wor
     let root = tempfile::tempdir().unwrap();
     let app = root.path().join("app");
     fs::create_dir(&app).unwrap();
-    let state = test_state(vec![root_config("projects", root.path())]).await;
+    let (state, _pontia_home) = test_state(vec![root_config("projects", root.path())]).await;
     let workspace = register(&state, "app").await;
     let readable = register(&state, "").await;
     fs::set_permissions(&app, fs::Permissions::from_mode(0o000)).unwrap();
@@ -220,7 +220,7 @@ async fn directory_registration_markers_follow_activation_and_deactivation() {
     for name in ["app", "other", "inactive"] {
         fs::create_dir(root.path().join(name)).unwrap();
     }
-    let state = test_state(vec![root_config("projects", root.path())]).await;
+    let (state, _pontia_home) = test_state(vec![root_config("projects", root.path())]).await;
     register(&state, "app").await;
     let inactive = register(&state, "inactive").await;
     let uri = format!(

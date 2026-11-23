@@ -15,29 +15,32 @@ use pontia_http::{
 
 use crate::common::test_app::TestApp;
 
-async fn test_state_with_dashboard(dashboard: ResolvedDashboard) -> http::HttpState {
-    let app_state = TestApp::builder()
+async fn test_state_with_dashboard(
+    dashboard: ResolvedDashboard,
+) -> (http::HttpState, tempfile::TempDir) {
+    let (app_state, pontia_home) = TestApp::builder()
         .database_name("dashboard.db")
         .external_api_token(Some("test-token".to_owned()))
         .build_state()
         .await;
-    http::HttpState::new(app_state, dashboard)
+    (http::HttpState::new(app_state, dashboard), pontia_home)
 }
 
 #[tokio::test]
 async fn dashboard_serves_configured_local_entrypoint() {
     let (_dir, root) = build_local_dashboard("custom dashboard", "custom.js");
 
-    let response =
-        http::router(test_state_with_dashboard(ResolvedDashboard::available(root.clone())).await)
-            .oneshot(
-                Request::builder()
-                    .uri("/dashboard")
-                    .body(Body::empty())
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
+    let (state, _pontia_home) =
+        test_state_with_dashboard(ResolvedDashboard::available(root.clone())).await;
+    let response = http::router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/dashboard")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
 
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
@@ -53,16 +56,16 @@ async fn dashboard_serves_configured_local_entrypoint() {
     let html = std::str::from_utf8(&body).expect("utf8 html");
     assert!(html.contains("custom dashboard"));
 
-    let response =
-        http::router(test_state_with_dashboard(ResolvedDashboard::available(root)).await)
-            .oneshot(
-                Request::builder()
-                    .uri("/dashboard/assets/custom.js")
-                    .body(Body::empty())
-                    .expect("request"),
-            )
-            .await
-            .expect("asset response");
+    let (state, _pontia_home) = test_state_with_dashboard(ResolvedDashboard::available(root)).await;
+    let response = http::router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/dashboard/assets/custom.js")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("asset response");
 
     assert_eq!(response.status(), StatusCode::OK);
 }
@@ -74,16 +77,16 @@ async fn dashboard_serves_files_from_configured_dist_root() {
     std::fs::create_dir_all(&logo_dir).expect("logo dir");
     std::fs::write(logo_dir.join("mark.png"), b"png-bytes").expect("logo file");
 
-    let response =
-        http::router(test_state_with_dashboard(ResolvedDashboard::available(root)).await)
-            .oneshot(
-                Request::builder()
-                    .uri("/dashboard/logo/mark.png")
-                    .body(Body::empty())
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
+    let (state, _pontia_home) = test_state_with_dashboard(ResolvedDashboard::available(root)).await;
+    let response = http::router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/dashboard/logo/mark.png")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
 
     assert_eq!(response.status(), StatusCode::OK);
     let content_type = response
@@ -111,17 +114,17 @@ async fn dashboard_serves_pwa_files_with_required_headers() {
         ("manifest.webmanifest", "application/manifest+json"),
         ("service-worker.js", "text/javascript; charset=utf-8"),
     ] {
-        let response = http::router(
-            test_state_with_dashboard(ResolvedDashboard::available(root.clone())).await,
-        )
-        .oneshot(
-            Request::builder()
-                .uri(format!("/dashboard/{path}"))
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await
-        .expect("response");
+        let (state, _pontia_home) =
+            test_state_with_dashboard(ResolvedDashboard::available(root.clone())).await;
+        let response = http::router(state)
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/dashboard/{path}"))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
 
         assert_eq!(response.status(), StatusCode::OK, "{path}");
         assert_eq!(
@@ -146,17 +149,17 @@ async fn dashboard_spa_fallback_serves_entrypoint_for_nested_routes() {
         "/dashboard/overview",
         "/dashboard/chat/example",
     ] {
-        let response = http::router(
-            test_state_with_dashboard(ResolvedDashboard::available(root.clone())).await,
-        )
-        .oneshot(
-            Request::builder()
-                .uri(path)
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await
-        .expect("response");
+        let (state, _pontia_home) =
+            test_state_with_dashboard(ResolvedDashboard::available(root.clone())).await;
+        let response = http::router(state)
+            .oneshot(
+                Request::builder()
+                    .uri(path)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
 
         assert_eq!(response.status(), StatusCode::OK, "{path}");
         let body = response
@@ -283,7 +286,8 @@ async fn remote_dashboard_serves_targz_with_root_directory_entry() {
     )
     .await;
     server.abort();
-    let app = http::router(test_state_with_dashboard(dashboard).await);
+    let (state, _pontia_home) = test_state_with_dashboard(dashboard).await;
+    let app = http::router(state);
     for (url, file) in [
         ("/dashboard", "index.html"),
         ("/dashboard/assets/release.js", "assets/release.js"),
@@ -358,7 +362,8 @@ async fn request_dashboard_html(dashboard: ResolvedDashboard) -> String {
 }
 
 async fn request_dashboard(dashboard: ResolvedDashboard) -> (StatusCode, String) {
-    let response = http::router(test_state_with_dashboard(dashboard).await)
+    let (state, _pontia_home) = test_state_with_dashboard(dashboard).await;
+    let response = http::router(state)
         .oneshot(
             Request::builder()
                 .uri("/dashboard")

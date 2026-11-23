@@ -35,7 +35,7 @@ async fn post(state: AppState, path: &str, authorization: Option<&str>) -> (Stat
 #[tokio::test]
 async fn workflow_commands_require_authentication_before_payload_validation() {
     for token in [Some("test-token".to_owned()), None] {
-        let state = TestApp::builder()
+        let (state, _pontia_home) = TestApp::builder()
             .external_api_token(token.clone())
             .build_state()
             .await;
@@ -56,7 +56,7 @@ async fn workflow_commands_require_authentication_before_payload_validation() {
 
 #[tokio::test]
 async fn workflow_commands_return_the_api_envelope_for_invalid_payloads() {
-    let state = TestApp::builder().build_state().await;
+    let (state, _pontia_home) = TestApp::builder().build_state().await;
     for path in COMMAND_PATHS {
         let (status, body) = post(state.clone(), path, Some("Bearer test-token")).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{path}: {body}");

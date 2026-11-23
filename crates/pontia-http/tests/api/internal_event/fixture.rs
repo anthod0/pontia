@@ -10,7 +10,7 @@ use pontia_storage_sqlite::repositories::session_runtimes::{
 };
 use serde_json::json;
 
-pub(super) async fn test_state() -> AppState {
+pub(super) async fn test_state() -> (AppState, tempfile::TempDir) {
     TestApp::builder()
         .database_name("internal_event.db")
         .external_api_token(None)
