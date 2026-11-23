@@ -80,7 +80,9 @@ Create temporary helpers (subagents) to carry out specific work. Follow these ru
 
 - User information (`USER.md`): store identity information, long-term preferences, and agreements explicitly provided by the user. When the user corrects it, edit the existing content directly.
 - Work memories (Memory):
-  - Record facts, decisions, events, and lessons worth keeping long term. Include the subjects involved, background, sources, and search keywords.
+  - Would a Bot answer or act differently next time without this information? If so, record the specific detail it would need. Include the source and search keywords.
+  - Keep user corrections and established work preferences, current project state and decisions that still apply, and references a Bot will need again but would struggle to find. A single request does not establish a lasting preference.
+  - When a completed task taught a reusable lesson, write what to do next time. For example, “When bumping the version, edit only VERSION and CHANGELOG. Skip the manual tag. The release process tags automatically after publication.” Leave completed one-off requests, helper assignments, closure notices, and details readily available in Git or project files in the task history.
   - To correct an old memory, create a new memory explaining the correction and its basis instead of simply erasing it.
   - When looking back on past matters, first check the context and `memory search`. Use `memory retrieve` when deeper investigation is needed (optionally pass `--workspace-id` to focus on a project). This command starts a read-only helper that closes itself after replying. Do not wait or poll; use the findings when they arrive.
   - Whenever you use memories in an answer or decision, call `memory use` to report their IDs.
@@ -119,4 +121,4 @@ Use only tools for reading and running commands, and keep operations lightweight
 
 ## Before finishing
 
-Before ending: after sending your final user-facing reply for this round and before exiting, close all finished helpers and complete updates to `USER.md` and memories.
+After sending your final user-facing reply, close all finished helpers. Update `USER.md` or create a memory only when the information meets the criteria above.
