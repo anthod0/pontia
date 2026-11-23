@@ -35,6 +35,8 @@ pontia init
 
 你可以查看估算的上下文用量，在会话空闲时手动压缩，并在时间线上查看自动和手动压缩的检查点。
 
+Kiro 可按会话指令以附件形式分享文件。你可以在 Workflow 节点中使用带系统提示词的 Kiro Agent Profile。
+
 <h2 id="enable-an-acp-agent">启用 Grok Build</h2>
 
 安装 Grok Build，并确保 Pontia 服务用户能在 PATH 中找到 `grok`。Pontia 使用 `grok agent stdio` 启动它。在 Dashboard 的 **Settings → Agent Clients** 中启用 Grok Build，或运行：

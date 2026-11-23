@@ -35,6 +35,8 @@ Pontia のサービスユーザーの PATH に `kiro-cli` をインストール�
 
 コンテキスト使用量の推定値を確認し、待機中のセッションを手動で圧縮できます。自動圧縮と手動圧縮のチェックポイントはタイムラインに表示されます。
 
+Kiro はセッションの指示に従ってファイルを添付できます。ワークフローのノードで、システムプロンプトを設定した Kiro の Agent Profile を使用できます。
+
 <h2 id="enable-an-acp-agent">Grok Build を有効にする</h2>
 
 Grok Build をインストールし、Pontia のサービスユーザーの PATH に `grok` を追加します。Pontia は `grok agent stdio` で起動します。Dashboard の **Settings → Agent Clients** で Grok Build を有効にするか、次を実行します。

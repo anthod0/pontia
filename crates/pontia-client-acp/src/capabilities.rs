@@ -7,6 +7,7 @@ pub(crate) struct AgentBounds {
     capabilities: AgentClientCapabilities,
     pub compaction: Option<crate::CompactionProtocol>,
     pub prompt_steering: bool,
+    pub first_prompt_instructions: bool,
     pub one_time_permissions_only: bool,
     pub interjection: Option<&'static crate::InterjectionProtocol>,
 }
@@ -29,6 +30,7 @@ impl AgentBounds {
         Self {
             compaction,
             capabilities: caps,
+            first_prompt_instructions: agent_id == "kiro",
             prompt_steering: agent_id == "antigravity",
             one_time_permissions_only: agent_id == "kiro",
             interjection: definition.and_then(|agent| agent.interjection),

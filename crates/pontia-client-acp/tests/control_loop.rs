@@ -61,13 +61,18 @@ impl Harness {
                 .iter()
                 .map(|(key, value)| (key.to_string(), value.to_string())),
         );
+        let kiro = flags.iter().any(|(key, _)| *key == "ACP_KIRO");
         let config = AcpAgentDefinition {
             name: "Controlled Agent".into(),
             capabilities: ACP_MAX_CAPABILITIES,
-            compaction: flags
-                .iter()
-                .any(|(key, _)| *key == "ACP_COMPACT")
-                .then_some(pontia_client_acp::CompactionProtocol::Grok),
+            compaction: if kiro {
+                Some(pontia_client_acp::CompactionProtocol::Kiro)
+            } else {
+                flags
+                    .iter()
+                    .any(|(key, _)| *key == "ACP_COMPACT")
+                    .then_some(pontia_client_acp::CompactionProtocol::Grok)
+            },
             interjection: flags
                 .iter()
                 .any(|(key, _)| *key == "ACP_INTERJECT")
@@ -102,7 +107,9 @@ impl Harness {
                 .clone(),
             ..config.clone()
         };
-        let first = if flags.iter().any(|(key, _)| *key == "ACP_COMPACT") {
+        let first = if kiro {
+            "kiro"
+        } else if flags.iter().any(|(key, _)| *key == "ACP_COMPACT") {
             "grok"
         } else if flags.iter().any(|(key, _)| *key == "ACP_ANTIGRAVITY") {
             "antigravity"
