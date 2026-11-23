@@ -3,7 +3,7 @@ pub use bot_context::{
     dreaming_command, helper_command, session_messages, update_user, workspace_command,
 };
 mod bot_memory;
-pub use bot_memory::memory_command;
+pub use bot_memory::{get_user_file, list_memories, memory_command};
 mod agent_clients;
 pub mod bots;
 pub use agent_clients::{

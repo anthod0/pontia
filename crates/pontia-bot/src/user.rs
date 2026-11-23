@@ -17,6 +17,13 @@ pub struct UpdateUser {
     pub new_text: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct UserFile {
+    pub text: String,
+    pub character_limit: usize,
+    pub updated_at: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UserRequest {
@@ -60,6 +67,30 @@ impl UserService {
         Self {
             path: Arc::new(Mutex::new(pontia_home.join("bot/USER.md"))),
         }
+    }
+
+    /// Reads USER.md for display; a missing file is empty with no update time.
+    pub async fn read(&self) -> Result<UserFile, Error> {
+        let path = self.path.clone();
+        tokio::task::spawn_blocking(move || {
+            let path = path.lock().expect("USER.md lock poisoned");
+            let text = read_current(&path)?;
+            let updated_at = match std::fs::metadata(&*path) {
+                Ok(metadata) => Some(
+                    time::OffsetDateTime::from(metadata.modified()?)
+                        .format(&time::format_description::well_known::Rfc3339)
+                        .map_err(std::io::Error::other)?,
+                ),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                Err(error) => return Err(error.into()),
+            };
+            Ok(UserFile {
+                text,
+                character_limit: USER_CHARACTER_LIMIT,
+                updated_at,
+            })
+        })
+        .await?
     }
 
     pub async fn read_for_handoff(&self) -> Result<String, Error> {

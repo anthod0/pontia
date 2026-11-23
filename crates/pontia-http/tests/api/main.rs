@@ -12,6 +12,7 @@ mod external_queries;
 mod health;
 mod internal_event;
 mod live_output;
+mod memory;
 mod raw_transcript;
 mod runtime_binding;
 mod runtime_lifecycle;

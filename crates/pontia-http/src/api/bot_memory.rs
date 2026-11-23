@@ -1,9 +1,9 @@
 use axum::{
     Json,
-    extract::{State, rejection::JsonRejection},
+    extract::{Query, State, rejection::JsonRejection},
     http::{HeaderMap, StatusCode},
 };
-use pontia_bot::memory::{Error, MemoryRequest};
+use pontia_bot::memory::{Error, ListMemories, MemoryRequest};
 use serde_json::{Value, json};
 
 use super::response::{ApiError, ApiResponse, ok};
@@ -33,4 +33,36 @@ pub async fn memory_command(
             ),
         })?;
     Ok(ok(json!(response)))
+}
+
+pub async fn list_memories(
+    State(state): State<HttpState>,
+    Query(query): Query<ListMemories>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let page = state
+        .memories()
+        .list(query)
+        .await
+        .map_err(|error| match error {
+            Error::InvalidInput(message) => ApiError::invalid_request(message),
+            _ => ApiError::custom(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                error.to_string(),
+            ),
+        })?;
+    Ok(ok(json!(page)))
+}
+
+pub async fn get_user_file(
+    State(state): State<HttpState>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let user = state.user_service().read().await.map_err(|error| {
+        ApiError::custom(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal_error",
+            error.to_string(),
+        )
+    })?;
+    Ok(ok(json!({ "user": user })))
 }

@@ -5,7 +5,13 @@
   import { isSettingsSectionActive, settingsSections as sections, type SettingsSection as Section } from './sections'
 
   let pathname = $state(window.location.pathname)
+  let nav = $state<HTMLElement>()
   const currentPath = $derived(dashboardRelativePath(pathname))
+  // Keep the current section visible when the bar scrolls horizontally on phones.
+  $effect(() => {
+    void currentPath
+    nav?.querySelector('[aria-current=page]')?.scrollIntoView({ block: 'nearest', inline: 'center' })
+  })
 
   function isActive(section: Section): boolean {
     return isSettingsSectionActive(section, currentPath)
@@ -20,7 +26,7 @@
 
 <svelte:window onpopstate={() => (pathname = window.location.pathname)} />
 
-<nav aria-label={$t('settings.sections')} class="flex min-w-0 gap-1 overflow-x-auto text-sm">
+<nav bind:this={nav} aria-label={$t('settings.sections')} class="flex min-w-0 gap-1 overflow-x-auto text-sm">
   {#each sections as section}
     <a
       href={dashboardPath(section.path, pathname)}

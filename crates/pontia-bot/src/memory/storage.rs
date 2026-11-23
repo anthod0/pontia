@@ -174,6 +174,35 @@ impl Store {
             .collect()
     }
 
+    /// Lists active memories for the Dashboard; `pattern` is an escaped LIKE pattern.
+    pub async fn list(
+        &self,
+        pattern: Option<&str>,
+        after: Option<(&str, &str)>,
+        limit: usize,
+    ) -> Result<(Vec<Memory>, u64)> {
+        let (after_updated_at, after_id) = after.unzip();
+        let memories = sqlx::query_as(
+            "SELECT * FROM bot_memories
+             WHERE archived = 0 AND (?1 IS NULL OR content LIKE ?1 ESCAPE '\\')
+               AND (?2 IS NULL OR updated_at < ?2 OR (updated_at = ?2 AND id < ?3))
+             ORDER BY updated_at DESC, id DESC LIMIT ?4",
+        )
+        .bind(pattern)
+        .bind(after_updated_at)
+        .bind(after_id)
+        .bind((limit + 1) as i64)
+        .fetch_all(&self.0)
+        .await?;
+        let total: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM bot_memories WHERE archived = 0 AND (?1 IS NULL OR content LIKE ?1 ESCAPE '\\')",
+        )
+        .bind(pattern)
+        .fetch_one(&self.0)
+        .await?;
+        Ok((memories, total as u64))
+    }
+
     pub async fn neighbors(
         &self,
         id: &str,

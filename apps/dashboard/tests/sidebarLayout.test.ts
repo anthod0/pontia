@@ -163,6 +163,8 @@ vi.mock("../src/queries/sessionOverview", async (importOriginal) => {
   };
 });
 beforeEach(() => {
+  // jsdom has no scrollIntoView; the settings tab bar scrolls the current section into view.
+  Element.prototype.scrollIntoView = vi.fn();
   window.history.pushState({}, "", "/dashboard");
   mocks.sessions.set([]);
   mocks.sidebarPinnedSessions.set([]);
@@ -887,6 +889,25 @@ test("settings pages show section tabs in the top bar", () => {
   );
   const activeLink = within(nav).getByRole("link", { name: /^workspaces$/i });
   expect(activeLink).toHaveAttribute("aria-current", "page");
+  expect(within(nav).getByRole("link", { name: /^memory$/i })).toHaveAttribute(
+    "href",
+    "/dashboard/settings/memory",
+  );
+});
+
+test("the settings tab bar scrolls the current section into view", async () => {
+  window.history.pushState({}, "", "/dashboard/settings/memory");
+
+  render(TopBarHost);
+
+  const nav = within(screen.getByRole("banner")).getByRole("navigation", {
+    name: /settings sections/i,
+  });
+  const memory = within(nav).getByRole("link", { name: /^memory$/i });
+  expect(memory).toHaveAttribute("aria-current", "page");
+  await waitFor(() =>
+    expect(vi.mocked(Element.prototype.scrollIntoView).mock.contexts).toContain(memory),
+  );
 });
 
 test("the sidebar lists settings sections instead of sessions on settings pages", async () => {

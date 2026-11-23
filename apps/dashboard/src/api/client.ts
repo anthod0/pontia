@@ -48,6 +48,9 @@ import type {
   WorkflowDocumentView,
   WorkflowGraphRevisionView,
   WorkflowListItemView,
+  MemoryListQuery,
+  MemoryPage,
+  UserFileView,
 } from "./types";
 import type { DeviceRuntime } from "../device/runtime";
 
@@ -431,6 +434,21 @@ export function createApi(device: DeviceRuntime) {
     const timeout = AbortSignal.timeout(15_000);
     const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
     return request<T>(path, { ...options, signal });
+  }
+
+  async function getUserFile(options: ReadRequestOptions = {}): Promise<UserFileView> {
+    return (await boundedReadRequest<{ user: UserFileView }>("/memory/user", options)).user;
+  }
+
+  async function listMemories(
+    query: MemoryListQuery,
+    options: ReadRequestOptions = {},
+  ): Promise<MemoryPage> {
+    const params = new URLSearchParams();
+    if (query.q) params.set("q", query.q);
+    if (query.cursor) params.set("cursor", query.cursor);
+    const search = params.toString();
+    return boundedReadRequest<MemoryPage>(`/memories${search ? `?${search}` : ""}`, options);
   }
 
   async function listAgentProfiles(options: ReadRequestOptions = {}): Promise<AgentProfileView[]> {
@@ -986,6 +1004,8 @@ export function createApi(device: DeviceRuntime) {
     respondInteraction,
     validateExternalApiToken,
     listAgentProfiles,
+    getUserFile,
+    listMemories,
     createAgentProfile,
     deleteAgentProfile,
     getAgentProfile,
