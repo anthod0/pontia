@@ -149,6 +149,32 @@ pub async fn timeline(
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct SearchQuery {
+    q: String,
+    before: Option<String>,
+    limit: Option<u32>,
+}
+
+pub async fn search(
+    State(state): State<HttpState>,
+    Path(bot_id): Path<String>,
+    query: Result<Query<SearchQuery>, QueryRejection>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let Query(query) = query.map_err(|error| ApiError::invalid_request(error.body_text()))?;
+    let page = state
+        .bots()
+        .search_messages(
+            &bot_id,
+            &query.q,
+            query.before.as_deref(),
+            query.limit.unwrap_or(20),
+        )
+        .await?;
+    Ok(ok(json!(page)))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SendInput {
     content: String,
 }

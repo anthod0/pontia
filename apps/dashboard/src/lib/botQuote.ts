@@ -34,7 +34,12 @@ export function quoteText(quote: BotQuote): string {
 
 /** Quoted text as one plain line, without common Markdown markers. */
 export function quoteSummary(quote: BotQuote): string {
-  return quoteText(quote)
+  return plainLine(quoteText(quote));
+}
+
+/** Text as one plain line, without common Markdown markers. */
+export function plainLine(text: string): string {
+  return text
     .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+[.)])\s+/gm, "")
     .replace(/\*\*|__|`/g, "")
     .replace(/\s+/g, " ")
