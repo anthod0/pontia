@@ -268,8 +268,7 @@ impl HelperService {
                     instructions.into(),
                 )
             };
-        self.conversation
-            .require_helper_client(client_type, client_key)?;
+        self.conversation.require_helper_client(client_type)?;
         let mut request = self
             .conversation
             .task_session_request(

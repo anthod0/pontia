@@ -49,15 +49,6 @@ impl ClientConfiguration for AcpConfiguration {
             .map(|recipe| recipe.policy())
     }
 
-    fn restrictions_require_managed_directory(&self, key: &str) -> bool {
-        matches!(
-            self.agents
-                .get(key)
-                .and_then(|agent| agent.restricted_execution),
-            Some(crate::RestrictedExecution::Antigravity | crate::RestrictedExecution::Kiro)
-        )
-    }
-
     fn validate_execution_policy(
         &self,
         key: &str,

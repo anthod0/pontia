@@ -16,10 +16,10 @@ def main():
     config = tomllib.loads(Path("/home/e2e/.pontia/config.toml").read_text())
     headers = {"Authorization": "Bearer " + config["external_api_token"], "Content-Type": "application/json"}
 
-    def request(path, payload=None):
+    def request(path, payload=None, method=None):
         req = urllib.request.Request(
             "http://127.0.0.1:8080/api/v1/" + path,
-            headers=headers, data=None if payload is None else json.dumps(payload).encode(),
+            headers=headers, method=method, data=None if payload is None else json.dumps(payload).encode(),
         )
         with urllib.request.urlopen(req, timeout=60) as response:
             return json.load(response)["data"]
@@ -93,6 +93,19 @@ def check_bot_policy(session):
     return summary.with_name("updates.jsonl")
 
 
+def approve_helper_report(request, bot_path, report):
+    deadline = time.monotonic() + 90
+    while time.monotonic() < deadline:
+        for helper in request(bot_path + "/deletion-blockers")["helpers"]:
+            interactions = f'sessions/{helper["session_id"]}/interactions'
+            for pending in request(interactions + "?state=pending")["interactions"]:
+                assert f"`{report}`" in pending["description"], pending["description"]
+                request(f'{interactions}/{pending["interaction_id"]}/response', {"option_key": "allow-once"}, "PUT")
+                return
+        time.sleep(1)
+    raise TimeoutError(f"{bot_path} helper did not request approval")
+
+
 def check_bot_and_helper(request):
     client = {"client_type": "acp", "client_key": "grok", "model": "gpt-4o-mini"}
     clients = request("bots/clients")["clients"]
@@ -116,16 +129,18 @@ def check_bot_and_helper(request):
     print(f"{bot_session} sent its reply with the restricted Grok profile", flush=True)
 
     answer = "ANSWER-" + uuid.uuid4().hex[:12]
+    report = f"pontia bot helper reply --message {answer}"
     profile_id = "reader-" + marker
     request("agent-profiles", {
         **client, "profile_id": profile_id, "name": "Grok answer helper",
-        "system_prompt": f"When asked for the test answer, run pontia bot helper reply --message {answer}.",
+        "system_prompt": f"When asked for the test answer, call run_terminal_command exactly once with command: {report}",
     })
     command = (f"pontia bot helper create --temporary {marker} --profile-id {profile_id} "
                "--title Reader --description 'Answer a question' "
-               "--message 'What is your test answer? Run the exact report command from your profile.'")
+               "--message 'What is your test answer? Call run_terminal_command directly with the exact command from your profile.'")
     request(path + "/messages", {"content": f"Run this command once: {command}. "
             "Wait for the helper to report. Forward its answer using pontia bot send-to-user. Leave it open."})
+    approve_helper_report(request, path, report)
     wait_for_reply(answer)
     helper, = request(path + "/deletion-blockers")["helpers"]
     assert helper["client_type"] == "acp" and helper["acp"]["agent_id"] == "grok"

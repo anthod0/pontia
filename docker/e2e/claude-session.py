@@ -113,10 +113,17 @@ def check_bot_and_helper(request, marker):
               "--message 'What is your test answer? Execute the exact Bash command in your profile.'")
     send(bash_task(create) + "\nWhen the helper reports, use Bash to run "
          "pontia bot send-to-user --message followed by its answer. Keep the helper open.")
-    reply(answer)
-    helper, = request(path + "/deletion-blockers")["helpers"]
-    assert helper["client_type"] == CLIENT["client_type"] and helper["model"] == CLIENT["model"]
+    helper, = wait_for("Bot did not create the helper",
+                       lambda: request(path + "/deletion-blockers")["helpers"])
     session_id = helper["session_id"]
+    interactions = f"sessions/{session_id}/interactions"
+    pending, = wait_for("Helper did not request approval",
+                        lambda: request(interactions + "?state=pending")["interactions"])
+    assert pending["description"].splitlines()[-1] == report, pending["description"]
+    request(f'{interactions}/{pending["interaction_id"]}/response', {"option_key": "allow"}, "PUT")
+    reply(answer)
+    detail = request("sessions/" + session_id)["session"]
+    assert detail["client_type"] == CLIENT["client_type"] and detail["model"] == CLIENT["model"]
     assert any(shlex.split(command) == shlex.split(report) for command in commands(transcript(request, session_id)))
     records = transcript(request, bot_session_id)
     assert any(profile in command and "pontia bot helper create" in command for command in commands(records))
@@ -129,8 +136,7 @@ def check_bot_and_helper(request, marker):
     wait_for(f"helper {session_id} did not exit",
              lambda: request("sessions/" + session_id)["session"]["state"] == "exited")
     assert any(shlex.split(command) == shlex.split(close) for command in commands(transcript(request, bot_session_id)))
-    for sid in (bot_session_id, session_id):
-        assert not request(f"sessions/{sid}/interactions")["interactions"]
+    assert not request(f"sessions/{bot_session_id}/interactions")["interactions"]
     print(f'{session_id} reported {answer}, Bot forwarded the answer and closed the helper', flush=True)
 
 

@@ -443,6 +443,7 @@ async fn retrieval_rejects_clients_that_cannot_disable_skills_but_ordinary_helpe
     assert_eq!(client.launched_policies.lock().unwrap().len(), 1);
     assert!(!root.path().join("bot/readonly").exists());
 
+    *client.policy_support.lock().unwrap() = PolicySupport::NoRestriction;
     let ordinary = helper(&helpers, &session).await;
     assert!(!client.launched_policies.lock().unwrap()[&ordinary].disable_skills);
     assert!(
