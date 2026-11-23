@@ -46,6 +46,18 @@ with tarfile.open(fileobj=io.BytesIO(archive)) as package:
 print("Installed CLIProxyAPI", release["tag_name"])
 PY
 
+FROM base AS grok
+ARG TARGETARCH
+RUN set -eu; \
+    case "$TARGETARCH" in \
+        amd64) arch=x86_64; sha=add4d201dbf2c0bd6077a36feb55a76939de30bae48dbb06f16b2307d38ceacb ;; \
+        arm64) arch=aarch64; sha=8c74f1dc6cdc1befff6b9faada06bec4cf6759d04f2a60cdc28ece5ff696b44f ;; \
+        *) exit 1 ;; \
+    esac; \
+    curl -fsSL "https://storage.googleapis.com/grok-build-public-artifacts/cli/grok-1.0.92-linux-${arch}" -o /usr/local/bin/grok; \
+    echo "$sha  /usr/local/bin/grok" | sha256sum -c -; \
+    chmod 755 /usr/local/bin/grok
+
 FROM rust:1-bookworm AS rust-build
 WORKDIR /src
 COPY Cargo.toml Cargo.lock VERSION ./
@@ -97,6 +109,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && usermod --login e2e --home /home/e2e --move-home node \
     && groupmod --new-name e2e node
 COPY --from=rust-build /out/pontia /out/pontiad /usr/local/bin/
+COPY --from=grok /usr/local/bin/grok /usr/local/bin/grok
 COPY --from=claude-proxy /usr/local/bin/CLIProxyAPI /usr/local/bin/CLIProxyAPI
 COPY --from=dashboard-build /out/local /opt/pontia/dashboard
 COPY clients/pi /opt/pontia/clients/pi
@@ -105,6 +118,7 @@ COPY clients/shared /opt/pontia/shared
 COPY --from=claude-build /src/clients/claude /opt/pontia/claude-validation
 COPY --from=claude-build /opt/pontia/claude-client /opt/pontia/claude-client
 COPY docker/e2e/device-entrypoint /usr/local/bin/device-entrypoint
+COPY docker/e2e/configure-grok.py /usr/local/lib/configure-grok.py
 COPY docker/e2e/configure-pi-auth.py /usr/local/lib/configure-pi-auth.py
 COPY docker/e2e/configure-claude-proxy.py /usr/local/lib/configure-claude-proxy.py
 COPY docker/e2e/device.toml /opt/pontia/config.toml
@@ -112,6 +126,7 @@ RUN mkdir -p /home/e2e/.pontia /home/e2e/.pi/agent /home/e2e/.codex /home/e2e/.c
     && chown -R 1000:1000 /home/e2e
 ENV HOME=/home/e2e PONTIA_HOME=/home/e2e/.pontia
 ENV CLAUDE_CONFIG_DIR=/home/e2e/.claude
+ENV GROK_DISABLE_AUTOUPDATER=1
 ENV PONTIA_CLAUDE_HOST_PATH=/opt/pontia/claude-client/node_modules/@pontia/claude-client/dist/src/main.js
 USER 1000:1000
 WORKDIR /home/e2e/workspace

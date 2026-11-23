@@ -33,6 +33,7 @@ fi
 if [[ ! -d "$HOME/workspace/.git" ]]; then
   git -C "$HOME/workspace" init --initial-branch=main
 fi
+python3 /usr/local/lib/configure-grok.py "$HOME/.grok/config.toml" /run/secrets/openai-api-key
 python3 /usr/local/lib/configure-pi-auth.py "$HOME/.pi/agent/auth.json" /run/secrets/openai-api-key
 python3 /usr/local/lib/configure-claude-proxy.py "$CLAUDE_CONFIG_DIR/settings.json" /run/secrets/openai-api-key /run/claude-proxy
 if [[ -n "$(< /run/secrets/openai-api-key)" ]]; then
