@@ -6,6 +6,7 @@
   import claude from '../../assets/client-icons/claude.svg?raw'
   import grok from '../../assets/client-icons/grok.svg?raw'
   import kiro from '../../assets/client-icons/kiro.svg?raw'
+  import antigravity from '../../assets/client-icons/antigravity.svg?raw'
 
   interface Props {
     clientType: string | undefined
@@ -17,13 +18,18 @@
 
   const clientIcons: Record<string, string> = { pi, codex, 'claude-agent': claude }
 
-  const acpIcons = new Map([['grok', grok], ['kiro', kiro]])
+  const acpIcons = new Map([['antigravity', antigravity], ['grok', grok], ['kiro', kiro]])
 
-  const icon = $derived.by(() => {
+  // Inline SVG ids are document-global, so prefix them per instance to keep mask and filter references local.
+  const idPrefix = $props.id()
+
+  const svg = $derived.by(() => {
     if (!clientType) return undefined
     if (clientType !== 'acp') return clientIcons[clientType]
     return typeof acpAgentId === 'string' ? acpIcons.get(acpAgentId) : undefined
   })
+
+  const icon = $derived(svg?.replace(/\bid="([^"]+)"/g, `id="${idPrefix}-$1"`).replace(/url\(#([^)]+)\)/g, `url(#${idPrefix}-$1)`))
 </script>
 
 {#if icon}
