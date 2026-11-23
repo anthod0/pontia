@@ -4,20 +4,23 @@ import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
+export type AccessScope = "private" | "public";
+
 export interface CommandInput {
   edgeId: string;
+  accessScope: AccessScope;
 }
 
 export interface EdgeRecord {
   id: string;
   name: string;
   tunnelUrl: string;
-  accessScope: "private" | "public";
+  accessScope: AccessScope;
 }
 
 export interface D1Client {
   findEdge(edgeId: string): Promise<EdgeRecord | null>;
-  makeEdgePublic(edgeId: string): Promise<void>;
+  setEdgeAccess(edgeId: string, accessScope: AccessScope): Promise<void>;
 }
 
 export interface Prompter {
@@ -37,14 +40,17 @@ const CLOUD_ROOT = join(REPOSITORY_ROOT, "apps", "cloud");
 const UUID_V7_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 export function parseCommandInput(args: readonly string[]): CommandInput {
-  if (args.length !== 1) {
-    throw new Error("Usage: ./scripts/make-edge-public.ts <edge-id>");
+  if (args.length !== 2) {
+    throw new Error("Usage: ./scripts/set-edge-access.ts <edge-id> <public|private>");
   }
-  const [edgeId] = args;
+  const [edgeId, accessScope] = args;
   if (!UUID_V7_PATTERN.test(edgeId)) {
     throw new Error("Edge ID must be a canonical lowercase UUIDv7.");
   }
-  return { edgeId };
+  if (accessScope !== "public" && accessScope !== "private") {
+    throw new Error("Access scope must be public or private.");
+  }
+  return { edgeId, accessScope };
 }
 
 function sqlString(value: string): string {
@@ -62,12 +68,12 @@ export function buildEdgeLookupSql(edgeId: string): string {
   ].join("\n");
 }
 
-export function buildMakePublicSql(edgeId: string): string {
+export function buildSetAccessSql(edgeId: string, accessScope: AccessScope): string {
   return [
     "UPDATE edges",
-    "SET access_scope = 'public',",
+    `SET access_scope = ${sqlString(accessScope)},`,
     "    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
-    `WHERE id = ${sqlString(edgeId)} AND access_scope = 'private'`,
+    `WHERE id = ${sqlString(edgeId)} AND access_scope <> ${sqlString(accessScope)}`,
     "RETURNING id, access_scope;",
     "",
   ].join("\n");
@@ -129,10 +135,12 @@ export class WranglerD1Client implements D1Client {
     return parseEdgeRow(result.results[0]);
   }
 
-  async makeEdgePublic(edgeId: string): Promise<void> {
-    const result = await this.execute(buildMakePublicSql(edgeId));
+  async setEdgeAccess(edgeId: string, accessScope: AccessScope): Promise<void> {
+    const result = await this.execute(buildSetAccessSql(edgeId, accessScope));
     if (!Array.isArray(result.results) || result.results.length !== 1) {
-      throw new Error("The edge changed before it could be made public; no update was confirmed.");
+      throw new Error(
+        "The edge changed before its access could be updated; no update was confirmed.",
+      );
     }
     const row = result.results[0];
     if (
@@ -140,7 +148,7 @@ export class WranglerD1Client implements D1Client {
       typeof row !== "object" ||
       Array.isArray(row) ||
       (row as Record<string, unknown>).id !== edgeId ||
-      (row as Record<string, unknown>).access_scope !== "public"
+      (row as Record<string, unknown>).access_scope !== accessScope
     ) {
       throw new Error("Wrangler returned an invalid update result.");
     }
@@ -202,13 +210,16 @@ export async function runCommand(
     write(`  Name: ${edge.name}`);
     write(`  Tunnel URL: ${edge.tunnelUrl}`);
     write(`  Current scope: ${edge.accessScope}`);
+    write(`  Target scope: ${input.accessScope}`);
 
-    if (edge.accessScope === "public") {
-      write("\nThis edge is already public. No database changes were made.");
+    if (edge.accessScope === input.accessScope) {
+      write(`\nThis edge is already ${input.accessScope}. No database changes were made.`);
       return 0;
     }
 
-    const confirmation = (await prompter.question('\nType "yes" to make this edge public: '))
+    const confirmation = (
+      await prompter.question(`\nType "yes" to make this edge ${input.accessScope}: `)
+    )
       .trim()
       .toLowerCase();
     if (confirmation !== "yes") {
@@ -216,11 +227,11 @@ export async function runCommand(
       return 0;
     }
 
-    await d1.makeEdgePublic(input.edgeId);
-    write("\nEdge is now public.");
+    await d1.setEdgeAccess(input.edgeId, input.accessScope);
+    write(`\nEdge is now ${input.accessScope}.`);
     return 0;
   } catch (error) {
-    writeError(`Failed to make edge public: ${errorMessage(error)}`);
+    writeError(`Failed to update edge access: ${errorMessage(error)}`);
     return 1;
   } finally {
     prompter.close();
