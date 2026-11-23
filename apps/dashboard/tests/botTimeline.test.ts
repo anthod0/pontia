@@ -26,6 +26,7 @@ function page(entries: BotEntry[], before: string | null, session = "s"): BotMes
       client_type: "pi",
       client_key: "default",
       model: "test",
+      reasoning_effort: null,
     },
     status: { kind: "idle" },
     file_link_session: null,

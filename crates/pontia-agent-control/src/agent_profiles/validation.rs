@@ -24,6 +24,12 @@ pub(super) fn validate_request(
 ) -> Result<()> {
     validate_non_empty("profile_id", &request.profile_id)?;
     validate_non_empty("name", &request.name)?;
+    if let Some(effort) = &request.reasoning_effort {
+        validate_non_empty("reasoning_effort", effort)?;
+        if request.model.is_none() {
+            return Err(Error::Domain("reasoning_effort requires a model".into()));
+        }
+    }
     match (&request.client_type, &request.client_key, &request.model) {
         (None, None, None) => {}
         (Some(client), Some(key), Some(model)) => {

@@ -12,6 +12,7 @@ const bot: Bot = {
   client_type: "pi",
   client_key: "default",
   model: "provider/first",
+  reasoning_effort: null,
   avatar_shape: "classic",
   avatar_color: "blue",
 };
@@ -53,7 +54,29 @@ test("searches the catalog and saves the selected model ID when editing a Bot", 
         client_type: "pi",
         client_key: "default",
         model: "provider/second",
+        reasoning_effort: null,
       },
+      "bot-one",
+    ),
+  );
+});
+
+test("requires an explicit choice when a saved effort is missing from the catalog", async () => {
+  const save = vi.spyOn(testDevice.api, "saveBot").mockResolvedValue(bot);
+  render(BotSettingsForm, { bot: { ...bot, reasoning_effort: "removed" }, onsaved: vi.fn() });
+  await screen.findByRole("alert");
+  const submit = screen.getByRole("button", { name: "Save" });
+  expect(submit).toBeDisabled();
+  const effort = screen.getByRole("combobox", { name: "Reasoning effort" });
+  await fireEvent.keyDown(effort, { key: "ArrowDown" });
+  await screen.findByRole("option");
+  await fireEvent.keyDown(effort, { key: "Home" });
+  await fireEvent.keyDown(effort, { key: "Enter" });
+  await waitFor(() => expect(submit).toBeEnabled());
+  await fireEvent.click(submit);
+  await waitFor(() =>
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({ reasoning_effort: null }),
       "bot-one",
     ),
   );
@@ -90,6 +113,7 @@ test("switching clients clears the selection and loads that client catalog", asy
         client_type: "another",
         client_key: "custom",
         model: "other-model",
+        reasoning_effort: null,
         avatar_shape: "classic",
         avatar_color: "blue",
       },

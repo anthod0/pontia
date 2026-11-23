@@ -7,6 +7,7 @@
   import { randomAvatar } from './avatar'
   import ClientIcon from '../chat/ClientIcon.svelte'
   import ClientModelSelect from '../chat/ClientModelSelect.svelte'
+  import ReasoningEffortSelect from '../chat/ReasoningEffortSelect.svelte'
   import ModelSelectPlaceholder from '../chat/ModelSelectPlaceholder.svelte'
   import * as Select from '$lib/components/ui/select/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -36,6 +37,8 @@
   let avatarShape = $derived(bot?.avatar_shape ?? initialAvatar.shape)
   let avatarColor = $derived(bot?.avatar_color ?? initialAvatar.color)
   let model = $derived(bot?.model ?? '')
+  let reasoningEffort = $derived(bot?.reasoning_effort ?? '')
+  let effortUnavailable = $state(false)
   let modelAvailable = $state(false)
   let clientId = $state('')
   let error = $state('')
@@ -51,7 +54,7 @@
 
   async function save(event: SubmitEvent) {
     event.preventDefault()
-    if (!selected || !name.trim() || !modelAvailable || saving) return
+    if (!selected || !name.trim() || !modelAvailable || effortUnavailable || saving) return
     saving = true
     error = ''
     try {
@@ -63,6 +66,7 @@
         client_type: selected.client_type,
         client_key: selected.client_key,
         model: model.trim(),
+        reasoning_effort: reasoningEffort || null,
       }
       const saved = bot
         ? await device.api.saveBot(input, bot.bot_id)
@@ -96,6 +100,8 @@
     <Select.Root type="single" value={clientId} onValueChange={(value) => {
       clientId = value
       model = ''
+      reasoningEffort = ''
+      effortUnavailable = false
       modelAvailable = false
     }} disabled={saving || !clients.data?.length}>
       <Select.Trigger id={`${id}-client`} class="w-full">
@@ -120,7 +126,14 @@
     <Label for={`${id}-model`}>{$t('bots.model')}</Label>
     {#if selected}
       {#key clientId}
-        <ClientModelSelect id={`${id}-model`} client={selected} bind:value={model} bind:available={modelAvailable} disabled={saving} />
+        <ClientModelSelect id={`${id}-model`} client={selected} bind:value={model} bind:available={modelAvailable} disabled={saving}>
+          {#snippet children(selectedModel)}
+            {#if selectedModel}
+              <ReasoningEffortSelect class="w-full" options={selectedModel.reasoning_efforts ?? []} defaultEffort={selectedModel.default_reasoning_effort}
+                savedValue={bot?.model === model ? bot.reasoning_effort : null} bind:value={reasoningEffort} bind:unavailable={effortUnavailable} disabled={saving} />
+            {/if}
+          {/snippet}
+        </ClientModelSelect>
       {/key}
     {:else}
       <ModelSelectPlaceholder id={`${id}-model`} label={$t('model.choose')} />
@@ -129,7 +142,7 @@
   {#if error}<p class="text-sm text-destructive" role="alert">{error}</p>{/if}
   <div class="flex justify-end gap-2">
     {#if oncancel}<Button variant="outline" type="button" disabled={saving} onclick={oncancel}>{$t('common.cancel')}</Button>{/if}
-    <Button type="submit" disabled={saving || !selected || !name.trim() || !modelAvailable}>
+    <Button type="submit" disabled={saving || !selected || !name.trim() || !modelAvailable || effortUnavailable}>
       {$t(bot ? 'common.save' : onboarding ? 'bots.startChat' : 'bots.create')}
     </Button>
   </div>

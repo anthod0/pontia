@@ -354,6 +354,7 @@ test("sidebar collapses the Bots group and keeps the create action", async () =>
       client_type: "pi",
       client_key: "default",
       model: "provider/model",
+      reasoning_effort: null,
     },
   ]);
   render(AppSidebarHost);
@@ -1048,6 +1049,7 @@ function mockCurrentBot() {
       client_type: "pi",
       client_key: "default",
       model: "provider/model",
+      reasoning_effort: null,
     },
   ]);
   window.history.pushState({}, "", "/dashboard/bots/bot-1");
@@ -1098,6 +1100,7 @@ test("sidebar refreshes every Bot status from live updates without opening its c
     client_type: "pi",
     client_key: "default",
     model: "test",
+    reasoning_effort: null,
   }));
   vi.spyOn(testDevice.api, "listBots").mockResolvedValue(bots);
   let status: BotWorkStatus = { kind: "idle" };

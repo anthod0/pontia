@@ -97,6 +97,7 @@ async fn activate_claimed_node<S: SessionCreator>(
             None => Ok(crate::ProfileSessionConfig {
                 client_type: sessions.default_client_type()?,
                 model: None,
+                reasoning_effort: None,
                 metadata: json!({}),
                 system_instructions: None,
             }),
@@ -144,7 +145,7 @@ fn session_request(
         workflow.workflow_id.clone(),
     )]);
     CreateSessionRequest {
-        reasoning_effort: None,
+        reasoning_effort: launch.reasoning_effort,
         launch_mode: Default::default(),
         execution_policy: Default::default(),
         model: launch.model,

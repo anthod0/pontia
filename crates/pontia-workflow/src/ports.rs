@@ -10,6 +10,7 @@ use crate::{Error, Result};
 pub struct ProfileSessionConfig {
     pub client_type: String,
     pub model: Option<String>,
+    pub reasoning_effort: Option<String>,
     pub metadata: serde_json::Value,
     pub system_instructions: Option<String>,
 }
@@ -52,6 +53,7 @@ impl SessionCreator for AgentControl {
         Ok(ProfileSessionConfig {
             client_type,
             model: profile.model,
+            reasoning_effort: profile.reasoning_effort,
             metadata,
             system_instructions: profile.system_prompt,
         })

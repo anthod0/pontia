@@ -381,6 +381,7 @@ function profileFromInput(input: UpsertAgentProfileInput): AgentProfileView {
     client_type: null,
     client_key: null,
     model: null,
+    reasoning_effort: null,
     system_prompt: null,
     ...input,
     created_at: timestamp,

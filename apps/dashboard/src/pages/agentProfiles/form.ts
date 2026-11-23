@@ -8,6 +8,7 @@ export interface AgentProfileDraft {
   client_type: string;
   client_key: string;
   model: string;
+  reasoning_effort: string;
   system_prompt: string;
 }
 
@@ -21,6 +22,7 @@ export function createAgentProfileDraft(): AgentProfileDraft {
     client_type: "",
     client_key: "",
     model: "",
+    reasoning_effort: "",
     system_prompt: "",
   };
 }
@@ -33,6 +35,7 @@ export function createAgentProfileDraftFromProfile(profile: AgentProfileView): A
     client_type: profile.client_type ?? "",
     client_key: profile.client_key ?? "",
     model: profile.model ?? "",
+    reasoning_effort: profile.reasoning_effort ?? "",
     system_prompt: profile.system_prompt ?? "",
   };
 }
@@ -73,6 +76,7 @@ export function buildAgentProfileInput(
       client_type: launch[0],
       client_key: launch[1],
       model: launch[2],
+      reasoning_effort: draft.reasoning_effort || null,
       system_prompt: draft.system_prompt.trim() || null,
     },
   };

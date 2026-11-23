@@ -38,6 +38,7 @@ impl AgentProfileService {
             client_type: profile.client_type,
             client_key: profile.client_key,
             model: profile.model,
+            reasoning_effort: profile.reasoning_effort,
             system_prompt: profile.system_prompt,
         })
     }
@@ -66,6 +67,7 @@ impl AgentProfileService {
                 client_type,
                 client_key,
                 model,
+                reasoning_effort: profile.reasoning_effort,
             });
         }
         Ok(launchable)

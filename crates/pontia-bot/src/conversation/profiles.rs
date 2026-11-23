@@ -59,6 +59,7 @@ enum ProfileCommand {
         description: String,
         client: ProfileClient,
         model: String,
+        reasoning_effort: Option<String>,
         system_prompt: Option<String>,
     },
     Update(ProfileUpdate),
@@ -80,11 +81,15 @@ struct ProfileUpdate {
     clear_system_prompt: bool,
     client: Option<ProfileClient>,
     model: Option<String>,
+    reasoning_effort: Option<String>,
+    #[serde(default)]
+    clear_reasoning_effort: bool,
 }
 
 impl ProfileUpdate {
     async fn merge(self, profiles: &AgentProfileService) -> Result<UpsertAgentProfileRequest> {
-        if self.clear_description && self.description.is_some()
+        if self.clear_reasoning_effort && self.reasoning_effort.is_some()
+            || self.clear_description && self.description.is_some()
             || self.clear_system_prompt && self.system_prompt.is_some()
         {
             return Err(Error::Domain(
@@ -99,14 +104,25 @@ impl ProfileUpdate {
             && !self.clear_description
             && self.system_prompt.is_none()
             && !self.clear_system_prompt
+            && self.reasoning_effort.is_none()
+            && !self.clear_reasoning_effort
             && self.model.is_none()
         {
             return Err(Error::Domain("Specify a Profile field to update".into()));
         }
         let current = profiles.require_profile(&self.profile_id).await?;
+        let changes_client = self.client.as_ref().is_some_and(|client| {
+            Some(&client.client_type) != current.client_type.as_ref()
+                || Some(&client.client_key) != current.client_key.as_ref()
+        });
         let (client_type, client_key) = match self.client {
             Some(client) => (Some(client.client_type), Some(client.client_key)),
             None => (current.client_type, current.client_key),
+        };
+        let reasoning_effort = if self.clear_reasoning_effort || changes_client {
+            self.reasoning_effort
+        } else {
+            self.reasoning_effort.or(current.reasoning_effort)
         };
         Ok(UpsertAgentProfileRequest {
             profile_id: self.profile_id,
@@ -114,6 +130,7 @@ impl ProfileUpdate {
             client_type,
             client_key,
             model: self.model.or(current.model),
+            reasoning_effort,
             description: if self.clear_description {
                 None
             } else {
@@ -164,10 +181,22 @@ impl ConversationService {
                 description,
                 client,
                 model,
+                reasoning_effort,
                 system_prompt,
             } => {
                 if description.trim().is_empty() {
                     return Err(Error::Domain("description cannot be empty".into()));
+                }
+                if reasoning_effort.is_none() {
+                    clients
+                        .validate_model_selection(
+                            &client.client_type,
+                            &client.client_key,
+                            &model,
+                            None,
+                            home,
+                        )
+                        .await?;
                 }
                 let input = UpsertAgentProfileRequest {
                     profile_id,
@@ -176,48 +205,24 @@ impl ConversationService {
                     client_type: Some(client.client_type),
                     client_key: Some(client.client_key),
                     model: Some(model),
+                    reasoning_effort,
                     system_prompt,
                 };
-                self.validate_profile_model(&clients, &input).await?;
                 Ok(json!({"profile": profiles.create(input, source).await?}))
             }
             ProfileCommand::Update(update) => {
-                let changes_model = update.model.is_some();
+                let check_model = update.model.is_some() || update.reasoning_effort.is_some();
                 let input = update.merge(&profiles).await?;
-                if changes_model {
-                    self.validate_profile_model(&clients, &input).await?;
-                }
                 let id = input.profile_id.clone();
-                Ok(json!({"profile": profiles.update(&id, input, source).await?}))
+                Ok(
+                    json!({"profile": profiles.update_with_model_check(&id, input, source, check_model).await?}),
+                )
             }
             ProfileCommand::Delete { profile_id } => {
                 profiles.delete(&profile_id, source).await?;
                 Ok(json!({"profile_id": profile_id}))
             }
         }
-    }
-
-    async fn validate_profile_model(
-        &self,
-        clients: &AgentClientService,
-        input: &UpsertAgentProfileRequest,
-    ) -> Result<()> {
-        let (Some(client), Some(key), Some(model)) =
-            (&input.client_type, &input.client_key, &input.model)
-        else {
-            return Err(Error::Domain(
-                "Choose a client and model for the Profile".into(),
-            ));
-        };
-        let catalog = clients
-            .list_models(client, key, self.control.pontia_home())
-            .await?;
-        if !catalog.models.iter().any(|entry| entry.id == *model) {
-            return Err(Error::Domain(format!(
-                "Model {model} is unavailable for {client}/{key}"
-            )));
-        }
-        Ok(())
     }
 
     async fn list_profiles(&self, profiles: &AgentProfileService) -> Result<Value> {
@@ -242,7 +247,7 @@ impl ConversationService {
             };
             items.push(json!({
                 "profile_id": profile.profile_id, "name": profile.name, "description": profile.description,
-                "client": client.map(|(client, key)| format!("{client}/{key}")), "model": profile.model,
+                "client": client.map(|(client, key)| format!("{client}/{key}")), "model": profile.model, "reasoning_effort": profile.reasoning_effort,
                 "has_system_prompt": profile.system_prompt.is_some(), "available": reason.is_none(),
                 "unavailable_reason": reason, "updated_at": profile.updated_at,
             }));

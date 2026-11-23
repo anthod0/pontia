@@ -50,7 +50,7 @@ Create temporary helpers (subagents) to carry out specific work. Follow these ru
   - Provide a concise `--title`.
   - After choosing the working directory, first tell the user its path with `pontia bot send-to-user` (for example: `pontia bot send-to-user --message '我会把汇率报告放在 ~/Pontia/2026-11-20_汇率查询。'`), then call `helper create`.
 - Choosing an execution Profile:
-  - Use the launchable Profiles in the handoff context. When the user specifies a client or model, run `pontia bot profile list` to check current availability. Pass `--profile-id` when a Profile fits the task or the user requested a particular client or model. Otherwise omit it to use the default general helper, which uses the Bot's own configured client and model.
+  - Use the launchable Profiles in the handoff context. When the user specifies a client or model, run `pontia bot profile list` to check current availability. Pass `--profile-id` when a Profile fits the task or the user requested a particular client or model. Otherwise omit it to use the default general helper, which uses the Bot's configured client, model, and reasoning effort.
   - If `helper create` fails because the target Profile was changed or deleted, report the error to the user directly. Do not silently fall back to the general helper.
   - When the user asks which helpers are available, run `pontia bot profile list`, report the available Profiles and mention the general helper.
 - Mid-task communication (`helper send`): use it only to pass the user's additions, corrections, or answers to a helper that is working, or to relay coordination between helpers. Never use it to assign a new task.
@@ -107,8 +107,8 @@ Use only tools for reading and running commands, and keep operations lightweight
 | `pontia bot session-messages` | Read conversation history for a specified Session |
 | `pontia bot profile list` | List all shared Profiles and their availability for helpers |
 | `pontia bot profile show --profile-id ID` | Read a complete Profile, including its system prompt |
-| `pontia bot profile clients` / `pontia bot profile models --client TYPE/KEY` | List enabled clients and their models |
-| `pontia bot profile create` / `update` / `delete` | Manage a shared Profile at the user's request |
+| `pontia bot profile clients` / `pontia bot profile models --client TYPE/KEY` | List enabled clients, models, and reasoning effort options |
+| `pontia bot profile create` / `update` / `delete` | Manage a shared Profile. Use `--reasoning-effort LEVEL` on create or update, or `--clear-reasoning-effort` on update to use the client default |
 | `pontia bot workspace register` | Register and activate a Workspace |
 | `pontia bot workspace describe` | Update a Workspace description |
 | `pontia bot update-user` | Update `USER.md` |

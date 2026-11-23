@@ -501,6 +501,7 @@ fn launchable(id: &str, description: Option<&str>) -> LaunchableAgentProfile {
         client_type: "pi".into(),
         client_key: "default".into(),
         model: format!("{id}/model"),
+        reasoning_effort: None,
     }
 }
 

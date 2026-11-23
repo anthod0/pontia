@@ -26,6 +26,7 @@ const bot: Bot = {
   client_type: "pi",
   client_key: "default",
   model: "test",
+  reasoning_effort: null,
 };
 const id = (n: number) => `bmsg_0193a000-0000-7000-8000-${String(n).padStart(12, "0")}`;
 const message = (n: number, kind: BotMessage["kind"], content: string): BotMessage => ({

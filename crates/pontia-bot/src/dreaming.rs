@@ -91,6 +91,7 @@ impl DreamingService {
             )
             .await?;
         let directory = self.conversation.records().read_only_directory().await?;
+        request.reasoning_effort = bot.reasoning_effort.clone();
         request.launch_mode = pontia_core::LaunchMode::Background;
         request.workspace = Some(directory.to_string_lossy().into_owned());
         request.title = Some("Dreaming".into());

@@ -233,33 +233,41 @@ impl HelperService {
             }
             _ => None,
         };
-        let (client_type, client_key, model, instructions) = if let Some((id, profile)) = &profile {
-            let (Some(client_type), Some(client_key), Some(model)) =
-                (&profile.client_type, &profile.client_key, &profile.model)
-            else {
-                return Err(Error::Domain(format!(
-                    "agent profile {id} has no launch defaults"
-                )));
-            };
-            let instructions = [profile.system_prompt.as_deref(), Some(HELPER_INSTRUCTIONS)]
-                .into_iter()
-                .flatten()
-                .collect::<Vec<_>>()
-                .join("\n\n");
-            (client_type, client_key, model, instructions)
-        } else {
-            let instructions = if retrieval {
-                include_str!("helpers/retrieval.md")
+        let (client_type, client_key, model, reasoning_effort, instructions) =
+            if let Some((id, profile)) = &profile {
+                let (Some(client_type), Some(client_key), Some(model)) =
+                    (&profile.client_type, &profile.client_key, &profile.model)
+                else {
+                    return Err(Error::Domain(format!(
+                        "agent profile {id} has no launch defaults"
+                    )));
+                };
+                let instructions = [profile.system_prompt.as_deref(), Some(HELPER_INSTRUCTIONS)]
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>()
+                    .join("\n\n");
+                (
+                    client_type,
+                    client_key,
+                    model,
+                    &profile.reasoning_effort,
+                    instructions,
+                )
             } else {
-                HELPER_INSTRUCTIONS
+                let instructions = if retrieval {
+                    include_str!("helpers/retrieval.md")
+                } else {
+                    HELPER_INSTRUCTIONS
+                };
+                (
+                    &bot.client_type,
+                    &bot.client_key,
+                    &bot.model,
+                    &bot.reasoning_effort,
+                    instructions.into(),
+                )
             };
-            (
-                &bot.client_type,
-                &bot.client_key,
-                &bot.model,
-                instructions.into(),
-            )
-        };
         self.conversation
             .require_helper_client(client_type, client_key)?;
         let mut request = self
@@ -273,6 +281,7 @@ impl HelperService {
                 retrieval,
             )
             .await?;
+        request.reasoning_effort = reasoning_effort.clone();
         if retrieval {
             request.launch_mode = pontia_core::LaunchMode::Background;
             request.role = Some(RETRIEVAL_ROLE.into());

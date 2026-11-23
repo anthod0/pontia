@@ -25,6 +25,7 @@ impl SessionCreator for RecordingSessionCreator {
         Ok(pontia_workflow::ProfileSessionConfig {
             client_type: "generic".into(),
             model: Some("writer-model".into()),
+            reasoning_effort: Some("high".into()),
             metadata: json!({"client_key":"writer"}),
             system_instructions: Some("Write carefully".into()),
         })
@@ -119,6 +120,7 @@ async fn start_launches_first_node_with_required_task_completion_instructions() 
         Some("Write carefully")
     );
     assert_eq!(request.model.as_deref(), Some("writer-model"));
+    assert_eq!(request.reasoning_effort.as_deref(), Some("high"));
     assert_eq!(request.metadata, json!({"client_key":"writer"}));
     assert!(!request.include_standalone_session_instructions);
     assert_eq!(

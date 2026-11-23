@@ -437,11 +437,21 @@ async fn dreaming_uses_the_oldest_bots_current_model_and_built_in_instructions()
         .unwrap();
     conversation
         .records()
-        .update(&first.bot_id, bot_configuration("First", MODEL))
+        .update(
+            &first.bot_id,
+            BotConfiguration {
+                reasoning_effort: Some("low".into()),
+                ..bot_configuration("First", MODEL)
+            },
+        )
         .await
         .unwrap();
     let dreaming = DreamingService::new(control.clone(), conversation);
     let round = dreaming.start().await.unwrap().unwrap();
+    assert_eq!(
+        client.launched_efforts.lock().unwrap()[&round].as_deref(),
+        Some("low")
+    );
     assert_eq!(
         instructions(&control, &round).await.trim(),
         include_str!("../../src/dreaming/instructions.md").trim()
