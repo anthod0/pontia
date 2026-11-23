@@ -354,6 +354,7 @@
   "files.sharedImage": "Shared image",
   "files.missing": "File no longer exists",
   "files.selectUpload": "Select files to upload",
+  "files.dropToUpload": "Drop files to upload",
   "files.uploaded": "Uploaded File",
   "files.checking": "Checking file…",
   "files.resumeHint": "Select the original file to resume",
