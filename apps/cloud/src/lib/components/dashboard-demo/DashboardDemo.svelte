@@ -1,31 +1,47 @@
 <script lang="ts">
+	import ArrowsLeftRightIcon from 'phosphor-svelte/lib/ArrowsLeftRightIcon';
+	import CaretLeftIcon from 'phosphor-svelte/lib/CaretLeftIcon';
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import CaretUpDownIcon from 'phosphor-svelte/lib/CaretUpDownIcon';
 	import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon';
 	import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon';
+	import DotsThreeIcon from 'phosphor-svelte/lib/DotsThreeIcon';
 	import FunnelIcon from 'phosphor-svelte/lib/FunnelIcon';
 	import GearIcon from 'phosphor-svelte/lib/GearIcon';
+	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
 	import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon';
 	import PushPinIcon from 'phosphor-svelte/lib/PushPinIcon';
 	import QuestionIcon from 'phosphor-svelte/lib/QuestionIcon';
 	import SidebarSimpleIcon from 'phosphor-svelte/lib/SidebarSimpleIcon';
+	import { Badge } from '$lib/components/ui/badge/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import { cn } from '$lib/utils';
+	import BotAvatarMark from '$lib/components/bot-story/BotAvatarMark.svelte';
 	import DemoConversation from './DemoConversation.svelte';
+	import DemoGitPanel from './DemoGitPanel.svelte';
 	import { demoDevices, type DemoSession, type DemoSessionState } from './mockData';
 
 	let deviceHandle = $state(demoDevices[0].handle);
+	let previousDeviceHandle = $state<string | null>(null);
+	let gitPanelOpen = $state(false);
 	// Open on a session whose conversation fits without scrolling.
 	let sessionId = $state('review-api');
 	let workspaceFilter = $state('');
+	// Like the Dashboard, Recent Sessions shows only active sessions until the filter asks for all.
+	let sessionScope = $state<'active' | 'all'>('active');
 	let mobileSidebarOpen = $state(false);
 
 	const device = $derived(demoDevices.find((item) => item.handle === deviceHandle)!);
 	const session = $derived(device.sessions.find((item) => item.id === sessionId)!);
 	const pinnedSessions = $derived(device.sessions.filter((item) => item.pinned));
 	// Like the Dashboard, the workspace filter only scopes Recent Sessions.
-	const recentSessions = $derived(device.sessions.filter((item) => !item.pinned && (!workspaceFilter || item.workspaceId === workspaceFilter)));
+	const scopedSessions = $derived(device.sessions.filter((item) => !item.pinned && (!workspaceFilter || item.workspaceId === workspaceFilter)));
+	const recentSessions = $derived(sessionScope === 'all' ? scopedSessions : scopedSessions.filter((item) => item.state !== 'exited'));
+	const filterApplied = $derived(Boolean(workspaceFilter) || sessionScope === 'all');
 	const filterWorkspace = $derived(device.workspaces.find((item) => item.id === workspaceFilter));
+	const workspace = $derived(device.workspaces.find((item) => item.id === session.workspaceId)!);
+	const previousDevice = $derived(demoDevices.find((item) => item.handle === previousDeviceHandle));
+	const changeCount = $derived(workspace.git.changes.length);
 
 	const stateDot: Record<Exclude<DemoSessionState, 'exited'>, string> = { busy: 'bg-busy', idle: 'bg-idle', waiting_for_interaction: 'bg-interrupted' };
 	const stateLabel: Record<Exclude<DemoSessionState, 'exited'>, string> = { busy: 'busy', idle: 'idle', waiting_for_interaction: 'waiting for input' };
@@ -35,9 +51,11 @@
 
 	function selectDevice(handle: string): void {
 		if (handle === deviceHandle) return;
+		previousDeviceHandle = deviceHandle;
 		deviceHandle = handle;
 		workspaceFilter = '';
 		sessionId = demoDevices.find((item) => item.handle === handle)!.sessions[0].id;
+		gitPanelOpen = false;
 	}
 
 	function selectSession(id: string): void {
@@ -70,7 +88,7 @@
 	<span class="flex items-center gap-1 text-xs font-medium">{label}<CaretRightIcon class="size-3 rotate-90" aria-hidden="true" /></span>
 {/snippet}
 
-<div class="dashboard-demo @container relative flex h-full overflow-hidden bg-surface text-foreground" role="region" aria-label="Interactive Dashboard demo with sample data">
+<div class="dashboard-demo demo-git-colors @container relative flex h-full overflow-hidden bg-surface text-foreground" role="region" aria-label="Interactive Dashboard demo with sample data">
 	{#if mobileSidebarOpen}
 		<button type="button" class="absolute inset-0 z-20 bg-black/40 @3xl:hidden" aria-label="Close sidebar" onclick={() => (mobileSidebarOpen = false)}></button>
 	{/if}
@@ -100,9 +118,9 @@
 				</div>
 			</div>
 
-			<div class="shrink-0 p-2 pb-0 text-sm">
+			<div class="relative shrink-0 p-2 pb-0 text-sm">
 				<DropdownMenu.Root>
-					<DropdownMenu.Trigger class={cn(menuButton, 'hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-primary data-[state=open]:bg-accent')} aria-label="Sidebar device">
+					<DropdownMenu.Trigger class={cn(menuButton, 'hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-primary data-[state=open]:bg-accent', previousDevice && 'pr-8')} aria-label="Sidebar device">
 						<DesktopIcon class="text-foreground/60" />
 						<span class="min-w-0 flex-1 truncate font-medium">{device.name}</span>
 						<CaretUpDownIcon class="text-foreground/60" />
@@ -119,9 +137,31 @@
 						</DropdownMenu.RadioGroup>
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
+				{#if previousDevice}
+					<button
+						type="button"
+						class="absolute top-3.5 right-3 flex size-5 items-center justify-center rounded-md hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary [&_svg]:size-4"
+						aria-label={`Switch back to ${previousDevice.name}`}
+						title={`Switch back to ${previousDevice.name} (Online, Alt+M)`}
+						onclick={() => selectDevice(previousDevice.handle)}
+					>
+						<ArrowsLeftRightIcon />
+					</button>
+				{/if}
 			</div>
 
 			<div class="demo-scroll min-h-0 flex-1 overflow-y-auto">
+				<div class="p-2" aria-hidden="true">
+					<div class="flex h-8 items-center px-2 text-foreground/70">{@render groupHeading('Bots')}</div>
+					<ul class="flex flex-col gap-1">
+						{#each device.bots as bot (bot.name)}
+							<li class={cn(menuButton, 'h-9 gap-2.5')}>
+								<span class="size-6 shrink-0"><BotAvatarMark shape={bot.shape} color={bot.color} /></span>
+								<span class="truncate">{bot.name}</span>
+							</li>
+						{/each}
+					</ul>
+				</div>
 				{#if pinnedSessions.length}
 					<div class="p-2">
 						<div class="flex h-8 items-center px-2 text-foreground/70">{@render groupHeading('Pinned Sessions')}</div>
@@ -138,13 +178,19 @@
 							<ArrowUpRightIcon class="size-4" aria-hidden="true" />
 							<DropdownMenu.Root>
 								<DropdownMenu.Trigger
-									class={cn('rounded-sm hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-hidden', workspaceFilter && 'text-primary')}
-									aria-label="Filter recent sessions by workspace"
-									title={filterWorkspace ? `Workspace: ${filterWorkspace.name}` : 'All workspaces'}
+									class={cn('rounded-sm hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-hidden', filterApplied && 'text-primary')}
+									aria-label="Filter recent sessions"
+									title={`${sessionScope === 'active' ? 'Active sessions' : 'All sessions'} · ${filterWorkspace?.name ?? 'All workspaces'}`}
 								>
-									<FunnelIcon class="size-4" weight={workspaceFilter ? 'fill' : 'regular'} />
+									<FunnelIcon class="size-4" weight={filterApplied ? 'fill' : 'regular'} />
 								</DropdownMenu.Trigger>
 								<DropdownMenu.Content side="right" align="start" class={cn(dropdownContent, 'w-72')}>
+									<DropdownMenu.Label class="px-1.5 py-1 font-medium">Status</DropdownMenu.Label>
+									<DropdownMenu.RadioGroup bind:value={sessionScope}>
+										<DropdownMenu.RadioItem closeOnSelect value="active" class={dropdownItem}>Active sessions</DropdownMenu.RadioItem>
+										<DropdownMenu.RadioItem closeOnSelect value="all" class={dropdownItem}>All sessions</DropdownMenu.RadioItem>
+									</DropdownMenu.RadioGroup>
+									<DropdownMenu.Separator class="my-1" />
 									<DropdownMenu.Label class="px-1.5 py-1 font-medium">Workspace</DropdownMenu.Label>
 									<DropdownMenu.RadioGroup bind:value={workspaceFilter}>
 										<DropdownMenu.RadioItem closeOnSelect value="" class={dropdownItem}>All workspaces</DropdownMenu.RadioItem>
@@ -164,8 +210,19 @@
 					</div>
 					<ul class="flex flex-col gap-1 pr-1">
 						{#each recentSessions as item (item.id)}{@render sessionItem(item)}{:else}
-							<li class="px-2 py-1 text-xs text-foreground/60">No recent sessions</li>
+							<li class="px-2 py-1 text-xs text-foreground/60">{sessionScope === 'active' ? 'No active sessions' : 'No recent sessions'}</li>
 						{/each}
+						{#if recentSessions.length < scopedSessions.length}
+							<li>
+								<button
+									type="button"
+									class="w-full rounded-md px-2 py-1 text-left text-xs text-foreground/60 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-primary"
+									onclick={() => (sessionScope = 'all')}
+								>
+									Show closed sessions
+								</button>
+							</li>
+						{/if}
 					</ul>
 				</div>
 			</div>
@@ -177,24 +234,68 @@
 		</div>
 	</aside>
 
-	<div class="flex min-w-0 flex-1 flex-col">
-		<div class="flex h-12 shrink-0 items-center px-3 @3xl:hidden">
-			<div class="flex h-8 min-w-0 items-center gap-1 rounded-lg bg-background px-1 ring-1 ring-foreground/10">
-				<button type="button" class="flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-muted" aria-label="Open sidebar" aria-expanded={mobileSidebarOpen} onclick={() => (mobileSidebarOpen = true)}>
-					<SidebarSimpleIcon class="size-4" />
+	<div class="relative flex min-w-0 flex-1 flex-col">
+		<!-- Like the Dashboard, the top bar floats over the conversation. -->
+		<div class="pointer-events-none absolute inset-x-0 top-0 z-10 flex h-12 items-center gap-2 px-3 @3xl:px-4">
+			<div class="pointer-events-auto flex h-8 min-w-0 items-center rounded-lg bg-popover px-1 ring-1 ring-foreground/10">
+				<button type="button" class="flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-muted @3xl:hidden" aria-label="Open sidebar" aria-expanded={mobileSidebarOpen} onclick={() => (mobileSidebarOpen = true)}>
+					<CaretLeftIcon class="size-4" />
 				</button>
+				<span class="mx-1 hidden min-w-0 max-w-80 truncate px-2 py-0.5 text-sm text-heading @3xl:block">{session.title}</span>
 			</div>
+			<span class="flex-1"></span>
+			<span class="pointer-events-auto flex h-8 shrink-0 items-center rounded-lg bg-popover px-1 ring-1 ring-foreground/10 @3xl:hidden" aria-hidden="true">
+				<span class="flex size-7 items-center justify-center"><DotsThreeIcon class="size-5" weight="bold" /></span>
+			</span>
+			<span class="pointer-events-auto flex h-8 shrink-0 items-center rounded-lg bg-popover px-1 ring-1 ring-foreground/10">
+				<button
+					type="button"
+					class={cn('relative flex size-7 items-center justify-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary', gitPanelOpen && 'bg-muted text-heading')}
+					aria-label={changeCount ? `Git changes, ${changeCount} ${changeCount === 1 ? 'file' : 'files'}` : 'Git changes'}
+					aria-pressed={gitPanelOpen}
+					title="Git changes (Alt G)"
+					onclick={() => (gitPanelOpen = !gitPanelOpen)}
+				>
+					<GitBranchIcon class="size-4" />
+					{#if changeCount}
+						<Badge class="pointer-events-none absolute -top-1 -right-1 h-4 min-w-4 rounded-full bg-primary-solid px-1 text-[0.625rem] text-primary-foreground tabular-nums">{changeCount}</Badge>
+					{/if}
+				</button>
+			</span>
 		</div>
 		{#key session.id}
-			<DemoConversation {session} workspace={device.workspaces.find((item) => item.id === session.workspaceId)} />
+			<DemoConversation {session} {workspace} />
 		{/key}
 	</div>
+
+	{#if gitPanelOpen}
+		{#key workspace.id}
+			<DemoGitPanel git={workspace.git} onclose={() => (gitPanelOpen = false)} />
+		{/key}
+	{/if}
 </div>
 
 <style>
+	/* Git status colours from the Dashboard theme. The details popover renders outside the demo and sets the class too. */
+	:global(.demo-git-colors) {
+		--demo-git-added: #98971a;
+		--demo-git-modified: #d79921;
+		--demo-git-untracked: #689d6a;
+		--demo-git-behind: #b16286;
+	}
+	:global(.dark .demo-git-colors) {
+		--demo-git-added: #b8bb26;
+		--demo-git-modified: #fabd2f;
+		--demo-git-untracked: #8ec07c;
+		--demo-git-behind: #d3869b;
+	}
 	/* The site styles focused buttons with an offset outline; the demo uses the Dashboard's focus ring. */
 	.dashboard-demo :global(button:focus-visible) {
 		outline: none;
+	}
+	/* The site sets `font: inherit` on buttons outside any layer, which overrides the demo's text size utilities. */
+	.dashboard-demo :global(button) {
+		font: revert-layer;
 	}
 	/* Chromium ignores ::-webkit-scrollbar when scrollbar-width or scrollbar-color is set, and its thin width is wider than 6px. */
 	@supports not selector(::-webkit-scrollbar) {

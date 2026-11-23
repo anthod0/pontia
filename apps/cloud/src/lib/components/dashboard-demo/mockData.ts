@@ -4,7 +4,10 @@ export type DemoSessionState = "busy" | "idle" | "waiting_for_interaction" | "ex
 
 export type DemoStep =
   | { kind: "read" | "edit" | "write"; files: number }
-  | { kind: "command"; title: string };
+  | { kind: "command"; title: string }
+  | { kind: "thinking"; text: string };
+
+export type DemoClient = "codex" | "claude" | "pi";
 
 export type DemoBlock =
   | { kind: "p"; text: string }
@@ -17,9 +20,11 @@ export interface DemoSession {
   workspaceId: string;
   state: DemoSessionState;
   pinned?: boolean;
-  client: string;
+  client: DemoClient;
   model: string;
-  branch: string;
+  reasoningEffort?: string;
+  /** Context window usage, as the composer shows it. */
+  context: string;
   handle: string;
   prompt: string;
   /** Seconds the agent has worked on the latest turn. */
@@ -28,15 +33,41 @@ export interface DemoSession {
   reply: DemoBlock[];
 }
 
+export type DemoChangeGroup = "staged" | "unstaged" | "untracked";
+
+export interface DemoChange {
+  path: string;
+  group: DemoChangeGroup;
+  status: "M" | "A" | "?";
+  /** Unified diff body: lines start with "@@", "+", "-" or " ". */
+  diff: string;
+}
+
+export interface DemoGit {
+  branch: string;
+  upstream: string;
+  ahead: number;
+  behind: number;
+  changes: DemoChange[];
+}
+
 export interface DemoWorkspace {
   id: string;
   name: string;
   path: string;
+  git: DemoGit;
+}
+
+export interface DemoBot {
+  name: string;
+  shape: "mochi" | "drop" | "blob" | "onigiri" | "egg" | "pudding";
+  color: string;
 }
 
 export interface DemoDevice {
   handle: string;
   name: string;
+  bots: DemoBot[];
   workspaces: DemoWorkspace[];
   sessions: DemoSession[];
 }
@@ -45,9 +76,73 @@ export const demoDevices: DemoDevice[] = [
   {
     handle: "studio",
     name: "Studio MacBook",
+    bots: [
+      { name: "Atlas", shape: "mochi", color: "#458588" },
+      { name: "Release Desk", shape: "drop", color: "#d79921" },
+    ],
     workspaces: [
-      { id: "atlas", name: "atlas", path: "~/code/atlas" },
-      { id: "atlas-docs", name: "atlas-docs", path: "~/code/atlas-docs" },
+      {
+        id: "atlas",
+        name: "atlas",
+        path: "~/code/atlas",
+        git: {
+          branch: "feat/command-menu",
+          upstream: "origin/feat/command-menu",
+          ahead: 2,
+          behind: 0,
+          changes: [
+            {
+              path: "src/lib/CommandMenu.svelte",
+              group: "staged",
+              status: "M",
+              diff: '@@ -18,5 +18,12 @@\n   let open = $state(false);\n-  let query = "";\n+  let query = $state("");\n+\n+  function onKeydown(event: KeyboardEvent) {\n+    if ((event.metaKey || event.ctrlKey) && event.key === "k") {\n+      event.preventDefault();\n+      open = !open;\n+    }\n+  }\n </script>\n \n-<svelte:window />\n+<svelte:window onkeydown={onKeydown} />',
+            },
+            {
+              path: "tests/command-menu.test.ts",
+              group: "staged",
+              status: "A",
+              diff: '@@ -0,0 +1,8 @@\n+import { render } from "@testing-library/svelte";\n+import CommandMenu from "../src/lib/CommandMenu.svelte";\n+\n+test("opens with Ctrl+K", async () => {\n+  const view = render(CommandMenu);\n+  await view.user.keyboard("{Control>}k{/Control}");\n+  expect(view.getByRole("dialog")).toBeVisible();\n+});',
+            },
+            {
+              path: "tests/checkout.test.ts",
+              group: "untracked",
+              status: "?",
+              diff: '@@ -0,0 +1,5 @@\n+test("places an order", async () => {\n+  const cart = await seedCart({ items: 2 });\n+  const order = await checkout(cart, { card: "4242" });\n+  expect(order.status).toBe("confirmed");\n+});',
+            },
+            {
+              path: "src/api/projects.ts",
+              group: "unstaged",
+              status: "M",
+              diff: "@@ -40,7 +40,7 @@ export async function listProjects(params: ListParams) {\n   const rows = await db.projects.list(params);\n   return {\n-    projects: rows,\n-    next: null,\n+    items: rows,\n+    cursor: rows.at(-1)?.id ?? null,\n   };\n }",
+            },
+            {
+              path: "tests/fixtures/payments.ts",
+              group: "untracked",
+              status: "?",
+              diff: '@@ -0,0 +1,5 @@\n+export const fakePayments = {\n+  async charge(card: string, amount: number) {\n+    return { id: `ch_${card}`, amount, status: "succeeded" };\n+  },\n+};',
+            },
+          ],
+        },
+      },
+      {
+        id: "atlas-docs",
+        name: "atlas-docs",
+        path: "~/code/atlas-docs",
+        git: {
+          branch: "main",
+          upstream: "origin/main",
+          ahead: 0,
+          behind: 0,
+          changes: [
+            {
+              path: "src/routes/search/+page.ts",
+              group: "unstaged",
+              status: "M",
+              diff: "@@ -6,5 +6,5 @@ export async function load({ url }) {\n   const params = Object.fromEntries(url.searchParams);\n-  const offset = (Number(params.page) - 1) * PAGE_SIZE;\n-  const page = Math.max(1, Number(params.page) || 1);\n+  const page = Math.max(1, Number(params.page) || 1);\n+  const offset = (page - 1) * PAGE_SIZE;\n   return { results: await search(params.q, { offset, limit: PAGE_SIZE }) };\n }",
+            },
+          ],
+        },
+      },
     ],
     sessions: [
       {
@@ -58,7 +153,8 @@ export const demoDevices: DemoDevice[] = [
         pinned: true,
         client: "codex",
         model: "gpt-5.4",
-        branch: "feat/keyboard-shortcuts",
+        reasoningEffort: "high",
+        context: "38% · 76k / 200k",
         handle: "atlas-ui",
         prompt:
           "Add keyboard shortcuts to the command menu. Use ⌘K to open it and Escape to close it, and cover both with tests.",
@@ -96,12 +192,17 @@ export const demoDevices: DemoDevice[] = [
         state: "busy",
         client: "claude",
         model: "claude-sonnet-4.5",
-        branch: "main",
+        reasoningEffort: "high",
+        context: "52% · 104k / 200k",
         handle: "atlas-review",
         prompt:
           "Review the changes in `src/api/` since the last release and flag anything that breaks existing clients.",
         duration: 136,
         steps: [
+          {
+            kind: "thinking",
+            text: "I'll diff the API folder against the last release tag first.",
+          },
           { kind: "command", title: "Run command" },
           { kind: "read", files: 6 },
         ],
@@ -125,9 +226,10 @@ export const demoDevices: DemoDevice[] = [
         title: "Add integration tests",
         workspaceId: "atlas",
         state: "busy",
-        client: "Pi",
+        client: "pi",
         model: "gpt-5.4",
-        branch: "test/checkout-flow",
+        reasoningEffort: "medium",
+        context: "21% · 42k / 200k",
         handle: "atlas-tests",
         prompt: "Write integration tests for the checkout flow, from cart to order confirmation.",
         duration: 248,
@@ -154,9 +256,9 @@ export const demoDevices: DemoDevice[] = [
         title: "Build the settings page",
         workspaceId: "atlas",
         state: "exited",
-        client: "Pi",
+        client: "pi",
         model: "kimi-k2",
-        branch: "feat/settings",
+        context: "64% · 82k / 128k",
         handle: "atlas-settings",
         prompt: "Build a settings page with profile, notifications, and danger zone sections.",
         duration: 191,
@@ -185,7 +287,8 @@ export const demoDevices: DemoDevice[] = [
         state: "exited",
         client: "codex",
         model: "gpt-5.4-mini",
-        branch: "fix/search-pages",
+        reasoningEffort: "low",
+        context: "9% · 18k / 200k",
         handle: "docs-search",
         prompt: "Search results repeat on page 2. Find out why and fix it.",
         duration: 57,
@@ -213,7 +316,8 @@ export const demoDevices: DemoDevice[] = [
         state: "exited",
         client: "claude",
         model: "claude-haiku-4.5",
-        branch: "feat/mobile-nav",
+        reasoningEffort: "medium",
+        context: "17% · 34k / 200k",
         handle: "docs-nav",
         prompt: "The docs sidebar covers the page on phones. Turn it into a drawer.",
         duration: 112,
@@ -241,9 +345,45 @@ export const demoDevices: DemoDevice[] = [
   {
     handle: "build-server",
     name: "Build Server",
+    bots: [{ name: "Ops", shape: "egg", color: "#98971a" }],
     workspaces: [
-      { id: "infra", name: "infra", path: "/srv/infra" },
-      { id: "billing-api", name: "billing-api", path: "/srv/billing-api" },
+      {
+        id: "infra",
+        name: "infra",
+        path: "/srv/infra",
+        git: {
+          branch: "ops/staging",
+          upstream: "origin/ops/staging",
+          ahead: 1,
+          behind: 1,
+          changes: [
+            {
+              path: "staging/lb/certs.tf",
+              group: "staged",
+              status: "M",
+              diff: '@@ -4,5 +4,5 @@ resource "tls_certificate" "staging" {\n   domain = "staging.example.com"\n-  serial = "4f:a1:09"\n-  not_after = "2025-11-30"\n-  fingerprint = "sha256:9c1e"\n+  serial = "7b:22:e4"\n+  not_after = "2026-02-28"\n+  fingerprint = "sha256:41d0"\n }',
+            },
+            {
+              path: "ci/e2e.yml",
+              group: "unstaged",
+              status: "M",
+              diff: '@@ -18,3 +18,4 @@ jobs:\n       - run: pnpm build\n-      - run: pnpm test:e2e --port 3000\n+      - run: pnpm test:e2e --port "$PORT"\n+        env: { PORT: 0 }\n       - uses: actions/upload-artifact@v4',
+            },
+          ],
+        },
+      },
+      {
+        id: "billing-api",
+        name: "billing-api",
+        path: "/srv/billing-api",
+        git: {
+          branch: "feat/invoice-export",
+          upstream: "origin/feat/invoice-export",
+          ahead: 0,
+          behind: 0,
+          changes: [],
+        },
+      },
     ],
     sessions: [
       {
@@ -254,7 +394,8 @@ export const demoDevices: DemoDevice[] = [
         pinned: true,
         client: "claude",
         model: "claude-sonnet-4.5",
-        branch: "ops/postgres-17",
+        reasoningEffort: "high",
+        context: "47% · 94k / 200k",
         handle: "infra-db",
         prompt: "Plan the Postgres 16 → 17 upgrade for staging and run it.",
         duration: 402,
@@ -280,11 +421,16 @@ export const demoDevices: DemoDevice[] = [
         state: "busy",
         client: "codex",
         model: "gpt-5.4",
-        branch: "main",
+        reasoningEffort: "medium",
+        context: "29% · 58k / 200k",
         handle: "infra-ci",
         prompt: "The `e2e` job fails about one run in five. Find the cause.",
         duration: 175,
         steps: [
+          {
+            kind: "thinking",
+            text: "The failures look timing related. I'll compare the failing runs first.",
+          },
           { kind: "command", title: "Run command" },
           { kind: "read", files: 2 },
         ],
@@ -301,9 +447,10 @@ export const demoDevices: DemoDevice[] = [
         title: "Rotate staging certificates",
         workspaceId: "infra",
         state: "waiting_for_interaction",
-        client: "Pi",
+        client: "pi",
         model: "gpt-5.4",
-        branch: "ops/certs",
+        reasoningEffort: "medium",
+        context: "12% · 24k / 200k",
         handle: "infra-certs",
         prompt: "Rotate the TLS certificates on the staging load balancer.",
         duration: 64,
@@ -324,9 +471,9 @@ export const demoDevices: DemoDevice[] = [
         title: "Add invoice export endpoint",
         workspaceId: "billing-api",
         state: "exited",
-        client: "Pi",
+        client: "pi",
         model: "kimi-k2",
-        branch: "feat/invoice-export",
+        context: "31% · 40k / 128k",
         handle: "billing-export",
         prompt: "Add an endpoint that exports a month of invoices as CSV.",
         duration: 146,
