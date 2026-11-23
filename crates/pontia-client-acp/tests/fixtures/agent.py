@@ -171,6 +171,8 @@ for line in sys.stdin:
             caps["sessionCapabilities"]["close"] = {}
         if (os.environ.get("ACP_SYSTEM_PROMPT") == "1" or (root / "system-prompt").exists()) and not (root / "no-system-prompt").exists():
             caps["sessionCapabilities"]["systemPrompt"] = {}
+        if os.environ.get("ACP_ANTIGRAVITY") == "1":
+            caps["_meta"] = {"antigravity": {"systemPrompt": {"append": True}}}
         if os.environ.get("ACP_OPTIONS"):
             caps["sessionCapabilities"]["options"] = {}
         if os.environ.get("ACP_INTERJECT"):

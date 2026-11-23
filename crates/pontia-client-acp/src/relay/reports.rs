@@ -160,6 +160,27 @@ impl Reports {
         }
     }
 
+    pub fn steer_prompt(&self, context: &mut Value, turn: &Value, frame: &Value) -> Result<bool> {
+        if context["active"]["turn"] != *turn
+            || context["active"]["cancelled"] == true
+            || self.finished.as_deref() == turn.as_str()
+        {
+            return Ok(false);
+        }
+        let input = frame
+            .pointer("/params/prompt/0/text")
+            .and_then(Value::as_str)
+            .ok_or_else(|| Error::Domain("ACP steering prompt requires text".into()))?;
+        let prompt = &mut context["active"];
+        let end = prompt["history_end"]
+            .as_u64()
+            .ok_or_else(|| Error::Domain("Missing ACP prompt history boundary".into()))?;
+        // agy completes the superseded request as soon as the next prompt arrives.
+        prompt["request_id"] = frame["id"].clone();
+        prompt["history_end"] = json!(end + input.len() as u64);
+        Ok(true)
+    }
+
     fn finish_original(&mut self, context: &Value, reason: String) {
         let prompt = &context["active"];
         let Some(turn) = prompt["turn"].as_str() else {
@@ -569,6 +590,26 @@ pub(super) async fn send_frame(peer: &Arc<RpcPeer>, id: &str, frame: &Value) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn completed_prompt_refuses_steering_before_controller_receives_completion() {
+        let mut reports = Reports::default();
+        let mut context = json!({"ready":true,"active":{
+            "turn":"turn","request_id":1,"history_index":0,"history_end":5
+        }});
+        reports.observe(
+            &mut context,
+            &json!({"id":1,"result":{"stopReason":"end_turn"}}),
+        );
+        let late = json!({"id":2,"params":{"prompt":[{"type":"text","text":"late"}]}});
+        assert!(
+            !reports
+                .steer_prompt(&mut context, &json!("turn"), &late)
+                .unwrap()
+        );
+        assert_eq!(context["active"]["request_id"], 1);
+        assert_eq!(context["active"]["history_end"], 5);
+    }
 
     #[test]
     fn replay_keeps_original_usage_and_relay_identity() {

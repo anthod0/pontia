@@ -166,6 +166,46 @@ async fn advertised_steering_joins_current_turn_and_after_idle_waits() {
 }
 
 #[tokio::test]
+async fn antigravity_finishes_the_running_turn_with_the_latest_prompt() {
+    let mut h = Harness::new(&[("ACP_ANTIGRAVITY", "1")]).await;
+    let session = h.create("antigravity").await.unwrap();
+    // A superseded response must not fail the Turn, even after reattachment.
+    let turn = h
+        .app
+        .turn_commands()
+        .create_and_dispatch_turn(&session, "max_tokens".into(), json!({}))
+        .await
+        .unwrap()
+        .unwrap()
+        .turn_id;
+    h.release("update-1");
+    h.wait_turn(&session, &turn, "running").await;
+    let message = submit(&h, &session, "steer").await;
+    assert_eq!(message["turn_id"], turn);
+    assert_eq!(message["state"], "dispatched");
+    h.release("release-1");
+    h.release("update-2");
+    h.restart().await;
+    h.release("release-2");
+    h.wait_turn(&session, &turn, "completed").await;
+    let timeline = h.history(&session).await.unwrap();
+    let messages: Vec<_> = timeline
+        .items
+        .iter()
+        .filter(|item| item.item.role == "user")
+        .collect();
+    assert_eq!(messages.len(), 2);
+    assert!(
+        messages
+            .iter()
+            .all(|item| item.turn_id.as_deref() == Some(turn.as_str()))
+    );
+    assert_eq!(h.events(&session, "turn.completed").await, 1);
+    assert_eq!(h.requests("session/prompt"), 2);
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn prompt_required_keeps_unconsumed_steer_queued() {
     let h = Harness::new(&[
         ("ACP_STEERING", "1"),

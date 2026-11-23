@@ -300,8 +300,8 @@ async fn handle(
             state.context = request.params["context"].clone();
             peer.reply(request.id, json!({})).await?;
         }
-        "relay.write" => {
-            let bytes = STANDARD
+        "relay.write" | "relay.steer_prompt" => {
+            let mut bytes = STANDARD
                 .decode(
                     request.params["chunk"]
                         .as_str()
@@ -310,6 +310,35 @@ async fn handle(
                 .map_err(|_| Error::Domain("Invalid relay bytes".into()))?;
             if let Some(id) = request.params.get("close_request_id") {
                 state.lock().await.reports.close_request_id = Some(id.clone());
+            }
+            if request.method == "relay.steer_prompt" {
+                answer.append(&mut bytes);
+                if request.params["last"] != true {
+                    peer.reply(request.id, json!({"buffered":true})).await?;
+                    return Ok(false);
+                }
+                bytes = std::mem::take(answer);
+                let frame: Value = serde_json::from_slice(&bytes)?;
+                let mut locked = state.lock().await;
+                let State {
+                    context, reports, ..
+                } = &mut *locked;
+                if !reports.steer_prompt(context, &request.params["turn"], &frame)? {
+                    drop(locked);
+                    peer.reply(request.id, json!({"written":false})).await?;
+                    // Release the local SDK request without writing a new prompt to the idle Agent.
+                    let result = json!({"jsonrpc":"2.0","id":frame["id"],"error":{"code":-32600,"message":"Prompt already finished"}});
+                    let peer = peer.clone();
+                    tokio::spawn(async move {
+                        let _ = send_frame(
+                            &peer,
+                            &pontia_core::ids::new_event_id().to_string(),
+                            &result,
+                        )
+                        .await;
+                    });
+                    return Ok(false);
+                }
             }
             let auth = request.params.get("permission");
             let permission = if let Some(auth) = auth {

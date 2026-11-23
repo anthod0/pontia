@@ -7,7 +7,7 @@ use pontia_core::{Error, Result};
 use pontia_runtime::{ProcessFingerprint, ProcessObservation};
 use serde_json::{Value, json};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -20,6 +20,7 @@ use tokio::{
 struct Written {
     keys: HashSet<String>,
     responses: HashSet<String>,
+    steering: HashMap<String, String>,
     closed: bool,
     rejected: HashSet<String>,
 }
@@ -44,7 +45,11 @@ impl Receipts {
                     return Ok(());
                 }
                 if state.rejected.remove(&key) {
-                    return Err(Error::StateConflict("ACP permission was withdrawn".into()));
+                    return Err(if key.starts_with("response:") {
+                        Error::StateConflict("ACP permission was withdrawn".into())
+                    } else {
+                        crate::steering::prompt_required()
+                    });
                 }
                 if state.closed {
                     return Err(Error::ControlUnknown(
@@ -63,7 +68,18 @@ impl Receipts {
         self.state.lock().unwrap().responses.insert(key.clone());
         Ok(key)
     }
-    fn rejected(&self, id: &Value) {
+    pub fn steering_request(&self, key: String, turn: &str) {
+        self.state.lock().unwrap().steering.insert(key, turn.into());
+    }
+
+    fn rejected(&self, frame: &Value) {
+        let id = &frame["id"];
+        if frame["method"] == "session/prompt" {
+            let mut state = self.state.lock().unwrap();
+            state.rejected.insert(id.to_string());
+            self.changed.send_modify(|version| *version += 1);
+            return;
+        }
         let key = format!("response:{id}");
         let mut state = self.state.lock().unwrap();
         if state.responses.remove(&key) {
@@ -203,6 +219,16 @@ pub(crate) async fn bridge(
             } else {
                 None
             };
+            let steering_turn = if frame["method"] == "session/prompt" {
+                receipts
+                    .state
+                    .lock()
+                    .unwrap()
+                    .steering
+                    .remove(&frame["id"].to_string())
+            } else {
+                None
+            };
             let count = bytes.len().div_ceil(64 * 1024);
             let mut written = true;
             for (i, chunk) in bytes.chunks(64 * 1024).enumerate() {
@@ -210,10 +236,17 @@ pub(crate) async fn bridge(
                 if i == 0 && frame["method"] == "session/close" {
                     params["close_request_id"] = frame["id"].clone();
                 }
+                let method = if let Some(turn) = &steering_turn {
+                    params["turn"] = json!(turn);
+                    params["last"] = json!(i + 1 == count);
+                    "relay.steer_prompt"
+                } else {
+                    "relay.write"
+                };
                 if let Some(key) = &permission {
                     params["permission"] = json!({"id":frame["id"],"key":key,"last":i+1==count});
                 }
-                if relay.call("relay.write", params).await?["written"] == false {
+                if relay.call(method, params).await?["written"] == false {
                     written = false;
                     break;
                 }
@@ -221,7 +254,7 @@ pub(crate) async fn bridge(
             if written {
                 receipts.written(&frame);
             } else {
-                receipts.rejected(&frame["id"]);
+                receipts.rejected(&frame);
             }
         }
     };

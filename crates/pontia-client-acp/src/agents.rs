@@ -50,7 +50,6 @@ impl AcpAgents {
                     },
                     new_session_instructions_meta_key: None,
                     capabilities: AgentClientCapabilities {
-                        steer: false,
                         manual_compaction: false,
                         compaction_events: false,
                         compaction_history: false,

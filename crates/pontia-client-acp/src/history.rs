@@ -286,7 +286,7 @@ impl AcpHistory {
         if !state.current || state.history_error.is_some() || state.replay.is_some() {
             return Err(unavailable());
         }
-        if !state.interjections.is_empty() {
+        if state.steering_history_pending || !state.interjections.is_empty() {
             return Err(Error::Conflict {
                 code: "timeline_pending",
                 message: "Waiting for native interjection history".into(),
