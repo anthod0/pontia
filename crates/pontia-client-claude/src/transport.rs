@@ -63,6 +63,7 @@ pub(crate) async fn launch(
         .envs(environment)
         .env("PONTIA_HOME", root)
         .env("PONTIA_SESSION_ID", &peer.session)
+        .env("PONTIA_RUNTIME_INSTANCE_ID", &peer.runtime)
         .env("CLAUDE_CONFIG_DIR", &peer.config_dir)
         .stdin(input)
         .stdout(Stdio::null())
