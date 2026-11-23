@@ -269,13 +269,13 @@ test(
       { file_path: "test.txt" },
       { signal: new AbortController().signal, toolUseID: "tool", requestId: "permission" },
     );
-    await h.wait(() => h.facts.some((f) => f.event.kind === "permission_requested"));
-    const permission = h.facts.find((f) => f.event.kind === "permission_requested")!.event;
+    await h.wait(() => h.facts.some((f) => f.event.kind === "interaction_requested"));
+    const permission = h.facts.find((f) => f.event.kind === "interaction_requested")!.event;
     assert.equal(
       (
         await h.command({
-          method: "permission",
-          permission_id: permission.permission_id,
+          method: "interaction",
+          interaction_key: permission.interaction_key,
           option: "allow",
         })
       ).status,
@@ -353,7 +353,7 @@ for (const transient of [false, true]) {
     `permission registration ${transient ? "retries the original observation" : "denies the waiting callback on conflict"}`,
     { timeout: 6000 },
     async (t) => {
-      const h = await setup(t, "permission_requested", transient);
+      const h = await setup(t, "interaction_requested", transient);
       await h.command({ method: "input", input_id: first, text: "task" });
       h.fixture.messages.push(init());
       h.fixture.messages.push(assistant());
@@ -369,13 +369,17 @@ for (const transient of [false, true]) {
       );
       if (transient) {
         await h.wait(
-          () => h.facts.filter((f) => f.event.kind === "permission_requested").length === 2,
+          () => h.facts.filter((f) => f.event.kind === "interaction_requested").length === 2,
         );
-        await h.command({ method: "permission", permission_id: "native-request", option: "allow" });
+        await h.command({
+          method: "interaction",
+          interaction_key: "native-request",
+          option: "allow",
+        });
       }
       assert.equal((await response)?.behavior, transient ? "allow" : "deny");
-      const registrations = h.facts.filter((f) => f.event.kind === "permission_requested");
-      assert.equal(registrations[0]!.event.permission_id, "native-request");
+      const registrations = h.facts.filter((f) => f.event.kind === "interaction_requested");
+      assert.equal(registrations[0]!.event.interaction_key, "native-request");
       assert.equal(
         registrations[0]!.report_key,
         `claude:${registrations[0]!.host_id}:native-request`,
@@ -389,7 +393,7 @@ test(
   "settlement retries independently after a single delivered choice",
   { timeout: 6000 },
   async (t) => {
-    const h = await setup(t, "permission_settled", true);
+    const h = await setup(t, "interaction_settled", true);
     await h.command({ method: "input", input_id: first, text: "task" });
     h.fixture.messages.push(init());
     h.fixture.messages.push(assistant());
@@ -403,13 +407,13 @@ test(
         requestId: "native-request",
       },
     );
-    await h.wait(() => h.facts.some((f) => f.event.kind === "permission_requested"));
-    await h.command({ method: "permission", permission_id: "native-request", option: "allow" });
+    await h.wait(() => h.facts.some((f) => f.event.kind === "interaction_requested"));
+    await h.command({ method: "interaction", interaction_key: "native-request", option: "allow" });
     assert.equal((await response)?.behavior, "allow");
-    const settlements = () => h.facts.filter((f) => f.event.kind === "permission_settled");
+    const settlements = () => h.facts.filter((f) => f.event.kind === "interaction_settled");
     await h.wait(() => settlements().length === 2);
     assert.deepEqual(settlements()[0], settlements()[1]);
-    assert.equal(h.facts.filter((f) => f.event.kind === "permission_requested").length, 1);
+    assert.equal(h.facts.filter((f) => f.event.kind === "interaction_requested").length, 1);
   },
 );
 
@@ -446,17 +450,19 @@ test(
         { signal: new AbortController().signal, toolUseID: id, requestId: id },
       );
     const firstAnswer = request("before");
-    await h.wait(() => h.facts.some((f) => f.event.permission_id === "before"));
+    await h.wait(() => h.facts.some((f) => f.event.interaction_key === "before"));
     let secondAnswer: ReturnType<typeof request>;
     await h.reconnect(async () => {
       secondAnswer = request("during");
     });
-    await h.wait(() => h.facts.filter((f) => f.event.kind === "permission_requested").length === 3);
-    const before = h.facts.filter((f) => f.event.permission_id === "before");
+    await h.wait(
+      () => h.facts.filter((f) => f.event.kind === "interaction_requested").length === 3,
+    );
+    const before = h.facts.filter((f) => f.event.interaction_key === "before");
     assert.deepEqual(before[0], before[1]);
     for (const id of ["before", "during"]) {
       assert.equal(
-        (await h.command({ method: "permission", permission_id: id, option: "allow" })).status,
+        (await h.command({ method: "interaction", interaction_key: id, option: "allow" })).status,
         "accepted",
       );
     }

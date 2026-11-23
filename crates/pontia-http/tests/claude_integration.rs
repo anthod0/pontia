@@ -153,7 +153,7 @@ impl Harness {
             .unwrap()
             .lines()
             .map(|line| serde_json::from_str::<Value>(line).unwrap())
-            .filter(|v| v["session"] == session && v["method"] == "permission")
+            .filter(|v| v["session"] == session && v["method"] == "interaction")
             .collect()
     }
     async fn stop(self) {
@@ -307,10 +307,10 @@ async fn claude_http_competing_and_duplicate_choices_deliver_only_once() {
 }
 
 #[tokio::test]
-async fn claude_http_parallel_approvals_deliver_allow_and_deny_to_separate_callbacks() {
+async fn claude_http_parallel_approvals_deliver_session_allow_and_deny_to_separate_callbacks() {
     let h = Harness::new().await;
     let (session, _, paths) = h.approvals().await;
-    for (path, option) in paths.iter().zip(["allow", "deny"]) {
+    for (path, option) in paths.iter().zip(["allow_always", "deny"]) {
         assert_eq!(
             call(&h.app, "PUT", path, json!({"option_key":option}))
                 .await
@@ -321,9 +321,9 @@ async fn claude_http_parallel_approvals_deliver_allow_and_deny_to_separate_callb
     wait_interactions(&h.app, &session, &["resolved", "resolved"]).await;
     let choices = h.choices(&session);
     assert_eq!(choices.len(), 2);
-    assert_eq!(choices[0]["option"], "allow");
+    assert_eq!(choices[0]["option"], "allow_always");
     assert_eq!(choices[1]["option"], "deny");
-    assert_ne!(choices[0]["permission_id"], choices[1]["permission_id"]);
+    assert_ne!(choices[0]["interaction_key"], choices[1]["interaction_key"]);
     wait_turn(&h.app, &session, "running").await;
     h.stop().await;
 }

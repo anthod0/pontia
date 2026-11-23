@@ -103,8 +103,31 @@ test(
                         input: { command: "printenv PONTIA_SESSION_ID" },
                       },
                     ]
-                  : [{ type: "text", text: "fixture answer" }],
-          stop_reason: [1, 3, 5, 7, 9, 11, 13].includes(requests.length) ? "tool_use" : "end_turn",
+                  : requests.length === 15
+                    ? [
+                        {
+                          type: "tool_use",
+                          id: "ask-fixture",
+                          name: "AskUserQuestion",
+                          input: {
+                            questions: [
+                              {
+                                question: "Which tone?",
+                                header: "Tone",
+                                multiSelect: false,
+                                options: [
+                                  { label: "Formal", description: "Polite" },
+                                  { label: "Casual", description: "Relaxed" },
+                                ],
+                              },
+                            ],
+                          },
+                        },
+                      ]
+                    : [{ type: "text", text: "fixture answer" }],
+          stop_reason: [1, 3, 5, 7, 9, 11, 13, 15].includes(requests.length)
+            ? "tool_use"
+            : "end_turn",
           stop_sequence: null,
           usage: {
             input_tokens: 12000 + 1000 * requests.length,
@@ -230,7 +253,7 @@ test(
       id: string,
       text: string,
       expected = "fixture answer",
-      choice?: "allow" | "deny",
+      choice?: "allow" | "deny" | "option_1",
     ) {
       const handled = new Set<string>();
       host.submit(id, text);
@@ -244,15 +267,16 @@ test(
         assert.ok(Date.now() < deadline, "SDK did not finish the fixture task");
         for (const event of events) {
           if (
-            event.kind === "permission_requested" &&
-            !handled.has(event.permission_id) &&
+            event.kind === "interaction_requested" &&
+            !handled.has(event.interaction_key) &&
             !events.some(
-              (e) => e.kind === "permission_settled" && e.permission_id === event.permission_id,
+              (e) =>
+                e.kind === "interaction_settled" && e.interaction_key === event.interaction_key,
             )
           ) {
             assert.ok(choice, "unexpected SDK approval");
-            handled.add(event.permission_id);
-            host.resolvePermission(event.permission_id, choice);
+            handled.add(event.interaction_key);
+            host.resolveInteraction(event.interaction_key, choice);
           }
         }
         await new Promise((resolve) => setTimeout(resolve, 10));
@@ -393,6 +417,16 @@ test(
         assert.ok(!names.includes("Agent"));
         await assert.rejects(access(join(cwd, `write-${index + 1}.txt`)));
       }
+      const interactive = create();
+      await finish(interactive, randomUUID(), "Choose tone", "fixture answer", "option_1");
+      const modelInput = requests[15]!.messages;
+      assert.ok(Array.isArray(modelInput));
+      const reply = modelInput
+        .flatMap((message) => message.content)
+        .find((block) => block.type === "tool_result" && block.tool_use_id === "ask-fixture");
+      assert.ok(reply && !reply.is_error);
+      assert.match(JSON.stringify(reply.content), /Casual/);
+      assert.doesNotMatch(JSON.stringify(reply.content), /Formal/);
     } finally {
       try {
         await Promise.all(hosts.map((host) => host.close()));
@@ -541,7 +575,7 @@ for (const phase of ["streaming", "approval"] as const) {
       try {
         host.submit(first, "original steering fixture task");
         await waitFor(() =>
-          events.some((e) => e.kind === (phase === "approval" ? "permission_requested" : "text")),
+          events.some((e) => e.kind === (phase === "approval" ? "interaction_requested" : "text")),
         );
         host.steer(first, second, "native steering correction marker");
         await waitFor(() => host.status().finished);
@@ -567,7 +601,9 @@ for (const phase of ["streaming", "approval"] as const) {
         assert.ok(history.includes(first));
         assert.ok(history.includes(second));
         if (phase === "approval") {
-          assert.ok(events.some((e) => e.kind === "permission_settled" && e.outcome === "expired"));
+          assert.ok(
+            events.some((e) => e.kind === "interaction_settled" && e.outcome === "expired"),
+          );
           await assert.rejects(access(join(cwd, "not-approved.txt")));
         }
       } finally {

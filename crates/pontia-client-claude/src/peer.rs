@@ -23,7 +23,7 @@ pub(crate) struct State {
     pub closed_anchor: Option<String>,
     pub native: Option<String>,
     pub input: Option<Input>,
-    pub permissions: HashMap<String, crate::interactions::Permission>,
+    pub interactions: HashMap<String, crate::interactions::PendingInteraction>,
 }
 pub(crate) struct Peer {
     pub session: String,
@@ -78,7 +78,7 @@ impl Peer {
         }
         if reason == "control_connection_lost" {
             let pending = state
-                .permissions
+                .interactions
                 .keys()
                 .map(|id| (self.session.clone(), id.clone()))
                 .collect();
@@ -138,7 +138,7 @@ impl Peer {
         if stale
             && !matches!(
                 event["kind"].as_str(),
-                Some("permission_requested" | "permission_settled")
+                Some("interaction_requested" | "interaction_settled")
             )
         {
             return Err(Error::StateConflict(
@@ -146,7 +146,7 @@ impl Peer {
             ));
         }
         match event["kind"].as_str() {
-            Some("permission_requested" | "permission_settled") => {
+            Some("interaction_requested" | "interaction_settled") => {
                 return crate::interactions::event(self, &mut state, host, params).await;
             }
             Some("closed") => {

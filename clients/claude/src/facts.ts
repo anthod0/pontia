@@ -1,5 +1,7 @@
 import type { SDKMessage, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 
+export type InteractionOption = { key: string; label: string; intent: "positive" | "negative" };
+
 export type HostEvent =
   | { kind: "compaction"; phase: "started" | "completed" | "failed"; data: Record<string, unknown> }
   | { kind: "ready"; native_session_id: string }
@@ -31,15 +33,17 @@ export type HostEvent =
   | { kind: "unavailable"; reason: string; result?: ResultDiagnostic }
   | { kind: "retry"; reason: "authentication_failed_retrying" | "api_request_retrying" | null }
   | {
-      kind: "permission_requested";
-      permission_id: string;
-      tool: string;
+      kind: "interaction_requested";
+      interaction_key: string;
+      title: string;
+      description: string;
+      options: InteractionOption[];
       blocking: boolean;
       authorization_digest: string;
     }
   | {
-      kind: "permission_settled";
-      permission_id: string;
+      kind: "interaction_settled";
+      interaction_key: string;
       authorization_digest: string;
       outcome: "resolved" | "expired";
     }
@@ -47,10 +51,10 @@ export type HostEvent =
 
 function reportKey(host: string, sequence: number, event: HostEvent): string | undefined {
   switch (event.kind) {
-    case "permission_requested":
-      return `claude:${host}:${event.permission_id}`;
-    case "permission_settled":
-      return `claude:${host}:${event.permission_id}:settled`;
+    case "interaction_requested":
+      return `claude:${host}:${event.interaction_key}`;
+    case "interaction_settled":
+      return `claude:${host}:${event.interaction_key}:settled`;
     case "started":
       return `claude:${host}:${event.input_id}:start`;
     case "finished":
@@ -68,8 +72,8 @@ export function hostObservation(host: string, sequence: number, event: HostEvent
     host_id: host,
     sequence,
     report_key: reportKey(host, sequence, event),
-    ...(event.kind === "permission_settled"
-      ? { registration_key: `claude:${host}:${event.permission_id}` }
+    ...(event.kind === "interaction_settled"
+      ? { registration_key: `claude:${host}:${event.interaction_key}` }
       : {}),
     event,
   };

@@ -78,7 +78,7 @@ impl Adapter {
                                 .params
                                 .pointer("/event/kind")
                                 .and_then(Value::as_str),
-                            Some("permission_requested" | "permission_settled")
+                            Some("interaction_requested" | "interaction_settled")
                         );
                         let code = match error {
                             Error::Domain(_) => -32602,

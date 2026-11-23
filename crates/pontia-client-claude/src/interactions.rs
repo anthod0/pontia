@@ -1,13 +1,12 @@
 use pontia_agent_control::interactions::{
-    ChoiceInteractionRequest, InteractionBlock, InteractionIntent, InteractionOption,
-    InteractionState,
+    ChoiceInteractionRequest, InteractionBlock, InteractionOption, InteractionState,
 };
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 
 use crate::peer::{Peer, State, field};
 
-pub(crate) struct Permission {
+pub(crate) struct PendingInteraction {
     native: String,
     resolving: bool,
 }
@@ -19,15 +18,27 @@ pub(crate) async fn event(
     params: &Value,
 ) -> Result<Value> {
     let event = &params["event"];
-    let native = field(event, "permission_id")?;
+    let native = field(event, "interaction_key")?;
     match event["kind"].as_str() {
-        Some("permission_requested") => {
+        Some("interaction_requested") => {
             let blocking = event["blocking"].as_bool().ok_or_else(expired)?;
             let key = field(params, "report_key")?;
             if key != format!("claude:{host}:{native}") {
                 return Err(Error::StateConflict(
                     "Claude permission key does not match request".into(),
                 ));
+            }
+            let title = field(event, "title")?;
+            let description = event["description"].as_str().ok_or_else(expired)?;
+            let options: Vec<InteractionOption> = serde_json::from_value(event["options"].clone())?;
+            if title.chars().count() > 256
+                || description.chars().count() > 4000
+                || !(1..=8).contains(&options.len())
+                || options.iter().any(|o| {
+                    o.label.is_empty() || o.label.chars().count() > 200 || o.key.is_empty()
+                })
+            {
+                return Err(Error::Domain("Invalid Claude interaction content".into()));
             }
             let request = ChoiceInteractionRequest {
                 report_key: key.into(),
@@ -41,20 +52,9 @@ pub(crate) async fn event(
                 // canUseTool identifies a callback, not a user input. In particular,
                 // background work must never be assigned to the latest Inbox Turn.
                 turn_id: None,
-                title: "Tool permission".into(),
-                description: Some(field(event, "tool")?.chars().take(256).collect()),
-                options: vec![
-                    InteractionOption {
-                        key: "allow".into(),
-                        label: "Allow once".into(),
-                        intent: InteractionIntent::Positive,
-                    },
-                    InteractionOption {
-                        key: "deny".into(),
-                        label: "Deny once".into(),
-                        intent: InteractionIntent::Negative,
-                    },
-                ],
+                title: title.into(),
+                description: Some(description.into()),
+                options,
             };
             let interaction = {
                 match peer.interactions.register(request).await {
@@ -67,7 +67,7 @@ pub(crate) async fn event(
                                 .expire(&peer.session, &stored.interaction_id)
                                 .await?;
                             if let Some(permission) =
-                                state.permissions.get_mut(&stored.interaction_id)
+                                state.interactions.get_mut(&stored.interaction_id)
                             {
                                 permission.resolving = true;
                             }
@@ -90,9 +90,9 @@ pub(crate) async fn event(
                 InteractionState::Pending | InteractionState::Resolving
             ) {
                 state
-                    .permissions
+                    .interactions
                     .entry(interaction.interaction_id.clone())
-                    .or_insert_with(|| Permission {
+                    .or_insert_with(|| PendingInteraction {
                         native: native.into(),
                         resolving: false,
                     });
@@ -102,7 +102,7 @@ pub(crate) async fn event(
                 "ended": matches!(interaction.state, InteractionState::Resolved | InteractionState::Expired)}),
             );
         }
-        Some("permission_settled") => {
+        Some("interaction_settled") => {
             let registration = field(params, "registration_key")?;
             let key = field(params, "report_key")?;
             let outcome = field(event, "outcome")?;
@@ -124,7 +124,7 @@ pub(crate) async fn event(
                     outcome,
                 )
                 .await?;
-            state.permissions.remove(&id);
+            state.interactions.remove(&id);
         }
         _ => return Err(expired()),
     }
@@ -134,15 +134,11 @@ pub(crate) async fn event(
 pub(crate) async fn resolve(peer: &Peer, id: &str, option: &str) -> Result<()> {
     let native = {
         let mut state = peer.state.lock().await;
-        if state.closed
-            || state.closing
-            || state.unavailable.is_some()
-            || !matches!(option, "allow" | "deny")
-        {
+        if state.closed || state.closing || state.unavailable.is_some() {
             return Err(expired());
         }
         let permission = state
-            .permissions
+            .interactions
             .get_mut(id)
             .filter(|p| !p.resolving)
             .ok_or_else(expired)?;
@@ -155,7 +151,7 @@ pub(crate) async fn resolve(peer: &Peer, id: &str, option: &str) -> Result<()> {
     // replay a choice, and never hold the state lock while the reader processes facts.
     tokio::spawn(async move {
         connection
-            .request(json!({"method":"permission","permission_id":native,"option":option}))
+            .request(json!({"method":"interaction","interaction_key":native,"option":option}))
             .await
             .map(|_| ())
     })
@@ -164,7 +160,7 @@ pub(crate) async fn resolve(peer: &Peer, id: &str, option: &str) -> Result<()> {
 }
 
 pub(crate) async fn expire_all(peer: &Peer, state: &mut State) {
-    for (id, _) in std::mem::take(&mut state.permissions) {
+    for (id, _) in std::mem::take(&mut state.interactions) {
         if let Err(error) = peer.interactions.expire(&peer.session, &id).await {
             tracing::warn!(session=%peer.session, %error, "Claude Code approval expiration failed");
         }

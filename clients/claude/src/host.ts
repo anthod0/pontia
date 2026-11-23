@@ -8,7 +8,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { Compaction } from "./compaction.js";
 import { Input } from "./input.js";
-import { Permissions } from "./permissions.js";
+import { Interactions } from "./interactions.js";
 import { FactError, InputFacts, type Emit, type ResultDiagnostic } from "./facts.js";
 
 export interface ExecutionPolicy {
@@ -37,7 +37,7 @@ export class ControlError extends Error {
 export class Host {
   private readonly input = new Input();
   private readonly compaction: Compaction;
-  private readonly permissions: Permissions;
+  private readonly interactions: Interactions;
   private execution?: ReturnType<QueryFactory>;
   private reader?: Promise<void>;
   private current?: InputFacts;
@@ -66,7 +66,7 @@ export class Host {
     private readonly emit: Emit,
     private readonly createQuery: QueryFactory = query,
   ) {
-    this.permissions = new Permissions(emit);
+    this.interactions = new Interactions(emit);
     this.compaction = new Compaction(emit);
   }
 
@@ -127,7 +127,7 @@ export class Host {
         settingSources: ["user", "project", "local"],
         settings: { env: { PONTIA_SESSION_ID: this.options.session_id } },
         disallowedTools: [
-          "AskUserQuestion",
+          ...(policy?.yolo ? ["AskUserQuestion"] : []),
           ...(policy?.disabled_tools ?? []),
           ...(policy?.disable_mcp ? ["mcp__*"] : []),
         ],
@@ -135,9 +135,14 @@ export class Host {
           if (this.closed || this.closing || this.unavailable)
             return Promise.resolve({ behavior: "deny", message: "Tool approval is unavailable." });
           if (policy?.yolo) return Promise.resolve({ behavior: "allow", updatedInput: input });
-          return this.permissions.request(tool, input, context);
+          return this.interactions.request(tool, input, context);
         },
-        onElicitation: async () => ({ action: "decline" }),
+        onElicitation: (request, context) => {
+          if (policy?.yolo) return Promise.resolve({ action: "decline" });
+          if (this.closed || this.closing || this.unavailable)
+            return Promise.resolve({ action: "cancel" });
+          return this.interactions.elicit(request, context);
+        },
         // Raw stderr may include credentials or tool arguments. It is not a control fact.
         stderr: () => {},
       };
@@ -210,23 +215,23 @@ export class Host {
     // The result, not this acknowledgement, decides whether interruption won.
   }
 
-  hasPermission(id: string): boolean {
-    return this.permissions.has(id);
+  hasInteraction(id: string): boolean {
+    return this.interactions.has(id);
   }
 
-  cancelPermission(id: string): void {
-    this.permissions.cancel(id);
+  cancelInteraction(id: string): void {
+    this.interactions.cancel(id);
   }
 
-  resolvePermission(id: string, option: string): void {
-    if (!this.acceptsControl() || !this.permissions.resolve(id, option))
+  resolveInteraction(id: string, option: string): void {
+    if (!this.acceptsControl() || !this.interactions.resolve(id, option))
       throw new ControlError("rejected", "permission_expired_or_invalid");
   }
 
   async close(): Promise<void> {
     if (this.closed) return;
     this.closing = true;
-    this.permissions.expire();
+    this.interactions.expire();
     if (this.execution) {
       try {
         this.execution.close();
@@ -258,7 +263,7 @@ export class Host {
     if (this.unavailable) return;
     this.unavailable = reason;
     this.compaction.closed(false);
-    this.permissions.expire();
+    this.interactions.expire();
     this.emit({ kind: "unavailable", reason, ...(result ? { result } : {}) });
   }
 

@@ -92,14 +92,14 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
         if (receipt.accepted !== true)
           throw new RpcError(-32602, "Invalid Claude fact acknowledgement");
         if (event.kind === "ready") pendingReady = undefined;
-        if (event.kind === "permission_requested" && host.hasPermission(event.permission_id)) {
-          if (receipt.ended === true) host.cancelPermission(event.permission_id);
-          else acknowledged.set(event.permission_id, params);
+        if (event.kind === "interaction_requested" && host.hasInteraction(event.interaction_key)) {
+          if (receipt.ended === true) host.cancelInteraction(event.interaction_key);
+          else acknowledged.set(event.interaction_key, params);
         }
       })
       .catch((error) => {
         console.error("Claude host fact discarded", params.report_key, String(error));
-        if (event.kind === "permission_requested") host.cancelPermission(event.permission_id);
+        if (event.kind === "interaction_requested") host.cancelInteraction(event.interaction_key);
       });
     reports.add(report);
     void report.finally(() => reports.delete(report));
@@ -120,7 +120,7 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
           native_session_id: event.native_session_id,
         };
       }
-      if (event.kind === "permission_settled") acknowledged.delete(event.permission_id);
+      if (event.kind === "interaction_settled") acknowledged.delete(event.interaction_key);
       if (params.report_key || event.kind === "closed" || event.kind === "unavailable") {
         deliver(params);
       } else if (connected) {
@@ -158,8 +158,8 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
         case "interrupt":
           await host.interrupt(string(request.input_id));
           break;
-        case "permission":
-          host.resolvePermission(string(request.permission_id), string(request.option));
+        case "interaction":
+          host.resolveInteraction(string(request.interaction_key), string(request.option));
           break;
         case "is_idle":
           return { status: "accepted", idle: host.isIdle() };
