@@ -33,6 +33,8 @@ Install `kiro-cli` on the PATH of the user running Pontia and run `kiro-cli logi
 
 Select Kiro and a model when creating a Session. You can approve a tool request for one use, queue a follow-up during a turn, and resume a conversation with its timeline.
 
+You can view estimated context usage, compact an idle Session, and see automatic and manual compaction checkpoints in the timeline.
+
 <h2 id="enable-an-acp-agent">Enable Grok Build</h2>
 
 Install Grok Build so that `grok` is on the Pontia service user’s PATH. Pontia launches it with `grok agent stdio`. Enable Grok Build under **Settings → Agent Clients** in the Dashboard, or run:

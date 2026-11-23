@@ -4,11 +4,14 @@ mod capabilities;
 mod compaction;
 pub mod configuration;
 mod connection;
-pub use agents::{AcpAgentDefinition, AcpAgents, AcpLaunch, InterjectionProtocol};
+pub use agents::{
+    AcpAgentDefinition, AcpAgents, AcpLaunch, CompactionProtocol, InterjectionProtocol,
+};
 mod history;
 pub mod identity;
 mod instructions;
 mod interactions;
+mod kiro;
 mod live_output;
 mod models;
 mod observations;

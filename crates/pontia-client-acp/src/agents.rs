@@ -23,12 +23,29 @@ pub struct InterjectionProtocol {
     pub prompt_index: &'static str,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CompactionProtocol {
+    Grok,
+    Kiro,
+}
+
+impl CompactionProtocol {
+    pub(crate) fn method(self) -> &'static str {
+        match self {
+            Self::Grok => "_x.ai/compact_conversation",
+            Self::Kiro => "_kiro/session/compact",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct AcpAgentDefinition {
     pub name: String,
     pub launch: AcpLaunch,
     pub new_session_instructions_meta_key: Option<String>,
     pub capabilities: AgentClientCapabilities,
+    pub compaction: Option<CompactionProtocol>,
     pub interjection: Option<&'static InterjectionProtocol>,
     pub restricted_execution: Option<&'static RestrictedExecution>,
 }
@@ -55,6 +72,7 @@ impl AcpAgents {
                         compaction_history: false,
                         ..crate::ACP_MAX_CAPABILITIES
                     },
+                    compaction: None,
                     interjection: None,
                     restricted_execution: None,
                 },
@@ -70,6 +88,7 @@ impl AcpAgents {
                     },
                     new_session_instructions_meta_key: Some("rules".into()),
                     capabilities: crate::ACP_MAX_CAPABILITIES,
+                    compaction: Some(CompactionProtocol::Grok),
                     interjection: Some(&InterjectionProtocol {
                         method: "_x.ai/interject",
                         echo: "_x.ai/session/interjection",
@@ -95,12 +114,11 @@ impl AcpAgents {
                     new_session_instructions_meta_key: None,
                     capabilities: AgentClientCapabilities {
                         steer: false,
-                        manual_compaction: false,
-                        compaction_events: false,
-                        compaction_history: false,
-                        context_usage: Default::default(),
+                        context_usage:
+                            pontia_core::client_capabilities::ContextUsageCapability::Estimated,
                         ..crate::ACP_MAX_CAPABILITIES
                     },
+                    compaction: Some(CompactionProtocol::Kiro),
                     interjection: None,
                     restricted_execution: None,
                 },

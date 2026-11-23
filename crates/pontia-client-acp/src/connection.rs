@@ -35,6 +35,8 @@ struct Context {
     compaction: Option<crate::compaction::Pending>,
     system_prompt: Option<SystemPrompt>,
     current_model: Option<String>,
+    #[serde(default)]
+    model_windows: std::collections::BTreeMap<String, u64>,
     config_options: Vec<SessionConfigOption>,
     active: Option<Prompt>,
     promoted: Option<String>,
@@ -44,7 +46,8 @@ struct Context {
 
 pub(crate) fn context(state: &SessionState) -> Value {
     json!({"ready":state.ready,"blocked":state.blocked,"native":state.native,"steer":state.negotiated.steer,"interject":state.negotiated.interject,"protocol":state.agent.interjection,"compact_command":state.negotiated.compact_command,"compaction":state.compaction,
-        "compaction_events":state.agent.compaction_events(),
+        "compaction_events":state.agent.compaction_events(), "compaction_protocol":state.agent.compaction,
+        "model_windows":state.model_windows,
         "system_prompt":state.system_prompt,"current_model":state.current_model,"config_options":state.config_options,"promoted":state.promoted,"interjections":state.interjections,"active":state.active})
 }
 
@@ -93,6 +96,7 @@ pub(crate) async fn restore(
     state.system_prompt = context.system_prompt;
     state.current_model = context.current_model;
     state.config_options = context.config_options;
+    state.model_windows = context.model_windows;
     state.blocked = context.blocked;
     if let Some(mut prompt) = context.active {
         let status: Option<String> = sqlx::query_scalar("SELECT state FROM turns WHERE session_id=? AND turn_id=? AND state IN ('queued','running')")

@@ -31,6 +31,15 @@ pub(crate) struct Message {
     pub(crate) tool: Option<(String, Option<String>)>,
 }
 
+impl Message {
+    pub fn kiro_checkpoint() -> Self {
+        Self {
+            role: "context_compaction",
+            ..Default::default()
+        }
+    }
+}
+
 pub(crate) fn user_bytes(messages: &[Message]) -> usize {
     messages
         .iter()
@@ -336,9 +345,15 @@ impl NativeHistory for AcpHistory {
                     turn.tail_cursor.as_deref(),
                     &state.history,
                 )?;
-                items.extend(render(&state.history, start, end, Some(&turn.turn_id))?);
-                // A checkpoint between two Turns belongs on the following page.
                 let last = number + 1 == selection.turns.len();
+                items.extend(render(
+                    &state.history,
+                    start,
+                    end,
+                    Some(&turn.turn_id),
+                    Some(last),
+                )?);
+                // A checkpoint between two Turns belongs on the following page.
                 let previous_end = selection.turns[..number]
                     .iter()
                     .rev()
@@ -355,6 +370,7 @@ impl NativeHistory for AcpHistory {
                 );
             }
             if selection.turns.is_empty() {
+                items.extend(render(&state.history, 0, 0, None, Some(true))?);
                 items.extend(state.checkpoints.iter().map(|cp| cp.item()));
             }
             items.sort_by(|a, b| a.item.item_id.cmp(&b.item.item_id));
@@ -369,7 +385,7 @@ impl NativeHistory for AcpHistory {
             let state = self.snapshot().await?;
             let mut items = Vec::new();
             if ranges.is_empty() {
-                return render(&state.history, 0, user_bytes(&state.history), None)
+                return render(&state.history, 0, user_bytes(&state.history), None, None)
                     .map_err(Into::into);
             }
             for range in ranges {
@@ -379,7 +395,13 @@ impl NativeHistory for AcpHistory {
                     range.tail_cursor.as_deref(),
                     &state.history,
                 )?;
-                items.extend(render(&state.history, start, end, Some(&range.turn_id))?);
+                items.extend(render(
+                    &state.history,
+                    start,
+                    end,
+                    Some(&range.turn_id),
+                    None,
+                )?);
             }
             Ok(items)
         })
@@ -401,12 +423,45 @@ fn render(
     start: usize,
     end: usize,
     turn: Option<&str>,
+    last_page_turn: Option<bool>,
 ) -> Result<Vec<TurnTimelineItem>> {
     let mut position = 0;
     let mut items = Vec::new();
     let has_tools = messages.iter().any(|m| m.tool.is_some());
     for (order, message) in messages.iter().enumerate() {
         let offset = position;
+        if message.role == "context_compaction" {
+            // A separator followed by assistant output is inside the Turn. One
+            // between Turns belongs on the following page, like a Grok checkpoint.
+            let within_turn = messages[order + 1..]
+                .iter()
+                .find(|m| m.role != "context_compaction")
+                .is_some_and(|next| next.role == "assistant");
+            if let Some(last) = last_page_turn
+                && if within_turn {
+                    start < offset && offset <= end
+                } else {
+                    start <= offset && (offset < end || last && offset == end)
+                }
+            {
+                items.push(TurnTimelineItem {
+                    turn_id: None,
+                    item: TimelineItem {
+                        item_id: format!("acp:{offset:020}:assistant:{order:020}"),
+                        kind: message.role.into(),
+                        role: "system".into(),
+                        raw_kind: Some("summarization_separator".into()),
+                        status: Some("completed".into()),
+                        occurred_at: None,
+                        content_preview: String::new(),
+                        title: None,
+                        call_id: None,
+                        managed_tool_use: None,
+                    },
+                });
+            }
+            continue;
+        }
         let text = if message.role == "user" {
             position += message.text.len();
             let from = start.max(offset).min(position) - offset;
@@ -433,7 +488,9 @@ fn render(
             item: TimelineItem {
                 // Timeline consumers use item IDs as ordering keys when ACP
                 // provides no timestamp. Preserve numeric native order lexically.
-                item_id: if has_tools && message.role != "user" {
+                item_id: if message.role != "user"
+                    && (has_tools || order > 0 && messages[order - 1].role == "context_compaction")
+                {
                     format!("acp:{:020}:assistant:{order:020}", start.max(offset))
                 } else {
                     format!("acp:{:020}:{}", start.max(offset), message.role)
@@ -499,6 +556,48 @@ mod tests {
     use super::*;
 
     #[test]
+    fn kiro_replay_keeps_checkpoints_between_chunks_and_between_turns() {
+        let mut messages = Vec::new();
+        append(&mut messages, "user", "one");
+        append(&mut messages, "assistant", "before");
+        messages.push(Message::kiro_checkpoint());
+        append(&mut messages, "assistant", "after");
+        messages.push(Message::kiro_checkpoint());
+        append(&mut messages, "user", "two");
+        let first = render(&messages, 0, 3, Some("a"), Some(false)).unwrap();
+        let second = render(&messages, 3, 6, Some("b"), Some(true)).unwrap();
+        let entries: Vec<_> = first
+            .iter()
+            .chain(&second)
+            .map(|entry| {
+                (
+                    entry.turn_id.as_deref(),
+                    entry.item.kind.as_str(),
+                    entry.item.content_preview.as_str(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            entries,
+            [
+                (Some("a"), "user", "one"),
+                (Some("a"), "assistant", "before"),
+                (None, "context_compaction", ""),
+                (Some("a"), "assistant", "after"),
+                (None, "context_compaction", ""),
+                (Some("b"), "user", "two"),
+            ]
+        );
+        assert!(
+            first
+                .iter()
+                .chain(&second)
+                .map(|entry| &entry.item.item_id)
+                .is_sorted()
+        );
+    }
+
+    #[test]
     fn captured_interjections_render_in_native_order_and_in_the_consuming_prompt() {
         let agents = crate::AcpAgents::builtin();
         let recipe = agents.get("grok").unwrap().interjection;
@@ -516,7 +615,7 @@ mod tests {
                 expected_user_texts.extend(sent.iter().map(|v| v.as_str().unwrap()));
             }
             let end = Anchor::Prompt { prompt: 1 }.offset(&messages).unwrap();
-            let first = render(&messages, 0, end, Some("original")).unwrap();
+            let first = render(&messages, 0, end, Some("original"), None).unwrap();
             assert_eq!(
                 first
                     .iter()
@@ -542,7 +641,7 @@ mod tests {
                 for (i, text) in sent.iter().enumerate() {
                     let start = Anchor::Prompt { prompt: i + 1 }.offset(&messages).unwrap();
                     let end = Anchor::Prompt { prompt: i + 2 }.offset(&messages).unwrap();
-                    let followup = render(&messages, start, end, Some("promotion")).unwrap();
+                    let followup = render(&messages, start, end, Some("promotion"), None).unwrap();
                     assert_eq!(followup[0].item.content_preview, text.as_str().unwrap());
                     assert_eq!(followup[1].item.role, "assistant");
                 }

@@ -33,6 +33,8 @@ Instale `kiro-cli` no PATH do usuário que executa o Pontia e execute `kiro-cli 
 
 Selecione o Kiro e um modelo ao criar a sessão. Você pode aprovar uma ferramenta para um único uso, enfileirar mensagens durante um turno e reabrir a sessão para consultar a conversa na linha do tempo.
 
+Você pode consultar o uso estimado do contexto, compactar uma sessão ociosa e ver na linha do tempo os pontos de compactação automática e manual.
+
 <h2 id="enable-an-acp-agent">Ativar o Grok Build</h2>
 
 Instale o Grok Build e confira se `grok` está no PATH do usuário que executa o serviço Pontia. O Pontia o inicia com `grok agent stdio`. Ative o Grok Build em **Settings → Agent Clients** no Dashboard ou execute:

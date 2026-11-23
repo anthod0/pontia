@@ -5,6 +5,7 @@ use crate::{ACP_MAX_CAPABILITIES, AcpAgentDefinition};
 
 pub(crate) struct AgentBounds {
     capabilities: AgentClientCapabilities,
+    pub compaction: Option<crate::CompactionProtocol>,
     pub prompt_steering: bool,
     pub one_time_permissions_only: bool,
     pub interjection: Option<&'static crate::InterjectionProtocol>,
@@ -19,12 +20,14 @@ impl AgentBounds {
         let mut caps = definition.map_or(ACP_MAX_CAPABILITIES, |agent| {
             agent.capabilities.intersection(&ACP_MAX_CAPABILITIES)
         });
-        if agent_id != "grok" {
+        let compaction = definition.and_then(|agent| agent.compaction);
+        if compaction.is_none() {
             caps.manual_compaction = false;
             caps.compaction_events = false;
             caps.compaction_history = false;
         }
         Self {
+            compaction,
             capabilities: caps,
             prompt_steering: agent_id == "antigravity",
             one_time_permissions_only: agent_id == "kiro",
@@ -42,7 +45,7 @@ pub(crate) struct Negotiated {
 }
 
 impl Negotiated {
-    pub fn from_initialize(response: &InitializeResponse, private: bool) -> Result<Self> {
+    pub fn from_initialize(response: &InitializeResponse, bounds: &AgentBounds) -> Result<Self> {
         let caps = &response.agent_capabilities;
         let mut missing = Vec::new();
         if !caps.load_session {
@@ -59,12 +62,24 @@ impl Negotiated {
         }
         Ok(Self {
             deferred_models: crate::models::deferred_options(caps),
-            compact_command: response
-                .meta
-                .as_ref()
-                .and_then(|meta| meta.get("availableCommands")?.as_array())
-                .is_some_and(|commands| commands.iter().any(|cmd| cmd["name"] == "compact")),
-            interject: private
+            compact_command: match bounds.compaction {
+                Some(crate::CompactionProtocol::Kiro) => caps
+                    .meta
+                    .as_ref()
+                    .and_then(|meta| meta.get("kiro")?["extensionMethods"].as_array())
+                    .is_some_and(|methods| {
+                        methods
+                            .iter()
+                            .any(|method| method == "_kiro/session/compact")
+                    }),
+                Some(crate::CompactionProtocol::Grok) => response
+                    .meta
+                    .as_ref()
+                    .and_then(|meta| meta.get("availableCommands")?.as_array())
+                    .is_some_and(|commands| commands.iter().any(|cmd| cmd["name"] == "compact")),
+                None => false,
+            },
+            interject: bounds.interjection.is_some()
                 && response
                     .meta
                     .as_ref()
@@ -110,14 +125,16 @@ pub(crate) fn live(
 
 pub(crate) fn effective(
     snapshot: Option<&AgentClientCapabilities>,
-    usage_observed: bool,
+    usage_observed: Option<&str>,
     implementation: &AgentClientCapabilities,
 ) -> AgentClientCapabilities {
     AgentClientCapabilities {
-        context_usage: if usage_observed {
-            implementation.context_usage
-        } else {
-            Default::default()
+        context_usage: match usage_observed {
+            Some("exact") => implementation.context_usage,
+            Some("estimated") if implementation.context_usage != Default::default() => {
+                pontia_core::client_capabilities::ContextUsageCapability::Estimated
+            }
+            _ => Default::default(),
         },
         ..snapshot
             .map(|caps| caps.intersection(implementation))
@@ -149,10 +166,6 @@ mod tests {
     fn grok_live_capabilities_follow_the_protocol_and_session_state() {
         let agents = AcpAgents::builtin();
         let bounds = AgentBounds::of("grok", agents.get("grok"));
-        assert_eq!(
-            bounds.capabilities,
-            AgentBounds::of("grok", None).capabilities
-        );
         for state in [
             Live {
                 current: false,
@@ -261,8 +274,9 @@ mod tests {
         };
         for (live, accept_task) in [(None, false), (Some(&snapshot), true)] {
             for (observed, context_usage) in [
-                (false, ContextUsageCapability::Unsupported),
-                (true, ContextUsageCapability::Exact),
+                (None, ContextUsageCapability::Unsupported),
+                (Some("estimated"), ContextUsageCapability::Estimated),
+                (Some("exact"), ContextUsageCapability::Exact),
             ] {
                 assert_eq!(
                     effective(live, observed, &ACP_MAX_CAPABILITIES),
@@ -277,7 +291,29 @@ mod tests {
     }
 
     #[test]
+    fn kiro_uses_the_advertised_extension_to_enable_manual_compaction() {
+        let agents = AcpAgents::builtin();
+        let bounds = AgentBounds::of("kiro", agents.get("kiro"));
+        for (methods, available) in [(json!([]), false), (json!(["_kiro/session/compact"]), true)] {
+            let response = serde_json::from_value(json!({"protocolVersion":1,
+                "_meta":{"availableCommands":[{"name":"compact"}]},
+                "agentCapabilities":{"loadSession":true,"sessionCapabilities":{"close":{}},
+                    "_meta":{"kiro":{"extensionMethods":methods}}}
+            }))
+            .unwrap();
+            let negotiated = Negotiated::from_initialize(&response, &bounds).unwrap();
+            assert_eq!(
+                live(&bounds, negotiated, idle()).unwrap().manual_compaction,
+                available
+            );
+        }
+    }
+
+    #[test]
     fn initialize_requires_load_and_close_and_reads_steering() {
+        let agents = AcpAgents::builtin();
+        let plain = AgentBounds::of("other", None);
+        let grok = AgentBounds::of("grok", agents.get("grok"));
         for (caps, missing) in [
             (json!({"sessionCapabilities":{"close":{}}}), "loadSession"),
             (json!({"loadSession":true}), "sessionCapabilities.close"),
@@ -286,7 +322,7 @@ mod tests {
             let response =
                 serde_json::from_value(json!({"protocolVersion":1, "agentCapabilities":caps}))
                     .unwrap();
-            assert!(matches!(Negotiated::from_initialize(&response, false),
+            assert!(matches!(Negotiated::from_initialize(&response, &plain),
                 Err(Error::CapabilityUnavailable(message)) if message == format!("ACP peer missing required capabilities: {missing}")));
         }
         for supported in [None, Some(false), Some(true)] {
@@ -296,10 +332,12 @@ mod tests {
             }
             let response = serde_json::from_value(value).unwrap();
             assert_eq!(
-                Negotiated::from_initialize(&response, false).unwrap().steer,
+                Negotiated::from_initialize(&response, &plain)
+                    .unwrap()
+                    .steer,
                 supported == Some(true)
             );
-            let builtin = Negotiated::from_initialize(&response, true).unwrap();
+            let builtin = Negotiated::from_initialize(&response, &grok).unwrap();
             assert_eq!(builtin.steer, supported == Some(true));
             assert_eq!(builtin.interject, supported.is_none());
         }

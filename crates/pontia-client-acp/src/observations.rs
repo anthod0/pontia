@@ -124,6 +124,18 @@ impl Peer {
                     json!({"client_session_key": binding, "launch_cwd": cwd, "binding_metadata": metadata}),
                 ).await?;
             }
+            Observation::AutoCompactionStarted { operation } => {
+                fact(
+                    events,
+                    session,
+                    runtime,
+                    None,
+                    EventType::SessionCompactionStarted,
+                    format!("acp:compaction_started:{operation}"),
+                    json!({"operation_id":operation,"trigger":"unknown"}),
+                )
+                .await?;
+            }
             Observation::Compacted {
                 operation,
                 manual,
@@ -179,6 +191,14 @@ impl Peer {
                     json!({"context_usage": usage}),
                 )
                 .await?;
+            }
+            Observation::UsageEstimate { ratio, size } => {
+                let used = size.map(|size| (ratio * size as f64).round() as u64);
+                fact(events, session, runtime, None, EventType::SessionContextUsageUpdated,
+                    report.key, json!({"context_usage":{
+                        "usage_ratio": ratio, "confidence": "estimated", "max_tokens": size,
+                        "used_tokens": used, "remaining_tokens": size.zip(used).map(|(size, used)| size - used)
+                    }})).await?;
             }
             Observation::Model { model } => {
                 crate::models::report(events, session, runtime, &model, report.key).await?;

@@ -233,6 +233,16 @@ impl ClientSession for AcpAdapter {
             };
             config.env.extend(request.environment);
             drop(peers);
+            let model_windows = if definition.compaction == Some(crate::CompactionProtocol::Kiro) {
+                crate::kiro::model_windows(&config, &cwd)
+                    .await
+                    .unwrap_or_else(|error| {
+                        tracing::warn!(%error, "Kiro context window sizes unavailable");
+                        Default::default()
+                    })
+            } else {
+                Default::default()
+            };
             let peer = match self
                 .launch(&root, &request.session_id, &runtime, &cwd, config)
                 .await
@@ -251,7 +261,11 @@ impl ClientSession for AcpAdapter {
                 }
             };
             let setup = async {
-                peer.state.lock().await.agent = AgentBounds::of(selected, Some(definition));
+                {
+                    let mut state = peer.state.lock().await;
+                    state.agent = AgentBounds::of(selected, Some(definition));
+                    state.model_windows = model_windows;
+                }
                 let (native, metadata) = peer.initialize(
                     &cwd,
                     bound_identity.as_ref().map(|identity| identity[1].as_str()),
@@ -591,20 +605,19 @@ impl ClientSession for AcpAdapter {
             // remains evidence of support even when the peer is disconnected.
             let usage_observed = match self.pool.get() {
                 Some(pool) => {
-                    sqlx::query_scalar::<_, bool>(
-                        "SELECT EXISTS(SELECT 1 FROM sessions WHERE session_id = ?
-                                   AND json_type(metadata, '$.context_usage') = 'object')",
+                    sqlx::query_scalar::<_, Option<String>>(
+                        "SELECT json_extract(metadata, '$.context_usage.confidence') FROM sessions WHERE session_id = ?",
                     )
                     .bind(session)
-                    .fetch_one(pool)
-                    .await?
+                    .fetch_optional(pool)
+                    .await?.flatten()
                 }
-                None => false,
+                None => None,
             };
             let Ok(peer) = self.peer(session).await else {
                 return Ok(capabilities::effective(
                     None,
-                    usage_observed,
+                    usage_observed.as_deref(),
                     implementation,
                 ));
             };
@@ -622,7 +635,7 @@ impl ClientSession for AcpAdapter {
             let state = peer.state.lock().await;
             Ok(capabilities::effective(
                 state.capabilities.as_ref(),
-                usage_observed,
+                usage_observed.as_deref(),
                 implementation,
             ))
         })

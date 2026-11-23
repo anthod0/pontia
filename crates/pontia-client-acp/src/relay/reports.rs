@@ -34,6 +34,13 @@ pub(crate) enum Observation {
         reason: String,
         index: usize,
     },
+    AutoCompactionStarted {
+        operation: String,
+    },
+    UsageEstimate {
+        ratio: f64,
+        size: Option<u64>,
+    },
     Compacted {
         operation: String,
         manual: bool,
@@ -95,6 +102,7 @@ pub(super) struct Reports {
     pub wake: Arc<Notify>,
     started: Option<String>,
     promotion: Option<Promotion>,
+    automatic_compaction: Option<String>,
     next_index: usize,
     original_terminal: Option<(String, String)>,
     original_native: Option<String>,
@@ -371,7 +379,13 @@ impl Reports {
         let prompt = context["active"].clone();
         let update = &frame["params"]["update"];
         if context["compaction_events"] == true
-            && let Some(observation) = crate::compaction::observe(context, frame)
+            && let Some(observation) = match context["compaction_protocol"].as_str() {
+                Some("grok") => crate::compaction::observe(context, frame),
+                Some("kiro") => {
+                    crate::kiro::compaction(context, frame, &mut self.automatic_compaction)
+                }
+                _ => None,
+            }
         {
             self.push(observation);
         }
@@ -379,10 +393,18 @@ impl Reports {
             && frame["params"]["sessionId"] == context["native"];
         if own_update {
             match update["sessionUpdate"].as_str() {
-                Some("available_commands_update") => {
+                Some("available_commands_update") if context["compaction_protocol"] == "grok" => {
                     if let Some(commands) = update["availableCommands"].as_array() {
                         context["compact_command"] =
                             json!(commands.iter().any(|cmd| cmd["name"] == "compact"));
+                    }
+                }
+                Some("session_info_update") if context["compaction_protocol"] == "kiro" => {
+                    if let Some(info) = crate::kiro::info(update)
+                        && info["replay"] != true
+                        && let Some(usage) = crate::kiro::usage(context, info)
+                    {
+                        self.push(usage);
                     }
                 }
                 Some("usage_update") => {
@@ -609,6 +631,53 @@ mod tests {
         );
         assert_eq!(context["active"]["request_id"], 1);
         assert_eq!(context["active"]["history_end"], 5);
+    }
+
+    #[test]
+    fn kiro_usage_and_summarization_follow_the_native_session_and_operation() {
+        let mut reports = Reports::default();
+        let mut context = json!({"ready":true, "native":"kiro-session", "compaction_events":true,
+            "compaction_protocol":"kiro", "current_model":"haiku", "model_windows":{"haiku":200000}});
+        let update = |session: &str, info: Value| {
+            json!({"method":"session/update", "params":{
+                "sessionId":session, "update":{"sessionUpdate":"session_info_update","_meta":{"kiro":info}}
+            }})
+        };
+        let usage = json!({"kind":"context_usage","usagePercentage":9.5});
+        reports.observe(&mut context, &update("foreign", usage.clone()));
+        reports.observe(
+            &mut context,
+            &update(
+                "kiro-session",
+                json!({"kind":"context_usage", "usagePercentage":80, "replay":true}),
+            ),
+        );
+        reports.observe(&mut context, &update("kiro-session", usage));
+        let started = json!({"kind":"summarization_started"});
+        let done = json!({"kind":"summarization_completed"});
+        reports.observe(&mut context, &update("kiro-session", started));
+        reports.observe(&mut context, &update("kiro-session", done.clone()));
+        context["compaction"] = json!({"operation":"manual", "request_id":42});
+        reports.observe(&mut context, &update("kiro-session", done));
+        reports.observe(&mut context, &json!({"id":1,"result":{"success":true}}));
+        reports.observe(&mut context, &json!({"id":42,"result":{"success":true}}));
+        context["compaction"] = json!({"operation":"rejected", "request_id":43});
+        reports.observe(
+            &mut context,
+            &json!({"id":43,"result":{"success":false,"error":"no history"}}),
+        );
+        let observations: Vec<_> = reports
+            .pending
+            .iter()
+            .map(|p| &p.report.observation)
+            .collect();
+        assert!(matches!(observations.as_slice(), [
+            Observation::UsageEstimate {ratio:0.095, size:Some(200000)},
+            Observation::AutoCompactionStarted {operation:start},
+            Observation::Compacted {operation:end,manual:false,..},
+            Observation::Compacted {operation,manual:true,..},
+            Observation::CompactionFailed {operation:failed,manual:true,message,..},
+        ] if start == end && operation == "manual" && failed == "rejected" && message == "no history"));
     }
 
     #[test]

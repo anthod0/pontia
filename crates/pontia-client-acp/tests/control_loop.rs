@@ -64,6 +64,10 @@ impl Harness {
         let config = AcpAgentDefinition {
             name: "Controlled Agent".into(),
             capabilities: ACP_MAX_CAPABILITIES,
+            compaction: flags
+                .iter()
+                .any(|(key, _)| *key == "ACP_COMPACT")
+                .then_some(pontia_client_acp::CompactionProtocol::Grok),
             interjection: flags
                 .iter()
                 .any(|(key, _)| *key == "ACP_INTERJECT")
