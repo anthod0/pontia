@@ -11,6 +11,7 @@
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { useTopBarAction } from '../layout/topBarAction'
   import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon'
+  import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon'
   import QuotesIcon from 'phosphor-svelte/lib/QuotesIcon'
   import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon'
   import XIcon from 'phosphor-svelte/lib/XIcon'
@@ -29,6 +30,7 @@
   import FilePreviewResizer from '../chat/FilePreviewResizer.svelte'
   import BotAvatar from './BotAvatar.svelte'
   import BotMessageSearch from './BotMessageSearch.svelte'
+  import BotGitTab from './BotGitTab.svelte'
   import { fileKindOf } from '../chat/fileKind'
   import { createRecentFiles, withRecentFile } from '$lib/botRecentFiles'
   import { createPanelTab, type PanelTab } from '$lib/botPanelTab'
@@ -258,13 +260,15 @@
     <FilePreviewResizer />
     <Tabs.Root bind:value={() => tab.current, next => { tab.current = next as PanelTab }} class="min-h-0 flex-1 gap-0">
       <header class="flex h-12 shrink-0 items-center justify-between gap-1 border-b px-2">
-        <Tabs.List variant="line" aria-label={$t('nav.sidebar')} class="h-full gap-0">
+        <!-- Phones show the tab labels without icons, so all tabs and the close button fit. -->
+        <Tabs.List variant="line" aria-label={$t('nav.sidebar')} class="h-full min-w-0 gap-0 max-sm:[&_svg]:hidden">
           <Tabs.Trigger value="files" class="h-full px-2.5"><FileTextIcon />{$t('bots.files')}</Tabs.Trigger>
           <Tabs.Trigger value="context" class="h-full px-2.5"><TreeStructureIcon />{$t('bots.context')}</Tabs.Trigger>
           <Tabs.Trigger value="todo" class="h-full px-2.5"><ListChecksIcon />{$t('bots.todos')}{@render badge()}</Tabs.Trigger>
           <Tabs.Trigger value="search" class="h-full px-2.5"><MagnifyingGlassIcon />{$t('bots.searchTab')}</Tabs.Trigger>
+          <Tabs.Trigger value="git" class="h-full px-2.5"><GitBranchIcon />{$t('git.title')}</Tabs.Trigger>
         </Tabs.List>
-        <Button variant="ghost" size="icon-sm" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => { open = false }}><XIcon /></Button>
+        <Button variant="ghost" size="icon-sm" class="shrink-0" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => { open = false }}><XIcon /></Button>
       </header>
       <Tabs.Content value="files" class="flex min-h-0 flex-col">
         {#if file}
@@ -317,6 +321,9 @@
       </Tabs.Content>
       <Tabs.Content value="search" class="flex min-h-0 flex-col">
         <BotMessageSearch {bot} active={open && tab.current === 'search'} bind:text={searchText} selected={searchSelected} onselect={jumpToResult} />
+      </Tabs.Content>
+      <Tabs.Content value="git" class="flex min-h-0 flex-col">
+        {#if tab.current === 'git'}<BotGitTab botId={bot.bot_id} />{/if}
       </Tabs.Content>
       <Tabs.Content value="todo" class="flex min-h-0 flex-col">
         <div class="min-h-0 flex-1 overflow-auto overscroll-contain p-3">

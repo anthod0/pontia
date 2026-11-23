@@ -1,0 +1,120 @@
+<script lang="ts">
+  import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
+  import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
+  import FolderSimpleIcon from 'phosphor-svelte/lib/FolderSimpleIcon'
+  import GearIcon from 'phosphor-svelte/lib/GearIcon'
+  import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
+  import { Button } from '$lib/components/ui/button/index.js'
+  import * as Empty from '$lib/components/ui/empty/index.js'
+  import * as Select from '$lib/components/ui/select/index.js'
+  import { Skeleton } from '$lib/components/ui/skeleton/index.js'
+  import { t, number } from '$lib/i18n'
+  import { navigate } from '$lib/navigation'
+  import { createGitWorkspace } from '$lib/botGitWorkspace'
+  import type { WorkspaceView } from '../../api/types'
+  import { useDeviceRuntime } from '../../device/context'
+  import type { GitDiffTarget } from '../../queries/workspaces'
+  import GitChanges from '../chat/git/GitChanges.svelte'
+  import { workspaceTitle } from '../chat/sessionMetadata'
+
+  /** The Git tab of a Bot chat's side panel: a Workspace picker over that Workspace's changes. Mounted only while the tab shows. */
+  let { botId }: { botId: string } = $props()
+
+  const device = useDeviceRuntime()
+  // The panel lives as long as its Bot chat page, which is recreated for another Bot.
+  // svelte-ignore state_referenced_locally
+  const saved = createGitWorkspace(device.id, botId)
+  const workspacesQuery = device.workspaceQueries.createWorkspacesQuery()
+  const workspaces = $derived(workspacesQuery.data ?? [])
+  // A saved Workspace that is no longer registered, or cannot be read, counts as none chosen.
+  const workspace = $derived(workspaces.find(item => item.workspace_id === saved.current && !unavailable(item)) ?? null)
+  let file = $state.raw<GitDiffTarget | null>(null)
+  let view = $state<GitChanges>()
+
+  function choose(workspaceId: string) {
+    if (workspaceId === saved.current) return
+    saved.current = workspaceId
+    file = null
+  }
+
+  function unavailable(item: WorkspaceView): boolean {
+    return item.availability.status === 'unavailable'
+  }
+
+  // Branch and upstream come from the status projection, which no Session keeps fresh on this page.
+  $effect(() => {
+    if (workspace) void device.workspaceQueries.refreshWorkspaceGitStatus(workspace.workspace_id).catch(() => {})
+  })
+</script>
+
+{#snippet workspaceLabel(item: WorkspaceView)}
+  <div class="flex min-w-0 flex-1 flex-col text-left">
+    <span class="truncate">{workspaceTitle(item)}</span>
+    <span class="truncate font-mono text-[11px] text-muted-foreground">{item.display_path}</span>
+  </div>
+{/snippet}
+
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="flex min-h-0 flex-1 flex-col" onkeydown={(event) => view?.keydown(event)}>
+  {#if workspace}
+    {#key `${device.id}\0${workspace.workspace_id}`}
+      <GitChanges bind:this={view} {device} workspaceId={workspace.workspace_id} {file} hint={$t('bots.gitKeyboardHint')}
+        onopen={(next) => { file = next }} onback={() => { file = null }}>
+        {#snippet header({ changes, refresh, fetching })}
+          <div class="flex h-12 shrink-0 items-center gap-1 border-b px-2">
+            <Select.Root type="single" value={workspace.workspace_id} onValueChange={choose}>
+              <Select.Trigger class="h-9 min-w-0 flex-1 border-0 px-2 hover:bg-muted" title={workspace.canonical_path}
+                aria-label={$t('bots.gitWorkspace', { name: workspaceTitle(workspace) })}>
+                <FolderIcon class="size-4 text-muted-foreground" />
+                <span class="min-w-0 flex-1 truncate text-left font-medium text-heading">{workspaceTitle(workspace)}</span>
+                {#if changes?.repo_root}<span class="text-xs text-muted-foreground tabular-nums" title={$t('git.changeCount', { count: changes.total })}>{$number(changes.total)}</span>{/if}
+              </Select.Trigger>
+              <Select.Content align="start" class="w-72">
+                {#each workspaces as item (item.workspace_id)}
+                  <Select.Item value={item.workspace_id} label={workspaceTitle(item)} disabled={unavailable(item)} class="py-2">{@render workspaceLabel(item)}</Select.Item>
+                {/each}
+              </Select.Content>
+            </Select.Root>
+            <Button variant="ghost" size="icon-sm" class="max-lg:size-11" disabled={fetching} onclick={refresh} aria-label={$t('common.refresh')} title={$t('common.refresh')}>
+              <ArrowClockwiseIcon class={['size-4 max-lg:size-5', fetching && 'animate-spin']} />
+            </Button>
+          </div>
+        {/snippet}
+      </GitChanges>
+    {/key}
+  {:else if workspacesQuery.isError}
+    <div role="alert" class="p-3 text-sm">{$t('workspaces.loadFailedMessage')} <Button variant="ghost" size="xs" onclick={() => workspacesQuery.refetch()}>{$t('common.retry')}</Button></div>
+  {:else if !workspacesQuery.data}
+    <div role="status" aria-label={$t('common.loading')} class="space-y-2 p-3">
+      {#each [0, 1, 2] as index (index)}<Skeleton class="h-14 rounded-lg" />{/each}
+    </div>
+  {:else if !workspaces.length}
+    <Empty.Root class="min-h-0 p-8">
+      <Empty.Header>
+        <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><FolderIcon class="size-6" /></Empty.Media>
+        <Empty.Title>{$t('workspaces.empty')}</Empty.Title>
+        <Empty.Description>{$t('bots.gitNoWorkspaces')}</Empty.Description>
+      </Empty.Header>
+      <Empty.Content>
+        <Button variant="outline" size="sm" onclick={() => navigate('/settings/workspaces')}><GearIcon data-icon="inline-start" />{$t('bots.gitManageWorkspaces')}</Button>
+      </Empty.Content>
+    </Empty.Root>
+  {:else}
+    <section class="min-h-0 flex-1 overflow-auto overscroll-contain p-3" aria-labelledby="bot-git-workspaces">
+      <h2 id="bot-git-workspaces" class="px-2 text-sm font-medium text-heading">{$t('bots.gitChooseWorkspace')}</h2>
+      <p class="px-2 pt-0.5 pb-2 text-xs text-muted-foreground">{$t('bots.gitChooseWorkspaceDescription')}</p>
+      <ul>
+        {#each workspaces as item (item.workspace_id)}
+          <li>
+            <button type="button" disabled={unavailable(item)} title={item.canonical_path} onclick={() => choose(item.workspace_id)}
+              class="flex w-full items-center gap-3 rounded-lg p-2 text-left text-sm outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50">
+              <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground"><FolderSimpleIcon class="size-5" weight="duotone" /></span>
+              {@render workspaceLabel(item)}
+              {#if unavailable(item)}<span class="ml-auto flex shrink-0 items-center gap-1 text-xs text-muted-foreground"><WarningCircleIcon class="size-3.5" />{$t('common.unavailable')}</span>{/if}
+            </button>
+          </li>
+        {/each}
+      </ul>
+    </section>
+  {/if}
+</div>
