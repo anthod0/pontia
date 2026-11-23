@@ -1391,7 +1391,7 @@ async fn conditional_exit_waits_for_host_and_process_closure() {
 }
 
 #[tokio::test]
-async fn explicit_sdk_close_abandons_active_turn_without_fabricating_result() {
+async fn explicit_sdk_close_interrupts_active_turn_without_fabricating_result() {
     let h = Harness::new().await;
     let session = h.create("held").await;
     h.gate(&session, 1, "start");
@@ -1401,7 +1401,7 @@ async fn explicit_sdk_close_abandons_active_turn_without_fabricating_result() {
         .terminate_session(&session)
         .await
         .unwrap();
-    h.wait_states(&session, &["abandoned"]).await;
+    h.wait_states(&session, &["interrupted"]).await;
     let history = h.history(&session).await.unwrap();
     assert_eq!(history.groups[0].items[0].item.content_preview, "held");
     assert!(history.groups[0].history_issue.is_none());
@@ -1581,7 +1581,7 @@ async fn unsupported_result_disables_input_without_inventing_a_terminal_turn() {
         .terminate_session(&session)
         .await
         .unwrap();
-    h.wait_states(&session, &["abandoned"]).await;
+    h.wait_states(&session, &["interrupted"]).await;
     h.stop().await;
 }
 

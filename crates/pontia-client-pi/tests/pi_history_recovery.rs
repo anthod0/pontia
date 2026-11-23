@@ -57,7 +57,7 @@ fn first_turn_recovery_treats_the_session_header_as_file_identity() {
         .recover(HistoryRecoveryRequest {
             source: source.clone(),
             turns: vec![
-                turn("turn1", cursor(0, ""), None, TurnState::Abandoned),
+                turn("turn1", cursor(0, ""), None, TurnState::Interrupted),
                 turn(
                     "turn2",
                     cursor(contents.len(), "tool-call"),
@@ -124,7 +124,7 @@ fn recovers_a_sealed_crash_range_and_links_the_native_branch() {
             "turn2",
             cursor(before.len(), "answer1"),
             None,
-            TurnState::Abandoned,
+            TurnState::Interrupted,
         ),
         turn(
             "turn3",
@@ -203,7 +203,7 @@ fn a_resume_on_an_older_branch_does_not_link_to_the_crashed_turn() {
                     "turn2",
                     cursor(before.len(), "answer1"),
                     None,
-                    TurnState::Abandoned,
+                    TurnState::Interrupted,
                 ),
                 turn("turn3", cursor(end, "answer1"), None, TurnState::Running),
             ],
@@ -251,7 +251,7 @@ fn ambiguous_or_unsealed_crash_ranges_remain_unresolved() {
                 "turn2",
                 cursor(before.len(), "answer1"),
                 None,
-                TurnState::Abandoned,
+                TurnState::Interrupted,
             ),
         ];
         if seal {

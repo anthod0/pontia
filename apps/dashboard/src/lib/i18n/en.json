@@ -707,7 +707,6 @@
   "state.running": "running",
   "state.completed": "completed",
   "state.failed": "failed",
-  "state.abandoned": "abandoned",
   "state.pending": "pending",
   "state.paused": "paused",
   "state.replanning": "replanning",

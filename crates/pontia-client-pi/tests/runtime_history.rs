@@ -710,7 +710,7 @@ async fn recovery_uses_native_anchors_without_creating_lifecycle_facts() {
                 input_summary: Some("u".into()),
                 head_cursor: None,
                 tail_cursor: None,
-                state: TurnState::Abandoned,
+                state: TurnState::Interrupted,
                 topology: TurnTopology::Unknown,
             },
             TurnHistoryCandidate {
@@ -934,7 +934,7 @@ async fn active_range_uses_snapshot_leaf_even_when_other_branches_were_appended_
 }
 
 #[tokio::test]
-async fn recovers_missing_head_and_abandoned_branch_switch_tail_from_long_unicode_inputs() {
+async fn recovers_missing_head_and_interrupted_branch_switch_tail_from_long_unicode_inputs() {
     let f = Fixture::new().await;
     let base =
         json!({"id":"base","parentId":null,"type":"custom","timestamp":"2026-10-11T00:00:00Z"});
@@ -962,7 +962,7 @@ async fn recovers_missing_head_and_abandoned_branch_switch_tail_from_long_unicod
                 input_summary: Some("界🙂".repeat(100)),
                 head_cursor: None,
                 tail_cursor: None,
-                state: TurnState::Abandoned,
+                state: TurnState::Interrupted,
                 topology: TurnTopology::Unknown,
             },
             TurnHistoryCandidate {

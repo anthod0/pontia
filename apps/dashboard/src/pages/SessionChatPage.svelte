@@ -263,14 +263,14 @@
       ? new Map($sessionDetail.turns.map((turn) => [turn.turn_id, turn]))
       : new Map()
     const seenTurnIds = new Set<string>()
-    const eligibleTurnStates = new Set(['completed', 'failed', 'interrupted', 'abandoned'])
+    const eligibleTurnStates = new Set(['completed', 'failed', 'interrupted'])
 
     return Object.fromEntries(chatMessages.flatMap((message) => {
       if (message.role !== 'user' || message.status !== 'sent' || seenTurnIds.has(message.turnId)) return []
       seenTurnIds.add(message.turnId)
       const projectedTurn = turns.get(message.turnId)
       if (!projectedTurn || !eligibleTurnStates.has(projectedTurn.state)) return []
-      if (session.capabilities.fork_session && (projectedTurn.state === 'abandoned' || !projectedTurn.metadata.native_turn_id)) return []
+      if (session.capabilities.fork_session && !projectedTurn.metadata.native_turn_id) return []
       if (!projectedTurn.input?.summary?.trim() || !message.content.trim()) return []
       return [[message.id, message.content]]
     }))
@@ -516,7 +516,6 @@
     return eventType === 'turn.completed'
       || eventType === 'turn.failed'
       || eventType === 'turn.interrupted'
-      || eventType === 'turn.abandoned'
   }
 
   function isSessionIdleEvent(eventType: string): boolean {
@@ -535,7 +534,7 @@
     const terminalTurn = detail?.session.session_id === sessionId
       ? detail.turns.find((turn) => turn.turn_id === turnId)
       : null
-    if (!terminalTurn || !['completed', 'failed', 'interrupted', 'abandoned'].includes(terminalTurn.state)) return
+    if (!terminalTurn || !['completed', 'failed', 'interrupted'].includes(terminalTurn.state)) return
     if (timeline.sessionId !== sessionId || !timeline.items.some((item) => item.turn_id === turnId)) return
     liveOutputOverlays = removeLiveOutputOverlay(liveOutputOverlays, turnId)
   }

@@ -52,7 +52,6 @@ impl PostCommitEffects {
                 EventType::TurnCompleted
                 | EventType::TurnFailed
                 | EventType::TurnDispatchFailed
-                | EventType::TurnAbandoned
                 | EventType::TurnInterrupted => {
                     if let Some(turn_id) = event.turn_id.as_deref() {
                         live_output.discard_turn(&event.session_id, turn_id);

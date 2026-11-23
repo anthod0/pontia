@@ -62,8 +62,7 @@ impl ProjectionState {
             EventType::TurnCompleted
             | EventType::TurnFailed
             | EventType::TurnInterrupted
-            | EventType::TurnDispatchFailed
-            | EventType::TurnAbandoned => {
+            | EventType::TurnDispatchFailed => {
                 if let Some(turn_id) = &event.turn_id
                     && !self.interaction_terminal_turns.insert(turn_id.clone())
                 {

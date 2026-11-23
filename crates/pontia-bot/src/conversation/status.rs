@@ -90,7 +90,6 @@ impl ConversationService {
                         "turn.completed"
                             | "turn.failed"
                             | "turn.interrupted"
-                            | "turn.abandoned"
                             | "turn.dispatch_failed"
                             | "session.exited"
                             | "session.error"
@@ -118,7 +117,6 @@ impl ConversationService {
                 | EventType::TurnCompleted
                 | EventType::TurnFailed
                 | EventType::TurnDispatchFailed
-                | EventType::TurnAbandoned
                 | EventType::TurnInterrupted
                 | EventType::SessionTitleUpdated
                 | EventType::InteractionBlocked

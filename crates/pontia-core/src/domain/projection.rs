@@ -157,7 +157,7 @@ impl ProjectionState {
             EventType::SessionReady => self.apply_session(event, SessionState::Idle),
             EventType::SessionExited => {
                 if self.execution_lifetime == SessionExecutionLifetime::Execution {
-                    self.abandon_active_turn_for_terminal_session(
+                    self.interrupt_active_turn_for_terminal_session(
                         event,
                         "session_exited_without_terminal_fact",
                     )?;
@@ -165,7 +165,7 @@ impl ProjectionState {
                 self.apply_session(event, SessionState::Exited)
             }
             EventType::SessionError => {
-                self.abandon_active_turn_for_terminal_session(
+                self.interrupt_active_turn_for_terminal_session(
                     event,
                     "session_error_without_terminal_fact",
                 )?;
@@ -209,7 +209,7 @@ impl ProjectionState {
                 self.apply_turn(event, TurnState::Running)
             }
             EventType::TurnCompleted => self.apply_turn(event, TurnState::Completed),
-            EventType::TurnFailed | EventType::TurnDispatchFailed | EventType::TurnAbandoned => {
+            EventType::TurnFailed | EventType::TurnDispatchFailed => {
                 self.apply_turn(event, TurnState::Failed)
             }
             EventType::TurnInterrupted => self.apply_turn(event, TurnState::Interrupted),
@@ -285,7 +285,6 @@ impl ProjectionState {
                 EventType::TurnCompleted
                 | EventType::TurnFailed
                 | EventType::TurnDispatchFailed
-                | EventType::TurnAbandoned
                 | EventType::TurnInterrupted,
             ) => {}
             _ => {

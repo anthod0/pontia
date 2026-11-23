@@ -439,7 +439,7 @@ async fn claude_http_creation_inbox_live_output_interrupt_and_exit_share_applica
     std::fs::write(root.path().join(format!("finish-{session}-1")), "").unwrap();
     wait_turn(&app, session, "interrupted").await;
     std::fs::write(root.path().join(format!("start-{session}-2")), "").unwrap();
-    wait_turn(&app, session, "running").await;
+    let second_turn = wait_turn(&app, session, "running").await;
     let (status, result) = call(
         &app,
         "POST",
@@ -449,7 +449,15 @@ async fn claude_http_creation_inbox_live_output_interrupt_and_exit_share_applica
     .await;
     assert_eq!(status, StatusCode::OK, "{result}");
     assert_eq!(result["data"]["session"]["state"], "exited");
-    wait_turn(&app, session, "abandoned").await;
+    let (status, detail) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/sessions/{session}/turns/{second_turn}"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{detail}");
+    assert_eq!(detail["data"]["turn"]["state"], "interrupted");
     app.control().shutdown().notify();
     tokio::time::timeout(Duration::from_secs(5), tasks.join())
         .await

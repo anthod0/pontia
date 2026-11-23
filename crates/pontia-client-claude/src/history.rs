@@ -322,7 +322,7 @@ impl NativeHistory for History {
                 let Some(turn) = turns.iter().find(|t| t.turn_id == *id) else {
                     continue;
                 };
-                let tail = if turn.state == TurnState::Abandoned && turn.tail_cursor.is_none() {
+                let tail = if turn.state == TurnState::Interrupted && turn.tail_cursor.is_none() {
                     messages[*position]["uuid"]
                         .as_str()
                         .and_then(|input| closed_anchors.get(input))

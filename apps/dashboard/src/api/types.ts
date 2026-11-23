@@ -118,7 +118,7 @@ export type SessionState =
   | "interrupted"
   | "exited"
   | "error";
-export type TurnState = "queued" | "running" | "completed" | "failed" | "interrupted" | "abandoned";
+export type TurnState = "queued" | "running" | "completed" | "failed" | "interrupted";
 export type TurnTopologyStatus = "unknown" | "root" | "linked";
 export type InboxDeliveryPolicy = "after_idle" | "interrupt_now" | "steer";
 export type InboxMessageState =

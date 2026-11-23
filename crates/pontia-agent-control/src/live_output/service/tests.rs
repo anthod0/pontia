@@ -188,13 +188,7 @@ async fn shared_backend_validates_session_capability_turn_ownership_and_activity
         invalid.identity.turn_id = turn.into();
         assert!(snapshot(&app, invalid).await.is_err());
     }
-    for terminal in [
-        "completed",
-        "failed",
-        "interrupted",
-        "abandoned",
-        "dispatch_failed",
-    ] {
+    for terminal in ["completed", "failed", "interrupted", "dispatch_failed"] {
         sqlx::query("UPDATE turns SET state=? WHERE turn_id='turn'")
             .bind(terminal)
             .execute(&app.db())

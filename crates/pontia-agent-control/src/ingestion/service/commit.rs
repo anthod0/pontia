@@ -271,7 +271,6 @@ impl EventCommitter {
             EventType::TurnCompleted
                 | EventType::TurnFailed
                 | EventType::TurnInterrupted
-                | EventType::TurnAbandoned
                 | EventType::TurnDispatchFailed
         ) && let Some(turn) = turns
             .iter()
@@ -284,7 +283,7 @@ impl EventCommitter {
             {
                 id.to_owned()
             } else {
-                sqlx::query_scalar("SELECT event_id FROM events WHERE session_id=? AND turn_id=? AND event_type IN ('turn.completed','turn.failed','turn.interrupted','turn.dispatch_failed','turn.abandoned') ORDER BY rowid LIMIT 1")
+                sqlx::query_scalar("SELECT event_id FROM events WHERE session_id=? AND turn_id=? AND event_type IN ('turn.completed','turn.failed','turn.interrupted','turn.dispatch_failed') ORDER BY rowid LIMIT 1")
                     .bind(&event.session_id).bind(&turn.turn_id).fetch_one(&mut *tx).await?
             };
             return duplicate_without_effects(&mut tx, event, existing).await;

@@ -174,7 +174,7 @@ fn reducer_keeps_the_latest_started_turn_as_the_current_branch_leaf() {
 }
 
 #[test]
-fn reducer_session_exit_abandons_execution_without_replacing_the_branch_leaf() {
+fn reducer_session_exit_interrupts_execution_without_replacing_the_branch_leaf() {
     let mut projection = ProjectionState::default();
     projection
         .apply(&event(EventType::SessionCreated, "sess_1", None))
@@ -198,7 +198,7 @@ fn reducer_session_exit_abandons_execution_without_replacing_the_branch_leaf() {
 
     assert_eq!(
         projection.turn("turn_2").unwrap().state,
-        TurnState::Abandoned
+        TurnState::Interrupted
     );
     assert_eq!(
         projection

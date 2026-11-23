@@ -139,7 +139,6 @@ impl InboxAssociations {
                     | EventType::TurnCompleted
                     | EventType::TurnFailed
                     | EventType::TurnDispatchFailed
-                    | EventType::TurnAbandoned
                     | EventType::TurnInterrupted
             )
         {
