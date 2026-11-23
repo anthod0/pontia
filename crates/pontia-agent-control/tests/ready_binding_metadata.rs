@@ -22,7 +22,7 @@ async fn fixture() -> (AgentControl, tempfile::TempDir) {
         .clients(clients)
         .build();
     sqlx::query("INSERT INTO sessions(session_id,client_type,state,workspace_ref) VALUES ('session','generic','idle',?)").bind(root.path().to_str().unwrap()).execute(&db).await.unwrap();
-    sqlx::query("INSERT INTO session_runtimes(session_id,runtime_id,role,state,created_at) VALUES ('session','runtime','tui','running','2026-01-01T00:00:00Z')").execute(&db).await.unwrap();
+    sqlx::query("INSERT INTO session_runtimes(session_id,runtime_id,role,state,created_at) VALUES ('session','runtime','generic_control','running','2026-01-01T00:00:00Z')").execute(&db).await.unwrap();
     AgentBindingService::new(db)
         .upsert_binding(UpsertAgentBindingRequest {
             session_id: "session".into(),

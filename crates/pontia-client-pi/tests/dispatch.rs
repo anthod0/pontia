@@ -27,7 +27,7 @@ async fn setup() -> (SqlitePool, tempfile::TempDir, AgentControl) {
     .execute(&pool)
     .await
     .unwrap();
-    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES ('sess_pi', 'rtinst_pi', '/unused/tmux', '%1', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#).execute(&pool).await.unwrap();
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES ('sess_pi', 'rtinst_pi', '/unused/tmux', '%1', 'pi_tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#).execute(&pool).await.unwrap();
     sqlx::query("UPDATE session_runtimes SET state='starting' WHERE session_id='sess_pi'")
         .execute(&pool)
         .await

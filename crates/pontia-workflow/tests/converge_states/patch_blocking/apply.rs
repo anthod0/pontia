@@ -18,15 +18,12 @@ async fn changed_apply_revises_the_graph_and_queues_one_continuation_without_pla
     let pontia_home = temp.path().join("pontia-home");
     std::fs::create_dir(&pontia_home).unwrap();
     let pool = test_pool(&temp.path().join("patch-apply.db")).await;
-    let repository = SqliteWorkflowRepository::new(
-        pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-    );
+    let repository = SqliteWorkflowRepository::new(pool.clone(), crate::fixture::queries(&pool));
     seed_requester(&pool, &repository, &pontia_home, "wf_apply", true).await;
     write_problem_report(&pontia_home, "wf_apply", "Replace the remaining work.");
     let patch_id = WorkflowPatchService::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        crate::fixture::queries(&pool),
         pontia_home.clone(),
     )
     .request_patch(RequestWorkflowPatch {
@@ -75,7 +72,7 @@ async fn changed_apply_revises_the_graph_and_queues_one_continuation_without_pla
     );
     let invalid = WorkflowPatchService::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        crate::fixture::queries(&pool),
         pontia_home.clone(),
     )
     .apply_patch(ApplyWorkflowPatch {
@@ -131,7 +128,7 @@ output = "replacement.md"
     .unwrap();
     let service = WorkflowPatchService::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        crate::fixture::queries(&pool),
         pontia_home.clone(),
     );
     write_patch_file(
@@ -247,7 +244,7 @@ output = "replacement.md"
     );
     let second_patch_id = WorkflowPatchService::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        crate::fixture::queries(&pool),
         pontia_home.clone(),
     )
     .request_patch(RequestWorkflowPatch {
@@ -317,7 +314,7 @@ output = "final.md"
     );
     let second_outcome = WorkflowPatchService::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        crate::fixture::queries(&pool),
         pontia_home.clone(),
     )
     .apply_patch(ApplyWorkflowPatch {
@@ -354,10 +351,7 @@ async fn unchanged_apply_rejects_without_advancing_the_revision() {
     let pontia_home = temp.path().join("pontia-home");
     std::fs::create_dir(&pontia_home).unwrap();
     let pool = test_pool(&temp.path().join("patch-reject.db")).await;
-    let repository = SqliteWorkflowRepository::new(
-        pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-    );
+    let repository = SqliteWorkflowRepository::new(pool.clone(), crate::fixture::queries(&pool));
     seed_requester(&pool, &repository, &pontia_home, "wf_reject", false).await;
     write_problem_report(
         &pontia_home,
@@ -366,7 +360,7 @@ async fn unchanged_apply_rejects_without_advancing_the_revision() {
     );
     let patch_id = WorkflowPatchService::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        crate::fixture::queries(&pool),
         pontia_home.clone(),
     )
     .request_patch(RequestWorkflowPatch {
@@ -408,7 +402,7 @@ async fn unchanged_apply_rejects_without_advancing_the_revision() {
     );
     let outcome = WorkflowPatchService::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        crate::fixture::queries(&pool),
         pontia_home.clone(),
     )
     .apply_patch(ApplyWorkflowPatch {

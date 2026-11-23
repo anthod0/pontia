@@ -73,7 +73,7 @@ async fn seed_running_workflow(
                 )
                 .unwrap(),
             ),
-            role: "tui".into(),
+            role: "pi_tui".into(),
             state: "running".into(),
             created_at: "2026-10-01T00:00:00Z".into(),
         })

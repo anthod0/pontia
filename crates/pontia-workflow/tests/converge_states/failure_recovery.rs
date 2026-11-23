@@ -13,11 +13,8 @@ async fn fixture() -> (
 ) {
     let root = tempfile::tempdir().unwrap();
     let pool = test_pool(&root.path().join("recovery.db")).await;
-    let repo = SqliteWorkflowRepository::new(
-        pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-    )
-    .with_recovery_client_types(["pi"]);
+    let repo = SqliteWorkflowRepository::new(pool.clone(), crate::fixture::queries(&pool))
+        .with_recovery_client_types(["pi"]);
     seed_linear_workflow(&repo, "wf_retry", "[]", true).await;
     repo.start_workflow("wf_retry", "started").await.unwrap();
     for (id, state) in [("upstream", "exited"), ("failed", "exited")] {
@@ -38,7 +35,7 @@ async fn fixture() -> (
         .await
         .unwrap();
     sqlx::query("INSERT INTO agent_bindings(id,session_id,client_type,launch_cwd,client_session_key) VALUES ('binding','failed','pi','/workspace','native-session')").execute(&pool).await.unwrap();
-    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, role, state, created_at) VALUES ('failed', 'old-runtime', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#).execute(&pool).await.unwrap();
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, role, state, created_at) VALUES ('failed', 'old-runtime', 'generic_control', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#).execute(&pool).await.unwrap();
     exit(&pool, "old-exit", "old-runtime").await;
     repo.fail_unsubmitted_workflow_node(
         "wf_retry",
@@ -231,14 +228,11 @@ async fn recovered_execution_ignores_old_exit_and_rejects_old_submission_then_co
         repo.get_workflow("wf_retry").await.unwrap().unwrap().state,
         "completed"
     );
-    let timeline = WorkflowQueryService::new(
-        app.db(),
-        pontia_agent_control::ControlQueryService::new(app.db()),
-    )
-    .get_workflow_timeline("wf_retry")
-    .await
-    .unwrap()
-    .unwrap();
+    let timeline = WorkflowQueryService::new(app.db(), app.queries())
+        .get_workflow_timeline("wf_retry")
+        .await
+        .unwrap()
+        .unwrap();
     assert!(timeline.entries.iter().any(|e| e.event_id == "failure"));
     assert!(
         timeline

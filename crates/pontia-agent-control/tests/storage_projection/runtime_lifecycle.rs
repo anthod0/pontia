@@ -17,6 +17,7 @@ impl pontia_agent_control::client_contract::ClientEventInterpreter for CoupledEv
         let mut runtime = event.clone();
         runtime.event_id = format!("{}:runtime", event.event_id);
         runtime.event_type = kind;
+        runtime.payload["role"] = json!("generic_control");
         runtime.payload["session_event_id"] = json!(event.event_id);
         Ok(Some(runtime))
     }
@@ -57,7 +58,7 @@ fn runtime_event(
         EventSource::RuntimeManager,
         client_type.to_string(),
         event_type,
-        json!({"runtime_id": runtime_id}),
+        json!({"runtime_id": runtime_id,"role":"generic_control"}),
     )
 }
 

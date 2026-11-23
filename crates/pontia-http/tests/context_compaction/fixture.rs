@@ -163,7 +163,7 @@ impl Fixture {
                 .await
                 .unwrap();
         }
-        sqlx::query("INSERT INTO session_runtimes(session_id,runtime_id,role,state,created_at) VALUES ('session','runtime','tui','running','2026-10-13T00:00:00Z')").execute(&self.state.db()).await.unwrap();
+        sqlx::query("INSERT INTO session_runtimes(session_id,runtime_id,role,state,created_at) VALUES ('session','runtime','generic_control','running','2026-10-13T00:00:00Z')").execute(&self.state.db()).await.unwrap();
         sqlx::query("INSERT INTO agent_bindings(id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES ('binding','session','compaction-test',?,'native','{}')").bind(self.root.path().to_str().unwrap()).execute(&self.state.db()).await.unwrap();
         self.state
             .control()

@@ -49,7 +49,7 @@ async fn bind(state: &AppState, session: &str, runtime: &str) {
         .execute(&state.db())
         .await
         .unwrap();
-    sqlx::query("INSERT INTO session_runtimes(runtime_id,session_id,role,state,tmux_socket_path,tmux_pane_id,created_at) VALUES (?,?,'tui','running','/unused/tmux','%1',strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(runtime_id) DO NOTHING")
+    sqlx::query("INSERT INTO session_runtimes(runtime_id,session_id,role,state,tmux_socket_path,tmux_pane_id,created_at) VALUES (?,?,'pi_tui','running','/unused/tmux','%1',strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(runtime_id) DO NOTHING")
         .bind(runtime).bind(session).execute(&state.db()).await.unwrap();
     sqlx::query("INSERT INTO agent_bindings (id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES (?,?,'pi','/unused',?,'{}') ON CONFLICT DO NOTHING")
         .bind(format!("binding_{session}")).bind(session).bind(format!("native_{session}")).execute(&state.db()).await.unwrap();

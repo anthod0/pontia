@@ -58,7 +58,7 @@ impl SessionCreator for BoundSessionCreator {
                 tmux_socket_path: Some("/tmp/fake-tmux.sock".to_string()),
                 tmux_pane_id: Some("%42".to_string()),
                 process_fingerprint: None,
-                role: "tui".into(),
+                role: "generic_control".into(),
                 state: "running".into(),
                 created_at: "2026-10-01T00:00:00Z".into(),
             })

@@ -117,7 +117,7 @@ async fn seed_session_for_client(state: &AppState, session_id: &str, client_type
 
 async fn seed_session(state: &AppState, session_id: &str) {
     seed_session_for_client(state, session_id, "pi").await;
-    sqlx::query("INSERT INTO session_runtimes(runtime_id,session_id,role,state,created_at) VALUES ('runtime_' || ?,?,'tui','running',strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(session_id).bind(session_id).execute(&state.db()).await.unwrap();
+    sqlx::query("INSERT INTO session_runtimes(runtime_id,session_id,role,state,created_at) VALUES ('runtime_' || ?,?,'pi_tui','running',strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(session_id).bind(session_id).execute(&state.db()).await.unwrap();
 }
 
 async fn precreate_turn_if_missing(state: &AppState, session_id: &str, turn_id: &str) {

@@ -45,7 +45,7 @@ async fn shutdown_only_stops_owned_processes_and_records_exit_before_service_cle
         for (session, client, role, fp) in [
             ("owned", "acp", "acp", owned.fingerprint()),
             ("stale", "claude-agent", "claude_sdk_host", stale),
-            ("native", "pi", "tui", unrelated.fingerprint()),
+            ("native", "pi", "pi_tui", unrelated.fingerprint()),
         ] {
             sqlx::query("INSERT INTO sessions(session_id,client_type,state,title,workspace_ref) VALUES(?,?,'idle',?,'/workspace')").bind(session).bind(client).bind(session).execute(&pool).await.unwrap();
             sqlx::query("INSERT INTO session_runtimes(runtime_id,session_id,role,state,process_fingerprint,created_at) VALUES(?,?,?,'running',?,'2026-01-01')").bind(session).bind(session).bind(role).bind(serde_json::to_string(&fp).unwrap()).execute(&pool).await.unwrap();

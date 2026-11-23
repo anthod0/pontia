@@ -41,7 +41,7 @@ pub(super) async fn bind_runtime(state: &AppState, session_id: &str, runtime_id:
         .await
         .unwrap();
     if let Some(existing) = SqliteSessionRuntimeRepository::new(state.db())
-        .runtime_id(session_id, Some("tui"))
+        .runtime_id(session_id, Some("pi_tui"))
         .await
         .unwrap()
         && existing != runtime_id
@@ -61,7 +61,7 @@ pub(super) async fn bind_runtime(state: &AppState, session_id: &str, runtime_id:
             tmux_socket_path: None,
             tmux_pane_id: None,
             process_fingerprint: None,
-            role: "tui".into(),
+            role: "pi_tui".into(),
             state: "running".into(),
             created_at: "2026-10-01T00:00:00Z".into(),
         })

@@ -100,7 +100,7 @@ impl Fixture {
             .observed_session("native-test", root.path().to_str().unwrap())
             .await
             .unwrap();
-        sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, role, state, created_at) VALUES (?, 'runtime', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
+        sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, role, state, created_at) VALUES (?, 'runtime', 'generic_control', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
 .bind(&session).execute(&state.db()).await.unwrap();
         events
             .report_fact(ReportedFact {

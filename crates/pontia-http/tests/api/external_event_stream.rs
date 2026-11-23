@@ -122,7 +122,7 @@ async fn interaction_facts_reach_queries_subscribers_and_cursor_replay() {
     use pontia_agent_control::ReportedFact;
     let (state, _pontia_home) = test_state("blocking").await;
     seed_session_events(&state).await;
-    sqlx::query("INSERT INTO session_runtimes(session_id,runtime_id,role,state,created_at) VALUES ('sess_stream_1','blocking-runtime','tui','running','2026-01-01T00:00:00Z')")
+    sqlx::query("INSERT INTO session_runtimes(session_id,runtime_id,role,state,created_at) VALUES ('sess_stream_1','blocking-runtime','generic_control','running','2026-01-01T00:00:00Z')")
         .execute(&state.db()).await.unwrap();
     let service = state.control().event_ingest_service();
     let mut subscriber = state.control().agent_events().subscribe();

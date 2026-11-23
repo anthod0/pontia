@@ -120,8 +120,8 @@ impl SqliteWorkflowRepository {
             .execute(&mut **tx)
             .await?;
         for runtime in &snapshot.runtimes {
-            sqlx::query("INSERT INTO workflow_runtime_snapshots(runtime_id,session_id,role,state) VALUES (?,?,?,?)")
-                .bind(&runtime.runtime_id).bind(&snapshot.session_id).bind(&runtime.role).bind(&runtime.state).execute(&mut **tx).await?;
+            sqlx::query("INSERT INTO workflow_runtime_snapshots(runtime_id,session_id,role,state,is_control) VALUES (?,?,?,?,?)")
+                .bind(&runtime.runtime_id).bind(&snapshot.session_id).bind(&runtime.role).bind(&runtime.state).bind(runtime.is_control).execute(&mut **tx).await?;
         }
         sqlx::query("DELETE FROM workflow_inbox_snapshots WHERE session_id=?")
             .bind(&snapshot.session_id)

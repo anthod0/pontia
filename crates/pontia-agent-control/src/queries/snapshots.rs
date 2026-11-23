@@ -34,6 +34,7 @@ pub struct TurnSnapshot {
 pub struct RuntimeSnapshot {
     pub runtime_id: String,
     pub role: String,
+    pub is_control: bool,
     pub state: String,
 }
 
@@ -130,11 +131,14 @@ impl ControlQueryService {
             .bind(session_id)
             .fetch_all(&mut *tx)
             .await?;
-        let runtimes =
-            sqlx::query_as("SELECT runtime_id,role,state FROM session_runtimes WHERE session_id=?")
-                .bind(session_id)
-                .fetch_all(&mut *tx)
-                .await?;
+        let runtimes = sqlx::query_as(
+            "SELECT runtime_id, role, state, role IS ? AS is_control
+             FROM session_runtimes WHERE session_id = ?",
+        )
+        .bind(self.clients.control_runtime_role(&client_type))
+        .bind(session_id)
+        .fetch_all(&mut *tx)
+        .await?;
         let has_agent_binding =
             sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM agent_bindings WHERE session_id=?)")
                 .bind(session_id)

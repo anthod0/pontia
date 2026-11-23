@@ -85,7 +85,7 @@ impl ShutdownRuntime {
             LEFT JOIN workspaces w USING(workspace_id)
             WHERE (s.client_type='acp' AND r.role='acp') OR
                   (s.client_type='claude-agent' AND r.role='claude_sdk_host') OR
-                  (s.client_type='pi' AND r.role='tui' AND
+                  (s.client_type='pi' AND r.role='pi_tui' AND
                    (SELECT e.source FROM events e WHERE e.session_id=s.session_id AND
                     e.event_type IN ('session.starting','session.resuming') ORDER BY e.rowid DESC LIMIT 1)='external_api')
             ORDER BY s.session_id,r.runtime_id"#).fetch_all(pool).await?;

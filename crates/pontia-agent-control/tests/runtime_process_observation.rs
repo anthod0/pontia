@@ -13,7 +13,7 @@ const OBSERVED_AGENT: pontia_agent_control::client_contract::AgentClientAdapter 
         lifecycle: pontia_agent_control::client_contract::SessionLifecycleBehavior {
             process_observation: Some(
                 pontia_agent_control::client_contract::ProcessObservationBehavior {
-                    role: "tui",
+                    role: "generic_control",
                     observe_starting: false,
                     exit_event: pontia_agent_control::PontiaEventType::SessionExited,
                     exit_reason: "agent_process_fingerprint_missing",
@@ -45,7 +45,7 @@ async fn missing_bound_agent_process_projects_session_exited_after_confirmation(
     .execute(&db)
     .await
     .expect("insert session");
-    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, process_fingerprint, role, state, created_at) VALUES (?, ?, ?, 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, process_fingerprint, role, state, created_at) VALUES (?, ?, ?, 'generic_control', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
 .bind("sess_observed")
 .bind("rtinst_observed")
 .bind(json!(fingerprint).to_string())
@@ -109,7 +109,7 @@ async fn active_session_without_a_fingerprint_remains_unknown() {
     .execute(&db)
     .await
     .expect("insert session");
-    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES (?, ?, ?, ?, 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES (?, ?, ?, ?, 'generic_control', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
 .bind("sess_without_fingerprint")
 .bind("rtinst_without_fingerprint")
 .bind(temp.path().join("missing-tmux-socket").to_str().unwrap())

@@ -197,7 +197,7 @@ async fn branch_replay_resolves_root_middle_latest_and_interrupted_targets_witho
         .unwrap();
         offset = tail;
     }
-    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES (?, ?, '/unused/branch-resolve.sock', '%1', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) ON CONFLICT(runtime_id) DO UPDATE SET state=excluded.state, tmux_socket_path=excluded.tmux_socket_path, tmux_pane_id=excluded.tmux_pane_id"#)
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES (?, ?, '/unused/branch-resolve.sock', '%1', 'pi_tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) ON CONFLICT(runtime_id) DO UPDATE SET state=excluded.state, tmux_socket_path=excluded.tmux_socket_path, tmux_pane_id=excluded.tmux_pane_id"#)
 .bind(session_id)
 .bind(runtime_id)
     .execute(&state.db())
@@ -559,7 +559,7 @@ async fn branch_inbox_delivery_is_opaque_idempotent_and_does_not_fabricate_a_tur
     .await
     .unwrap();
 
-    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES (?, ?, '/unused/branch-dispatch.sock', '%1', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) ON CONFLICT(runtime_id) DO UPDATE SET state=excluded.state, tmux_socket_path=excluded.tmux_socket_path, tmux_pane_id=excluded.tmux_pane_id"#)
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES (?, ?, '/unused/branch-dispatch.sock', '%1', 'pi_tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) ON CONFLICT(runtime_id) DO UPDATE SET state=excluded.state, tmux_socket_path=excluded.tmux_socket_path, tmux_pane_id=excluded.tmux_pane_id"#)
 .bind(session_id)
 .bind(runtime_id)
     .execute(&state.db())

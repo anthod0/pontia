@@ -21,7 +21,7 @@ fn runtime(id: &str) -> SessionRuntimeRecord {
     SessionRuntimeRecord {
         runtime_id: id.into(),
         session_id: "session".into(),
-        role: "tui".into(),
+        role: "generic_control".into(),
         state: "running".into(),
         start_command: Some("pi --approve".into()),
         tmux_socket_path: Some("/tmp/test.sock".into()),
@@ -53,14 +53,17 @@ async fn updating_one_runtime_preserves_other_runtimes_and_creation_time() {
     assert_eq!(repository.get("b").await.unwrap(), Some(b));
     assert_eq!(repository.list("session").await.unwrap().len(), 2);
     assert!(
-        repository.runtime_id("session", Some("tui")).await.is_err(),
+        repository
+            .runtime_id("session", Some("generic_control"))
+            .await
+            .is_err(),
         "ambiguous control must not choose an arbitrary TUI"
     );
 }
 
 #[tokio::test]
 async fn guarded_writes_allow_multiple_non_control_runtimes() {
-    for role in [None, Some("tui")] {
+    for role in [None, Some("generic_control")] {
         let (pool, _root) = test_pool().await;
         let repository = SqliteSessionRuntimeRepository::new(pool);
         repository

@@ -164,7 +164,7 @@ async fn generic_test_client_can_expose_pi_like_capabilities_without_pi_runtime(
             .fetch_one(&state.db())
             .await
             .expect("runtime kind");
-    assert_eq!(runtime_kind, "tui");
+    assert_eq!(runtime_kind, "generic_control");
 }
 
 #[tokio::test]

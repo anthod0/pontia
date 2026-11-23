@@ -17,7 +17,7 @@ async fn pi_client_session_key_binds_the_precreated_pontia_session_without_marke
     .execute(&state.db())
     .await
     .expect("precreate session");
-    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES (?, 'rtinst_precreated', ?, '%42', 'tui', 'starting', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES (?, 'rtinst_precreated', ?, '%42', 'pi_tui', 'starting', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
 .bind(session_id)
 .bind(std::path::Path::new(&workspace).join("missing-tmux.sock").to_str().unwrap())
     .execute(&state.db())
@@ -161,7 +161,7 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_without_tmux()
     .fetch_one(&state.db())
     .await
     .expect("runtime binding");
-    assert_eq!(row.get::<String, _>("role"), "tui");
+    assert_eq!(row.get::<String, _>("role"), "pi_tui");
     assert_eq!(row.get::<String, _>("runtime_id"), runtime_id);
     assert_eq!(row.get::<String, _>("start_command"), "pi --approve");
     assert_eq!(row.get::<Option<String>, _>("tmux_socket_path"), None);

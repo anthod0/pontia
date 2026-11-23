@@ -46,7 +46,7 @@ fn runtime_event_types_round_trip_through_text_and_json() {
 }
 
 #[test]
-fn runtime_events_require_a_runtime_id_and_forbid_a_turn_id() {
+fn runtime_events_require_a_runtime_id_and_role_and_forbid_a_turn_id() {
     let event = |turn_id: Option<&str>, payload| {
         DomainEvent::new(
             "evt_runtime_shape".to_string(),
@@ -61,20 +61,35 @@ fn runtime_events_require_a_runtime_id_and_forbid_a_turn_id() {
 
     assert!(
         ProjectionState::default()
-            .apply(&event(None, json!({})))
+            .apply(&event(None, json!({"role":"control"})))
+            .is_err()
+    );
+    for role in [serde_json::Value::Null, json!(" "), json!(7)] {
+        assert!(
+            ProjectionState::default()
+                .apply(&event(None, json!({"runtime_id":"runtime","role":role})))
+                .is_err()
+        );
+    }
+    assert!(
+        ProjectionState::default()
+            .apply(&event(None, json!({"runtime_id":"runtime"})))
             .is_err()
     );
     assert!(
         ProjectionState::default()
             .apply(&event(
                 Some("turn_invalid"),
-                json!({"runtime_id":"runtime"})
+                json!({"runtime_id":"runtime", "role":"control"})
             ))
             .is_err()
     );
     assert!(
         ProjectionState::default()
-            .apply(&event(None, json!({"runtime_id":"runtime"})))
+            .apply(&event(
+                None,
+                json!({"runtime_id":"runtime", "role":"control"})
+            ))
             .is_ok()
     );
 }

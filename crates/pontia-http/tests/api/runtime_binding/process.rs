@@ -32,7 +32,7 @@ async fn pending_native_identity_recovers_the_launch_and_preserves_its_terminal_
     let workspace = crate::common::test_app::registered_workspace(&state).await;
     sqlx::query("INSERT INTO sessions (session_id, client_type, state) VALUES ('sess_pending', 'pi', 'starting')")
         .execute(&state.db()).await.unwrap();
-    sqlx::query("INSERT INTO session_runtimes (runtime_id, session_id, role, state, tmux_socket_path, tmux_pane_id, start_command, created_at) VALUES ('rt_pending', 'sess_pending', 'tui', 'starting', '/launch/socket', '%9', 'pi --approve', '2026-01-01T00:00:00Z')")
+    sqlx::query("INSERT INTO session_runtimes (runtime_id, session_id, role, state, tmux_socket_path, tmux_pane_id, start_command, created_at) VALUES ('rt_pending', 'sess_pending', 'pi_tui', 'starting', '/launch/socket', '%9', 'pi --approve', '2026-01-01T00:00:00Z')")
         .execute(&state.db()).await.unwrap();
     let (status, context) =
         get_session_context_by_client_session(state.clone(), "pi", "sess_pending").await;

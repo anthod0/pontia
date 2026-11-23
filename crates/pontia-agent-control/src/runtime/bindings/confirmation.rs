@@ -23,8 +23,11 @@ impl RuntimeBindingUpsertService {
         created_session: bool,
         process: &pontia_runtime::ProcessFingerprint,
     ) -> Result<Value> {
+        let role = client_spec.adapter.control_runtime_role.ok_or_else(|| {
+            Error::Domain("runtime binding requires a declared control runtime role".into())
+        })?;
         let existing = SqliteSessionRuntimeRepository::new(self.pool.clone())
-            .runtime_id(session_id, client_spec.adapter.control_runtime_role)
+            .runtime_id(session_id, Some(role))
             .await?;
         let requested = non_empty(request.runtime_id.as_deref());
         if requested.is_some() && existing != requested {
@@ -42,7 +45,7 @@ impl RuntimeBindingUpsertService {
                     PontiaEventSource::RuntimeManager,
                     request.client_type.clone(),
                     PontiaEventType::RuntimeReady,
-                    json!({"runtime_id": runtime_id.clone()}),
+                    json!({"runtime_id": runtime_id,"role":role}),
                 ))
                 .await?;
         }
@@ -59,13 +62,7 @@ impl RuntimeBindingUpsertService {
         let socket = terminal.and_then(|record| record.tmux_socket_path.clone());
         let pane = terminal.and_then(|record| record.tmux_pane_id.clone());
         let mut tx = self.pool.begin().await?;
-        fence_runtime_binding_write(
-            &mut tx,
-            session_id,
-            Some(&runtime_id),
-            client_spec.adapter.control_runtime_role,
-        )
-        .await?;
+        fence_runtime_binding_write(&mut tx, session_id, Some(&runtime_id), Some(role)).await?;
         // Binding confirmation only adds identity and location. Runtime events own
         // every lifecycle transition, including an already-running attachment.
         let prior_state: String =
@@ -78,7 +75,7 @@ impl RuntimeBindingUpsertService {
             SessionRuntimeRecord {
                 runtime_id: runtime_id.clone(),
                 session_id: session_id.into(),
-                role: "tui".into(),
+                role: role.into(),
                 state: prior_state,
                 start_command: non_empty(request.start_command.as_deref())
                     .or_else(|| prior.and_then(|record| record.start_command)),

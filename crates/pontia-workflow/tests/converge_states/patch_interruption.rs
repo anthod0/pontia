@@ -45,10 +45,7 @@ async fn only_the_exact_client_confirmed_interruption_unlocks_replanning() {
     let pontia_home = temp.path().join("pontia-home");
     fs::create_dir(&pontia_home).expect("Pontia home");
     let pool = test_pool(&temp.path().join("patch-interruption.db")).await;
-    let repository = SqliteWorkflowRepository::new(
-        pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-    );
+    let repository = SqliteWorkflowRepository::new(pool.clone(), crate::fixture::queries(&pool));
     seed_linear_workflow(&repository, "wf_patch_interrupt", "[]", false).await;
     repository
         .start_workflow("wf_patch_interrupt", "evt_started")
@@ -79,7 +76,7 @@ async fn only_the_exact_client_confirmed_interruption_unlocks_replanning() {
             tmux_socket_path: None,
             tmux_pane_id: None,
             process_fingerprint: None,
-            role: "tui".into(),
+            role: "generic_control".into(),
             state: "running".into(),
             created_at: "2026-10-01T00:00:00Z".into(),
         })
@@ -98,7 +95,7 @@ async fn only_the_exact_client_confirmed_interruption_unlocks_replanning() {
     fs::write(node_dir.join("problem-report.md"), "Need a corrected plan").expect("problem report");
     let outcome = WorkflowPatchService::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        crate::fixture::queries(&pool),
         pontia_home.clone(),
     )
     .request_patch(RequestWorkflowPatch {

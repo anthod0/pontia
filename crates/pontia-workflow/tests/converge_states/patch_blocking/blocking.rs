@@ -18,10 +18,7 @@ async fn confirmed_interruption_creates_one_real_replanner_and_explicit_block_is
     let pontia_home = temp.path().join("pontia-home");
     std::fs::create_dir(&pontia_home).expect("Pontia home");
     let pool = test_pool(&temp.path().join("patch-blocking.db")).await;
-    let repository = SqliteWorkflowRepository::new(
-        pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-    );
+    let repository = SqliteWorkflowRepository::new(pool.clone(), crate::fixture::queries(&pool));
     seed_requester(&pool, &repository, &pontia_home, "wf_block", false).await;
 
     write_problem_report(
@@ -31,7 +28,7 @@ async fn confirmed_interruption_creates_one_real_replanner_and_explicit_block_is
     );
     let patch_id = WorkflowPatchService::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        crate::fixture::queries(&pool),
         pontia_home.clone(),
     )
     .request_patch(RequestWorkflowPatch {
@@ -155,7 +152,7 @@ async fn confirmed_interruption_creates_one_real_replanner_and_explicit_block_is
     );
     let outcome = WorkflowPatchService::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        crate::fixture::queries(&pool),
         pontia_home.clone(),
     )
     .block_patch(BlockWorkflowPatch {
@@ -203,7 +200,7 @@ async fn confirmed_interruption_creates_one_real_replanner_and_explicit_block_is
 
     let stale = WorkflowPatchService::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        crate::fixture::queries(&pool),
         pontia_home.clone(),
     )
     .block_patch(BlockWorkflowPatch {
@@ -248,10 +245,7 @@ async fn requester_terminal_fact_implicitly_blocks_and_preserves_the_accepted_ou
     let pontia_home = temp.path().join("pontia-home");
     std::fs::create_dir(&pontia_home).unwrap();
     let pool = test_pool(&temp.path().join("requester-terminal.db")).await;
-    let repository = SqliteWorkflowRepository::new(
-        pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-    );
+    let repository = SqliteWorkflowRepository::new(pool.clone(), crate::fixture::queries(&pool));
     seed_requester(
         &pool,
         &repository,
@@ -267,7 +261,7 @@ async fn requester_terminal_fact_implicitly_blocks_and_preserves_the_accepted_ou
     );
     let patch_id = WorkflowPatchService::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        crate::fixture::queries(&pool),
         pontia_home.clone(),
     )
     .request_patch(RequestWorkflowPatch {
@@ -344,10 +338,7 @@ async fn unresolved_replanner_terminal_blocks_once_restores_definition_and_late_
     let pontia_home = temp.path().join("pontia-home");
     std::fs::create_dir(&pontia_home).unwrap();
     let pool = test_pool(&temp.path().join("replanner-terminal.db")).await;
-    let repository = SqliteWorkflowRepository::new(
-        pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-    );
+    let repository = SqliteWorkflowRepository::new(pool.clone(), crate::fixture::queries(&pool));
     seed_requester(
         &pool,
         &repository,
@@ -359,7 +350,7 @@ async fn unresolved_replanner_terminal_blocks_once_restores_definition_and_late_
     write_problem_report(&pontia_home, "wf_planner_terminal", "Re-plan");
     let patch_id = WorkflowPatchService::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        crate::fixture::queries(&pool),
         pontia_home.clone(),
     )
     .request_patch(RequestWorkflowPatch {

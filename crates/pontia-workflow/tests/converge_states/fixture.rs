@@ -5,6 +5,11 @@ use std::{path::Path, time::Duration};
 
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 
+pub(super) fn queries(pool: &sqlx::SqlitePool) -> pontia_agent_control::ControlQueryService {
+    pontia_agent_control::ControlQueryService::new(pool.clone())
+        .with_clients(super::test_doubles::clients())
+}
+
 pub(super) async fn test_pool(path: &Path) -> sqlx::SqlitePool {
     let database_url = format!("sqlite://{}", path.display());
     let pool = connect_sqlite(&database_url).await.expect("connect");

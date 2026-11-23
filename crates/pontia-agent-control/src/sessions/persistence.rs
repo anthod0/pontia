@@ -36,7 +36,7 @@ impl SessionCommandService {
     ) -> Result<()> {
         let result = SqliteSessionRuntimeRepository::new(self.pool.clone())
             .upsert_binding_guarded(
-                crate::runtime::runtime_binding_record(session_id, runtime)?,
+                crate::runtime::runtime_binding_record(session_id, runtime, role)?,
                 role,
             )
             .await;

@@ -30,6 +30,7 @@ impl ClientEventInterpreter for PiEventInterpreter {
             payload = serde_json::json!({});
         }
         payload["runtime_id"] = serde_json::json!(runtime_id);
+        payload["role"] = serde_json::json!(crate::spec::CONTROL_RUNTIME_ROLE);
         payload["session_event_id"] = serde_json::json!(event.event_id);
         Ok(Some(DomainEvent {
             event_id: format!("{}:runtime", event.event_id),

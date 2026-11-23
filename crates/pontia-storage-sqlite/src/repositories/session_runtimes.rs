@@ -164,8 +164,9 @@ impl SqliteSessionRuntimeRepository {
     pub async fn tmux_pane_binding(
         &self,
         session_id: &str,
+        role: Option<&str>,
     ) -> Result<Option<RuntimeBindingTmuxPaneRow>> {
-        let Some(id) = self.runtime_id(session_id, Some("tui")).await? else {
+        let Some(id) = self.runtime_id(session_id, role).await? else {
             return Ok(None);
         };
         Ok(sqlx::query_as("SELECT runtime_id, tmux_socket_path AS socket_path, tmux_pane_id AS pane_id, process_fingerprint FROM session_runtimes WHERE runtime_id = ?")

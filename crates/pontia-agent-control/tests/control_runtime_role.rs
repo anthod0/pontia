@@ -44,8 +44,22 @@ async fn only_the_registered_role_is_controlled_and_ready_among_other_runtimes()
     let (app, _root) = fixture(Some("owned")).await;
     runtime(&app, "worker", "worker").await;
     runtime(&app, "interface", "interface").await;
-    runtime(&app, "tui", "tui").await;
+    runtime(&app, "pi_tui", "pi_tui").await;
     runtime(&app, "control", "owned").await;
+
+    let snapshot = app
+        .queries()
+        .session_snapshot("session")
+        .await
+        .unwrap()
+        .unwrap();
+    let controls: Vec<_> = snapshot
+        .runtimes
+        .iter()
+        .filter(|r| r.is_control)
+        .map(|r| r.runtime_id.as_str())
+        .collect();
+    assert_eq!(controls, ["control"]);
 
     let target = ControlTarget::resolve(&app.db(), &app.clients(), "session", None)
         .await
@@ -60,7 +74,7 @@ async fn only_the_registered_role_is_controlled_and_ready_among_other_runtimes()
             .await
             .unwrap()
     );
-    for id in ["worker", "interface", "tui"] {
+    for id in ["worker", "interface", "pi_tui"] {
         assert!(!readiness.is_ready("session", "generic", id).await.unwrap());
         assert!(matches!(
             ControlTarget::resolve(&app.db(), &app.clients(), "session", Some(id)).await,
@@ -131,8 +145,15 @@ async fn an_undeclared_runtime_cannot_exit_the_session_when_control_runtime_is_m
 #[tokio::test]
 async fn a_client_without_a_declared_role_has_no_control_runtime() {
     let (app, _root) = fixture(None).await;
-    runtime(&app, "tui", "tui").await;
+    runtime(&app, "pi_tui", "pi_tui").await;
     runtime(&app, "worker", "worker").await;
+    let snapshot = app
+        .queries()
+        .session_snapshot("session")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(snapshot.runtimes.iter().all(|runtime| !runtime.is_control));
     let target = ControlTarget::resolve(&app.db(), &app.clients(), "session", None)
         .await
         .unwrap();
@@ -140,7 +161,7 @@ async fn a_client_without_a_declared_role_has_no_control_runtime() {
     let readiness = RuntimeReadinessService::new(app.db(), None);
     assert!(
         !readiness
-            .is_ready("session", "generic", "tui")
+            .is_ready("session", "generic", "pi_tui")
             .await
             .unwrap()
     );

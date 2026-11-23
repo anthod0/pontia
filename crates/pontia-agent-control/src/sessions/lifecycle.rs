@@ -530,8 +530,13 @@ impl SessionCommandService {
                 prior_restart_count + 1,
             )
             .await?;
-        self.upsert_runtime_binding_in_tx(&mut runtime_replacement_tx, session_id, &runtime)
-            .await?;
+        self.upsert_runtime_binding_in_tx(
+            &mut runtime_replacement_tx,
+            session_id,
+            &runtime,
+            target.control_runtime_role,
+        )
+        .await?;
         runtime_replacement_tx.commit().await?;
         let ingest = self.event_ingest.clone();
         ingest
