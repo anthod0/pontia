@@ -16,6 +16,7 @@
   import BoxArrowUpIcon from 'phosphor-svelte/lib/BoxArrowUpIcon'
   import DotsThreeVerticalIcon from 'phosphor-svelte/lib/DotsThreeVerticalIcon'
   import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
+  import FileArrowUpIcon from 'phosphor-svelte/lib/FileArrowUpIcon'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
   import UploadAttachments from './UploadAttachments.svelte'
@@ -243,6 +244,39 @@
     void uploads.add(Array.from(data.files))
   }
 
+  // Nested elements fire their own enter/leave pairs; count them so the hint stays up until the drag leaves the composer.
+  // A leave toward the outside resets the count, since elements re-rendered mid-drag never send their own leave.
+  let dragDepth = $state(0)
+  const draggingFiles = $derived(dragDepth > 0)
+  function carriesFiles(event: DragEvent): boolean {
+    return Boolean(uploads) && Boolean(event.dataTransfer?.types.includes('Files'))
+  }
+  function dragEnter(event: DragEvent): void {
+    if (!carriesFiles(event)) return
+    event.preventDefault()
+    dragDepth += 1
+  }
+  function dragOver(event: DragEvent): void {
+    if (!carriesFiles(event)) return
+    event.preventDefault()
+    event.dataTransfer!.dropEffect = uploadUnavailable ? 'none' : 'copy'
+  }
+  function dragLeave(event: DragEvent): void {
+    if (!carriesFiles(event)) return
+    const next = event.relatedTarget
+    const outside = next instanceof Node && !(event.currentTarget as Node).contains(next)
+    dragDepth = outside ? 0 : Math.max(0, dragDepth - 1)
+  }
+  // Capture keeps the editor from inserting the dropped file as text.
+  function dropFiles(event: DragEvent): void {
+    if (!carriesFiles(event)) return
+    event.preventDefault()
+    event.stopPropagation()
+    dragDepth = 0
+    if (uploadUnavailable || !event.dataTransfer?.files.length) return
+    void uploads!.add(Array.from(event.dataTransfer.files))
+  }
+
   function handleKeydown(event: KeyboardEvent): void {
     if (event.isComposing || event.keyCode === 229) return
     const queueInput = !event.shiftKey && !event.ctrlKey && !event.metaKey
@@ -273,6 +307,15 @@
     <Button type="button" variant="ghost" size="icon-sm" aria-label={$t('files.upload')} title={$t('files.upload')} disabled={uploadUnavailable} onclick={() => picker?.choose()}>
       <PlusIcon class="size-4" />
     </Button>
+  {/if}
+{/snippet}
+
+{#snippet dropHint()}
+  {#if draggingFiles && !uploadUnavailable}
+    <div class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-[inherit] border-2 border-dashed border-primary bg-background text-sm font-medium text-primary">
+      <FileArrowUpIcon class="size-5" />
+      <span>{$t('files.dropToUpload')}</span>
+    </div>
   {/if}
 {/snippet}
 
@@ -314,7 +357,8 @@
   </div>
 {/if}
 
-<PromptInput.Root class={compact ? 'grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center' : 'w-full'} onSubmit={() => submit()}>
+<PromptInput.Root class={cn('relative', compact ? 'grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center' : 'w-full')} onSubmit={() => submit()} ondragenter={dragEnter} ondragover={dragOver} ondragleave={dragLeave} ondropcapture={dropFiles}>
+  {@render dropHint()}
   {#if uploads}
     <div class={compact ? 'col-span-3 row-start-1' : 'contents'}>
       <UploadAttachments bind:this={uploadPicker} draft={uploads} disabled={disabled || busy || sending} />
@@ -365,7 +409,8 @@
         <Dialog.Description>{$t('chat.longerFollowUp')}</Dialog.Description>
       </Dialog.Header>
 
-      <PromptInput.Root class="mt-2 flex min-h-0 w-full flex-1 flex-col shadow-none" onSubmit={submitAndCloseFullscreen}>
+      <PromptInput.Root class="relative mt-2 flex min-h-0 w-full flex-1 flex-col shadow-none" onSubmit={submitAndCloseFullscreen} ondragenter={dragEnter} ondragover={dragOver} ondragleave={dragLeave} ondropcapture={dropFiles}>
+        {@render dropHint()}
         {#if uploads}<UploadAttachments bind:this={fullscreenUploadPicker} draft={uploads} disabled={disabled || busy || sending} />{/if}
         <PromptInput.Body class="min-h-0 flex-1" onpastecapture={pasteFiles}>
           <ChatCommandInput bind:this={fullscreenEditor} bind:value {commands} commandSide="bottom" onCommand={executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget autofocus onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-[52px] pr-2" />

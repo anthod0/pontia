@@ -354,6 +354,7 @@
   "files.sharedImage": "共享图片",
   "files.missing": "文件已不存在",
   "files.selectUpload": "选择要上传的文件",
+  "files.dropToUpload": "松开即可上传文件",
   "files.uploaded": "上传文件",
   "files.checking": "正在检查文件…",
   "files.resumeHint": "选择原文件以继续",

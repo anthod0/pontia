@@ -1,5 +1,5 @@
 import { testDevice } from "../deviceFixture";
-import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { createEvent, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, expect, test, vi } from "vitest";
 const toast = vi.hoisted(() => ({ error: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }));
 vi.mock("svelte-sonner", () => ({ toast }));
@@ -115,6 +115,76 @@ test("uploads files pasted into the input", async () => {
   expect(pasted).toBe(false);
   await screen.findByRole("button", { name: "Remove attachment image.png" });
   expect(send).toBeDisabled();
+});
+
+test("shows a drop hint while files are dragged over the input and uploads dropped files", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => new Promise(() => {})),
+  );
+  const draftId = crypto.randomUUID();
+  render(MessageComposer, { value: "", draftId, onSubmit: vi.fn() });
+  await waitFor(() => expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled());
+  const textbox = screen.getByRole("textbox");
+  const file = new File(["pdf"], "notes.pdf", { type: "application/pdf" });
+  const dataTransfer = clipboard([file], []);
+  await fireEvent.dragEnter(textbox, { dataTransfer });
+  expect(screen.getByText("Drop files to upload")).toBeInTheDocument();
+  await fireEvent.dragEnter(screen.getByRole("button", { name: "Send" }), { dataTransfer });
+  await fireEvent.dragLeave(textbox, { dataTransfer });
+  expect(screen.getByText("Drop files to upload")).toBeInTheDocument();
+  const dropped = await fireEvent.drop(textbox, { dataTransfer });
+  expect(dropped).toBe(false);
+  expect(screen.queryByText("Drop files to upload")).not.toBeInTheDocument();
+  await screen.findByRole("button", { name: "Remove attachment notes.pdf" });
+  expect(textbox).toHaveTextContent("");
+});
+
+test("hides the drop hint when the drag leaves the composer", async () => {
+  const draftId = crypto.randomUUID();
+  render(MessageComposer, { value: "", draftId, onSubmit: vi.fn() });
+  await waitFor(() => expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled());
+  const textbox = screen.getByRole("textbox");
+  const dataTransfer = clipboard([new File(["a"], "a.txt")], []);
+  await fireEvent.dragEnter(textbox, { dataTransfer });
+  await fireEvent.dragEnter(screen.getByRole("button", { name: "Send" }), { dataTransfer });
+  await fireEvent.dragLeave(textbox, { dataTransfer });
+  await fireEvent.dragLeave(screen.getByRole("button", { name: "Send" }), { dataTransfer });
+  expect(screen.queryByText("Drop files to upload")).not.toBeInTheDocument();
+  // A re-rendered element never sends its leave; leaving toward the page still clears the hint.
+  await fireEvent.dragEnter(textbox, { dataTransfer });
+  await fireEvent.dragEnter(screen.getByRole("button", { name: "Send" }), { dataTransfer });
+  // jsdom has no DragEvent, so set the leave's destination by hand.
+  const leave = createEvent.dragLeave(textbox, { dataTransfer });
+  Object.defineProperty(leave, "relatedTarget", { value: document.body });
+  await fireEvent(textbox, leave);
+  expect(screen.queryByText("Drop files to upload")).not.toBeInTheDocument();
+});
+
+test("refuses dropped files while the composer is busy", async () => {
+  const draftId = crypto.randomUUID();
+  const view = render(MessageComposer, { value: "", draftId, onSubmit: vi.fn() });
+  await waitFor(() => expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled());
+  await view.rerender({ busy: true });
+  const textbox = screen.getByRole("textbox");
+  const dataTransfer = { ...clipboard([new File(["a"], "a.txt")], []), dropEffect: "copy" };
+  await fireEvent.dragEnter(textbox, { dataTransfer });
+  const over = await fireEvent.dragOver(textbox, { dataTransfer });
+  expect(over).toBe(false);
+  expect(dataTransfer.dropEffect).toBe("none");
+  expect(screen.queryByText("Drop files to upload")).not.toBeInTheDocument();
+  expect(await fireEvent.drop(textbox, { dataTransfer })).toBe(false);
+  expect(screen.queryByRole("button", { name: "Remove attachment a.txt" })).not.toBeInTheDocument();
+});
+
+test("ignores drags that carry no files", async () => {
+  const draftId = crypto.randomUUID();
+  render(MessageComposer, { value: "", draftId, onSubmit: vi.fn() });
+  await waitFor(() => expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled());
+  await fireEvent.dragEnter(screen.getByRole("textbox"), {
+    dataTransfer: clipboard([], ["text/plain"]),
+  });
+  expect(screen.queryByText("Drop files to upload")).not.toBeInTheDocument();
 });
 
 test("keeps rich text pastes that carry a rendered image as text", async () => {
