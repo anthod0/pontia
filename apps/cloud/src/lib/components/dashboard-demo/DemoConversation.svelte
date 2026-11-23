@@ -19,6 +19,7 @@
 	import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon';
 	import * as Popover from '$lib/components/ui/popover/index.js';
 	import { cn } from '$lib/utils';
+	import DemoInline from './DemoInline.svelte';
 	import type { DemoClient, DemoSession, DemoStep, DemoWorkspace } from './mockData';
 
 	let { session, workspace }: { session: DemoSession; workspace: DemoWorkspace } = $props();
@@ -55,26 +56,7 @@
 		return minutes ? `${minutes}m ${seconds}s` : `${seconds}s`;
 	}
 
-	// Mock replies only use **bold** and `code`.
-	function inlineTokens(text: string): { kind: 'text' | 'strong' | 'code'; value: string }[] {
-		return text
-			.split(/(\*\*[^*]+\*\*|`[^`]+`)/)
-			.filter(Boolean)
-			.map((part) =>
-				part.startsWith('**') ? { kind: 'strong', value: part.slice(2, -2) }
-					: part.startsWith('`') ? { kind: 'code', value: part.slice(1, -1) }
-						: { kind: 'text', value: part }
-			);
-	}
 </script>
-
-{#snippet inline(text: string)}
-	{#each inlineTokens(text) as token}
-		{#if token.kind === 'strong'}<strong class="font-semibold text-heading">{token.value}</strong>
-		{:else if token.kind === 'code'}<code class="rounded-sm bg-muted px-1 py-0.5 font-mono text-xs text-primary">{token.value}</code>
-		{:else}{token.value}{/if}
-	{/each}
-{/snippet}
 
 {#snippet clientIcon(size: string)}
 	<img class={cn(size, 'shrink-0 object-contain', client.darkLogo && 'dark:hidden')} src={client.logo} alt="" />
@@ -96,7 +78,7 @@
 		<div class="mx-auto flex w-full max-w-[760px] flex-col gap-4 pt-14 pb-6 @3xl:pt-12">
 			<div class="flex flex-col items-end gap-1.5">
 				<div class="max-w-[min(95%,720px)] rounded-lg border border-border bg-background px-4 py-3 text-[13.5px] leading-relaxed text-heading">
-					{@render inline(session.prompt)}
+					<DemoInline text={session.prompt} />
 				</div>
 				<div class="flex h-7 items-center gap-0.5 text-muted-foreground" aria-hidden="true">
 					<span class="px-1 text-xs tabular-nums">10:42 AM</span>
@@ -137,10 +119,10 @@
 				<div class="text-sm leading-[1.85] text-foreground [&>*:first-child]:mt-0">
 					{#each session.reply as block}
 						{#if block.kind === 'p'}
-							<div class="my-3">{@render inline(block.text)}</div>
+							<div class="my-3"><DemoInline text={block.text} /></div>
 						{:else if block.kind === 'ul'}
 							<ul class="my-3 list-disc pl-5">
-								{#each block.items as item}<li class="my-1">{@render inline(item)}</li>{/each}
+								{#each block.items as item}<li class="my-1"><DemoInline text={item} /></li>{/each}
 							</ul>
 						{:else}
 							<div class="my-4 overflow-hidden rounded-lg border border-border bg-muted">
