@@ -507,8 +507,8 @@ for (const resume of [undefined, native]) {
   });
 }
 
-for (const combined of [false, true]) {
-  test(`steering stays in the active task with ${combined ? "combined" : "separate"} native results`, async (t) => {
+for (const mode of ["combined", "after text", "after tool use"] as const) {
+  test(`steering stays in the active task with native results ${mode}`, async (t) => {
     const { fixture, events, host } = setup();
     t.after(() => host.close());
     host.submit(first, "original");
@@ -522,12 +522,12 @@ for (const combined of [false, true]) {
     assert.equal(steering.priority, "now");
     assert.equal(steering.message.content, "change direction");
     assert.equal(fixture.interrupts, 0);
-    if (!combined) {
+    if (mode !== "combined") {
       fixture.messages.push(
         result(first, {
           subtype: "success",
           is_error: false,
-          stop_reason: null,
+          stop_reason: mode === "after tool use" ? "tool_use" : null,
           terminal_reason: "aborted_streaming",
         }),
       );
@@ -537,7 +537,9 @@ for (const combined of [false, true]) {
       assert.throws(() => host.submit(native, "queued"), rejects("input_busy"));
     }
     fixture.messages.push(assistant(second, [{ type: "text", text: "redirected" }], "steered"));
-    fixture.messages.push(result(second, combined ? { user_message_uuids: [first, second] } : {}));
+    fixture.messages.push(
+      result(second, mode === "combined" ? { user_message_uuids: [first, second] } : {}),
+    );
     await settle();
     assert.equal(host.status().unavailable, null);
     assert.deepEqual(

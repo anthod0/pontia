@@ -111,7 +111,8 @@ function outcome(message: SDKResultMessage): "completed" | "failed" | "interrupt
   if (
     ((message.subtype === "error_during_execution" && message.is_error) ||
       (message.subtype === "success" && !message.is_error)) &&
-    ((message.stop_reason === null && message.terminal_reason === "aborted_streaming") ||
+    (((message.stop_reason === null || message.stop_reason === "tool_use") &&
+      message.terminal_reason === "aborted_streaming") ||
       (message.stop_reason === "tool_use" && message.terminal_reason === "aborted_tools"))
   )
     return "interrupted";
