@@ -14,6 +14,7 @@
   import QuotesIcon from 'phosphor-svelte/lib/QuotesIcon'
   import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon'
   import XIcon from 'phosphor-svelte/lib/XIcon'
+  import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import * as Tabs from '$lib/components/ui/tabs/index.js'
@@ -26,6 +27,7 @@
   import FilePreviewPanel from '../chat/FilePreviewPanel.svelte'
   import FilePreviewResizer from '../chat/FilePreviewResizer.svelte'
   import BotAvatar from './BotAvatar.svelte'
+  import BotMessageSearch from './BotMessageSearch.svelte'
   import { fileKindOf } from '../chat/fileKind'
   import { createRecentFiles, withRecentFile } from '$lib/botRecentFiles'
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
@@ -53,6 +55,8 @@
   // svelte-ignore state_referenced_locally
   const recentFiles = createRecentFiles(device.id, bot.bot_id)
   let selected = $state<string | null>(null)
+  let searchText = $state('')
+  let searchSelected = $state<string | null>(null)
   const context = createQuery(() => ({
     queryKey: ['bot-message-context', bot.bot_id, selected],
     queryFn: ({ signal }) => device.api.getBotMessageContext(bot.bot_id, selected!, signal),
@@ -83,6 +87,14 @@
     open = true
   }
 
+  function toggle(next: string) {
+    if (open && tab === next) open = false
+    else {
+      tab = next
+      open = true
+    }
+  }
+
   export function refresh() {
     if (open && tab === 'todo') void todos.refetch()
     if (open && tab === 'context' && selected) void context.refetch()
@@ -105,6 +117,11 @@
   async function jump(id: string) {
     await closeOnMobile()
     await onjump(id)
+  }
+
+  function jumpToResult(id: string) {
+    searchSelected = id
+    void jump(id)
   }
 
   async function quoteTodo(message: BotMessage) {
@@ -162,8 +179,12 @@
 
 {#snippet todoButton()}
   <div class="pointer-events-auto mr-3 flex h-12 shrink-0 items-center rounded-lg bg-popover px-0.5 ring-1 ring-foreground/10 max-md:mt-2 md:h-8 md:px-1">
+    <Button variant="ghost" size="icon" class={['size-11 md:size-7', open && tab === 'search' && 'bg-muted text-heading']}
+      aria-label={$t('bots.search')} title={$t('bots.search')} aria-pressed={open && tab === 'search'} onclick={() => toggle('search')}>
+      <MagnifyingGlassIcon class="size-5 md:size-4" />
+    </Button>
     <Button variant="ghost" size="icon" class={['relative size-11 md:size-7', open && tab === 'todo' && 'bg-muted text-heading']}
-      aria-label={`${$t('bots.todos')} ${count}`} title={$t('bots.todos')} aria-pressed={open && tab === 'todo'} onclick={() => { if (open && tab === 'todo') open = false; else viewTodos() }}>
+      aria-label={`${$t('bots.todos')} ${count}`} title={$t('bots.todos')} aria-pressed={open && tab === 'todo'} onclick={() => toggle('todo')}>
       <ListChecksIcon class="size-5 md:size-4" />{@render badge(true)}
     </Button>
   </div>
@@ -251,6 +272,7 @@
           <Tabs.Trigger value="files" class="h-full px-2.5"><FileTextIcon />{$t('bots.files')}</Tabs.Trigger>
           <Tabs.Trigger value="context" class="h-full px-2.5"><TreeStructureIcon />{$t('bots.context')}</Tabs.Trigger>
           <Tabs.Trigger value="todo" class="h-full px-2.5"><ListChecksIcon />{$t('bots.todos')}{@render badge()}</Tabs.Trigger>
+          <Tabs.Trigger value="search" class="h-full px-2.5"><MagnifyingGlassIcon />{$t('bots.searchTab')}</Tabs.Trigger>
         </Tabs.List>
         <Button variant="ghost" size="icon-sm" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => { open = false }}><XIcon /></Button>
       </header>
@@ -302,6 +324,9 @@
         {:else}
           <p role="status" class="p-3 text-sm text-muted-foreground">{$t('common.loading')}</p>
         {/if}
+      </Tabs.Content>
+      <Tabs.Content value="search" class="flex min-h-0 flex-col">
+        <BotMessageSearch {bot} active={open && tab === 'search'} bind:text={searchText} selected={searchSelected} onselect={jumpToResult} />
       </Tabs.Content>
       <Tabs.Content value="todo" class="flex min-h-0 flex-col">
         <div class="min-h-0 flex-1 overflow-auto overscroll-contain p-3">

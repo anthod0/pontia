@@ -4,6 +4,7 @@ mod common;
 mod agent_profile;
 mod bot_delete;
 mod bot_description;
+mod bot_search;
 mod bot_timeline;
 mod e2e_authentication;
 mod entrypoint_authentication;

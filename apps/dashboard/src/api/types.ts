@@ -64,6 +64,11 @@ export interface BotMessageContext {
   truncated: boolean;
 }
 
+export interface BotMessageSearchPage {
+  messages: BotMessage[];
+  next_before: string | null;
+}
+
 export interface BotNotice {
   id: string;
   kind: "turn.failed" | "session.error" | "session.exited";

@@ -11,6 +11,7 @@ import type {
   BotMessage,
   BotMessagePage,
   BotMessageContext,
+  BotMessageSearchPage,
   BotClient,
   BotConfiguration,
   BotDeletionBlockers,
@@ -124,6 +125,16 @@ export function createApi(device: DeviceRuntime) {
   ): Promise<BotMessagePage> {
     const query = new URLSearchParams({ ...page, limit: String(page.limit ?? 50) });
     return request(`${botPath(id)}/messages?${query}`, { signal });
+  }
+
+  function searchBotMessages(
+    id: string,
+    page: { q: string; before?: string },
+    signal?: AbortSignal,
+  ): Promise<BotMessageSearchPage> {
+    const query = new URLSearchParams({ q: page.q });
+    if (page.before) query.set("before", page.before);
+    return request(`${botPath(id)}/messages/search?${query}`, { signal });
   }
 
   function getBotTodos(
@@ -986,6 +997,7 @@ export function createApi(device: DeviceRuntime) {
     listAgentClientModels,
     getBotMessages,
     getBotMessageContext,
+    searchBotMessages,
     getBotTodos,
     changeBotTodo,
     saveBot,

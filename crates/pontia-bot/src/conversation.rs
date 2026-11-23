@@ -435,6 +435,17 @@ impl ConversationService {
         Ok(message)
     }
 
+    pub async fn search_messages(
+        &self,
+        bot_id: &str,
+        query: &str,
+        before: Option<&str>,
+        limit: u32,
+    ) -> Result<crate::messages::SearchPage> {
+        self.records.get(bot_id).await?;
+        self.messages.search(bot_id, query, before, limit).await
+    }
+
     pub async fn message_context(
         &self,
         bot_id: &str,
