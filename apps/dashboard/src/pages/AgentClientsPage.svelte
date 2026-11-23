@@ -114,7 +114,7 @@
 </script>
 
 {#snippet restoreButton()}
-  <Button type="button" variant="ghost" disabled={busy} onclick={() => resetOpen = true}><ArrowCounterClockwiseIcon class="size-4" /> {$t('clients.restoreInheritance')}</Button>
+  <Button type="button" variant="ghost" disabled={busy} onclick={() => resetOpen = true}><ArrowCounterClockwiseIcon class="size-4" /> {$t('clients.restoreDefault')}</Button>
 {/snippet}
 
 <section class="space-y-6">
@@ -160,7 +160,7 @@
             <div class="min-w-0 space-y-1">
               <h3 class="truncate text-lg font-semibold text-heading">{selected.name}</h3>
               <p class="text-xs text-muted-foreground">
-                {selected.client_type} / {selected.short_id} · {selected.has_record ? $t('clients.databaseUpdated', { date: formatDateTime(selected.updated_at, $currentLocale) }) : $t('clients.inherited')}
+                {selected.client_type} / {selected.short_id} · {selected.has_record ? $t('clients.databaseUpdated', { date: formatDateTime(selected.updated_at, $currentLocale) }) : $t('clients.default')}
               </p>
               <p class="break-all font-mono text-xs text-muted-foreground" title={$t('clients.uniqueId')}>{selected.id}</p>
               <div role="status" class="space-y-1 pt-2 text-sm">
@@ -220,6 +220,6 @@
 <AlertDialog.Root bind:open={resetOpen}>
   <AlertDialog.Content>
     <AlertDialog.Header><AlertDialog.Title>{$t('clients.restoreConfirm')}</AlertDialog.Title><AlertDialog.Description>{$t('clients.restoreBefore')} {selected?.name}{$t('clients.restoreAfter')}</AlertDialog.Description></AlertDialog.Header>
-    <AlertDialog.Footer><AlertDialog.Cancel>{$t('common.cancel')}</AlertDialog.Cancel><AlertDialog.Action onclick={() => selected && reset(selected)}>{$t('clients.restoreInheritance')}</AlertDialog.Action></AlertDialog.Footer>
+    <AlertDialog.Footer><AlertDialog.Cancel>{$t('common.cancel')}</AlertDialog.Cancel><AlertDialog.Action onclick={() => selected && reset(selected)}>{$t('clients.restoreDefault')}</AlertDialog.Action></AlertDialog.Footer>
   </AlertDialog.Content>
 </AlertDialog.Root>

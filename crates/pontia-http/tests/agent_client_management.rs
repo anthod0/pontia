@@ -237,7 +237,7 @@ async fn unconfigured_clients_cannot_create_sessions() {
 }
 
 #[tokio::test]
-async fn patch_updates_the_enabled_setting_and_delete_restores_inheritance() {
+async fn patch_updates_the_enabled_setting_and_delete_restores_defaults() {
     let (app, _root) = app().await;
     let (_, original) = request(&app, "GET", "/pi/default", None, true).await;
     let (status, saved) = request(

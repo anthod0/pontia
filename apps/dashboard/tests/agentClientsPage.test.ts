@@ -67,9 +67,9 @@ test("disable sends only the enabled setting and reset removes the entire select
     ),
   );
   expect(screen.getByRole("switch", { name: "Enabled" })).not.toBeChecked();
-  await user.click(screen.getByRole("button", { name: "Restore inheritance" }));
+  await user.click(screen.getByRole("button", { name: "Restore default" }));
   const dialog = screen.getByRole("alertdialog");
-  await user.click(within(dialog).getByRole("button", { name: "Restore inheritance" }));
+  await user.click(within(dialog).getByRole("button", { name: "Restore default" }));
   await waitFor(() =>
     expect(api.resetAgentClient).toHaveBeenCalledWith(
       expect.objectContaining({ client_key: "default" }),
@@ -93,9 +93,9 @@ test("Grok can be enabled and reset", async () => {
   expect(screen.queryByRole("button", { name: "Add custom client" })).toBeNull();
   expect(screen.queryByRole("textbox")).toBeNull();
   expect(screen.getByRole("switch", { name: "Enabled" })).toBeEnabled();
-  await user.click(screen.getByRole("button", { name: "Restore inheritance" }));
+  await user.click(screen.getByRole("button", { name: "Restore default" }));
   await user.click(
-    within(screen.getByRole("alertdialog")).getByRole("button", { name: "Restore inheritance" }),
+    within(screen.getByRole("alertdialog")).getByRole("button", { name: "Restore default" }),
   );
   await waitFor(() =>
     expect(api.resetAgentClient).toHaveBeenCalledWith(
