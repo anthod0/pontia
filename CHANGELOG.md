@@ -7,9 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.11] - 2026-11-23
+
 ### Added
 
 - Bots can list, inspect, create, edit, and delete shared Agent Profiles with `pontia bot profile`, and look up available clients and models.
+- In a Dashboard Bot chat, open the Search tab to find a message and jump to it in the conversation. Messages also show their send times.
+- The Git panel in a Dashboard Session shows the Workspace's branch, staged and unstaged changes, untracked files, and conflicts. Select a file to read its diff.
+- In Dashboard Settings, open Memory to search the memories shared by Bots on the device. The About you tab shows their shared `USER.md`.
+- In a standalone Claude Code Session, you can answer single-choice questions and MCP forms with yes/no or multiple-choice fields in Dashboard. Tool approvals offer Allow once and Deny. When Claude suggests a reusable permission, you can also allow it for the rest of the Session.
+- In an idle or interrupted Grok Session, use `/compact` to compact the context and see the checkpoint in the timeline.
 
 ### Changed
 
@@ -17,13 +24,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `config.toml` ignores unknown keys and tables instead of failing to load.
 - `pontia down` and `pontia uninstall` list running agents started by Pontia. Use `--force` to terminate them before stopping the service.
 - You can run `pontia update` while Sessions are busy or have messages waiting for delivery. Agents continue working when the service restarts.
+- In Claude Code Sessions, context usage reflects the latest model reply. Compaction dividers show the token counts before and after compaction when Claude reports them.
+- In Session and Bot chats, file cards appear where the agent placed the attachment in its reply. Download and More use matching icons in file rows and matching translucent buttons on image tiles.
+- When a Session ends during a Turn, Dashboard shows that Turn as interrupted.
+- Bots pass your task requirements to helpers, including where to work and how to deliver the result when specified.
+- On the Agent Clients page, “Restore inheritance” is now called “Restore default”.
+- The homepage’s “Shows its work” story follows a helper Session as a user checks its progress and asks for a change.
 
 ### Fixed
 
 - Pi, Claude Code and ACP can reconnect after a temporary-file cleaner removes the control socket. If an agent’s control protocol is incompatible with pontiad, Dashboard explains that the Session must be restarted.
+- Claude Code Workflow nodes can submit their results with `pontia workflow submit`. Claude Code Bots continue responding when a new message interrupts them after a tool call.
+- Messages sent during a Codex Turn stay visible in Dashboard as the conversation updates.
+- `pontia down` and `pontia uninstall` exit with an error if the running service rejects the CLI's credentials. ACP Sessions that exit during cleanup no longer restart automatically.
+- The shortcuts for focusing the message input and opening keyboard help now work in Bot chats.
+- For Workspaces outside a Git repository, the Session header shows only a placeholder in the branch field.
 
 ### Removed
 
+- Removed the `GET /api/v1/update/blockers` endpoint.
 - Removed Agent Client configuration overrides: the JSON editor and effective configuration on the Dashboard Agent Clients page, `pontia client set`, and the `config_overrides` and `effective_config` fields of the Agent Client API. `PATCH /api/v1/agent-clients/{client}/{key}` now accepts only `enabled`. Upgrading deletes saved overrides. Set the Pi command with `[runtime.pi].tui_command` in `config.toml` or `PONTIA_PI_TUI_COMMAND`.
 
 ## [0.8.10] - 2026-11-23
