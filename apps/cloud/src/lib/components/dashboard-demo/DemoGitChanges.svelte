@@ -6,7 +6,6 @@
 	import ClockIcon from 'phosphor-svelte/lib/ClockIcon';
 	import CloudArrowUpIcon from 'phosphor-svelte/lib/CloudArrowUpIcon';
 	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import type { Snippet } from 'svelte';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import * as Collapsible from '$lib/components/ui/collapsible/index.js';
@@ -14,13 +13,12 @@
 	import type { DemoChange, DemoChangeGroup, DemoGit } from './mockData';
 
 	/** One Workspace's changes: the change list under `header`, or the diff of the opened file. */
-	let { git, header, hint, onclose }: {
+	let { git, header, hint, file = $bindable(null) }: {
 		git: DemoGit;
 		header: Snippet;
 		/** The keyboard hint in the footer. */
 		hint: string;
-		/** Closes the surrounding panel; without it, the diff has no close button and Esc stops at the list. */
-		onclose?: () => void;
+		file?: DemoChange | null;
 	} = $props();
 	let element = $state<HTMLElement>();
 	let list = $state<HTMLElement>();
@@ -37,18 +35,15 @@
 	const iconButton = 'flex size-7 items-center justify-center rounded-md text-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary';
 
 	let collapsed = $state<Partial<Record<DemoChangeGroup, boolean>>>({});
-	let file = $state<DemoChange | null>(null);
 
 	function count(change: DemoChange, mark: '+' | '-'): number {
 		return change.diff.split('\n').filter((line) => line.startsWith(mark)).length;
 	}
 
-	/** Esc returns from a diff to the list, then closes the panel. The parent forwards keys from the element that holds focus. */
+	/** Esc returns from a diff to the list. The parent forwards keys from the element that holds focus. */
 	export function keydown(event: KeyboardEvent) {
-		if (event.key !== 'Escape' || event.defaultPrevented) return;
-		if (file) back();
-		else if (onclose) onclose();
-		else return;
+		if (event.key !== 'Escape' || event.defaultPrevented || !file) return;
+		back();
 		event.preventDefault();
 	}
 
@@ -111,7 +106,6 @@
 				{#if parts.dir}<span class="min-w-0 flex-1 truncate text-left font-mono text-xs text-muted-foreground" dir="rtl"><bdi>{parts.dir}</bdi></span>{/if}
 			</div>
 			<span class="flex size-7 items-center justify-center" aria-hidden="true"><ArrowClockwiseIcon class="size-4" /></span>
-			{#if onclose}<button type="button" class={iconButton} aria-label="Close" title="Close (Alt G)" onclick={onclose}><XIcon class="size-4" /></button>{/if}
 		</header>
 		<div class="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1.5 text-xs">
 			<Badge variant="outline" class={cn('font-normal', group.tone)}>{group.label}</Badge>

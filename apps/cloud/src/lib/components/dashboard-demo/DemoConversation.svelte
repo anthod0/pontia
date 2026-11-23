@@ -22,7 +22,7 @@
 	import DemoInline from './DemoInline.svelte';
 	import type { DemoClient, DemoSession, DemoStep, DemoWorkspace } from './mockData';
 
-	let { session, workspace }: { session: DemoSession; workspace: DemoWorkspace } = $props();
+	let { session, workspace, onopenfile }: { session: DemoSession; workspace: DemoWorkspace; onopenfile: (path: string) => void } = $props();
 
 	let scroller: HTMLDivElement;
 	onMount(() => {
@@ -78,7 +78,7 @@
 		<div class="mx-auto flex w-full max-w-[760px] flex-col gap-4 pt-14 pb-6 @3xl:pt-12">
 			<div class="flex flex-col items-end gap-1.5">
 				<div class="max-w-[min(95%,720px)] rounded-lg border border-border bg-background px-4 py-3 text-[13.5px] leading-relaxed text-heading">
-					<DemoInline text={session.prompt} />
+					<DemoInline onlink={onopenfile} text={session.prompt} />
 				</div>
 				<div class="flex h-7 items-center gap-0.5 text-muted-foreground" aria-hidden="true">
 					<span class="px-1 text-xs tabular-nums">10:42 AM</span>
@@ -119,10 +119,10 @@
 				<div class="text-sm leading-[1.85] text-foreground [&>*:first-child]:mt-0">
 					{#each session.reply as block}
 						{#if block.kind === 'p'}
-							<div class="my-3"><DemoInline text={block.text} /></div>
+							<div class="my-3"><DemoInline onlink={onopenfile} text={block.text} /></div>
 						{:else if block.kind === 'ul'}
 							<ul class="my-3 list-disc pl-5">
-								{#each block.items as item}<li class="my-1"><DemoInline text={item} /></li>{/each}
+								{#each block.items as item}<li class="my-1"><DemoInline onlink={onopenfile} text={item} /></li>{/each}
 							</ul>
 						{:else}
 							<div class="my-4 overflow-hidden rounded-lg border border-border bg-muted">

@@ -31,6 +31,8 @@ export interface DemoSession {
   duration: number;
   steps: DemoStep[];
   reply: DemoBlock[];
+  files?: Record<string, string>;
+  recentFiles?: string[];
 }
 
 export type DemoChangeGroup = "staged" | "unstaged" | "untracked";
@@ -354,6 +356,11 @@ export const demoDevices: DemoDevice[] = [
         reasoningEffort: "high",
         context: "52% · 104k / 200k",
         handle: "atlas-review",
+        recentFiles: ["src/api/projects.ts"],
+        files: {
+          "src/api/projects.ts":
+            "export async function listProjects(params: ListParams) {\n  const rows = await db.projects.list(params);\n  return {\n    items: rows,\n    cursor: rows.at(-1)?.id ?? null,\n  };\n}",
+        },
         prompt:
           "Review the changes in `src/api/` since the last release and flag anything that breaks existing clients.",
         duration: 136,
@@ -368,7 +375,7 @@ export const demoDevices: DemoDevice[] = [
         reply: [
           {
             kind: "p",
-            text: "Compared `v2.3.0..HEAD` across 14 changed files. So far I found one breaking change:",
+            text: "Compared `v2.3.0..HEAD` across 14 changed files. So far I found one breaking change in [projects.ts](src/api/projects.ts):",
           },
           {
             kind: "ul",

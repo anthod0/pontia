@@ -8,24 +8,26 @@
 	import DotsThreeIcon from 'phosphor-svelte/lib/DotsThreeIcon';
 	import FunnelIcon from 'phosphor-svelte/lib/FunnelIcon';
 	import GearIcon from 'phosphor-svelte/lib/GearIcon';
-	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
 	import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon';
 	import PushPinIcon from 'phosphor-svelte/lib/PushPinIcon';
 	import QuestionIcon from 'phosphor-svelte/lib/QuestionIcon';
 	import SidebarSimpleIcon from 'phosphor-svelte/lib/SidebarSimpleIcon';
-	import { Badge } from '$lib/components/ui/badge/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import { cn } from '$lib/utils';
 	import BotAvatarMark from '$lib/components/bot-story/BotAvatarMark.svelte';
 	import DemoBotChat from './DemoBotChat.svelte';
 	import DemoConversation from './DemoConversation.svelte';
-	import DemoGitPanel from './DemoGitPanel.svelte';
-	import { demoDevices, type DemoSession, type DemoSessionState } from './mockData';
+	import DemoSessionPanel from './DemoSessionPanel.svelte';
+	import { demoDevices, type DemoChange, type DemoSession, type DemoSessionState } from './mockData';
 
 	const devices = $state(demoDevices);
 	let deviceHandle = $state(demoDevices[0].handle);
 	let previousDeviceHandle = $state<string | null>(null);
-	let gitPanelOpen = $state(false);
+	let panelOpen = $state(false);
+	let panelTab = $state<'files' | 'git'>('files');
+	let file = $state<string | null>(null);
+	let diff = $state<DemoChange | null>(null);
+	let panelButton = $state<HTMLButtonElement>();
 	// Open on a session whose conversation fits without scrolling.
 	let sessionId = $state('review-api');
 	let workspaceFilter = $state('');
@@ -44,7 +46,6 @@
 	const filterWorkspace = $derived(device.workspaces.find((item) => item.id === workspaceFilter));
 	const workspace = $derived(device.workspaces.find((item) => item.id === session.workspaceId)!);
 	const previousDevice = $derived(devices.find((item) => item.handle === previousDeviceHandle));
-	const changeCount = $derived(workspace.git.changes.length);
 	const bot = $derived(device.bots.find((item) => item.id === botId));
 
 	const stateDot: Record<Exclude<DemoSessionState, 'exited'>, string> = { busy: 'bg-busy', idle: 'bg-idle', waiting_for_interaction: 'bg-interrupted' };
@@ -60,11 +61,15 @@
 		workspaceFilter = '';
 		sessionId = devices.find((item) => item.handle === handle)!.sessions[0].id;
 		botId = null;
-		gitPanelOpen = false;
+		panelOpen = false;
+		file = null;
+		diff = null;
 	}
 
-	function selectSession(id: string): void {
-		sessionId = id;
+	function selectSession(next: DemoSession): void {
+		if (next.workspaceId !== session.workspaceId) diff = null;
+		if (next.id !== sessionId) file = null;
+		sessionId = next.id;
 		botId = null;
 		mobileSidebarOpen = false;
 	}
@@ -72,6 +77,28 @@
 	function selectBot(id: string): void {
 		botId = id;
 		mobileSidebarOpen = false;
+	}
+
+	function openFile(path: string) {
+		file = path;
+		session.recentFiles = [path, ...(session.recentFiles ?? []).filter((item) => item !== path)];
+		panelTab = 'files';
+		panelOpen = true;
+	}
+
+	function closePanel() {
+		panelOpen = false;
+		panelButton?.focus({ preventScroll: true });
+	}
+
+	function shortcut(event: KeyboardEvent) {
+		if (bot || !event.altKey || event.ctrlKey || event.shiftKey || event.metaKey || event.code !== 'KeyG') return;
+		event.preventDefault();
+		if (panelOpen && panelTab === 'git') closePanel();
+		else {
+			panelTab = 'git';
+			panelOpen = true;
+		}
 	}
 </script>
 
@@ -82,7 +109,7 @@
 			type="button"
 			class={cn(menuButton, 'pr-8 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-primary', active && 'bg-accent text-accent-foreground')}
 			aria-current={active ? 'true' : undefined}
-			onclick={() => selectSession(item.id)}
+			onclick={() => selectSession(item)}
 		>
 			{#if item.pinned}<PushPinIcon class="size-3.5!" aria-label="Pinned session" />{/if}
 			<span class={cn('truncate', active && 'font-medium')}>{item.title}</span>
@@ -99,7 +126,8 @@
 	<span class="flex items-center gap-1 text-xs font-medium">{label}<CaretRightIcon class="size-3 rotate-90" aria-hidden="true" /></span>
 {/snippet}
 
-<div class="dashboard-demo demo-git-colors @container relative flex h-full overflow-hidden bg-surface text-foreground" role="region" aria-label="Interactive Dashboard demo with sample data">
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<div onkeydown={shortcut} class="dashboard-demo demo-git-colors @container relative flex h-full overflow-hidden bg-surface text-foreground" role="region" aria-label="Interactive Dashboard demo with sample data">
 	{#if mobileSidebarOpen}
 		<button type="button" class="absolute inset-0 z-20 bg-black/40 @3xl:hidden" aria-label="Close sidebar" onclick={() => (mobileSidebarOpen = false)}></button>
 	{/if}
@@ -280,28 +308,24 @@
 				<span class="pointer-events-auto flex h-8 shrink-0 items-center rounded-lg bg-popover px-1 ring-1 ring-foreground/10">
 					<button
 						type="button"
-						class={cn('relative flex size-7 items-center justify-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary', gitPanelOpen && 'bg-muted text-heading')}
-						aria-label={changeCount ? `Git changes, ${changeCount} ${changeCount === 1 ? 'file' : 'files'}` : 'Git changes'}
-						aria-pressed={gitPanelOpen}
-						title="Git changes (Alt G)"
-						onclick={() => (gitPanelOpen = !gitPanelOpen)}
+						class={cn('relative flex size-7 items-center justify-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary', panelOpen && 'bg-muted text-heading')}
+						bind:this={panelButton}
+						aria-label="Sidebar"
+						aria-pressed={panelOpen}
+						title="Sidebar"
+						onclick={() => (panelOpen = !panelOpen)}
 					>
-						<GitBranchIcon class="size-4" />
-						{#if changeCount}
-							<Badge class="pointer-events-none absolute -top-1 -right-1 h-4 min-w-4 rounded-full bg-primary-solid px-1 text-[0.625rem] text-primary-foreground tabular-nums">{changeCount}</Badge>
-						{/if}
+						<SidebarSimpleIcon class="size-4 -scale-x-100" />
 					</button>
 				</span>
 			</div>
 			{#key session.id}
-				<DemoConversation {session} {workspace} />
+				<DemoConversation {session} {workspace} onopenfile={openFile} />
 			{/key}
 		</div>
 
-		{#if gitPanelOpen}
-			{#key workspace.id}
-				<DemoGitPanel git={workspace.git} onclose={() => (gitPanelOpen = false)} />
-			{/key}
+		{#if panelOpen}
+			<DemoSessionPanel {session} {workspace} bind:tab={panelTab} bind:file bind:diff onopenfile={openFile} onclear={() => (session.recentFiles = [])} onclose={closePanel} />
 		{/if}
 	{/if}
 </div>
