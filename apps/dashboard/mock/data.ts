@@ -90,6 +90,12 @@ const creationOptions: SessionCreationOption[] = [
     metadata: {},
   },
   {
+    id: '["acp","antigravity"]',
+    name: "Google Antigravity",
+    client_type: "acp",
+    metadata: { acp_agent_id: "antigravity" },
+  },
+  {
     id: '["acp","grok"]',
     name: "Grok Build",
     client_type: "acp",
@@ -744,6 +750,7 @@ export function createSampleData(): MockData {
       agentClient("pi", "pi", "Pi"),
       agentClient("codex", "codex", "Codex"),
       agentClient("claude-agent", "claude-agent", "Claude Code"),
+      agentClient("acp", "antigravity", "Google Antigravity"),
       agentClient("acp", "grok", "Grok Build"),
     ],
     creationOptions,

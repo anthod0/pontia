@@ -25,12 +25,13 @@ test.each([
   ["pi", "pi", "pi"],
   ["codex", "codex", "codex"],
   ["claude-agent", "claude-agent", "claude-agent"],
+  ["acp", "antigravity", '["acp","antigravity"]'],
   ["acp", "grok", '["acp","grok"]'],
 ])("mock creation options follow enabled settings for %s", async (type, key, id) => {
   const device = createMockDevice(createSampleData());
   const otherDevice = createMockDevice(createSampleData());
   const path = `/agent-clients/${type}/${key}`;
-  const allIds = ["pi", "codex", "claude-agent", '["acp","grok"]'];
+  const allIds = ["pi", "codex", "claude-agent", '["acp","antigravity"]', '["acp","grok"]'];
 
   await request(device, "PATCH", path, { enabled: false });
   expect(await optionIds(device)).toEqual(allIds.filter((value) => value !== id));
@@ -54,7 +55,13 @@ test.each([
 
 test("mock creation options are empty when every client is disabled", async () => {
   const device = createMockDevice(createSampleData());
-  for (const path of ["pi/pi", "codex/codex", "claude-agent/claude-agent", "acp/grok"]) {
+  for (const path of [
+    "pi/pi",
+    "codex/codex",
+    "claude-agent/claude-agent",
+    "acp/antigravity",
+    "acp/grok",
+  ]) {
     await request(device, "PATCH", `/agent-clients/${path}`, { enabled: false });
   }
   expect(await optionIds(device)).toEqual([]);
