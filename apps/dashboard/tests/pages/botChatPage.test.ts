@@ -94,6 +94,37 @@ test("renders Bot replies as markdown while keeping user messages as plain text"
   expect(screen.getByText("Keep [literal](https://example.com/user) raw")).toBeInTheDocument();
 });
 
+test("shows the send time of every message and notice in the feed", async () => {
+  const times = [
+    "2026-11-20T00:00:00.000Z",
+    "2026-11-20T00:00:01.000Z",
+    "2026-11-20T00:00:02.000Z",
+  ];
+  vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue({
+    bot,
+    entries: [
+      { id: "u", kind: "user_input", content: "Hi", status: "failed", created_at: times[0] },
+      { id: "r", kind: "bot_reply", content: "Hello", status: "normal", created_at: times[1] },
+      { id: "n", kind: "session.exited", created_at: times[2] },
+    ],
+    next_before: null,
+    file_link_session: null,
+    open_todo_count: 0,
+    notice_session_id: null,
+    generation_notice: null,
+    status: { kind: "idle" },
+  });
+  render(BotChatPage, { botId: bot.bot_id });
+  const log = await screen.findByRole("log");
+  await waitFor(() => expect(log.querySelectorAll("[data-bot-entry-id]")).toHaveLength(3));
+  ["u", "r", "n"].forEach((id, index) => {
+    const row = log.querySelector(`[data-bot-entry-id="${id}"]`)!;
+    expect(row.querySelector("time")).toHaveAttribute("datetime", times[index]);
+  });
+  const failed = log.querySelector('[data-bot-entry-id="u"] [data-bot-message-meta]')!;
+  expect(failed).toHaveTextContent("Message failed to send");
+});
+
 test.each([
   ["/tmp/report.md", "/tmp/report.md"],
   ["reports/report.md", "/bot/a/reports/report.md"],

@@ -20,6 +20,7 @@
   import { provideFilePreviewNavigator } from '../components/chat/filePreviewContext'
   import BotMessageActions from '../components/bots/BotMessageActions.svelte'
   import BotQuoteBlock from '../components/bots/BotQuoteBlock.svelte'
+  import MessageTime from '$lib/components/MessageTime.svelte'
   import { parseQuotedMessage, quotedMessage, type BotQuote } from '$lib/botQuote'
   import { splitAttachments } from '$lib/attachmentBlocks'
   import { isImagePath } from '$lib/downloads/localFilePath'
@@ -267,12 +268,15 @@
                   <p class="whitespace-pre-wrap [overflow-wrap:anywhere]" data-bot-quote-source>{parts.text}</p>
                 </div>
               {/if}
-              {#if entry.status === 'failed'}
-                <div class="mt-1 flex items-center justify-end gap-2 text-xs text-destructive">
-                  <span>{$t('bots.sendFailed')}</span>
-                  <Button variant="ghost" size="xs" disabled={retrying.includes(entry.id)} onclick={() => void retry(entry.id)}>{$t('common.retry')}</Button>
-                </div>
-              {/if}
+              <div class={['-mt-1 flex items-center gap-2 text-xs text-muted-foreground', entry.kind === 'user_input' ? 'justify-end' : 'justify-start']} data-bot-message-meta>
+                {#if entry.status === 'failed'}
+                  <span class="flex items-center gap-2 text-destructive">
+                    {$t('bots.sendFailed')}
+                    <Button variant="ghost" size="xs" disabled={retrying.includes(entry.id)} onclick={() => void retry(entry.id)}>{$t('common.retry')}</Button>
+                  </span>
+                {/if}
+                <MessageTime value={entry.created_at} />
+              </div>
             </div>
             {#if entry.todo?.state === 'open'}
               <button type="button" class="grid size-7 shrink-0 place-items-center self-end rounded-md outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
@@ -286,6 +290,7 @@
           <p class="flex items-center justify-center gap-2 text-center text-xs text-muted-foreground">
             <WarningCircleIcon class="size-4 shrink-0" />
             {entry.kind === 'session.exited' ? $t('bots.sessionExited') : $t('bots.executionFailed')}
+            <MessageTime value={entry.created_at} class="px-0" />
           </p>
         {/if}
       {/snippet}
