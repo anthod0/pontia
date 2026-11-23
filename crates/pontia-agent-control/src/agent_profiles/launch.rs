@@ -12,6 +12,23 @@ impl AgentProfileService {
         Ok(())
     }
 
+    pub async fn launch_client_unavailable_reason(
+        &self,
+        client: &str,
+        key: &str,
+    ) -> Result<Option<String>> {
+        match self.validate_launch_client(client, key).await {
+            Ok(()) => Ok(None),
+            Err(
+                error @ (Error::CapabilityUnavailable(_)
+                | Error::Domain(_)
+                | Error::InvalidConfig { .. }
+                | Error::Serialization(_)),
+            ) => Ok(Some(error.to_string())),
+            Err(error) => Err(error),
+        }
+    }
+
     pub async fn resolve_launch(&self, id: &str) -> Result<ProfileLaunchConfig> {
         let profile = self.require_profile(id).await?;
         if let (Some(client), Some(key)) = (&profile.client_type, &profile.client_key) {
@@ -35,16 +52,12 @@ impl AgentProfileService {
             else {
                 continue;
             };
-            match self.validate_launch_client(&client_type, &client_key).await {
-                Ok(()) => {}
-                // Disabled, unknown, or unparsable client configuration.
-                Err(
-                    Error::CapabilityUnavailable(_)
-                    | Error::Domain(_)
-                    | Error::InvalidConfig { .. }
-                    | Error::Serialization(_),
-                ) => continue,
-                Err(error) => return Err(error),
+            if self
+                .launch_client_unavailable_reason(&client_type, &client_key)
+                .await?
+                .is_some()
+            {
+                continue;
             }
             launchable.push(LaunchableAgentProfile {
                 profile_id: profile.profile_id,

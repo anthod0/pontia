@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Bots can list, inspect, create, edit, and delete shared Agent Profiles with `pontia bot profile`, and look up available clients and models.
+
 ### Changed
 
 - Messages sent to a busy Grok Session, Bot, or helper join its current turn at the next tool or model transition. Grok starts a follow-up turn if the message arrives after the last transition.

@@ -40,7 +40,7 @@ pub async fn create_agent_profile(
 ) -> Result<Response, ApiError> {
     let service = state.control().agent_profiles();
     let outcome = idempotent(&state, &headers, "create_agent_profile", || async move {
-        Ok(json!({"agent_profile": service.create(request).await?}))
+        Ok(json!({"agent_profile": service.create(request, None).await?}))
     })
     .await?;
     let status = if outcome.duplicate {
@@ -59,7 +59,7 @@ pub async fn delete_agent_profile(
     let service = state.control().agent_profiles();
     let operation = format!("delete_agent_profile:{profile_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
-        service.delete(&profile_id).await?;
+        service.delete(&profile_id, None).await?;
         Ok(json!({"profile_id": profile_id}))
     })
     .await?;
@@ -75,7 +75,7 @@ pub async fn update_agent_profile(
     let service = state.control().agent_profiles();
     let operation = format!("update_agent_profile:{profile_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
-        Ok(json!({"agent_profile": service.update(&profile_id, request).await?}))
+        Ok(json!({"agent_profile": service.update(&profile_id, request, None).await?}))
     })
     .await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())

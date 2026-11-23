@@ -41,6 +41,21 @@ pub async fn update_user(
     Ok(ok(json!({"updated": true})))
 }
 
+pub async fn profile_command(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    request: Result<Json<pontia_bot::conversation::profiles::ProfileRequest>, JsonRejection>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let Json(request) = request.map_err(|error| ApiError::invalid_request(error.body_text()))?;
+    authorize_tool(&state, &headers, &request.session_id).await?;
+    let result = state
+        .bots()
+        .profile_command(request)
+        .await
+        .map_err(super::bots::bot_tool_error)?;
+    Ok(ok(result))
+}
+
 pub async fn workspace_command(
     State(state): State<HttpState>,
     headers: HeaderMap,

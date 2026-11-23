@@ -113,7 +113,7 @@ async fn fixed_windows_merge_by_last_occurrence_and_send_only_to_live_recipients
     ws.register(register("new"), None).await.unwrap();
     control
         .agent_profiles()
-        .create(profile("reviewer", MODEL, None))
+        .create(profile("reviewer", MODEL, None), None)
         .await
         .unwrap();
     service
@@ -213,10 +213,14 @@ async fn bot_registrations_exclude_the_initiator_and_failed_delivery_is_forgotte
     *client.blocked.lock().unwrap() = None;
     control
         .agent_profiles()
-        .create(profile("second", MODEL, None))
+        .create(profile("second", MODEL, None), None)
         .await
         .unwrap();
-    control.agent_profiles().delete("second").await.unwrap();
+    control
+        .agent_profiles()
+        .delete("second", None)
+        .await
+        .unwrap();
     wait_for_inputs(&client, before + 3).await;
     stop.send(true).unwrap();
     notices.await.unwrap();
@@ -231,4 +235,60 @@ async fn bot_registrations_exclude_the_initiator_and_failed_delivery_is_forgotte
         .await
         .unwrap();
     assert_eq!(persisted, 0);
+}
+
+#[tokio::test]
+async fn profile_changes_reach_other_bots_and_skip_the_source() {
+    let (_root, _pool, client, control, service) = fixture().await;
+    let (_, origin) = bot(&service).await;
+    let (_, peer) = bot(&service).await;
+    let (stop, receiver) = tokio::sync::watch::channel(false);
+    let notices = tokio::spawn(service.system_notices().run(receiver));
+    let before = client.inputs.lock().unwrap().len();
+    let profiles = control.agent_profiles();
+    // Distinct IDs keep all three changes visible in the same notification batch.
+    profiles
+        .create(profile("added", MODEL, None), Some(&origin))
+        .await
+        .unwrap();
+    let mut edited = profile("edited", MODEL, None);
+    for input in [edited.clone(), profile("removed", MODEL, None)] {
+        profiles.create(input, Some(&origin)).await.unwrap();
+    }
+    edited.description = Some("New description".into());
+    profiles
+        .update("edited", edited, Some(&origin))
+        .await
+        .unwrap();
+    profiles.delete("removed", Some(&origin)).await.unwrap();
+    profiles
+        .create(profile("dashboard", MODEL, None), None)
+        .await
+        .unwrap();
+    wait_for_inputs(&client, before + 2).await;
+    stop.send(true).unwrap();
+    notices.await.unwrap();
+    let inputs = client.inputs.lock().unwrap();
+    let deliveries = &inputs[before..];
+    assert_eq!(deliveries.len(), 2);
+    let origin = &deliveries
+        .iter()
+        .find(|i| i.session_id == origin)
+        .unwrap()
+        .input;
+    let peer = &deliveries
+        .iter()
+        .find(|i| i.session_id == peer)
+        .unwrap()
+        .input;
+    for message in [
+        "created: added",
+        "description changed: edited",
+        "deleted: removed",
+    ] {
+        assert!(!origin.contains(message));
+        assert!(peer.contains(message));
+    }
+    assert!(origin.contains("created: dashboard"));
+    assert!(peer.contains("created: dashboard"));
 }

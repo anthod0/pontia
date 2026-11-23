@@ -243,18 +243,21 @@ async fn initialization_leaves_a_deleted_legacy_helper_profile_deleted() {
         .unwrap();
     let legacy = format!("{}-helper", bot.bot_id);
     f.profiles
-        .create(UpsertAgentProfileRequest {
-            profile_id: legacy.clone(),
-            name: "A helper".into(),
-            description: None,
-            client_type: Some("generic".into()),
-            client_key: Some("a".into()),
-            model: Some("model-a".into()),
-            system_prompt: None,
-        })
+        .create(
+            UpsertAgentProfileRequest {
+                profile_id: legacy.clone(),
+                name: "A helper".into(),
+                description: None,
+                client_type: Some("generic".into()),
+                client_key: Some("a".into()),
+                model: Some("model-a".into()),
+                system_prompt: None,
+            },
+            None,
+        )
         .await
         .unwrap();
-    f.profiles.delete(&legacy).await.unwrap();
+    f.profiles.delete(&legacy, None).await.unwrap();
     f.bots.initialize(&bot.bot_id).await.unwrap();
     f.bots
         .update(&bot.bot_id, configuration("A", "b", "model-b"))

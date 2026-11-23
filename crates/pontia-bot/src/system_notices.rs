@@ -190,36 +190,24 @@ impl SystemNoticeService {
     }
 
     async fn control_change(&self, change: ControlChange, windows: &mut Windows) {
-        let (key, text, except) = match change {
+        let (key, text, source_session_id) = match change {
             ControlChange::WorkspaceRegistered {
                 workspace_id,
                 canonical_path,
                 description,
                 source_session_id,
                 ..
-            } => {
-                let except = if let Some(session) = source_session_id {
-                    match self.conversation.owner_bot_id(&session).await {
-                        Ok(id) => id,
-                        Err(error) => {
-                            tracing::debug!(%error, "Dropped workspace notice during source lookup");
-                            return;
-                        }
-                    }
-                } else {
-                    None
-                };
-                (
-                    format!("workspace:{workspace_id}"),
-                    format!(
-                        "Workspace registered: {workspace_id}\nPath: {canonical_path}\nDescription: {}",
-                        description.unwrap_or_default()
-                    ),
-                    except,
-                )
-            }
+            } => (
+                format!("workspace:{workspace_id}"),
+                format!(
+                    "Workspace registered: {workspace_id}\nPath: {canonical_path}\nDescription: {}",
+                    description.unwrap_or_default()
+                ),
+                source_session_id,
+            ),
             ControlChange::AgentProfileCreated {
                 profile_id,
+                source_session_id,
                 name,
                 description,
             } => (
@@ -228,15 +216,19 @@ impl SystemNoticeService {
                     "Agent Profile created: {profile_id}\nName: {name}\nDescription: {}",
                     description.unwrap_or_default()
                 ),
-                None,
+                source_session_id,
             ),
-            ControlChange::AgentProfileDeleted { profile_id } => (
+            ControlChange::AgentProfileDeleted {
+                profile_id,
+                source_session_id,
+            } => (
                 format!("profile:{profile_id}"),
                 format!("Agent Profile deleted: {profile_id}"),
-                None,
+                source_session_id,
             ),
             ControlChange::AgentProfileDescriptionChanged {
                 profile_id,
+                source_session_id,
                 description,
             } => (
                 format!("profile:{profile_id}"),
@@ -244,8 +236,18 @@ impl SystemNoticeService {
                     "Agent Profile description changed: {profile_id}\nDescription: {}",
                     description.unwrap_or_default()
                 ),
-                None,
+                source_session_id,
             ),
+        };
+        let except = match source_session_id {
+            Some(session) => match self.conversation.owner_bot_id(&session).await {
+                Ok(id) => id,
+                Err(error) => {
+                    tracing::debug!(%error, "Dropped system notice during source lookup");
+                    return;
+                }
+            },
+            None => None,
         };
         windows.broadcast(&key, &text, except.as_deref());
     }

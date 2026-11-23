@@ -108,6 +108,7 @@ fn external_api_router(state: HttpState) -> Router {
         .route("/api/v1/bot/session-messages", post(api::session_messages))
         .route("/api/v1/bot/memory", post(api::memory_command))
         .route("/api/v1/bot/user", post(api::update_user))
+        .route("/api/v1/bot/profile", post(api::profile_command))
         .route("/api/v1/bot/workspace", post(api::workspace_command))
         .route("/api/v1/bot/description", post(api::bots::set_description))
         .route("/api/v1/bot/link-message", post(api::bots::link_message))

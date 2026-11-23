@@ -10,14 +10,17 @@ pub enum ControlChange {
         source_session_id: Option<String>,
     },
     AgentProfileCreated {
+        source_session_id: Option<String>,
         profile_id: String,
         name: String,
         description: Option<String>,
     },
     AgentProfileDeleted {
+        source_session_id: Option<String>,
         profile_id: String,
     },
     AgentProfileDescriptionChanged {
+        source_session_id: Option<String>,
         profile_id: String,
         description: Option<String>,
     },

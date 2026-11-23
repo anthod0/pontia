@@ -316,6 +316,7 @@ async fn workflow_resolves_profile_launch_settings_and_pins_instructions() {
                 "model":"review-model", "system_prompt":"Review carefully"
             }))
             .unwrap(),
+            None,
         )
         .await
         .unwrap();
@@ -354,7 +355,7 @@ async fn workflow_resolves_profile_launch_settings_and_pins_instructions() {
             .client_type,
         "codex"
     );
-    profiles.delete("reviewer").await.unwrap();
+    profiles.delete("reviewer", None).await.unwrap();
     assert_eq!(
         SessionInstructionsService::new(app.db.clone())
             .session_instructions(session)
@@ -392,6 +393,7 @@ async fn workflow_profiles_without_launch_defaults_use_the_default_client() {
                 "system_prompt":"Keep context"
             }))
             .unwrap(),
+            None,
         )
         .await
         .unwrap();
