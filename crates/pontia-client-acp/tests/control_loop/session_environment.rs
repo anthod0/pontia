@@ -70,6 +70,7 @@ async fn commands_use_their_own_session_environment_with_a_shared_agent_and_work
     let h = Harness::new(&[
         ("ACP_READ_SESSION_ENV", "1"),
         ("ACP_UNIQUE_ID", "1"),
+        ("PONTIA_RUNTIME_INSTANCE_ID", "wrong-configured-runtime"),
         ("PONTIA_SESSION_ID", "wrong-configured-session"),
     ])
     .await;
@@ -94,6 +95,8 @@ async fn commands_use_their_own_session_environment_with_a_shared_agent_and_work
             .find(|reading| reading["native"] == native)
             .unwrap();
         assert_eq!(reading["session_environment"], *session);
+        let view = h.app.queries().get_session(session).await.unwrap().unwrap();
+        assert_eq!(reading["runtime"], view.runtimes[0].runtime_id);
     }
     h.stop().await;
 }

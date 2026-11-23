@@ -163,7 +163,7 @@ async fn management_lists_builtin_entries_and_rejects_unknown_acp_clients() {
             .filter(|(client_type, _)| *client_type == "acp")
             .map(|(_, key)| *key)
             .collect::<Vec<_>>(),
-        vec!["antigravity", "grok"]
+        vec!["antigravity", "grok", "kiro"]
     );
     for identity in [("pi", "default"), ("codex", "default"), ("acp", "grok")] {
         assert!(identities.contains(&identity));

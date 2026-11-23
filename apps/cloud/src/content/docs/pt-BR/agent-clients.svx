@@ -15,6 +15,7 @@ O Pontia inclui estes Agent Clients:
 | [Codex](/docs/codex) | Um Codex CLI com suporte ao daemon app-server | Inicialização do daemon do Codex por usuário, launcher e PATH do shell |
 | [Claude Code](/docs/agent-clients/claude) | Node.js LTS, npm e autenticação do Claude Code | O pacote `@pontia/claude-client` do npm |
 | Grok Build | `grok` | Ative em Agent Clients (ACP) |
+| Kiro | `kiro-cli` | Faça login com `kiro-cli login` |
 
 ## Escolha os Clients durante a inicialização
 
@@ -25,6 +26,12 @@ pontia init
 ```
 
 O inicializador verifica os Clients selecionados antes de aplicar a configuração. O Pi vem selecionado por padrão; Codex e `claude-agent` são opcionais. Os Clients selecionados ficam ativados para novas Sessions.
+
+## Usar o Kiro em uma sessão
+
+Instale `kiro-cli` no PATH do usuário que executa o Pontia e execute `kiro-cli login` como esse usuário. Ative o Kiro em **Settings → Agent Clients** ou execute `pontia client enable kiro`.
+
+Selecione o Kiro e um modelo ao criar a sessão. Você pode aprovar uma ferramenta para um único uso, enfileirar mensagens durante um turno e reabrir a sessão para consultar a conversa na linha do tempo.
 
 <h2 id="enable-an-acp-agent">Ativar o Grok Build</h2>
 

@@ -5,7 +5,7 @@ use serde_json::json;
 #[test]
 fn builtin_launch_and_management_settings() {
     let configuration = AcpConfiguration::new(AcpAgents::builtin());
-    assert_eq!(configuration.keys(), ["antigravity", "grok"]);
+    assert_eq!(configuration.keys(), ["antigravity", "grok", "kiro"]);
     assert_eq!(
         configuration.resolve("grok").unwrap(),
         json!({"name":"Grok Build","command":"grok","args":["agent","stdio"],"env":{}})
@@ -13,6 +13,10 @@ fn builtin_launch_and_management_settings() {
     assert_eq!(
         configuration.resolve("antigravity").unwrap(),
         json!({"name":"Google Antigravity","command":"agy","args":["acp"],"env":{}})
+    );
+    assert_eq!(
+        configuration.resolve("kiro").unwrap(),
+        json!({"name":"Kiro","command":"kiro-cli","args":["acp","--agent-engine=v3"],"env":{}})
     );
     assert!(configuration.resolve("unknown").is_err());
     for key in [".", "..", ""] {

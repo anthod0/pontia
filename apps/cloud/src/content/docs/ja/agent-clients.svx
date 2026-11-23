@@ -15,6 +15,7 @@ Pontia には次の Agent Client が含まれています。
 | [Codex](/docs/codex) | app-server デーモンに対応した Codex CLI | ユーザーごとの Codex デーモンの起動、ランチャー、シェルの PATH |
 | [Claude Code](/docs/agent-clients/claude) | Node.js LTS、npm、Claude Code の認証 | npm の `@pontia/claude-client` パッケージ |
 | Grok Build | `grok` | Agent Clients で有効にする (ACP) |
+| Kiro | `kiro-cli` | `kiro-cli login` でログイン |
 
 ## 初期化時に Client を選択する
 
@@ -25,6 +26,12 @@ pontia init
 ```
 
 初期化ツールは、設定を適用する前に選択した Client を確認します。Pi はデフォルトで選択されており、Codex と `claude-agent` は任意です。選択した Client は新しい Session で有効になります。
+
+## セッションで Kiro を使う
+
+Pontia のサービスユーザーの PATH に `kiro-cli` をインストールし、そのユーザーで `kiro-cli login` を実行します。**Settings → Agent Clients** で Kiro を有効にするか、`pontia client enable kiro` を実行します。
+
+セッション作成時に Kiro とモデルを選択します。ツールの使用を一度だけ許可したり、ターンの実行中に次のメッセージをキューに入れたりできます。セッションを再開すると、タイムラインで会話を確認できます。
 
 <h2 id="enable-an-acp-agent">Grok Build を有効にする</h2>
 

@@ -127,6 +127,34 @@ async fn model_discovery_closes_the_probe_session_when_options_are_not_advertise
 }
 
 #[tokio::test]
+async fn delayed_model_options_support_discovery_and_startup_selection() {
+    let h = Harness::new(&[("ACP_MODELS", "deferred"), ("ACP_DELETE", "1")]).await;
+    assert_eq!(list(&h).await.unwrap().models.len(), 2);
+    assert_eq!(h.requests("session/delete"), 1);
+    let session = create_with_model(&h, "deep").await.unwrap();
+    let view = h
+        .app
+        .queries()
+        .get_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(view.model.as_deref(), Some("deep"));
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn kiro_model_discovery_avoids_creating_a_session_it_cannot_delete() {
+    let h = Harness::new(&[("ACP_MODELS", "deferred")]).await;
+    assert!(matches!(
+        list(&h).await,
+        Err(Error::CapabilityUnavailable(_))
+    ));
+    assert_eq!(h.requests("session/new"), 0);
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn failed_options_discovery_does_not_create_a_session() {
     let h = Harness::new(&[("ACP_OPTIONS", "error"), ("ACP_MODELS", "flat")]).await;
     assert!(list(&h).await.is_err());

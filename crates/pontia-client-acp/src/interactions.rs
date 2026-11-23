@@ -154,7 +154,9 @@ pub(crate) async fn register(
         return Ok(());
     }
     let turn = prompt.turn.clone();
-    let Some((options, native)) = choice_options(request.options) else {
+    let Some((options, native)) =
+        choice_options(request.options, state.agent.one_time_permissions_only)
+    else {
         responder
             .respond_with_error(agent_client_protocol::Error::invalid_params())
             .map_err(crate::peer::protocol_error)?;
@@ -268,14 +270,17 @@ pub(crate) async fn register(
 
 fn choice_options(
     options: Vec<PermissionOption>,
+    one_time_only: bool,
 ) -> Option<(Vec<InteractionOption>, HashMap<String, PermissionOptionId>)> {
-    if options.is_empty() {
-        return None;
-    }
     let mut choices = Vec::new();
     let mut native = HashMap::new();
     for option in options {
         let intent = match option.kind {
+            PermissionOptionKind::AllowAlways | PermissionOptionKind::RejectAlways
+                if one_time_only =>
+            {
+                continue;
+            }
             PermissionOptionKind::AllowOnce | PermissionOptionKind::AllowAlways => {
                 InteractionIntent::Positive
             }
@@ -295,7 +300,7 @@ fn choice_options(
             intent,
         });
     }
-    Some((choices, native))
+    (!choices.is_empty()).then_some((choices, native))
 }
 
 pub(crate) async fn resolve(peer: &Peer, id: &str, option: &str) -> Result<()> {
