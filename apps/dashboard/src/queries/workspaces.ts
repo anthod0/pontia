@@ -9,11 +9,17 @@ import {
 import { readable } from "svelte/store";
 
 import type {
+  GitChangeGroup,
   RegisterWorkspaceInput,
   RenameWorkspaceInput,
   WorkspaceGitStatusView,
 } from "../api/types";
 import type { DeviceRuntime } from "../device/runtime";
+
+export type GitDiffTarget = { path: string; orig_path?: string; group: GitChangeGroup };
+
+/** How often the open Git panel re-reads the change list. */
+const GIT_CHANGES_POLL_MS = 5_000;
 
 export function createWorkspaceQueries(device: DeviceRuntime) {
   const workspaceKeys = {
@@ -25,6 +31,10 @@ export function createWorkspaceQueries(device: DeviceRuntime) {
       [...workspaceKeys.filePickers(), workspaceId, { query, limit }] as const,
     gitStatuses: () => [...workspaceKeys.all, "git-status"] as const,
     gitStatus: (workspaceId: string) => [...workspaceKeys.gitStatuses(), workspaceId] as const,
+    git: (workspaceId: string) => [...workspaceKeys.all, "git", workspaceId] as const,
+    gitChanges: (workspaceId: string) => [...workspaceKeys.git(workspaceId), "changes"] as const,
+    gitDiff: (workspaceId: string, file: GitDiffTarget) =>
+      [...workspaceKeys.git(workspaceId), "diff", file] as const,
   };
 
   const workspaceRootKeys = {
@@ -114,6 +124,36 @@ export function createWorkspaceQueries(device: DeviceRuntime) {
         }
       });
     });
+  }
+
+  /** Reads only while `enabled`, so a closed Git panel sends no requests. */
+  function createWorkspaceGitChangesQuery(workspaceId: () => string, enabled: () => boolean) {
+    return createQuery(
+      () => ({
+        queryKey: workspaceKeys.gitChanges(workspaceId()),
+        queryFn: ({ signal }) => device.api.getWorkspaceGitChanges(workspaceId(), { signal }),
+        enabled: enabled() && workspaceId().length > 0,
+        refetchInterval: GIT_CHANGES_POLL_MS,
+        refetchIntervalInBackground: false,
+      }),
+      () => device.queryClient,
+    );
+  }
+
+  function createWorkspaceGitDiffQuery(workspaceId: () => string, file: () => GitDiffTarget) {
+    return createQuery(
+      () => ({
+        queryKey: workspaceKeys.gitDiff(workspaceId(), file()),
+        queryFn: ({ signal }) => device.api.getWorkspaceGitDiff(workspaceId(), file(), { signal }),
+        staleTime: 0,
+      }),
+      () => device.queryClient,
+    );
+  }
+
+  /** Re-reads the Git panel's data for a Workspace, for example after an Agent turn ends. */
+  function invalidateWorkspaceGit(workspaceId: string): Promise<void> {
+    return device.queryClient.invalidateQueries({ queryKey: workspaceKeys.git(workspaceId) });
   }
 
   function createWorkspaceRootEntriesQuery(
@@ -223,6 +263,9 @@ export function createWorkspaceQueries(device: DeviceRuntime) {
     createWorkspaceRootsQuery,
     createWorkspaceGitStatusesStore,
     createWorkspaceRootEntriesQuery,
+    createWorkspaceGitChangesQuery,
+    createWorkspaceGitDiffQuery,
+    invalidateWorkspaceGit,
     fetchWorkspaces,
     fetchWorkspaceFilePickerEntries,
     invalidateWorkspaceQueries,

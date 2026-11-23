@@ -15,6 +15,7 @@ mod auth;
 mod authentication;
 mod dashboard_events;
 mod events;
+mod git;
 mod git_status;
 mod idempotency;
 mod inbox;
@@ -39,6 +40,7 @@ pub use auth::validate_auth;
 pub(crate) use authentication::authenticate;
 pub use dashboard_events::stream_dashboard_events;
 pub use events::{stream_session_events, stream_turn_events};
+pub use git::{get_workspace_git_changes, get_workspace_git_diff};
 pub use git_status::{get_workspace_git_status, refresh_workspace_git_status};
 pub use inbox::{
     cancel_inbox_message, dismiss_inbox_message, get_inbox_message, list_inbox_messages,

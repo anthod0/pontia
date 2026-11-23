@@ -33,6 +33,7 @@
   } from '$lib/session-chat/liveOutput'
   import { hasTimelineSnapshot } from "../stores/timeline";
   import SessionComposerDock from '../components/chat/SessionComposerDock.svelte'
+  import GitPanelSession from '../components/chat/git/GitPanelSession.svelte'
   import SessionInteractions from '../components/chat/SessionInteractions.svelte'
   import ScrollToBottomButton from '../components/chat/ScrollToBottomButton.svelte'
   import { scrollDocumentToBottom } from '../lib/session-chat/autoScroll'
@@ -58,6 +59,7 @@
     createRefreshWorkspaceGitStatusMutation,
     createWorkspaceGitStatusesStore,
     createWorkspacesStore,
+    invalidateWorkspaceGit,
   } = device.workspaceQueries;
   const {
     cancelInboxMessage,
@@ -336,6 +338,12 @@
     }
   }
 
+  /** An Agent turn may have changed files; the Git panel reads them again if it is open. */
+  function refreshGitAfterTurn(): void {
+    const workspaceId = currentSelectedSession()?.workspace_id
+    if (workspaceId) void invalidateWorkspaceGit(workspaceId)
+  }
+
   async function refreshCurrentSessionGitStatus(): Promise<void> {
     await refreshSessionGitStatus(currentSelectedSession())
   }
@@ -568,6 +576,7 @@
     }
     if (streamEvent.kind === 'session_event') {
       if (streamEvent.event.session_id !== selectedSessionId) return
+      if (isTerminalTurnEvent(streamEvent.event.type)) refreshGitAfterTurn()
       if (streamEvent.event.type.startsWith('session.compaction_')) {
         compactionEvents = [...compactionEvents.filter(event => event.event_id !== streamEvent.event.event_id), streamEvent.event]
         void loadSessionDetail(selectedSessionId, { showLoading: false })
@@ -984,6 +993,10 @@
 </script>
 
 <svelte:window onpopstate={() => void selectSessionFromLocation()} />
+
+{#if selectedSession?.workspace_id}
+  <GitPanelSession workspaceId={selectedSession.workspace_id} gitStatus={selectedSessionGitStatus} />
+{/if}
 
 <section class="flex flex-col gap-4 pb-[var(--chat-bottom-padding)]" style={`--chat-top-offset: 4rem; --chat-bottom-padding: ${composerHeight + 16}px; --chat-composer-height: ${composerHeight}px`}>
   {#if selectedSession?.control_connected === false}

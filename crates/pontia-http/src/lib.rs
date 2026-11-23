@@ -251,6 +251,14 @@ fn external_api_router(state: HttpState) -> Router {
             get(api::get_workspace_git_status),
         )
         .route(
+            "/api/v1/workspaces/{workspace_id}/git/changes",
+            get(api::get_workspace_git_changes),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/git/diff",
+            get(api::get_workspace_git_diff),
+        )
+        .route(
             "/api/v1/workspaces/{workspace_id}/file-picker",
             get(api::pick_workspace_files),
         )

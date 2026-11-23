@@ -266,6 +266,42 @@ function turnGroup(session: MockSession, turn: TurnView): TurnTimelineGroup {
   };
 }
 
+const mockGitChanges = [
+  {
+    path: "src/lib/store.ts",
+    group: "staged",
+    status: "M",
+    additions: 2,
+    deletions: 1,
+    binary: false,
+  },
+  {
+    path: "src/app.css",
+    group: "unstaged",
+    status: "M",
+    additions: 8,
+    deletions: 3,
+    binary: false,
+  },
+  {
+    path: "src/routes/+page.svelte",
+    group: "unstaged",
+    status: "M",
+    additions: 14,
+    deletions: 6,
+    binary: false,
+  },
+  {
+    path: "src/lib/legacy.ts",
+    group: "unstaged",
+    status: "D",
+    additions: 0,
+    deletions: 22,
+    binary: false,
+  },
+  { path: "notes.md", group: "untracked", status: "?", additions: 5, deletions: 0, binary: false },
+];
+
 function limitParam(query: URLSearchParams, fallback: number): number {
   const limit = Number(query.get("limit") ?? fallback);
   return Number.isInteger(limit) && limit > 0 ? limit : fallback;
@@ -722,6 +758,42 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
       device.data.workspaces = device.data.workspaces.filter((item) => item !== workspace);
       return { workspace };
     },
+  ],
+  [
+    "GET",
+    "/workspaces/:id/git/changes",
+    ({ device, params: [id] }) => ({
+      changes: {
+        repo_root: findWorkspace(device, id).canonical_path,
+        total: mockGitChanges.length,
+        truncated: false,
+        files: mockGitChanges,
+      },
+    }),
+  ],
+  [
+    "GET",
+    "/workspaces/:id/git/diff",
+    ({ query }) => ({
+      diff: {
+        path: query.get("path"),
+        group: query.get("group"),
+        binary: false,
+        truncated: false,
+        hunks: [
+          {
+            header: "@@ -1,3 +1,4 @@",
+            lines: [
+              { kind: "context", old: 1, new: 1, text: "import { writable } from 'svelte/store'" },
+              { kind: "delete", old: 2, new: null, text: "const open = writable(false)" },
+              { kind: "add", old: null, new: 2, text: "const open = writable(true)" },
+              { kind: "add", old: null, new: 3, text: "export { open }" },
+              { kind: "context", old: 3, new: 4, text: "" },
+            ],
+          },
+        ],
+      },
+    }),
   ],
   [
     "POST",

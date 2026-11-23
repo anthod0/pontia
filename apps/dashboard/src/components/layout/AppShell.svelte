@@ -15,6 +15,8 @@
   import { provideFilePreview } from '../chat/filePreviewContext'
   import FilePreviewPanel from '../chat/FilePreviewPanel.svelte'
   import { filePreviewWidth } from '../chat/filePreviewWidth'
+  import { provideGitPanel } from '../chat/git/gitPanelContext.svelte'
+  import GitPanel from '../chat/git/GitPanel.svelte'
 
   let { children, sidebar, topbar, settingsEnabled = true }: {
     children: Snippet
@@ -26,6 +28,9 @@
   let currentLocation = location.pathname
   const topBarAction = provideTopBarAction()
   const filePreview = provideFilePreview()
+  const gitPanel = provideGitPanel(filePreview)
+  // The session page registers its Workspace; other pages show no Git panel.
+  const gitSource = $derived(!$filePreview && gitPanel.open ? gitPanel.source : null)
 
   function updatePath(): void {
     if (currentLocation !== location.pathname) filePreview.set(null)
@@ -59,7 +64,7 @@
 
 <svelte:window onpopstate={updatePath} onclick={updatePathAfterNavigation} />
 
-<Sidebar.Provider class="file-preview-layout" data-preview-open={$filePreview ? 'true' : 'false'} style={$filePreviewWidth === null ? undefined : `--file-preview-saved-width: ${$filePreviewWidth}px`}>
+<Sidebar.Provider class="file-preview-layout" data-preview-open={$filePreview || gitSource ? 'true' : 'false'} style={$filePreviewWidth === null ? undefined : `--file-preview-saved-width: ${$filePreviewWidth}px`}>
   {#if sidebar}
     {@render sidebar()}
   {:else}
@@ -95,6 +100,10 @@
   {#if $filePreview}
     {#key $filePreview}
       <FilePreviewPanel target={$filePreview} onclose={() => filePreview.set(null)} />
+    {/key}
+  {:else if gitSource}
+    {#key `${gitSource.device.id}\0${gitSource.workspaceId}`}
+      <GitPanel panel={gitPanel} source={gitSource} />
     {/key}
   {/if}
 </Sidebar.Provider>

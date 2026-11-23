@@ -430,6 +430,41 @@ export interface WorkspaceGitStatusView {
   updated_at: string | null;
 }
 
+export type GitChangeGroup = "conflicted" | "staged" | "unstaged" | "untracked";
+
+export interface GitChangedFile {
+  /** Relative to the repository root; untracked directories end with "/". */
+  path: string;
+  orig_path?: string;
+  group: GitChangeGroup;
+  status: "M" | "A" | "D" | "R" | "C" | "T" | "U" | "?" | string;
+  additions: number | null;
+  deletions: number | null;
+  binary: boolean;
+}
+
+export interface GitChangesView {
+  repo_root: string | null;
+  files: GitChangedFile[];
+  total: number;
+  truncated: boolean;
+}
+
+export interface GitDiffLine {
+  kind: "context" | "add" | "delete";
+  old: number | null;
+  new: number | null;
+  text: string;
+}
+
+export interface GitDiffView {
+  path: string;
+  group: GitChangeGroup;
+  binary: boolean;
+  hunks: { header: string; lines: GitDiffLine[] }[];
+  truncated: boolean;
+}
+
 export interface WorkspaceRootView {
   root_id: string;
   label: string;
