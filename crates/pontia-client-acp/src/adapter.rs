@@ -344,7 +344,9 @@ impl ClientSession for AcpAdapter {
                 let state = peer.state.lock().await;
                 state.current
                     && state.active.is_none()
-                    && (state.history_error.is_some() || !state.interjections.is_empty())
+                    && (state.history_error.is_some()
+                        || state.steering_history_pending
+                        || !state.interjections.is_empty())
             };
             if reload {
                 peer.load().await?;
@@ -425,13 +427,11 @@ impl ClientSession for AcpAdapter {
             peer.remember(&state, None).await?;
             let key = serde_json::to_string(sent.id())?;
             let session = target.session_id.clone();
-            let turn = turn.to_owned();
+            let id = serde_json::to_value(sent.id())?;
             let result_peer = peer.clone();
             sent.on_receiving_result(async move |result| {
-                if let Err(error) =
-                    peer::finish(&events, &session, &result_peer, &turn, result).await
-                {
-                    tracing::warn!(%session, %turn, %error, "ACP prompt result unavailable");
+                if let Err(error) = peer::finish(&result_peer, &id, result).await {
+                    tracing::warn!(%session, %id, %error, "ACP prompt result unavailable");
                 }
                 Ok(())
             })

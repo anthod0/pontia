@@ -62,6 +62,7 @@ pub(crate) struct SessionState {
     pub history: Vec<crate::history::Message>,
     pub replay: Option<Vec<crate::history::Message>>,
     pub history_error: Option<String>,
+    pub steering_history_pending: bool,
     pub cwd: std::path::PathBuf,
 }
 
@@ -112,7 +113,8 @@ impl SessionState {
                                     .zip(loaded.tool.as_ref())
                                     .is_some_and(|(a, b)| a.0 == b.0)
                                     || loaded.text == known.text
-                                    || (known.role == "assistant"
+                                    || ((known.role == "assistant"
+                                        || self.steering_history_pending && known.role == "user")
                                         && index + 1 == self.history.len()
                                         && loaded.text.starts_with(&known.text)))
                         })
@@ -124,6 +126,7 @@ impl SessionState {
             let result = if let Some(reason) = self.history_error.clone() {
                 Err(Error::CapabilityUnavailable(reason))
             } else {
+                self.steering_history_pending = false;
                 self.history = replay;
                 Ok(())
             };
@@ -146,7 +149,8 @@ impl SessionState {
                 has_native: self.native.is_some(),
                 closing: self.closing,
                 active: self.active.is_some(),
-                history_ok: self.history_error.is_none(),
+                history_ok: self.history_error.is_none()
+                    && (!self.steering_history_pending || self.active.is_none()),
                 replaying: self.replay.is_some(),
                 blocked: self.blocked || self.compaction.is_some() || self.promotion_pending(),
             },
@@ -293,6 +297,7 @@ impl Peer {
             history: Vec::new(),
             replay: None,
             history_error: Some("ACP history has not been loaded".into()),
+            steering_history_pending: false,
             cwd: cwd.to_path_buf(),
         }));
         if !context.is_null() {
@@ -365,16 +370,13 @@ impl Peer {
                     async move |message: agent_client_protocol::UntypedMessage, _cx| {
                         if message.method() == "pontia/recovered-result" {
                             if let Some(peer) = recovered_peer.get().and_then(Weak::upgrade) {
-                                let turn = peer.state.lock().await.active.as_ref()
-                                    .filter(|prompt| prompt.request_id == message.params()["id"])
-                                    .map(|prompt| prompt.turn.clone());
-                                if let Some(turn) = turn {
-                                    let result = if let Some(error) = message.params().get("error") {
-                                        Err(serde_json::from_value(error.clone())?)
-                                    } else { Ok(serde_json::from_value(message.params()["result"].clone())?) };
-                                    if let Err(error) = finish(&update_events, &update_session, &peer, &turn, result).await {
-                                        tracing::warn!(session=%update_session, %error, "Restored ACP prompt result rejected");
-                                    }
+                                let result = if let Some(error) = message.params().get("error") {
+                                    Err(serde_json::from_value(error.clone())?)
+                                } else {
+                                    Ok(serde_json::from_value(message.params()["result"].clone())?)
+                                };
+                                if let Err(error) = finish(&peer, &message.params()["id"], result).await {
+                                    tracing::warn!(session=%update_session, %error, "Restored ACP prompt result rejected");
                                 }
                             }
                             return Ok(());
@@ -590,7 +592,10 @@ impl Peer {
         // initialize advertises different capabilities.
         let meta_key = match binding_metadata {
             Some(binding) => binding["new_session_instructions_meta_key"].as_str(),
-            None if !supported => new_session_instructions_meta_key,
+            None if !supported => crate::instructions::creation_meta_key(
+                initialize.agent_capabilities.meta.as_ref(),
+                new_session_instructions_meta_key,
+            ),
             None => None,
         };
         let inject = match binding_metadata {
@@ -605,7 +610,7 @@ impl Peer {
                 Error::StateConflict("ACP Session is missing its bound instructions".into())
             })?;
             match meta_key {
-                Some(key) => (None, Some(Meta::from_iter([(key.to_owned(), Value::String(text))]))),
+                Some(key) => (None, Some(crate::instructions::creation_meta(key, text))),
                 None if supported => (
                     Some(SystemPrompt::new(vec![ContentBlock::Text(TextContent::new(text))])),
                     None,
@@ -845,7 +850,10 @@ async fn update(
     if state.active.is_none() {
         return Ok(());
     }
-    if update["sessionUpdate"] != "user_message_chunk" && state.history_error.is_none() {
+    if update["sessionUpdate"] != "user_message_chunk"
+        && state.history_error.is_none()
+        && !state.steering_history_pending
+    {
         let _ = crate::history::collect(&mut state.history, update, protocol);
     }
     let prompt = state.active.as_mut().expect("checked active prompt");
@@ -868,14 +876,12 @@ async fn update(
 }
 
 pub(crate) async fn finish(
-    _events: &EventIngestService,
-    _session: &str,
     peer: &Peer,
-    turn: &str,
+    id: &Value,
     result: std::result::Result<PromptResponse, agent_client_protocol::Error>,
 ) -> Result<()> {
     let mut state = peer.state.lock().await;
-    if !state.current || state.active.as_ref().map(|prompt| prompt.turn.as_str()) != Some(turn) {
+    if !state.current || state.active.as_ref().map(|prompt| &prompt.request_id) != Some(id) {
         return Ok(());
     }
     if let Err(error) = result {

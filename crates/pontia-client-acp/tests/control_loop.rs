@@ -100,6 +100,8 @@ impl Harness {
         };
         let first = if flags.iter().any(|(key, _)| *key == "ACP_COMPACT") {
             "grok"
+        } else if flags.iter().any(|(key, _)| *key == "ACP_ANTIGRAVITY") {
+            "antigravity"
         } else {
             "first"
         };

@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use agent_client_protocol::UntypedMessage;
+use agent_client_protocol::{
+    UntypedMessage,
+    v1::schema::{ContentBlock, PromptRequest, TextContent},
+};
 use pontia_agent_control::{EventIngestService, control::InputReceipt, runtime::ControlTarget};
 use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -24,7 +27,7 @@ pub(crate) fn text_digest(text: &str) -> String {
     format!("{:x}", Sha256::digest(text.as_bytes()))
 }
 
-fn prompt_required() -> Error {
+pub(crate) fn prompt_required() -> Error {
     Error::Conflict {
         code: "steer_requires_prompt",
         message: "Input must wait for the current prompt to finish".into(),
@@ -50,6 +53,56 @@ pub(crate) async fn send(
         || state.active.as_ref().map(|prompt| prompt.turn.as_str()) != Some(turn)
     {
         return Err(prompt_required());
+    }
+    if state.agent.prompt_steering {
+        let native = state.native.clone().ok_or_else(prompt_required)?;
+        let request = peer.connection.prepare_request(PromptRequest::new(
+            native,
+            vec![ContentBlock::Text(TextContent::new(input))],
+        ));
+        let id = serde_json::to_value(request.id())?;
+        let key = id.to_string();
+        peer.receipts.steering_request(key.clone(), turn);
+        let result_peer = peer.clone();
+        let result_id = id.clone();
+        request
+            .on_receiving_result(async move |result| {
+                if let Err(error) = crate::peer::finish(&result_peer, &result_id, result).await {
+                    tracing::warn!(%result_id, %error, "ACP steering prompt failed");
+                }
+                Ok(())
+            })
+            .map_err(protocol_error)?;
+        if let Err(error) = peer.receipts.wait(key).await {
+            if matches!(error, Error::ControlUnknown(_)) {
+                peer.invalidate(&mut state);
+            }
+            return Err(error);
+        }
+        let prompt = state.active.as_mut().expect("checked active prompt");
+        prompt.request_id = id;
+        prompt.history_end += input.len();
+        if let Some(output) = events.live_output()
+            && let Err(error) = crate::live_output::user_input(
+                &output,
+                &target.session_id,
+                &peer.runtime,
+                prompt,
+                input,
+            )
+            .await
+        {
+            tracing::warn!(%turn, %error, "ACP live steering input rejected");
+        }
+        // agy may finish streaming its previous answer before consuming this input.
+        // Only session/load gives the native position of the injected message.
+        state.steering_history_pending = true;
+        state.refresh_capabilities();
+        return Ok(InputReceipt {
+            turn_pending: false,
+            native_turn_id: None,
+            runtime_id: target.runtime_id.clone(),
+        });
     }
     if state.negotiated.interject {
         let protocol = state.agent.interjection.expect("negotiated protocol");

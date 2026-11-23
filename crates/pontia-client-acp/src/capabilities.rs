@@ -5,6 +5,7 @@ use crate::{ACP_MAX_CAPABILITIES, AcpAgentDefinition};
 
 pub(crate) struct AgentBounds {
     capabilities: AgentClientCapabilities,
+    pub prompt_steering: bool,
     pub interjection: Option<&'static crate::InterjectionProtocol>,
 }
 
@@ -24,6 +25,7 @@ impl AgentBounds {
         }
         Self {
             capabilities: caps,
+            prompt_steering: agent_id == "antigravity",
             interjection: definition.and_then(|agent| agent.interjection),
         }
     }
@@ -91,7 +93,7 @@ pub(crate) fn live(
 ) -> Option<AgentClientCapabilities> {
     (state.current && state.ready && state.has_native && !state.closing).then(|| {
         let mut caps = bounds.capabilities.clone();
-        caps.steer &= negotiated.steer || negotiated.interject;
+        caps.steer &= negotiated.steer || negotiated.interject || bounds.prompt_steering;
         caps.interrupt &= state.active;
         caps.manual_compaction &=
             negotiated.compact_command && !state.active && !state.blocked && !state.replaying;

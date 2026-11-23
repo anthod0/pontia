@@ -121,6 +121,39 @@ async fn native_instructions_are_sent_only_on_creation_and_remain_bound_on_recov
 }
 
 #[tokio::test]
+async fn antigravity_declares_its_creation_only_nested_prompt() {
+    let h = Harness::new(&[("ACP_ANTIGRAVITY", "1")]).await;
+    let session = create(
+        &h,
+        json!({
+            "metadata":{"acp_agent_id":"antigravity"}, "system_instructions":"profile-marker"
+        }),
+    )
+    .await
+    .unwrap();
+    h.release("system-prompt");
+    h.crash_agent(&session);
+    h.wait_ready(&session, 2).await;
+    assert!(injected(&h, &session).await);
+    assert_eq!(h.requests("session/new"), 1);
+    for request in h.wire() {
+        let params = &request["params"];
+        match request["method"].as_str() {
+            Some("session/new") => assert_eq!(
+                params["_meta"],
+                json!({"antigravity":{"systemPrompt":{"append":"profile-marker"}}})
+            ),
+            Some("session/load") => {
+                assert!(params.get("systemPrompt").is_none());
+                assert!(params["_meta"].get("antigravity").is_none());
+            }
+            _ => {}
+        }
+    }
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn standalone_instructions_are_opt_in_and_injected_when_supported() {
     let h = Harness::new(&[("ACP_SYSTEM_PROMPT", "1")]).await;
     let session = h.create("first").await.unwrap();
