@@ -47,6 +47,7 @@ pub(crate) struct SessionState {
     pub agent: AgentBounds,
     pub negotiated: Negotiated,
     pub system_prompt: Option<SystemPrompt>,
+    pub prompt_prefix: Option<String>,
     pub native: Option<SessionId>,
     pub capabilities: Option<pontia_core::client_capabilities::AgentClientCapabilities>,
     pub current_model: Option<String>,
@@ -85,7 +86,10 @@ impl SessionState {
         if !self.current {
             Err(crate::history::unavailable())
         } else {
-            let replay = self.replay.take().unwrap_or_default();
+            let mut replay = self.replay.take().unwrap_or_default();
+            if let Some(prefix) = &self.prompt_prefix {
+                crate::instructions::strip_replayed_prefixes(&mut replay, prefix);
+            }
             let result = match result {
                 Ok(response) => {
                     if let Some(options) = response.config_options {
@@ -286,6 +290,7 @@ impl Peer {
             agent: owner.agent,
             negotiated: Negotiated::default(),
             system_prompt: None,
+            prompt_prefix: None,
             current_model: None,
             verified_model: None,
             config_options: Vec::new(),
@@ -576,10 +581,11 @@ impl Peer {
                 "ACP peer did not negotiate protocol v1".into(),
             ));
         }
-        {
+        let first_prompt_available = {
             let mut state = self.state.lock().await;
             state.negotiated = Negotiated::from_initialize(&initialize, &state.agent)?;
-        }
+            state.agent.first_prompt_instructions
+        };
         let instructions = pontia_agent_control::SessionInstructionsService::new(self.events.db())
             .session_instructions(&self.session)
             .await?
@@ -601,13 +607,22 @@ impl Peer {
             ),
             None => None,
         };
+        let first_prompt = binding_metadata.map_or(
+            first_prompt_available && !supported && meta_key.is_none(),
+            |binding| binding["first_prompt_instructions"] == true,
+        );
         let inject = match binding_metadata {
             Some(binding) => binding["system_prompt_injected"] == true,
             None => {
                 instructions.system_prompt.is_some()
-                    && (supported || meta_key.is_some() || instructions.required)
+                    && (supported || meta_key.is_some() || first_prompt || instructions.required)
             }
         };
+        let prompt_prefix = instructions
+            .system_prompt
+            .as_deref()
+            .filter(|_| first_prompt && inject)
+            .map(|text| format!("Session instructions:\n{text}\n\nUser request:\n"));
         let (system_prompt, new_session_meta) = if inject {
             let text = instructions.system_prompt.ok_or_else(|| {
                 Error::StateConflict("ACP Session is missing its bound instructions".into())
@@ -618,6 +633,7 @@ impl Peer {
                     Some(SystemPrompt::new(vec![ContentBlock::Text(TextContent::new(text))])),
                     None,
                 ),
+                None if first_prompt => (None, None),
                 None => return Err(Error::CapabilityUnavailable(
                     "ACP Agent lacks sessionCapabilities.systemPrompt; create a Session without system_instructions".into(),
                 )),
@@ -625,7 +641,11 @@ impl Peer {
         } else {
             (None, None)
         };
-        self.state.lock().await.system_prompt = system_prompt.clone();
+        {
+            let mut state = self.state.lock().await;
+            state.system_prompt = system_prompt.clone();
+            state.prompt_prefix = prompt_prefix;
+        }
         let native = match existing {
             Some(id) => SessionId::new(id.to_owned()),
             None => {
@@ -664,6 +684,9 @@ impl Peer {
             json!({})
         };
         metadata["system_prompt_injected"] = json!(inject);
+        if inject && first_prompt {
+            metadata["first_prompt_instructions"] = json!(true);
+        }
         if inject && let Some(key) = meta_key {
             metadata["new_session_instructions_meta_key"] = json!(key);
         }

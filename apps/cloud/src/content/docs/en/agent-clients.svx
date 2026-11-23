@@ -38,6 +38,8 @@ Select Kiro and a model when creating a Session. You can approve a tool request 
 
 You can view estimated context usage, compact an idle Session, and see automatic and manual compaction checkpoints in the timeline.
 
+Kiro follows Session instructions for sharing files as attachments. You can assign a Kiro Agent Profile with a system prompt to a Workflow node.
+
 <h2 id="enable-an-acp-agent">Enable Grok Build</h2>
 
 Install Grok Build so that `grok` is on the Pontia service user’s PATH. Pontia launches it with `grok agent stdio`. Enable Grok Build under **Settings → Agent Clients** in the Dashboard, or run:

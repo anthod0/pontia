@@ -38,6 +38,8 @@ Selecione o Kiro e um modelo ao criar a sessão. Você pode aprovar uma ferramen
 
 Você pode consultar o uso estimado do contexto, compactar uma sessão ociosa e ver na linha do tempo os pontos de compactação automática e manual.
 
+O Kiro segue as instruções da sessão para compartilhar arquivos como anexos. Você pode usar um Agent Profile do Kiro com um prompt de sistema em um nó de Workflow.
+
 <h2 id="enable-an-acp-agent">Ativar o Grok Build</h2>
 
 Instale o Grok Build e confira se `grok` está no PATH do usuário que executa o serviço Pontia. O Pontia o inicia com `grok agent stdio`. Ative o Grok Build em **Settings → Agent Clients** no Dashboard ou execute:

@@ -51,3 +51,21 @@ pub(crate) fn creation_meta(key: &str, text: String) -> Meta {
     };
     Meta::from_iter([entry])
 }
+
+/// Replay can split a prompt across arbitrary chunks. Strip the wire prefix only
+/// after the user chunks have been joined so Pontia's user-text cursors stay stable.
+pub(crate) fn strip_replayed_prefixes(messages: &mut [crate::history::Message], prefix: &str) {
+    let mut first = true;
+    for message in messages {
+        match message.role {
+            "context_compaction" => first = true,
+            "user" if first => {
+                if message.text.starts_with(prefix) {
+                    message.text.drain(..prefix.len());
+                }
+                first = false;
+            }
+            _ => {}
+        }
+    }
+}

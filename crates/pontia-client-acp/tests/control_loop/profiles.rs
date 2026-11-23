@@ -326,3 +326,105 @@ async fn antigravity_prepares_its_workspace_agent_again_on_process_recovery() {
     assert_eq!(h.requests("session/new"), 1);
     h.stop().await;
 }
+
+#[tokio::test]
+async fn kiro_prompts_include_bound_instructions_once_per_context_and_replay_user_text() {
+    let mut h = Harness::new(&[("ACP_KIRO", "1"), ("ACP_STOP_REASON", "end_turn")]).await;
+    let session = create(
+        &h,
+        json!({
+            "metadata":{"acp_agent_id":"kiro"},
+            "include_standalone_session_instructions":true,
+            "system_instructions":"profile-marker"
+        }),
+    )
+    .await
+    .unwrap();
+    assert!(injected(&h, &session).await);
+    let inputs = ["first β", "after resume", "after compaction", "next"];
+    for (i, input) in inputs.iter().enumerate() {
+        if i == 1 {
+            h.restart().await;
+            h.wait_ready(&session, 2).await;
+        }
+        if i == 2 {
+            use std::io::Write;
+            let mut native_history = std::fs::OpenOptions::new()
+                .append(true)
+                .open(h.root.path().join("history.jsonl"))
+                .unwrap();
+            writeln!(
+                native_history,
+                "{}",
+                json!({"sessionUpdate":"session_info_update",
+                "_meta":{"kiro":{"kind":"summarization_separator","replay":true}}})
+            )
+            .unwrap();
+            h.history(&session).await.unwrap();
+        }
+        let turn = h
+            .app
+            .turn_commands()
+            .create_and_dispatch_turn(&session, (*input).into(), json!({}))
+            .await
+            .unwrap()
+            .unwrap();
+        h.release(&format!("update-{}", i + 1));
+        h.release(&format!("release-{}", i + 1));
+        h.wait_turn(&session, &turn.turn_id, "completed").await;
+    }
+    let wire = h.wire();
+    let sent: Vec<_> = wire
+        .iter()
+        .filter(|f| f["method"] == "session/prompt")
+        .map(|f| f["params"]["prompt"][0]["text"].as_str().unwrap())
+        .collect();
+    assert_eq!(sent.len(), inputs.len());
+    for i in [0, 2] {
+        assert!(sent[i].contains(standalone_session_instructions()));
+        assert!(sent[i].contains("profile-marker"));
+        assert!(sent[i].ends_with(inputs[i]));
+    }
+    for i in [1, 3] {
+        assert_eq!(sent[i], inputs[i]);
+    }
+    let page = h.history(&session).await.unwrap();
+    let users: Vec<_> = page
+        .items
+        .iter()
+        .filter(|i| i.item.role == "user")
+        .map(|i| i.item.content_preview.as_str())
+        .collect();
+    assert_eq!(users, inputs);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn kiro_prefers_the_advertised_standard_system_prompt() {
+    let h = Harness::new(&[("ACP_KIRO", "1"), ("ACP_SYSTEM_PROMPT", "1")]).await;
+    let session = create(
+        &h,
+        json!({"metadata":{"acp_agent_id":"kiro"},"system_instructions":"profile-marker"}),
+    )
+    .await
+    .unwrap();
+    assert_prompts(&h, Some("profile-marker"));
+    let turn = h
+        .app
+        .turn_commands()
+        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .await
+        .unwrap()
+        .unwrap();
+    h.release("update-1");
+    h.release("release-1");
+    h.wait_turn(&session, &turn.turn_id, "completed").await;
+    assert_eq!(
+        h.wire()
+            .into_iter()
+            .find(|f| f["method"] == "session/prompt")
+            .unwrap()["params"]["prompt"][0]["text"],
+        "end_turn"
+    );
+    h.stop().await;
+}

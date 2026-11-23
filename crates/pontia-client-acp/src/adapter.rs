@@ -416,6 +416,19 @@ impl ClientSession for AcpAdapter {
                 });
             }
             let native = state.native.clone().ok_or_else(unavailable)?;
+            let prefix = state.prompt_prefix.as_ref().filter(|_| {
+                state.system_prompt.is_none()
+                    && !state
+                        .history
+                        .iter()
+                        .rev()
+                        .take_while(|message| message.role != "context_compaction")
+                        .any(|message| message.role == "user")
+            });
+            let wire_input = match prefix {
+                Some(prefix) => format!("{prefix}{input}"),
+                None => input.to_owned(),
+            };
             let history_index = crate::history::user_bytes(&state.history);
             let prompt_index = state.negotiated.interject.then(|| {
                 state
@@ -437,7 +450,7 @@ impl ClientSession for AcpAdapter {
             }
             let sent = peer.connection.prepare_request(PromptRequest::new(
                 native,
-                vec![ContentBlock::Text(TextContent::new(input))],
+                vec![ContentBlock::Text(TextContent::new(wire_input))],
             ));
             state.active = Some(Prompt {
                 request_id: serde_json::to_value(sent.id())?,

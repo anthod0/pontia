@@ -34,6 +34,7 @@ struct Context {
     compact_command: bool,
     compaction: Option<crate::compaction::Pending>,
     system_prompt: Option<SystemPrompt>,
+    prompt_prefix: Option<String>,
     current_model: Option<String>,
     #[serde(default)]
     model_windows: std::collections::BTreeMap<String, u64>,
@@ -48,7 +49,7 @@ pub(crate) fn context(state: &SessionState) -> Value {
     json!({"ready":state.ready,"blocked":state.blocked,"native":state.native,"steer":state.negotiated.steer,"interject":state.negotiated.interject,"protocol":state.agent.interjection,"compact_command":state.negotiated.compact_command,"compaction":state.compaction,
         "compaction_events":state.agent.compaction_events(), "compaction_protocol":state.agent.compaction,
         "model_windows":state.model_windows,
-        "system_prompt":state.system_prompt,"current_model":state.current_model,"config_options":state.config_options,"promoted":state.promoted,"interjections":state.interjections,"active":state.active})
+        "system_prompt":state.system_prompt,"prompt_prefix":state.prompt_prefix,"current_model":state.current_model,"config_options":state.config_options,"promoted":state.promoted,"interjections":state.interjections,"active":state.active})
 }
 
 impl Peer {
@@ -94,6 +95,7 @@ pub(crate) async fn restore(
     state.interjections = context.interjections;
     state.compaction = context.compaction;
     state.system_prompt = context.system_prompt;
+    state.prompt_prefix = context.prompt_prefix;
     state.current_model = context.current_model;
     state.config_options = context.config_options;
     state.model_windows = context.model_windows;
