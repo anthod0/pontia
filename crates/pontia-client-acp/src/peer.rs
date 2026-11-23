@@ -52,6 +52,7 @@ pub(crate) struct SessionState {
     pub current_model: Option<String>,
     pub verified_model: Option<String>,
     pub model_options_available: watch::Sender<()>,
+    pub model_windows: std::collections::BTreeMap<String, u64>,
     pub config_options: Vec<SessionConfigOption>,
     pub active: Option<Prompt>,
     pub interjections: HashMap<String, crate::steering::Interjection>,
@@ -293,6 +294,7 @@ impl Peer {
             interjections: HashMap::new(),
             promoted: None,
             closing: false,
+            model_windows: Default::default(),
             checkpoints: Vec::new(),
             compaction: None,
             permissions: HashMap::new(),
@@ -576,8 +578,7 @@ impl Peer {
         }
         {
             let mut state = self.state.lock().await;
-            state.negotiated =
-                Negotiated::from_initialize(&initialize, state.agent.interjection.is_some())?;
+            state.negotiated = Negotiated::from_initialize(&initialize, &state.agent)?;
         }
         let instructions = pontia_agent_control::SessionInstructionsService::new(self.events.db())
             .session_instructions(&self.session)
@@ -823,7 +824,9 @@ async fn update(
         }
         return Ok(());
     }
-    if let SessionUpdate::AvailableCommandsUpdate(commands) = notification.update {
+    if let SessionUpdate::AvailableCommandsUpdate(ref commands) = notification.update
+        && state.agent.compaction == Some(crate::CompactionProtocol::Grok)
+    {
         state.negotiated.compact_command = commands
             .available_commands
             .iter()
@@ -841,6 +844,23 @@ async fn update(
     // Retain field presence: schema serialization omits empty collections and
     // JSON null, which are meaningful replacement/return values for live tools.
     let protocol = state.agent.interjection;
+    if state.agent.compaction == Some(crate::CompactionProtocol::Kiro)
+        && let Some(info) = crate::kiro::info(update)
+    {
+        match (info["kind"].as_str(), info["replay"] == true) {
+            (Some("summarization_separator"), true) => {
+                if let Some(messages) = &mut state.replay {
+                    messages.push(crate::history::Message::kiro_checkpoint());
+                }
+            }
+            (Some("summarization_completed"), false) if state.replay.is_none() => {
+                state
+                    .history
+                    .push(crate::history::Message::kiro_checkpoint());
+            }
+            _ => {}
+        }
+    }
     if let Some(replay) = &mut state.replay {
         if crate::history::collect(replay, update, protocol).is_err() {
             state.history_error = Some(

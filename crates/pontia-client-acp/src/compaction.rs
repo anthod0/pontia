@@ -28,7 +28,11 @@ pub(crate) async fn request(peer: &Peer, operation: String) -> Result<()> {
     }
     let request = peer.connection.prepare_request(
         UntypedMessage::new(
-            "_x.ai/compact_conversation",
+            state
+                .agent
+                .compaction
+                .expect("negotiated compaction protocol")
+                .method(),
             json!({"sessionId": state.native}),
         )
         .map_err(protocol_error)?,
@@ -104,7 +108,7 @@ pub(crate) fn replay(state: &mut SessionState, params: &Value) {
     let update = &params["update"];
     if let Some(messages) = &state.replay
         && params["_meta"]["isReplay"] == true
-        && state.agent.compaction_events()
+        && state.agent.compaction == Some(crate::CompactionProtocol::Grok)
         && state.current
         && state
             .native
