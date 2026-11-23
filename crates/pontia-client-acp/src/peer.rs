@@ -57,7 +57,6 @@ pub(crate) struct SessionState {
     pub config_options: Vec<SessionConfigOption>,
     pub active: Option<Prompt>,
     pub kiro_receipts: HashMap<String, oneshot::Sender<Result<()>>>,
-    pub replayed_steering_notes: crate::kiro::Notes,
     pub interjections: HashMap<String, crate::steering::Interjection>,
     pub promoted: Option<String>,
     pub compaction: Option<crate::compaction::Pending>,
@@ -65,7 +64,7 @@ pub(crate) struct SessionState {
     pub closing: bool,
     pub permissions: HashMap<String, crate::interactions::Permission>,
     pub history: Vec<crate::history::Message>,
-    pub replay: Option<Vec<crate::history::Message>>,
+    pub replay: Option<crate::history::Replay>,
     pub history_error: Option<String>,
     pub steering_history_pending: bool,
     pub cwd: std::path::PathBuf,
@@ -89,13 +88,7 @@ impl SessionState {
             Err(crate::history::unavailable())
         } else {
             let mut replay = self.replay.take().unwrap_or_default();
-            let mut notes = std::mem::take(&mut self.replayed_steering_notes);
-            for message in replay.iter_mut().filter(|m| m.role == "assistant") {
-                notes.strip_complete(&mut message.text);
-            }
-            if let Some(prefix) = &self.prompt_prefix {
-                crate::instructions::strip_replayed_prefixes(&mut replay, prefix);
-            }
+            replay.finish(self.prompt_prefix.as_deref());
             let result = match result {
                 Ok(response) => {
                     if let Some(options) = response.config_options {
@@ -117,7 +110,7 @@ impl SessionState {
                     })
                     .enumerate()
                     .all(|(index, known)| {
-                        replay.get(index).is_some_and(|loaded| {
+                        replay.messages.get(index).is_some_and(|loaded| {
                             loaded.role == known.role
                                 && (known
                                     .tool
@@ -139,7 +132,8 @@ impl SessionState {
                 Err(Error::CapabilityUnavailable(reason))
             } else {
                 self.steering_history_pending = false;
-                self.history = replay;
+                self.history = replay.messages;
+                self.checkpoints = replay.checkpoints;
                 Ok(())
             };
             self.refresh_capabilities();
@@ -303,7 +297,6 @@ impl Peer {
             model_options_available: watch::channel(()).0,
             active: None,
             kiro_receipts: Default::default(),
-            replayed_steering_notes: Default::default(),
             interjections: HashMap::new(),
             promoted: None,
             closing: false,
@@ -635,7 +628,7 @@ impl Peer {
             .system_prompt
             .as_deref()
             .filter(|_| first_prompt && inject)
-            .map(|text| format!("Session instructions:\n{text}\n\nUser request:\n"));
+            .map(crate::instructions::prompt_prefix);
         let (system_prompt, new_session_meta) = if inject {
             let text = instructions.system_prompt.ok_or_else(|| {
                 Error::StateConflict("ACP Session is missing its bound instructions".into())
@@ -734,7 +727,7 @@ impl Peer {
                 .clone()
                 .ok_or_else(crate::history::unavailable)?;
             state.checkpoints.clear();
-            state.replay = Some(Vec::new());
+            state.replay = Some(Default::default());
             state.history_error = None;
             state.refresh_capabilities();
             (native, state.cwd.clone(), state.system_prompt.clone())
@@ -880,39 +873,23 @@ async fn update(
     // Retain field presence: schema serialization omits empty collections and
     // JSON null, which are meaningful replacement/return values for live tools.
     let protocol = state.agent.interjection;
-    if state.agent.compaction == Some(crate::CompactionProtocol::Kiro)
-        && let Some(info) = crate::kiro::info(update)
-    {
-        match (info["kind"].as_str(), info["replay"] == true) {
-            (Some("summarization_separator"), true) => {
-                if let Some(messages) = &mut state.replay {
-                    messages.push(crate::history::Message::kiro_checkpoint());
-                }
-            }
-            (Some("summarization_completed"), false) if state.replay.is_none() => {
-                state
-                    .history
-                    .push(crate::history::Message::kiro_checkpoint());
-            }
-            _ => {}
-        }
-    }
-    let kiro = state.agent.kiro;
-    let SessionState {
-        replay,
-        replayed_steering_notes,
-        ..
-    } = &mut *state;
+    let SessionState { replay, agent, .. } = &mut *state;
     if let Some(replay) = replay {
-        if kiro && replayed_steering_notes.replay_input(replay, update) {
-            return Ok(());
-        }
-        if crate::history::collect(replay, update, protocol).is_err() {
+        if replay.update(agent, update).is_err() {
             state.history_error = Some(
                 "ACP history replay contains unsupported or unassociated message content".into(),
             );
         }
         return Ok(());
+    }
+    if agent.compaction == Some(crate::CompactionProtocol::Kiro)
+        && let Some(info) = crate::kiro::info(update)
+        && info["kind"] == "summarization_completed"
+        && info["replay"] != true
+    {
+        state
+            .history
+            .push(crate::history::Message::kiro_checkpoint());
     }
     if state.active.is_none() {
         return Ok(());

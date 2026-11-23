@@ -25,6 +25,10 @@ pub(crate) struct Instructions {
     pub required: bool,
 }
 
+pub(crate) fn prompt_prefix(text: &str) -> String {
+    format!("Session instructions:\n{text}\n\nUser request:\n")
+}
+
 const ANTIGRAVITY_APPEND: &str = "antigravity.systemPrompt.append";
 
 pub(crate) fn creation_meta_key<'a>(

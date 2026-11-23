@@ -1,7 +1,8 @@
-use std::{path::Path, process::Stdio, time::Duration};
+use std::path::Path;
 
+use crate::{AcpLaunch, peer::protocol_error};
 use agent_client_protocol::{
-    Agent, ByteStreams, UntypedMessage,
+    Agent, UntypedMessage,
     schema::ProtocolVersion,
     v1::{ConnectionTo, schema::*},
 };
@@ -9,56 +10,37 @@ use pontia_agent_control::agent_clients::AgentClientModels;
 use pontia_core::{Error, Result};
 use serde::Deserialize;
 use serde_json::json;
-use tokio::process::Command;
-use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
-
-use crate::{AcpLaunch, peer::protocol_error};
 
 pub(crate) async fn list(config: &AcpLaunch, cwd: &Path) -> Result<AgentClientModels> {
-    let mut child = Command::new(&config.command)
-        .args(&config.args)
-        .envs(&config.env)
-        .env_remove("PONTIA_SESSION_ID")
-        .env_remove("PONTIA_RUNTIME_INSTANCE_ID")
-        .current_dir(cwd)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .kill_on_drop(true)
-        .spawn()?;
-    let writer = child.stdin.take().expect("piped stdin");
-    let reader = child.stdout.take().expect("piped stdout");
     let (options_tx, mut options_rx) = tokio::sync::watch::channel(None);
-    let operation = agent_client_protocol::Client
-        .v1()
-        .on_receive_notification(
-            async move |notification: SessionNotification, _cx| {
-                if let SessionUpdate::ConfigOptionUpdate(update) = notification.update
-                    && super::model_option(&update.config_options).is_some()
-                {
-                    options_tx.send_replace(Some((notification.session_id, update.config_options)));
-                }
-                Ok(())
-            },
-            agent_client_protocol::on_receive_notification!(),
-        )
-        .connect_with(
-            ByteStreams::new(writer.compat_write(), reader.compat()),
-            async |connection: ConnectionTo<Agent>| {
-                Ok(discover(&connection, cwd, &mut options_rx).await)
-            },
-        );
-    let result = tokio::time::timeout(Duration::from_secs(30), operation).await;
-    // Closing stdin lets agents shut down any runtime processes they own.
-    match tokio::time::timeout(Duration::from_secs(2), child.wait()).await {
-        Ok(status) => {
-            status?;
-        }
-        Err(_) => child.kill().await?,
-    }
-    result
-        .map_err(|_| Error::CapabilityUnavailable("ACP model listing timed out".into()))?
-        .map_err(protocol_error)?
+    crate::stdio::run(
+        config,
+        cwd,
+        "ACP model listing timed out",
+        |streams| async move {
+            agent_client_protocol::Client
+                .v1()
+                .on_receive_notification(
+                    async move |notification: SessionNotification, _cx| {
+                        if let SessionUpdate::ConfigOptionUpdate(update) = notification.update
+                            && super::model_option(&update.config_options).is_some()
+                        {
+                            options_tx.send_replace(Some((
+                                notification.session_id,
+                                update.config_options,
+                            )));
+                        }
+                        Ok(())
+                    },
+                    agent_client_protocol::on_receive_notification!(),
+                )
+                .connect_with(streams, async |connection: ConnectionTo<Agent>| {
+                    Ok(discover(&connection, cwd, &mut options_rx).await)
+                })
+                .await
+        },
+    )
+    .await
 }
 
 async fn discover(

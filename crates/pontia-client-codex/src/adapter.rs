@@ -99,6 +99,7 @@ impl ClientData for CodexData {
     }
     fn probe_timeline(
         &self,
+        _exited: bool,
         _binding: &pontia_agent_control::client_contract::raw_transcripts::AgentBindingResolveRequest,
     ) -> Option<Result<()>> {
         Some(Ok(()))

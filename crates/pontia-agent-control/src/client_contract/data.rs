@@ -26,6 +26,7 @@ pub trait ClientData: Send + Sync {
     /// Clients whose native history availability is instance-specific can verify it on demand.
     fn probe_timeline(
         &self,
+        _exited: bool,
         _binding: &super::raw_transcripts::AgentBindingResolveRequest,
     ) -> Option<Result<()>> {
         None
