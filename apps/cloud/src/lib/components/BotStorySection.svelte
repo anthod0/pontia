@@ -13,7 +13,7 @@
 	const HOLD_MS = 3600;
 	const lastStep = (index: number) => stories[index].steps - 1;
 
-	// The prerendered page shows Atlas's final frame, so it reads complete without JavaScript.
+	// The prerendered page shows the first Bot's final frame, so it reads complete without JavaScript.
 	let index = $state(0);
 	let step = $state(lastStep(0));
 	let playing = $state(false);
