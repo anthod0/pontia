@@ -1,11 +1,5 @@
 import { testDevice } from "../deviceFixture";
-import {
-  createEvent,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/svelte";
+import { createEvent, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, expect, test, vi } from "vitest";
 const toast = vi.hoisted(() => ({
   error: vi.fn(),
@@ -15,10 +9,7 @@ const toast = vi.hoisted(() => ({
 vi.mock("svelte-sonner", () => ({ toast }));
 import MessageComposer from "../../src/components/chat/MessageComposer.svelte";
 import FileDropZoneHarness from "./FileDropZoneHarness.svelte";
-import {
-  loadUploadRecords,
-  saveUploadRecord,
-} from "../../src/lib/uploads/records";
+import { loadUploadRecords, saveUploadRecord } from "../../src/lib/uploads/records";
 testDevice.access.uploadStorageScope = async () => "composer-test";
 afterEach(() => vi.unstubAllGlobals());
 async function seed(completed: boolean) {
@@ -61,10 +52,7 @@ async function seed(completed: boolean) {
 }
 test("sends attachment-only messages and clears recovery only after successful submission", async () => {
   const draftId = await seed(true);
-  const onSubmit = vi
-    .fn()
-    .mockResolvedValueOnce(false)
-    .mockResolvedValueOnce(true);
+  const onSubmit = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
   render(MessageComposer, { value: "", draftId, onSubmit });
   const submit = screen.getByRole("button", { name: "Send" });
   await waitFor(() => expect(submit).toBeEnabled());
@@ -78,9 +66,7 @@ test("sends attachment-only messages and clears recovery only after successful s
   expect(await loadUploadRecords("composer-test", draftId)).toHaveLength(1);
   await waitFor(() => expect(submit).toBeEnabled());
   await fireEvent.click(submit);
-  await waitFor(async () =>
-    expect(await loadUploadRecords("composer-test", draftId)).toEqual([]),
-  );
+  await waitFor(async () => expect(await loadUploadRecords("composer-test", draftId)).toEqual([]));
   expect(submit).toBeDisabled();
 });
 test("blocks sending unfinished attachments until they are removed", async () => {
@@ -90,9 +76,7 @@ test("blocks sending unfinished attachments until they are removed", async () =>
   await screen.findByRole("button", { name: "Remove attachment report.txt" });
   const submit = screen.getByRole("button", { name: "Send" });
   expect(submit).toBeDisabled();
-  await fireEvent.click(
-    screen.getByRole("button", { name: "Remove attachment report.txt" }),
-  );
+  await fireEvent.click(screen.getByRole("button", { name: "Remove attachment report.txt" }));
   await waitFor(() => expect(submit).toBeEnabled());
   await fireEvent.click(submit);
   expect(onSubmit).toHaveBeenCalledWith("Read the report", "steer");
@@ -134,9 +118,7 @@ test("uploads files pasted into the input", async () => {
   const draftId = crypto.randomUUID();
   render(MessageComposer, { value: "", draftId, onSubmit: vi.fn() });
   const send = screen.getByRole("button", { name: "Send" });
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled(),
-  );
+  await waitFor(() => expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled());
   const file = new File(["png"], "image.png", { type: "image/png" });
   const pasted = await fireEvent.paste(screen.getByRole("textbox"), {
     clipboardData: clipboard([file], []),
@@ -152,22 +134,15 @@ test("uploads files dropped anywhere on the main panel, showing the overlay whil
     vi.fn(() => new Promise(() => {})),
   );
   render(FileDropZoneHarness, { draftId: crypto.randomUUID() });
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled(),
-  );
+  await waitFor(() => expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled());
   const feed = screen.getByText("Conversation feed");
-  const dataTransfer = clipboard(
-    [new File(["pdf"], "notes.pdf", { type: "application/pdf" })],
-    [],
-  );
+  const dataTransfer = clipboard([new File(["pdf"], "notes.pdf", { type: "application/pdf" })], []);
   await fireEvent.dragEnter(feed, { dataTransfer });
   expect(screen.getByText("Drop files to upload")).toBeInTheDocument();
   await fireEvent.dragEnter(screen.getByRole("textbox"), { dataTransfer });
   await fireEvent.dragLeave(feed, { dataTransfer });
   expect(screen.getByText("Drop files to upload")).toBeInTheDocument();
-  expect(
-    await fireEvent.drop(screen.getByRole("textbox"), { dataTransfer }),
-  ).toBe(false);
+  expect(await fireEvent.drop(screen.getByRole("textbox"), { dataTransfer })).toBe(false);
   expect(screen.queryByText("Drop files to upload")).not.toBeInTheDocument();
   await screen.findByRole("button", { name: "Remove attachment notes.pdf" });
   expect(screen.getByRole("textbox")).toHaveTextContent("");
@@ -175,9 +150,7 @@ test("uploads files dropped anywhere on the main panel, showing the overlay whil
 
 test("hides the overlay when the drag leaves the main panel", async () => {
   render(FileDropZoneHarness, { draftId: crypto.randomUUID() });
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled(),
-  );
+  await waitFor(() => expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled());
   const feed = screen.getByText("Conversation feed");
   const textbox = screen.getByRole("textbox");
   const dataTransfer = clipboard([new File(["a"], "a.txt")], []);
@@ -200,24 +173,18 @@ test("hides the overlay when the drag leaves the main panel", async () => {
 
 test("leaves drops on the Bot side panel alone", async () => {
   render(FileDropZoneHarness, { draftId: crypto.randomUUID() });
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled(),
-  );
+  await waitFor(() => expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled());
   const panel = screen.getByText("Bot side panel");
   const dataTransfer = clipboard([new File(["a"], "a.txt")], []);
   await fireEvent.dragEnter(panel, { dataTransfer });
   expect(screen.queryByText("Drop files to upload")).not.toBeInTheDocument();
   expect(await fireEvent.drop(panel, { dataTransfer })).toBe(true);
-  expect(
-    screen.queryByRole("button", { name: "Remove attachment a.txt" }),
-  ).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Remove attachment a.txt" })).not.toBeInTheDocument();
 });
 
 test("refuses dropped files while the composer is busy", async () => {
   const view = render(FileDropZoneHarness, { draftId: crypto.randomUUID() });
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled(),
-  );
+  await waitFor(() => expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled());
   await view.rerender({ busy: true });
   const feed = screen.getByText("Conversation feed");
   const dataTransfer = {
@@ -229,16 +196,12 @@ test("refuses dropped files while the composer is busy", async () => {
   expect(dataTransfer.dropEffect).toBe("none");
   expect(screen.queryByText("Drop files to upload")).not.toBeInTheDocument();
   expect(await fireEvent.drop(feed, { dataTransfer })).toBe(false);
-  expect(
-    screen.queryByRole("button", { name: "Remove attachment a.txt" }),
-  ).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Remove attachment a.txt" })).not.toBeInTheDocument();
 });
 
 test("ignores drags that carry no files", async () => {
   render(FileDropZoneHarness, { draftId: crypto.randomUUID() });
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled(),
-  );
+  await waitFor(() => expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled());
   await fireEvent.dragEnter(screen.getByText("Conversation feed"), {
     dataTransfer: clipboard([], ["text/plain"]),
   });
@@ -248,9 +211,7 @@ test("ignores drags that carry no files", async () => {
 test("keeps rich text pastes that carry a rendered image as text", async () => {
   const draftId = crypto.randomUUID();
   render(MessageComposer, { value: "", draftId, onSubmit: vi.fn() });
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled(),
-  );
+  await waitFor(() => expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled());
   const file = new File(["png"], "image.png", { type: "image/png" });
   const pasted = await fireEvent.paste(screen.getByRole("textbox"), {
     clipboardData: clipboard([file], ["text/plain", "text/rtf"]),
@@ -298,14 +259,10 @@ test("reports a failed attachment cleanup in a persistent toast whose Retry acti
   expect(blocked.defaultPrevented).toBe(true);
   await view.rerender({ disabled: false });
   await waitFor(() =>
-    expect(
-      screen.getByRole("button", { name: "Dismiss sent attachments" }),
-    ).toBeEnabled(),
+    expect(screen.getByRole("button", { name: "Dismiss sent attachments" })).toBeEnabled(),
   );
   action.onClick(new MouseEvent("click", { cancelable: true }));
-  await waitFor(async () =>
-    expect(await loadUploadRecords("composer-test", draftId)).toEqual([]),
-  );
+  await waitFor(async () => expect(await loadUploadRecords("composer-test", draftId)).toEqual([]));
   expect(onSubmit).toHaveBeenCalledOnce();
   expect(toast.dismiss).toHaveBeenCalledWith("composer-submit-error");
 });

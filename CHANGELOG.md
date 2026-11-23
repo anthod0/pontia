@@ -7,13 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.12] - 2026-11-24
+
 ### Added
 
-- Choose the reasoning effort for supported Pi, Codex, and Claude Code models in New chat or the session creation API. Session details show the level the client reports.
+- Choose the reasoning effort for supported Pi, Codex, and Claude Code models in New chat or the session creation API. Session details show the level the client reports. You can also set reasoning effort for Bots and Agent Profiles.
+- Run Google Antigravity and Kiro in Sessions, Bots, and memory tasks. Both clients accept Session instructions and support steering a running Turn when available. Kiro also reports estimated context usage and shows manual and automatic compaction in the timeline.
+- Drop files anywhere on the main panel of a Dashboard chat to attach them to your message.
+- Open the Git tab in a Bot chat and choose a Workspace to inspect its changes.
+- Administrators can use `scripts/set-edge-access.ts <edge-id> <public|private>` to change an edge's access after confirmation.
+- Contributors can remove a merged development worktree, its branch, and its Cargo build cache with `scripts/remove-workspace`. New worktrees start with a fresh Cargo target directory.
 
 ### Changed
 
 - In a Dashboard Session, the sidebar button at the top right opens a side panel with Files and Git tabs. Files linked in the chat open in the Files tab, which lists the Session's recently opened files when no file is open. The panel reopens on the tab you used last, and Alt G opens the Git tab.
+- The Dashboard sidebar shows active Sessions by default. Select All sessions to include inactive ones. The Bot chat side panel remembers its last tab and whether it was open on wide screens.
+- Bots prioritize preferences, corrections, decisions, and lessons that will affect future work when writing and organizing shared memories.
+- The homepage Dashboard demo includes interactive Bot chats and a Session side panel for exploring files and Git diffs.
 
 ## [0.8.11] - 2026-11-23
 
@@ -1135,7 +1145,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.6.9...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.8.12...HEAD
+[0.8.12]: https://github.com/anthod0/pontia/compare/v0.8.11...v0.8.12
 [0.6.9]: https://github.com/anthod0/pontia/compare/v0.6.8...v0.6.9
 [0.6.8]: https://github.com/anthod0/pontia/compare/v0.6.7...v0.6.8
 [0.6.7]: https://github.com/anthod0/pontia/compare/v0.6.6...v0.6.7

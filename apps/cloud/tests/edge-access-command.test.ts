@@ -119,12 +119,14 @@ describe("edge access command", () => {
     expect(outcome.closed).toBe(true);
   });
 
-  test.each([
+  for (const args of [
     [EDGE_ID],
     [EDGE_ID, "invalid"],
     ["invalid", "private"],
     [EDGE_ID, "private", "extra"],
-  ])("rejects invalid arguments %j", (...args) => {
-    expect(() => parseCommandInput(args)).toThrow();
-  });
+  ]) {
+    test(`rejects invalid arguments ${args.join(" ")}`, () => {
+      expect(() => parseCommandInput(args)).toThrow();
+    });
+  }
 });
