@@ -12,7 +12,7 @@
   import { useGitPanel } from './git/gitPanelContext.svelte'
   const device = useDeviceRuntime();
   const { createSessionOverviewQuery } = device.sessionOverview;
-  const { selectedWorkspaceId } = device.sidebarWorkspaceFilter;
+  const { selectedWorkspaceId } = device.sidebarSessionFilter;
 
   let { newChatHandle }: { newChatHandle?: string } = $props()
 

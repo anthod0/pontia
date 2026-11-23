@@ -6,7 +6,7 @@ import { createFileApi } from "../api/sessionFiles";
 import { createConnection } from "../stores/connection";
 import { createChatDraft } from "../stores/chatDraft";
 import { createHistoryForks } from "../stores/historyForks";
-import { createSidebarWorkspaceFilter } from "../stores/sidebarWorkspaceFilter";
+import { createSidebarSessionFilter } from "../stores/sidebarSessionFilter";
 import { createInboxRecovery } from "../stores/inboxRecovery";
 import { createSessions } from "../stores/sessions";
 import { createWorkflows } from "../stores/workflows";
@@ -73,9 +73,9 @@ export class DeviceRuntime {
     return (this._historyForks ??= createHistoryForks(this));
   }
 
-  private _sidebarWorkspaceFilter?: ReturnType<typeof createSidebarWorkspaceFilter>;
-  get sidebarWorkspaceFilter(): ReturnType<typeof createSidebarWorkspaceFilter> {
-    return (this._sidebarWorkspaceFilter ??= createSidebarWorkspaceFilter(this));
+  private _sidebarSessionFilter?: ReturnType<typeof createSidebarSessionFilter>;
+  get sidebarSessionFilter(): ReturnType<typeof createSidebarSessionFilter> {
+    return (this._sidebarSessionFilter ??= createSidebarSessionFilter(this));
   }
 
   private _inboxRecovery?: ReturnType<typeof createInboxRecovery>;

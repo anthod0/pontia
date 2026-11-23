@@ -37,12 +37,20 @@
   let sessionActionMenuOpenKey = $state<string | null>(null)
   let pinnedSessionsOpen = $state(true)
   let recentSessionsOpen = $state(true)
-  const { selectedWorkspaceId } = device.sidebarWorkspaceFilter
+  const { selectedWorkspaceId, sessionScope } = device.sidebarSessionFilter
   const workspacesQuery = createWorkspacesQuery()
   const selectedWorkspace = $derived(workspacesQuery.data?.find((workspace) => workspace.workspace_id === $selectedWorkspaceId))
   const overviewQuery = createSessionOverviewQuery(false, () => $selectedWorkspaceId || undefined)
   const overview = $derived(snapshotSessionOverview(overviewQuery.data))
-  const sidebarRecentSessions = $derived(recentSessions(overview, $selectedWorkspaceId))
+  const sidebarRecentSessions = $derived(recentSessions(overview, $selectedWorkspaceId, $sessionScope))
+  const hasClosedSessions = $derived(
+    $sessionScope === 'active' && (Boolean(overview.nextCursor) || recentSessions(overview, $selectedWorkspaceId, 'all').length > sidebarRecentSessions.length),
+  )
+  const filterApplied = $derived(Boolean($selectedWorkspaceId) || $sessionScope === 'all')
+  const filterTitle = $derived([
+    $sessionScope === 'active' ? $t('sessions.activeOnly') : $t('sessions.all'),
+    $selectedWorkspaceId ? selectedWorkspace?.name || selectedWorkspace?.display_path || $selectedWorkspaceId : $t('workspaces.all'),
+  ].join(' · '))
 
   $effect(() => {
     if (!renameDialogOpen && renamingSession && renamingSessionId === null) cancelRenameSession()
@@ -147,8 +155,9 @@
     renamingSession = null
   }
 
+  // Active scope shows only the complete active group, so it never pages the closed-session list.
   function loadNextPage(): void {
-    if (overview.nextCursor && !overviewQuery.isFetchingNextPage) void overviewQuery.fetchNextPage()
+    if ($sessionScope === 'all' && overview.nextCursor && !overviewQuery.isFetchingNextPage) void overviewQuery.fetchNextPage()
   }
 
   // Re-observing after each page reports whether the end is still in view, so loading continues until the list
@@ -158,7 +167,7 @@
       if (entry.isIntersecting) loadNextPage()
     }, { root: node.closest('[data-sidebar="content"]'), rootMargin: '0px 0px 80px 0px' })
     $effect(() => {
-      if (overview.nextCursor && !overviewQuery.isFetchingNextPage && !overviewQuery.isFetchNextPageError) {
+      if ($sessionScope === 'all' && overview.nextCursor && !overviewQuery.isFetchingNextPage && !overviewQuery.isFetchNextPageError) {
         observer.unobserve(node)
         observer.observe(node)
       }
@@ -277,13 +286,19 @@
         </button>
         <DropdownMenu.Root>
           <DropdownMenu.Trigger
-            class={cn('rounded-sm hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden', $selectedWorkspaceId && 'text-primary')}
-            aria-label={$t('sessions.filterWorkspace')}
-            title={$selectedWorkspaceId ? `Workspace: ${selectedWorkspace?.name || selectedWorkspace?.display_path || $selectedWorkspaceId}` : $t('workspaces.all')}
+            class={cn('rounded-sm hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden', filterApplied && 'text-primary')}
+            aria-label={$t('sessions.filter')}
+            title={filterTitle}
           >
-            <FunnelIcon class="size-4" weight={$selectedWorkspaceId ? 'fill' : 'regular'} />
+            <FunnelIcon class="size-4" weight={filterApplied ? 'fill' : 'regular'} />
           </DropdownMenu.Trigger>
-          <DropdownMenu.Content side="right" align="start" class="max-h-80 w-72 overflow-y-auto">
+          <DropdownMenu.Content side="right" align="start" class="max-h-96 w-72 overflow-y-auto">
+            <DropdownMenu.Label>{$t('sessions.filterStatus')}</DropdownMenu.Label>
+            <DropdownMenu.RadioGroup bind:value={$sessionScope}>
+              <DropdownMenu.RadioItem value="active">{$t('sessions.activeOnly')}</DropdownMenu.RadioItem>
+              <DropdownMenu.RadioItem value="all">{$t('sessions.all')}</DropdownMenu.RadioItem>
+            </DropdownMenu.RadioGroup>
+            <DropdownMenu.Separator />
             <DropdownMenu.Label>{$t('workspace.title')}</DropdownMenu.Label>
             <DropdownMenu.RadioGroup bind:value={$selectedWorkspaceId}>
               <DropdownMenu.RadioItem value="">{$t('workspaces.all')}</DropdownMenu.RadioItem>
@@ -323,7 +338,20 @@
           {/each}
         {:else if !overviewQuery.error}
           <Sidebar.MenuItem>
-            <div class="px-2 py-1 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">{$t('sessions.noRecent')}</div>
+            <div class="px-2 py-1 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">
+              {$sessionScope === 'active' ? $t('sessions.noActive') : $t('sessions.noRecent')}
+            </div>
+          </Sidebar.MenuItem>
+        {/if}
+        {#if hasClosedSessions}
+          <Sidebar.MenuItem>
+            <button
+              type="button"
+              class="w-full rounded-md px-2 py-1 text-left text-xs text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+              onclick={() => sessionScope.set('all')}
+            >
+              {$t('sessions.showClosed')}
+            </button>
           </Sidebar.MenuItem>
         {/if}
         {#if overviewQuery.isFetchingNextPage}
