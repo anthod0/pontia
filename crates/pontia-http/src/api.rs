@@ -1,6 +1,7 @@
 mod bot_context;
 pub use bot_context::{
-    dreaming_command, helper_command, session_messages, update_user, workspace_command,
+    dreaming_command, helper_command, profile_command, session_messages, update_user,
+    workspace_command,
 };
 mod bot_memory;
 pub use bot_memory::memory_command;

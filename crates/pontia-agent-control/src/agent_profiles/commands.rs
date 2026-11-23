@@ -17,7 +17,11 @@ impl AgentProfileService {
         Ok(())
     }
 
-    pub async fn create(&self, request: UpsertAgentProfileRequest) -> Result<AgentProfileView> {
+    pub async fn create(
+        &self,
+        request: UpsertAgentProfileRequest,
+        source_session_id: Option<&str>,
+    ) -> Result<AgentProfileView> {
         validate_new_profile_id(&request.profile_id)?;
         self.validate_configuration(&request).await?;
         let id = request.profile_id.clone();
@@ -35,6 +39,7 @@ impl AgentProfileService {
             return Err(error);
         }
         self.changes.publish(ControlChange::AgentProfileCreated {
+            source_session_id: source_session_id.map(str::to_owned),
             profile_id: id.clone(),
             name,
             description,
@@ -46,6 +51,7 @@ impl AgentProfileService {
         &self,
         id: &str,
         request: UpsertAgentProfileRequest,
+        source_session_id: Option<&str>,
     ) -> Result<AgentProfileView> {
         if id != request.profile_id {
             return Err(Error::Domain(
@@ -63,6 +69,7 @@ impl AgentProfileService {
         if changed {
             self.changes
                 .publish(ControlChange::AgentProfileDescriptionChanged {
+                    source_session_id: source_session_id.map(str::to_owned),
                     profile_id: id.into(),
                     description,
                 });
@@ -70,7 +77,7 @@ impl AgentProfileService {
         self.require_profile(id).await
     }
 
-    pub async fn delete(&self, id: &str) -> Result<()> {
+    pub async fn delete(&self, id: &str, source_session_id: Option<&str>) -> Result<()> {
         if !SqliteAgentProfileRepository::new(self.pool.clone())
             .delete(id)
             .await?
@@ -78,12 +85,13 @@ impl AgentProfileService {
             return Err(Error::NotFound(format!("agent profile {id} not found")));
         }
         self.changes.publish(ControlChange::AgentProfileDeleted {
+            source_session_id: source_session_id.map(str::to_owned),
             profile_id: id.into(),
         });
         Ok(())
     }
 
-    pub(super) async fn require_profile(&self, id: &str) -> Result<AgentProfileView> {
+    pub async fn require_profile(&self, id: &str) -> Result<AgentProfileView> {
         self.get(id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("agent profile {id} not found")))

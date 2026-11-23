@@ -544,3 +544,82 @@ async fn set_description_requires_and_forwards_the_description() {
         })
     );
 }
+
+#[tokio::test]
+async fn profile_commands_send_grouped_actions_and_reject_incomplete_updates() {
+    let mut f = Fixture::new("profile", json!({})).await;
+    let target = json!({"profile_id":"review"});
+    let client = json!({"client_type":"acp","client_key":"vendor/grok"});
+    for (args, expected) in [
+        (vec!["list"], json!({"action":"list"})),
+        (vec!["clients"], json!({"action":"clients"})),
+        (
+            vec!["show", "--profile-id", "review"],
+            json!({"action":"show","input":target}),
+        ),
+        (
+            vec!["delete", "--profile-id", "review"],
+            json!({"action":"delete","input":target}),
+        ),
+        (
+            vec!["models", "--client", "acp/vendor/grok"],
+            json!({"action":"models","input":{"client":client}}),
+        ),
+        (
+            vec![
+                "create",
+                "--profile-id",
+                "review",
+                "--name",
+                "Review",
+                "--description",
+                "Check code",
+                "--client",
+                "acp/vendor/grok",
+                "--model",
+                "m",
+                "--system-prompt",
+                "- Review changes",
+            ],
+            json!({"action":"create","input":{"profile_id":"review","name":"Review","description":"Check code","client":client,"model":"m","system_prompt":"- Review changes"}}),
+        ),
+        (
+            vec![
+                "update",
+                "--profile-id",
+                "review",
+                "--clear-description",
+                "--clear-system-prompt",
+            ],
+            json!({"action":"update","input":{"profile_id":"review","name":null,"description":null,"system_prompt":null,"client":null,"model":null,"clear_description":true,"clear_system_prompt":true}}),
+        ),
+    ] {
+        let args = [&["profile"][..], &args[..]].concat();
+        let output = f.cli(&args).await;
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            f.requests.recv().await.unwrap(),
+            json!({"session_id":"caller-session","command":expected})
+        );
+    }
+    for flags in [
+        vec![],
+        vec!["--client", "acp/vendor/grok"],
+        vec!["--description", "x", "--clear-description"],
+        vec!["--system-prompt", "x", "--clear-system-prompt"],
+        vec!["--client", "acp", "--model", "m"],
+        vec!["--client", "acp/", "--model", "m"],
+    ] {
+        let args = [
+            &["profile", "update", "--profile-id", "review"][..],
+            &flags[..],
+        ]
+        .concat();
+        assert!(!f.cli(&args).await.status.success(), "{args:?}");
+    }
+    assert!(f.requests.try_recv().is_err());
+}

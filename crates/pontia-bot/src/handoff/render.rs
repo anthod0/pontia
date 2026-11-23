@@ -157,7 +157,7 @@ pub(super) fn document(
         }),
         false,
     ));
-    output.push_str("## Agent Profiles\n\n");
+    output.push_str("## Agent Profiles\n\nThese Profiles were available when this Session started. Run `pontia bot profile list` for current Profiles.\n\n");
     if profiles.is_empty() {
         output.push_str(
             "No Agent Profiles are available. Omit `--profile-id` to start the general helper.\n\n",

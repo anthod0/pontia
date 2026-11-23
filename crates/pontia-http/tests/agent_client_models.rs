@@ -188,3 +188,6 @@ async fn times_out_a_stalled_catalog_and_stops_its_process() {
     .await
     .unwrap();
 }
+
+#[path = "agent_client_models/bot_profiles.rs"]
+mod bot_profiles;

@@ -83,14 +83,14 @@ async fn updating_only_the_model_does_not_publish_a_profile_notice() {
     let changes = pontia_agent_control::ControlChanges::default();
     let mut events = changes.subscribe();
     let (service, _, _) = fixture_with_changes(changes).await;
-    service.create(configured()).await.unwrap();
+    service.create(configured(), None).await.unwrap();
     assert!(matches!(
         events.try_recv(),
         Ok(pontia_agent_control::ControlChange::AgentProfileCreated { .. })
     ));
     let mut updated = configured();
     updated.model = Some("new-model".into());
-    service.update("reviewer", updated).await.unwrap();
+    service.update("reviewer", updated, None).await.unwrap();
     assert_eq!(
         events.try_recv(),
         Err(tokio::sync::broadcast::error::TryRecvError::Empty)
@@ -120,15 +120,15 @@ fn configured() -> UpsertAgentProfileRequest {
 #[tokio::test]
 async fn crud_and_launch_use_current_profile() {
     let (service, _, _) = fixture().await;
-    let initial = service.create(request()).await.unwrap();
+    let initial = service.create(request(), None).await.unwrap();
     assert!(matches!(
-        service.create(request()).await,
+        service.create(request(), None).await,
         Err(Error::StateConflict(_))
     ));
     assert_eq!(service.get("reviewer").await.unwrap().unwrap(), initial);
     let mut edited = configured();
     edited.system_prompt = Some("Edited".into());
-    let updated = service.update("reviewer", edited).await.unwrap();
+    let updated = service.update("reviewer", edited, None).await.unwrap();
     assert_eq!(updated.created_at, initial.created_at);
     assert_eq!(service.list().await.unwrap(), vec![updated]);
     let launch = service.resolve_launch("reviewer").await.unwrap();
@@ -136,17 +136,17 @@ async fn crud_and_launch_use_current_profile() {
     assert_eq!(launch.client_key.as_deref(), Some("default"));
     assert_eq!(launch.model.as_deref(), Some("model"));
     assert_eq!(launch.system_prompt.as_deref(), Some("Edited"));
-    service.delete("reviewer").await.unwrap();
+    service.delete("reviewer", None).await.unwrap();
     assert!(matches!(
         service.resolve_launch("reviewer").await,
         Err(Error::NotFound(_))
     ));
     assert!(matches!(
-        service.update("reviewer", request()).await,
+        service.update("reviewer", request(), None).await,
         Err(Error::NotFound(_))
     ));
     assert!(matches!(
-        service.delete("reviewer").await,
+        service.delete("reviewer", None).await,
         Err(Error::NotFound(_))
     ));
     assert!(service.list().await.unwrap().is_empty());
@@ -193,11 +193,14 @@ async fn rejects_empty_identifiers_partial_defaults_and_invalid_instructions() {
     input.system_prompt = Some("client-rejected".into());
     invalid.push(input);
     for input in invalid {
-        assert!(matches!(service.create(input).await, Err(Error::Domain(_))));
+        assert!(matches!(
+            service.create(input, None).await,
+            Err(Error::Domain(_))
+        ));
     }
     assert!(service.list().await.unwrap().is_empty());
     assert!(matches!(
-        service.update("other", request()).await,
+        service.update("other", request(), None).await,
         Err(Error::Domain(_))
     ));
 }
@@ -212,7 +215,7 @@ async fn creates_profiles_only_with_handwritable_ids() {
     ] {
         let mut input = request();
         input.profile_id = id.into();
-        service.create(input).await.unwrap();
+        service.create(input, None).await.unwrap();
     }
     for id in [
         "Reviewer",
@@ -226,7 +229,7 @@ async fn creates_profiles_only_with_handwritable_ids() {
         let mut input = request();
         input.profile_id = id.into();
         assert!(
-            matches!(service.create(input).await, Err(Error::Domain(_))),
+            matches!(service.create(input, None).await, Err(Error::Domain(_))),
             "{id}"
         );
     }
@@ -247,7 +250,11 @@ async fn existing_profiles_with_older_ids_can_be_edited_launched_and_deleted() {
     edited.profile_id = "Old Reviewer".into();
     edited.name = "Edited".into();
     assert_eq!(
-        service.update("Old Reviewer", edited).await.unwrap().name,
+        service
+            .update("Old Reviewer", edited, None)
+            .await
+            .unwrap()
+            .name,
         "Edited"
     );
     assert_eq!(
@@ -259,7 +266,7 @@ async fn existing_profiles_with_older_ids_can_be_edited_launched_and_deleted() {
             .as_deref(),
         Some("model")
     );
-    service.delete("Old Reviewer").await.unwrap();
+    service.delete("Old Reviewer", None).await.unwrap();
     assert!(service.list().await.unwrap().is_empty());
 }
 
@@ -268,24 +275,24 @@ async fn rejects_unknown_and_disabled_clients_at_save_and_launch() {
     let (service, settings, _) = fixture().await;
     let mut input = configured();
     input.client_type = Some("missing".into());
-    assert!(service.create(input).await.is_err());
+    assert!(service.create(input, None).await.is_err());
     settings.save("generic", "unknown", true).await.unwrap();
     let mut input = configured();
     input.client_key = Some("unknown".into());
-    assert!(service.create(input).await.is_err());
-    service.create(configured()).await.unwrap();
+    assert!(service.create(input, None).await.is_err());
+    service.create(configured(), None).await.unwrap();
     settings.save("generic", "default", false).await.unwrap();
     assert!(matches!(
         service.resolve_launch("reviewer").await,
         Err(Error::CapabilityUnavailable(_))
     ));
     assert!(matches!(
-        service.update("reviewer", configured()).await,
+        service.update("reviewer", configured(), None).await,
         Err(Error::CapabilityUnavailable(_))
     ));
-    service.delete("reviewer").await.unwrap();
+    service.delete("reviewer", None).await.unwrap();
     assert!(matches!(
-        service.create(configured()).await,
+        service.create(configured(), None).await,
         Err(Error::CapabilityUnavailable(_))
     ));
 }
@@ -304,7 +311,7 @@ async fn rejects_launch_defaults_for_clients_without_configuration() {
     let mut input = configured();
     input.system_prompt = None;
     assert!(matches!(
-        service.create(input).await,
+        service.create(input, None).await,
         Err(Error::CapabilityUnavailable(_))
     ));
 }
@@ -322,15 +329,15 @@ fn configured_profile(id: &str, model: &str) -> UpsertAgentProfileRequest {
 async fn launchable_profiles_follow_current_launch_admission_in_id_order() {
     let (service, settings, pool) = fixture().await;
     service
-        .create(configured_profile("zeta", "model-z"))
+        .create(configured_profile("zeta", "model-z"), None)
         .await
         .unwrap();
     let mut described = configured_profile("alpha", "model-a");
     described.description = Some("Reviews code".into());
-    service.create(described).await.unwrap();
-    service.create(request()).await.unwrap();
+    service.create(described, None).await.unwrap();
+    service.create(request(), None).await.unwrap();
     service
-        .create(configured_profile("unparsable", "model-u"))
+        .create(configured_profile("unparsable", "model-u"), None)
         .await
         .unwrap();
     settings.save("generic", "unknown", true).await.unwrap();
@@ -357,8 +364,8 @@ async fn launchable_profiles_follow_current_launch_admission_in_id_order() {
     );
     let mut updated = configured_profile("zeta", "model-new");
     updated.description = Some("Updated".into());
-    service.update("zeta", updated).await.unwrap();
-    service.delete("alpha").await.unwrap();
+    service.update("zeta", updated, None).await.unwrap();
+    service.delete("alpha", None).await.unwrap();
     let listed = service.list_launchable().await.unwrap();
     assert_eq!(listed.len(), 1);
     assert_eq!(
@@ -372,7 +379,7 @@ async fn launchable_profiles_follow_current_launch_admission_in_id_order() {
 #[tokio::test]
 async fn launchable_profiles_report_storage_failures() {
     let (service, _, pool) = fixture().await;
-    service.create(configured()).await.unwrap();
+    service.create(configured(), None).await.unwrap();
     sqlx::query("DROP TABLE agent_clients")
         .execute(&pool)
         .await

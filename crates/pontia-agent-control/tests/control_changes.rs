@@ -95,38 +95,52 @@ async fn profiles_publish_only_successful_creation_deletion_and_description_chan
         model: None,
         system_prompt: None,
     };
-    service.create(request.clone()).await.unwrap();
+    service.create(request.clone(), None).await.unwrap();
     assert_eq!(
         events.try_recv().unwrap(),
         ControlChange::AgentProfileCreated {
+            source_session_id: None,
             profile_id: "review".into(),
             name: "Review".into(),
             description: None
         }
     );
-    assert!(service.create(request.clone()).await.is_err());
+    assert!(service.create(request.clone(), None).await.is_err());
     request.name = "New name".into();
-    service.update("review", request.clone()).await.unwrap();
+    service
+        .update("review", request.clone(), None)
+        .await
+        .unwrap();
     assert_eq!(events.try_recv(), Err(TryRecvError::Empty));
     request.description = Some("Check changes".into());
-    service.update("review", request.clone()).await.unwrap();
+    service
+        .update("review", request.clone(), None)
+        .await
+        .unwrap();
     assert_eq!(
         events.try_recv().unwrap(),
         ControlChange::AgentProfileDescriptionChanged {
+            source_session_id: None,
             profile_id: "review".into(),
             description: request.description.clone()
         }
     );
-    service.delete("review").await.unwrap();
+    service.delete("review", None).await.unwrap();
     assert_eq!(
         events.try_recv().unwrap(),
         ControlChange::AgentProfileDeleted {
+            source_session_id: None,
             profile_id: "review".into()
         }
     );
-    assert!(service.delete("review").await.is_err());
-    assert!(service.update("review", request.clone()).await.is_err());
+    assert!(service.delete("review", None).await.is_err());
+    assert!(
+        service
+            .update("review", request.clone(), None)
+            .await
+            .is_err()
+    );
     request.name.clear();
-    assert!(service.create(request).await.is_err());
+    assert!(service.create(request, None).await.is_err());
     assert_eq!(events.try_recv(), Err(TryRecvError::Empty));
 }

@@ -1276,11 +1276,14 @@ async fn general_helper_follows_a_corrected_bot_model_and_ignores_legacy_helper_
     );
     control
         .agent_profiles()
-        .create(profile(
-            &format!("{}-helper", bot.bot_id),
-            "missing/model",
-            Some("legacy prompt"),
-        ))
+        .create(
+            profile(
+                &format!("{}-helper", bot.bot_id),
+                "missing/model",
+                Some("legacy prompt"),
+            ),
+            None,
+        )
         .await
         .unwrap();
     conversation
@@ -1341,7 +1344,7 @@ async fn profile_helper_uses_the_profile_launch_config_and_keeps_its_instruction
     let helpers = HelperService::new(control.clone(), conversation.clone());
     let profiles = control.agent_profiles();
     profiles
-        .create(profile("specialist", MODEL, Some("Review only")))
+        .create(profile("specialist", MODEL, Some("Review only")), None)
         .await
         .unwrap();
     let mut changed = bot_configuration("changed", "missing/model");
@@ -1366,7 +1369,11 @@ async fn profile_helper_uses_the_profile_launch_config_and_keeps_its_instruction
     assert_eq!(binding.matches("Review only").count(), 1);
     assert_eq!(binding.matches(HELPER_INSTRUCTIONS).count(), 1);
     profiles
-        .update("specialist", profile("specialist", MODEL, Some("Edited")))
+        .update(
+            "specialist",
+            profile("specialist", MODEL, Some("Edited")),
+            None,
+        )
         .await
         .unwrap();
     assert_eq!(instructions(&control, target).await, binding);
@@ -1468,28 +1475,53 @@ async fn bot_handoff_lists_only_profiles_that_can_start_a_helper_at_each_launch(
     assert!(listed_profiles(&instructions(&control, &session).await).is_empty());
     let profiles = control.agent_profiles();
     profiles
-        .create(profile("reviewer", MODEL, Some("Review only")))
+        .create(profile("reviewer", MODEL, Some("Review only")), None)
         .await
         .unwrap();
     profiles
-        .create(profile("writer", MODEL, None))
+        .create(profile("writer", MODEL, None), None)
         .await
         .unwrap();
     let mut no_steer = profile("no-steer", MODEL, None);
     no_steer.client_type = Some("no-steer".into());
-    profiles.create(no_steer).await.unwrap();
+    profiles.create(no_steer, None).await.unwrap();
     profiles
-        .create(UpsertAgentProfileRequest {
-            client_type: None,
-            client_key: None,
-            model: None,
-            ..profile("no-defaults", MODEL, Some("Prompt only"))
-        })
+        .create(
+            UpsertAgentProfileRequest {
+                client_type: None,
+                client_key: None,
+                model: None,
+                ..profile("no-defaults", MODEL, Some("Prompt only"))
+            },
+            None,
+        )
         .await
         .unwrap();
     let session = restart_bot(&control, &conversation, &id).await;
     let handoff = instructions(&control, &session).await;
     assert_eq!(listed_profiles(&handoff), ["reviewer", "writer"]);
+    let list = conversation
+        .profile_command(
+            serde_json::from_value(json!({
+                "session_id":session,"command":{"action":"list"}
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let summaries = list["profiles"].as_array().unwrap();
+    assert_eq!(summaries.len(), 4);
+    for summary in summaries {
+        let id = summary["profile_id"].as_str().unwrap();
+        assert_eq!(
+            summary["available"],
+            listed_profiles(&handoff).contains(&id)
+        );
+        assert_eq!(
+            summary["unavailable_reason"].is_string(),
+            !listed_profiles(&handoff).contains(&id)
+        );
+    }
     assert!(!handoff.contains("Review only"));
 
     let helpers = HelperService::new(control.clone(), conversation.clone());
@@ -1520,9 +1552,9 @@ async fn bot_handoff_lists_only_profiles_that_can_start_a_helper_at_each_launch(
         HELPER_INSTRUCTIONS
     );
 
-    profiles.delete("writer").await.unwrap();
+    profiles.delete("writer", None).await.unwrap();
     profiles
-        .create(profile("auditor", MODEL, None))
+        .create(profile("auditor", MODEL, None), None)
         .await
         .unwrap();
     assert_eq!(
@@ -1541,7 +1573,7 @@ async fn profile_selected_from_a_handoff_launches_with_its_current_configuration
     let (_root, pool, client, control, conversation) = fixture().await;
     let profiles = control.agent_profiles();
     profiles
-        .create(profile("specialist", "missing/model", None))
+        .create(profile("specialist", "missing/model", None), None)
         .await
         .unwrap();
     let (_, session) = bot(&conversation).await;
@@ -1553,6 +1585,7 @@ async fn profile_selected_from_a_handoff_launches_with_its_current_configuration
         .update(
             "specialist",
             profile("specialist", MODEL, Some("Specialist prompt")),
+            None,
         )
         .await
         .unwrap();
@@ -1569,9 +1602,9 @@ async fn profile_selected_from_a_handoff_launches_with_its_current_configuration
             .count(),
         1
     );
-    profiles.delete("specialist").await.unwrap();
+    profiles.delete("specialist", None).await.unwrap();
     profiles
-        .create(profile("disabled", MODEL, None))
+        .create(profile("disabled", MODEL, None), None)
         .await
         .unwrap();
     AgentClientService::new(control.db(), control.clients())
@@ -1608,10 +1641,10 @@ async fn helper_rejects_missing_and_deleted_profiles_before_creating_a_session()
     let helpers = HelperService::new(control.clone(), conversation);
     let profiles = control.agent_profiles();
     profiles
-        .create(profile("deleted", MODEL, None))
+        .create(profile("deleted", MODEL, None), None)
         .await
         .unwrap();
-    profiles.delete("deleted").await.unwrap();
+    profiles.delete("deleted", None).await.unwrap();
     let before: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions")
         .fetch_one(&pool)
         .await

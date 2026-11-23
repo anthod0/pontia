@@ -250,7 +250,7 @@ pub async fn link_message(
     Ok(ok(json!(request.input)))
 }
 
-fn bot_tool_error(error: pontia_core::Error) -> ApiError {
+pub(super) fn bot_tool_error(error: pontia_core::Error) -> ApiError {
     match error {
         pontia_core::Error::Conflict {
             code: "bot_session_required",

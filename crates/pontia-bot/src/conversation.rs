@@ -19,6 +19,7 @@ use crate::{
     user::UserService,
 };
 
+pub mod profiles;
 mod status;
 pub use status::WorkStatus;
 
