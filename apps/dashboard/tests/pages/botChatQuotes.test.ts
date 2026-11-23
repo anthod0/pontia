@@ -532,6 +532,7 @@ test("opens context from the message menu and reveals an earlier linked message"
     name: /Renew the certificate first\./,
   });
   expect(context).toHaveBeenCalledWith(bot.bot_id, latest.id, expect.any(AbortSignal));
+  expect(linked.querySelector("time")).toHaveAttribute("datetime", first.created_at);
   await fireEvent.click(linked);
   await waitFor(() =>
     expect(document.querySelector(`[data-bot-entry-id="${first.id}"]`)).toHaveAttribute(
@@ -564,6 +565,25 @@ test("lists a todo's actions with context first, then Ignore, Quote and Reply", 
   );
   for (const [before, after] of actions.slice(0, -1).map((button, i) => [button, actions[i + 1]]))
     expect(before.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test("dates a todo and its closing time in the todo panel", async () => {
+  const at = "2026-11-21T08:00:00.000Z";
+  vi.spyOn(testDevice.api, "getBotTodos").mockResolvedValue({
+    open: [todo],
+    recently_resolved: [{ ...reply, id: id(3), todo: { state: "done", by: "bot", at } }],
+  });
+  serve([todo]);
+  render(BotChatPage, { botId: bot.bot_id });
+  await fireEvent.click(await screen.findByRole("button", { name: "Todo" }));
+  const panel = within(screen.getByRole("complementary"));
+  const [open] = await panel.findAllByRole("listitem");
+  expect(open.querySelector("time")).toHaveAttribute("datetime", todo.created_at);
+  await fireEvent.click(panel.getByRole("button", { name: /Recently resolved/ }));
+  const done = (await panel.findAllByRole("listitem"))[1];
+  const times = [...done.querySelectorAll("time")].map((time) => time.getAttribute("datetime"));
+  expect(times).toEqual([reply.created_at, at]);
+  expect(done.querySelectorAll("time")[1]).toHaveTextContent(/Nov 21/);
 });
 
 test("ignoring a todo resolves it like marking it done", async () => {

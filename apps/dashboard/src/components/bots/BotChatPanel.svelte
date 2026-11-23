@@ -17,7 +17,8 @@
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import * as Tabs from '$lib/components/ui/tabs/index.js'
-  import { currentLocale, t } from '$lib/i18n'
+  import { t } from '$lib/i18n'
+  import MessageTime from '$lib/components/MessageTime.svelte'
   import { entryQuote, parseQuotedMessage, quoteSummary, type BotQuote } from '$lib/botQuote'
   import type { Bot, BotMessage } from '../../api/types'
   import { useDeviceRuntime } from '../../device/context'
@@ -63,7 +64,6 @@
     enabled: open && tab === 'todo',
     staleTime: 0,
   }), () => device.queryClient)
-  const clock = $derived(new Intl.DateTimeFormat($currentLocale, { hour: '2-digit', minute: '2-digit' }))
 
   export function openFile(target: FilePreviewTarget) {
     file = target
@@ -212,9 +212,9 @@
     <button type="button" class="block w-full rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring" onclick={() => jump(message.id)}>
       <span class="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
         <BotAvatar shape={bot.avatar_shape} color={bot.avatar_color} class="size-4" />
-        <time datetime={message.created_at}>{clock.format(new Date(message.created_at))}</time>
+        <MessageTime value={message.created_at} class="px-0" />
         {#if done}
-          <span class="ml-auto">{done.by === 'user' ? $t('bots.resolvedByYou') : $t('bots.closedByBot', { name: bot.name })} · <time datetime={done.at} title={new Date(done.at).toLocaleString($currentLocale)}>{clock.format(new Date(done.at))}</time></span>
+          <span class="ml-auto">{done.by === 'user' ? $t('bots.resolvedByYou') : $t('bots.closedByBot', { name: bot.name })} · <MessageTime value={done.at} class="px-0" /></span>
         {/if}
       </span>
       <span class={['text-[13px] leading-5 [overflow-wrap:anywhere]', done ? 'line-clamp-2 text-muted-foreground' : 'line-clamp-3']}>{summary(message)}</span>
@@ -285,7 +285,7 @@
                     <span class="min-w-0 flex-1">
                       <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <span class="font-medium text-heading">{user ? $t('bots.you') : bot.name}</span>
-                        <time datetime={message.created_at}>{clock.format(new Date(message.created_at))}</time>
+                        <MessageTime value={message.created_at} class="px-0" />
                         {#if message.todo?.state === 'open'}<span class="ml-auto rounded bg-primary/10 px-1.5 text-[11px] font-medium text-primary">{$t('bots.todos')}</span>
                         {:else if message.todo?.state === 'done'}<span class="ml-auto flex items-center gap-0.5"><CheckCircleIcon class="size-3" />{$t('bots.todoDone')}</span>{/if}
                         {#if user && parseQuotedMessage(message.content).quote}<span class="flex items-center gap-0.5"><QuotesIcon class="size-3" />{$t('bots.quoted')}</span>{/if}

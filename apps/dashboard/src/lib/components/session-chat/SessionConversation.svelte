@@ -18,7 +18,7 @@
   import ThoughtSummary from './ThoughtSummary.svelte'
   import TurnDuration from './TurnDuration.svelte'
   import CompactionCheckpoint from './CompactionCheckpoint.svelte'
-  import MessageTime from './MessageTime.svelte'
+  import MessageTime from '$lib/components/MessageTime.svelte'
   import QuestionReplyCard from './QuestionReplyCard.svelte'
   import SharedFiles from '../../../components/chat/files/SharedFiles.svelte'
   import { splitAttachments } from '$lib/attachmentBlocks'

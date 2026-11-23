@@ -1,6 +1,7 @@
 <script lang="ts">
   import { currentLocale } from '$lib/i18n';
-  let { value }: { value: string } = $props()
+  import { cn } from '$lib/utils';
+  let { value, class: className }: { value: string; class?: string } = $props()
 
   const date = $derived(new Date(value))
   const label = $derived(
@@ -10,4 +11,4 @@
   )
 </script>
 
-<time datetime={value} title={date.toLocaleString($currentLocale)} class="px-1 text-xs tabular-nums">{label}</time>
+<time datetime={value} title={date.toLocaleString($currentLocale)} class={cn('px-1 text-xs tabular-nums', className)}>{label}</time>
