@@ -17,6 +17,7 @@
   import { filePreviewWidth } from '../chat/filePreviewWidth'
   import { provideGitPanel } from '../chat/git/gitPanelContext.svelte'
   import GitPanel from '../chat/git/GitPanel.svelte'
+  import FileDropZone from '../chat/FileDropZone.svelte'
 
   let { children, sidebar, topbar, settingsEnabled = true }: {
     children: Snippet
@@ -73,29 +74,31 @@
     <AppSidebar />
   {/if}
   <Sidebar.Inset class="bg-surface lg:mr-[var(--file-preview-width)]">
-    <!-- On chat pages only the top bar buttons take pointer input, so the feed beneath still scrolls. -->
-    <div class={['sticky z-10 flex items-center', chatPath ? 'pointer-events-none' : 'bg-surface']} style="top: var(--visual-viewport-top, 0px)">
-      <div class="min-w-0 flex-1">
-        {#if topbar}
-          {@render topbar()}
-        {:else}
-          <TopBar />
-        {/if}
+    <FileDropZone>
+      <!-- On chat pages only the top bar buttons take pointer input, so the feed beneath still scrolls. -->
+      <div class={['sticky z-10 flex items-center', chatPath ? 'pointer-events-none' : 'bg-surface']} style="top: var(--visual-viewport-top, 0px)">
+        <div class="min-w-0 flex-1">
+          {#if topbar}
+            {@render topbar()}
+          {:else}
+            <TopBar />
+          {/if}
+        </div>
+        {@render $topBarAction?.()}
+        <div class="shrink-0 md:pr-4"><DownloadCenter /></div>
       </div>
-      {@render $topBarAction?.()}
-      <div class="shrink-0 md:pr-4"><DownloadCenter /></div>
-    </div>
-    <main class={mainClass}>
-      <div class={contentClass}>
-        {#if settingsPath && settingsEnabled}
-          <SettingsShell>
+      <main class={mainClass}>
+        <div class={contentClass}>
+          {#if settingsPath && settingsEnabled}
+            <SettingsShell>
+              {@render children()}
+            </SettingsShell>
+          {:else}
             {@render children()}
-          </SettingsShell>
-        {:else}
-          {@render children()}
-        {/if}
-      </div>
-    </main>
+          {/if}
+        </div>
+      </main>
+    </FileDropZone>
   </Sidebar.Inset>
   {#if $filePreview}
     {#key $filePreview}
