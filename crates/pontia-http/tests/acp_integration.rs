@@ -102,7 +102,7 @@ async fn creation_options_follow_enabled_settings_for_native_and_acp_clients() {
                 .unwrap()
                 .iter()
                 .any(|item| { item["client_type"] == client && item["client_key"] == key }),
-            !matches!(key, "antigravity" | "kiro")
+            key != "kiro"
         );
 
         let (status, body) = call(&app, "PATCH", &path, json!({"enabled":false})).await;
