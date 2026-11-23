@@ -807,7 +807,6 @@
   "bots.quoteImage": "Quote image",
   "git.panel": "Git changes",
   "git.panelWithCount": "{count, plural, one {Git changes, # file} other {Git changes, # files}}",
-  "git.changes": "Changes",
   "git.conflicted": "Conflicted",
   "git.staged": "Staged",
   "git.unstaged": "Unstaged",
@@ -833,5 +832,7 @@
   "git.binaryFile": "Binary file",
   "git.noTextChanges": "No content changes",
   "git.diffTruncated": "The diff is too long; only its beginning is shown.",
-  "shortcuts.toggleGit": "Toggle the Git panel"
+  "shortcuts.toggleGit": "Toggle the Git panel",
+  "git.title": "Git",
+  "git.changeCount": "{count, plural, one {# changed file} other {# changed files}}"
 }

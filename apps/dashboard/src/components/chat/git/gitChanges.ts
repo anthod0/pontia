@@ -44,8 +44,17 @@ export function splitChangePath(path: string): { name: string; dir: string } {
     : { name: path.slice(slash + 1), dir: trimmed.slice(0, slash) };
 }
 
-export function parentDir(path: string): string {
-  return splitChangePath(path).dir;
+/**
+ * The directory shown after a file name. A move shows `old dir → new dir`; when the name
+ * changed too, the old side is the whole old path so the old name stays visible. The
+ * repository root shows as `.`.
+ */
+export function changeDirLabel(file: Pick<GitChangedFile, "path" | "orig_path">): string {
+  const to = splitChangePath(file.path);
+  if (!file.orig_path) return to.dir;
+  const from = splitChangePath(file.orig_path);
+  const old = from.name === to.name ? from.dir || "." : file.orig_path;
+  return `${old} → ${to.dir || "."}`;
 }
 
 /** The number of changed file entries in a Git status summary. */

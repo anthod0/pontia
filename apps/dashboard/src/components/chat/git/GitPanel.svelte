@@ -5,7 +5,6 @@
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import ClockIcon from 'phosphor-svelte/lib/ClockIcon'
   import CloudArrowUpIcon from 'phosphor-svelte/lib/CloudArrowUpIcon'
-  import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
   import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
@@ -87,8 +86,8 @@
   {:else}
     <header class="flex h-12 shrink-0 items-center gap-1 border-b px-2 max-lg:h-14">
       <h2 class="flex h-full items-center gap-1.5 border-b-2 border-primary px-2.5 text-sm font-medium text-heading">
-        <FileTextIcon class="size-4" />{$t('git.changes')}
-        {#if changes?.repo_root}<span class="text-xs font-normal text-muted-foreground tabular-nums">{$number(changes.total)}</span>{/if}
+        <GitBranchIcon class="size-4" />{$t('git.title')}
+        {#if changes?.repo_root}<span class="text-xs font-normal text-muted-foreground tabular-nums" title={$t('git.changeCount', { count: changes.total })}>{$number(changes.total)}</span>{/if}
       </h2>
       <span class="flex-1"></span>
       <Button variant="ghost" size="icon-sm" class="max-lg:size-11" disabled={changesQuery.isFetching} onclick={refresh} aria-label={$t('common.refresh')} title={$t('common.refresh')}>
@@ -131,9 +130,9 @@
         <div class="border-b px-4 py-3">
           <div class="flex min-w-0 items-center gap-2 text-sm">
             <GitBranchIcon class="size-4 shrink-0 text-muted-foreground" />
-            <span class="min-w-0 truncate font-mono font-medium text-heading">{status?.branch ?? $t('git.noBranch')}</span>
+            <span class="min-w-0 truncate font-mono text-[13px] font-medium text-heading">{status?.branch ?? $t('git.noBranch')}</span>
             {#if status?.upstream}
-              <span class="ml-auto flex shrink-0 gap-1.5 font-mono text-xs">
+              <span class="flex shrink-0 gap-1.5 font-mono text-xs">
                 {#if status.ahead}<span class="text-primary" title={$t('git.ahead', { count: status.ahead })}>↑{status.ahead}</span>{/if}
                 {#if status.behind}<span class="text-interrupted" title={$t('git.behind', { count: status.behind })}>↓{status.behind}</span>{/if}
                 {#if !status.ahead && !status.behind}<span class="text-muted-foreground">{$t('git.synced')}</span>{/if}

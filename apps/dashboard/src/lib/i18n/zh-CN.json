@@ -807,7 +807,6 @@
   "bots.quoteImage": "引用图片",
   "git.panel": "Git 改动",
   "git.panelWithCount": "Git 改动，{count} 个文件",
-  "git.changes": "改动",
   "git.conflicted": "冲突",
   "git.staged": "已暂存",
   "git.unstaged": "未暂存",
@@ -833,5 +832,7 @@
   "git.binaryFile": "二进制文件",
   "git.noTextChanges": "内容没有改动",
   "git.diffTruncated": "diff 太长，只显示开头部分。",
-  "shortcuts.toggleGit": "开关 Git 侧栏"
+  "shortcuts.toggleGit": "开关 Git 侧栏",
+  "git.title": "Git",
+  "git.changeCount": "{count} 个改动文件"
 }

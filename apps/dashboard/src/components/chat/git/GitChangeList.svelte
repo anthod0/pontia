@@ -3,7 +3,7 @@
   import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
   import * as Collapsible from '$lib/components/ui/collapsible/index.js'
   import type { GitChangedFile, GitChangeGroup } from '../../../api/types'
-  import { gitStatusTone, groupChanges, parentDir, splitChangePath } from './gitChanges'
+  import { changeDirLabel, gitStatusTone, groupChanges, splitChangePath } from './gitChanges'
 
   let { files, onopen }: { files: GitChangedFile[]; onopen: (file: GitChangedFile) => void } = $props()
 
@@ -22,13 +22,6 @@
     rows[next].focus()
   }
 
-  /** A move shows `old dir → new dir`; a rename within one directory shows the old name. */
-  function dirLabel(file: GitChangedFile): string {
-    const dir = parentDir(file.path)
-    if (!file.orig_path) return dir
-    const from = splitChangePath(file.orig_path)
-    return from.dir === dir ? `${from.name} → ${dir || '.'}` : `${from.dir || '.'} → ${dir || '.'}`
-  }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -45,7 +38,7 @@
         <ul>
           {#each group.files as file (file.group + '\0' + file.path)}
             {@const parts = splitChangePath(file.path)}
-            {@const dir = dirLabel(file)}
+            {@const dir = changeDirLabel(file)}
             {@const directory = file.path.endsWith('/')}
             <li>
               <button type="button" data-git-change-row data-group={file.group} data-path={file.path}

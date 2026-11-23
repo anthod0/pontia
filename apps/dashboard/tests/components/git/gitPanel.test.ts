@@ -110,6 +110,9 @@ test("lists changes by group in panel order with line counts", async () => {
   );
   expect(within(panel).getByRole("button", { name: "Untracked: scratch/" })).toBeDisabled();
   expect(localStorage.getItem("pontia.gitPanelOpen")).toBe("true");
+  const title = within(panel).getByRole("heading", { level: 2 });
+  expect(title.textContent?.replace(/\s+/g, " ").trim()).toBe("Git 5");
+  expect(within(title).getByTitle("5 changed files")).toBeTruthy();
 });
 
 test("opens a file diff in the panel and returns to the list", async () => {
