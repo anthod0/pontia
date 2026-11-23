@@ -6,7 +6,7 @@ use crate::common::reporting::report_fact_result as report_fact;
 
 #[tokio::test]
 async fn reporting_service_rejects_pontia_owned_event_types() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     create_session(&state, "sess_owned_event", "generic").await;
 
     for fact_type in ["session.created", "turn.dispatch_failed", "turn.abandoned"] {
@@ -35,7 +35,7 @@ async fn reporting_service_rejects_pontia_owned_event_types() {
 
 #[tokio::test]
 async fn reporting_service_rejection_does_not_broadcast() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     create_session(&state, "sess_rejected_broadcast", "generic").await;
     let mut subscriber = state.control().agent_events().subscribe();
 
@@ -62,7 +62,7 @@ async fn reporting_service_rejection_does_not_broadcast() {
 
 #[tokio::test]
 async fn reporting_service_rejects_supplied_unknown_turn_id_for_started_fact() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     create_session(&state, "sess_unknown_started_turn", "pi").await;
     bind_runtime(
         &state,
@@ -91,7 +91,7 @@ async fn reporting_service_rejects_supplied_unknown_turn_id_for_started_fact() {
 
 #[tokio::test]
 async fn reporting_service_rejects_other_creation_facts_with_unknown_supplied_turn_ids() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     create_session(&state, "sess_unknown_created_turn", "generic").await;
 
     for fact_type in ["turn.created", "turn.queued"] {
@@ -115,7 +115,7 @@ async fn reporting_service_rejects_other_creation_facts_with_unknown_supplied_tu
 
 #[tokio::test]
 async fn reporting_service_rejects_unknown_sessions_and_missing_followup_turn_ids() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     let failure = report_fact(
         state.clone(),
         json!({"session_id":"sess_unknown","type":"session.ready","data":{}}),
@@ -145,7 +145,7 @@ async fn reporting_service_rejects_unknown_sessions_and_missing_followup_turn_id
 
 #[tokio::test]
 async fn reporting_service_rejects_followups_for_unknown_or_other_session_turns() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     create_session(&state, "sess_turn_owner", "pi").await;
     create_session(&state, "sess_turn_intruder", "pi").await;
     bind_runtime(&state, "sess_turn_owner", "rtinst_owner").await;
@@ -208,7 +208,7 @@ async fn reporting_service_rejects_followups_for_unknown_or_other_session_turns(
 
 #[tokio::test]
 async fn reporting_service_validates_context_usage_and_truncates_output() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     create_session(&state, "sess_validation", "generic").await;
 
     let failure = report_fact(

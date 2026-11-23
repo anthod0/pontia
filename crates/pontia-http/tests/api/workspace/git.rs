@@ -11,8 +11,8 @@ const COMMIT: &[&str] = &[
     "-qm",
 ];
 
-async fn workspace_for(root: &Path, path: &str) -> (AppState, String) {
-    let state = test_state(vec![WorkspaceRootConfig {
+async fn workspace_for(root: &Path, path: &str) -> (AppState, String, tempfile::TempDir) {
+    let (state, pontia_home) = test_state(vec![WorkspaceRootConfig {
         root_id: "projects".to_string(),
         label: "Projects".to_string(),
         path: root.display().to_string(),
@@ -29,7 +29,7 @@ async fn workspace_for(root: &Path, path: &str) -> (AppState, String) {
         .as_str()
         .unwrap()
         .to_string();
-    (state, id)
+    (state, id, pontia_home)
 }
 
 fn repo_with_changes(app: &Path) {
@@ -58,7 +58,7 @@ async fn git_changes_lists_grouped_files_with_line_counts() {
     let root = tempfile::tempdir().unwrap();
     let app = root.path().join("app");
     repo_with_changes(&app);
-    let (state, id) = workspace_for(root.path(), "app").await;
+    let (state, id, _pontia_home) = workspace_for(root.path(), "app").await;
 
     let (status, body) = get_json(state, &format!("/api/v1/workspaces/{id}/git/changes")).await;
 
@@ -117,7 +117,7 @@ async fn git_changes_lists_grouped_files_with_line_counts() {
 async fn git_changes_reports_non_git_workspace() {
     let root = tempfile::tempdir().unwrap();
     fs::create_dir(root.path().join("notes")).unwrap();
-    let (state, id) = workspace_for(root.path(), "notes").await;
+    let (state, id, _pontia_home) = workspace_for(root.path(), "notes").await;
 
     let (status, body) = get_json(state, &format!("/api/v1/workspaces/{id}/git/changes")).await;
 
@@ -131,7 +131,7 @@ async fn git_diff_returns_hunks_for_each_group() {
     let root = tempfile::tempdir().unwrap();
     let app = root.path().join("app");
     repo_with_changes(&app);
-    let (state, id) = workspace_for(root.path(), "app").await;
+    let (state, id, _pontia_home) = workspace_for(root.path(), "app").await;
     let diff = |query: &str| {
         let state = state.clone();
         let uri = format!("/api/v1/workspaces/{id}/git/diff?{query}");
@@ -175,7 +175,7 @@ async fn git_diff_rejects_paths_outside_the_repository() {
     repo_with_changes(&app);
     fs::write(root.path().join("secret.txt"), "secret\n").unwrap();
     std::os::unix::fs::symlink(root.path().join("secret.txt"), app.join("link")).unwrap();
-    let (state, id) = workspace_for(root.path(), "app").await;
+    let (state, id, _pontia_home) = workspace_for(root.path(), "app").await;
 
     for query in [
         "path=../secret.txt&group=untracked",

@@ -18,7 +18,7 @@ use super::{
 #[tokio::test]
 async fn first_turn_captures_identity_without_a_file_and_requires_runtime_history() {
     let temp = tempdir().unwrap();
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     let session_id = "sess_delayed_first_timeline";
     let session_key = "delayed-first-timeline";
     let cwd = temp.path().join("workspace");
@@ -136,7 +136,7 @@ async fn first_turn_captures_identity_without_a_file_and_requires_runtime_histor
 #[tokio::test]
 async fn delayed_terminal_fact_seals_timeline_after_runtime_binding_changes() {
     let temp = tempdir().unwrap();
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     let session_id = "sess_delayed_terminal";
     let session_key = "delayed-terminal";
     let turn_id = "turn_delayed_terminal";
@@ -253,7 +253,7 @@ async fn delayed_terminal_fact_seals_timeline_after_runtime_binding_changes() {
 async fn hook_lifecycle_events_capture_and_replay_entry_boundaries_without_history_io() {
     let temp = tempdir().unwrap();
 
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     let session_id = "sess_pi_boundaries";
     let turn_id = "turn_pi_boundaries";
     let session_key = "pi-boundary-session";
@@ -372,7 +372,7 @@ async fn hook_lifecycle_events_capture_and_replay_entry_boundaries_without_histo
 async fn interrupted_pi_turn_captures_tail_boundary_and_remains_timeline_readable() {
     let temp = tempdir().unwrap();
 
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     let session_id = "sess_pi_interrupted_boundary";
     let turn_id = "turn_pi_interrupted_boundary";
     let session_key = "pi-interrupted-boundary";
@@ -487,7 +487,7 @@ async fn interrupted_pi_turn_captures_tail_boundary_and_remains_timeline_readabl
 #[tokio::test]
 async fn timeline_capture_failure_keeps_lifecycle_fact_and_logs_structured_warning() {
     let temp = tempdir().unwrap();
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     let session_id = "sess_pi_boundary_missing";
     seed_session(&state, session_id).await;
     EventIngestService::for_projection_tests(state.db())

@@ -6,7 +6,7 @@ use super::{
 
 #[tokio::test]
 async fn turn_timeline_returns_empty_for_a_session_without_turns_or_binding() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     let session_id = "sess_empty_turn_timeline";
     seed_session(&state, session_id).await;
 
@@ -61,7 +61,7 @@ async fn turn_timeline_returns_empty_for_a_session_without_turns_or_binding() {
 
 #[tokio::test]
 async fn turn_timeline_validates_queries_anchors_and_complete_ranges() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     let session_id = "sess_turn_timeline_errors";
     seed_session(&state, session_id).await;
 
@@ -152,7 +152,7 @@ async fn turn_timeline_validates_queries_anchors_and_complete_ranges() {
 
 #[tokio::test]
 async fn turn_timeline_only_allows_the_globally_newest_active_turn() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     let session_id = "sess_open_turn_qualification";
     seed_session(&state, session_id).await;
     sqlx::query(
@@ -188,7 +188,7 @@ async fn turn_timeline_only_allows_the_globally_newest_active_turn() {
 
 #[tokio::test]
 async fn turn_timeline_maps_capability_invalid_cursor_and_source_errors() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     for (client_type, session_id, turn_id, expected_status, expected_code) in [
         (
             "generic",

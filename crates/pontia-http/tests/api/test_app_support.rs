@@ -55,7 +55,7 @@ async fn test_app_creates_isolated_state_home_and_workspace() {
 
 #[tokio::test]
 async fn build_state_remains_usable_after_helper_returns() {
-    let state = TestApp::builder()
+    let (state, _pontia_home) = TestApp::builder()
         .external_api_token(None)
         .build_state()
         .await;
@@ -69,7 +69,7 @@ async fn build_state_remains_usable_after_helper_returns() {
 
 #[tokio::test]
 async fn build_state_supports_event_projection_updates() {
-    let state = TestApp::builder().build_state().await;
+    let (state, _pontia_home) = TestApp::builder().build_state().await;
     EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients())
         .ingest_reported_event(ReportedEvent::new(

@@ -13,14 +13,14 @@ use tower::ServiceExt;
 
 const TOKEN: &str = "test-token";
 
-async fn test_state() -> (AppState, tempfile::TempDir) {
-    let state = TestApp::builder()
+async fn test_state() -> (AppState, tempfile::TempDir, tempfile::TempDir) {
+    let (state, pontia_home) = TestApp::builder()
         .database_name("session_create.db")
         .external_api_token(Some(TOKEN.to_string()))
         .build_state()
         .await;
     let workspace = crate::common::test_app::registered_workspace(&state).await;
-    (state, workspace)
+    (state, workspace, pontia_home)
 }
 
 async fn post_json(
@@ -109,7 +109,7 @@ async fn patch_json(state: AppState, uri: &str, body: Value) -> (StatusCode, Val
 #[tokio::test]
 async fn create_session_rejects_unauthenticated_requests() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
 
     let (status, body) = post_json(
         state,
@@ -128,7 +128,7 @@ async fn create_session_rejects_unauthenticated_requests() {
 #[tokio::test]
 async fn create_session_rejects_unsupported_client_type() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
 
     let (status, body) = post_json(
         state,
@@ -146,7 +146,7 @@ async fn create_session_rejects_unsupported_client_type() {
 #[tokio::test]
 async fn create_session_emits_lifecycle_events_and_returns_idle_session_with_capabilities() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
 
     let (status, body) = post_json(
         state.clone(),
@@ -228,7 +228,7 @@ async fn create_session_emits_lifecycle_events_and_returns_idle_session_with_cap
 #[tokio::test]
 async fn create_session_accepts_handle_and_exposes_it_on_session_views() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
 
     let (status, body) = post_json(
         state.clone(),
@@ -256,7 +256,7 @@ async fn create_session_accepts_handle_and_exposes_it_on_session_views() {
 #[tokio::test]
 async fn create_session_accepts_title_and_exposes_it_on_session_views() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
 
     let (status, body) = post_json(
         state.clone(),
@@ -287,7 +287,7 @@ async fn create_session_accepts_title_and_exposes_it_on_session_views() {
 #[tokio::test]
 async fn session_management_pin_archive_and_unarchive_update_session_views_and_list_filters() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
     let workspace = crate::common::test_app::registered_workspace(&state).await;
     let workspace_path = workspace.path().to_string_lossy();
 
@@ -389,7 +389,7 @@ async fn session_management_pin_archive_and_unarchive_update_session_views_and_l
 #[tokio::test]
 async fn patch_session_updates_title_through_session_events() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
 
     let (_, create_body) = post_json(
         state.clone(),
@@ -446,7 +446,7 @@ async fn patch_session_updates_title_through_session_events() {
 #[tokio::test]
 async fn create_session_accepts_role_and_description_and_exposes_them_on_session_views() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
 
     let (status, body) = post_json(
         state.clone(),
@@ -484,7 +484,7 @@ async fn create_session_accepts_role_and_description_and_exposes_them_on_session
 #[tokio::test]
 async fn create_session_rejects_duplicate_handle_in_same_workspace_with_agent_friendly_error() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
 
     let first = post_json(
         state.clone(),
@@ -526,7 +526,7 @@ async fn create_session_rejects_duplicate_handle_in_same_workspace_with_agent_fr
 #[tokio::test]
 async fn create_session_allows_reusing_handle_after_previous_session_exited() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
 
     let first = post_json(
         state.clone(),
@@ -582,7 +582,7 @@ async fn create_session_allows_reusing_handle_after_previous_session_exited() {
 #[tokio::test]
 async fn create_session_rejects_handle_without_workspace() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
 
     let (status, body) = post_json(
         state,
@@ -608,7 +608,7 @@ async fn create_session_rejects_handle_without_workspace() {
 #[tokio::test]
 async fn create_session_rejects_invalid_handle_format() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
 
     let (status, body) = post_json(
         state,
@@ -635,7 +635,7 @@ async fn create_session_rejects_invalid_handle_format() {
 #[tokio::test]
 async fn create_session_with_initial_task_creates_queued_initial_turn() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
 
     let (status, body) = post_json(
         state.clone(),
@@ -677,7 +677,7 @@ async fn create_session_with_initial_task_creates_queued_initial_turn() {
 #[tokio::test]
 async fn create_session_is_idempotent_when_idempotency_key_is_retried() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
     let body = json!({
         "client_type":"generic",
         "workspace":_workspace.path(),

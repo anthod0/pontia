@@ -11,7 +11,7 @@ use tower::ServiceExt;
 
 const TOKEN: &str = "test-token";
 
-async fn test_state() -> AppState {
+async fn test_state() -> (AppState, tempfile::TempDir) {
     TestApp::builder()
         .database_name("agent_profiles.db")
         .external_api_token(Some(TOKEN.to_string()))
@@ -113,7 +113,7 @@ fn profile(id: &str) -> Value {
 
 #[tokio::test]
 async fn profile_crud_and_idempotent_mutations() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     assert_eq!(
         get_json(state.clone(), "/api/v1/agent-profiles").await.1["data"]["agent_profiles"],
         json!([])
@@ -201,7 +201,7 @@ async fn profile_crud_and_idempotent_mutations() {
 
 #[tokio::test]
 async fn profile_launch_defaults_and_validation() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     let mut input = profile("configured");
     input["client_type"] = json!("pi");
     input["client_key"] = json!("default");

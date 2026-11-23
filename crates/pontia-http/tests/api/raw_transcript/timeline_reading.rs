@@ -18,7 +18,7 @@ async fn active_pi_timeline_fixture(
     _started_event_id: &str,
 ) -> ActivePiTimelineFixture {
     let temp = tempdir().unwrap();
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     let cwd = temp.path().join("workspace");
     fs::create_dir_all(&cwd).unwrap();
     let cwd = cwd.canonicalize().unwrap();
@@ -71,7 +71,7 @@ async fn active_pi_timeline_fixture(
 #[tokio::test]
 async fn turn_timeline_reads_sealed_pi_ranges_and_pages_by_turn_id() {
     let temp = tempdir().unwrap();
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     let session_id = "sess_projected_timeline";
     let session_key = "projected-timeline";
     let cwd = temp.path().join("workspace");

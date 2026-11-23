@@ -20,14 +20,14 @@ use pontia_storage_sqlite::repositories::session_runtimes::{
 use serde_json::json;
 use tower::ServiceExt;
 
-async fn state_with_running_turn() -> AppState {
-    let state = TestApp::builder()
+async fn state_with_running_turn() -> (AppState, tempfile::TempDir) {
+    let (state, pontia_home) = TestApp::builder()
         .database_name("live-output.db")
         .external_api_token(Some("test-token".to_string()))
         .build_state()
         .await;
     seed_running_turn(&state, "sess_live", "turn_live", "rtinst_live").await;
-    state
+    (state, pontia_home)
 }
 
 async fn seed_running_turn(state: &AppState, session_id: &str, turn_id: &str, runtime_id: &str) {
@@ -125,7 +125,7 @@ async fn body_until(body: &mut Body, needle: &str) -> String {
 
 #[tokio::test]
 async fn tool_execution_updates_and_reconnect_snapshot_share_the_session_channel() {
-    let state = state_with_running_turn().await;
+    let (state, _pontia_home) = state_with_running_turn().await;
     let producer = producer("sess_live", "turn_live", "stream_live", "rtinst_live");
     state.control().live_output().replace_snapshot(LiveOutputSnapshotReplacement {
         producer: producer.clone(), sequence: 1,
@@ -181,7 +181,7 @@ async fn tool_execution_updates_and_reconnect_snapshot_share_the_session_channel
 
 #[tokio::test]
 async fn external_live_output_stream_authenticates_and_checks_the_session() {
-    let state = state_with_running_turn().await;
+    let (state, _pontia_home) = state_with_running_turn().await;
 
     assert_eq!(
         stream_response(state.clone(), false, "sess_live")
@@ -197,7 +197,7 @@ async fn external_live_output_stream_authenticates_and_checks_the_session() {
 
 #[tokio::test]
 async fn external_live_output_stream_sends_snapshot_updates_and_closed() {
-    let state = state_with_running_turn().await;
+    let (state, _pontia_home) = state_with_running_turn().await;
     state
         .control()
         .live_output()

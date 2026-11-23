@@ -8,7 +8,7 @@ use serde_json::json;
 #[tokio::test]
 async fn create_session_links_existing_canonical_workspace() {
     let _scope = GenericClientTestScope::new().await;
-    let state = crate::common::test_app::TestApp::builder()
+    let (state, _pontia_home) = crate::common::test_app::TestApp::builder()
         .external_api_token(Some(crate::support::http::TOKEN.to_string()))
         .build_state()
         .await;

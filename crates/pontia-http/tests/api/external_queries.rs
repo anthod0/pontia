@@ -13,7 +13,7 @@ use tower::ServiceExt;
 
 const TOKEN: &str = "test-token";
 
-async fn test_state() -> AppState {
+async fn test_state() -> (AppState, tempfile::TempDir) {
     TestApp::builder()
         .database_name("external_queries.db")
         .external_api_token(Some(TOKEN.to_string()))
@@ -170,7 +170,7 @@ async fn get(state: AppState, uri: &str, token: Option<&str>) -> (StatusCode, Va
 
 #[tokio::test]
 async fn external_api_validates_bearer_token_explicitly() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
 
     let valid = get(state.clone(), "/api/v1/auth/validate", Some(TOKEN)).await;
     let missing = get(state.clone(), "/api/v1/auth/validate", None).await;
@@ -188,7 +188,7 @@ async fn external_api_validates_bearer_token_explicitly() {
 
 #[tokio::test]
 async fn external_api_rejects_missing_or_wrong_bearer_token() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
 
     let missing = get(
         state.clone(),
@@ -212,7 +212,7 @@ async fn external_api_rejects_missing_or_wrong_bearer_token() {
 
 #[tokio::test]
 async fn external_api_gets_session_views() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     seed_session_turn(&state).await;
 
     let (get_status, get_body) = get(
@@ -243,7 +243,7 @@ async fn external_api_gets_session_views() {
 
 #[tokio::test]
 async fn external_api_reads_runtime_binding_capabilities_column() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     let service = EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients());
     service
@@ -290,7 +290,7 @@ async fn external_api_reads_runtime_binding_capabilities_column() {
 
 #[tokio::test]
 async fn external_api_exposes_projected_session_context_usage() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     let service = EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients());
     service
@@ -359,7 +359,7 @@ async fn external_api_exposes_projected_session_context_usage() {
 
 #[tokio::test]
 async fn external_api_lists_and_gets_turn_views() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     seed_session_turn(&state).await;
 
     let (list_status, list_body) = get(
@@ -411,7 +411,7 @@ async fn external_api_lists_and_gets_turn_views() {
 
 #[tokio::test]
 async fn external_api_lists_linked_topology_in_turn_id_order() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     let service = EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients());
     service
@@ -491,7 +491,7 @@ async fn external_api_lists_linked_topology_in_turn_id_order() {
 
 #[tokio::test]
 async fn external_api_orders_turns_by_uuid_v7_id() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients())
         .ingest_reported_event(event(
@@ -532,7 +532,7 @@ async fn external_api_orders_turns_by_uuid_v7_id() {
 
 #[tokio::test]
 async fn external_api_lists_session_and_turn_events() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
     seed_session_turn(&state).await;
 
     let (session_status, session_body) = get(
@@ -575,7 +575,7 @@ async fn external_api_lists_session_and_turn_events() {
 
 #[tokio::test]
 async fn external_api_returns_clear_not_found_errors() {
-    let state = test_state().await;
+    let (state, _pontia_home) = test_state().await;
 
     let session = get(state.clone(), "/api/v1/sessions/sess_missing", Some(TOKEN)).await;
 

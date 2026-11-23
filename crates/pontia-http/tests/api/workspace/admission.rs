@@ -6,7 +6,7 @@ async fn session_creation_requires_explicit_activation_by_path_or_id() {
     let root = tempfile::tempdir().unwrap();
     let cwd = root.path().join("project");
     std::fs::create_dir(&cwd).unwrap();
-    let state = test_state(vec![WorkspaceRootConfig {
+    let (state, _pontia_home) = test_state(vec![WorkspaceRootConfig {
         root_id: "projects".into(),
         label: "Projects".into(),
         path: root.path().display().to_string(),

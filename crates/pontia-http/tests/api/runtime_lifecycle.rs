@@ -13,14 +13,14 @@ use crate::common::generic_client::GenericClientTestScope;
 
 const TOKEN: &str = "test-token";
 
-async fn test_state() -> (AppState, tempfile::TempDir) {
-    let state = TestApp::builder()
+async fn test_state() -> (AppState, tempfile::TempDir, tempfile::TempDir) {
+    let (state, pontia_home) = TestApp::builder()
         .database_name("runtime_lifecycle.db")
         .external_api_token(Some(TOKEN.to_string()))
         .build_state()
         .await;
     let workspace = crate::common::test_app::registered_workspace(&state).await;
-    (state, workspace)
+    (state, workspace, pontia_home)
 }
 
 async fn request(
@@ -119,7 +119,7 @@ async fn submit_turn(state: AppState, session_id: &str) -> String {
 #[tokio::test]
 async fn interrupt_current_turn_returns_capability_unavailable_for_generic_runtime() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
     let session_id = create_session(state.clone()).await;
     let turn_id = submit_turn(state.clone(), &session_id).await;
 
@@ -158,7 +158,7 @@ async fn interrupt_current_turn_returns_capability_unavailable_for_generic_runti
 #[tokio::test]
 async fn interrupt_specified_turn_returns_capability_unavailable_for_generic_runtime() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
     let session_id = create_session(state.clone()).await;
     let turn_id = submit_turn(state.clone(), &session_id).await;
 
@@ -179,7 +179,7 @@ async fn interrupt_specified_turn_returns_capability_unavailable_for_generic_run
 #[tokio::test]
 async fn exit_session_requests_runtime_shutdown_without_fabricating_exit_and_is_idempotent() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
     let session_id = create_session(state.clone()).await;
 
     let first = request(
@@ -250,7 +250,7 @@ async fn exit_session_requests_runtime_shutdown_without_fabricating_exit_and_is_
 #[tokio::test]
 async fn restart_idle_session_with_a_sticky_branch_leaf_runs_a_new_start_cycle() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
     let session_id = create_session(state.clone()).await;
     sqlx::query(
         r#"INSERT INTO turns (turn_id, session_id, state, metadata)
@@ -331,7 +331,7 @@ async fn restart_idle_session_with_a_sticky_branch_leaf_runs_a_new_start_cycle()
 #[tokio::test]
 async fn restart_rejects_replacing_the_runtime_while_a_turn_is_active() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
     let session_id = create_session(state.clone()).await;
     let turn_id = submit_turn(state.clone(), &session_id).await;
     let original_runtime_id: String =
@@ -376,7 +376,7 @@ async fn restart_rejects_replacing_the_runtime_while_a_turn_is_active() {
 #[tokio::test]
 async fn resume_exited_session_runs_resume_cycle_and_is_idempotent() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
     let session_id = create_session(state.clone()).await;
     let terminate = request(
         state.clone(),
@@ -448,7 +448,7 @@ async fn resume_exited_session_runs_resume_cycle_and_is_idempotent() {
 #[tokio::test]
 async fn resume_rejects_non_exited_session() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
     let session_id = create_session(state.clone()).await;
 
     let (status, body) = request(
@@ -468,7 +468,7 @@ async fn resume_rejects_non_exited_session() {
 #[tokio::test]
 async fn resume_rejects_error_session() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
     let session_id = create_session(state.clone()).await;
     pontia_agent_control::EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients())
@@ -501,7 +501,7 @@ async fn resume_rejects_error_session() {
 #[tokio::test]
 async fn restart_rejects_terminal_session() {
     let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace) = test_state().await;
+    let (state, _workspace, _pontia_home) = test_state().await;
     let session_id = create_session(state.clone()).await;
     let terminate = request(
         state.clone(),
