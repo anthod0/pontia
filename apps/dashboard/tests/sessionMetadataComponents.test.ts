@@ -79,10 +79,9 @@ function gitStatus(overrides: Partial<WorkspaceGitStatusView> = {}): WorkspaceGi
   };
 }
 
-function metadataProps() {
+function metadataProps(currentGitStatus = gitStatus({ unstaged_count: 1, clean: false })) {
   const currentSession = session();
   const workspaces = [workspace()];
-  const currentGitStatus = gitStatus({ unstaged_count: 1, clean: false });
   const metadataItems = sessionMetadataItems(currentSession, workspaces, currentGitStatus, {});
 
   return {
@@ -114,4 +113,27 @@ describe("session metadata component boundaries", () => {
     expect(within(dialog).getByLabelText("Client: Pi")).toHaveTextContent("Pi");
     expect(within(dialog).getByLabelText("Handle: main")).toHaveTextContent("main");
   });
+});
+
+test.each([
+  {
+    failure: "domain error: fatal: not a git repository (or any of the parent directories): .git",
+    visible: false,
+  },
+  { failure: "domain error: fatal: not a git repository: broken-submodule", visible: true },
+])("git status displays $failure only for repository failures", async ({ failure, visible }) => {
+  const status = gitStatus({
+    repo_root: null,
+    branch: null,
+    upstream: null,
+    state: "error",
+    failure,
+  });
+  render(SessionMetadata, { props: metadataProps(status) });
+  await fireEvent.click(screen.getByRole("button", { name: /^Session details:/ }));
+
+  const dialog = await screen.findByRole("dialog", { name: "Session details" });
+  const gitField = within(dialog).getByLabelText(/^Git: /);
+  expect(gitField.textContent?.includes(failure)).toBe(visible);
+  expect(gitField.title.includes(failure)).toBe(visible);
 });
