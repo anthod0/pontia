@@ -290,9 +290,7 @@ impl ClientSession for AcpAdapter {
                     definition.new_session_instructions_meta_key.as_deref(),
                     request.model.as_deref(),
                 ).await?;
-                if let Some(model) = &request.model {
-                    crate::models::select(&peer, model, binding.is_some()).await?;
-                }
+                crate::models::select(&peer, request.model.as_deref(), request.reasoning_effort.as_deref(), binding.is_some()).await?;
                 let key = identity::encode(selected, &native.to_string())?;
                 let mut state = peer.state.lock().await;
                 if !state.current || self.stopped.load(Ordering::Acquire) {
@@ -306,7 +304,7 @@ impl ClientSession for AcpAdapter {
                     .bind(&request.session_id).fetch_one(&pool).await?;
                 state.ready = true;
                 let params = json!({"context":crate::connection::context(&state),
-                    "setup":crate::relay::Observation::Setup {binding:key, metadata, model:state.current_model.clone(),cwd:cwd.display().to_string()}});
+                    "setup":crate::relay::Observation::Setup {binding:key, metadata, model:state.current_model.clone(),reasoning_effort:crate::models::effort(&state.config_options),cwd:cwd.display().to_string()}});
                 drop(state);
                 Ok(params)
             }
@@ -721,8 +719,8 @@ impl ClientSession for AcpAdapter {
         Box::pin(async move {
             let pool = events.db();
             target.validate(&pool).await?;
-            let (model, environment): (Option<String>, String) = sqlx::query_as(
-                "SELECT json_extract(metadata, '$.model'), runtime_environment FROM sessions WHERE session_id = ?",
+            let (model, reasoning_effort, environment): (Option<String>, Option<String>, String) = sqlx::query_as(
+                "SELECT json_extract(metadata, '$.model'), json_extract(metadata, '$.reasoning_effort'), runtime_environment FROM sessions WHERE session_id = ?",
             )
             .bind(&target.session_id)
             .fetch_one(&pool)
@@ -731,7 +729,7 @@ impl ClientSession for AcpAdapter {
                 events,
                 self.root.get().ok_or_else(unavailable)?,
                 RuntimeStartRequest {
-                    reasoning_effort: None,
+                    reasoning_effort,
                     launch_mode: Default::default(),
                     execution_policy: pontia_agent_control::ControlQueryService::new(pool.clone())
                         .session_execution_policy(&target.session_id)

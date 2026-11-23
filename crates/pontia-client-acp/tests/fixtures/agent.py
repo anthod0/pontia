@@ -18,6 +18,7 @@ threading.Thread(target=watch_root, daemon=True).start()
 lock = threading.Lock()
 active = None
 number = 0
+effort = "medium"
 interjections = []
 protocol = json.loads(Path(__file__).with_name("interjection-protocol.json").read_text())
 native_id = f"native-{os.getpid()}" if os.environ.get("ACP_UNIQUE_ID") == "1" else "native-id"
@@ -54,17 +55,28 @@ def model_config():
     ]
     if os.environ.get("ACP_MODELS") == "grouped":
         values = [{"group": "provider", "name": "Provider", "options": values}]
-    return {"configOptions": [
+    options = [
         {"id": "behavior", "name": "Mode", "category": "mode", "type": "select",
          "currentValue": "ask", "options": [{"value": "ask", "name": "Ask"}]},
         {"id": "llm-selector", "name": "Model", "category": "model", "type": "select",
          "currentValue": current.read_text() if current.exists() else "fast", "options": values},
-    ]}
+    ]
+    if os.environ.get("ACP_EFFORT"):
+        model = options[1]["currentValue"]
+        options.append({"id": f"{model}-effort", "name": "Effort", "category": "thought_level", "type": "select",
+                        "currentValue": effort, "options": [{"group": "levels", "name": "Levels", "options": [
+                            {"value": "medium", "name": "Medium"}, {"value": "high", "name": "High", "description": "More thinking"},
+                            {"value": "low", "name": "Low"}]}]})
+    return {"configOptions": options}
 
 
 def session_config(request, fields):
     if os.environ.get("ACP_MODELS") == "deferred":
-        response(request, {**fields, "configOptions": []})
+        initial = []
+        if os.environ.get("ACP_EFFORT"):
+            model = model_config()["configOptions"][1]
+            initial = [{**model, "options": [{"value": model["currentValue"], "name": "Current"}]}]
+        response(request, {**fields, "configOptions": initial})
         send({"method": "session/update", "params": {"sessionId": native_id, "update": {
             "sessionUpdate": "config_option_update", **model_config()
         }}})
@@ -275,6 +287,10 @@ for line in sys.stdin:
         response(request, {})
     elif method == "session/set_config_option":
         params = request["params"]
+        if os.environ.get("ACP_EFFORT") and params["configId"] == model_config()["configOptions"][-1]["id"]:
+            effort = os.environ.get("ACP_EFFECTIVE_EFFORT", params["value"])
+            response(request, model_config())
+            continue
         if (os.environ.get("ACP_REJECT_MODEL") == "1" or params["sessionId"] != native_id
                 or params["configId"] != "llm-selector" or params["value"] not in ["fast", "deep"]):
             send({"id": request["id"], "error": {"code": -32602, "message": "Model rejected"}})

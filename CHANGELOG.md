@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Choose a reasoning effort level for the default model in Grok Build, Antigravity, and Kiro. Session details show the level the client reports.
+
 ## [0.8.12] - 2026-11-24
 
 ### Added

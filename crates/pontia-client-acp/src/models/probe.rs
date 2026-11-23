@@ -23,7 +23,11 @@ pub(crate) async fn list(config: &AcpLaunch, cwd: &Path) -> Result<AgentClientMo
                 .on_receive_notification(
                     async move |notification: SessionNotification, _cx| {
                         if let SessionUpdate::ConfigOptionUpdate(update) = notification.update
-                            && super::model_option(&update.config_options).is_some()
+                            && super::selector(
+                                &update.config_options,
+                                SessionConfigOptionCategory::Model,
+                            )
+                            .is_some()
                         {
                             options_tx.send_replace(Some((
                                 notification.session_id,
@@ -104,25 +108,32 @@ async fn discover(
         .block_task()
         .await
         .map_err(protocol_error)?;
-    let models = super::catalog(response.config_options.as_deref().unwrap_or_default());
-    let models = if models.default_model.is_none() && deferred {
-        match tokio::time::timeout(
+    let initial = response.config_options.as_deref().unwrap_or_default();
+    let models = if deferred && super::pending_catalog(initial) {
+        let _ = tokio::time::timeout(
             super::MODEL_OPTIONS_WAIT,
             options.wait_for(|update| {
-                update
-                    .as_ref()
-                    .is_some_and(|(id, _)| id == &response.session_id)
+                update.as_ref().is_some_and(|(id, options)| {
+                    id == &response.session_id && !super::pending_catalog(options)
+                })
             }),
         )
-        .await
-        {
-            Ok(Ok(update)) => Ok(super::catalog(&update.as_ref().expect("matched Session").1)),
-            _ => Err(Error::CapabilityUnavailable(
+        .await;
+        let latest = options.borrow();
+        let options = latest
+            .as_ref()
+            .filter(|(id, _)| id == &response.session_id)
+            .map_or(initial, |(_, options)| options.as_slice());
+        let models = super::catalog(options);
+        if models.default_model.is_some() {
+            Ok(models)
+        } else {
+            Err(Error::CapabilityUnavailable(
                 "ACP model options did not arrive".into(),
-            )),
+            ))
         }
     } else {
-        Ok(models)
+        Ok(super::catalog(initial))
     };
     connection
         .send_request(CloseSessionRequest::new(response.session_id.clone()))

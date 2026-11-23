@@ -11,10 +11,14 @@ async fn model_updates_preserve_the_active_turn_and_session_identity() {
     let updated = json!({"sessionUpdate":"config_option_update", "configOptions":[{
         "id":"llm-selector", "name":"Model", "category":"model", "type":"select",
         "currentValue":"new-model", "options":[{"value":"new-model", "name":"New Model"}]
-    }]});
+    }, {"id":"effort", "name":"Effort", "category":"thought_level", "type":"select",
+        "currentValue":"low", "options":[{"value":"low", "name":"Low"}, {"value":"high","name":"High"}]}]});
+    let mut effort_only = updated.clone();
+    effort_only["configOptions"][1]["currentValue"] = json!("high");
     let steps = json!([
         [{"sessionId":"wrong-session", "update":updated}],
         [{"update":updated}],
+        [{"update":effort_only}],
         [{"update":{"sessionUpdate":"config_option_update", "configOptions":[]}}]
     ]);
     std::fs::write(h.root.path().join("live-script.json"), steps.to_string()).unwrap();
@@ -27,7 +31,10 @@ async fn model_updates_preserve_the_active_turn_and_session_identity() {
         .unwrap()
         .unwrap();
     h.release("update-1");
-    for index in 0..3 {
+    for (index, effort) in [None, Some("low"), Some("high"), None]
+        .into_iter()
+        .enumerate()
+    {
         h.release(&format!("live-1-{index}"));
         tokio::time::timeout(Duration::from_secs(5), async {
             while !h.wire().iter().any(|message| {
@@ -49,6 +56,7 @@ async fn model_updates_preserve_the_active_turn_and_session_identity() {
             view.model.as_deref(),
             Some(if index == 0 { "fast" } else { "new-model" })
         );
+        assert_eq!(view.reasoning_effort.as_deref(), effort);
         assert_eq!(h.events(&session, "turn.started").await, 0);
     }
     h.release("release-1");
@@ -140,6 +148,87 @@ async fn delayed_model_options_support_discovery_and_startup_selection() {
         .unwrap()
         .unwrap();
     assert_eq!(view.model.as_deref(), Some("deep"));
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn deferred_catalog_exposes_effort_only_for_the_current_model() {
+    let h = Harness::new(&[
+        ("ACP_MODELS", "deferred"),
+        ("ACP_DELETE", "1"),
+        ("ACP_EFFORT", "1"),
+    ])
+    .await;
+    let models = list(&h).await.unwrap().models;
+    assert_eq!(
+        models[0].default_reasoning_effort.as_deref(),
+        Some("medium")
+    );
+    assert_eq!(
+        models[0]
+            .reasoning_efforts
+            .iter()
+            .map(|level| level.id.as_str())
+            .collect::<Vec<_>>(),
+        ["medium", "high", "low"]
+    );
+    assert_eq!(models[0].reasoning_efforts[1].name, "High");
+    assert_eq!(models[0].reasoning_efforts[1].description, "More thinking");
+    assert!(models[1].reasoning_efforts.is_empty());
+    assert!(models[1].default_reasoning_effort.is_none());
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn restore_applies_the_observed_effort_after_model_selection() {
+    let h = Harness::new(&[
+        ("ACP_MODELS", "flat"),
+        ("ACP_EFFORT", "1"),
+        ("ACP_EFFECTIVE_EFFORT", "low"),
+    ])
+    .await;
+    let request = serde_json::from_value(json!({
+        "client_type":"acp", "workspace":h.root.path(), "metadata":{"acp_agent_id":"first"},
+        "model":"deep", "reasoning_effort":"high"
+    }))
+    .unwrap();
+    let created = h
+        .app
+        .session_commands()
+        .create_session(request)
+        .await
+        .unwrap();
+    let session = created.session_id().unwrap();
+    let view = h.app.queries().get_session(session).await.unwrap().unwrap();
+    assert_eq!(view.reasoning_effort.as_deref(), Some("low"));
+    h.app
+        .session_commands()
+        .terminate_session(session)
+        .await
+        .unwrap();
+    h.app
+        .session_commands()
+        .resume_session(session, h.root.path())
+        .await
+        .unwrap();
+    let settings: Vec<_> = h
+        .wire()
+        .into_iter()
+        .filter(|frame| frame["method"] == "session/set_config_option")
+        .map(|frame| json!([frame["params"]["configId"], frame["params"]["value"]]))
+        .collect();
+    assert_eq!(
+        settings,
+        [
+            json!(["llm-selector", "deep"]),
+            json!(["deep-effort", "high"]),
+            json!(["deep-effort", "low"])
+        ]
+    );
+    assert_eq!(
+        h.events(session, "session.reasoning_effort_updated").await,
+        2
+    );
     h.stop().await;
 }
 

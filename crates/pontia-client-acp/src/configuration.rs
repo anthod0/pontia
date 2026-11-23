@@ -65,6 +65,10 @@ impl ClientConfiguration for AcpConfiguration {
         true
     }
 
+    fn supports_startup_reasoning_effort(&self) -> bool {
+        true
+    }
+
     fn list_models<'a>(
         &'a self,
         effective: &'a Value,
