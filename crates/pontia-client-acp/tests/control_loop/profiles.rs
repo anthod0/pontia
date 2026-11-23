@@ -275,3 +275,54 @@ async fn invalid_session_instructions_are_rejected() {
     assert_eq!(h.requests("session/new"), 0);
     h.stop().await;
 }
+
+#[tokio::test]
+async fn antigravity_prepares_its_workspace_agent_again_on_process_recovery() {
+    use pontia_agent_control::client_contract::ClientConfiguration;
+    use pontia_client_acp::configuration::AcpConfiguration;
+
+    let h = Harness::new(&[("ACP_ANTIGRAVITY", "1")]).await;
+    let configuration = AcpConfiguration::new(h.config.clone());
+    let mut policy = configuration
+        .restricted_execution_policy("antigravity")
+        .unwrap();
+    policy.disable_skills = true;
+    policy.yolo = true;
+    let cwd = h.root.path().join("bot/readonly");
+    std::fs::create_dir_all(&cwd).unwrap();
+    let session = create(
+        &h,
+        json!({
+            "metadata":{"acp_agent_id":"antigravity"}, "execution_policy":policy, "workspace":cwd,
+            "ownership":{"application_id":"bot","reference":"test-readonly"}
+        }),
+    )
+    .await
+    .unwrap();
+    let agent = cwd.join(".agents/agents/pontia-restricted.md");
+    let original = std::fs::read_to_string(&agent).unwrap();
+    assert!(original.contains("tools: [read_file, run_command, search_web]"));
+    std::fs::write(&agent, "old definition").unwrap();
+    h.crash_agent(&session);
+    h.wait_ready(&session, 2).await;
+    assert_eq!(std::fs::read_to_string(agent).unwrap(), original);
+    let wire = h.wire();
+    let launches: Vec<_> = wire.iter().filter_map(|item| item.get("startup")).collect();
+    assert_eq!(launches.len(), 2);
+    for launch in launches {
+        assert_eq!(launch["cwd"], json!(cwd));
+        assert_eq!(
+            launch["argv"].as_array().unwrap()[1..],
+            [
+                json!("--gemini-dir"),
+                json!(h.root.path().join("clients/antigravity")),
+                json!("--agent"),
+                json!("pontia-restricted"),
+                json!("--include-default-customizations=false"),
+                json!("--dangerously-skip-permissions")
+            ]
+        );
+    }
+    assert_eq!(h.requests("session/new"), 1);
+    h.stop().await;
+}

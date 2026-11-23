@@ -14,8 +14,11 @@ Pontia 包含以下 Agent Client：
 | [Pi](/docs/agent-clients/pi) | `pi` 和 `tmux` | Pontia 的 Pi 插件 |
 | [Codex](/docs/codex) | 支持 app-server 守护进程的 Codex CLI | 按用户启动的 Codex 守护进程、启动器和 shell PATH |
 | [Claude Code](/docs/agent-clients/claude) | Node.js LTS、npm 以及 Claude Code 认证 | 来自 npm 的 `@pontia/claude-client` 包 |
+| Google Antigravity | `agy` | 在 Agent Clients 中启用（ACP） |
 | Grok Build | `grok` | 在 Agent Clients 中启用 (ACP) |
 | Kiro | `kiro-cli` | 使用 `kiro-cli login` 登录 |
+
+Bot、记忆检索和 Dreaming 可以选择 Antigravity，使用受限 agent 读取文件、运行终端命令和搜索网页。Workspace 中的普通 helper 使用 Antigravity 原有的工具和审批方式。
 
 ## 在初始化时选择 Client
 

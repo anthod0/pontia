@@ -14,8 +14,11 @@ O Pontia inclui estes Agent Clients:
 | [Pi](/docs/agent-clients/pi) | `pi` e `tmux` | Plugin do Pi do Pontia |
 | [Codex](/docs/codex) | Um Codex CLI com suporte ao daemon app-server | Inicialização do daemon do Codex por usuário, launcher e PATH do shell |
 | [Claude Code](/docs/agent-clients/claude) | Node.js LTS, npm e autenticação do Claude Code | O pacote `@pontia/claude-client` do npm |
+| Google Antigravity | `agy` | Ative em Agent Clients (ACP) |
 | Grok Build | `grok` | Ative em Agent Clients (ACP) |
 | Kiro | `kiro-cli` | Faça login com `kiro-cli login` |
+
+Selecione o Antigravity para um Bot, para recuperar memórias ou para Dreaming. O agente restrito pode ler arquivos, executar comandos no terminal e pesquisar na web. Helpers em um Workspace usam as ferramentas e as permissões habituais do Antigravity.
 
 ## Escolha os Clients durante a inicialização
 
