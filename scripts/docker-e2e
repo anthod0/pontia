@@ -222,7 +222,7 @@ class Lab:
                 subnet = network["IPAM"]["Config"][0]["Subnet"]
                 write_private(self.state / "network.json", json.dumps({"subnet": subnet}))
                 self.compose(["up", "-d", "--wait", "--wait-timeout", "180"])
-                for client in ("pi", "codex", "claude-agent"):
+                for client in ("pi", "codex", "claude-agent", "grok"):
                     self.compose(["exec", "-T", "device", "pontia", "client", "enable", client])
                 print(f"Instance: {self.name} ({self.project})")
                 print(f"Test browser: {self.browser_url()}")
