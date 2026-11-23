@@ -1,6 +1,6 @@
 import type { BotEntry, BotMessage } from "../api/types";
 import { escapeXml, parseUploadMessage } from "./uploads/message";
-import { attachedFile, splitAttachments } from "./attachmentBlocks";
+import { attachedFile, attachedPaths, splitAttachments } from "./attachmentBlocks";
 
 export type QuoteSpeaker = "User" | "Bot";
 export type BotQuote =
@@ -113,7 +113,10 @@ export function parseQuotedMessage(text: string): { quote: BotQuote | null; text
 
 /** The visible text of a Bot chat message, without attachments or its own quote. */
 export function messageText(message: BotMessage): string {
-  if (message.kind === "bot_reply") return splitAttachments(message.content).text;
+  if (message.kind === "bot_reply")
+    return splitAttachments(message.content)
+      .flatMap((part) => (part.kind === "text" ? [part.text] : []))
+      .join("\n\n");
   return parseUploadMessage(parseQuotedMessage(message.content).text).text;
 }
 
@@ -125,15 +128,14 @@ export function entryQuote(
 ): BotQuote | null {
   if (!("content" in entry)) return null;
   if (path !== null) {
-    if (entry.kind !== "bot_reply" || !splitAttachments(entry.content).paths.includes(path))
-      return null;
+    if (entry.kind !== "bot_reply" || !attachedPaths(entry.content).includes(path)) return null;
     return { kind: "file", messageId: entry.id, ...attachedFile(path) };
   }
   const text =
     excerpt ??
     (messageText(entry) ||
       (entry.kind === "bot_reply"
-        ? splitAttachments(entry.content).paths.map((path) => attachedFile(path).name)
+        ? attachedPaths(entry.content).map((path) => attachedFile(path).name)
         : parseUploadMessage(entry.content).files.map((file) => file.name)
       ).join("\n"));
   return limitQuote({

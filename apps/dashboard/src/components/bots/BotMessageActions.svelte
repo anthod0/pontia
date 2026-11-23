@@ -14,7 +14,7 @@
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
   import { downloads } from '$lib/downloads/manager'
   import { isImagePath } from '$lib/downloads/localFilePath'
-  import { attachedFile, splitAttachments } from '$lib/attachmentBlocks'
+  import { attachedFile, attachedPaths } from '$lib/attachmentBlocks'
   import { useDeviceRuntime } from '../../device/context'
   import type { AttachedFile, BotEntry } from '../../api/types'
 
@@ -53,7 +53,7 @@
     const found = id ? entry(id) : undefined
     if (!element || !found || !root?.contains(element)) return null
     const path = element.dataset.botFilePath
-    const file = path && found.kind === 'bot_reply' && splitAttachments(found.content).paths.includes(path) ? attachedFile(path) : null
+    const file = path && found.kind === 'bot_reply' && attachedPaths(found.content).includes(path) ? attachedFile(path) : null
     return { entry: found, element, file }
   }
 

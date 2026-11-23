@@ -817,7 +817,7 @@ test("conversation renders assistant loading placeholder when session is startin
   expect(screen.queryByText("No messages yet")).not.toBeInTheDocument();
 });
 
-test("an Agent reply shows its attachments blocks as one card below the message", () => {
+test("an Agent reply shows each attachments block as a card where it is written", () => {
   const block = (...paths: string[]) => ["```attachments", ...paths, "```"].join("\n");
   render(SessionConversation, {
     props: {
@@ -835,7 +835,7 @@ test("an Agent reply shows its attachments blocks as one card below the message"
           id: "a",
           turnId: "turn-1",
           role: "assistant",
-          content: `Here you go.\n\n${block("/tmp/a.txt", "/tmp/b.txt")}\n\nAnd one more:\n\n${block("/tmp/b.txt", "/tmp/c.txt")}`,
+          content: `Here you go.\n\n${block("/tmp/a.txt", "/tmp/b.txt")}\n\nAnd one more:\n\n${block("/tmp/b.txt", "/tmp/c.txt")}\n\nThat is all.`,
           status: "sent",
           createdAt: "",
         },
@@ -851,16 +851,22 @@ test("an Agent reply shows its attachments blocks as one card below the message"
     },
   });
   const message = document.querySelector('[data-chat-message-id="a"]')!;
-  expect(message).toHaveTextContent("Here you go.");
-  expect(message).toHaveTextContent("And one more:");
   expect(message.textContent).not.toContain("attachments");
-  const card = message.querySelector("[data-chat-message-files]")!;
-  expect(message.lastElementChild).toBe(card);
   expect(
-    [...card.querySelectorAll("[data-shared-file]")].map((row) =>
-      row.getAttribute("data-shared-file"),
+    [...message.children].map((child) =>
+      child.hasAttribute("data-chat-message-files")
+        ? [...child.querySelectorAll("[data-shared-file]")].map((row) =>
+            row.getAttribute("data-shared-file"),
+          )
+        : child.textContent?.trim(),
     ),
-  ).toEqual(["/tmp/a.txt", "/tmp/b.txt", "/tmp/c.txt"]);
+  ).toEqual([
+    "Here you go.",
+    ["/tmp/a.txt", "/tmp/b.txt"],
+    "And one more:",
+    ["/tmp/b.txt", "/tmp/c.txt"],
+    "That is all.",
+  ]);
   // A user message keeps the block as text.
   expect(document.querySelector('[data-chat-message-id="u2"]')).toHaveTextContent("/tmp/user.txt");
   expect(screen.queryByRole("button", { name: "Download user.txt" })).not.toBeInTheDocument();

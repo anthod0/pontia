@@ -698,3 +698,30 @@ test("a reply with only attachments keeps its message menu", async () => {
       .map((item) => item.textContent),
   ).toEqual(["ReplyR", "Copy", "View context"]);
 });
+
+test("a block in the middle of a reply shows its card between two bubbles of one message", async () => {
+  const middle = message(
+    2,
+    "bot_reply",
+    "Before the file.\n\n```attachments\n/work/report.pdf\n```\n\nAfter the file.",
+  );
+  serve([middle]);
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  render(BotChatPage, { botId: bot.bot_id });
+  await screen.findByRole("button", { name: "Download report.pdf" });
+  const entry = document.querySelector<HTMLElement>(`[data-bot-entry-id="${id(2)}"]`)!;
+  expect(
+    [...entry.querySelectorAll<HTMLElement>("[data-bot-quotable]")].map(
+      (element) => element.dataset.botFilePath ?? element.textContent?.trim(),
+    ),
+  ).toEqual(["Before the file.", "/work/report.pdf", "After the file."]);
+  // Either bubble acts on the whole message.
+  await fireEvent.contextMenu(screen.getByText("After the file."), { clientX: 10, clientY: 10 });
+  await fireEvent.click(await screen.findByRole("menuitem", { name: "Copy" }));
+  await waitFor(() =>
+    expect(writeText).toHaveBeenCalledWith("Before the file.\n\nAfter the file."),
+  );
+  await quoteFromMenu(screen.getByText("Before the file."));
+  await screen.findByRole("button", { name: /^Remove quote.*Before the file/ });
+});

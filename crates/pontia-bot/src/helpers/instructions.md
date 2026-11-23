@@ -14,4 +14,4 @@ To show the user a file, use its absolute path in one of two ways:
   ```attachments
   /absolute/path/report.pdf
   ```
-  Shows as one file card below your message. Use it for files the user should receive.
+  Shows as a file card where you place it. Use it for files the user should receive.

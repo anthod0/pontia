@@ -3,32 +3,31 @@ import type { AttachedFile } from "../api/types";
 
 const LANGUAGE = "attachments";
 
-export interface MessageAttachments {
-  /** The message without its attachments blocks. */
-  text: string;
-  /** Absolute paths from every attachments block, in order and without duplicates. */
-  paths: string[];
-}
+/** A run of message text, or the files of one attachments block, in message order. */
+export type MessagePart = { kind: "text"; text: string } | { kind: "files"; paths: string[] };
 
 /**
- * Splits attachments blocks from an Agent or Bot reply. An attachments block is a
+ * Splits an Agent or Bot reply at its attachments blocks. An attachments block is a
  * top-level ``` fenced code block with the language `attachments` and one absolute
- * path per line; blank lines are ignored. A block with any other line, or one left
- * unclosed when the message ends, stays a code block. While streaming, a trailing
- * fence that is or may become an attachments block is hidden until it closes.
+ * path per line; blank lines are ignored and a path repeated within a block counts
+ * once. A block with any other line, or one left unclosed when the message ends,
+ * stays a code block. While streaming, a trailing fence that is or may become an
+ * attachments block is hidden until it closes. Blank text parts are left out.
  */
-export function splitAttachments(content: string, streaming = false): MessageAttachments {
-  if (!content.includes("```")) return { text: content, paths: [] };
+export function splitAttachments(content: string, streaming = false): MessagePart[] {
+  const whole = (): MessagePart[] => (content.trim() ? [{ kind: "text", text: content }] : []);
+  if (!content.includes("```")) return whole();
   const tokens = Lexer.lex(content.replace(/\r\n?/g, "\n"));
-  const paths = new Set<string>();
+  const parts: MessagePart[] = [];
   let text = "";
   let changed = false;
-  let removed = false;
+  const flush = () => {
+    // Leading spaces can be an indented code block, so only blank lines are trimmed.
+    const trimmed = text.replace(/^\n+/, "").trimEnd();
+    if (trimmed) parts.push({ kind: "text", text: trimmed });
+    text = "";
+  };
   tokens.forEach((token, index) => {
-    // Neighbours of a removed block stay separate blocks, joined by one blank line.
-    if (removed && token.type === "space") return;
-    if (removed && text && !text.endsWith("\n\n")) text = text.replace(/\n?$/, "\n\n");
-    removed = false;
     if (token.type === "code") {
       const code = token as Tokens.Code;
       const fence = /^ {0,3}(`{3,})/.exec(code.raw)?.[1];
@@ -40,28 +39,37 @@ export function splitAttachments(content: string, streaming = false): MessageAtt
         !closed &&
         (code.lang === LANGUAGE ||
           (!code.raw.includes("\n") && LANGUAGE.startsWith(code.lang ?? "")));
-      const block = closed && code.lang === LANGUAGE ? blockPaths(code.text) : null;
-      if (pending || block) {
-        for (const path of block ?? []) paths.add(path);
-        changed = removed = true;
+      const paths = closed && code.lang === LANGUAGE ? blockPaths(code.text) : null;
+      if (pending || paths) {
+        changed = true;
+        flush();
+        if (paths) parts.push({ kind: "files", paths });
         return;
       }
     }
     text += token.raw;
   });
-  // Leading spaces can be an indented code block, so only blank lines are trimmed.
-  return changed
-    ? { text: text.replace(/^\n+/, "").trimEnd(), paths: [...paths] }
-    : { text: content, paths: [] };
+  if (!changed) return whole();
+  flush();
+  return parts;
 }
 
-/** Paths of a block, or null when any non-blank line is not an absolute path. */
+/** Every attached path of a reply, in order and without duplicates. */
+export function attachedPaths(content: string): string[] {
+  return [
+    ...new Set(
+      splitAttachments(content).flatMap((part) => (part.kind === "files" ? part.paths : [])),
+    ),
+  ];
+}
+
+/** Paths of a block without duplicates, or null when any non-blank line is not an absolute path. */
 function blockPaths(text: string): string[] | null {
   const lines = text
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
-  return lines.length && lines.every((line) => line.startsWith("/")) ? lines : null;
+  return lines.length && lines.every((line) => line.startsWith("/")) ? [...new Set(lines)] : null;
 }
 
 function closes(raw: string, fence: string): boolean {

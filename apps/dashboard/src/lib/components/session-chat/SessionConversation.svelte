@@ -325,25 +325,25 @@
         </ul>
       {/if}
       {#if chatMessage.role === 'assistant'}
-        {@const attachments = splitAttachments(chatMessage.content, chatMessage.status === 'pending')}
         {#if chatMessage.thoughtSteps?.length}
           <ThoughtSummary steps={chatMessage.thoughtSteps} active={liveSegment && busy && !chatMessage.content.trim()} />
         {/if}
-        {#if attachments.text.trim()}
-          <Message.Content class={chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''}>
-            <Message.Response
-              content={attachments.text}
-              {sessionId}
-              linkBase={workspace ? `${workspace.replace(/\/+$/, '')}/` : null}
-              markdown
-              streaming={chatMessage.status === 'pending'}
-              streamId={chatMessage.id}
-            />
-          </Message.Content>
-        {/if}
-        {#if attachments.paths.length && sessionId}
-          <div class="w-full max-w-md" data-chat-message-files><SharedFiles paths={attachments.paths} {sessionId} /></div>
-        {/if}
+        {#each splitAttachments(chatMessage.content, chatMessage.status === 'pending') as part, index (index)}
+          {#if part.kind === 'text'}
+            <Message.Content class={chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''}>
+              <Message.Response
+                content={part.text}
+                {sessionId}
+                linkBase={workspace ? `${workspace.replace(/\/+$/, '')}/` : null}
+                markdown
+                streaming={chatMessage.status === 'pending'}
+                streamId={`${chatMessage.id}:${index}`}
+              />
+            </Message.Content>
+          {:else if sessionId}
+            <div class="w-full max-w-md" data-chat-message-files><SharedFiles paths={part.paths} {sessionId} /></div>
+          {/if}
+        {/each}
       {:else if !uploadParts || uploadParts.text.trim() || editingMessageId === chatMessage.id}
         <Message.Content class={`${chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''} ${editingMessageId === chatMessage.id ? 'w-full' : ''}`}>
           {#if editingMessageId === chatMessage.id}
