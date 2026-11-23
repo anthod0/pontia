@@ -71,7 +71,7 @@ npx @pontia/cli init
 
 服务器主动向外连接到中继，中继只在你的浏览器和服务器之间转发密文。你无需开放端口、配置 VPN 或在任何服务前面放置反向代理。高级用户可以[运行自己的中继](/docs/self-hosted-edge)。
 
-从 Dashboard 启动的 Pi Session 在 tmux 中运行，独立于 Pontia 服务，因此重启或更新 Pontia 不会停止它们。你仍然可以 SSH 登录，用 `tmux attach -t SESSION_NAME` 附加到其中一个。名称以 `pontia_` 开头。
+从 Dashboard 启动的 Pi Session 在 tmux 中运行。你仍然可以 SSH 登录，用 `tmux attach -t SESSION_NAME` 附加到其中一个。名称以 `pontia_` 开头。
 
 检查和维护设置：
 

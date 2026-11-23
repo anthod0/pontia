@@ -71,7 +71,7 @@ Pi、Codex、またはその両方を選択します。初期化処理では次�
 
 サーバーはリレーに外向きに接続し、リレーはブラウザーとサーバーの間で暗号文を転送するだけです。ポートを開いたり、VPN を設定したり、リバースプロキシを置いたりする必要はありません。上級者は[自分のリレーを運用](/docs/self-hosted-edge)することもできます。
 
-Dashboard から開始した Pi の Session は Pontia サービスの外の tmux で動作するので、Pontia を再起動やアップデートしても停止しません。SSH でログインして `tmux attach -t SESSION_NAME` でアタッチすることもできます。名前は `pontia_` で始まります。
+Dashboard から開始した Pi の Session は tmux で動作します。SSH でログインして `tmux attach -t SESSION_NAME` でアタッチすることもできます。名前は `pontia_` で始まります。
 
 セットアップの確認と保守には次のコマンドを使います。
 

@@ -71,7 +71,7 @@ Quando terminar, abra [app.pontia.dev](https://app.pontia.dev) no celular e sele
 
 O servidor se conecta para fora até o relay, e o relay encaminha apenas texto cifrado entre o seu navegador e o servidor. Você não abre portas, não configura VPN nem coloca um proxy reverso na frente de nada. Usuários avançados podem [rodar o próprio relay](/docs/self-hosted-edge).
 
-As sessões do Pi iniciadas pelo Dashboard rodam no tmux, fora do serviço do Pontia, então reiniciar ou atualizar o Pontia não as interrompe. Você ainda pode entrar por SSH e se anexar a uma delas com `tmux attach -t SESSION_NAME`. Os nomes começam com `pontia_`.
+As sessões do Pi iniciadas pelo Dashboard rodam no tmux. Você ainda pode entrar por SSH e se anexar a uma delas com `tmux attach -t SESSION_NAME`. Os nomes começam com `pontia_`.
 
 Para verificar e manter a configuração:
 
