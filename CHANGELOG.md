@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.10] - 2026-11-23
+
+### Fixed
+
+- `pontia init` and `pontia up` save the terminal's `PATH` in the systemd or launchd service, so agents started by pontiad find the same commands as your terminal. Relative and duplicate directories are skipped. On macOS, Pontia no longer adds its own default directories to the service `PATH`. Run `pontia up` again after changing `PATH`.
+
 ## [0.8.9] - 2026-11-23
 
 ### Added
