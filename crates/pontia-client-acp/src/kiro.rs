@@ -1,3 +1,6 @@
+mod steering;
+pub(crate) use steering::{Notes, Steers, steer, steering_supported};
+
 use std::{collections::BTreeMap, path::Path, time::Duration};
 
 use pontia_core::{Error, Result};

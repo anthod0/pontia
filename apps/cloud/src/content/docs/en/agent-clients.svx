@@ -34,7 +34,7 @@ The initializer checks your selected Clients before applying the configuration. 
 
 Install `kiro-cli` on the PATH of the user running Pontia and run `kiro-cli login` as that user. Enable Kiro in **Settings → Agent Clients** or run `pontia client enable kiro`.
 
-Select Kiro and a model when creating a Session. You can approve a tool request for one use, queue a follow-up during a turn, and resume a conversation with its timeline.
+Select Kiro and a model when creating a Session. You can approve a tool request for one use, steer a running turn when Kiro offers steering, queue a follow-up for the next turn, and resume a conversation with its timeline.
 
 You can view estimated context usage, compact an idle Session, and see automatic and manual compaction checkpoints in the timeline.
 

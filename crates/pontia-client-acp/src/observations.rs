@@ -12,6 +12,38 @@ impl Peer {
         let session = &self.session;
         let runtime = &self.runtime;
         match report.observation {
+            Observation::KiroSteered {
+                request,
+                turn,
+                text,
+                history_end,
+            } => {
+                let mut state = self.state.lock().await;
+                let waiting = state
+                    .kiro_receipts
+                    .get(&request)
+                    .is_some_and(|w| !w.is_closed());
+                if let Some(prompt) = state.active.as_mut().filter(|p| p.turn == turn) {
+                    if prompt.history_end < history_end {
+                        prompt.history_end = history_end;
+                        if waiting
+                            && let Some(output) = events.live_output()
+                            && let Err(error) = crate::live_output::user_input(
+                                &output, session, runtime, prompt, &text,
+                            )
+                            .await
+                        {
+                            tracing::warn!(%session, %error, "ACP live steering input rejected");
+                        }
+                    }
+                    state.steering_history_pending = true;
+                    state.refresh_capabilities();
+                    self.remember(&state, None).await?;
+                    if let Some(waiter) = state.kiro_receipts.remove(&request) {
+                        let _ = waiter.send(Ok(()));
+                    }
+                }
+            }
             Observation::PromotionPending { native } => {
                 let mut state = self.state.lock().await;
                 state.promoted = Some(native);
@@ -292,6 +324,16 @@ impl Peer {
                 )));
             }
         };
+        {
+            let mut state = self.state.lock().await;
+            if state.active.as_ref().is_some_and(|p| p.turn == turn) {
+                for (_, waiter) in state.kiro_receipts.drain() {
+                    let _ = waiter.send(Err(Error::StateConflict(
+                        "Kiro Turn ended before steering was injected".into(),
+                    )));
+                }
+            }
+        }
         let mut data = json!({"acp_history_anchor":anchor});
         if kind == EventType::TurnFailed {
             data["failure"] = json!({"message":format!("ACP prompt stopped: {reason}")});

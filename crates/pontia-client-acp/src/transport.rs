@@ -74,7 +74,7 @@ impl Receipts {
 
     fn rejected(&self, frame: &Value) {
         let id = &frame["id"];
-        if frame["method"] == "session/prompt" {
+        if frame["method"] == "session/prompt" || frame["method"] == "_session/steer" {
             let mut state = self.state.lock().unwrap();
             state.rejected.insert(id.to_string());
             self.changed.send_modify(|version| *version += 1);
@@ -219,16 +219,17 @@ pub(crate) async fn bridge(
             } else {
                 None
             };
-            let steering_turn = if frame["method"] == "session/prompt" {
-                receipts
-                    .state
-                    .lock()
-                    .unwrap()
-                    .steering
-                    .remove(&frame["id"].to_string())
-            } else {
-                None
-            };
+            let steering_turn =
+                if frame["method"] == "session/prompt" || frame["method"] == "_session/steer" {
+                    receipts
+                        .state
+                        .lock()
+                        .unwrap()
+                        .steering
+                        .remove(&frame["id"].to_string())
+                } else {
+                    None
+                };
             let count = bytes.len().div_ceil(64 * 1024);
             let mut written = true;
             for (i, chunk) in bytes.chunks(64 * 1024).enumerate() {

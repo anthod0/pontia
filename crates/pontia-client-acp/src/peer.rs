@@ -56,6 +56,8 @@ pub(crate) struct SessionState {
     pub model_windows: std::collections::BTreeMap<String, u64>,
     pub config_options: Vec<SessionConfigOption>,
     pub active: Option<Prompt>,
+    pub kiro_receipts: HashMap<String, oneshot::Sender<Result<()>>>,
+    pub replayed_steering_notes: crate::kiro::Notes,
     pub interjections: HashMap<String, crate::steering::Interjection>,
     pub promoted: Option<String>,
     pub compaction: Option<crate::compaction::Pending>,
@@ -87,6 +89,10 @@ impl SessionState {
             Err(crate::history::unavailable())
         } else {
             let mut replay = self.replay.take().unwrap_or_default();
+            let mut notes = std::mem::take(&mut self.replayed_steering_notes);
+            for message in replay.iter_mut().filter(|m| m.role == "assistant") {
+                notes.strip_complete(&mut message.text);
+            }
             if let Some(prefix) = &self.prompt_prefix {
                 crate::instructions::strip_replayed_prefixes(&mut replay, prefix);
             }
@@ -296,6 +302,8 @@ impl Peer {
             config_options: Vec::new(),
             model_options_available: watch::channel(()).0,
             active: None,
+            kiro_receipts: Default::default(),
+            replayed_steering_notes: Default::default(),
             interjections: HashMap::new(),
             promoted: None,
             closing: false,
@@ -450,6 +458,7 @@ impl Peer {
                     state.ready && !state.closing && (state.current || state.reconnect_needed);
                 state.current = false;
                 state.capabilities = None;
+                state.kiro_receipts.clear();
                 state.active = None;
                 (std::mem::take(&mut state.permissions), recover)
             };
@@ -581,11 +590,15 @@ impl Peer {
                 "ACP peer did not negotiate protocol v1".into(),
             ));
         }
-        let first_prompt_available = {
+        let kiro = {
             let mut state = self.state.lock().await;
             state.negotiated = Negotiated::from_initialize(&initialize, &state.agent)?;
-            state.agent.first_prompt_instructions
+            state.agent.kiro
         };
+        if kiro {
+            let supported = crate::kiro::steering_supported(self, &initialize).await?;
+            self.state.lock().await.negotiated.kiro_steer = supported;
+        }
         let instructions = pontia_agent_control::SessionInstructionsService::new(self.events.db())
             .session_instructions(&self.session)
             .await?
@@ -607,10 +620,10 @@ impl Peer {
             ),
             None => None,
         };
-        let first_prompt = binding_metadata.map_or(
-            first_prompt_available && !supported && meta_key.is_none(),
-            |binding| binding["first_prompt_instructions"] == true,
-        );
+        let first_prompt = binding_metadata
+            .map_or(kiro && !supported && meta_key.is_none(), |binding| {
+                binding["first_prompt_instructions"] == true
+            });
         let inject = match binding_metadata {
             Some(binding) => binding["system_prompt_injected"] == true,
             None => {
@@ -884,7 +897,16 @@ async fn update(
             _ => {}
         }
     }
-    if let Some(replay) = &mut state.replay {
+    let kiro = state.agent.kiro;
+    let SessionState {
+        replay,
+        replayed_steering_notes,
+        ..
+    } = &mut *state;
+    if let Some(replay) = replay {
+        if kiro && replayed_steering_notes.replay_input(replay, update) {
+            return Ok(());
+        }
         if crate::history::collect(replay, update, protocol).is_err() {
             state.history_error = Some(
                 "ACP history replay contains unsupported or unassociated message content".into(),

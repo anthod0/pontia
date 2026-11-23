@@ -7,8 +7,7 @@ pub(crate) struct AgentBounds {
     capabilities: AgentClientCapabilities,
     pub compaction: Option<crate::CompactionProtocol>,
     pub prompt_steering: bool,
-    pub first_prompt_instructions: bool,
-    pub one_time_permissions_only: bool,
+    pub kiro: bool,
     pub interjection: Option<&'static crate::InterjectionProtocol>,
 }
 
@@ -30,9 +29,8 @@ impl AgentBounds {
         Self {
             compaction,
             capabilities: caps,
-            first_prompt_instructions: agent_id == "kiro",
+            kiro: agent_id == "kiro",
             prompt_steering: agent_id == "antigravity",
-            one_time_permissions_only: agent_id == "kiro",
             interjection: definition.and_then(|agent| agent.interjection),
         }
     }
@@ -41,6 +39,7 @@ impl AgentBounds {
 #[derive(Default, Clone, Copy)]
 pub(crate) struct Negotiated {
     pub steer: bool,
+    pub kiro_steer: bool,
     pub interject: bool,
     pub compact_command: bool,
     pub deferred_models: bool,
@@ -63,6 +62,7 @@ impl Negotiated {
             )));
         }
         Ok(Self {
+            kiro_steer: false,
             deferred_models: crate::models::deferred_options(caps),
             compact_command: match bounds.compaction {
                 Some(crate::CompactionProtocol::Kiro) => caps
@@ -114,7 +114,10 @@ pub(crate) fn live(
 ) -> Option<AgentClientCapabilities> {
     (state.current && state.ready && state.has_native && !state.closing).then(|| {
         let mut caps = bounds.capabilities.clone();
-        caps.steer &= negotiated.steer || negotiated.interject || bounds.prompt_steering;
+        caps.steer &= negotiated.steer
+            || negotiated.kiro_steer
+            || negotiated.interject
+            || bounds.prompt_steering;
         caps.interrupt &= state.active;
         caps.manual_compaction &=
             negotiated.compact_command && !state.active && !state.blocked && !state.replaying;
@@ -205,6 +208,7 @@ mod tests {
         );
         let negotiated = Negotiated {
             steer: true,
+            kiro_steer: false,
             compact_command: true,
             interject: false,
             deferred_models: false,

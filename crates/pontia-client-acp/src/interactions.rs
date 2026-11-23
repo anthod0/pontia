@@ -154,9 +154,7 @@ pub(crate) async fn register(
         return Ok(());
     }
     let turn = prompt.turn.clone();
-    let Some((options, native)) =
-        choice_options(request.options, state.agent.one_time_permissions_only)
-    else {
+    let Some((options, native)) = choice_options(request.options, state.agent.kiro) else {
         responder
             .respond_with_error(agent_client_protocol::Error::invalid_params())
             .map_err(crate::peer::protocol_error)?;

@@ -34,7 +34,7 @@ O inicializador verifica os Clients selecionados antes de aplicar a configuraç�
 
 Instale `kiro-cli` no PATH do usuário que executa o Pontia e execute `kiro-cli login` como esse usuário. Ative o Kiro em **Settings → Agent Clients** ou execute `pontia client enable kiro`.
 
-Selecione o Kiro e um modelo ao criar a sessão. Você pode aprovar uma ferramenta para um único uso, enfileirar mensagens durante um turno e reabrir a sessão para consultar a conversa na linha do tempo.
+Selecione o Kiro e um modelo ao criar a sessão. Você pode aprovar uma ferramenta para um único uso, enviar instruções durante o turno quando o Kiro permitir ou enfileirar uma mensagem para o próximo turno e reabrir a sessão para consultar a conversa na linha do tempo.
 
 Você pode consultar o uso estimado do contexto, compactar uma sessão ociosa e ver na linha do tempo os pontos de compactação automática e manual.
 

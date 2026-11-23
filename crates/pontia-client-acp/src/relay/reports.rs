@@ -20,6 +20,12 @@ pub(crate) enum Observation {
         anchor: Value,
         reason: String,
     },
+    KiroSteered {
+        turn: String,
+        request: String,
+        text: String,
+        history_end: usize,
+    },
     PromotionPending {
         native: String,
     },
@@ -104,6 +110,7 @@ pub(super) struct Reports {
     promotion: Option<Promotion>,
     automatic_compaction: Option<String>,
     next_index: usize,
+    kiro_steers: crate::kiro::Steers,
     original_terminal: Option<(String, String)>,
     original_native: Option<String>,
     finished: Option<String>,
@@ -168,12 +175,21 @@ impl Reports {
         }
     }
 
-    pub fn steer_prompt(&self, context: &mut Value, turn: &Value, frame: &Value) -> Result<bool> {
+    pub fn steer_prompt(
+        &mut self,
+        context: &mut Value,
+        turn: &Value,
+        frame: &Value,
+    ) -> Result<bool> {
         if context["active"]["turn"] != *turn
             || context["active"]["cancelled"] == true
             || self.finished.as_deref() == turn.as_str()
         {
             return Ok(false);
+        }
+        if frame["method"] == "_session/steer" {
+            self.kiro_steers.register(frame)?;
+            return Ok(true);
         }
         let input = frame
             .pointer("/params/prompt/0/text")
@@ -198,6 +214,7 @@ impl Reports {
             return;
         }
         self.start(prompt);
+        self.kiro_steers = Default::default();
         self.finished = Some(turn.into());
         self.permissions
             .retain(|_, p| self.writing.contains(&p.key));
@@ -374,6 +391,11 @@ impl Reports {
         {
             requests.remove(&id);
             context["interject"] = json!(false);
+        }
+        if context["kiro_steer"] == true
+            && let Some(injected) = self.kiro_steers.observe(context, frame)
+        {
+            self.push(injected);
         }
         self.observe_promotion(context, frame);
         let prompt = context["active"].clone();

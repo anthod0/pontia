@@ -115,7 +115,6 @@ impl AcpAgents {
                     },
                     new_session_instructions_meta_key: None,
                     capabilities: AgentClientCapabilities {
-                        steer: false,
                         context_usage:
                             pontia_core::client_capabilities::ContextUsageCapability::Estimated,
                         ..crate::ACP_MAX_CAPABILITIES

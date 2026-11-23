@@ -470,3 +470,151 @@ async fn disconnected_interjection_is_unknown_and_never_resubmitted() {
     assert_eq!(h.requests("session/cancel"), 0);
     h.stop().await;
 }
+
+async fn wait_fixture_response(h: &Harness, id: &str) {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !h
+            .wire()
+            .iter()
+            .any(|frame| frame["id"] == id && frame.get("error").is_some())
+        {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn kiro_injects_into_the_running_turn_and_filters_live_and_replayed_notes() {
+    let h = Harness::new(&[("ACP_KIRO", "1"), ("ACP_KIRO_STEER", "inject")]).await;
+    let session = h.create("kiro").await.unwrap();
+    let turn = start(&h, &session).await;
+    let mut delivery = Box::pin(submit(&h, &session, "steer"));
+    tokio::select! {
+        _ = &mut delivery => panic!("steering completed before injection"),
+        _ = wait_fixture_response(&h, "steer-queued-barrier") => {}
+    }
+    h.release("inject");
+    let message = delivery.await;
+    assert_eq!(message["state"], "dispatched");
+    assert_eq!(message["turn_id"], turn);
+    let items = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let live = h.app.live_output().snapshot(&session, &turn).unwrap();
+            let items = serde_json::to_value(live.items).unwrap();
+            if items
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|i| i["text"] == "前後[OTHER]")
+            {
+                break items;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        items
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|i| i["kind"] == "user_input")
+            .count(),
+        1
+    );
+    h.release("release-1");
+    h.wait_turn(&session, &turn, "completed").await;
+    let history = h.history(&session).await.unwrap();
+    assert!(history.items.iter().any(|i| i.turn_id.as_deref() == Some(&turn) && i.item.content_preview == "前後[OTHER]"));
+    assert_eq!(h.requests("session/prompt"), 1);
+    assert_eq!(h.requests("session/cancel"), 0);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn kiro_queued_without_matching_injection_is_undelivered() {
+    for timeout in [false, true] {
+        let mode = if timeout { "inject" } else { "queued" };
+        let h = Harness::new(&[("ACP_KIRO", "1"), ("ACP_KIRO_STEER", mode)]).await;
+        let session = h.create("kiro").await.unwrap();
+        let turn = start(&h, &session).await;
+        let mut delivery = Box::pin(submit(&h, &session, "steer"));
+        tokio::select! {
+            _ = &mut delivery => panic!("unmatched injection completed steering"),
+            _ = wait_fixture_response(&h, "steer-queued-barrier") => {}
+        }
+        if timeout {
+            tokio::time::pause();
+            tokio::time::advance(Duration::from_secs(31)).await;
+            tokio::time::resume();
+        } else {
+            h.release("release-1");
+        }
+        let receipt = delivery.await;
+        assert_eq!(receipt["state"], if timeout { "unknown" } else { "failed" });
+        assert!(receipt["turn_id"].is_null());
+        if timeout {
+            h.release("inject");
+            wait_fixture_response(&h, "steer-barrier").await;
+            let items =
+                serde_json::to_value(h.app.live_output().snapshot(&session, &turn).unwrap().items)
+                    .unwrap();
+            assert!(
+                !items
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|item| item["kind"] == "user_input")
+            );
+            h.release("release-1");
+        }
+        h.wait_turn(&session, &turn, "completed").await;
+        assert_eq!(h.requests("session/prompt"), 1);
+        assert_eq!(h.requests("session/cancel"), 0);
+        h.stop().await;
+    }
+}
+
+#[tokio::test]
+async fn kiro_hides_the_rest_of_a_note_after_controller_reattachment() {
+    let mut h = Harness::new(&[("ACP_KIRO", "1"), ("ACP_KIRO_STEER", "reattach")]).await;
+    let session = h.create("kiro").await.unwrap();
+    let turn = start(&h, &session).await;
+    h.release("inject");
+    assert_eq!(submit(&h, &session, "steer").await["turn_id"], turn);
+    wait_fixture_response(&h, "note-barrier").await;
+    h.restart().await;
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while !h
+            .app
+            .queries()
+            .get_session(&session)
+            .await
+            .unwrap()
+            .unwrap()
+            .capabilities
+            .steer
+        {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    h.release("continue-note");
+    wait_fixture_response(&h, "steer-barrier").await;
+    let items =
+        serde_json::to_value(h.app.live_output().snapshot(&session, &turn).unwrap().items).unwrap();
+    assert!(
+        items
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i["text"] == "後[OTHER]")
+    );
+    h.release("release-1");
+    h.wait_turn(&session, &turn, "completed").await;
+    h.stop().await;
+}

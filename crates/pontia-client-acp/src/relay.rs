@@ -71,28 +71,32 @@ pub async fn run(config: Bootstrap) -> Result<()> {
     let mut reader = tokio::spawn(async move {
         let mut reader = BufReader::new(output);
         let mut frame = Vec::new();
+        let mut notes = crate::kiro::Notes::default();
         while reader.read_until(b'\n', &mut frame).await? != 0 {
-            let native: Value = serde_json::from_slice(&frame)?;
-            let (forward, barrier) = {
-                let mut state = reader_state.lock().await;
-                let State {
-                    context, reports, ..
-                } = &mut *state;
-                let forward = reports.observe(context, &native);
-                (forward, reports.barrier())
-            };
-            let peer = connection.borrow_and_update().clone();
-            if forward && let Some(peer) = peer {
-                if native["method"] != "$/cancel_request"
-                    && let Some(mut barrier) = barrier
-                {
-                    tokio::select! {
-                        _ = barrier.changed() => {},
-                        _ = connection.changed() => { frame.clear(); continue; }
+            let mut native: Value = serde_json::from_slice(&frame)?;
+            let tail = notes.live(&reader_state.lock().await.context, &mut native);
+            for native in tail.into_iter().chain(std::iter::once(native)) {
+                let (forward, barrier) = {
+                    let mut state = reader_state.lock().await;
+                    let State {
+                        context, reports, ..
+                    } = &mut *state;
+                    let forward = reports.observe(context, &native);
+                    (forward, reports.barrier())
+                };
+                let peer = connection.borrow_and_update().clone();
+                if forward && let Some(peer) = peer {
+                    if native["method"] != "$/cancel_request"
+                        && let Some(mut barrier) = barrier
+                    {
+                        tokio::select! {
+                            _ = barrier.changed() => {},
+                            _ = connection.changed() => { frame.clear(); continue; }
+                        }
                     }
+                    let id = pontia_core::ids::new_event_id().to_string();
+                    let _ = send_frame(&peer, &id, &native).await;
                 }
-                let id = pontia_core::ids::new_event_id().to_string();
-                let _ = send_frame(&peer, &id, &native).await;
             }
             frame.clear();
         }
