@@ -214,7 +214,6 @@ impl ConversationService {
         &self,
         client_type: &str,
         client_key: &str,
-        managed_directory: bool,
     ) -> Result<pontia_core::execution_policy::ExecutionPolicy> {
         let clients = self.control.clients();
         let configuration = clients
@@ -228,11 +227,8 @@ impl ConversationService {
             .ok_or_else(|| {
                 Error::CapabilityUnavailable("Client cannot restrict Session tools".into())
             })?;
-        if !managed_directory && configuration.restrictions_require_managed_directory(client_key) {
-            return Ok(Default::default());
-        }
         policy.yolo = true;
-        policy.disable_skills = managed_directory;
+        policy.disable_skills = true;
         configuration.validate_execution_policy(client_key, &policy)?;
         Ok(policy)
     }
@@ -249,17 +245,12 @@ impl ConversationService {
                         .as_ref()
                         .is_some_and(|config| config.supports_startup_model())
                     && self
-                        .restricted_execution_policy(client_type, client_key, true)
+                        .restricted_execution_policy(client_type, client_key)
                         .is_ok()
             })
     }
 
-    fn task_execution_policy(
-        &self,
-        client_type: &str,
-        client_key: &str,
-        managed_directory: bool,
-    ) -> Result<pontia_core::execution_policy::ExecutionPolicy> {
+    fn require_task_client(&self, client_type: &str) -> Result<()> {
         if !self
             .control
             .clients()
@@ -272,22 +263,19 @@ impl ConversationService {
                 "Client cannot run tasks with injected instructions".into(),
             ));
         }
-        self.restricted_execution_policy(client_type, client_key, managed_directory)
+        Ok(())
     }
 
     /// Profiles that can currently start a helper; unavailable ones are left out of the list.
     async fn helper_profiles(&self) -> Result<Vec<LaunchableAgentProfile>> {
         let mut profiles = self.control.agent_profiles().list_launchable().await?;
-        profiles.retain(|profile| {
-            self.require_helper_client(&profile.client_type, &profile.client_key)
-                .is_ok()
-        });
+        profiles.retain(|profile| self.require_helper_client(&profile.client_type).is_ok());
         Ok(profiles)
     }
 
     /// Checks the client capabilities a helper Session needs, without launching anything.
-    pub(crate) fn require_helper_client(&self, client_type: &str, client_key: &str) -> Result<()> {
-        self.task_execution_policy(client_type, client_key, false)?;
+    pub(crate) fn require_helper_client(&self, client_type: &str) -> Result<()> {
+        self.require_task_client(client_type)?;
         if !self
             .control
             .clients()
@@ -308,10 +296,14 @@ impl ConversationService {
         model: &str,
         ownership: SessionOwnership,
         instructions: &str,
-        managed_directory: bool,
+        restricted: bool,
     ) -> Result<CreateSessionRequest> {
-        let execution_policy =
-            self.task_execution_policy(client_type, client_key, managed_directory)?;
+        self.require_task_client(client_type)?;
+        let execution_policy = if restricted {
+            self.restricted_execution_policy(client_type, client_key)?
+        } else {
+            Default::default()
+        };
         let metadata = self.session_metadata(client_type, client_key).await?;
         Ok(CreateSessionRequest {
             reasoning_effort: None,
@@ -696,11 +688,8 @@ impl ConversationService {
             .create_session(CreateSessionRequest {
                 reasoning_effort: bot.reasoning_effort.clone(),
                 launch_mode: pontia_core::LaunchMode::Background,
-                execution_policy: self.restricted_execution_policy(
-                    &bot.client_type,
-                    &bot.client_key,
-                    true,
-                )?,
+                execution_policy: self
+                    .restricted_execution_policy(&bot.client_type, &bot.client_key)?,
                 model: Some(bot.model.clone()),
                 client_type: bot.client_type.clone(),
                 title: Some(bot.name.clone()),

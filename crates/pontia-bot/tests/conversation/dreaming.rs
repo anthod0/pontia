@@ -351,7 +351,7 @@ async fn seed_pending_memory(
 }
 
 #[tokio::test]
-async fn bot_helper_and_dreaming_enforce_yolo_on_restricted_client_policy() {
+async fn bot_and_dreaming_use_restricted_policy_while_ordinary_helper_uses_client_defaults() {
     let (_root, pool, client, control, conversation) = fixture().await;
     assert_eq!(
         client.restricted_execution_policy("default"),
@@ -370,19 +370,21 @@ async fn bot_helper_and_dreaming_enforce_yolo_on_restricted_client_policy() {
     let dreaming = DreamingService::new(control.clone(), conversation.clone());
     let dreaming_session = dreaming.start().await.unwrap().unwrap();
 
-    let expected = pontia_core::execution_policy::ExecutionPolicy {
+    let restricted = pontia_core::execution_policy::ExecutionPolicy {
         tools: None,
         disabled_tools: vec!["edit".into(), "write".into()],
         disable_mcp: true,
-        disable_skills: false,
+        disable_skills: true,
         yolo: true,
     };
-    for session in [&bot_session, &helper_session, &dreaming_session] {
-        let mut expected = expected.clone();
-        expected.disable_skills = session != &helper_session;
+    for (session, expected) in [
+        (&bot_session, &restricted),
+        (&helper_session, &Default::default()),
+        (&dreaming_session, &restricted),
+    ] {
         assert_eq!(
             client.launched_policies.lock().unwrap().get(session),
-            Some(&expected)
+            Some(expected)
         );
         assert_eq!(
             control
@@ -390,7 +392,7 @@ async fn bot_helper_and_dreaming_enforce_yolo_on_restricted_client_policy() {
                 .session_execution_policy(session)
                 .await
                 .unwrap(),
-            expected
+            *expected
         );
     }
 }

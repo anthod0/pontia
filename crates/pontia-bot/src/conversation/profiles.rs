@@ -239,7 +239,7 @@ impl ConversationService {
                 {
                     Some(reason) => Some(reason),
                     None => self
-                        .require_helper_client(client, key)
+                        .require_helper_client(client)
                         .err()
                         .map(|err| err.to_string()),
                 },
