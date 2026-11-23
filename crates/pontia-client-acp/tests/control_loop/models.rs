@@ -12,10 +12,13 @@ async fn model_updates_preserve_the_active_turn_and_session_identity() {
         "id":"llm-selector", "name":"Model", "category":"model", "type":"select",
         "currentValue":"new-model", "options":[{"value":"new-model", "name":"New Model"}]
     }, {"id":"effort", "name":"Effort", "category":"thought_level", "type":"select",
-        "currentValue":"low", "options":[{"value":"low", "name":"Low"}]}]});
+        "currentValue":"low", "options":[{"value":"low", "name":"Low"}, {"value":"high","name":"High"}]}]});
+    let mut effort_only = updated.clone();
+    effort_only["configOptions"][1]["currentValue"] = json!("high");
     let steps = json!([
         [{"sessionId":"wrong-session", "update":updated}],
         [{"update":updated}],
+        [{"update":effort_only}],
         [{"update":{"sessionUpdate":"config_option_update", "configOptions":[]}}]
     ]);
     std::fs::write(h.root.path().join("live-script.json"), steps.to_string()).unwrap();
@@ -28,7 +31,10 @@ async fn model_updates_preserve_the_active_turn_and_session_identity() {
         .unwrap()
         .unwrap();
     h.release("update-1");
-    for index in 0..3 {
+    for (index, effort) in [None, Some("low"), Some("high"), None]
+        .into_iter()
+        .enumerate()
+    {
         h.release(&format!("live-1-{index}"));
         tokio::time::timeout(Duration::from_secs(5), async {
             while !h.wire().iter().any(|message| {
@@ -50,10 +56,7 @@ async fn model_updates_preserve_the_active_turn_and_session_identity() {
             view.model.as_deref(),
             Some(if index == 0 { "fast" } else { "new-model" })
         );
-        assert_eq!(
-            view.reasoning_effort.as_deref(),
-            (index == 1).then_some("low")
-        );
+        assert_eq!(view.reasoning_effort.as_deref(), effort);
         assert_eq!(h.events(&session, "turn.started").await, 0);
     }
     h.release("release-1");
