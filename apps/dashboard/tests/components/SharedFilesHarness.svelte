@@ -1,12 +1,13 @@
 <script lang="ts">
   import SharedFiles from '../../src/components/chat/files/SharedFiles.svelte'
   import FilePreviewPanel from '../../src/components/chat/FilePreviewPanel.svelte'
-  import { provideFilePreview } from '../../src/components/chat/filePreviewContext'
+  import { provideFilePreviewNavigator, type FilePreviewTarget } from '../../src/components/chat/filePreviewContext'
   let { paths, highlighted = null }: { paths: string[]; highlighted?: string | null } = $props()
-  const preview = provideFilePreview()
+  let preview = $state.raw<FilePreviewTarget | null>(null)
+  provideFilePreviewNavigator({ open: target => { preview = target } })
 </script>
 
 <SharedFiles {paths} sessionId="main" {highlighted} />
-{#if $preview}
-  <FilePreviewPanel target={$preview} onclose={() => preview.set(null)} />
+{#if preview}
+  <aside aria-label="Preview panel"><FilePreviewPanel target={preview} onclose={() => { preview = null }} /></aside>
 {/if}

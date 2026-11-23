@@ -1,4 +1,4 @@
-import type { GitChangedFile, GitChangeGroup, WorkspaceGitStatusView } from "../../../api/types";
+import type { GitChangedFile, GitChangeGroup } from "../../../api/types";
 import type { MessageKey } from "$lib/i18n";
 
 /** Group order, symbol and color, matching the composer's git summary. */
@@ -55,18 +55,6 @@ export function changeDirLabel(file: Pick<GitChangedFile, "path" | "orig_path">)
   const from = splitChangePath(file.orig_path);
   const old = from.name === to.name ? from.dir || "." : file.orig_path;
   return `${old} → ${to.dir || "."}`;
-}
-
-/** The number of changed file entries in a Git status summary. */
-export function gitStatusChangeCount(status: WorkspaceGitStatusView | undefined): number {
-  if (!status || status.state !== "observed") return 0;
-  return (
-    status.staged_count + status.unstaged_count + status.untracked_count + status.conflicted_count
-  );
-}
-
-export function changeCountLabel(count: number): string {
-  return count > 99 ? "99+" : String(count);
 }
 
 export function sameChange(

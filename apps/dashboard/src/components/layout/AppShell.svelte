@@ -12,11 +12,10 @@
   import { isSettingsPath } from '../settings/sections'
   import { dashboardRelativePath } from '$lib/dashboardRoutes'
   import { installVisualViewportCssVars } from '$lib/visualViewport'
-  import { provideFilePreview } from '../chat/filePreviewContext'
-  import FilePreviewPanel from '../chat/FilePreviewPanel.svelte'
+  import { provideFilePreviewNavigator } from '../chat/filePreviewContext'
   import { filePreviewWidth } from '../chat/filePreviewWidth'
-  import { provideGitPanel } from '../chat/git/gitPanelContext.svelte'
-  import GitPanel from '../chat/git/GitPanel.svelte'
+  import { provideSessionPanel } from '../chat/sessionPanel/sessionPanelContext.svelte'
+  import SessionSidePanel from '../chat/sessionPanel/SessionSidePanel.svelte'
 
   let { children, sidebar, topbar, settingsEnabled = true }: {
     children: Snippet
@@ -25,16 +24,14 @@
     settingsEnabled?: boolean
   } = $props()
   let currentPath = $state(dashboardRelativePath())
-  let currentLocation = location.pathname
   const topBarAction = provideTopBarAction()
-  const filePreview = provideFilePreview()
-  const gitPanel = provideGitPanel(filePreview)
-  // The session page registers its Workspace; other pages show no Git panel.
-  const gitSource = $derived(!$filePreview && gitPanel.open ? gitPanel.source : null)
+  const sessionPanel = provideSessionPanel()
+  // Local file links open in the session side panel. The Bot chat page opens them in its own panel.
+  provideFilePreviewNavigator({ open: target => sessionPanel.openFile(target) })
+  // The session page registers its Session; other pages show no session side panel.
+  const sessionSource = $derived(sessionPanel.open ? sessionPanel.source : null)
 
   function updatePath(): void {
-    if (currentLocation !== location.pathname) filePreview.set(null)
-    currentLocation = location.pathname
     currentPath = dashboardRelativePath()
   }
 
@@ -64,7 +61,7 @@
 
 <svelte:window onpopstate={updatePath} onclick={updatePathAfterNavigation} />
 
-<Sidebar.Provider class="file-preview-layout" data-preview-open={$filePreview || gitSource ? 'true' : 'false'} style={$filePreviewWidth === null ? undefined : `--file-preview-saved-width: ${$filePreviewWidth}px`}>
+<Sidebar.Provider class="file-preview-layout" style={$filePreviewWidth === null ? undefined : `--file-preview-saved-width: ${$filePreviewWidth}px`}>
   {#if sidebar}
     {@render sidebar()}
   {:else}
@@ -97,13 +94,9 @@
       </div>
     </main>
   </Sidebar.Inset>
-  {#if $filePreview}
-    {#key $filePreview}
-      <FilePreviewPanel target={$filePreview} onclose={() => filePreview.set(null)} />
-    {/key}
-  {:else if gitSource}
-    {#key `${gitSource.device.id}\0${gitSource.workspaceId}`}
-      <GitPanel panel={gitPanel} source={gitSource} />
+  {#if sessionSource}
+    {#key sessionSource.device}
+      <SessionSidePanel panel={sessionPanel} source={sessionSource} />
     {/key}
   {/if}
 </Sidebar.Provider>
@@ -113,8 +106,7 @@
     --file-preview-width: 0px;
   }
   @media (min-width: 1024px) {
-    :global(.file-preview-layout[data-preview-open='true']),
-    :global(.file-preview-layout:has([data-bot-chat-panel])) {
+    :global(.file-preview-layout:has([data-session-panel], [data-bot-chat-panel])) {
       /* Keep in sync with FILE_PREVIEW_MIN_WIDTH and FILE_PREVIEW_RESERVED_WIDTH. */
       --file-preview-width: clamp(
         320px,

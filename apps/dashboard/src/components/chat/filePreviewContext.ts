@@ -1,5 +1,4 @@
 import { getContext, setContext } from "svelte";
-import { writable } from "svelte/store";
 import type { DeviceRuntime } from "../../device/runtime";
 
 export type FilePreviewTarget = {
@@ -13,12 +12,6 @@ export type FilePreviewTarget = {
 export type FilePreviewNavigator = { open(target: FilePreviewTarget): void };
 
 const key = Symbol("file-preview");
-
-export function provideFilePreview() {
-  const preview = writable<FilePreviewTarget | null>(null);
-  provideFilePreviewNavigator({ open: (target) => preview.set(target) });
-  return preview;
-}
 
 export function provideFilePreviewNavigator(navigator: FilePreviewNavigator) {
   setContext(key, navigator);

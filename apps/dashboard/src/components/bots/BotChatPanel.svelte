@@ -31,7 +31,7 @@
   import BotAvatar from './BotAvatar.svelte'
   import BotMessageSearch from './BotMessageSearch.svelte'
   import BotGitTab from './BotGitTab.svelte'
-  import { fileKindOf } from '../chat/fileKind'
+  import RecentFileList from '../chat/files/RecentFileList.svelte'
   import { createRecentFiles, withRecentFile } from '$lib/botRecentFiles'
   import { createPanelTab, type PanelTab } from '$lib/botPanelTab'
   import { SidePanelOpen } from '$lib/sidePanelOpen.svelte'
@@ -195,32 +195,6 @@
   </Empty.Root>
 {/snippet}
 
-{#snippet recentFileList()}
-  <section class="min-h-0 flex-1 overflow-auto overscroll-contain p-3" aria-labelledby="bot-recent-files">
-    <div class="flex items-center justify-between gap-2 pb-1 pl-2">
-      <h2 id="bot-recent-files" class="text-xs font-medium text-muted-foreground">{$t('files.recent')}</h2>
-      <Button variant="ghost" size="xs" onclick={() => { recentFiles.current = [] }}>{$t('files.clearRecent')}</Button>
-    </div>
-    <ul>
-      {#each recentFiles.current as recent (recent.path)}
-        {@const slash = recent.path.lastIndexOf('/')}
-        {@const name = recent.path.slice(slash + 1)}
-        {@const kind = fileKindOf(name)}
-        <li>
-          <button type="button" class="flex w-full items-center gap-3 rounded-lg p-2 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
-            title={recent.path} aria-label={$t('files.previewNamed', { name })} onclick={() => openFile({ device, ...recent })}>
-            <span class={['grid size-9 shrink-0 place-items-center rounded-lg', kind.tone]}><kind.icon class="size-5" weight="duotone" /></span>
-            <span class="min-w-0 flex-1">
-              <span class="block truncate text-sm font-medium">{name}</span>
-              {#if slash > 0}<span class="block truncate text-xs text-muted-foreground" dir="rtl"><bdi>{recent.path.slice(0, slash)}</bdi></span>{/if}
-            </span>
-          </button>
-        </li>
-      {/each}
-    </ul>
-  </section>
-{/snippet}
-
 {#snippet todoCard(message: BotMessage)}
   {@const done = message.todo?.state === 'done' ? message.todo : null}
   <li class={['rounded-xl border p-3', done ? 'border-transparent bg-muted/50' : 'bg-background']}>
@@ -264,7 +238,7 @@
       <header class="flex h-12 shrink-0 items-center justify-between gap-1 border-b px-2">
         <!-- Phones show the tab labels without icons, so all tabs and the close button fit. -->
         <Tabs.List variant="line" aria-label={$t('nav.sidebar')} class="h-full min-w-0 gap-0 max-sm:[&_svg]:hidden">
-          <Tabs.Trigger value="files" class="h-full px-2.5"><FileTextIcon />{$t('bots.files')}</Tabs.Trigger>
+          <Tabs.Trigger value="files" class="h-full px-2.5"><FileTextIcon />{$t('files.title')}</Tabs.Trigger>
           <Tabs.Trigger value="context" class="h-full px-2.5"><TreeStructureIcon />{$t('bots.context')}</Tabs.Trigger>
           <Tabs.Trigger value="todo" class="h-full px-2.5"><ListChecksIcon />{$t('bots.todos')}{@render badge()}</Tabs.Trigger>
           <Tabs.Trigger value="search" class="h-full px-2.5"><MagnifyingGlassIcon />{$t('bots.searchTab')}</Tabs.Trigger>
@@ -274,9 +248,9 @@
       </header>
       <Tabs.Content value="files" class="flex min-h-0 flex-col">
         {#if file}
-          {#key file}<FilePreviewPanel embedded target={file} onclose={() => { file = null }} />{/key}
+          {#key file}<FilePreviewPanel target={file} onclose={() => { file = null }} />{/key}
         {:else if recentFiles.current.length}
-          {@render recentFileList()}
+          <RecentFileList files={recentFiles.current} onopen={recent => openFile({ device, ...recent })} onclear={() => { recentFiles.current = [] }} />
         {:else}
           {@render empty(true)}
         {/if}

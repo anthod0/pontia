@@ -1,6 +1,6 @@
 import { PersistedState, scopedKey } from "./storage";
 
-/** A file opened in a Bot chat's side panel, read through the Session it was opened from. */
+/** A file opened in a side panel, read through the Session it was opened from. */
 export type RecentFile = { sessionId: string; path: string };
 
 const recentFileLimit = 10;

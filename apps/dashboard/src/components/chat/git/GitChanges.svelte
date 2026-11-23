@@ -23,7 +23,7 @@
   type Header = Snippet<[{ changes: GitChangesView | undefined; refresh: () => void; fetching: boolean }]>
 
   /** One Workspace's uncommitted changes: the change list, or the diff of `file` when one is open. */
-  let { device, workspaceId, file, hint, header, onopen, onback, onclose }: {
+  let { device, workspaceId, file, hint, header, onopen, onback }: {
     device: DeviceRuntime
     workspaceId: string
     file: GitDiffTarget | null
@@ -32,8 +32,6 @@
     header: Header
     onopen: (file: GitDiffTarget) => void
     onback: () => void
-    /** Closes the surrounding panel; without it, the diff has no close button and Esc stops at the list. */
-    onclose?: () => void
   } = $props()
 
   // The parent recreates this view for each device and Workspace.
@@ -60,10 +58,9 @@
   /** Esc returns from a diff to the list, then closes the panel. The parent forwards keys from the element that holds focus. */
   export function keydown(event: KeyboardEvent) {
     if (event.key !== 'Escape' || event.defaultPrevented) return
-    if (file) back()
-    else if (onclose) onclose()
-    else return
+    if (!file) return
     event.preventDefault()
+    back()
   }
 
   function back() {
@@ -82,7 +79,7 @@
 <div bind:this={element} class="flex min-h-0 flex-1 flex-col">
   {#if file}
     {#key `${workspaceId}\0${file.group}\0${file.path}`}
-      <GitDiffView {device} {workspaceId} {file} {change} onback={back} {onclose} />
+      <GitDiffView {device} {workspaceId} {file} {change} onback={back} />
     {/key}
   {:else}
     {@render header({ changes, refresh, fetching: changesQuery.isFetching })}

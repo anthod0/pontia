@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Choose the reasoning effort for supported Pi, Codex, and Claude Code models in New chat or the session creation API. Session details show the level the client reports.
 
+### Changed
+
+- In a Dashboard Session, the sidebar button at the top right opens a side panel with Files and Git tabs. Files linked in the chat open in the Files tab, which lists the Session's recently opened files when no file is open. The panel reopens on the tab you used last, and Alt G opens the Git tab.
+
 ## [0.8.11] - 2026-11-23
 
 ### Added

@@ -1,0 +1,97 @@
+<script lang="ts">
+  import { t, number } from '$lib/i18n'
+  import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
+  import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon'
+  import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
+  import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon'
+  import XIcon from 'phosphor-svelte/lib/XIcon'
+  import { Button } from '$lib/components/ui/button/index.js'
+  import * as Empty from '$lib/components/ui/empty/index.js'
+  import * as Tabs from '$lib/components/ui/tabs/index.js'
+  import { sessionRecentFiles, withoutSessionRecentFiles } from '$lib/sessionRecentFiles'
+  import FilePreviewPanel from '../FilePreviewPanel.svelte'
+  import FilePreviewResizer from '../FilePreviewResizer.svelte'
+  import RecentFileList from '../files/RecentFileList.svelte'
+  import GitChanges from '../git/GitChanges.svelte'
+  import { workspaceTitle } from '../sessionMetadata'
+  import type { SessionPanel, SessionPanelSource, SessionPanelTab } from './sessionPanelContext.svelte'
+
+  let { panel, source }: { panel: SessionPanel; source: SessionPanelSource } = $props()
+
+  // The panel is recreated for each device.
+  // svelte-ignore state_referenced_locally
+  const device = source.device
+  // svelte-ignore state_referenced_locally
+  const recentFiles = panel.recentFiles(device)
+  const sessionFiles = $derived(sessionRecentFiles(recentFiles.current, source.sessionId))
+  const workspacesQuery = device.workspaceQueries.createWorkspacesQuery()
+  const workspace = $derived(workspacesQuery.data?.find(item => item.workspace_id === source.workspaceId))
+  let element = $state<HTMLElement>()
+  let changes = $state<GitChanges>()
+
+  // Opening the panel by hand moves focus into it, so the keyboard works there right away.
+  $effect(() => {
+    if (!panel.focusPending || !element) return
+    panel.focusPending = false
+    element.focus()
+  })
+</script>
+
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<aside bind:this={element} tabindex="-1" data-session-panel aria-label={$t('nav.sidebar')} onkeydown={(event) => changes?.keydown(event)}
+  class="fixed inset-y-0 right-0 z-50 flex w-full min-w-0 flex-col border-l bg-surface outline-none pt-[env(safe-area-inset-top)] lg:w-[var(--file-preview-width)]">
+  <FilePreviewResizer />
+  <Tabs.Root bind:value={() => panel.tab, next => { panel.tab = next as SessionPanelTab }} class="min-h-0 flex-1 gap-0">
+    <header class="flex h-12 shrink-0 items-center justify-between gap-1 border-b px-2">
+      <Tabs.List variant="line" aria-label={$t('nav.sidebar')} class="h-full gap-0">
+        <Tabs.Trigger value="files" class="h-full px-2.5"><FileTextIcon />{$t('files.title')}</Tabs.Trigger>
+        <Tabs.Trigger value="git" class="h-full px-2.5"><GitBranchIcon />{$t('git.title')}</Tabs.Trigger>
+      </Tabs.List>
+      <Button variant="ghost" size="icon-sm" class="max-lg:size-11" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => panel.close()}><XIcon class="size-4 max-lg:size-5" /></Button>
+    </header>
+    <Tabs.Content value="files" class="flex min-h-0 flex-col">
+      {#if panel.file}
+        {#key panel.file}<FilePreviewPanel target={panel.file} onclose={() => panel.closeFile()} />{/key}
+      {:else if sessionFiles.length}
+        <RecentFileList files={sessionFiles} onopen={file => panel.openFile({ device, ...file })}
+          onclear={() => { recentFiles.current = withoutSessionRecentFiles(recentFiles.current, source.sessionId) }} />
+      {:else}
+        <Empty.Root class="min-h-0 p-8">
+          <Empty.Header>
+            <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><FileTextIcon class="size-6" /></Empty.Media>
+            <Empty.Title>{$t('files.noneOpen')}</Empty.Title>
+            <Empty.Description>{$t('files.noneOpenDescription')}</Empty.Description>
+          </Empty.Header>
+        </Empty.Root>
+      {/if}
+    </Tabs.Content>
+    <Tabs.Content value="git" class="flex min-h-0 flex-col">
+      <!-- Changes are read only while the tab shows. -->
+      {#if panel.tab === 'git' && source.workspaceId}
+        {#key source.workspaceId}
+          <GitChanges bind:this={changes} {device} workspaceId={source.workspaceId} file={panel.diff} hint={$t('git.keyboardHint')}
+            onopen={file => panel.openDiff(file)} onback={() => panel.showChanges()}>
+            {#snippet header({ changes, refresh, fetching })}
+              <div class="flex h-12 shrink-0 items-center gap-2 border-b pr-2 pl-4">
+                <FolderIcon class="size-4 shrink-0 text-muted-foreground" />
+                <span class="min-w-0 flex-1 truncate text-sm font-medium text-heading" title={workspace?.canonical_path}>{workspace ? workspaceTitle(workspace) : ''}</span>
+                {#if changes?.repo_root}<span class="text-xs text-muted-foreground tabular-nums" title={$t('git.changeCount', { count: changes.total })}>{$number(changes.total)}</span>{/if}
+                <Button variant="ghost" size="icon-sm" class="max-lg:size-11" disabled={fetching} onclick={refresh} aria-label={$t('common.refresh')} title={$t('common.refresh')}>
+                  <ArrowClockwiseIcon class={['size-4 max-lg:size-5', fetching && 'animate-spin']} />
+                </Button>
+              </div>
+            {/snippet}
+          </GitChanges>
+        {/key}
+      {:else if !source.workspaceId}
+        <Empty.Root class="min-h-0 p-8">
+          <Empty.Header>
+            <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><FolderIcon class="size-6" /></Empty.Media>
+            <Empty.Title>{$t('workspaces.noWorkspace')}</Empty.Title>
+            <Empty.Description>{$t('git.noWorkspaceDescription')}</Empty.Description>
+          </Empty.Header>
+        </Empty.Root>
+      {/if}
+    </Tabs.Content>
+  </Tabs.Root>
+</aside>

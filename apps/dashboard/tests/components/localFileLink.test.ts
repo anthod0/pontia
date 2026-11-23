@@ -119,7 +119,7 @@ test("cancels an old preview when another link is opened, ignores late results, 
   first(new Response("stale content"));
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(screen.queryByText("stale content")).not.toBeInTheDocument();
-  await fireEvent.click(screen.getByRole("button", { name: "Close", exact: true }));
+  await fireEvent.click(screen.getByRole("button", { name: "Close file" }));
   expect(fetch.mock.calls[1][1].signal.aborted).toBe(true);
   expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
 });
@@ -181,23 +181,6 @@ test("shows a loading placeholder and an empty-file state", async () => {
   resolve(new Response(""));
   await screen.findByText("This file is empty");
   expect(screen.queryByRole("status", { name: "Loading preview…" })).not.toBeInTheDocument();
-});
-
-test("resizes the preview with the keyboard and remembers the width", async () => {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("content")));
-  localStorage.removeItem("pontia.filePreviewWidth");
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
-    width: 400,
-  } as DOMRect);
-  vi.stubGlobal("innerWidth", 1440);
-  message("/tmp/report.txt");
-  await fireEvent.click(screen.getByRole("button", { name: "Preview report.txt" }));
-  const handle = screen.getByRole("separator", { name: "Resize preview" });
-  await fireEvent.keyDown(handle, { key: "ArrowLeft" });
-  expect(localStorage.getItem("pontia.filePreviewWidth")).toBe("432");
-  expect(handle).toHaveAttribute("aria-valuenow", "432");
-  await fireEvent.dblClick(handle);
-  expect(localStorage.getItem("pontia.filePreviewWidth")).toBeNull();
 });
 
 function requestedPath(call: unknown[]) {

@@ -5,7 +5,6 @@
   import BinaryIcon from 'phosphor-svelte/lib/BinaryIcon'
   import FileDashedIcon from 'phosphor-svelte/lib/FileDashedIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
-  import XIcon from 'phosphor-svelte/lib/XIcon'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
@@ -17,15 +16,13 @@
   import type { GitDiffTarget } from '../../../queries/workspaces'
   import { gitChangeGroups, splitChangePath } from './gitChanges'
 
-  let { device, workspaceId, file, change, onback, onclose }: {
+  let { device, workspaceId, file, change, onback }: {
     device: DeviceRuntime
     workspaceId: string
     file: GitDiffTarget
     /** The file's entry in the change list, when it is still listed. */
     change: GitChangedFile | undefined
     onback: () => void
-    /** Closes the surrounding panel; the close button shows only with it. */
-    onclose?: () => void
   } = $props()
 
   const skeletonLines = [42, 68, 55, 0, 74, 61, 83, 36, 0, 58, 70, 47]
@@ -74,7 +71,6 @@
   <Button variant="ghost" size="icon-sm" class="max-lg:size-11" disabled={diffQuery.isFetching} onclick={() => diffQuery.refetch()} aria-label={$t('common.refresh')} title={$t('common.refresh')}>
     <ArrowClockwiseIcon class={['size-4 max-lg:size-5', diffQuery.isFetching && 'animate-spin']} />
   </Button>
-  {#if onclose}<Button variant="ghost" size="icon-sm" class="max-lg:size-11" onclick={onclose} aria-label={$t('common.close')} title={`${$t('common.close')} (Alt G)`}><XIcon class="size-4 max-lg:size-5" /></Button>{/if}
 </header>
 <div class="flex shrink-0 items-center gap-2 border-b px-3 py-1.5 text-xs">
   <Badge variant="outline" class={['font-normal', group.tone]}>{$t(group.label)}</Badge>

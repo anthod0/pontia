@@ -1,0 +1,296 @@
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { testDevice } from "../deviceFixture";
+import type { GitChangesView, GitDiffView, WorkspaceView } from "../../src/api/types";
+import type { SessionPanel } from "../../src/components/chat/sessionPanel/sessionPanelContext.svelte";
+import SessionPanelHarness from "./SessionPanelHarness.svelte";
+
+const changes: GitChangesView = {
+  repo_root: "/repo",
+  total: 5,
+  truncated: false,
+  files: [
+    {
+      path: "src/conflict.ts",
+      group: "conflicted",
+      status: "U",
+      additions: null,
+      deletions: null,
+      binary: false,
+    },
+    { path: "src/lib.rs", group: "staged", status: "M", additions: 3, deletions: 1, binary: false },
+    {
+      path: "docs/new.md",
+      orig_path: "docs/old.md",
+      group: "staged",
+      status: "R",
+      additions: 0,
+      deletions: 0,
+      binary: false,
+    },
+    {
+      path: "logo.png",
+      group: "unstaged",
+      status: "M",
+      additions: null,
+      deletions: null,
+      binary: true,
+    },
+    {
+      path: "scratch/",
+      group: "untracked",
+      status: "?",
+      additions: null,
+      deletions: null,
+      binary: false,
+    },
+  ],
+};
+
+const diff: GitDiffView = {
+  path: "src/lib.rs",
+  group: "staged",
+  binary: false,
+  truncated: false,
+  hunks: [
+    {
+      header: "@@ -1,2 +1,2 @@",
+      lines: [
+        { kind: "context", old: 1, new: 1, text: "fn a() {}" },
+        { kind: "delete", old: 2, new: null, text: "fn old() {}" },
+        { kind: "add", old: null, new: 2, text: "fn new() {}" },
+      ],
+    },
+  ],
+};
+
+const workspace: WorkspaceView = {
+  availability: { status: "available", root_id: "root-1", path: "pontia" },
+  workspace_id: "workspace-1",
+  name: "pontia",
+  canonical_path: "/repo/pontia",
+  display_path: "~/repo/pontia",
+  state: "active",
+  metadata: {},
+  created_at: "2026-11-20T00:00:00Z",
+  updated_at: "2026-11-20T00:00:00Z",
+  last_used_at: null,
+};
+
+let wide = true;
+
+beforeEach(() => {
+  localStorage.clear();
+  wide = true;
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: wide && query === "(min-width: 1024px)",
+    addEventListener() {},
+    removeEventListener() {},
+  }));
+  vi.spyOn(testDevice.api, "listWorkspaces").mockResolvedValue([workspace]);
+  vi.spyOn(testDevice.api, "getWorkspaceGitChanges").mockResolvedValue(changes);
+  vi.spyOn(testDevice.api, "getWorkspaceGitDiff").mockResolvedValue(diff);
+  vi.spyOn(testDevice.fileApi, "pathFileContent").mockImplementation(
+    async (_session, path) => new Response(`# ${path.slice(path.lastIndexOf("/") + 1, -3)}\n`),
+  );
+});
+
+afterEach(() => {
+  cleanup();
+  testDevice.queryClient.clear();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+const sidebarButton = () => screen.getByRole("button", { name: "Sidebar" });
+const sidePanel = () => screen.getByRole("complementary", { name: "Sidebar" });
+
+async function openTab(name: "Files" | "Git") {
+  await fireEvent.click(sidebarButton());
+  const panel = sidePanel();
+  await fireEvent.click(within(panel).getByRole("tab", { name }));
+  return panel;
+}
+
+test("the sidebar button opens the panel on Files and shows no change count", async () => {
+  render(SessionPanelHarness);
+  const button = sidebarButton();
+  expect(button).toHaveAttribute("aria-pressed", "false");
+  expect(button.textContent?.trim()).toBe("");
+  expect(screen.queryByRole("complementary")).toBeNull();
+
+  await fireEvent.click(button);
+  const panel = sidePanel();
+  expect(button).toHaveAttribute("aria-pressed", "true");
+  expect(within(panel).getByRole("tab", { name: "Files" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  expect(within(panel).getByText("No open file")).toBeVisible();
+  // Changes are read only once the Git tab shows.
+  expect(testDevice.api.getWorkspaceGitChanges).not.toHaveBeenCalled();
+
+  await fireEvent.click(within(panel).getByRole("button", { name: "Close" }));
+  expect(screen.queryByRole("complementary")).toBeNull();
+});
+
+test("lists changes by group in panel order with line counts", async () => {
+  render(SessionPanelHarness);
+  const panel = await openTab("Git");
+
+  await within(panel).findByText("lib.rs");
+  const headings = within(panel)
+    .getAllByRole("button", { expanded: true })
+    .map((element) => element.textContent?.replace(/\s+/g, " ").trim());
+  expect(headings).toEqual(["! Conflicted 1", "+ Staged 2", "~ Unstaged 1", "? Untracked 1"]);
+
+  const lib = within(panel).getByRole("button", { name: "Staged: src/lib.rs" });
+  expect(lib.textContent).toContain("+3");
+  expect(lib.textContent).toContain("−1");
+  expect(within(panel).getByRole("button", { name: "Staged: docs/new.md" }).title).toBe(
+    "docs/old.md → docs/new.md",
+  );
+  expect(within(panel).getByRole("button", { name: "Unstaged: logo.png" }).textContent).toContain(
+    "Binary",
+  );
+  expect(within(panel).getByRole("button", { name: "Untracked: scratch/" })).toBeDisabled();
+  expect(await within(panel).findByText("pontia")).toHaveAttribute("title", "/repo/pontia");
+  expect(within(panel).getByTitle("5 changed files")).toHaveTextContent("5");
+});
+
+test("opens a file diff in the Git tab and returns to the list", async () => {
+  render(SessionPanelHarness);
+  const panel = await openTab("Git");
+
+  await fireEvent.click(await within(panel).findByRole("button", { name: "Staged: src/lib.rs" }));
+
+  await waitFor(() =>
+    expect(panel.querySelector("[data-git-diff]")?.textContent).toContain("fn new() {}"),
+  );
+  expect(testDevice.api.getWorkspaceGitDiff).toHaveBeenCalledWith(
+    "workspace-1",
+    { path: "src/lib.rs", orig_path: undefined, group: "staged" },
+    expect.anything(),
+  );
+  expect(within(panel).getByText("@@ -1,2 +1,2 @@")).toBeTruthy();
+
+  // Esc leaves the diff, and on the list it leaves the side panel open.
+  await fireEvent.keyDown(panel, { key: "Escape" });
+  await waitFor(() =>
+    expect(within(panel).getByRole("button", { name: "Staged: src/lib.rs" })).toBe(
+      document.activeElement,
+    ),
+  );
+  await fireEvent.keyDown(panel, { key: "Escape" });
+  expect(sidePanel()).toBeInTheDocument();
+});
+
+test("local file links open in the Files tab, which lists them again after a reload", async () => {
+  const first = render(SessionPanelHarness);
+  await openTab("Git");
+
+  await fireEvent.click(screen.getByRole("button", { name: "Preview notes.md" }));
+  const panel = sidePanel();
+  expect(within(panel).getByRole("tab", { name: "Files" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await within(panel).findByRole("heading", { name: "notes" });
+  await fireEvent.click(within(panel).getByRole("button", { name: "Close file" }));
+
+  first.unmount();
+  const second = render(SessionPanelHarness);
+  const list = await within(sidePanel()).findByRole("region", { name: "Recently opened" });
+  await fireEvent.click(within(list).getByRole("button", { name: "Preview notes.md" }));
+  await within(sidePanel()).findByRole("heading", { name: "notes" });
+
+  // Another Session on the same panel closes the file and lists only its own files.
+  await second.rerender({ sessionId: "session-2" });
+  expect(await within(sidePanel()).findByText("No open file")).toBeVisible();
+  await second.rerender({ sessionId: "session-1" });
+  expect(await within(sidePanel()).findByRole("region", { name: "Recently opened" })).toBeVisible();
+});
+
+test("resizes the panel with the keyboard and remembers the width", async () => {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+    width: 400,
+  } as DOMRect);
+  vi.stubGlobal("innerWidth", 1440);
+  render(SessionPanelHarness);
+  await fireEvent.click(sidebarButton());
+  const handle = within(sidePanel()).getByRole("separator", { name: "Resize preview" });
+  await fireEvent.keyDown(handle, { key: "ArrowLeft" });
+  expect(localStorage.getItem("pontia.filePreviewWidth")).toBe("432");
+  expect(handle).toHaveAttribute("aria-valuenow", "432");
+  await fireEvent.dblClick(handle);
+  expect(localStorage.getItem("pontia.filePreviewWidth")).toBeNull();
+});
+
+test("on wide screens the panel stays open on the tab last used", async () => {
+  const first = render(SessionPanelHarness);
+  await openTab("Git");
+  first.unmount();
+  expect(localStorage.getItem("pontia.gitPanelOpen")).toBe("true");
+  expect(localStorage.getItem("pontia.sessionPanelTab")).toBe("git");
+
+  render(SessionPanelHarness);
+  expect(within(sidePanel()).getByRole("tab", { name: "Git" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+});
+
+test("on phones the panel starts closed and does not save whether it is open", async () => {
+  localStorage.setItem("pontia.gitPanelOpen", "true");
+  wide = false;
+  render(SessionPanelHarness);
+  expect(screen.queryByRole("complementary")).toBeNull();
+  await fireEvent.click(sidebarButton());
+  await fireEvent.click(within(sidePanel()).getByRole("button", { name: "Close" }));
+  expect(localStorage.getItem("pontia.gitPanelOpen")).toBe("true");
+});
+
+test("toggling Git opens the Git tab, then closes the panel", async () => {
+  let panel: SessionPanel | undefined;
+  render(SessionPanelHarness, { onpanel: (value: SessionPanel) => (panel = value) });
+  panel!.toggleGit();
+  const aside = await screen.findByRole("complementary", { name: "Sidebar" });
+  expect(within(aside).getByRole("tab", { name: "Git" })).toHaveAttribute("aria-selected", "true");
+  await waitFor(() => expect(aside).toBe(document.activeElement));
+  panel!.toggleGit();
+  await waitFor(() => expect(screen.queryByRole("complementary")).toBeNull());
+});
+
+test("shows a message for a Workspace outside a Git repository", async () => {
+  vi.mocked(testDevice.api.getWorkspaceGitChanges).mockResolvedValue({
+    repo_root: null,
+    files: [],
+    total: 0,
+    truncated: false,
+  });
+  render(SessionPanelHarness);
+  await openTab("Git");
+  expect(await screen.findByText("Not a Git repository")).toBeTruthy();
+});
+
+test("shows a message for a Session without a Workspace", async () => {
+  render(SessionPanelHarness, { workspaceId: null });
+  await openTab("Git");
+  expect(await screen.findByText("No workspace")).toBeTruthy();
+  expect(testDevice.api.getWorkspaceGitChanges).not.toHaveBeenCalled();
+});
+
+test("keeps the open diff when the same Workspace attaches again", () => {
+  let panel: SessionPanel | undefined;
+  render(SessionPanelHarness, { onpanel: (value: SessionPanel) => (panel = value) });
+  panel!.openDiff({ path: "src/lib.rs", group: "staged" });
+
+  // A session switch detaches the page while it loads, then attaches the same Workspace.
+  const source = { device: testDevice, sessionId: "session-2", workspaceId: "workspace-1" };
+  panel!.attach(source)();
+  panel!.attach(source);
+  expect(panel!.diff).toEqual({ path: "src/lib.rs", group: "staged" });
+
+  panel!.attach({ ...source, workspaceId: "workspace-2" });
+  expect(panel!.diff).toBeNull();
+});
