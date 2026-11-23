@@ -28,6 +28,7 @@ time.sleep(8)
     )
     .unwrap();
     let mut runtime = launch_request(root.path(), Some("python3 pi.py --approve".into()));
+    runtime.reasoning_effort = Some("high".into());
     runtime.launch_mode = pontia_core::LaunchMode::Background;
     let started = start_session(&RuntimeConfig::default(), root.path(), runtime).unwrap();
     let fingerprint =
@@ -47,7 +48,15 @@ time.sleep(8)
     assert_eq!(started.metadata["start_command"], "python3 pi.py --approve");
     assert_eq!(
         serde_json::from_slice::<Vec<String>>(&std::fs::read(args).unwrap()).unwrap(),
-        ["--approve", "--mode", "rpc", "--session-id", "sess_launch"]
+        [
+            "--approve",
+            "--mode",
+            "rpc",
+            "--session-id",
+            "sess_launch",
+            "--thinking",
+            "high"
+        ]
     );
 }
 
@@ -197,6 +206,7 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
         &config,
         tempdir.path().join("pontia-home").as_path(),
         RuntimeStartRequest {
+            reasoning_effort: None,
             launch_mode: Default::default(),
             execution_policy: Default::default(),
             model: Some("provider/model".into()),
@@ -268,6 +278,7 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
         &config,
         tempdir.path().join("pontia-home").as_path(),
         RuntimeStartRequest {
+            reasoning_effort: None,
             launch_mode: Default::default(),
             execution_policy: Default::default(),
             model: None,
@@ -524,6 +535,7 @@ fn creation_uses_environment_file_and_default_command_precedence() {
 
 fn launch_request(root: &Path, start_command: Option<String>) -> RuntimeStartRequest {
     RuntimeStartRequest {
+        reasoning_effort: None,
         launch_mode: Default::default(),
         execution_policy: Default::default(),
         model: None,

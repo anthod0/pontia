@@ -597,8 +597,15 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
   [
     "GET",
     "/agent-clients/:type/:key/models",
-    ({ device }) => ({
-      models: device.data.models,
+    ({ device, params: [type] }) => ({
+      models: device.data.models.map((model, index) => ({
+        ...model,
+        reasoning_efforts:
+          type === "pi"
+            ? ["off", "low", "medium", "high"].map((id) => ({ id, name: id, description: "" }))
+            : [],
+        default_reasoning_effort: type === "pi" && index === 0 ? "medium" : null,
+      })),
       default_model: device.data.models[0]?.id ?? null,
     }),
   ],
@@ -899,6 +906,8 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
           },
           timeline_unavailable_reason: null,
           model,
+          reasoning_effort:
+            body.client_type === "pi" ? String(body.reasoning_effort ?? "medium") : null,
           context_usage: contextUsage(6_000),
           lineage: null,
           created_at: timestamp,

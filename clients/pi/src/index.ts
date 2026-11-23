@@ -222,33 +222,50 @@ export function createPontiaPiExtension(
 
   const modelId = (model: { provider: string; id: string }) => `${model.provider}/${model.id}`;
 
-  let lastModelReport: { event: InternalEvent; conflict?: boolean } | undefined;
+  type Observation = "model" | "reasoning_effort";
+  const lastReports: Partial<Record<Observation, { event: InternalEvent; conflict?: boolean }>> =
+    {};
 
-  async function reportModel(reconnecting = false): Promise<void> {
+  async function reportObservation(
+    field: Observation,
+    value: string | null | undefined,
+    reconnecting = false,
+  ): Promise<void> {
     const context = boundSessionContext;
-    const model = piContext?.model;
-    if (!context || !model || !readyReported || reportingDisabled) return;
-    const name = modelId(model);
+    if (!context || value === undefined || !readyReported || reportingDisabled) return;
+    let report = lastReports[field];
     if (
       !reconnecting ||
-      lastModelReport?.event.session_id !== context.sessionId ||
-      lastModelReport.event.data.runtime_id !== context.runtimeId ||
-      lastModelReport.event.data.model !== name
+      !report ||
+      report.event.session_id !== context.sessionId ||
+      report.event.data.runtime_id !== context.runtimeId ||
+      report.event.data[field] !== value
     ) {
-      lastModelReport = {
+      report = {
         event: {
           session_id: context.sessionId,
           report_key: nextReportKey(),
-          type: "session.model_updated",
-          data: { model: name, runtime_id: context.runtimeId },
+          type: `session.${field}_updated`,
+          data: { [field]: value, runtime_id: context.runtimeId },
         },
       };
+      lastReports[field] = report;
     }
-    const report = lastModelReport;
     if (report.conflict) return;
     const result = await makeReporter(currentHookLogFile()).report(context, report.event);
     if (result.conflict) report.conflict = true;
-    if (!result.accepted) throw new Error("Pi model observation was not accepted");
+    if (!result.accepted) throw new Error(`Pi ${field} observation was not accepted`);
+  }
+
+  function observedEffort(level = piContext?.thinkingLevel) {
+    return piContext?.model?.reasoning === false ? null : level;
+  }
+
+  async function reportModelAndEffort(reconnecting = false) {
+    await Promise.all([
+      reportObservation("model", piContext?.model && modelId(piContext.model), reconnecting),
+      reportObservation("reasoning_effort", observedEffort(), reconnecting),
+    ]);
   }
 
   function reportReady(context: SessionContext, logFile: string): void {
@@ -259,7 +276,7 @@ export function createPontiaPiExtension(
         if (!result.accepted && boundSessionContext === context) readyReported = false;
       })
       .catch(controlError);
-    void reportModel().catch(controlError);
+    void reportModelAndEffort().catch(controlError);
   }
 
   function sendControlInput(submission: ControlInput): void {
@@ -367,7 +384,7 @@ export function createPontiaPiExtension(
       },
       async () => {
         if (generation !== controlGeneration) return;
-        await reportModel(true);
+        await reportModelAndEffort(true);
       },
       (inboxMessageId) => {
         if (generation !== controlGeneration || reportingDisabled || !boundSessionContext) {
@@ -626,7 +643,12 @@ export function createPontiaPiExtension(
 
   pi.on("model_select", async (_event, ctx) => {
     piContext = ctx;
-    void reportModel().catch(controlError);
+    void reportModelAndEffort().catch(controlError);
+  });
+
+  pi.on("thinking_level_select", async (event, ctx) => {
+    piContext = ctx;
+    void reportObservation("reasoning_effort", observedEffort(event.level)).catch(controlError);
   });
 
   pi.on("session_before_compact", async (event) => {
@@ -687,7 +709,7 @@ export function createPontiaPiExtension(
         sourceEnv.PONTIA_SESSION_ID = reload.context.sessionId;
         sourceEnv.PONTIA_RUNTIME_INSTANCE_ID = reload.context.runtimeId;
         readyReported = true;
-        void reportModel().catch(controlError);
+        void reportModelAndEffort().catch(controlError);
         return;
       }
       if (reload?.control.socket) {

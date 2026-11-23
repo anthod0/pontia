@@ -47,6 +47,10 @@ impl ClientConfiguration for PiConfiguration {
         Ok(())
     }
 
+    fn supports_startup_reasoning_effort(&self) -> bool {
+        true
+    }
+
     fn supports_startup_model(&self) -> bool {
         true
     }

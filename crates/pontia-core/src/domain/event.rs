@@ -71,6 +71,8 @@ pub enum EventType {
     SessionCompactionFailed,
     #[serde(rename = "session.model_updated")]
     SessionModelUpdated,
+    #[serde(rename = "session.reasoning_effort_updated")]
+    SessionReasoningEffortUpdated,
     #[serde(rename = "interaction.blocked")]
     InteractionBlocked,
     #[serde(rename = "interaction.unblocked")]
@@ -191,6 +193,7 @@ impl EventType {
                 | Self::SessionCompactionFailed
                 | Self::SessionContextUsageUpdated
                 | Self::SessionModelUpdated
+                | Self::SessionReasoningEffortUpdated
                 | Self::TurnStarted
                 | Self::TurnOutput
                 | Self::TurnCompleted
@@ -212,6 +215,7 @@ impl std::fmt::Display for EventType {
             Self::SessionError => "session.error",
             Self::SessionTitleUpdated => "session.title_updated",
             Self::SessionModelUpdated => "session.model_updated",
+            Self::SessionReasoningEffortUpdated => "session.reasoning_effort_updated",
             Self::SessionCompactionStarted => "session.compaction_started",
             Self::SessionCompactionCompleted => "session.compaction_completed",
             Self::SessionCompactionFailed => "session.compaction_failed",
@@ -257,6 +261,7 @@ impl std::str::FromStr for EventType {
             "session.error" => Ok(Self::SessionError),
             "session.title_updated" => Ok(Self::SessionTitleUpdated),
             "session.model_updated" => Ok(Self::SessionModelUpdated),
+            "session.reasoning_effort_updated" => Ok(Self::SessionReasoningEffortUpdated),
             "session.compaction_started" => Ok(Self::SessionCompactionStarted),
             "session.compaction_completed" => Ok(Self::SessionCompactionCompleted),
             "session.compaction_failed" => Ok(Self::SessionCompactionFailed),

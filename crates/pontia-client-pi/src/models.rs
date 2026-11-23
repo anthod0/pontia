@@ -1,6 +1,9 @@
 use std::{collections::HashSet, path::Path, process::Stdio, time::Duration};
 
-use pontia_agent_control::{agent_clients::AgentClientModels, sessions::SessionModel};
+use pontia_agent_control::{
+    agent_clients::AgentClientModels,
+    sessions::{ReasoningEffortOption, SessionModel},
+};
 use pontia_core::{Error, Result};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -14,9 +17,31 @@ struct Model {
     provider: String,
     id: String,
     name: String,
+    #[serde(default)]
+    reasoning: bool,
+    #[serde(rename = "thinkingLevelMap", default)]
+    thinking_level_map: Value,
 }
 
 impl Model {
+    fn reasoning_efforts(&self) -> Vec<ReasoningEffortOption> {
+        if !self.reasoning {
+            return vec![];
+        }
+        ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
+            .into_iter()
+            .filter(|level| match self.thinking_level_map.get(level) {
+                Some(value) => !value.is_null(),
+                None => !matches!(*level, "xhigh" | "max"),
+            })
+            .map(|level| ReasoningEffortOption {
+                id: level.into(),
+                name: level.into(),
+                description: String::new(),
+            })
+            .collect()
+    }
+
     fn qualified_id(&self) -> Result<String> {
         if self.provider.trim().is_empty() || self.id.trim().is_empty() {
             return Err(Error::Domain("Invalid Pi model identifiers".into()));
@@ -40,6 +65,11 @@ pub(crate) async fn list(command: &str, directory: &Path) -> Result<AgentClientM
         let mut stdout = BufReader::new(child.stdout.take().expect("piped stdout"));
         let response = request(&mut stdin, &mut stdout, "get_available_models").await?;
         let models: Vec<Model> = serde_json::from_value(response["models"].clone())?;
+        let state = request(&mut stdin, &mut stdout, "get_state").await?;
+        let default_model: Option<Model> = serde_json::from_value(state["model"].clone())?;
+        let default_model = default_model
+            .map(|model| model.qualified_id())
+            .transpose()?;
         let mut ids = HashSet::new();
         let models = models
             .into_iter()
@@ -49,17 +79,18 @@ pub(crate) async fn list(command: &str, directory: &Path) -> Result<AgentClientM
                     return Err(Error::Domain("Invalid Pi model identifiers".into()));
                 }
                 Ok(SessionModel {
+                    default_reasoning_effort: if default_model.as_ref() == Some(&id) {
+                        state["thinkingLevel"].as_str().map(str::to_owned)
+                    } else {
+                        None
+                    },
+                    reasoning_efforts: model.reasoning_efforts(),
                     id,
                     name: model.name,
                     description: model.provider,
                 })
             })
             .collect::<Result<Vec<_>>>()?;
-        let state = request(&mut stdin, &mut stdout, "get_state").await?;
-        let default_model: Option<Model> = serde_json::from_value(state["model"].clone())?;
-        let default_model = default_model
-            .map(|model| model.qualified_id())
-            .transpose()?;
         drop(stdin);
         if !child.wait().await?.success() {
             return Err(Error::CapabilityUnavailable(

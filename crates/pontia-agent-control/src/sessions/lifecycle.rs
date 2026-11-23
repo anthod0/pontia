@@ -343,6 +343,7 @@ impl SessionCommandService {
                 &target,
                 pontia_home,
                 RuntimeStartRequest {
+                    reasoning_effort: None,
                     launch_mode: self.queries.session_launch_mode(session_id).await?,
                     execution_policy: self.queries.session_execution_policy(session_id).await?,
                     model: None,
@@ -512,6 +513,7 @@ impl SessionCommandService {
                 &target,
                 pontia_home,
                 RuntimeStartRequest {
+                    reasoning_effort: None,
                     launch_mode,
                     execution_policy,
                     model: None,

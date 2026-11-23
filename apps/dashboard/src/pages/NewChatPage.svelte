@@ -28,12 +28,14 @@
   const LAST_NEW_CHAT_CLIENT_STORAGE_KEY = scopedKey('pontia.chat.lastCreationOptionId', device.id)
   let createWorkspaceId = ''
   let creationOptionId = readStored(LAST_NEW_CHAT_CLIENT_STORAGE_KEY) ?? defaultClientType
+  let reasoningEffort = ''
   let model = ''
   let modelOptionId = creationOptionId
   let modelWorkspaceId = createWorkspaceId
   $: if (creationOptionId !== modelOptionId || createWorkspaceId !== modelWorkspaceId) {
     modelOptionId = creationOptionId
     modelWorkspaceId = createWorkspaceId
+    reasoningEffort = ''
     model = ''
   }
   let creating = false
@@ -164,6 +166,7 @@
       const result = await createSession({
         client_type: selectedCreationOption.client_type,
         ...(selectedCreationOption.model_catalog_key && model ? { model } : {}),
+        ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
         workspace_id: workspaceId,
         title: titleFromInitialPrompt(initialPrompt),
         include_standalone_session_instructions: true,
@@ -203,6 +206,7 @@
       <NewChatPanel
         bind:prompt={$chatDraft}
         bind:workspaceId={createWorkspaceId}
+        bind:reasoningEffort
         bind:model
         bind:creationOptionId
         {creating}

@@ -5,7 +5,7 @@ import type { InternalEvent } from "../src/events.js";
 import { createPontiaPiExtension } from "../src/index.js";
 import { tempDir } from "./temp-dir.js";
 
-async function fixture(failInitialModelReport = false) {
+async function fixture(failInitialModelReport = false, thinkingLevel?: string) {
   const root = await tempDir("pm-");
   const workspace = await realpath(root);
   const handlers: Record<string, (event: any, ctx?: any) => Promise<void>> = {};
@@ -20,6 +20,9 @@ async function fixture(failInitialModelReport = false) {
   let current = available[0];
   const context = {
     mode: "tui",
+    get thinkingLevel() {
+      return thinkingLevel;
+    },
     get model() {
       return current;
     },
@@ -79,6 +82,10 @@ async function fixture(failInitialModelReport = false) {
     controls,
     available,
     close,
+    async changeEffort(level: string) {
+      thinkingLevel = level;
+      await handlers.thinking_level_select({ level }, context);
+    },
     failReports(value: boolean) {
       failModelReports = value;
     },
@@ -114,4 +121,17 @@ test("failed startup model reporting preserves the registered connection for res
   f.failReports(false);
   await f.controls[0]();
   expect(f.events.at(-1)?.data.model).toBe("one/shared/name");
+});
+
+test("Pi reports the effective thinking level at ready, on native changes and on reconnect", async () => {
+  const f = await fixture(false, "medium");
+  const efforts = () =>
+    f.events.filter((event) => event.type === "session.reasoning_effort_updated");
+  await vi.waitFor(() => expect(efforts().at(-1)?.data.reasoning_effort).toBe("medium"));
+  await f.changeEffort("high");
+  await vi.waitFor(() => expect(efforts().at(-1)?.data.reasoning_effort).toBe("high"));
+  const selected = efforts().at(-1);
+  f.events.length = 0;
+  await f.controls[0]();
+  expect(efforts()).toEqual([selected]);
 });

@@ -67,7 +67,7 @@ impl ClientLauncher for PiLauncher {
         if runtime.execution_policy.disable_skills {
             policy_args.push_str(" --no-skills");
         }
-        let session_args = match request.native_session_key {
+        let mut session_args = match request.native_session_key {
             Some(key) => {
                 self.validate_resume(key, request.native_session_file)?;
                 let path = request
@@ -77,6 +77,9 @@ impl ClientLauncher for PiLauncher {
             }
             None => format!("--session-id {}", quote(&runtime.session_id)),
         };
+        if let Some(effort) = &runtime.reasoning_effort {
+            session_args.push_str(&format!(" --thinking {}", quote(effort)));
+        }
         let background = runtime.launch_mode == pontia_core::LaunchMode::Background;
         let mode = if background { " --mode rpc" } else { "" };
         runtime.start_command = Some(format!("{command}{mode}{policy_args} {session_args}"));

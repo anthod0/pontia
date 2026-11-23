@@ -351,6 +351,34 @@ fn fact(session: &str, runtime: &str, kind: &str, data: serde_json::Value) -> se
 }
 
 #[tokio::test]
+async fn reported_effort_is_validated_and_can_be_cleared_in_the_session_view() {
+    let (state, root) = state().await;
+    let (pi, _requests) = client(&state);
+    let (session, runtime) = register(&pi, root.path()).await;
+    let report = |data| fact(&session, &runtime, "session.reasoning_effort_updated", data);
+    for invalid in [
+        json!({}),
+        json!({"reasoning_effort":" "}),
+        json!({"reasoning_effort":42}),
+    ] {
+        assert!(pi.call("event.report", report(invalid)).await.is_err());
+    }
+    for effort in [Some("high"), None] {
+        pi.call("event.report", report(json!({"reasoning_effort": effort})))
+            .await
+            .unwrap();
+        let view = state
+            .queries()
+            .get_session(&session)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(view.reasoning_effort.as_deref(), effort);
+        assert_eq!(view.metadata.get("reasoning_effort"), Some(&json!(effort)));
+    }
+}
+
+#[tokio::test]
 async fn compaction_control_and_facts_share_identity_without_changing_session_state() {
     let (state, root) = state().await;
     let (pi, mut requests) = client(&state);

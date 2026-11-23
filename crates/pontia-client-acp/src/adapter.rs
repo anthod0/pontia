@@ -688,6 +688,7 @@ impl ClientSession for AcpAdapter {
                 events,
                 self.root.get().ok_or_else(unavailable)?,
                 RuntimeStartRequest {
+                    reasoning_effort: None,
                     launch_mode: Default::default(),
                     execution_policy: Default::default(),
                     model,

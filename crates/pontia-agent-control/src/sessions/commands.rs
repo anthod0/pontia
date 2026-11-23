@@ -52,12 +52,12 @@ impl SessionCommandService {
             request.client_type = self.clients.registry().default_client_type()?.to_string();
         }
         self.clients.for_client(&request.client_type)?;
-        let client_key = match self
+        let client_config = self
             .clients
             .registry()
             .get(&request.client_type)
-            .and_then(|entry| entry.configuration.as_ref())
-        {
+            .and_then(|entry| entry.configuration.as_ref());
+        let client_key = match client_config {
             Some(configuration) => {
                 let key = configuration.key(&request.metadata)?;
                 configuration.validate_execution_policy(&key, &request.execution_policy)?;
@@ -74,15 +74,19 @@ impl SessionCommandService {
             if model.trim().is_empty() {
                 return Err(Error::Domain("model must be non-empty".into()));
             }
-            if !self
-                .clients
-                .registry()
-                .get(&request.client_type)
-                .and_then(|entry| entry.configuration.as_ref())
-                .is_some_and(|config| config.supports_startup_model())
-            {
+            if !client_config.is_some_and(|config| config.supports_startup_model()) {
                 return Err(Error::CapabilityUnavailable(
                     "Model selection at startup is unavailable for this client".into(),
+                ));
+            }
+        }
+        if let Some(effort) = &request.reasoning_effort {
+            if effort.trim().is_empty() {
+                return Err(Error::Domain("reasoning_effort must be non-empty".into()));
+            }
+            if !client_config.is_some_and(|config| config.supports_startup_reasoning_effort()) {
+                return Err(Error::CapabilityUnavailable(
+                    "Reasoning effort selection at startup is unavailable for this client".into(),
                 ));
             }
         }
@@ -205,6 +209,7 @@ impl SessionCommandService {
             .start(
                 &self.pontia_home,
                 RuntimeStartRequest {
+                    reasoning_effort: request.reasoning_effort,
                     launch_mode: request.launch_mode,
                     execution_policy: request.execution_policy,
                     model: request.model,

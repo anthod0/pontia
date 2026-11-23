@@ -22,7 +22,7 @@ pub mod instructions;
 pub use fork::{ForkSessionOutcome, ForkSessionRequest};
 mod models;
 pub use compaction::CompactionAccepted;
-pub use models::SessionModel;
+pub use models::{ReasoningEffortOption, SessionModel};
 mod lifecycle;
 mod runtime_binding;
 
@@ -36,6 +36,7 @@ pub struct CreateSessionRequest {
     #[serde(default)]
     pub execution_policy: pontia_core::execution_policy::ExecutionPolicy,
     pub model: Option<String>,
+    pub reasoning_effort: Option<String>,
     #[serde(default, deserialize_with = "deserialize_client_type")]
     pub client_type: String,
     pub title: Option<String>,

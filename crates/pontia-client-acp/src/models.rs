@@ -48,6 +48,8 @@ fn catalog(options: &[SessionConfigOption]) -> AgentClientModels {
     AgentClientModels {
         models: values(select)
             .map(|model| SessionModel {
+                reasoning_efforts: vec![],
+                default_reasoning_effort: None,
                 id: model.value.to_string(),
                 name: model.name.clone(),
                 description: model.description.clone().unwrap_or_default(),

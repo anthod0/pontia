@@ -370,6 +370,7 @@ export interface SessionView {
   control_disconnected_reason?: "unsupported_protocol_version";
   timeline_unavailable_reason?: string | null;
   model: string | null;
+  reasoning_effort?: string | null;
   context_usage: ContextUsageView | null;
   lineage: SessionLineageView | null;
   created_at: string;
@@ -655,6 +656,7 @@ export interface Interaction {
 }
 
 export interface CreateSessionInput {
+  reasoning_effort?: string;
   model?: string;
   client_type: string;
   workspace?: string | null;
@@ -696,7 +698,15 @@ export interface ApiEnvelope<T> {
   error?: { code: string; message: string } | null;
 }
 
+export interface ReasoningEffortOption {
+  id: string;
+  name: string;
+  description: string;
+}
+
 export interface SessionModel {
+  reasoning_efforts?: ReasoningEffortOption[];
+  default_reasoning_effort?: string | null;
   id: string;
   name: string;
   description: string;

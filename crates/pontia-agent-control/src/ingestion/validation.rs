@@ -84,6 +84,15 @@ impl InternalEventValidationService {
             ));
         }
 
+        if event.event_type == EventType::SessionReasoningEffortUpdated
+            && !event.payload.get("reasoning_effort").is_some_and(|value| {
+                value.is_null() || value.as_str().is_some_and(|s| !s.trim().is_empty())
+            })
+        {
+            return Err(Error::Domain(
+                "payload.reasoning_effort must be a non-empty string or null".into(),
+            ));
+        }
         if event.event_type == EventType::SessionModelUpdated
             && !event
                 .payload
