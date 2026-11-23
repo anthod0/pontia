@@ -26,6 +26,7 @@
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
 	import { cn } from '$lib/utils';
 	import BotAvatarMark from '$lib/components/bot-story/BotAvatarMark.svelte';
+	import DemoFilesTab from './DemoFilesTab.svelte';
 	import DemoGitChanges from './DemoGitChanges.svelte';
 	import type { DemoBot, DemoBotEntry, DemoTodo, DemoWorkspace } from './mockData';
 	import { plainText } from './text';
@@ -43,6 +44,7 @@
 		query = $bindable(),
 		searchSelected = $bindable(),
 		workspaceId = $bindable(),
+		onopenfile,
 		onjump,
 		onquote,
 		onreply,
@@ -62,6 +64,7 @@
 		searchSelected: string | null;
 		/** The Workspace the Git tab shows. */
 		workspaceId: string | null;
+		onopenfile: (path: string) => void;
 		onjump: (id: string) => void;
 		onquote: (entry: DemoBotEntry) => void;
 		onreply: (text: string, quote: string) => void;
@@ -101,16 +104,6 @@
 	const tabTrigger = 'h-full flex-none px-1 text-xs @[27.5rem]/panel:px-2 @[27.5rem]/panel:text-sm text-foreground/60 hover:text-foreground data-[state=active]:text-foreground data-[state=active]:after:opacity-100 [&_svg]:size-4';
 	const smallButton = 'inline-flex h-6 items-center gap-1 rounded-md px-2 text-xs font-medium hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary [&_svg]:size-3.5';
 	const iconButton = 'flex size-7 shrink-0 items-center justify-center rounded-md text-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary';
-
-	function openFile(path: string) {
-		file = path;
-		recent = [path, ...recent.filter((item) => item !== path)];
-	}
-
-	function split(path: string): { name: string; dir: string } {
-		const slash = path.lastIndexOf('/');
-		return { name: path.slice(slash + 1), dir: slash < 0 ? '' : path.slice(0, slash) };
-	}
 
 	function highlight(text: string): { text: string; match: boolean }[] {
 		const needle = query.trim().toLowerCase();
@@ -227,40 +220,7 @@
 			<button type="button" class={iconButton} aria-label="Close" title="Close" onclick={onclose}><XIcon class="size-4" /></button>
 		</header>
 
-		<Tabs.Content value="files" class="flex min-h-0 flex-col text-sm">
-			{#if file}
-				{@const parts = split(file)}
-				<header class="flex shrink-0 items-center gap-1 border-b border-border px-2 py-2">
-					<h2 class="panel-heading min-w-0 flex-1 truncate px-1 font-medium" title={file}>{parts.name}</h2>
-					<span class="flex size-7 items-center justify-center" aria-hidden="true"><ArrowClockwiseIcon class="size-4" /></span>
-					<button type="button" class={iconButton} aria-label="Close file" title="Close file" onclick={() => (file = null)}><XIcon class="size-4" /></button>
-				</header>
-				<pre class="demo-scroll min-h-0 flex-1 overflow-auto p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-foreground">{bot.files[file]}</pre>
-			{:else if recent.length}
-				<section class="demo-scroll min-h-0 flex-1 overflow-auto p-3" aria-label="Recently opened">
-					<div class="flex items-center justify-between gap-2 pb-1 pl-2">
-						<h2 class="panel-heading text-xs! font-medium text-muted-foreground">Recently opened</h2>
-						<button type="button" class={smallButton} onclick={() => (recent = [])}>Clear list</button>
-					</div>
-					<ul>
-						{#each recent as path (path)}
-							{@const parts = split(path)}
-							<li>
-								<button type="button" class="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary" title={path} aria-label={`Preview ${parts.name}`} onclick={() => openFile(path)}>
-									<span class="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/12 text-primary"><FileTextIcon class="size-5" weight="duotone" /></span>
-									<span class="min-w-0 flex-1">
-										<span class="block truncate text-sm font-medium">{parts.name}</span>
-										{#if parts.dir}<span class="block truncate text-xs text-muted-foreground" dir="rtl"><bdi>{parts.dir}</bdi></span>{/if}
-									</span>
-								</button>
-							</li>
-						{/each}
-					</ul>
-				</section>
-			{:else}
-				{@render empty(FileTextIcon, 'No open file')}
-			{/if}
-		</Tabs.Content>
+		<DemoFilesTab files={bot.files} {file} {recent} onopen={onopenfile} onclose={() => (file = null)} onclear={() => (recent = [])} />
 
 		<Tabs.Content value="context" class="flex min-h-0 flex-col">
 			{#if !context.length}

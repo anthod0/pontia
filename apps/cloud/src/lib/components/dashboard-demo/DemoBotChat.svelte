@@ -256,7 +256,7 @@
 </div>
 
 {#if panelOpen}
-	<DemoBotPanel bind:element={panelElement} bind:tab bind:file bind:selected bind:recent bind:query bind:searchSelected bind:workspaceId {bot} {workspaces} {count} onjump={jump} onquote={addQuote} onreply={send} {ontodochange} onclose={() => (panelOpen = false)} />
+	<DemoBotPanel bind:element={panelElement} bind:tab bind:file bind:selected bind:recent bind:query bind:searchSelected bind:workspaceId {bot} {workspaces} {count} onopenfile={openFile} onjump={jump} onquote={addQuote} onreply={send} {ontodochange} onclose={() => (panelOpen = false)} />
 {/if}
 
 <style>
