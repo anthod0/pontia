@@ -307,3 +307,62 @@ async fn native_recovery_restores_steering_after_the_turn_input() {
     );
     fixture.shutdown().await;
 }
+
+#[tokio::test]
+async fn direct_inputs_without_client_ids_survive_recovery_and_live_steering() {
+    let history_input = |id: &str| {
+        json!({
+            "type":"userMessage", "id":id, "clientId":null,
+            "content":[{"type":"text","text":"same input"}]
+        })
+    };
+    let mut initial = turn(json!([
+        {"type":"agentMessage","id":"before","text":"before"},
+        history_input("item-3"),
+    ]));
+    initial["items"][0] = history_input("item-1");
+    let fixture = Fixture::new(initial, Vec::new()).await;
+    let recovered = fixture.wait_snapshot(|_| true).await;
+    assert_eq!(
+        recovered.items.iter().map(item_summary).collect::<Vec<_>>(),
+        ["text:before", "input:same input"]
+    );
+
+    fixture.server_state.turns.lock().await[0]["items"]
+        .as_array_mut()
+        .unwrap()
+        .extend([history_input("item-4"), history_input("item-6")]);
+    // A full history read can already see both steers while the observer drains
+    // the notifications separated by an assistant delta.
+    for (id, reply) in [("uuid-a", "between"), ("uuid-b", "next")] {
+        for method in ["item/started", "item/completed"] {
+            fixture
+                .notify(json!({"method":method,"params":{
+                    "threadId":"thread","turnId":"native-turn","item":history_input(id)
+                }}))
+                .await;
+        }
+        fixture
+            .notify(delta("thread", "native-turn", reply, json!(reply)))
+            .await;
+    }
+    fixture
+        .notify(delta("thread", "native-turn", "after", json!("after")))
+        .await;
+    let snapshot = fixture
+        .wait_snapshot(|s| s.items.last() == Some(&text("after", "after")))
+        .await;
+    assert_eq!(
+        snapshot.items.iter().map(item_summary).collect::<Vec<_>>(),
+        [
+            "text:before",
+            "input:same input",
+            "input:same input",
+            "text:between",
+            "input:same input",
+            "text:next",
+            "text:after"
+        ]
+    );
+    fixture.shutdown().await;
+}
