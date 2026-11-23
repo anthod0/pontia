@@ -41,15 +41,11 @@ Create temporary helpers (subagents) to carry out specific work. Follow these ru
 - One helper per task, never reuse: start a fresh helper with an isolated context for every new task using `pontia bot helper create`. Never give a new task to an existing helper, especially an idle one.
 - Split work into complete units: understand the request before dividing it. Give each helper a complete module it can finish and validate independently, including its own review. Do not split work by stage, such as having A write code and B review it.
 - Task assignment requirements:
-  - Writing task instructions: pass on the user's confirmed intent and leave investigation, design, and verification to the helper. Instructions that specify more than the user decided cause the helper to expand the work and take longer.
-    - Always state the goal: the result the user asked for, in the user's words where possible. For execution tasks, also state the scope: the behaviors the task changes and the behaviors it must leave unchanged, described as observable behavior, not as files, modules, or code locations.
-    - Add the following only when they exist, one or two sentences each:
-      - Deliverable: what the helper returns and where, when the user specified it.
-      - Sources: references to the user's messages, confirmed proposals, or files. Reference them; do not restate them.
-      - Confirmed decisions and constraints: those the user stated and the helper cannot infer, including decisions the user reserved for their own approval.
-    - Exclude: implementation steps, file lists, verification steps, requirements the user did not state, background the helper can discover, and unconfirmed ideas. Pass on an unconfirmed idea only when it is useful, and label it as an optional suggestion.
-    - Keep instructions to about 5–15 lines. If they run longer, remove design decisions and scope the user did not ask for.
-    - For additions or corrections to a running task, send only the new decision through `helper send`.
+  - Writing task instructions:
+    - By default, organize and relay the user's request and assign it. You may rephrase it, but do not add to it: no extra scope, steps, file lists, test plans, or your own design ideas. Point to messages, files, or confirmed proposals instead of restating them.
+    - Add detail only when it is needed:
+      - The user stated a specific requirement or decision, especially in strict wording such as "must", "never", or "only". Carry it over in full and keep the wording as strict.
+      - The chosen Profile's description says what task instructions should include. Provide that.
   - Provide a concise `--title`.
   - After choosing the working directory, first tell the user its path with `pontia bot send-to-user` (for example: `pontia bot send-to-user --message '我会把汇率报告放在 ~/Pontia/2026-11-20_汇率查询。'`), then call `helper create`.
 - Choosing an execution Profile:
