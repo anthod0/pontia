@@ -18,6 +18,34 @@ RUN bash scripts/pack-claude-client.sh /out/claude-client.tgz \
     && npm install --prefix /opt/pontia/claude-client --omit=dev --no-audit --no-fund /out/claude-client.tgz \
     && node /opt/pontia/claude-client/node_modules/@pontia/claude-client/dist/src/main.js preflight
 
+FROM base AS claude-proxy
+ARG TARGETARCH
+RUN python3 - "$TARGETARCH" <<'PY'
+import hashlib
+import io
+import json
+from pathlib import Path
+import sys
+import tarfile
+import urllib.request
+
+base = "https://api.github.com/repos/router-for-me/CLIProxyAPI/releases/latest"
+release = json.load(urllib.request.urlopen(base))
+arch = {"amd64": "amd64", "arm64": "aarch64"}[sys.argv[1]]
+asset = next(a for a in release["assets"] if a["name"].endswith(f"_linux_{arch}_no-plugin.tar.gz"))
+checksums = next(a for a in release["assets"] if a["name"] == "checksums.txt")
+archive = urllib.request.urlopen(asset["browser_download_url"]).read()
+checks = urllib.request.urlopen(checksums["browser_download_url"]).read().decode()
+expected = next(line.split()[0] for line in checks.splitlines() if line.endswith(asset["name"]))
+if hashlib.sha256(archive).hexdigest() != expected:
+    raise ValueError("CLIProxyAPI checksum mismatch")
+with tarfile.open(fileobj=io.BytesIO(archive)) as package:
+    binary = Path("/usr/local/bin/CLIProxyAPI")
+    binary.write_bytes(package.extractfile("cli-proxy-api").read())
+    binary.chmod(0o755)
+print("Installed CLIProxyAPI", release["tag_name"])
+PY
+
 FROM rust:1-bookworm AS rust-build
 WORKDIR /src
 COPY Cargo.toml Cargo.lock VERSION ./
@@ -69,6 +97,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && usermod --login e2e --home /home/e2e --move-home node \
     && groupmod --new-name e2e node
 COPY --from=rust-build /out/pontia /out/pontiad /usr/local/bin/
+COPY --from=claude-proxy /usr/local/bin/CLIProxyAPI /usr/local/bin/CLIProxyAPI
 COPY --from=dashboard-build /out/local /opt/pontia/dashboard
 COPY clients/pi /opt/pontia/clients/pi
 COPY clients/shared /opt/pontia/clients/shared
@@ -77,6 +106,7 @@ COPY --from=claude-build /src/clients/claude /opt/pontia/claude-validation
 COPY --from=claude-build /opt/pontia/claude-client /opt/pontia/claude-client
 COPY docker/e2e/device-entrypoint /usr/local/bin/device-entrypoint
 COPY docker/e2e/configure-pi-auth.py /usr/local/lib/configure-pi-auth.py
+COPY docker/e2e/configure-claude-proxy.py /usr/local/lib/configure-claude-proxy.py
 COPY docker/e2e/device.toml /opt/pontia/config.toml
 RUN mkdir -p /home/e2e/.pontia /home/e2e/.pi/agent /home/e2e/.codex /home/e2e/.claude /home/e2e/workspace \
     && chown -R 1000:1000 /home/e2e

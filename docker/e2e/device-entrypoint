@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 077
+pids=()
+cleanup() {
+  if ((${#pids[@]})); then
+    kill "${pids[@]}" 2>/dev/null || true
+    wait "${pids[@]}" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
+trap 'exit 0' TERM INT
 mkdir -p "$PONTIA_HOME" "$HOME/.pi/agent" "$HOME/.codex" "$CLAUDE_CONFIG_DIR" "$HOME/workspace"
 if [[ ! -f "$HOME/.pi/agent/auth.json" && -f /e2e-auth/pi.json ]]; then
   cp /e2e-auth/pi.json "$HOME/.pi/agent/auth.json"
@@ -25,10 +34,21 @@ if [[ ! -d "$HOME/workspace/.git" ]]; then
   git -C "$HOME/workspace" init --initial-branch=main
 fi
 python3 /usr/local/lib/configure-pi-auth.py "$HOME/.pi/agent/auth.json" /run/secrets/openai-api-key
+python3 /usr/local/lib/configure-claude-proxy.py "$CLAUDE_CONFIG_DIR/settings.json" /run/secrets/openai-api-key /run/claude-proxy
 if [[ -n "$(< /run/secrets/openai-api-key)" ]]; then
+  (cd /run/claude-proxy && exec CLIProxyAPI -config config.yaml -local-model) &
+  pids+=("$!")
+  for ((attempt = 0; attempt < 100; attempt++)); do
+    kill -0 "${pids[0]}"
+    if curl --fail --silent http://127.0.0.1:8317/ >/dev/null; then break; fi
+    sleep 0.1
+  done
+  curl --fail --silent http://127.0.0.1:8317/ >/dev/null
   codex login --with-api-key < /run/secrets/openai-api-key
 elif [[ -f "$HOME/.codex/auth.json" ]]; then
   codex logout
 fi
 codex app-server daemon start
-exec pontiad
+pontiad &
+pids+=("$!")
+wait -n "${pids[@]}"

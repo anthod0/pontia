@@ -88,7 +88,7 @@ class SetupTests(unittest.TestCase):
         config = self.state / "cloud.dev.vars"
         self.assertFalse({"GOOGLE_CLIENT_ID", "GITHUB_CLIENT_ID", "OAUTH_COOKIE_SECRET"}
                          & setup.variables(config).keys())
-        config.write_text(config.read_text() + 'OPENROUTER_API_KEY="fixture"\n')
+        config.write_text(config.read_text() + 'EXTRA_TEST_SETTING="fixture"\n')
         api_key = self.state / "openai-api-key"
         self.assertEqual(api_key.read_bytes(), b"")
         self.assertEqual(api_key.stat().st_mode & 0o777, 0o600)
@@ -98,41 +98,6 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(api_key.read_text(), "fixture-key")
         self.assertEqual((self.state / "cloud.dev.vars").read_bytes(), original)
         self.assertEqual((self.state / "cloud.dev.vars").stat().st_mode & 0o777, 0o600)
-
-    def test_openrouter_key_refreshes_native_configuration(self):
-        path = self.state / "auth/device/claude-settings.json"
-        setup.write_private(path, json.dumps({
-            "model": "test-model", "env": {"ANTHROPIC_API_KEY": "old-key"},
-        }))
-        original = path.read_bytes()
-        setup.prepare_claude(self.state, self.state)
-        self.assertEqual(path.read_bytes(), original)
-        config = self.state / "cloud.dev.vars"
-        base = config.read_text()
-        for key in ("test-openrouter-first", "test-openrouter-rotated"):
-            config.write_text(base + f'OPENROUTER_API_KEY="{key}"\n')
-            setup.prepare_claude(self.state, self.state)
-            self.assertEqual(json.loads(path.read_text()), {
-                "model": "test-model",
-                "env": {
-                    "ANTHROPIC_BASE_URL": "https://openrouter.ai/api",
-                    "ANTHROPIC_AUTH_TOKEN": key,
-                    "ANTHROPIC_API_KEY": "",
-                },
-            })
-            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
-
-    def test_openrouter_placeholder_stops_startup_before_containers_are_created(self):
-        config = self.state / "cloud.dev.vars"
-        base = config.read_text()
-        for value in ('xxx', '""', '"  "'):
-            config.write_text(base + f"OPENROUTER_API_KEY={value}\n")
-            with patch.object(self.lab, "resources", return_value=b""), \
-                    patch.object(setup, "check"), patch.object(self.lab, "compose") as compose:
-                with self.assertRaises(ValueError):
-                    self.lab.up()
-                compose.assert_not_called()
-            self.assertFalse((self.state / "auth/device/claude-settings.json").exists())
 
     def test_saved_browser_credentials_keep_only_agent_client_logins(self):
         cookie_path = self.root / "Cookies"

@@ -56,6 +56,89 @@ class SmokeLab(test_setup.setup.Lab):
 
 @unittest.skipUnless(os.environ.get("PONTIA_DOCKER_SMOKE") == "1", "Set PONTIA_DOCKER_SMOKE=1 after building images")
 class ContainerSmokeTests(unittest.TestCase):
+    def test_claude_gateway_converts_requests_without_reasoning_or_database(self):
+        probe = textwrap.dedent('''
+            import http.server
+            import json
+            from pathlib import Path
+            import subprocess
+            import tempfile
+            import threading
+            import time
+            import urllib.request
+
+            requests = []
+            class OpenAI(http.server.BaseHTTPRequestHandler):
+                def log_message(self, *args):
+                    pass
+
+                def do_POST(self):
+                    body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                    requests.append((self.path, body))
+                    response = {'id': 'chatcmpl-test', 'object': 'chat.completion',
+                                'model': 'gpt-4o-mini', 'created': 1,
+                                'choices': [{'index': 0, 'message': {'role': 'assistant',
+                                            'content': 'gateway-ok'}, 'finish_reason': 'stop'}],
+                                'usage': {'prompt_tokens': 5, 'completion_tokens': 3, 'total_tokens': 8}}
+                    data = json.dumps(response).encode()
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.send_header('Content-Length', str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+
+            with tempfile.TemporaryDirectory(prefix='claude-gateway-test-') as directory, \
+                    http.server.ThreadingHTTPServer(('127.0.0.1', 0), OpenAI) as upstream:
+                root = Path(directory)
+                key = root / 'key'
+                key.write_text('upstream-fixture')
+                settings = root / 'settings.json'
+                runtime = root / 'runtime'
+                subprocess.run(['python3', '/usr/local/lib/configure-claude-proxy.py',
+                                str(settings), str(key), str(runtime)], check=True)
+                config_path = runtime / 'config.yaml'
+                config = json.loads(config_path.read_text())
+                config['api-keys']['openai-compatibility'][0]['base-url'] = (
+                    f'http://127.0.0.1:{upstream.server_port}/v1')
+                config_path.write_text(json.dumps(config))
+                threading.Thread(target=upstream.serve_forever, daemon=True).start()
+                process = subprocess.Popen(['CLIProxyAPI', '-config', str(config_path), '-local-model'],
+                                           cwd=runtime, stdout=subprocess.DEVNULL)
+                try:
+                    for _ in range(100):
+                        assert process.poll() is None
+                        try:
+                            with urllib.request.urlopen('http://127.0.0.1:8317/', timeout=1):
+                                break
+                        except OSError:
+                            time.sleep(.1)
+                    body = {'model': 'gpt-4o-mini', 'max_tokens': 32,
+                            'thinking': {'type': 'disabled'}, 'output_config': {'effort': 'medium'},
+                            'messages': [{'role': 'user', 'content': 'hello'}]}
+                    request = urllib.request.Request('http://127.0.0.1:8317/v1/messages',
+                        data=json.dumps(body).encode(), headers={'Content-Type': 'application/json',
+                        'x-api-key': config['access']['api-keys'][0]})
+                    with urllib.request.urlopen(request, timeout=10) as response:
+                        assert json.load(response)['content'][0]['text'] == 'gateway-ok'
+                    assert requests[0][0] == '/v1/chat/completions'
+                    assert requests[0][1]['model'] == 'gpt-4o-mini'
+                    assert 'reasoning_effort' not in requests[0][1]
+                finally:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait()
+                    upstream.shutdown()
+                assert not list(runtime.rglob('*.db'))
+        ''')
+        result = subprocess.run([
+            "docker", "run", "--rm", "--init", "--network", "none",
+            "--entrypoint", "python3", f"{test_setup.setup.Lab(test_setup.ROOT, test_setup.ROOT).images}-device:latest", "-c", probe,
+        ], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_local_d1_commands_exit_when_registry_does_not_respond(self):
         probe = textwrap.dedent('''
             import json
@@ -240,7 +323,18 @@ class ContainerSmokeTests(unittest.TestCase):
                                   "cat /home/e2e/.claude/.credentials.json")
             self.assertEqual(json.loads(credentials.stdout), {"test_credential": "refreshed"})
             settings = compose("exec", "-T", "device", "cat", "/home/e2e/.claude/settings.json")
-            self.assertEqual(json.loads(settings.stdout), claude_settings)
+            native = json.loads(settings.stdout)
+            self.assertEqual(native["env"]["ANTHROPIC_BASE_URL"], "http://127.0.0.1:8317")
+            self.assertEqual(native["model"], "gpt-4o-mini")
+            self.assertNotIn(b"sk-fixture-openai-test-key", settings.stdout)
+            models = compose("exec", "-T", "device", "python3", "-c",
+                             "import json,urllib.request; from pathlib import Path; "
+                             "s=json.loads(Path('/home/e2e/.claude/settings.json').read_text()); "
+                             "r=urllib.request.Request(s['env']['ANTHROPIC_BASE_URL']+'/v1/models', "
+                             "headers={'Authorization':'Bearer '+s['env']['ANTHROPIC_AUTH_TOKEN']}); "
+                             "print(urllib.request.urlopen(r).read().decode())")
+            self.assertIn("gpt-4o-mini", [model["id"] for model in json.loads(models.stdout)["data"]])
+            compose("exec", "-T", "device", "test", "!", "-e", "/run/claude-proxy/auth/kv.db")
             fresh = compose("exec", "-T", "cloud", "./node_modules/.bin/wrangler", "d1", "execute", "DB",
                             "--local", "--persist-to", "/state", "--json", "--command",
                             "SELECT count(*) AS count FROM hero_name_modifiers WHERE word='discard-me';")

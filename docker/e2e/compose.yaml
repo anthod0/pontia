@@ -108,6 +108,8 @@ services:
       <<: *build
       target: device
     init: true
+    tmpfs:
+      - /run/claude-proxy:uid=1000,gid=1000,mode=0700,size=16m
     cap_drop: [ALL]
     # Moby profiles 4b8214fc4971e06172938a1f1554ccff6647ee80/seccomp/default.json,
     # plus clone, unshare, mount, umount2, pivot_root and setns for Codex's

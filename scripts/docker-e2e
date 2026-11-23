@@ -202,7 +202,6 @@ class Lab:
             write_private(self.state / settings, (self.config / settings).read_bytes())
         else:
             (self.state / settings).unlink(missing_ok=True)
-        prepare_claude(self.state, self.config)
 
     def browser_url(self):
         address = self.compose(["port", "browser", "6080"], capture_output=True).stdout.decode().strip()
@@ -270,22 +269,6 @@ class Lab:
         except subprocess.CalledProcessError as error:
             if error.returncode != 1:
                 raise
-
-
-def prepare_claude(state, config):
-    key = variables(config / "cloud.dev.vars").get("OPENROUTER_API_KEY")
-    if key is None:
-        return
-    if not key.strip() or key.strip() == "xxx":
-        raise ValueError("Fill OPENROUTER_API_KEY in docker/e2e/.local/cloud.dev.vars with your OpenRouter API key")
-    path = state / "auth/device/claude-settings.json"
-    settings = json.loads(path.read_text()) if path.exists() else {}
-    settings.setdefault("env", {}).update({
-        "ANTHROPIC_BASE_URL": "https://openrouter.ai/api",
-        "ANTHROPIC_AUTH_TOKEN": key,
-        "ANTHROPIC_API_KEY": "",
-    })
-    write_private(path, json.dumps(settings) + "\n")
 
 
 def container_file(container, path):
