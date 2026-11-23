@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The Git tab in Sessions and Bot chats has a History view. Choose any local or remote branch to read its commits without checking it out, then open a commit to see its message, the files it changed, and each file's diff.
+
 ## [0.8.12] - 2026-11-24
 
 ### Added

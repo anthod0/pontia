@@ -1,4 +1,5 @@
 import {
+  createInfiniteQuery,
   createMutation,
   createQuery,
   MutationObserver,
@@ -17,6 +18,8 @@ import type {
 import type { DeviceRuntime } from "../device/runtime";
 
 export type GitDiffTarget = { path: string; orig_path?: string; group: GitChangeGroup };
+/** A file changed by a commit. */
+export type GitCommitFileTarget = { path: string; orig_path?: string };
 
 /** How often the open Git tab re-reads the change list. */
 const GIT_CHANGES_POLL_MS = 5_000;
@@ -35,6 +38,13 @@ export function createWorkspaceQueries(device: DeviceRuntime) {
     gitChanges: (workspaceId: string) => [...workspaceKeys.git(workspaceId), "changes"] as const,
     gitDiff: (workspaceId: string, file: GitDiffTarget) =>
       [...workspaceKeys.git(workspaceId), "diff", file] as const,
+    gitBranches: (workspaceId: string) => [...workspaceKeys.git(workspaceId), "branches"] as const,
+    gitCommits: (workspaceId: string, ref: string) =>
+      [...workspaceKeys.git(workspaceId), "commits", ref] as const,
+    gitCommit: (workspaceId: string, sha: string) =>
+      [...workspaceKeys.git(workspaceId), "commit", sha] as const,
+    gitCommitDiff: (workspaceId: string, sha: string, file: GitCommitFileTarget) =>
+      [...workspaceKeys.gitCommit(workspaceId, sha), "diff", file] as const,
   };
 
   const workspaceRootKeys = {
@@ -146,6 +156,62 @@ export function createWorkspaceQueries(device: DeviceRuntime) {
         queryKey: workspaceKeys.gitDiff(workspaceId(), file()),
         queryFn: ({ signal }) => device.api.getWorkspaceGitDiff(workspaceId(), file(), { signal }),
         staleTime: 0,
+      }),
+      () => device.queryClient,
+    );
+  }
+
+  function createWorkspaceGitBranchesQuery(workspaceId: () => string) {
+    return createQuery(
+      () => ({
+        queryKey: workspaceKeys.gitBranches(workspaceId()),
+        queryFn: ({ signal }) => device.api.getWorkspaceGitBranches(workspaceId(), { signal }),
+        staleTime: 0,
+      }),
+      () => device.queryClient,
+    );
+  }
+
+  /** The history reachable from `ref`, newest first, one page at a time; a null `ref` reads nothing. */
+  function createWorkspaceGitCommitsQuery(workspaceId: () => string, ref: () => string | null) {
+    return createInfiniteQuery(
+      () => ({
+        queryKey: workspaceKeys.gitCommits(workspaceId(), ref() ?? ""),
+        queryFn: ({ pageParam, signal }) =>
+          device.api.getWorkspaceGitCommits(workspaceId(), ref()!, pageParam, { signal }),
+        initialPageParam: 0,
+        getNextPageParam: (last, pages) =>
+          last.has_more ? pages.reduce((total, page) => total + page.commits.length, 0) : undefined,
+        enabled: ref() !== null,
+        staleTime: 0,
+      }),
+      () => device.queryClient,
+    );
+  }
+
+  // A commit's contents never change, so they are read once.
+  function createWorkspaceGitCommitQuery(workspaceId: () => string, sha: () => string) {
+    return createQuery(
+      () => ({
+        queryKey: workspaceKeys.gitCommit(workspaceId(), sha()),
+        queryFn: ({ signal }) => device.api.getWorkspaceGitCommit(workspaceId(), sha(), { signal }),
+        staleTime: Infinity,
+      }),
+      () => device.queryClient,
+    );
+  }
+
+  function createWorkspaceGitCommitDiffQuery(
+    workspaceId: () => string,
+    sha: () => string,
+    file: () => GitCommitFileTarget,
+  ) {
+    return createQuery(
+      () => ({
+        queryKey: workspaceKeys.gitCommitDiff(workspaceId(), sha(), file()),
+        queryFn: ({ signal }) =>
+          device.api.getWorkspaceGitCommitDiff(workspaceId(), sha(), file(), { signal }),
+        staleTime: Infinity,
       }),
       () => device.queryClient,
     );
@@ -265,6 +331,10 @@ export function createWorkspaceQueries(device: DeviceRuntime) {
     createWorkspaceRootEntriesQuery,
     createWorkspaceGitChangesQuery,
     createWorkspaceGitDiffQuery,
+    createWorkspaceGitBranchesQuery,
+    createWorkspaceGitCommitsQuery,
+    createWorkspaceGitCommitQuery,
+    createWorkspaceGitCommitDiffQuery,
     invalidateWorkspaceGit,
     fetchWorkspaces,
     fetchWorkspaceFilePickerEntries,

@@ -12,7 +12,7 @@
   import FilePreviewPanel from '../FilePreviewPanel.svelte'
   import FilePreviewResizer from '../FilePreviewResizer.svelte'
   import RecentFileList from '../files/RecentFileList.svelte'
-  import GitChanges from '../git/GitChanges.svelte'
+  import GitPanel from '../git/GitPanel.svelte'
   import { workspaceTitle } from '../sessionMetadata'
   import type { SessionPanel, SessionPanelSource, SessionPanelTab } from './sessionPanelContext.svelte'
 
@@ -27,7 +27,7 @@
   const workspacesQuery = device.workspaceQueries.createWorkspacesQuery()
   const workspace = $derived(workspacesQuery.data?.find(item => item.workspace_id === source.workspaceId))
   let element = $state<HTMLElement>()
-  let changes = $state<GitChanges>()
+  let git = $state<GitPanel>()
 
   // Opening the panel by hand moves focus into it, so the keyboard works there right away.
   $effect(() => {
@@ -38,7 +38,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<aside bind:this={element} tabindex="-1" data-session-panel aria-label={$t('nav.sidebar')} onkeydown={(event) => changes?.keydown(event)}
+<aside bind:this={element} tabindex="-1" data-session-panel aria-label={$t('nav.sidebar')} onkeydown={(event) => git?.keydown(event)}
   class="fixed inset-y-0 right-0 z-50 flex w-full min-w-0 flex-col border-l bg-surface outline-none pt-[env(safe-area-inset-top)] lg:w-[var(--file-preview-width)]">
   <FilePreviewResizer />
   <Tabs.Root bind:value={() => panel.tab, next => { panel.tab = next as SessionPanelTab }} class="min-h-0 flex-1 gap-0">
@@ -66,11 +66,10 @@
       {/if}
     </Tabs.Content>
     <Tabs.Content value="git" class="flex min-h-0 flex-col">
-      <!-- Changes are read only while the tab shows. -->
+      <!-- Git is read only while the tab shows. -->
       {#if panel.tab === 'git' && source.workspaceId}
         {#key source.workspaceId}
-          <GitChanges bind:this={changes} {device} workspaceId={source.workspaceId} file={panel.diff} hint={$t('git.keyboardHint')}
-            onopen={file => panel.openDiff(file)} onback={() => panel.showChanges()}>
+          <GitPanel bind:this={git} {device} workspaceId={source.workspaceId} git={panel.git} hint={$t('git.keyboardHint')}>
             {#snippet header({ changes, refresh, fetching })}
               <div class="flex h-12 shrink-0 items-center gap-2 border-b pr-2 pl-4">
                 <FolderIcon class="size-4 shrink-0 text-muted-foreground" />
@@ -81,7 +80,7 @@
                 </Button>
               </div>
             {/snippet}
-          </GitChanges>
+          </GitPanel>
         {/key}
       {:else if !source.workspaceId}
         <Empty.Root class="min-h-0 p-8">

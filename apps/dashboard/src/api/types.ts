@@ -474,6 +474,67 @@ export interface GitDiffView {
   truncated: boolean;
 }
 
+export interface GitBranch {
+  /** Short name, such as `main` or `origin/main`. */
+  name: string;
+  /** Full ref name, such as `refs/heads/main`. */
+  ref: string;
+  remote: boolean;
+  current: boolean;
+}
+
+export interface GitBranchesView {
+  repo_root: string | null;
+  /** The checked-out branch ref, `HEAD` when detached, or null before the first commit. */
+  head: string | null;
+  branches: GitBranch[];
+}
+
+export interface GitCommitSummary {
+  sha: string;
+  parents: string[];
+  author_name: string;
+  authored_at: string;
+  subject: string;
+}
+
+export interface GitCommitsPage {
+  commits: GitCommitSummary[];
+  has_more: boolean;
+}
+
+export interface GitCommitFile {
+  path: string;
+  orig_path?: string;
+  status: "M" | "A" | "D" | "R" | "C" | "T" | string;
+  additions: number | null;
+  deletions: number | null;
+  binary: boolean;
+}
+
+export interface GitCommitView {
+  sha: string;
+  parents: string[];
+  author_name: string;
+  author_email: string;
+  authored_at: string;
+  committer_name: string;
+  committed_at: string;
+  subject: string;
+  body: string;
+  files: GitCommitFile[];
+  total: number;
+  truncated: boolean;
+}
+
+export interface GitCommitDiffView {
+  sha: string;
+  path: string;
+  binary: boolean;
+  hunks: { header: string; lines: GitDiffLine[] }[];
+  truncated: boolean;
+}
+
 export interface WorkspaceRootView {
   root_id: string;
   label: string;

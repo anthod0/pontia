@@ -8,7 +8,7 @@ use super::{
 };
 
 /// Largest diff output read for one file.
-const MAX_DIFF_BYTES: usize = 512 * 1024;
+pub(crate) const MAX_DIFF_BYTES: usize = 512 * 1024;
 /// Most diff lines returned for one file.
 const MAX_DIFF_LINES: usize = 2000;
 
@@ -137,13 +137,13 @@ async fn ensure_untracked(repo_root: &Path, path: &str) -> Result<()> {
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
-struct ParsedDiff {
-    binary: bool,
-    hunks: Vec<DiffHunkView>,
-    truncated: bool,
+pub(crate) struct ParsedDiff {
+    pub binary: bool,
+    pub hunks: Vec<DiffHunkView>,
+    pub truncated: bool,
 }
 
-fn parse_unified_diff(output: &str) -> ParsedDiff {
+pub(crate) fn parse_unified_diff(output: &str) -> ParsedDiff {
     let mut parsed = ParsedDiff::default();
     let (mut old, mut new) = (0, 0);
     // Lines still expected on each side of the current hunk; a hunk ends when both reach zero.

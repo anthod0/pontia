@@ -4,8 +4,8 @@ import { PersistedState } from "$lib/storage";
 import type { RecentFile } from "$lib/botRecentFiles";
 import { createSessionRecentFiles, withSessionRecentFile } from "$lib/sessionRecentFiles";
 import type { DeviceRuntime } from "../../../device/runtime";
-import type { GitDiffTarget } from "../../../queries/workspaces";
 import type { FilePreviewTarget } from "../filePreviewContext";
+import { GitPanelState } from "../git/gitPanelState.svelte";
 
 const panelTabs = ["files", "git"] as const;
 
@@ -36,8 +36,8 @@ export class SessionPanel {
   #last: SessionPanelSource | null = null;
   /** The file previewed in the Files tab. */
   file = $state.raw<FilePreviewTarget | null>(null);
-  /** The file whose diff the Git tab shows; null shows the change list. */
-  diff = $state.raw<GitDiffTarget | null>(null);
+  /** What the Git tab shows for the Session's Workspace. */
+  readonly git = new GitPanelState();
   #recentFiles = new Map<string, PersistedState<RecentFile[]>>();
   /** Set when the panel is opened by hand, telling it to take focus. Remounts leave focus where it is. */
   focusPending = $state(false);
@@ -56,7 +56,7 @@ export class SessionPanel {
 
   /**
    * Shows this Session until the returned function runs. Another Session closes its file, and
-   * another Workspace its diff. Callers may run it in an effect, so it does not track the panel
+   * another Workspace what its Git tab had open. Callers may run it in an effect, so it does not track the panel
    * state it replaces.
    */
   attach(source: SessionPanelSource): () => void {
@@ -64,7 +64,7 @@ export class SessionPanel {
       const last = this.#last;
       if (last?.device !== source.device || last.sessionId !== source.sessionId) this.file = null;
       if (last?.device !== source.device || last.workspaceId !== source.workspaceId) {
-        this.diff = null;
+        this.git.reset();
       }
       this.#last = source;
       this.source = source;
@@ -117,14 +117,6 @@ export class SessionPanel {
 
   closeFile(): void {
     this.file = null;
-  }
-
-  openDiff(diff: GitDiffTarget): void {
-    this.diff = diff;
-  }
-
-  showChanges(): void {
-    this.diff = null;
   }
 
   #show(focus: boolean): void {

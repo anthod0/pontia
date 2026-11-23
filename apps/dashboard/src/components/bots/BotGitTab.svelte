@@ -13,11 +13,11 @@
   import { createGitWorkspace } from '$lib/botGitWorkspace'
   import type { WorkspaceView } from '../../api/types'
   import { useDeviceRuntime } from '../../device/context'
-  import type { GitDiffTarget } from '../../queries/workspaces'
-  import GitChanges from '../chat/git/GitChanges.svelte'
+  import GitPanel from '../chat/git/GitPanel.svelte'
+  import { GitPanelState } from '../chat/git/gitPanelState.svelte'
   import { workspaceTitle } from '../chat/sessionMetadata'
 
-  /** The Git tab of a Bot chat's side panel: a Workspace picker over that Workspace's changes. Mounted only while the tab shows. */
+  /** The Git tab of a Bot chat's side panel: a Workspace picker over that Workspace's changes and history. Mounted only while the tab shows. */
   let { botId }: { botId: string } = $props()
 
   const device = useDeviceRuntime()
@@ -28,13 +28,13 @@
   const workspaces = $derived(workspacesQuery.data ?? [])
   // A saved Workspace that is no longer registered, or cannot be read, counts as none chosen.
   const workspace = $derived(workspaces.find(item => item.workspace_id === saved.current && !unavailable(item)) ?? null)
-  let file = $state.raw<GitDiffTarget | null>(null)
-  let view = $state<GitChanges>()
+  const git = new GitPanelState()
+  let view = $state<GitPanel>()
 
   function choose(workspaceId: string) {
     if (workspaceId === saved.current) return
     saved.current = workspaceId
-    file = null
+    git.reset()
   }
 
   function unavailable(item: WorkspaceView): boolean {
@@ -58,8 +58,7 @@
 <div class="flex min-h-0 flex-1 flex-col" onkeydown={(event) => view?.keydown(event)}>
   {#if workspace}
     {#key `${device.id}\0${workspace.workspace_id}`}
-      <GitChanges bind:this={view} {device} workspaceId={workspace.workspace_id} {file} hint={$t('bots.gitKeyboardHint')}
-        onopen={(next) => { file = next }} onback={() => { file = null }}>
+      <GitPanel bind:this={view} {device} workspaceId={workspace.workspace_id} {git} hint={$t('bots.gitKeyboardHint')}>
         {#snippet header({ changes, refresh, fetching })}
           <div class="flex h-12 shrink-0 items-center gap-1 border-b px-2">
             <Select.Root type="single" value={workspace.workspace_id} onValueChange={choose}>
@@ -80,7 +79,7 @@
             </Button>
           </div>
         {/snippet}
-      </GitChanges>
+      </GitPanel>
     {/key}
   {:else if workspacesQuery.isError}
     <div role="alert" class="p-3 text-sm">{$t('workspaces.loadFailedMessage')} <Button variant="ghost" size="xs" onclick={() => workspacesQuery.refetch()}>{$t('common.retry')}</Button></div>

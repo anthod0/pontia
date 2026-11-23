@@ -3,7 +3,7 @@
   import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
   import * as Collapsible from '$lib/components/ui/collapsible/index.js'
   import type { GitChangedFile, GitChangeGroup } from '../../../api/types'
-  import { changeDirLabel, gitStatusTone, groupChanges, splitChangePath } from './gitChanges'
+  import { changeDirLabel, changeKey, gitStatusTone, groupChanges, moveRowFocus, splitChangePath } from './gitChanges'
 
   let { files, onopen }: { files: GitChangedFile[]; onopen: (file: GitChangedFile) => void } = $props()
 
@@ -11,21 +11,10 @@
   let collapsed = $state<Partial<Record<GitChangeGroup, boolean>>>({})
   let list = $state<HTMLElement>()
 
-  /** Up and Down move between file rows; Enter opens the focused row as a native button. */
-  function keydown(event: KeyboardEvent) {
-    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
-    const rows = [...list!.querySelectorAll<HTMLElement>('[data-git-change-row]')]
-    if (!rows.length) return
-    event.preventDefault()
-    const index = rows.indexOf(document.activeElement as HTMLElement)
-    const next = index < 0 ? 0 : Math.min(rows.length - 1, Math.max(0, index + (event.key === 'ArrowDown' ? 1 : -1)))
-    rows[next].focus()
-  }
-
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div bind:this={list} class="px-2 py-1" onkeydown={keydown}>
+<div bind:this={list} class="px-2 py-1" onkeydown={(event) => moveRowFocus(event, list!)}>
   {#each groups as group (group.group)}
     <Collapsible.Root open={!collapsed[group.group]} onOpenChange={(open) => { collapsed[group.group] = !open }} class="py-1">
       <Collapsible.Trigger class="group flex h-[30px] w-full items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring max-lg:h-9">
@@ -41,7 +30,7 @@
             {@const dir = changeDirLabel(file)}
             {@const directory = file.path.endsWith('/')}
             <li>
-              <button type="button" data-git-change-row data-group={file.group} data-path={file.path}
+              <button type="button" data-git-row={changeKey(file)}
                 class="flex h-[30px] w-full min-w-0 items-center gap-2 rounded-md pr-2 pl-2.5 text-left text-[13px] outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none max-lg:h-10"
                 title={file.orig_path ? `${file.orig_path} → ${file.path}` : file.path}
                 aria-label={`${$t(group.label)}: ${file.path}`}

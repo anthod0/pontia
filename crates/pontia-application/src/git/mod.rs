@@ -3,6 +3,7 @@
 mod changes;
 pub(crate) mod command;
 mod diff;
+mod history;
 
 use pontia_agent_control::get_workspace_record;
 use pontia_core::error::{Error, Result};
@@ -11,6 +12,10 @@ use std::path::PathBuf;
 
 pub use changes::{ChangeGroup, ChangedFileView, GitChangesView, MAX_CHANGED_FILES};
 pub use diff::{DiffHunkView, DiffLineKind, DiffLineView, GitDiffView};
+pub use history::{
+    COMMIT_PAGE_SIZE, GitBranchView, GitBranchesView, GitCommitDiffView, GitCommitFileView,
+    GitCommitSummaryView, GitCommitView, GitCommitsView,
+};
 
 pub struct WorkspaceGitService {
     pool: SqlitePool,
@@ -46,12 +51,59 @@ impl WorkspaceGitService {
         orig_path: Option<&str>,
         group: ChangeGroup,
     ) -> Result<GitDiffView> {
-        let repo_root = self.repo_root(workspace_id).await?.ok_or_else(|| {
+        let repo_root = self.require_repo_root(workspace_id).await?;
+        diff::file_diff(&repo_root, path, orig_path, group).await
+    }
+
+    pub async fn branches(&self, workspace_id: &str) -> Result<GitBranchesView> {
+        let Some(repo_root) = self.repo_root(workspace_id).await? else {
+            return Ok(GitBranchesView {
+                repo_root: None,
+                head: None,
+                branches: Vec::new(),
+            });
+        };
+        let (head, branches) = history::branches(&repo_root).await?;
+        Ok(GitBranchesView {
+            repo_root: Some(repo_root.to_string_lossy().into_owned()),
+            head,
+            branches,
+        })
+    }
+
+    /// One page of the history reachable from `ref_name`, newest first.
+    pub async fn commits(
+        &self,
+        workspace_id: &str,
+        ref_name: &str,
+        skip: usize,
+    ) -> Result<GitCommitsView> {
+        let repo_root = self.require_repo_root(workspace_id).await?;
+        history::commits(&repo_root, ref_name, skip).await
+    }
+
+    pub async fn commit(&self, workspace_id: &str, sha: &str) -> Result<GitCommitView> {
+        let repo_root = self.require_repo_root(workspace_id).await?;
+        history::commit(&repo_root, sha).await
+    }
+
+    pub async fn commit_diff(
+        &self,
+        workspace_id: &str,
+        sha: &str,
+        path: &str,
+        orig_path: Option<&str>,
+    ) -> Result<GitCommitDiffView> {
+        let repo_root = self.require_repo_root(workspace_id).await?;
+        history::commit_diff(&repo_root, sha, path, orig_path).await
+    }
+
+    async fn require_repo_root(&self, workspace_id: &str) -> Result<PathBuf> {
+        self.repo_root(workspace_id).await?.ok_or_else(|| {
             Error::NotFound(format!(
                 "workspace {workspace_id} is not in a Git repository"
             ))
-        })?;
-        diff::file_diff(&repo_root, path, orig_path, group).await
+        })
     }
 
     async fn repo_root(&self, workspace_id: &str) -> Result<Option<PathBuf>> {

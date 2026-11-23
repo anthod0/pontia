@@ -168,14 +168,14 @@ fn parse_status(output: &str) -> Result<Vec<ChangedFileView>> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Numstat {
+pub(crate) enum Numstat {
     Text(u64, u64),
     Binary,
 }
 
 /// Parses `git diff --numstat -z`, keyed by the new path. A rename record has an empty path
 /// field followed by the old and new paths as separate NUL-terminated fields.
-fn parse_numstat(output: &str) -> HashMap<String, Numstat> {
+pub(crate) fn parse_numstat(output: &str) -> HashMap<String, Numstat> {
     let mut stats = HashMap::new();
     let mut fields = output.split('\0');
     while let Some(record) = fields.next() {

@@ -40,7 +40,11 @@ import type {
   FilePickerResultView,
   WorkspaceGitStatusView,
   GitChangeGroup,
+  GitBranchesView,
   GitChangesView,
+  GitCommitDiffView,
+  GitCommitsPage,
+  GitCommitView,
   GitDiffView,
   WorkspaceRootView,
   WorkspaceView,
@@ -705,6 +709,62 @@ export function createApi(device: DeviceRuntime) {
     ).diff;
   }
 
+  async function getWorkspaceGitBranches(
+    workspaceId: string,
+    options: ReadRequestOptions = {},
+  ): Promise<GitBranchesView> {
+    return (
+      await request<{ branches: GitBranchesView }>(
+        `/workspaces/${encodeURIComponent(workspaceId)}/git/branches`,
+        options,
+      )
+    ).branches;
+  }
+
+  async function getWorkspaceGitCommits(
+    workspaceId: string,
+    ref: string,
+    skip: number,
+    options: ReadRequestOptions = {},
+  ): Promise<GitCommitsPage> {
+    const params = new URLSearchParams({ ref, skip: String(skip) });
+    return (
+      await request<{ commits: GitCommitsPage }>(
+        `/workspaces/${encodeURIComponent(workspaceId)}/git/commits?${params}`,
+        options,
+      )
+    ).commits;
+  }
+
+  async function getWorkspaceGitCommit(
+    workspaceId: string,
+    sha: string,
+    options: ReadRequestOptions = {},
+  ): Promise<GitCommitView> {
+    return (
+      await request<{ commit: GitCommitView }>(
+        `/workspaces/${encodeURIComponent(workspaceId)}/git/commits/${encodeURIComponent(sha)}`,
+        options,
+      )
+    ).commit;
+  }
+
+  async function getWorkspaceGitCommitDiff(
+    workspaceId: string,
+    sha: string,
+    file: { path: string; orig_path?: string },
+    options: ReadRequestOptions = {},
+  ): Promise<GitCommitDiffView> {
+    const params = new URLSearchParams({ path: file.path });
+    if (file.orig_path) params.set("orig_path", file.orig_path);
+    return (
+      await request<{ diff: GitCommitDiffView }>(
+        `/workspaces/${encodeURIComponent(workspaceId)}/git/commits/${encodeURIComponent(sha)}/diff?${params}`,
+        options,
+      )
+    ).diff;
+  }
+
   async function listWorkspaceRoots(
     options: ReadRequestOptions = {},
   ): Promise<WorkspaceRootView[]> {
@@ -1038,6 +1098,10 @@ export function createApi(device: DeviceRuntime) {
     refreshWorkspaceGitStatus,
     getWorkspaceGitChanges,
     getWorkspaceGitDiff,
+    getWorkspaceGitBranches,
+    getWorkspaceGitCommits,
+    getWorkspaceGitCommit,
+    getWorkspaceGitCommitDiff,
     listWorkspaceRoots,
     listWorkspaceRootEntries,
     listWorkspaceFilePickerEntries,
