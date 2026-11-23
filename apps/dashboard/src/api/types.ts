@@ -364,6 +364,7 @@ export interface SessionView {
   archived_at: string | null;
   capabilities: SessionCapabilities;
   control_connected?: boolean;
+  control_disconnected_reason?: "unsupported_protocol_version";
   timeline_unavailable_reason?: string | null;
   model: string | null;
   context_usage: ContextUsageView | null;

@@ -49,7 +49,15 @@ impl ControlQueryService {
             });
         }
         session.runtimes = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone()).list(&session.session_id).await?;
-        if let Some(entry) = self.clients.get(&session.client_type)
+        if session
+            .metadata
+            .get("incompatible_control_runtime")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|id| session.runtimes.iter().any(|r| r.runtime_id == id))
+        {
+            session.control_connected = Some(false);
+            session.control_disconnected_reason = Some("unsupported_protocol_version");
+        } else if let Some(entry) = self.clients.get(&session.client_type)
             && entry.session.is_none()
             && entry.spec.adapter.dispatch == crate::client_contract::DispatchMode::Connected
             && let Some(control) = &self.control

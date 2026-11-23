@@ -1,10 +1,11 @@
 import { RpcError } from "./rpc-error.js";
 export { RpcError } from "./rpc-error.js";
 import { createConnection, type Socket } from "node:net";
-import { isAbsolute, join } from "node:path";
+import { isAbsolute } from "node:path";
 import { statSync } from "node:fs";
 
 export const CONTROL_VERSION = 8;
+export const UNSUPPORTED_CONTROL_VERSION = -32012;
 export const MAX_CONTROL_FRAME_BYTES = 64 * 1024;
 // Match the former HTTP event body limit, including the RPC envelope.
 export const MAX_RPC_FRAME_BYTES = 2 * 1024 * 1024 + 1024;
@@ -23,14 +24,20 @@ export interface RuntimeConnection {
   close(): Promise<void>;
 }
 
+// Pi plugins, Claude hosts and ACP relays keep computing this path with their startup
+// version across pontiad upgrades. Moving it in 9d550ec6 from $PONTIA_HOME/state/pi/rpc.sock
+// left running agents retrying the old path, disconnected and impossible to close from Pontia.
+// /tmp fits the ~104–108 byte Unix socket limit even with a long PONTIA_HOME.
+// Changing this path requires project owner approval.
 export function controlSocketPath(pontiaHome: string): string {
   if (!isAbsolute(pontiaHome) || pontiaHome.includes("\0"))
     throw new Error("Control home requires an absolute path without NUL");
   const home = statSync(pontiaHome, { bigint: true });
-  return join(
-    `/tmp/pontia-control-${home.uid}-${home.dev.toString(16)}-${home.ino.toString(16)}`,
-    "rpc.sock",
-  );
+  return formatSocketPath(home.uid, home.dev, home.ino);
+}
+
+export function formatSocketPath(uid: bigint, dev: bigint, ino: bigint): string {
+  return `/tmp/pontia-control-${uid}-${dev.toString(16)}-${ino.toString(16)}/rpc.sock`;
 }
 
 class RpcSocket {
@@ -318,11 +325,20 @@ export async function connectRuntime(
   return {
     async request(method, params) {
       if (method === "event.report" || method === "host.event") await ready();
-      else if (identity && !attached) throw new Error("Control connection is unavailable");
       if (reconnectRejected) throw reconnectRejected;
       if (stopped) throw new AttachmentRejected("Control connection closed");
+      if (identity && !attached) throw new Error("Control connection is unavailable");
       if (!current) return Promise.reject(new Error("Control connection is unavailable"));
-      return current.request(method, params);
+      try {
+        return await current.request(method, params);
+      } catch (error) {
+        if (error instanceof RpcError && error.code === UNSUPPORTED_CONTROL_VERSION) {
+          reconnectRejected = new AttachmentRejected(error.message);
+          onError(error);
+          wakeRequests();
+        }
+        throw error;
+      }
     },
     registered(value) {
       identity = value;

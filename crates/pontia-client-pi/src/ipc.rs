@@ -48,6 +48,7 @@ pub(crate) async fn serve_peer(
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
     let mut reads = JoinSet::new();
     loop {
+        let routed = first.is_some();
         let request = if let Some(first) = first.take() {
             Some(first)
         } else {
@@ -60,6 +61,19 @@ pub(crate) async fn serve_peer(
             }
         };
         let Some(request) = request else { break };
+        if !routed
+            && let Some(message) =
+                pontia_agent_control::ipc::protocol::rejection(&state, process_id, &request).await
+        {
+            let _ = peer
+                .reply_error(
+                    request.id,
+                    pontia_agent_control::ipc::protocol::UNSUPPORTED_VERSION,
+                    &message,
+                )
+                .await;
+            break;
+        }
         if request.id.is_none() {
             continue;
         } // All Pi reports and registration require an acknowledged response.

@@ -1,4 +1,4 @@
-use super::rpc::{PROTOCOL_VERSION, RpcRequest};
+use super::rpc::RpcRequest;
 use crate::{AgentControl, RuntimeBindingUpsertRequest};
 use pontia_core::{Error, Result};
 use serde::Deserialize;
@@ -28,7 +28,6 @@ pub async fn native_registration(
     match request.method.as_str() {
         "runtime.register" => {
             let registration: Registration = serde_json::from_value(request.params.clone())?;
-            version(registration.version)?;
             if registration.binding.client_type != client {
                 return Err(Error::Domain(format!(
                     "Registration requires client_type {client}"
@@ -69,21 +68,11 @@ pub async fn native_registration(
         }
         "runtime.attach" => {
             let identity: NativeAttachment = serde_json::from_value(request.params.clone())?;
-            version(identity.version)?;
             let result = json!({"session_id":identity.session_id,"runtime_id":identity.runtime_id});
             Ok((identity, result))
         }
         _ => Err(Error::Domain("Unknown runtime identity method".into())),
     }
-}
-
-pub fn version(value: u32) -> Result<()> {
-    if value != PROTOCOL_VERSION {
-        return Err(Error::Domain(
-            "Unsupported control RPC protocol version".into(),
-        ));
-    }
-    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -114,7 +103,6 @@ impl RuntimeAttachment {
         client: &str,
         channel: std::sync::Arc<dyn crate::ClientControlChannel>,
     ) -> Result<()> {
-        version(self.version)?;
         let guard = state.client_control().lock_identity().await;
         state
             .client_control()

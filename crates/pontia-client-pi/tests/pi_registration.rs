@@ -188,7 +188,6 @@ async fn disabling_pi_blocks_new_native_registration_but_preserves_existing_regi
 #[tokio::test]
 async fn rejects_old_protocol_and_invalid_registration_before_mutating_business_state() {
     let (state, _root) = state().await;
-    let (pi, _requests) = client(&state);
     for (method, params) in [
         ("hello", json!({"session_id":"s","runtime_id":"r"})),
         (
@@ -204,14 +203,99 @@ async fn rejects_old_protocol_and_invalid_registration_before_mutating_business_
             json!({"version":PROTOCOL_VERSION,"session_id":"s","runtime_id":"old","client_session_key":"unknown"}),
         ),
     ] {
+        let (pi, _requests) = client(&state);
         assert!(pi.call(method, params).await.is_err());
+        pi.close();
     }
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
         .fetch_one(&state.db())
         .await
         .unwrap();
     assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn incompatible_handshake_marks_the_runtime_until_a_supported_attachment() {
+    use pontia_agent_control::ipc::{
+        protocol::UNSUPPORTED_VERSION,
+        rpc::{MAX_FRAME_BYTES, RpcPeer},
+    };
+    let (state, root) = state().await;
+    let (pi, _requests) = client(&state);
+    let (session, runtime) = register(&pi, root.path()).await;
     pi.close();
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while state.client_control().available(&session).await.unwrap() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+
+    for (method, params) in [
+        (
+            "runtime.attach",
+            json!({"session_id":session,"runtime_id":runtime,"client_session_key":"native","version":9}),
+        ),
+        (
+            "runtime.register",
+            json!({"binding":{"client_type":"pi","client_session_key":"native"}}),
+        ),
+    ] {
+        let (server, client) = UnixStream::pair().unwrap();
+        tokio::spawn(pontia_agent_control::ipc::serve_connection(
+            state.clone(),
+            server,
+        ));
+        let (peer, _) = RpcPeer::new(client);
+        if method == "runtime.register" {
+            peer.request(
+                "session.context",
+                json!({"client_session_key":"native"}),
+                MAX_FRAME_BYTES,
+                false,
+            )
+            .await
+            .unwrap();
+        }
+        let response = peer
+            .request(method, params, MAX_FRAME_BYTES, false)
+            .await
+            .unwrap();
+        assert_eq!(response["error"]["code"], UNSUPPORTED_VERSION);
+        let view = state
+            .queries()
+            .get_session(&session)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(view.control_connected, Some(false));
+        assert_eq!(
+            view.control_disconnected_reason,
+            Some("unsupported_protocol_version")
+        );
+        peer.close();
+        let (valid, _) = self::client(&state);
+        valid.call("runtime.attach", json!({"session_id":session,"runtime_id":runtime,"client_session_key":"native","version":PROTOCOL_VERSION})).await.unwrap();
+        assert_eq!(
+            state
+                .queries()
+                .get_session(&session)
+                .await
+                .unwrap()
+                .unwrap()
+                .control_disconnected_reason,
+            None
+        );
+        valid.close();
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while state.client_control().available(&session).await.unwrap() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+    }
 }
 
 #[tokio::test]
