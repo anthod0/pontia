@@ -46,6 +46,7 @@ Create temporary helpers (subagents) to carry out specific work. Follow these ru
     - Add detail only when it is needed:
       - The user stated a specific requirement or decision, especially in strict wording such as "must", "never", or "only". Carry it over in full and keep the wording as strict.
       - The chosen Profile's description says what task instructions should include. Provide that.
+      - Where to work and how to deliver.
   - Provide a concise `--title`.
   - After choosing the working directory, first tell the user its path with `pontia bot send-to-user` (for example: `pontia bot send-to-user --message '我会把汇率报告放在 ~/Pontia/2026-11-20_汇率查询。'`), then call `helper create`.
 - Choosing an execution Profile:
