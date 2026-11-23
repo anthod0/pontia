@@ -17,10 +17,12 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import { cn } from '$lib/utils';
 	import BotAvatarMark from '$lib/components/bot-story/BotAvatarMark.svelte';
+	import DemoBotChat from './DemoBotChat.svelte';
 	import DemoConversation from './DemoConversation.svelte';
 	import DemoGitPanel from './DemoGitPanel.svelte';
 	import { demoDevices, type DemoSession, type DemoSessionState } from './mockData';
 
+	const devices = $state(demoDevices);
 	let deviceHandle = $state(demoDevices[0].handle);
 	let previousDeviceHandle = $state<string | null>(null);
 	let gitPanelOpen = $state(false);
@@ -30,8 +32,9 @@
 	// Like the Dashboard, Recent Sessions shows only active sessions until the filter asks for all.
 	let sessionScope = $state<'active' | 'all'>('active');
 	let mobileSidebarOpen = $state(false);
+	let botId = $state<string | null>(null);
 
-	const device = $derived(demoDevices.find((item) => item.handle === deviceHandle)!);
+	const device = $derived(devices.find((item) => item.handle === deviceHandle)!);
 	const session = $derived(device.sessions.find((item) => item.id === sessionId)!);
 	const pinnedSessions = $derived(device.sessions.filter((item) => item.pinned));
 	// Like the Dashboard, the workspace filter only scopes Recent Sessions.
@@ -40,8 +43,9 @@
 	const filterApplied = $derived(Boolean(workspaceFilter) || sessionScope === 'all');
 	const filterWorkspace = $derived(device.workspaces.find((item) => item.id === workspaceFilter));
 	const workspace = $derived(device.workspaces.find((item) => item.id === session.workspaceId)!);
-	const previousDevice = $derived(demoDevices.find((item) => item.handle === previousDeviceHandle));
+	const previousDevice = $derived(devices.find((item) => item.handle === previousDeviceHandle));
 	const changeCount = $derived(workspace.git.changes.length);
+	const bot = $derived(device.bots.find((item) => item.id === botId));
 
 	const stateDot: Record<Exclude<DemoSessionState, 'exited'>, string> = { busy: 'bg-busy', idle: 'bg-idle', waiting_for_interaction: 'bg-interrupted' };
 	const stateLabel: Record<Exclude<DemoSessionState, 'exited'>, string> = { busy: 'busy', idle: 'idle', waiting_for_interaction: 'waiting for input' };
@@ -54,18 +58,25 @@
 		previousDeviceHandle = deviceHandle;
 		deviceHandle = handle;
 		workspaceFilter = '';
-		sessionId = demoDevices.find((item) => item.handle === handle)!.sessions[0].id;
+		sessionId = devices.find((item) => item.handle === handle)!.sessions[0].id;
+		botId = null;
 		gitPanelOpen = false;
 	}
 
 	function selectSession(id: string): void {
 		sessionId = id;
+		botId = null;
+		mobileSidebarOpen = false;
+	}
+
+	function selectBot(id: string): void {
+		botId = id;
 		mobileSidebarOpen = false;
 	}
 </script>
 
 {#snippet sessionItem(item: DemoSession)}
-	{@const active = item.id === session.id}
+	{@const active = !bot && item.id === session.id}
 	<li class="relative text-sm">
 		<button
 			type="button"
@@ -128,7 +139,7 @@
 					<DropdownMenu.Content align="start" class={cn(dropdownContent, 'min-w-56')}>
 						<DropdownMenu.Label class="px-1.5 py-1 pl-7 font-medium">Devices</DropdownMenu.Label>
 						<DropdownMenu.RadioGroup value={deviceHandle} onValueChange={selectDevice}>
-							{#each demoDevices as item (item.handle)}
+							{#each devices as item (item.handle)}
 								<DropdownMenu.RadioItem closeOnSelect value={item.handle} class={cn(dropdownItem, 'pr-2 pl-7 *:data-[slot=dropdown-menu-radio-item-indicator]:right-auto *:data-[slot=dropdown-menu-radio-item-indicator]:left-2')}>
 									<span class="min-w-0 flex-1 truncate">{item.name}</span>
 									<span class="shrink-0 text-xs text-muted-foreground">Online</span>
@@ -151,13 +162,21 @@
 			</div>
 
 			<div class="demo-scroll min-h-0 flex-1 overflow-y-auto">
-				<div class="p-2" aria-hidden="true">
-					<div class="flex h-8 items-center px-2 text-foreground/70">{@render groupHeading('Bots')}</div>
+				<div class="p-2">
+					<div class="flex h-8 items-center px-2 text-foreground/70" aria-hidden="true">{@render groupHeading('Bots')}</div>
 					<ul class="flex flex-col gap-1">
-						{#each device.bots as bot (bot.name)}
-							<li class={cn(menuButton, 'h-9 gap-2.5')}>
-								<span class="size-6 shrink-0"><BotAvatarMark shape={bot.shape} color={bot.color} /></span>
-								<span class="truncate">{bot.name}</span>
+						{#each device.bots as item (item.id)}
+							{@const active = item.id === bot?.id}
+							<li>
+								<button
+									type="button"
+									class={cn(menuButton, 'h-9 gap-2.5 [&_svg]:size-6 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-primary', active && 'bg-accent font-medium text-accent-foreground')}
+									aria-current={active ? 'page' : undefined}
+									onclick={() => selectBot(item.id)}
+								>
+									<span class="size-6 shrink-0"><BotAvatarMark shape={item.shape} color={item.color} /></span>
+									<span class="truncate">{item.name}</span>
+								</button>
 							</li>
 						{/each}
 					</ul>
@@ -234,44 +253,56 @@
 		</div>
 	</aside>
 
-	<div class="relative flex min-w-0 flex-1 flex-col">
-		<!-- Like the Dashboard, the top bar floats over the conversation. -->
-		<div class="pointer-events-none absolute inset-x-0 top-0 z-10 flex h-12 items-center gap-2 px-3 @3xl:px-4">
-			<div class="pointer-events-auto flex h-8 min-w-0 items-center rounded-lg bg-popover px-1 ring-1 ring-foreground/10">
-				<button type="button" class="flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-muted @3xl:hidden" aria-label="Open sidebar" aria-expanded={mobileSidebarOpen} onclick={() => (mobileSidebarOpen = true)}>
-					<CaretLeftIcon class="size-4" />
-				</button>
-				<span class="mx-1 hidden min-w-0 max-w-80 truncate px-2 py-0.5 text-sm text-heading @3xl:block">{session.title}</span>
+	{#if bot}
+		{#key bot.id}
+			<DemoBotChat
+				{bot}
+				workspaces={device.workspaces}
+				onopensidebar={() => (mobileSidebarOpen = true)}
+				ontodochange={(entry, todo) => (entry.todo = todo)}
+				onsend={(text, quote) => bot.entries.push({ id: crypto.randomUUID(), kind: 'user', text, quote, time: 'Just now' })}
+			/>
+		{/key}
+	{:else}
+		<div class="relative flex min-w-0 flex-1 flex-col">
+			<!-- Like the Dashboard, the top bar floats over the conversation. -->
+			<div class="pointer-events-none absolute inset-x-0 top-0 z-10 flex h-12 items-center gap-2 px-3 @3xl:px-4">
+				<div class="pointer-events-auto flex h-8 min-w-0 items-center rounded-lg bg-popover px-1 ring-1 ring-foreground/10">
+					<button type="button" class="flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-muted @3xl:hidden" aria-label="Open sidebar" aria-expanded={mobileSidebarOpen} onclick={() => (mobileSidebarOpen = true)}>
+						<CaretLeftIcon class="size-4" />
+					</button>
+					<span class="mx-1 hidden min-w-0 max-w-80 truncate px-2 py-0.5 text-sm text-heading @3xl:block">{session.title}</span>
+				</div>
+				<span class="flex-1"></span>
+				<span class="pointer-events-auto flex h-8 shrink-0 items-center rounded-lg bg-popover px-1 ring-1 ring-foreground/10 @3xl:hidden" aria-hidden="true">
+					<span class="flex size-7 items-center justify-center"><DotsThreeIcon class="size-5" weight="bold" /></span>
+				</span>
+				<span class="pointer-events-auto flex h-8 shrink-0 items-center rounded-lg bg-popover px-1 ring-1 ring-foreground/10">
+					<button
+						type="button"
+						class={cn('relative flex size-7 items-center justify-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary', gitPanelOpen && 'bg-muted text-heading')}
+						aria-label={changeCount ? `Git changes, ${changeCount} ${changeCount === 1 ? 'file' : 'files'}` : 'Git changes'}
+						aria-pressed={gitPanelOpen}
+						title="Git changes (Alt G)"
+						onclick={() => (gitPanelOpen = !gitPanelOpen)}
+					>
+						<GitBranchIcon class="size-4" />
+						{#if changeCount}
+							<Badge class="pointer-events-none absolute -top-1 -right-1 h-4 min-w-4 rounded-full bg-primary-solid px-1 text-[0.625rem] text-primary-foreground tabular-nums">{changeCount}</Badge>
+						{/if}
+					</button>
+				</span>
 			</div>
-			<span class="flex-1"></span>
-			<span class="pointer-events-auto flex h-8 shrink-0 items-center rounded-lg bg-popover px-1 ring-1 ring-foreground/10 @3xl:hidden" aria-hidden="true">
-				<span class="flex size-7 items-center justify-center"><DotsThreeIcon class="size-5" weight="bold" /></span>
-			</span>
-			<span class="pointer-events-auto flex h-8 shrink-0 items-center rounded-lg bg-popover px-1 ring-1 ring-foreground/10">
-				<button
-					type="button"
-					class={cn('relative flex size-7 items-center justify-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary', gitPanelOpen && 'bg-muted text-heading')}
-					aria-label={changeCount ? `Git changes, ${changeCount} ${changeCount === 1 ? 'file' : 'files'}` : 'Git changes'}
-					aria-pressed={gitPanelOpen}
-					title="Git changes (Alt G)"
-					onclick={() => (gitPanelOpen = !gitPanelOpen)}
-				>
-					<GitBranchIcon class="size-4" />
-					{#if changeCount}
-						<Badge class="pointer-events-none absolute -top-1 -right-1 h-4 min-w-4 rounded-full bg-primary-solid px-1 text-[0.625rem] text-primary-foreground tabular-nums">{changeCount}</Badge>
-					{/if}
-				</button>
-			</span>
+			{#key session.id}
+				<DemoConversation {session} {workspace} />
+			{/key}
 		</div>
-		{#key session.id}
-			<DemoConversation {session} {workspace} />
-		{/key}
-	</div>
 
-	{#if gitPanelOpen}
-		{#key workspace.id}
-			<DemoGitPanel git={workspace.git} onclose={() => (gitPanelOpen = false)} />
-		{/key}
+		{#if gitPanelOpen}
+			{#key workspace.id}
+				<DemoGitPanel git={workspace.git} onclose={() => (gitPanelOpen = false)} />
+			{/key}
+		{/if}
 	{/if}
 </div>
 

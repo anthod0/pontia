@@ -58,10 +58,36 @@ export interface DemoWorkspace {
   git: DemoGit;
 }
 
+/** A Bot reply, kept to the Markdown the demo renders. */
+export type DemoBotBlock = Exclude<DemoBlock, { kind: "code" }>;
+
+export type DemoTodo = "open" | { by: "user" | "bot"; at: string };
+
+export type DemoBotEntry =
+  | {
+      id: string;
+      kind: "user";
+      text: string;
+      time: string;
+      /** The id of the quoted message. */
+      quote?: string;
+      failed?: boolean;
+    }
+  | { id: string; kind: "bot"; blocks: DemoBotBlock[]; time: string; todo?: DemoTodo }
+  | { id: string; kind: "notice"; text: string; time: string };
+
 export interface DemoBot {
+  id: string;
   name: string;
   shape: "mochi" | "drop" | "blob" | "onigiri" | "egg" | "pudding";
   color: string;
+  entries: DemoBotEntry[];
+  /** What the Bot is doing now, shown above the composer. */
+  working?: string;
+  /** Recently opened files, newest first. */
+  recentFiles: string[];
+  /** File contents for the Files tab, by path. Bot replies link to these paths. */
+  files: Record<string, string>;
 }
 
 export interface DemoDevice {
@@ -77,8 +103,141 @@ export const demoDevices: DemoDevice[] = [
     handle: "studio",
     name: "Studio MacBook",
     bots: [
-      { name: "Atlas", shape: "mochi", color: "#458588" },
-      { name: "Release Desk", shape: "drop", color: "#d79921" },
+      {
+        id: "atlas",
+        name: "Atlas",
+        shape: "mochi",
+        color: "#458588",
+        working: "Updating docs/release-notes.md",
+        recentFiles: ["docs/release-notes.md", "reports/release-2.3.md"],
+        files: {
+          "docs/release-notes.md":
+            "# Atlas 2.4\n\n## Highlights\n\n- Open the command menu with Ctrl+K.\n- Project lists are paginated with a cursor.\n- Settings has profile, notification and danger zone sections.\n\n## Breaking changes\n\n- `GET /projects` returns `items` instead of `projects`.\n",
+          "reports/release-2.3.md":
+            "# Release 2.3 check\n\nDeploy: finished at 21:02\nMigrations: 3 applied on staging\nSmoke tests: 42 passed\n\nStaging certificate expires on Nov 28.\n",
+        },
+        entries: [
+          {
+            id: "a1",
+            kind: "user",
+            text: "Check whether last night's release went out cleanly.",
+            time: "Nov 20, 9:14 PM",
+          },
+          {
+            id: "a2",
+            kind: "bot",
+            time: "Nov 20, 9:16 PM",
+            todo: "open",
+            blocks: [
+              {
+                kind: "p",
+                text: "The release finished and the migrations ran on staging. Details are in [release-2.3.md](reports/release-2.3.md).",
+              },
+              {
+                kind: "p",
+                text: "The staging certificate expires this week. **Should I renew it?**",
+              },
+            ],
+          },
+          {
+            id: "a3",
+            kind: "user",
+            quote: "a2",
+            text: "Hold off until I confirm the budget.",
+            time: "Nov 20, 9:20 PM",
+            failed: true,
+          },
+          {
+            id: "a4",
+            kind: "bot",
+            time: "Nov 21, 2:05 PM",
+            todo: { by: "user", at: "Nov 22, 8:20 AM" },
+            blocks: [
+              {
+                kind: "p",
+                text: "The CI build cache is using 38 GB. Should I clear the entries older than a month?",
+              },
+            ],
+          },
+          { id: "a5", kind: "notice", text: "Bot Session exited", time: "Nov 22, 6:02 PM" },
+          {
+            id: "a6",
+            kind: "user",
+            text: "Summarize what changed in atlas this week and write it up as release notes.",
+            time: "9:12 AM",
+          },
+          {
+            id: "a7",
+            kind: "bot",
+            time: "9:15 AM",
+            blocks: [
+              {
+                kind: "p",
+                text: "The draft is in [release-notes.md](docs/release-notes.md). Highlights:",
+              },
+              {
+                kind: "ul",
+                items: [
+                  "**⌘K** opens the command menu.",
+                  "Project lists page with a cursor.",
+                  "The new settings page has three sections.",
+                ],
+              },
+              {
+                kind: "p",
+                text: "Clients must act on one change: `GET /projects` now returns `items`.",
+              },
+            ],
+          },
+          {
+            id: "a8",
+            kind: "user",
+            quote: "a7",
+            text: "Add a migration note for SDK users.",
+            time: "10:40 AM",
+          },
+        ],
+      },
+      {
+        id: "release-desk",
+        name: "Release Desk",
+        shape: "drop",
+        color: "#d79921",
+        recentFiles: [],
+        files: {},
+        entries: [
+          {
+            id: "r1",
+            kind: "user",
+            text: "What is still blocking the 2.4 release?",
+            time: "8:30 AM",
+          },
+          {
+            id: "r2",
+            kind: "bot",
+            time: "8:31 AM",
+            blocks: [
+              { kind: "p", text: "Two things:" },
+              {
+                kind: "ul",
+                items: [
+                  "The checkout tests fail on tax rounding.",
+                  "The changelog needs your approval.",
+                ],
+              },
+            ],
+          },
+          {
+            id: "r3",
+            kind: "bot",
+            time: "8:52 AM",
+            todo: "open",
+            blocks: [
+              { kind: "p", text: "The checkout tests pass now. **Can I publish the changelog?**" },
+            ],
+          },
+        ],
+      },
     ],
     workspaces: [
       {
@@ -345,7 +504,50 @@ export const demoDevices: DemoDevice[] = [
   {
     handle: "build-server",
     name: "Build Server",
-    bots: [{ name: "Ops", shape: "egg", color: "#98971a" }],
+    bots: [
+      {
+        id: "ops",
+        name: "Ops",
+        shape: "egg",
+        color: "#98971a",
+        recentFiles: ["reports/staging-overnight.md"],
+        files: {
+          "reports/staging-overnight.md":
+            "# Staging overnight\n\nUptime: 100%\np95 latency: 182 ms\nErrors: 3 (all retried)\n\nbuild-02 disk: 91% used\n",
+        },
+        entries: [
+          {
+            id: "o1",
+            kind: "user",
+            text: "Watch staging overnight and tell me if anything breaks.",
+            time: "Nov 22, 11:40 PM",
+          },
+          {
+            id: "o2",
+            kind: "bot",
+            time: "7:05 AM",
+            blocks: [
+              {
+                kind: "p",
+                text: "Staging stayed up all night. The report is in [staging-overnight.md](reports/staging-overnight.md).",
+              },
+            ],
+          },
+          {
+            id: "o3",
+            kind: "bot",
+            time: "7:06 AM",
+            todo: "open",
+            blocks: [
+              {
+                kind: "p",
+                text: "The disk on build-02 is 91% full. **Should I prune old Docker images?**",
+              },
+            ],
+          },
+        ],
+      },
+    ],
     workspaces: [
       {
         id: "infra",
