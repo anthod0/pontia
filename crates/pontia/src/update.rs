@@ -5,10 +5,7 @@ use std::path::PathBuf;
 
 pub struct PreparedUpdate(pontia_update::PreparedUpdate);
 
-pub async fn prepare(config: Option<&AppConfig>) -> Result<Option<PreparedUpdate>, String> {
-    if let Some(config) = config {
-        ensure_no_active_execution(config, "update").await?;
-    }
+pub async fn prepare() -> Result<Option<PreparedUpdate>, String> {
     pontia_update::prepare(
         "pontia",
         &["pontia", "pontiad"],
@@ -28,14 +25,7 @@ impl PreparedUpdate {
         pontia_update::ensure_not_running(&self.daemon_path())
     }
 
-    pub async fn install(
-        self,
-        config: Option<&AppConfig>,
-        restart: impl FnMut() -> Result<(), String>,
-    ) -> Result<(), String> {
-        if let Some(config) = config {
-            ensure_no_active_execution(config, "update").await?;
-        }
+    pub fn install(self, restart: impl FnMut() -> Result<(), String>) -> Result<(), String> {
         self.0.install(restart)
     }
 }
@@ -186,18 +176,6 @@ mod tests {
         let result = ensure_no_active_execution(&config, "update").await;
         server.await.unwrap();
         result
-    }
-
-    #[tokio::test]
-    async fn active_execution_refuses_update_before_release_preparation() {
-        let (config, _root, server) = check_server(
-            200,
-            r#"{"data":{"blockers":[{"session_id":"session-a","title":"Fix login","client_type":"codex","workspace_path":null,"reason":"running a task"}]}}"#,
-        )
-        .await;
-        let error = prepare(Some(&config)).await.err().unwrap();
-        server.await.unwrap();
-        assert!(error.contains("Fix login"));
     }
 
     #[tokio::test]
