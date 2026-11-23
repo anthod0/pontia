@@ -6,6 +6,7 @@ import {
 
 import type { SessionOverviewView, SessionView } from "../api/types";
 import type { DeviceRuntime } from "../device/runtime";
+import type { SidebarSessionScope } from "../stores/sidebarSessionFilter";
 
 type PageParam = string | null;
 
@@ -48,13 +49,15 @@ export function recentActiveSessions(
 export function recentSessions(
   overview: SessionOverviewSnapshot,
   workspaceId: string,
+  scope: SidebarSessionScope,
 ): SessionView[] {
   const active = recentActiveSessions(overview, workspaceId);
   const activeIds = new Set(active.map((session) => session.session_id));
-  return [
-    ...active,
-    ...overview.list.filter((session) => !activeIds.has(session.session_id)),
-  ].filter((session) => !session.pinned_at);
+  const sessions =
+    scope === "active"
+      ? active
+      : [...active, ...overview.list.filter((session) => !activeIds.has(session.session_id))];
+  return sessions.filter((session) => !session.pinned_at);
 }
 
 export function createSessionOverview(device: DeviceRuntime) {

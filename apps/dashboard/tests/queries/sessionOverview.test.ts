@@ -270,7 +270,7 @@ test("excludes pinned sessions from recent sessions while preserving order and w
     "updated-recently",
     "updated-earlier",
   ]);
-  expect(recentSessions(snapshot, "w1").map((item) => item.session_id)).toEqual([
+  expect(recentSessions(snapshot, "w1", "all").map((item) => item.session_id)).toEqual([
     "updated-recently",
     "updated-earlier",
     "exited",
@@ -281,10 +281,14 @@ test("excludes pinned sessions from recent sessions while preserving order and w
     "other",
     "updated-earlier",
   ]);
-  expect(recentSessions(snapshot, "").map((item) => item.session_id)).toEqual([
+  expect(recentSessions(snapshot, "", "all").map((item) => item.session_id)).toEqual([
     "updated-recently",
     "other",
     "updated-earlier",
     "exited",
+  ]);
+  expect(recentSessions(snapshot, "w1", "active").map((item) => item.session_id)).toEqual([
+    "updated-recently",
+    "updated-earlier",
   ]);
 });

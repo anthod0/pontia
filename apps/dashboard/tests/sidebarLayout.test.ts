@@ -173,6 +173,8 @@ beforeEach(() => {
   mocks.sidebarSessionsLoadingMore.set(false);
   mocks.sidebarSessionsLoading.set(false);
   mocks.sidebarSessionsError.set(null);
+  testDevice.sidebarSessionFilter.selectedWorkspaceId.set("");
+  testDevice.sidebarSessionFilter.sessionScope.set("active");
   vi.clearAllMocks();
   Object.defineProperty(window, "matchMedia", {
     writable: true,
@@ -235,11 +237,10 @@ test("workspace selection filters recent sessions but keeps global pins and does
   mocks.sessions.set([first, second]);
   mocks.sidebarRecentSessions.set([first, second, older, pinned]);
   mocks.sidebarPinnedSessions.set([pinned]);
+  testDevice.sidebarSessionFilter.sessionScope.set("all");
   render(AppSidebarHost);
 
-  await fireEvent.click(
-    screen.getByRole("button", { name: "Filter recent sessions by workspace" }),
-  );
+  await fireEvent.click(screen.getByRole("button", { name: "Filter recent sessions" }));
   await fireEvent.click(screen.getByRole("menuitemradio", { name: /First workspace/ }));
 
   expect(screen.getAllByText("first-active")).toHaveLength(1);
@@ -248,9 +249,7 @@ test("workspace selection filters recent sessions but keeps global pins and does
   expect(screen.getAllByText("second-pinned")).toHaveLength(1);
   expect(mocks.navigate).not.toHaveBeenCalled();
 
-  await fireEvent.click(
-    screen.getByRole("button", { name: "Filter recent sessions by workspace" }),
-  );
+  await fireEvent.click(screen.getByRole("button", { name: "Filter recent sessions" }));
   expect(screen.getByRole("menuitemradio", { name: /First workspace/ })).toHaveAttribute(
     "aria-checked",
     "true",
@@ -261,12 +260,93 @@ test("workspace selection filters recent sessions but keeps global pins and does
   expect(screen.getAllByText("second-pinned")).toHaveLength(1);
 });
 
+test("sidebar shows only active sessions by default and switches to all sessions from the filter or the list", async () => {
+  TestIntersectionObserver.instances = [];
+  vi.stubGlobal("IntersectionObserver", TestIntersectionObserver);
+  const active = chatSession("session-active", "idle", "2026-05-14T04:00:00Z");
+  const otherWorkspace = {
+    ...chatSession("session-other", "idle", "2026-05-14T03:00:00Z"),
+    workspace_id: "workspace-2",
+  };
+  const exited = chatSession("session-exited", "exited", "2026-05-14T02:00:00Z");
+  const failed = chatSession("session-failed", "error", "2026-05-14T01:00:00Z");
+  const pinnedExited = chatSession(
+    "session-pinned",
+    "exited",
+    "2026-05-14T01:00:00Z",
+    "2026-05-14T05:00:00Z",
+  );
+  mocks.sessions.set([active, otherWorkspace]);
+  mocks.sidebarRecentSessions.set([active, otherWorkspace, exited, failed, pinnedExited]);
+  mocks.sidebarPinnedSessions.set([pinnedExited]);
+  mocks.sidebarSessionsNextCursor.set("next-page");
+  render(AppSidebarHost);
+
+  expect(screen.getByText("session-active")).toBeInTheDocument();
+  expect(screen.getByText("session-other")).toBeInTheDocument();
+  expect(screen.getByText("session-pinned")).toBeInTheDocument();
+  expect(screen.queryByText("session-exited")).not.toBeInTheDocument();
+  expect(screen.queryByText("session-failed")).not.toBeInTheDocument();
+  TestIntersectionObserver.instances[0].trigger(true);
+  expect(mocks.loadMoreSidebarSessions).not.toHaveBeenCalled();
+
+  await fireEvent.click(screen.getByRole("button", { name: "Filter recent sessions" }));
+  expect(screen.getByRole("menuitemradio", { name: "Active sessions" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await fireEvent.click(screen.getByRole("menuitemradio", { name: /First workspace/ }));
+  expect(screen.queryByText("session-other")).not.toBeInTheDocument();
+  expect(screen.queryByText("session-exited")).not.toBeInTheDocument();
+
+  document.body.style.pointerEvents = "";
+  await fireEvent.click(screen.getByRole("button", { name: "Show closed sessions" }));
+  expect(screen.getByText("session-exited")).toBeInTheDocument();
+  expect(screen.getByText("session-failed")).toBeInTheDocument();
+  expect(screen.queryByText("session-other")).not.toBeInTheDocument();
+  expect(screen.getAllByText("session-pinned")).toHaveLength(1);
+  expect(screen.queryByRole("button", { name: "Show closed sessions" })).not.toBeInTheDocument();
+  TestIntersectionObserver.instances[0].trigger(true);
+  await waitFor(() => expect(mocks.loadMoreSidebarSessions).toHaveBeenCalledTimes(1));
+
+  await fireEvent.click(screen.getByRole("button", { name: "Filter recent sessions" }));
+  expect(screen.getByRole("menuitemradio", { name: "All sessions" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await fireEvent.click(screen.getByRole("menuitemradio", { name: "Active sessions" }));
+  expect(screen.queryByText("session-exited")).not.toBeInTheDocument();
+  expect(screen.getByText("session-active")).toBeInTheDocument();
+  vi.unstubAllGlobals();
+});
+
+test("sidebar hides the closed-session link when there are no closed sessions", () => {
+  mocks.sessions.set([chatSession("session-active", "idle", "2026-05-14T04:00:00Z")]);
+  mocks.sidebarRecentSessions.set([chatSession("session-active", "idle", "2026-05-14T04:00:00Z")]);
+  render(AppSidebarHost);
+
+  expect(screen.getByText("session-active")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Show closed sessions" })).not.toBeInTheDocument();
+});
+
+test("sidebar says when no session is active", () => {
+  mocks.sidebarRecentSessions.set([
+    chatSession("session-exited", "exited", "2026-05-14T02:00:00Z"),
+  ]);
+  render(AppSidebarHost);
+
+  expect(screen.getByText("No active sessions")).toBeInTheDocument();
+  expect(screen.queryByText("session-exited")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Show closed sessions" })).toBeInTheDocument();
+});
+
 test("sidebar renders active sessions before paged recent sessions without duplicating active sessions", () => {
   const active = chatSession("session-active", "idle", "2026-05-14T04:00:00Z");
   const duplicate = chatSession("session-active", "idle", "2026-05-14T04:00:00Z");
   const older = chatSession("session-older", "exited", "2026-05-14T01:00:00Z");
   mocks.sessions.set([active]);
   mocks.sidebarRecentSessions.set([duplicate, older]);
+  testDevice.sidebarSessionFilter.sessionScope.set("all");
 
   render(AppSidebarHost);
 
@@ -332,6 +412,7 @@ test("sidebar loads the next page when the end of its session list scrolls into 
   vi.stubGlobal("IntersectionObserver", TestIntersectionObserver);
   mocks.sessions.set([chatSession("session-active", "idle", "2026-05-14T04:00:00Z")]);
   mocks.sidebarSessionsNextCursor.set("next-page");
+  testDevice.sidebarSessionFilter.sessionScope.set("all");
   render(AppSidebarHost);
 
   const [observer] = TestIntersectionObserver.instances;
@@ -797,9 +878,7 @@ test("chat numeric shortcuts open active sessions by sidebar order within the se
   await fireEvent.keyDown(window, { key: "2", code: "Digit2", altKey: true });
   expect(mocks.navigate).toHaveBeenLastCalledWith("/chat/session-other");
 
-  await fireEvent.click(
-    screen.getByRole("button", { name: "Filter recent sessions by workspace" }),
-  );
+  await fireEvent.click(screen.getByRole("button", { name: "Filter recent sessions" }));
   await fireEvent.click(screen.getByRole("menuitemradio", { name: /First workspace/ }));
 
   await fireEvent.keyDown(window, { key: "2", code: "Digit2", altKey: true });
