@@ -79,8 +79,13 @@ impl GenericRuntimeManager {
                 pane_id: pane_id.to_string(),
             })
         } else {
-            let status = tmux::spawn_tmux_session(&tmux_session, &workspace, &launch_command)
-                .map_err(|err| Error::Domain(format!("tmux runtime spawn failed: {err}")))?;
+            let status = tmux::spawn_session(
+                &tmux_session,
+                &workspace,
+                &launch_command,
+                Some(&runtime_id),
+            )
+            .map_err(|err| Error::Domain(format!("tmux runtime spawn failed: {err}")))?;
             if !status.success() {
                 return Err(Error::Domain(format!(
                     "tmux runtime spawn failed with status {status}"

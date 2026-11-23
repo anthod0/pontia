@@ -24,6 +24,8 @@
 | `pontia --version` | インストール済みのバージョンを表示します |
 | `pontia completions SHELL` | シェル用の補完スクリプトを出力します |
 
+Pontia が起動したエージェントが動作中の場合、`pontia down` と `pontia uninstall` は該当する Session を一覧表示します。`--force` を付けると、エージェントを停止してから処理を続けます。サービスがオフラインでも確認できます。起動元を確認できない旧バージョンの Codex バックグラウンドサーバーは、`--force` を付けても実行を継続し、警告が表示されます。
+
 `pontia uninstall` は削除対象を表示し、確認を求めます。`--yes` で確認を省略できます。バイナリ、設定、認証情報、履歴、クラウドのデバイス登録、Agent Client 本体は保持されます。完了後は新しいターミナルを開いてください。再設定には `pontia init` を実行します。
 
 `pontia setup` は `pi`、`codex`、`claude` を受け付け、追加の Client オプションなしで推奨設定を適用します。

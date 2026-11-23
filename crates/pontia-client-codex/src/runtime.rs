@@ -120,7 +120,7 @@ async fn connect_daemon(
         ));
     }
     if let Some(starting) = starting {
-        starting.ready();
+        starting.ready(&endpoint.socket, &connection.identity)?;
     }
     Ok(connection)
 }
@@ -206,6 +206,9 @@ impl CodexRuntime {
             .as_ref()
             .map(|runtime| runtime.operations.clone())
             .unwrap_or_default();
+        let _launch = (target == CodexServerTarget::Background)
+            .then(|| pontia_runtime::launch_lock::launch(&root))
+            .transpose()?;
         let connection = connect_daemon(&endpoint, target, unloaded).await?;
         let runtime = Arc::new(Self {
             root: root.clone(),
@@ -310,4 +313,41 @@ impl CodexRuntime {
             }
         }
     }
+}
+
+/// The owner can outlive its socket. A different listener may have since bound
+/// the same path and must be reported independently.
+pub struct BackgroundServer {
+    pub owned: Vec<pontia_runtime::ProcessFingerprint>,
+    pub unverified_listener: Option<(PathBuf, Option<u32>)>,
+}
+
+pub async fn background_server(root: &Path) -> Result<BackgroundServer> {
+    use pontia_runtime::ProcessObservation;
+    use std::io::ErrorKind;
+    let socket = root.join("state/codex/background-app-server.sock");
+    let owned = daemon::live_owners(&socket)?;
+    let listener = match daemon::connect_socket(&socket).await {
+        Ok(stream) => {
+            let pid = stream
+                .peer_cred()
+                .ok()
+                .and_then(|peer| peer.pid())
+                .and_then(|pid| u32::try_from(pid).ok());
+            if owned
+                .iter()
+                .any(|p| Some(p.pid) == pid && p.observe() == ProcessObservation::Alive)
+            {
+                None
+            } else {
+                Some((socket, pid))
+            }
+        }
+        Err(e) if matches!(e.kind(), ErrorKind::NotFound | ErrorKind::ConnectionRefused) => None,
+        Err(e) => return Err(e.into()),
+    };
+    Ok(BackgroundServer {
+        owned,
+        unverified_listener: listener,
+    })
 }

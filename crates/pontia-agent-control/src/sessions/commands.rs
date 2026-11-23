@@ -156,6 +156,7 @@ impl SessionCommandService {
         } else {
             None
         };
+        let _launch = pontia_runtime::launch_lock::launch(&self.pontia_home)?;
         let ingest = self.event_ingest.clone();
 
         ingest

@@ -55,6 +55,10 @@ impl ClientAdapter {
     ) -> Result<InputReceipt> {
         target.validate(&self.pool.clone()).await?;
         if let Some(client) = self.session_client() {
+            let _launch = self
+                .prepares_on_input()
+                .then(|| pontia_runtime::launch_lock::launch(&self.control.pontia_home))
+                .transpose()?;
             return client
                 .input(
                     self.events.clone(),

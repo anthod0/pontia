@@ -139,10 +139,17 @@ enum Command {
         /// Apply the displayed cleanup without prompting
         #[arg(short = 'y', long)]
         yes: bool,
+        /// Stop agents started by Pontia before removing integrations
+        #[arg(long)]
+        force: bool,
     },
     /// Stop and disable the per-user Pontia service
     #[command(after_help = DOWN_HELP)]
-    Down,
+    Down {
+        /// Stop agents started by Pontia before stopping the service
+        #[arg(long)]
+        force: bool,
+    },
     /// Show service health, the signed-in user, and remote registration
     #[command(after_help = STATUS_HELP)]
     Status,
@@ -163,7 +170,7 @@ enum Command {
 #[derive(Debug)]
 enum LifecycleCommand {
     Up,
-    Down,
+    Down { force: bool },
 }
 
 #[tokio::main]
@@ -320,9 +327,9 @@ async fn execute(command: Command) -> Result<bool, String> {
             Ok(true)
         }
         Command::Update => run_update().await,
-        Command::Uninstall { yes } => run_uninstall(yes).await,
-        Command::Up => run_lifecycle(LifecycleCommand::Up),
-        Command::Down => run_lifecycle(LifecycleCommand::Down),
+        Command::Uninstall { yes, force } => run_uninstall(yes, force).await,
+        Command::Up => run_lifecycle(LifecycleCommand::Up).await,
+        Command::Down { force } => run_lifecycle(LifecycleCommand::Down { force }).await,
         Command::Status => run_diagnostics(false).await,
         Command::Doctor => run_diagnostics(true).await,
         Command::Completions { shell } => {
@@ -332,7 +339,7 @@ async fn execute(command: Command) -> Result<bool, String> {
     }
 }
 
-async fn run_uninstall(yes: bool) -> Result<bool, String> {
+async fn run_uninstall(yes: bool, force: bool) -> Result<bool, String> {
     let runner = ProcessCommandRunner;
     #[cfg(target_os = "linux")]
     let manager = SystemdManager::with_environment_paths(
@@ -352,7 +359,11 @@ async fn run_uninstall(yes: bool) -> Result<bool, String> {
             &pontia_clients::integrations(),
         )?;
         let remaining_data_hint = prepared.remaining_data_hint();
-        let summary = prepared.summary();
+        let config = prepared.service_config()?;
+        let shutdown = pontia::shutdown::Shutdown::inspect(&config).await?;
+        shutdown.require_force("uninstall", force)?;
+        let mut summary = prepared.summary();
+        summary.extend(shutdown.listing());
         if summary.is_empty() {
             println!("No installed Pontia integrations or services to remove.");
             println!("{remaining_data_hint}");
@@ -364,28 +375,23 @@ async fn run_uninstall(yes: bool) -> Result<bool, String> {
         println!(
             "Binaries, configuration, credentials, history, and cloud registration will be kept."
         );
-        if !yes
-            && !Confirm::with_theme(&terminal::theme())
+        let shutdown = if yes {
+            shutdown
+        } else {
+            drop(shutdown);
+            if !Confirm::with_theme(&terminal::theme())
                 .with_prompt("Remove these Pontia integrations and services?")
                 .default(false)
                 .interact()
                 .map_err(|error| error.to_string())?
-        {
-            return Ok(true);
-        }
-        if prepared.service_installed() {
-            match manager.status()?.run_state {
-                RunState::Running => {
-                    let config = prepared.service_config()?;
-                    update::ensure_no_active_execution(&config, "uninstall").await?;
-                }
-                RunState::Starting => {
-                    return Err("Pontia is starting; retry uninstall once it has settled".into());
-                }
-                RunState::Stopped | RunState::Failed => {}
+            {
+                return Ok(true);
             }
-        }
-        prepared.uninstall(&manager, &runner)?;
+            pontia::shutdown::Shutdown::inspect(&config).await?
+        };
+        shutdown
+            .run("uninstall", force, || prepared.uninstall(&manager, &runner))
+            .await?;
         println!(
             "{}",
             terminal::success(
@@ -532,12 +538,12 @@ fn update_service_config<M: ServiceManager>(
     .map_err(|error| error.to_string())
 }
 
-fn run_lifecycle(command: LifecycleCommand) -> Result<bool, String> {
+async fn run_lifecycle(command: LifecycleCommand) -> Result<bool, String> {
     service_manager_preflight()?;
     let runner = ProcessCommandRunner;
     let search_path = match command {
         LifecycleCommand::Up => service_executable_search_path(env::var_os("PATH").as_deref())?,
-        LifecycleCommand::Down => Vec::new(),
+        LifecycleCommand::Down { .. } => Vec::new(),
     };
 
     #[cfg(target_os = "linux")]
@@ -551,12 +557,13 @@ fn run_lifecycle(command: LifecycleCommand) -> Result<bool, String> {
             )
             .with_executable_search_path(search_path),
         )
+        .await
     }
 
     #[cfg(target_os = "macos")]
     {
         let manager = launchd_manager(&runner, &[])?.with_executable_search_path(search_path);
-        run_with_manager(command, &manager)
+        run_with_manager(command, &manager).await
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -652,7 +659,7 @@ fn service_manager_preflight() -> Result<(), String> {
     Ok(())
 }
 
-fn run_with_manager<M: ServiceManager>(
+async fn run_with_manager<M: ServiceManager>(
     command: LifecycleCommand,
     manager: &M,
 ) -> Result<bool, String> {
@@ -686,8 +693,20 @@ fn run_with_manager<M: ServiceManager>(
             println!("Local Dashboard: {dashboard_url}");
             Ok(true)
         }
-        LifecycleCommand::Down => {
-            lifecycle.down()?;
+        LifecycleCommand::Down { force } => {
+            let definition = definitions.read(&manager.definition_path(&user_home()?))?;
+            let config = match definition {
+                Some(definition) => pontia_clients::config_from_vars(&HashMap::from([(
+                    "PONTIA_HOME".into(),
+                    manager.persisted_home(&definition)?.display().to_string(),
+                )])),
+                None => pontia_clients::config_from_env(),
+            }
+            .map_err(|e| e.to_string())?;
+            pontia::shutdown::Shutdown::inspect(&config)
+                .await?
+                .run("down", force, || lifecycle.down())
+                .await?;
             println!("Pontia is down.");
             Ok(true)
         }

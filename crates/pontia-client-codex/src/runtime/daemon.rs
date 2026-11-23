@@ -35,6 +35,7 @@ impl Endpoint {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DaemonIdentity {
     pub instance_id: String,
+    process: pontia_runtime::ProcessFingerprint,
 }
 
 impl DaemonIdentity {
@@ -49,15 +50,14 @@ impl DaemonIdentity {
         if credentials.uid() != unsafe { libc::geteuid() } {
             return Err(protocol_error("daemon belongs to another user"));
         }
-        let identity = pontia_runtime::process::process_identity(pid as u32)
-            .ok_or_else(|| protocol_error("cannot read daemon process start time"))?;
-        let boot_time = pontia_runtime::process::system_boot_time_seconds()
-            .ok_or_else(|| protocol_error("cannot read system boot time"))?;
+        let process = pontia_runtime::ProcessFingerprint::capture(pid as u32)
+            .ok_or_else(|| protocol_error("cannot identify Codex server process"))?;
         Ok(Self {
             instance_id: format!(
                 "codex_{}_{}_{}",
-                boot_time, identity.pid, identity.start_time_seconds
+                process.boot_time_seconds, process.pid, process.start_time_seconds
             ),
+            process,
         })
     }
 
@@ -88,9 +88,51 @@ pub(super) struct StartingServer {
     _lock: std::fs::File,
 }
 
+pub(super) fn live_owners(
+    socket: &std::path::Path,
+) -> Result<Vec<pontia_runtime::ProcessFingerprint>> {
+    use pontia_runtime::{ProcessFingerprint, ProcessObservation};
+    let bytes = match std::fs::read(socket.with_extension("owner")) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(e.into()),
+    };
+    let mut live = Vec::new();
+    for process in serde_json::from_slice::<Vec<ProcessFingerprint>>(&bytes)? {
+        match process.observe() {
+            ProcessObservation::Alive => live.push(process),
+            ProcessObservation::Exited => {}
+            ProcessObservation::Unknown => {
+                return Err(protocol_error("cannot verify Codex server identity"));
+            }
+        }
+    }
+    Ok(live)
+}
+
 impl StartingServer {
-    pub(super) fn ready(mut self) {
+    pub(super) fn ready(
+        mut self,
+        socket: &std::path::Path,
+        identity: &DaemonIdentity,
+    ) -> Result<()> {
+        let child = self.child.as_ref().unwrap();
+        let peer = &identity.process;
+        if !peer.is_in_process_tree(child.id()) {
+            return Err(protocol_error(
+                "background socket peer does not belong to the spawned Codex process",
+            ));
+        }
+        // An unlinked socket can be rebound while its previous server still lives.
+        let mut owned = live_owners(socket)?;
+        owned.push(peer.clone());
+        let temp = tempfile::NamedTempFile::new_in(socket.parent().unwrap())?;
+        serde_json::to_writer(temp.as_file(), &owned)?;
+        temp.persist(socket.with_extension("owner"))
+            .map_err(|error| error.error)?;
+
         pontia_runtime::reap_detached_child(self.child.take().unwrap());
+        Ok(())
     }
 }
 
@@ -297,7 +339,10 @@ mod tests {
                 let _ = GenericRuntimeManager.terminate_process(&self.0);
             }
         }
-        let _cleanup = Cleanup(ProcessFingerprint::capture(pid as u32).unwrap());
+        let original = Cleanup(ProcessFingerprint::capture(pid as u32).unwrap());
+        let recorded = super::super::background_server(&home).await.unwrap();
+        assert_eq!(recorded.owned.as_slice(), std::slice::from_ref(&original.0));
+        assert!(recorded.unverified_listener.is_none());
         let second = second.unwrap();
         assert_eq!(second.identity, first.identity);
         second.close().await;
@@ -388,5 +433,36 @@ mod tests {
         ));
         assert_eq!(recovered.codex_home(), home);
         CodexRuntime::shutdown(&home).await;
+        // Moving a Pontia home retains the ownership record while the old
+        // app-server continues listening at its original native socket.
+        let moved = home.join("moved");
+        std::fs::create_dir(&moved).unwrap();
+        std::fs::rename(home.join("state"), moved.join("state")).unwrap();
+        let socket = moved.join("state/codex/background-app-server.sock");
+        std::fs::remove_file(&socket).unwrap();
+        let replacement = CodexRuntime::connect(
+            moved.clone(),
+            CodexServerTarget::Background,
+            Endpoint {
+                socket,
+                home: home.clone(),
+            },
+        )
+        .await
+        .unwrap();
+        let replacement = Cleanup(
+            replacement
+                .connection()
+                .await
+                .unwrap()
+                .identity
+                .process
+                .clone(),
+        );
+        assert_ne!(replacement.0, original.0);
+        let recorded = super::super::background_server(&moved).await.unwrap();
+        assert_eq!(recorded.owned, [original.0.clone(), replacement.0.clone()]);
+        assert!(recorded.unverified_listener.is_none());
+        CodexRuntime::shutdown(&moved).await;
     }
 }

@@ -142,6 +142,14 @@ impl GenericRuntimeManager {
     }
 
     pub fn terminate_process(&self, fingerprint: &ProcessFingerprint) -> Result<()> {
+        self.signal(fingerprint, libc::SIGTERM)
+    }
+
+    pub fn kill_process(&self, fingerprint: &ProcessFingerprint) -> Result<()> {
+        self.signal(fingerprint, libc::SIGKILL)
+    }
+
+    fn signal(&self, fingerprint: &ProcessFingerprint, signal: i32) -> Result<()> {
         let pid = i32::try_from(fingerprint.pid)
             .ok()
             .filter(|pid| *pid > 0)
@@ -182,13 +190,13 @@ impl GenericRuntimeManager {
             libc::syscall(
                 libc::SYS_pidfd_send_signal,
                 pidfd.as_raw_fd(),
-                libc::SIGTERM,
+                signal,
                 std::ptr::null::<libc::siginfo_t>(),
                 0,
             )
         };
         #[cfg(target_os = "macos")]
-        target.terminate()?;
+        target.signal(signal)?;
         #[cfg(target_os = "linux")]
         if status != 0 {
             let error = io::Error::last_os_error();

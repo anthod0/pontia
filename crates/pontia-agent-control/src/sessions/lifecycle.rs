@@ -278,6 +278,7 @@ impl SessionCommandService {
         session_id: &str,
         pontia_home: &Path,
     ) -> Result<ControlCommandOutcome> {
+        let _launch = pontia_runtime::launch_lock::launch(pontia_home)?;
         let mut launch_guard = Some(self.control.lock_identity().await);
         let query = &self.queries;
         let session = query
@@ -484,6 +485,7 @@ impl SessionCommandService {
         let environment = self.runtime_environment(session_id).await?;
         let execution_policy = self.queries.session_execution_policy(session_id).await?;
         let launch_mode = self.queries.session_launch_mode(session_id).await?;
+        let _launch = pontia_runtime::launch_lock::launch(pontia_home)?;
         let mut runtime_replacement_tx = self.pool.begin().await?;
         SqliteTurnRepository::serialize_session_turn_writes_in_tx(
             &mut runtime_replacement_tx,
