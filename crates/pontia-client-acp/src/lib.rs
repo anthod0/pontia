@@ -21,6 +21,7 @@ pub mod relay;
 mod restrictions;
 pub use restrictions::{AgentProfile, RestrictedExecution};
 mod spec;
+mod stdio;
 mod steering;
 mod transport;
 

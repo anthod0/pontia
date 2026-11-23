@@ -31,6 +31,7 @@ impl ControlQueryService {
                 .binding_for_session(&session.session_id)
                 .await?
             && let Some(result) = data.probe_timeline(
+                session.state == "exited",
                 &crate::client_contract::raw_transcripts::AgentBindingResolveRequest {
                     id: binding.id,
                     session_id: binding.session_id,

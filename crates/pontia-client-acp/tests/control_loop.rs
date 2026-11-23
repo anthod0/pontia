@@ -1914,7 +1914,7 @@ async fn backpressured_prompt_writes_do_not_report_a_live_history_source_as_unav
     // The peer cannot drain its pipe until explicitly released. Probe through
     // the public data contract while the large prompt write is backpressured.
     for _ in 0..64 {
-        if let Some(result) = data.probe_timeline(&request) {
+        if let Some(result) = data.probe_timeline(false, &request) {
             assert!(
                 result.is_ok(),
                 "a busy lock must not diagnose a failed history source: {result:?}"

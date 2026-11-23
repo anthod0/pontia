@@ -227,7 +227,7 @@ for line in sys.stdin:
         gate = os.environ.get("ACP_LOAD_GATE")
         if gate and (root / gate).exists():
             wait_for(f"release-{gate}")
-        if (root / f"hold-load-{os.environ['PONTIA_SESSION_ID']}").exists():
+        if os.environ.get("PONTIA_SESSION_ID") and (root / f"hold-load-{os.environ['PONTIA_SESSION_ID']}").exists():
             wait_for(f"release-load-{os.environ['PONTIA_SESSION_ID']}")
         if (root / "hold-load").exists():
             wait_for("release-load")

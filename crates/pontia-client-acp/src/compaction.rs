@@ -1,8 +1,5 @@
+use crate::peer::{Peer, SessionState, protocol_error};
 use crate::relay::Observation;
-use crate::{
-    history,
-    peer::{Peer, SessionState, protocol_error},
-};
 use agent_client_protocol::UntypedMessage;
 use pontia_agent_control::client_contract::raw_transcripts::{TimelineItem, TurnTimelineItem};
 use pontia_core::{Error, Result};
@@ -105,26 +102,15 @@ impl Checkpoint {
 }
 
 pub(crate) fn replay(state: &mut SessionState, params: &Value) {
-    let update = &params["update"];
-    if let Some(messages) = &state.replay
-        && params["_meta"]["isReplay"] == true
-        && state.agent.compaction == Some(crate::CompactionProtocol::Grok)
+    if state.agent.compaction == Some(crate::CompactionProtocol::Grok)
         && state.current
         && state
             .native
             .as_ref()
             .is_some_and(|native| params["sessionId"].as_str() == Some(native.0.as_ref()))
-        && update["sessionUpdate"] == "compaction_checkpoint"
-        && let (Some(id), Some(created_at)) = (
-            update["checkpoint_id"].as_str(),
-            update["created_at"].as_str(),
-        )
+        && let Some(replay) = &mut state.replay
     {
-        state.checkpoints.push(Checkpoint {
-            offset: history::user_bytes(messages),
-            id: id.into(),
-            created_at: created_at.into(),
-        });
+        replay.checkpoint(params);
     }
 }
 

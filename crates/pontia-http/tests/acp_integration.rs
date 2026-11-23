@@ -464,6 +464,23 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
     assert!(status.is_success(), "{body}");
     let detail = get(&app, &path).await;
     assert_eq!(detail["session"]["state"], "exited");
+    assert_eq!(detail["session"]["capabilities"]["timeline"], true);
+    let after_exit = get(&app, &format!("{path}/turns/timeline?direction=backward")).await;
+    assert_eq!(after_exit, history);
+    let detail = get(&app, &path).await;
+    assert_eq!(detail["session"]["state"], "exited");
+    assert_eq!(detail["session"]["capabilities"]["accept_task"], false);
+    std::fs::write(root.path().join("wrong-replay"), "").unwrap();
+    let (status, error) = call(
+        &app,
+        "GET",
+        &format!("{path}/turns/timeline?direction=backward"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(error["error"]["code"], "timeline_source_unavailable");
+
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM session_runtimes WHERE session_id=?")
             .bind(session)

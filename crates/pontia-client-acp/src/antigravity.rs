@@ -57,6 +57,12 @@ pub(crate) fn prepare_launch(
     crate::restrictions::write_config(&cwd.join(".agents/agents"), "pontia-restricted.md", AGENT)?;
     let data = home.join("clients/antigravity");
     fs::create_dir_all(&data)?;
+    configure_launch(home, policy, launch);
+    Ok(())
+}
+
+pub(crate) fn configure_launch(home: &Path, policy: &ExecutionPolicy, launch: &mut AcpLaunch) {
+    let data = home.join("clients/antigravity");
     launch.args.extend([
         "--gemini-dir".into(),
         data.to_string_lossy().into_owned(),
@@ -67,5 +73,4 @@ pub(crate) fn prepare_launch(
     if policy.yolo {
         launch.args.push("--dangerously-skip-permissions".into());
     }
-    Ok(())
 }
