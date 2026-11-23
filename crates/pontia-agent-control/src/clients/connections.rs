@@ -250,6 +250,9 @@ impl ClientControlService {
                 "Client runtime already has an active connection".into(),
             ));
         }
+        sqlx::query("UPDATE sessions SET metadata=json_remove(metadata,'$.incompatible_control_runtime')
+            WHERE session_id=? AND json_type(metadata,'$.incompatible_control_runtime') IS NOT NULL")
+            .bind(session_id).execute(&self.pool).await?;
         if let Some(previous) = connections.entries.insert(
             session_id.into(),
             Arc::new(Connection {

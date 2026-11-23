@@ -179,7 +179,12 @@ async fn connect(
                 }
                 Ok(response) if response.get("error").is_some() => {
                     eprintln!("Discarding queued ACP reports after permanent attachment rejection");
-                    return Err(Error::StateConflict("Relay identity was rejected".into()));
+                    return Err(Error::StateConflict(
+                        response["error"]["message"]
+                            .as_str()
+                            .unwrap_or("Relay attachment was rejected")
+                            .into(),
+                    ));
                 }
                 Ok(response) => {
                     if response["result"]["session_id"] != config.session_id

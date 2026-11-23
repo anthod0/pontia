@@ -4,11 +4,28 @@ import { dirname, join } from "node:path";
 import { onTestFinished, expect, test, vi } from "vitest";
 import { createPontiaPiExtension } from "../src/index.js";
 import { connectPi } from "../src/control-socket.js";
-import { controlSocketPath, MAX_RPC_FRAME_BYTES, RpcError } from "../shared/control-socket.js";
+import {
+  controlSocketPath,
+  formatSocketPath,
+  AttachmentRejected,
+  MAX_RPC_FRAME_BYTES,
+  RpcError,
+} from "../shared/control-socket.js";
 import { LiveOutputPublisher } from "../src/live-output.js";
 import { EventReporter } from "../src/reporter.js";
 import { buildTurnStartedEvent } from "../src/events.js";
 import { tempDir } from "./temp-dir.js";
+
+// Pi plugins, Claude hosts and ACP relays keep computing this path with their startup
+// version across pontiad upgrades. Moving it in 9d550ec6 from $PONTIA_HOME/state/pi/rpc.sock
+// left running agents retrying the old path, disconnected and impossible to close from Pontia.
+// /tmp fits the ~104–108 byte Unix socket limit even with a long PONTIA_HOME.
+// Changing this path requires project owner approval.
+test("the control socket path is stable across upgrades", () => {
+  expect(formatSocketPath(1001n, 0xabcdn, 0x123456789abcdefn)).toBe(
+    "/tmp/pontia-control-1001-abcd-123456789abcdef/rpc.sock",
+  );
+});
 
 async function server(handler: (socket: Socket, message: any) => void) {
   const root = await tempDir("pr-");
@@ -315,6 +332,29 @@ test("reports large facts without treating normal socket buffering as failure", 
   await expect(
     client.request("event.report", { event: { data: { input_summary: data } } }),
   ).resolves.toMatchObject({ accepted: true });
+});
+
+test("an incompatible reconnect permanently rejects pending and subsequent requests", async () => {
+  const attempts = vi.fn();
+  const root = await server((socket, message) => {
+    if (message.method === "break") return socket.destroy();
+    attempts(message.params.version);
+    socket.end(
+      `${JSON.stringify({ jsonrpc: "2.0", id: message.id, error: { code: -32012, message: "Restart this Session." } })}\n`,
+    );
+  });
+  const client = await connectPi(
+    root,
+    () => {},
+    () => {},
+  );
+  onTestFinished(() => client.close());
+  client.registered({ sessionId: "s", runtimeId: "r" });
+  await expect(client.request("break", {})).rejects.toThrow();
+  await expect(client.request("event.report", {})).rejects.toBeInstanceOf(AttachmentRejected);
+  await expect(client.request("session.get", {})).rejects.toBeInstanceOf(AttachmentRejected);
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  expect(attempts).toHaveBeenCalledExactlyOnceWith(8);
 });
 
 test("new event reports wait for reconnect attachment before they are sent", async () => {

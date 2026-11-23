@@ -152,6 +152,7 @@
   "clients.loadFailed": "无法加载 Agent",
   "workspaces.loadFailed": "无法加载工作区",
   "common.retry": "重试",
+  "chat.controlProtocolMismatch": "Agent Client 的控制协议与 pontiad 不兼容，连接已断开。请重新启动此 Session。",
   "chat.clientDisconnected": "Agent Client 连接已断开。",
   "chat.historyUnavailable": "原生历史记录暂不可用。",
   "chat.refreshFailed": "会话刷新失败",

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Pi, Claude Code and ACP can reconnect after a temporary-file cleaner removes the control socket. If an agent’s control protocol is incompatible with pontiad, Dashboard explains that the Session must be restarted.
+
 ## [0.8.10] - 2026-11-23
 
 ### Fixed

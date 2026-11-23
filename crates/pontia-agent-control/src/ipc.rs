@@ -1,5 +1,6 @@
 pub mod identity;
 mod listener;
+pub mod protocol;
 pub mod rpc;
 use crate::AgentControl;
 pub use listener::{ControlListener, control_socket_path};
@@ -32,6 +33,12 @@ pub async fn serve_connection(state: AgentControl, stream: UnixStream) {
         peer.close();
         return;
     };
+    if let Some(message) = protocol::rejection(&state, process_id, &first).await {
+        let _ = peer
+            .reply_error(first.id, protocol::UNSUPPORTED_VERSION, &message)
+            .await;
+        return;
+    }
     let clients = state.clients();
     let client = match first.method.as_str() {
         "runtime.register" => first.params["binding"]["client_type"]

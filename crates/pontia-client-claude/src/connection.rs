@@ -232,11 +232,10 @@ async fn attach_host(
     status: &Value,
     connection: Arc<Connection>,
 ) -> Result<()> {
-    use pontia_agent_control::ipc::identity::{BindingConfirmation, version};
+    use pontia_agent_control::ipc::identity::BindingConfirmation;
     let Some(native) = identity.client_session_key.as_deref() else {
         return identity.attach(app, "claude-agent", connection).await;
     };
-    version(identity.version)?;
     let control = app.client_control();
     let guard = control.lock_identity().await;
     let pending = &status["pending_ready"];

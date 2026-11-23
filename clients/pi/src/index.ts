@@ -4,7 +4,11 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import type { HistoryContext } from "./history.js";
 import { PiCompaction } from "./compaction.js";
 import { connectPi, type ControlInput, type PiControlBinding } from "./control-socket.js";
-import { RpcError, type RuntimeConnection } from "../shared/control-socket.js";
+import {
+  RpcError,
+  UNSUPPORTED_CONTROL_VERSION,
+  type RuntimeConnection,
+} from "../shared/control-socket.js";
 import { defaultHookLogFile, type EnvLike, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { pontiaHomeFromEnv } from "./discovery.js";
@@ -280,6 +284,8 @@ export function createPontiaPiExtension(
   }
 
   async function controlError(error: unknown): Promise<void> {
+    if (error instanceof RpcError && error.code === UNSUPPORTED_CONTROL_VERSION)
+      reportingDisabled = true;
     await logDiagnostic(currentHookLogFile(), {
       level: "warn",
       code: "pi_control_unavailable",

@@ -987,7 +987,7 @@
 
 <section class="flex flex-col gap-4 pb-[var(--chat-bottom-padding)]" style={`--chat-top-offset: 4rem; --chat-bottom-padding: ${composerHeight + 16}px; --chat-composer-height: ${composerHeight}px`}>
   {#if selectedSession?.control_connected === false}
-    <p class="text-sm text-destructive" role="status">{$t('chat.clientDisconnected')}</p>
+    <p class="text-sm text-destructive" role="status">{$t(selectedSession.control_disconnected_reason === 'unsupported_protocol_version' ? 'chat.controlProtocolMismatch' : 'chat.clientDisconnected')}</p>
   {/if}
   {#if selectedSession && controlDetails && (selectedSession.capabilities.accept_task || controlDetails.unavailableReason) && (controlDetails.unavailableReason || controlDetails.profile?.error || !sessionSupportsTimeline(selectedSession))}
     <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
