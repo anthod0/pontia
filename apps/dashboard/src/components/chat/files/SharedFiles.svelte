@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
+  import type { FileActionLook } from './fileActionButton'
   import type { HTMLAttributes } from 'svelte/elements'
   import { tick, untrack } from 'svelte'
   import { t, number } from '$lib/i18n'
@@ -22,7 +23,7 @@
    * that can all be previewed as images become a mosaic, and anything else a list.
    */
   let { itemActions, paths, sessionId, highlighted = null, itemProps = () => ({}) }: {
-    itemActions?: Snippet
+    itemActions?: Snippet<[FileActionLook]>
     /** Absolute paths, in order and without duplicates. */
     paths: string[]
     sessionId: string

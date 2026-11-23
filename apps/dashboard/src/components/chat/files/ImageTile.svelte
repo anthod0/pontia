@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
+  import type { FileActionLook } from './fileActionButton'
   import type { HTMLAttributes } from 'svelte/elements'
   import { t } from '$lib/i18n'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
@@ -11,7 +12,7 @@
 
   /** One image of an all-image share, cropped to fill its cell, with its download state drawn on it. */
   let { itemActions, state, more = 0, highlighted = false, onenlarge, onmore, itemProps = {}, class: className = '' }: {
-    itemActions?: Snippet
+    itemActions?: Snippet<[FileActionLook]>
     state: SharedFileState
     /** Images hidden after this one; the tile then expands the card instead of opening the viewer. */
     more?: number
@@ -54,7 +55,7 @@
     {/if}
     {#if state.receiving}
       <div class="pointer-events-none absolute inset-0 grid place-items-center bg-black/25">
-        <div class="pointer-events-auto"><FileAction {state} overlay /></div>
+        <div class="pointer-events-auto"><FileAction {state} look="overlay" /></div>
       </div>
       {#if state.percent !== null}<span class="pointer-events-none absolute bottom-1.5 left-1.5 rounded-md bg-black/55 px-1.5 py-0.5 text-[11px] font-medium text-white tabular-nums">{Math.floor(state.percent)}%</span>{/if}
     {:else if failed}
@@ -63,9 +64,10 @@
         <span class="text-[11px] font-medium">{$t('downloads.failed')}</span>
       </div>
     {:else}
-      <div class={['absolute right-1.5 bottom-1.5 transition-opacity', state.imageUrl && 'opacity-0 group-hover/tile:opacity-100 group-focus-within/tile:opacity-100 pointer-coarse:hidden']}><FileAction {state} overlay small /></div>
+      <div class={['absolute right-1.5 bottom-1.5 transition-opacity', state.imageUrl && 'opacity-0 group-hover/tile:opacity-100 group-focus-within/tile:opacity-100 pointer-coarse:hidden']}><FileAction {state} look="overlay" /></div>
     {/if}
   {/if}
-  {#if itemActions}<div class="absolute top-1.5 right-1.5 *:bg-background/90">{@render itemActions()}</div>{/if}
+  <!-- With a mouse the tile's actions show while it is hovered or keyboard-focused, and while a menu is open; touch always shows them. -->
+  {#if itemActions}<div class="absolute top-1.5 right-1.5 opacity-0 transition-opacity group-hover/tile:opacity-100 group-has-focus-visible/tile:opacity-100 has-aria-expanded:opacity-100 pointer-coarse:opacity-100">{@render itemActions('overlay')}</div>{/if}
   {#if highlighted}<div class="pointer-events-none absolute inset-0 ring-3 ring-primary ring-inset"></div>{/if}
 </div>

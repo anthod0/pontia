@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
+  import type { FileActionLook } from './fileActionButton'
   import type { HTMLAttributes } from 'svelte/elements'
   import { t } from '$lib/i18n'
   import ImageTile from './ImageTile.svelte'
@@ -11,7 +12,7 @@
    * 4 as 2+2, and 5 or more as 2+3 with the hidden count on the fifth. Expanded shows a 3-column grid.
    */
   let { itemActions, states, expanded = $bindable(false), highlighted = null, onenlarge, itemProps }: {
-    itemActions?: Snippet
+    itemActions?: Snippet<[FileActionLook]>
     states: SharedFileState[]
     expanded?: boolean
     highlighted?: string | null

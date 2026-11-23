@@ -719,6 +719,30 @@ test("a reply with only attachments keeps its message menu", async () => {
   ).toEqual(["ReplyR", "Copy", "View context"]);
 });
 
+test("a file's message menu button looks the same as its download button", async () => {
+  vi.stubGlobal("IntersectionObserver", VisibleObserver);
+  mockFileInfo();
+  vi.spyOn(testDevice.previews, "imageUrl").mockImplementation(
+    async (_session, path) => `blob:${path}`,
+  );
+  serve([attached(2, "report.pdf"), attached(3, "a.txt", "b.txt"), attached(4, "x.png", "y.png")]);
+  render(BotChatPage, { botId: bot.bot_id });
+  const actions = async (name: string) => {
+    const download = await screen.findByRole("button", { name: `Download ${name}` });
+    const file = download.closest<HTMLElement>("[data-bot-file-path]")!;
+    return { download, menu: within(file).getByRole("button", { name: "Message actions" }) };
+  };
+  for (const name of ["report.pdf", "a.txt", "x.png"]) {
+    const { download, menu } = await actions(name);
+    expect(menu.className).toBe(download.className);
+  }
+  // Rows always show both actions; an image tile reveals its menu on hover.
+  for (const name of ["report.pdf", "a.txt"])
+    expect((await actions(name)).menu.closest(".opacity-0")).toBeNull();
+  expect((await actions("x.png")).menu.closest(".opacity-0")).not.toBeNull();
+  vi.unstubAllGlobals();
+});
+
 test("a block in the middle of a reply shows its card between two bubbles of one message", async () => {
   const middle = message(
     2,
