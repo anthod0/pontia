@@ -19,12 +19,13 @@ export interface ExecutionPolicy {
   yolo: boolean;
 }
 
-export type QueryFactory = (
-  args: Parameters<typeof query>[0],
-) => Pick<
+export type QueryFactory = (args: Parameters<typeof query>[0]) => Pick<
   Query,
   typeof Symbol.asyncIterator | "interrupt" | "close" | "supportedModels" | "getContextUsage"
->;
+> & {
+  // The SDK exposes get_settings on Query at runtime, outside its public typings.
+  getSettings?: () => Promise<{ applied: { effort: string | null } }>;
+};
 export class ControlError extends Error {
   constructor(
     readonly code: "rejected" | "unknown" | "unsupported",
@@ -59,6 +60,7 @@ export class Host {
       session_id: string;
       cwd: string;
       model?: string;
+      reasoning_effort?: string;
       resume?: string;
       system_prompt?: string;
       execution_policy?: ExecutionPolicy;
@@ -106,6 +108,9 @@ export class Host {
       const options: Options = {
         cwd: this.options.cwd,
         ...(this.options.model ? { model: this.options.model } : {}),
+        ...(this.options.reasoning_effort
+          ? { effort: this.options.reasoning_effort as Options["effort"] }
+          : {}),
         ...(this.options.resume ? { resume: this.options.resume } : {}),
         ...(this.options.system_prompt
           ? {
@@ -271,7 +276,7 @@ export class Host {
     try {
       for await (const message of execution) {
         try {
-          this.message(message);
+          await this.message(message);
         } catch (error) {
           this.fail(
             error instanceof Error ? error.message : "sdk_message_invalid",
@@ -367,7 +372,7 @@ export class Host {
     }
   }
 
-  private message(message: SDKMessage): void {
+  private async message(message: SDKMessage): Promise<void> {
     if (this.unavailable) return;
     if (message.type === "system" && message.subtype === "init") {
       if (
@@ -384,6 +389,14 @@ export class Host {
       if (this.contextModel !== message.model) {
         this.contextModel = message.model;
         void this.reportContextUsage();
+      }
+      try {
+        const settings = await this.execution!.getSettings!();
+        const effort = settings.applied.effort;
+        if (effort === null || typeof effort === "string")
+          this.emit({ kind: "reasoning_effort", reasoning_effort: effort });
+      } catch {
+        if (!this.closing) console.error("Claude reasoning effort query failed");
       }
       return;
     }

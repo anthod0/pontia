@@ -41,6 +41,7 @@ export function sdk() {
   let onInterrupt: (() => Promise<void>) | undefined;
   let onClose: (() => void) | undefined;
   let contextUsage = async () => usage(0, 0);
+  let effort: string | null = null;
   const models = [
     { value: "sonnet", displayName: "Sonnet", description: "Balanced" },
     { value: "haiku", displayName: "Haiku", description: "Fast" },
@@ -53,6 +54,7 @@ export function sdk() {
     return {
       [Symbol.asyncIterator]: () => messages[Symbol.asyncIterator](),
       supportedModels: async () => models,
+      getSettings: async () => ({ applied: { effort } }),
       getContextUsage: async () => contextUsage(),
       interrupt: async () => {
         interrupts += 1;
@@ -67,6 +69,9 @@ export function sdk() {
   return {
     factory,
     messages,
+    setEffort: (value: string | null) => {
+      effort = value;
+    },
     onContextUsage: (fn: typeof contextUsage) => {
       contextUsage = fn;
     },

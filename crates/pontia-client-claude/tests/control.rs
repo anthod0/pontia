@@ -696,6 +696,56 @@ async fn resumed_input_is_held_and_released_once_only_to_the_expected_runtime() 
 }
 
 #[tokio::test]
+async fn resume_uses_the_effort_reported_by_the_host() {
+    let h = Harness::new().await;
+    for (input, observed) in [
+        ("observe capped effort", Some("low")),
+        ("observe no effort", None),
+    ] {
+        let request = serde_json::from_value(json!({
+            "client_type":"claude-agent", "workspace":h.root.path(),
+            "reasoning_effort":"max", "initial_task":{"input":input}
+        }))
+        .unwrap();
+        let created = h
+            .app
+            .session_commands()
+            .create_session(request)
+            .await
+            .unwrap();
+        let session = created.session_id().unwrap();
+        h.gate(session, 1, "start");
+        h.gate(session, 1, "finish");
+        h.wait_states(session, &["completed"]).await;
+        let history = h
+            .app
+            .event_ingest_service()
+            .list_events(session)
+            .await
+            .unwrap();
+        let fact = history
+            .iter()
+            .find(|e| e.event_type == pontia_core::domain::EventType::SessionReasoningEffortUpdated)
+            .unwrap();
+        assert_eq!(fact.payload.get("reasoning_effort"), Some(&json!(observed)));
+        h.app
+            .session_commands()
+            .terminate_session(session)
+            .await
+            .unwrap();
+        h.resume_input(session, "continue").await;
+        let efforts: Vec<_> = h
+            .wire(session)
+            .into_iter()
+            .filter(|v| v["method"] == "spawn")
+            .map(|v| v.get("reasoning_effort").cloned())
+            .collect();
+        assert_eq!(efforts, [Some(json!("max")), observed.map(|v| json!(v))]);
+    }
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn exited_sessions_read_and_resume_their_own_history_in_a_shared_workspace() {
     let h = Harness::new().await;
     let a = h.create("alpha history").await;

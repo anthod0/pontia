@@ -7,6 +7,10 @@ export async function modelOptions(execution: Pick<Query, "supportedModels">) {
     id: model.value,
     name: model.displayName,
     description: model.description,
+    reasoning_efforts: (model.supportsEffort ? (model.supportedEffortLevels ?? []) : []).map(
+      (id) => ({ id, name: id, description: "" }),
+    ),
+    default_reasoning_effort: null,
   }));
 }
 

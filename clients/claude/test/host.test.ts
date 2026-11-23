@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Host, ControlError } from "../src/host.js";
+import { modelOptions } from "../src/models.js";
 import type { HostEvent } from "../src/facts.js";
 import {
   assistant,
@@ -27,6 +28,61 @@ function setup(resume?: string) {
 }
 const rejects = (reason: string) => (error: unknown) =>
   error instanceof ControlError && error.reason === reason;
+
+test("lists native effort levels in model order only for models with effort support", async () => {
+  const models = await modelOptions({
+    supportedModels: async () => [
+      {
+        value: "opus",
+        displayName: "Opus",
+        description: "",
+        supportsEffort: true,
+        supportedEffortLevels: ["high", "max"],
+      },
+      {
+        value: "custom",
+        displayName: "Custom",
+        description: "",
+        supportsEffort: false,
+        supportedEffortLevels: ["low"],
+      },
+    ],
+  });
+  assert.deepEqual(
+    models.map((model) => model.reasoning_efforts),
+    [
+      [
+        { id: "high", name: "high", description: "" },
+        { id: "max", name: "max", description: "" },
+      ],
+      [],
+    ],
+  );
+  assert.ok(models.every((model) => model.default_reasoning_effort === null));
+});
+
+test("passes the requested effort to the SDK and reports the applied effort on each init", async (t) => {
+  const fixture = sdk();
+  const events: HostEvent[] = [];
+  const host = new Host(
+    { session_id: "pontia-session", cwd: "/unused-fixture-workspace", reasoning_effort: "max" },
+    (event) => events.push(event),
+    fixture.factory,
+  );
+  t.after(() => host.close());
+  host.submit(first, "task");
+  assert.equal(fixture.options?.effort, "max");
+  fixture.setEffort("high");
+  fixture.messages.push(init());
+  await settle();
+  fixture.setEffort(null);
+  fixture.messages.push(init());
+  await settle();
+  assert.deepEqual(
+    events.filter((e) => e.kind === "reasoning_effort").map((e) => e.reasoning_effort),
+    ["high", null],
+  );
+});
 
 for (const tools of [null, [], ["Read", "Bash", "Glob"]] as const) {
   test(`YOLO applies the requested tool set and does not request approval (${tools})`, async (t) => {
@@ -212,7 +268,7 @@ test("automatic and subagent messages do not start or complete the next input", 
   await settle();
   assert.deepEqual(
     events.map((e) => e.kind),
-    ["ready", "model"],
+    ["ready", "model", "reasoning_effort"],
   );
   // A notification-started foreground round can subsequently consume the user input.
   fixture.messages.push(assistant(first));
@@ -220,7 +276,7 @@ test("automatic and subagent messages do not start or complete the next input", 
   await settle();
   assert.deepEqual(
     events.map((e) => e.kind),
-    ["ready", "model", "started", "text", "finished"],
+    ["ready", "model", "reasoning_effort", "started", "text", "finished"],
   );
 });
 

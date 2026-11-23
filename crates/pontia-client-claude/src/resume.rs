@@ -101,9 +101,16 @@ impl Adapter {
                 ("PONTIA_WORKFLOW_PATCH_ID".into(), patch_id),
             ]);
         }
+        let effort: Option<String> = sqlx::query_scalar(
+            "SELECT json_extract(metadata, '$.reasoning_effort') FROM sessions WHERE session_id=?",
+        )
+        .bind(&target.session_id)
+        .fetch_one(&events.db())
+        .await?;
         peers.insert(peer.session.clone(), peer.clone());
         drop(peers);
-        peer.start(&events, root, &script, &environment).await?;
+        peer.start(&events, root, &script, &environment, effort.as_deref())
+            .await?;
         Ok(())
     }
 }

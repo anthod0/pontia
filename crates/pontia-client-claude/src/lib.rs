@@ -118,6 +118,10 @@ impl ClientConfiguration for Configuration {
         true
     }
 
+    fn supports_startup_reasoning_effort(&self) -> bool {
+        true
+    }
+
     fn list_models<'a>(
         &'a self,
         _: &'a Value,
@@ -245,8 +249,14 @@ impl ClientSession for Adapter {
             });
             peers.insert(peer.session.clone(), peer.clone());
             drop(peers);
-            peer.start(&events, root, &script, &request.environment)
-                .await?;
+            peer.start(
+                &events,
+                root,
+                &script,
+                &request.environment,
+                request.reasoning_effort.as_deref(),
+            )
+            .await?;
             Ok(())
         })
     }

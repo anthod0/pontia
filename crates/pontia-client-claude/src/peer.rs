@@ -43,10 +43,13 @@ impl Peer {
         root: &std::path::Path,
         script: &std::path::Path,
         environment: &std::collections::BTreeMap<String, String>,
+        reasoning_effort: Option<&str>,
     ) -> Result<()> {
         self.runtime_event(events, PontiaEventType::RuntimeStarting, json!({}))
             .await?;
-        match crate::transport::launch(self, root, script, environment, events).await {
+        match crate::transport::launch(self, root, script, environment, reasoning_effort, events)
+            .await
+        {
             Ok(()) => Ok(()),
             Err(error) => {
                 self.runtime_event(

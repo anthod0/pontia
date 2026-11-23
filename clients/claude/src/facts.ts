@@ -6,6 +6,7 @@ export type HostEvent =
   | { kind: "compaction"; phase: "started" | "completed" | "failed"; data: Record<string, unknown> }
   | { kind: "ready"; native_session_id: string }
   | { kind: "model"; model: string }
+  | { kind: "reasoning_effort"; reasoning_effort: string | null }
   | {
       kind: "context_usage";
       context_usage: {
@@ -60,6 +61,7 @@ function reportKey(host: string, sequence: number, event: HostEvent): string | u
     case "finished":
       return `claude:${host}:${event.result_id}`;
     case "model":
+    case "reasoning_effort":
     case "context_usage":
     case "compaction":
     case "ready":
