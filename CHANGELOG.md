@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `config.toml` ignores unknown keys and tables instead of failing to load.
 - `pontia down` and `pontia uninstall` list running agents started by Pontia. Use `--force` to terminate them before stopping the service.
+- You can run `pontia update` while Sessions are busy or have messages waiting for delivery. Agents continue working when the service restarts.
 
 ### Fixed
 
@@ -418,7 +419,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `pontia update` now checks for active tasks before downloading a release.
 - Opening and closing the Codex TUI without sending a message no longer creates a Session.
 - Codex sessions started through Pontia now open in the directory where `codex` was launched.
 - Codex history messages now keep their timestamps.
@@ -453,7 +453,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pontia client list` now prints a table by default.
 - `pontia setup [CLIENT]` now enables the selected Clients after the Pontia service starts.
 - `pontia --help` now lists agent tools such as `send-file` and `workflow` in their own section.
-- `pontia update` now stops and lists the affected Sessions when the running service has active tasks, pending interactions, or pending inputs.
 - The install scripts no longer require `jq`.
 
 ### Fixed

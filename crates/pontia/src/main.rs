@@ -69,9 +69,7 @@ Run after editing $PONTIA_HOME/config.toml. The printed Dashboard URL contains t
 For configuration options, see https://pontia.dev/docs/configuration.md";
 
 const UPDATE_HELP: &str = "\
-Restarts a running service. Refuses installation when the service reports active tasks,
-pending interactions or inputs, or when the execution check fails.
-Avoid starting new tasks during the update; this check does not pause execution.
+Restarts a running service. Agents continue working during the restart.
 To install a specific release, see https://pontia.dev/docs/updating.md";
 
 const DOWN_HELP: &str = "Configuration and state are kept; run 'pontia up' to start again.";
@@ -420,7 +418,7 @@ async fn run_update() -> Result<bool, String> {
         } else {
             None
         };
-        let Some(update) = update::prepare(config.as_ref()).await? else {
+        let Some(update) = update::prepare().await? else {
             maintain_updated_clients(config.as_ref(), &manager).await?;
             return Ok(true);
         };
@@ -430,16 +428,13 @@ async fn run_update() -> Result<bool, String> {
         if config.is_none() {
             update.ensure_no_unmanaged_daemon()?;
         }
-        update
-            .install(config.as_ref(), || {
-                if let Some(config) = &config {
-                    eprintln!("Restarting Pontia and waiting for it to become healthy...");
-                    Lifecycle::new(&manager, &FileDefinitionStore, &HttpHealthProbe)
-                        .restart(config)?;
-                }
-                Ok(())
-            })
-            .await?;
+        update.install(|| {
+            if let Some(config) = &config {
+                eprintln!("Restarting Pontia and waiting for it to become healthy...");
+                Lifecycle::new(&manager, &FileDefinitionStore, &HttpHealthProbe).restart(config)?;
+            }
+            Ok(())
+        })?;
         maintain_updated_clients(config.as_ref(), &manager).await?;
         Ok(true)
     }
@@ -450,7 +445,7 @@ async fn run_update() -> Result<bool, String> {
         // A loaded KeepAlive job can restart while its process is temporarily absent,
         // so keep treating stopped or failed loaded jobs as managed during replacement.
         let config = update_service_config(&manager, &user_home()?, true)?;
-        let Some(update) = update::prepare(config.as_ref()).await? else {
+        let Some(update) = update::prepare().await? else {
             maintain_updated_clients(config.as_ref(), &manager).await?;
             return Ok(true);
         };
@@ -460,16 +455,13 @@ async fn run_update() -> Result<bool, String> {
         if config.is_none() {
             update.ensure_no_unmanaged_daemon()?;
         }
-        update
-            .install(config.as_ref(), || {
-                if let Some(config) = &config {
-                    eprintln!("Restarting Pontia and waiting for it to become healthy...");
-                    Lifecycle::new(&manager, &FileDefinitionStore, &HttpHealthProbe)
-                        .restart(config)?;
-                }
-                Ok(())
-            })
-            .await?;
+        update.install(|| {
+            if let Some(config) = &config {
+                eprintln!("Restarting Pontia and waiting for it to become healthy...");
+                Lifecycle::new(&manager, &FileDefinitionStore, &HttpHealthProbe).restart(config)?;
+            }
+            Ok(())
+        })?;
         maintain_updated_clients(config.as_ref(), &manager).await?;
         Ok(true)
     }

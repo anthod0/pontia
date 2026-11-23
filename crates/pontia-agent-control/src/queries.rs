@@ -13,8 +13,6 @@ mod events;
 pub use event_history::{SessionEventSummary, TimePage};
 mod sessions;
 mod turns;
-mod update;
-pub use update::UpdateBlocker;
 mod workspaces;
 use sqlx::SqlitePool;
 #[derive(Clone)]
