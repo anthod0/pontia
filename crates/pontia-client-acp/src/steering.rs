@@ -54,6 +54,9 @@ pub(crate) async fn send(
     {
         return Err(prompt_required());
     }
+    if state.negotiated.kiro_steer {
+        return crate::kiro::steer(peer, state, target, turn, input).await;
+    }
     if state.agent.prompt_steering {
         let native = state.native.clone().ok_or_else(prompt_required)?;
         let request = peer.connection.prepare_request(PromptRequest::new(

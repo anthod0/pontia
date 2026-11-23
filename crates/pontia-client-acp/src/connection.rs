@@ -29,6 +29,8 @@ struct Context {
     native: Option<SessionId>,
     steer: bool,
     #[serde(default)]
+    kiro_steer: bool,
+    #[serde(default)]
     interject: bool,
     #[serde(default)]
     compact_command: bool,
@@ -46,7 +48,7 @@ struct Context {
 }
 
 pub(crate) fn context(state: &SessionState) -> Value {
-    json!({"ready":state.ready,"blocked":state.blocked,"native":state.native,"steer":state.negotiated.steer,"interject":state.negotiated.interject,"protocol":state.agent.interjection,"compact_command":state.negotiated.compact_command,"compaction":state.compaction,
+    json!({"ready":state.ready,"blocked":state.blocked,"native":state.native,"steer":state.negotiated.steer,"kiro_steer":state.negotiated.kiro_steer,"interject":state.negotiated.interject,"protocol":state.agent.interjection,"compact_command":state.negotiated.compact_command,"compaction":state.compaction,
         "compaction_events":state.agent.compaction_events(), "compaction_protocol":state.agent.compaction,
         "model_windows":state.model_windows,
         "system_prompt":state.system_prompt,"prompt_prefix":state.prompt_prefix,"current_model":state.current_model,"config_options":state.config_options,"promoted":state.promoted,"interjections":state.interjections,"active":state.active})
@@ -89,6 +91,7 @@ pub(crate) async fn restore(
     state.ready = context.ready;
     state.native = context.native;
     state.negotiated.steer = context.steer;
+    state.negotiated.kiro_steer = context.kiro_steer;
     state.negotiated.interject = context.interject && state.agent.interjection.is_some();
     state.negotiated.compact_command = context.compact_command;
     state.promoted = context.promoted;

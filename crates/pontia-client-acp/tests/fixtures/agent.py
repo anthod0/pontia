@@ -321,6 +321,37 @@ for line in sys.stdin:
         else:
             remember({"sessionUpdate":"user_message_chunk","_meta":{"interjection":True},"content":{
                 "type":"text","text":"<user_query>"+params["text"]+"</user_query>","_meta":{"displayText":params["text"]}}})
+    elif method == "_session/steer" and os.environ.get("ACP_KIRO_STEER"):
+        if not request["params"]:
+            send({"id": request["id"], "error": {"code": -32603, "message": "Internal error",
+                  "data": {"details": "_session/steer: missing or invalid sessionId"}}})
+            continue
+        message_id = "steer-" + str(request["id"])
+        text = request["params"]["message"]
+        response(request, {"queued": True, "messageId": message_id})
+        def injected(sid, mid, replay=False):
+            send({"method": "session/update", "params": {"sessionId": sid, "update": {
+                "sessionUpdate": "session_info_update", "_meta": {"kiro": {
+                    "kind": "steering_injected", "messageId": mid, "replay": replay}}}}})
+        injected(native_id, "unrelated")
+        injected("other-session", message_id)
+        injected(native_id, message_id, True)
+        send({"id": "steer-queued-barrier", "method": "_fixture_barrier", "params": {}})
+        def inject_steer(message_id, text):
+            if os.environ["ACP_KIRO_STEER"] in ("inject", "reattach"):
+                wait_for("inject")
+                injected(native_id, message_id)
+                remember({"sessionUpdate": "user_message_chunk", "_meta": {"kiro": {
+                    "source": "steer", "messageId": message_id}}, "content": {"type": "text", "text": text}})
+                for chunk in ["前[ST", "EERING " + message_id, ": note", "]後[OTHER]"]:
+                    if chunk.startswith("]") and os.environ["ACP_KIRO_STEER"] == "reattach":
+                        send({"id": "note-barrier", "method": "_fixture_barrier", "params": {}})
+                        wait_for("continue-note")
+                    update = {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": chunk}}
+                    send({"method": "session/update", "params": {"sessionId": native_id, "update": update}})
+                    remember(update)
+            send({"id": "steer-barrier", "method": "_fixture_barrier", "params": {}})
+        threading.Thread(target=inject_steer, args=(message_id,text), daemon=True).start()
     elif method == "_session/steering":
         outcome = os.environ.get("ACP_STEERING_OUTCOME", "injected")
         if outcome == "disconnect":
