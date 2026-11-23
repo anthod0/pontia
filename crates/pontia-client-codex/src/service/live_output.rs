@@ -393,7 +393,7 @@ impl CodexLiveOutput {
     ) -> Result<()> {
         let params = &notification["params"];
         let item = &params["item"];
-        let Some((item_id, text)) = user_input(item) else {
+        let Some((mut item_id, text)) = user_input(item) else {
             return Ok(());
         };
         let native = string(params, "turnId")?;
@@ -404,14 +404,47 @@ impl CodexLiveOutput {
         else {
             return Ok(());
         };
-        // Without a known first input, this message may itself be the Turn input.
-        let turn_input = turns
+        let Some(items) = turns
             .iter()
             .find(|turn| turn["id"] == native)
             .and_then(|turn| turn["items"].as_array())
-            .and_then(|items| items.iter().find(|other| other["type"] == "userMessage"))
-            .and_then(user_input_id);
-        if turn_input.is_none_or(|first| first == item_id) {
+        else {
+            return Ok(());
+        };
+        let mut inputs = items.iter().filter(|item| item["type"] == "userMessage");
+        let Some(first) = inputs.next() else {
+            return Ok(());
+        };
+
+        if is_history_item_id(first["id"].as_str())
+            && (first["clientId"].is_null() || item["clientId"].is_null())
+        {
+            // Without clientId, notification UUIDs cannot identify legacy item-N
+            // records. Advance one native input per completion, in stream order.
+            if notification["method"] != "item/completed" {
+                return Ok(());
+            }
+            let Some(producer) = self.producer(service, session, native).await? else {
+                return Ok(());
+            };
+            let published = self
+                .output
+                .snapshot(session, &producer.identity.turn_id)
+                .map_or(0, |snapshot| {
+                    snapshot
+                        .items
+                        .iter()
+                        .filter(|item| matches!(item, LiveOutputItem::UserInput { .. }))
+                        .count()
+                });
+            let Some((history_id, input)) = inputs.filter_map(user_input).nth(published) else {
+                return Ok(());
+            };
+            if input != text {
+                return Ok(());
+            }
+            item_id = history_id;
+        } else if user_input_id(first).as_deref() == Some(&item_id) {
             return Ok(());
         }
         self.publish(
@@ -676,14 +709,11 @@ impl CodexLiveOutput {
 
 fn user_input_id(item: &Value) -> Option<String> {
     // History can rebuild `id` as item-N while notifications use a native UUID.
-    // The sender's clientId survives both projections, including recovery.
+    // Prefer the sender's clientId when one was supplied.
     if let Some(id) = item["clientId"].as_str() {
         return Some(format!("input:client:{id}"));
     }
-    item["id"]
-        .as_str()
-        .filter(|id| !is_history_item_id(Some(id)))
-        .map(|id| format!("input:{id}"))
+    item["id"].as_str().map(|id| format!("input:{id}"))
 }
 
 fn user_input(item: &Value) -> Option<(String, String)> {
