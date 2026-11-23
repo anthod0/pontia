@@ -764,6 +764,7 @@ impl ClientService for AcpAdapter {
                             let state = state.clone();
                             recoveries.spawn(async move {
                                 let result = async {
+                                    let _launch = pontia_runtime::launch_lock::launch(state.pontia_home())?;
                                     let target = ControlTarget::resolve(&state.db(), &state.clients(), &session, None).await?;
                                     adapter.resume(state.event_ingest_service(), &target).await
                                 }.await;

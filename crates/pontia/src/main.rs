@@ -2,6 +2,7 @@ mod bot;
 mod diagnostics;
 mod login;
 mod remote;
+mod shutdown;
 mod update;
 mod workflow;
 mod workspace;
@@ -358,25 +359,29 @@ async fn run_uninstall(yes: bool, force: bool) -> Result<bool, String> {
         )?;
         let remaining_data_hint = prepared.remaining_data_hint();
         let config = prepared.service_config()?;
-        let shutdown = pontia::shutdown::Shutdown::inspect(&config).await?;
-        shutdown.require_force("uninstall", force)?;
-        let mut summary = prepared.summary();
-        summary.extend(shutdown.listing());
-        if summary.is_empty() {
-            println!("No installed Pontia integrations or services to remove.");
-            println!("{remaining_data_hint}");
+        let mut empty = false;
+        let list = |agents: Vec<String>| {
+            let mut summary = prepared.summary();
+            summary.extend(agents);
+            empty = summary.is_empty();
+            if empty {
+                println!("No installed Pontia integrations or services to remove.");
+                println!("{remaining_data_hint}");
+            } else {
+                for line in summary {
+                    println!("  • {line}");
+                }
+                println!(
+                    "Binaries, configuration, credentials, history, and cloud registration will be kept."
+                );
+            }
+        };
+        use shutdown::{Operation, run};
+        let mut guard = run(&config, Operation::Uninstall, force, yes, &manager, list).await?;
+        if empty {
             return Ok(true);
         }
-        for line in summary {
-            println!("  • {line}");
-        }
-        println!(
-            "Binaries, configuration, credentials, history, and cloud registration will be kept."
-        );
-        let shutdown = if yes {
-            shutdown
-        } else {
-            drop(shutdown);
+        if !yes {
             if !Confirm::with_theme(&terminal::theme())
                 .with_prompt("Remove these Pontia integrations and services?")
                 .default(false)
@@ -385,11 +390,10 @@ async fn run_uninstall(yes: bool, force: bool) -> Result<bool, String> {
             {
                 return Ok(true);
             }
-            pontia::shutdown::Shutdown::inspect(&config).await?
-        };
-        shutdown
-            .run("uninstall", force, || prepared.uninstall(&manager, &runner))
-            .await?;
+            guard = run(&config, Operation::Uninstall, force, true, &manager, |_| {}).await?;
+        }
+        prepared.uninstall(&manager, &runner)?;
+        drop(guard);
         println!(
             "{}",
             terminal::success(
@@ -695,10 +699,16 @@ async fn run_with_manager<M: ServiceManager>(
                 None => pontia_clients::config_from_env(),
             }
             .map_err(|e| e.to_string())?;
-            pontia::shutdown::Shutdown::inspect(&config)
-                .await?
-                .run("down", force, || lifecycle.down())
-                .await?;
+            let _guard = shutdown::run(
+                &config,
+                shutdown::Operation::Down,
+                force,
+                true,
+                manager,
+                |_| {},
+            )
+            .await?;
+            lifecycle.down()?;
             println!("Pontia is down.");
             Ok(true)
         }

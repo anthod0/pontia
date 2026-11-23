@@ -1,5 +1,6 @@
 mod e2e_identity;
 mod initialization;
+mod shutdown;
 mod uploads;
 use pontia_agent_control::client_contract::ClientServicePhase;
 use pontia_core::error::Result;
@@ -14,8 +15,16 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    if std::env::args().nth(1).as_deref() == Some("--stdio-relay") {
-        return pontia_clients::run_stdio_relay().await;
+    match std::env::args().nth(1).as_deref() {
+        Some("--stdio-relay") => return pontia_clients::run_stdio_relay().await,
+        Some("shutdown") => {
+            if let Err(error) = shutdown::run().await {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
+            return Ok(());
+        }
+        _ => {}
     }
     let config = pontia_clients::config_from_env()?;
     init_tracing();

@@ -1,4 +1,8 @@
-use std::time::Duration;
+mod command;
+pub use command::{Operation, ShutdownRequest, ShutdownUpdate};
+
+use crate::{client_contract::PreparedServiceShutdown, clients::ClientRegistry};
+use std::{path::Path, time::Duration};
 
 use pontia_core::{Error, Result};
 use pontia_runtime::{GenericRuntimeManager, ProcessFingerprint, ProcessObservation};
@@ -6,6 +10,68 @@ use serde_json::json;
 use sqlx::{FromRow, SqlitePool};
 
 use crate::{EventIngestService, PontiaEvent, PontiaEventSource, PontiaEventType};
+
+pub struct Shutdown {
+    lock: pontia_runtime::launch_lock::LaunchLock,
+    events: Option<EventIngestService>,
+    runtimes: Vec<ShutdownRuntime>,
+    services: Vec<PreparedServiceShutdown>,
+}
+
+impl Shutdown {
+    pub async fn inspect(
+        root: &Path,
+        clients: &ClientRegistry,
+        database: impl Future<Output = Result<Option<SqlitePool>>>,
+    ) -> Result<Self> {
+        let lock = pontia_runtime::launch_lock::shutdown(root)?;
+        let events = database.await?.map(|pool| {
+            crate::AgentControl::builder(pool, root.to_owned())
+                .clients(clients.clone())
+                .build()
+                .event_ingest_service()
+        });
+        let mut services = Vec::new();
+        for service in clients.registrations().filter_map(|c| c.service.as_ref()) {
+            if let Some(prepared) = service.inspect_shutdown(root, events.as_ref()).await? {
+                services.push(prepared);
+            }
+        }
+        let runtimes = match &events {
+            Some(events) => ShutdownRuntime::list(&events.db(), root, clients).await?,
+            None => Vec::new(),
+        };
+        Ok(Self {
+            lock,
+            events,
+            runtimes,
+            services,
+        })
+    }
+
+    fn listing(&self) -> Vec<String> {
+        self.runtimes
+            .iter()
+            .map(|r| r.session().label())
+            .chain(self.services.iter().flat_map(|s| s.listing.iter().cloned()))
+            .collect()
+    }
+
+    async fn terminate(&mut self) -> Result<Vec<String>> {
+        if let Some(events) = &self.events {
+            for runtime in self.runtimes.drain(..) {
+                runtime.terminate(events).await?;
+            }
+        }
+        let mut warnings = Vec::new();
+        for service in self.services.drain(..) {
+            if let Some(warning) = service.terminate.await? {
+                warnings.push(warning);
+            }
+        }
+        Ok(warnings)
+    }
+}
 
 #[derive(FromRow, Debug)]
 pub struct ShutdownSession {
@@ -16,23 +82,18 @@ pub struct ShutdownSession {
 }
 
 impl ShutdownSession {
-    pub async fn background_codex(pool: &SqlitePool) -> Result<Vec<Self>> {
-        let sessions: Vec<Self> = sqlx::query_as(
-            "SELECT s.session_id, s.title, s.client_type, COALESCE(w.display_path, s.workspace_ref) AS workspace
-             FROM sessions s LEFT JOIN workspaces w USING(workspace_id)
-             WHERE s.client_type='codex' AND s.state NOT IN ('exited','error')
-             ORDER BY s.session_id",
-        ).fetch_all(pool).await?;
-        let queries = crate::ControlQueryService::new(pool.clone());
-        let mut background = Vec::new();
-        for session in sessions {
-            if queries.session_launch_mode(&session.session_id).await?
-                == pontia_core::LaunchMode::Background
-            {
-                background.push(session);
-            }
-        }
-        Ok(background)
+    pub fn label(&self) -> String {
+        let title = self
+            .title
+            .as_deref()
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .unwrap_or("Untitled Session");
+        format!(
+            "{title:?} ({}, {})",
+            self.client_type,
+            self.workspace.as_deref().unwrap_or("No Workspace")
+        )
     }
 
     pub async fn exited(
@@ -65,30 +126,48 @@ struct Record {
     tmux_pane_id: Option<String>,
 }
 
-pub struct ShutdownRuntime {
+struct ShutdownRuntime {
     record: Record,
     process: Option<ProcessFingerprint>,
     pane: Option<ProcessFingerprint>,
+    coupled_runtime: bool,
 }
 
 impl ShutdownRuntime {
-    pub fn session(&self) -> &ShutdownSession {
+    fn session(&self) -> &ShutdownSession {
         &self.record.session
     }
 
-    pub async fn list(pool: &SqlitePool, root: &std::path::Path) -> Result<Vec<Self>> {
-        // Native Pi registrations also have a fingerprint. Only its latest Pontia
-        // launch (as opposed to a user reopening that conversation) confers ownership.
-        let records: Vec<Record> = sqlx::query_as(r#"SELECT s.session_id,s.title,s.client_type,COALESCE(w.display_path,s.workspace_ref) AS workspace,
-            r.runtime_id,r.role,r.process_fingerprint,r.tmux_socket_path,r.tmux_pane_id
-            FROM session_runtimes r JOIN sessions s USING(session_id)
-            LEFT JOIN workspaces w USING(workspace_id)
-            WHERE (s.client_type='acp' AND r.role='acp') OR
-                  (s.client_type='claude-agent' AND r.role='claude_sdk_host') OR
-                  (s.client_type='pi' AND r.role='pi_tui' AND
-                   (SELECT e.source FROM events e WHERE e.session_id=s.session_id AND
-                    e.event_type IN ('session.starting','session.resuming') ORDER BY e.rowid DESC LIMIT 1)='external_api')
-            ORDER BY s.session_id,r.runtime_id"#).fetch_all(pool).await?;
+    async fn list(
+        pool: &SqlitePool,
+        root: &std::path::Path,
+        clients: &ClientRegistry,
+    ) -> Result<Vec<Self>> {
+        let mut query = sqlx::QueryBuilder::new(
+            "SELECT s.session_id,s.title,s.client_type,COALESCE(w.display_path,s.workspace_ref) AS workspace,
+                    r.runtime_id,r.role,r.process_fingerprint,r.tmux_socket_path,r.tmux_pane_id
+             FROM session_runtimes r JOIN sessions s USING(session_id)
+             LEFT JOIN workspaces w USING(workspace_id)
+             WHERE FALSE",
+        );
+        for client in clients.registrations() {
+            let adapter = &client.spec.adapter;
+            let Some(role) = adapter.control_runtime_role else {
+                continue;
+            };
+            query
+                .push(" OR (s.client_type=")
+                .push_bind(client.spec.client_type)
+                .push(" AND r.role=")
+                .push_bind(role);
+            if adapter.lifecycle.shutdown_requires_managed_launch {
+                query.push(" AND (SELECT e.source FROM events e WHERE e.session_id=s.session_id AND
+                    e.event_type IN ('session.starting','session.resuming') ORDER BY e.rowid DESC LIMIT 1)='external_api'");
+            }
+            query.push(")");
+        }
+        query.push(" ORDER BY s.session_id,r.runtime_id");
+        let records: Vec<Record> = query.build_query_as().fetch_all(pool).await?;
         let snapshot = pontia_runtime::process::ProcessSnapshot::capture();
         let mut sockets = std::collections::HashMap::new();
         let log = pontia_runtime::pontia_log_paths(root).runtime_log;
@@ -133,7 +212,11 @@ impl ShutdownRuntime {
                 None
             };
             if pane.is_some() || process.is_some() {
+                let spec = clients
+                    .spec(&record.session.client_type)
+                    .expect("selected a registered control runtime");
                 live.push(Self {
+                    coupled_runtime: spec.adapter.lifecycle.coupled_runtime,
                     record,
                     process,
                     pane,
@@ -143,7 +226,7 @@ impl ShutdownRuntime {
         Ok(live)
     }
 
-    pub async fn terminate(self, events: &EventIngestService) -> Result<()> {
+    async fn terminate(self, events: &EventIngestService) -> Result<()> {
         let r = self.record;
         if let Some(pane) = &self.pane {
             terminate_with_tree(pane, || {
@@ -159,7 +242,7 @@ impl ShutdownRuntime {
             terminate_tree(&process).await?;
         }
         let fact = json!({"runtime_id":r.runtime_id,"role":r.role,"process_fingerprint":r.process_fingerprint,"reason":"management_exit"});
-        if r.session.client_type != "pi" {
+        if !self.coupled_runtime {
             events
                 .ingest_pontia_event(PontiaEvent::new(
                     &r.session.session_id,

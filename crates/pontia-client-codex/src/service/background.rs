@@ -8,6 +8,15 @@ use tokio::task::JoinHandle;
 pub(crate) struct CodexBackgroundService;
 
 impl ClientService for CodexBackgroundService {
+    fn inspect_shutdown<'a>(
+        &'a self,
+        root: &'a std::path::Path,
+        events: Option<&'a pontia_agent_control::EventIngestService>,
+    ) -> ClientOperation<'a, Option<pontia_agent_control::client_contract::PreparedServiceShutdown>>
+    {
+        Box::pin(async move { super::shutdown::inspect(root, events).await.map(Some) })
+    }
+
     fn phase(&self) -> ClientServicePhase {
         ClientServicePhase::Observation
     }

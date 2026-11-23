@@ -5,6 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+rustix = { version = "1", features = ["net", "process"] }
+uuid.workspace = true
 libc = "0.2.189"
 pontia-core.workspace = true
 serde = { workspace = true, features = ["derive"] }

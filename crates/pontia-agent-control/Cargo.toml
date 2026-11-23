@@ -5,6 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+async-stream = "0.3"
+tokio-stream = "0.1"
 sha2 = "0.10"
 base64 = "0.22"
 pontia-config.workspace = true

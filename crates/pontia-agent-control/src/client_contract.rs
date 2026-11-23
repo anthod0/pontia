@@ -19,7 +19,7 @@ pub use channel::{ClientControlChannel, ClientControlOperation};
 pub use data::{
     BranchTargetRequest, ClientData, ClientLaunchRequest, ClientLauncher, NativeEventEvidence,
 };
-pub use service::{ClientService, ClientServicePhase};
+pub use service::{ClientService, ClientServicePhase, PreparedServiceShutdown};
 pub use session::{
     ClientExitMode, ClientExitOutcome, ClientOperation, ClientSession, ClientSessionDetails,
     InProcessClient, NativeSessionFork, SessionCreationOption,
