@@ -44,6 +44,28 @@ test("checkpoints preserve their native positions inside and between Turns witho
   expect(checkpoint.queryByText("inside")).not.toBeInTheDocument();
 });
 
+test("a checkpoint shows the token counts reported by its completion", () => {
+  const { container } = render(SessionConversation, {
+    messages: [],
+    timelineItems: [
+      {
+        item_id: "reported",
+        kind: "context_compaction",
+        turn_id: null,
+        role: "system",
+        title: null,
+        status: "completed",
+        occurred_at: null,
+        content_preview: "",
+        compaction_tokens: { before: 152_340, after: 18_200 },
+      },
+    ],
+  });
+  expect(container.querySelector('[data-context-compaction="reported"]')).toHaveTextContent(
+    "Context compacted · 152k → 18k",
+  );
+});
+
 test("a checkpoint is visible when no Pontia Turn exists yet", () => {
   const { container } = render(SessionConversation, {
     messages: [],
