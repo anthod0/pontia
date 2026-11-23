@@ -40,6 +40,7 @@ impl BotIdentity for TestIdentity {
 
 struct Fixture {
     commands: MemoryCommands,
+    service: MemoryService,
     pool: sqlx::SqlitePool,
     seconds: Arc<AtomicI64>,
     _root: tempfile::TempDir,
@@ -60,7 +61,8 @@ impl Fixture {
             OffsetDateTime::from_unix_timestamp(clock.load(Ordering::SeqCst)).unwrap()
         });
         Self {
-            commands: MemoryCommands::new(service, Arc::new(TestIdentity)),
+            commands: MemoryCommands::new(service.clone(), Arc::new(TestIdentity)),
+            service,
             pool,
             seconds,
             _root: root,
@@ -782,5 +784,99 @@ async fn dreaming_writes_require_an_explanation_before_mutating_memory() {
             .await;
         assert!(matches!(result, Err(Error::InvalidInput(_))));
         assert_eq!(f.read(&memory["id"]).await["organized"], false);
+    }
+}
+
+#[tokio::test]
+async fn dashboard_list_pages_active_memories_by_update_time_and_matches_literal_text() {
+    let f = Fixture::new().await;
+    let mut ids = Vec::new();
+    for (day, content) in [
+        (0, "first 100% done"),
+        (1, "second 100_ done"),
+        (2, "third DONE"),
+    ] {
+        f.days(day);
+        let memory = f
+            .call(
+                "bot",
+                "create",
+                json!({"kind":"fact", "content":content, "keywords":["k"], "workspace_id":null}),
+            )
+            .await
+            .unwrap()["memory"]
+            .clone();
+        ids.push(memory["id"].clone());
+    }
+    f.days(3);
+    let archived = f.create(None, &["gone"]).await;
+    f.archive(&archived["id"], true).await;
+    f.call("bot", "use", json!({"ids":[ids[0]]})).await.unwrap();
+    let read_before: Option<String> =
+        sqlx::query_scalar("SELECT last_read_at FROM bot_memories WHERE id = ?")
+            .bind(ids[0].as_str())
+            .fetch_one(&f.pool)
+            .await
+            .unwrap();
+
+    let list = |q: Option<&str>, cursor: Option<String>, limit| {
+        let service = f.service.clone();
+        let q = q.map(str::to_owned);
+        async move {
+            serde_json::to_value(
+                service
+                    .list(ListMemories { q, cursor, limit })
+                    .await
+                    .unwrap(),
+            )
+            .unwrap()
+        }
+    };
+    let first = list(None, None, Some(2)).await;
+    assert_eq!(first["total"], 3);
+    assert_eq!(
+        first["memories"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m["id"].clone())
+            .collect::<Vec<_>>(),
+        vec![ids[2].clone(), ids[1].clone()]
+    );
+    let second = list(
+        None,
+        first["next_cursor"].as_str().map(str::to_owned),
+        Some(2),
+    )
+    .await;
+    assert_eq!(second["memories"][0]["id"], ids[0]);
+    assert_eq!(second["memories"].as_array().unwrap().len(), 1);
+    assert!(second["next_cursor"].is_null());
+
+    let percent = list(Some(" 100% "), None, None).await;
+    assert_eq!(percent["total"], 1);
+    assert_eq!(percent["memories"][0]["id"], ids[0]);
+    let underscore = list(Some("100_"), None, None).await;
+    assert_eq!(underscore["memories"][0]["id"], ids[1]);
+    assert_eq!(list(Some("done"), None, None).await["total"], 3);
+    assert_eq!(list(Some("gone"), None, None).await["total"], 0);
+
+    let read_after: Option<String> =
+        sqlx::query_scalar("SELECT last_read_at FROM bot_memories WHERE id = ?")
+            .bind(ids[0].as_str())
+            .fetch_one(&f.pool)
+            .await
+            .unwrap();
+    assert_eq!(read_before, read_after);
+    for cursor in ["bad", "not-a-time/mem_1"] {
+        assert!(matches!(
+            f.service
+                .list(ListMemories {
+                    cursor: Some(cursor.into()),
+                    ..Default::default()
+                })
+                .await,
+            Err(Error::InvalidInput(_))
+        ));
     }
 }

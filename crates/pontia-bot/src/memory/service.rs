@@ -199,6 +199,37 @@ impl MemoryService {
         }
     }
 
+    /// Read-only listing for the Dashboard user. It does not record use.
+    pub async fn list(&self, input: ListMemories) -> Result<MemoryPage> {
+        let limit = limit(input.limit, 50, 100)?;
+        let pattern = input
+            .q
+            .as_deref()
+            .map(str::trim)
+            .filter(|q| !q.is_empty())
+            .map(like_pattern);
+        let cursor = input
+            .cursor
+            .as_deref()
+            .map(decode_list_cursor)
+            .transpose()?;
+        let (mut memories, total) = self.store.list(pattern.as_deref(), cursor, limit).await?;
+        let has_more = memories.len() > limit;
+        memories.truncate(limit);
+        let next_cursor = has_more
+            .then(|| {
+                memories
+                    .last()
+                    .map(|m| format!("{}/{}", m.updated_at, m.id))
+            })
+            .flatten();
+        Ok(MemoryPage {
+            memories,
+            total,
+            next_cursor,
+        })
+    }
+
     async fn edge(
         &self,
         input: MemoryEdge,
@@ -237,6 +268,28 @@ fn scope<'a>(access: &'a BotAccess, requested: Option<&'a str>) -> Result<Option
         (Some(bound), _) => Ok(Some(bound)),
         (None, requested) => Ok(requested),
     }
+}
+
+fn like_pattern(query: &str) -> String {
+    let mut pattern = String::with_capacity(query.len() + 2);
+    pattern.push('%');
+    for c in query.chars() {
+        if matches!(c, '%' | '_' | '\\') {
+            pattern.push('\\');
+        }
+        pattern.push(c);
+    }
+    pattern.push('%');
+    pattern
+}
+
+/// List cursors are `{updated_at}/{id}` of the last memory on the previous page.
+fn decode_list_cursor(cursor: &str) -> Result<(&str, &str)> {
+    let invalid = || Error::InvalidInput("cursor is invalid".into());
+    let (updated_at, id) = cursor.split_once('/').ok_or_else(invalid)?;
+    OffsetDateTime::parse(updated_at, &Rfc3339).map_err(|_| invalid())?;
+    validate_id(id).map_err(|_| invalid())?;
+    Ok((updated_at, id))
 }
 
 fn validate_id(id: &str) -> Result<()> {

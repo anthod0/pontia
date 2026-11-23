@@ -1,0 +1,64 @@
+<script lang="ts">
+  import { t, currentLocale } from '$lib/i18n'
+  import { toast } from 'svelte-sonner'
+  import { copyText } from '$lib/copyText'
+  import { useDeviceRuntime } from '../../device/context'
+  import { Button } from '$lib/components/ui/button/index.js'
+  import { Skeleton } from '$lib/components/ui/skeleton/index.js'
+  import * as Alert from '$lib/components/ui/alert/index.js'
+  import * as Empty from '$lib/components/ui/empty/index.js'
+  import * as ToggleGroup from '$lib/components/ui/toggle-group/index.js'
+  import MessageResponse from '$lib/components/ai-elements/message/message-response.svelte'
+  import UserCircleIcon from 'phosphor-svelte/lib/UserCircleIcon'
+  import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
+  import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
+  import { formatRelativeTime } from '$lib/format'
+
+  const device = useDeviceRuntime()
+  const user = device.memoryQueries.createUserFileQuery()
+  let mode = $state<'rendered' | 'source'>('rendered')
+  const length = $derived(user.data ? [...user.data.text].length : 0)
+
+  async function copy(): Promise<void> {
+    if (user.data && (await copyText(user.data.text))) toast.success($t('common.copied'))
+  }
+</script>
+
+<div class="overflow-hidden rounded-lg border bg-background text-sm shadow-sm">
+  {#if user.isError}
+    <Alert.Root variant="destructive" class="m-4 w-auto"><WarningCircleIcon class="size-4" /><Alert.Description>{user.error.message}</Alert.Description></Alert.Root>
+  {:else if user.isPending}
+    <div class="space-y-3 p-4" role="status" aria-label={$t('common.loading')}><Skeleton class="h-6 w-48" /><Skeleton class="h-48 w-full" /></div>
+  {:else if !user.data.text.trim()}
+    <Empty.Root class="min-h-72">
+      <Empty.Header>
+        <Empty.Media variant="icon"><UserCircleIcon class="size-4" /></Empty.Media>
+        <Empty.Title>{$t('memory.userEmptyTitle')}</Empty.Title>
+        <Empty.Description>{$t('memory.userEmptyDescription')}</Empty.Description>
+      </Empty.Header>
+    </Empty.Root>
+  {:else}
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-2">
+      <div class="flex min-w-0 flex-1 items-center gap-2">
+        <span class="font-mono text-sm font-medium text-heading">USER.md</span>
+        <span class="text-xs text-muted-foreground">
+          {$t('memory.userCharacters', { count: length.toLocaleString($currentLocale), limit: user.data.character_limit.toLocaleString($currentLocale) })}
+          {#if user.data.updated_at}· {$t('memory.updatedRelative', { time: formatRelativeTime(user.data.updated_at, $currentLocale) })}{/if}
+        </span>
+      </div>
+      <ToggleGroup.Root type="single" size="sm" variant="outline" value={mode} onValueChange={(value) => { if (value) mode = value as typeof mode }} aria-label={$t('memory.userView')}>
+        <ToggleGroup.Item value="rendered" class="px-2.5">{$t('memory.userRendered')}</ToggleGroup.Item>
+        <ToggleGroup.Item value="source" class="px-2.5">{$t('memory.userSource')}</ToggleGroup.Item>
+      </ToggleGroup.Root>
+      <Button size="icon-sm" variant="ghost" aria-label={$t('common.copy')} title={$t('common.copy')} onclick={() => void copy()}><CopyIcon class="size-4" /></Button>
+    </div>
+    <div class="max-h-[34rem] overflow-auto px-5 py-4">
+      {#if mode === 'rendered'}
+        <MessageResponse markdown content={user.data.text} />
+      {:else}
+        <pre class="font-mono text-xs leading-relaxed whitespace-pre-wrap text-foreground">{user.data.text}</pre>
+      {/if}
+    </div>
+    <p class="border-t px-4 py-2 text-xs text-muted-foreground">{$t('memory.userHint')}</p>
+  {/if}
+</div>

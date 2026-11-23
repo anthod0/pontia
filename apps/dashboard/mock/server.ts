@@ -523,6 +523,23 @@ function eventStream(device: MockDevice, signal: AbortSignal): Response {
 
 // Routes mirror the pontiad `/api/v1` paths used by src/api/client.ts.
 const routes: [method: string, pattern: string, handler: Handler][] = [
+  [
+    "GET",
+    "/memory/user",
+    ({ device }) => ({ user: { ...device.data.memory.user, character_limit: 2000 } }),
+  ],
+  [
+    "GET",
+    "/memories",
+    ({ device, query }) => {
+      const q = query.get("q")?.trim().toLowerCase() ?? "";
+      const memories = device.data.memory.memories
+        .filter((memory) => !memory.archived)
+        .filter((memory) => !q || memory.content.toLowerCase().includes(q))
+        .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+      return { memories, total: memories.length, next_cursor: null };
+    },
+  ],
   ["GET", "/auth/validate", () => ({ valid: true })],
 
   ["GET", "/agent-client-setup", ({ device }) => ({ operation: device.data.clientSetup })],

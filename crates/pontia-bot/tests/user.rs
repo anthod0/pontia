@@ -160,3 +160,16 @@ async fn invalid_initial_update_leaves_missing_file_missing() {
         Err(Error::Rejected { reason: Rejection::TooLong, current_text }) if current_text.is_empty()));
     assert!(!f.root.path().join("bot").exists());
 }
+
+#[tokio::test]
+async fn read_reports_text_limit_and_file_update_time() {
+    let f = Fixture::new();
+    let missing = f.service.read().await.unwrap();
+    assert_eq!(missing.text, "");
+    assert_eq!(missing.character_limit, USER_CHARACTER_LIMIT);
+    assert!(missing.updated_at.is_none());
+    f.update("bot-a", "", "名字：林").await.unwrap();
+    let user = f.service.read().await.unwrap();
+    assert_eq!(user.text, "名字：林");
+    assert!(user.updated_at.is_some());
+}

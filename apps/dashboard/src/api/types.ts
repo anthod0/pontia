@@ -707,3 +707,41 @@ export interface ForkSessionOutcome {
   session_id: string | null;
   error: string | null;
 }
+
+export type MemoryKind = "fact" | "decision" | "event" | "lesson" | "observation";
+export type MemoryImportance = "low" | "normal" | "high";
+
+export interface MemoryView {
+  id: string;
+  kind: MemoryKind;
+  content: string;
+  keywords: string[];
+  workspace_id: string | null;
+  session_id: string | null;
+  archived: boolean;
+  organized: boolean;
+  importance: MemoryImportance;
+  occurred_at: string | null;
+  sources: string | null;
+  created_by: "bot" | "dreaming";
+  created_at: string;
+  updated_at: string;
+  last_read_at: string | null;
+}
+
+export interface MemoryListQuery {
+  q?: string;
+  cursor?: string;
+}
+
+export interface MemoryPage {
+  memories: MemoryView[];
+  total: number;
+  next_cursor: string | null;
+}
+
+export interface UserFileView {
+  text: string;
+  character_limit: number;
+  updated_at: string | null;
+}

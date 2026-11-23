@@ -17,6 +17,7 @@ import { createWorkflowQueries } from "../queries/workflows";
 import { createInboxQueries } from "../queries/inbox";
 import { createOptimisticChat } from "../queries/optimisticChat";
 import { createAgentProfileQueries } from "../queries/agentProfiles";
+import { createMemoryQueries } from "../queries/memory";
 import { createCompactionHistory } from "../queries/compactionHistory";
 import { createInvalidation } from "../queries/dashboardInvalidation";
 import { createSessionCreation } from "../queries/sessionCreation";
@@ -120,6 +121,11 @@ export class DeviceRuntime {
   private _optimisticChat?: ReturnType<typeof createOptimisticChat>;
   get optimisticChat(): ReturnType<typeof createOptimisticChat> {
     return (this._optimisticChat ??= createOptimisticChat(this));
+  }
+
+  private _memoryQueries?: ReturnType<typeof createMemoryQueries>;
+  get memoryQueries(): ReturnType<typeof createMemoryQueries> {
+    return (this._memoryQueries ??= createMemoryQueries(this));
   }
 
   private _agentProfileQueries?: ReturnType<typeof createAgentProfileQueries>;

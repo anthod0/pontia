@@ -18,6 +18,7 @@ import type {
   WorkspaceRootView,
   WorkspaceView,
 } from "../src/api/types.ts";
+import { createEmptyMemoryData, createSampleMemoryData, type MockMemoryData } from "./memory.ts";
 
 export interface MockSession {
   view: SessionView;
@@ -47,6 +48,7 @@ export interface MockData {
   creationOptions: SessionCreationOption[];
   models: SessionModel[];
   files: string[];
+  memory: MockMemoryData;
   nextId: (prefix: string) => string;
 }
 
@@ -753,6 +755,7 @@ export function createSampleData(): MockData {
       "apps/dashboard/src/pages/SessionChatPage.svelte",
       "crates/pontiad/src/main.rs",
     ],
+    memory: createSampleMemoryData(),
     nextId,
   };
 }
@@ -760,5 +763,5 @@ export function createSampleData(): MockData {
 /** A device that has just been set up: no workspaces, sessions or workflows. */
 export function createEmptyData(): MockData {
   const data = createSampleData();
-  return { ...data, workspaces: [], sessions: [], workflows: [] };
+  return { ...data, workspaces: [], sessions: [], workflows: [], memory: createEmptyMemoryData() };
 }

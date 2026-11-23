@@ -113,6 +113,21 @@ pub struct MemoryNeighbors {
     pub limit: Option<usize>,
 }
 
+/// A Dashboard read of active memories, newest change first.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct ListMemories {
+    pub q: Option<String>,
+    pub cursor: Option<String>,
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MemoryPage {
+    pub memories: Vec<Memory>,
+    pub total: u64,
+    pub next_cursor: Option<String>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(
     tag = "action",
