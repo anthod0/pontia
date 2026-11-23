@@ -75,3 +75,25 @@ fn acp_validates_the_selected_definition() {
         );
     }
 }
+
+#[test]
+fn antigravity_accepts_its_fixed_policy_in_managed_directories() {
+    let configuration = AcpConfiguration::new(AcpAgents::builtin());
+    assert!(configuration.restrictions_require_managed_directory("antigravity"));
+    assert!(!configuration.restrictions_require_managed_directory("grok"));
+    let mut policy = configuration
+        .restricted_execution_policy("antigravity")
+        .unwrap();
+    policy.disable_skills = true;
+    policy.yolo = true;
+    policy.disabled_tools.reverse();
+    configuration
+        .validate_execution_policy("antigravity", &policy)
+        .unwrap();
+    policy.disabled_tools.pop();
+    assert!(
+        configuration
+            .validate_execution_policy("antigravity", &policy)
+            .is_err()
+    );
+}

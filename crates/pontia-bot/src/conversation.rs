@@ -214,7 +214,7 @@ impl ConversationService {
         &self,
         client_type: &str,
         client_key: &str,
-        disable_skills: bool,
+        managed_directory: bool,
     ) -> Result<pontia_core::execution_policy::ExecutionPolicy> {
         let clients = self.control.clients();
         let configuration = clients
@@ -228,8 +228,11 @@ impl ConversationService {
             .ok_or_else(|| {
                 Error::CapabilityUnavailable("Client cannot restrict Session tools".into())
             })?;
+        if !managed_directory && configuration.restrictions_require_managed_directory(client_key) {
+            return Ok(Default::default());
+        }
         policy.yolo = true;
-        policy.disable_skills = disable_skills;
+        policy.disable_skills = managed_directory;
         configuration.validate_execution_policy(client_key, &policy)?;
         Ok(policy)
     }
@@ -255,7 +258,7 @@ impl ConversationService {
         &self,
         client_type: &str,
         client_key: &str,
-        disable_skills: bool,
+        managed_directory: bool,
     ) -> Result<pontia_core::execution_policy::ExecutionPolicy> {
         if !self
             .control
@@ -269,7 +272,7 @@ impl ConversationService {
                 "Client cannot run tasks with injected instructions".into(),
             ));
         }
-        self.restricted_execution_policy(client_type, client_key, disable_skills)
+        self.restricted_execution_policy(client_type, client_key, managed_directory)
     }
 
     /// Profiles that can currently start a helper; unavailable ones are left out of the list.
@@ -305,10 +308,10 @@ impl ConversationService {
         model: &str,
         ownership: SessionOwnership,
         instructions: &str,
-        disable_skills: bool,
+        managed_directory: bool,
     ) -> Result<CreateSessionRequest> {
         let execution_policy =
-            self.task_execution_policy(client_type, client_key, disable_skills)?;
+            self.task_execution_policy(client_type, client_key, managed_directory)?;
         let metadata = self.session_metadata(client_type, client_key).await?;
         Ok(CreateSessionRequest {
             reasoning_effort: None,

@@ -8,7 +8,13 @@ use serde_json::{Value, json};
 use crate::peer::{Peer, protocol_error};
 
 #[derive(Debug)]
-pub struct RestrictedExecution {
+pub enum RestrictedExecution {
+    Antigravity,
+    AgentProfile(&'static AgentProfile),
+}
+
+#[derive(Debug)]
+pub struct AgentProfile {
     pub profile_key: &'static str,
     pub profile_name: (&'static str, &'static str),
     pub profile_description: (&'static str, &'static str),
@@ -29,12 +35,18 @@ pub struct RestrictedExecution {
 
 impl RestrictedExecution {
     pub(crate) fn policy(&self) -> ExecutionPolicy {
+        let disabled_tools = match self {
+            Self::AgentProfile(profile) => profile.disabled_tools,
+            Self::Antigravity => crate::antigravity::DISABLED_TOOLS,
+        };
         ExecutionPolicy {
-            disabled_tools: self.disabled_tools.iter().map(|s| (*s).into()).collect(),
+            disabled_tools: disabled_tools.iter().map(|s| (*s).into()).collect(),
             ..Default::default()
         }
     }
+}
 
+impl AgentProfile {
     pub(crate) async fn check_model(&self, peer: &Peer, requested: Option<&str>) -> Result<String> {
         let cwd = peer.state.lock().await.cwd.clone();
         let result = peer
@@ -94,7 +106,7 @@ impl RestrictedExecution {
 
 #[derive(Clone, Default)]
 pub(crate) struct SessionPolicy {
-    pub profile: Option<&'static RestrictedExecution>,
+    pub profile: Option<&'static AgentProfile>,
     pub meta: Meta,
 }
 
@@ -111,6 +123,10 @@ impl SessionPolicy {
                     "ACP Agent lacks the requested execution policy".into(),
                 ))
             };
+        };
+        let RestrictedExecution::AgentProfile(recipe) = recipe else {
+            crate::antigravity::validate(policy)?;
+            return Ok(Self::default());
         };
         if policy.tools.is_some()
             || policy.disable_mcp

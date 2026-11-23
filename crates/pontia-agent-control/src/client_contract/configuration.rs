@@ -12,6 +12,11 @@ pub trait ClientConfiguration: Send + Sync {
         None
     }
 
+    /// Whether this client's restricted tools require a Pontia-managed working directory.
+    fn restrictions_require_managed_directory(&self, _key: &str) -> bool {
+        false
+    }
+
     fn validate_execution_policy(
         &self,
         _key: &str,

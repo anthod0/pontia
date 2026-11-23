@@ -1,5 +1,6 @@
 mod adapter;
 mod agents;
+mod antigravity;
 mod capabilities;
 mod compaction;
 pub mod configuration;
@@ -18,7 +19,7 @@ mod observations;
 mod peer;
 pub mod relay;
 mod restrictions;
-pub use restrictions::RestrictedExecution;
+pub use restrictions::{AgentProfile, RestrictedExecution};
 mod spec;
 mod steering;
 mod transport;

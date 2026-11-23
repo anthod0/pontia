@@ -209,15 +209,28 @@ impl ClientSession for AcpAdapter {
                 .map(std::path::PathBuf::from)
                 .map(Ok)
                 .unwrap_or_else(std::env::current_dir)?;
+            let mut launch = definition.launch.clone();
+            if matches!(
+                definition.restricted_execution,
+                Some(crate::RestrictedExecution::Antigravity)
+            ) && request.execution_policy != Default::default()
+            {
+                crate::antigravity::prepare_launch(
+                    &root,
+                    &cwd,
+                    &request.execution_policy,
+                    &mut launch,
+                )?;
+            }
             peer::runtime_event(
                 &events,
                 &request.session_id,
                 &runtime,
                 PontiaEventType::RuntimeStarting,
-                json!({"start_command":peer::start_command(&definition.launch)}),
+                json!({"start_command":peer::start_command(&launch)}),
             )
             .await?;
-            let mut config = match peer::resolve_command(&definition.launch, &cwd) {
+            let mut config = match peer::resolve_command(&launch, &cwd) {
                 Ok(config) => config,
                 Err(error) => {
                     peer::runtime_event(
@@ -703,7 +716,9 @@ impl ClientSession for AcpAdapter {
                 RuntimeStartRequest {
                     reasoning_effort: None,
                     launch_mode: Default::default(),
-                    execution_policy: Default::default(),
+                    execution_policy: pontia_agent_control::ControlQueryService::new(pool.clone())
+                        .session_execution_policy(&target.session_id)
+                        .await?,
                     model,
                     session_id: target.session_id.clone(),
                     runtime_id: target.runtime_id.clone(),

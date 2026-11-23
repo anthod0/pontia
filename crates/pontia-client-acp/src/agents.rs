@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use crate::restrictions::RestrictedExecution;
+use crate::restrictions::{AgentProfile, RestrictedExecution};
 use pontia_core::client_capabilities::AgentClientCapabilities;
 use serde::{Deserialize, Serialize};
 
@@ -74,7 +74,7 @@ impl AcpAgents {
                     },
                     compaction: None,
                     interjection: None,
-                    restricted_execution: None,
+                    restricted_execution: Some(&RestrictedExecution::Antigravity),
                 },
             ),
             (
@@ -99,7 +99,9 @@ impl AcpAgents {
                         display_text: "/content/_meta/displayText",
                         prompt_index: "/_meta/promptIndex",
                     }),
-                    restricted_execution: Some(&GROK_RESTRICTED),
+                    restricted_execution: Some(&RestrictedExecution::AgentProfile(
+                        &GROK_RESTRICTED,
+                    )),
                 },
             ),
             (
@@ -139,7 +141,7 @@ impl AcpAgents {
     }
 }
 
-const GROK_RESTRICTED: RestrictedExecution = RestrictedExecution {
+const GROK_RESTRICTED: AgentProfile = AgentProfile {
     profile_key: "agentProfile",
     profile_name: ("name", "pontia-restricted"),
     profile_description: ("description", "Pontia restricted Session"),
