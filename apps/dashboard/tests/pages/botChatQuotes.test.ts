@@ -719,6 +719,21 @@ test("a reply with only attachments keeps its message menu", async () => {
   ).toEqual(["ReplyR", "Copy", "View context"]);
 });
 
+test("a file's message menu button looks the same as its download button", async () => {
+  serve([attached(2, "report.pdf"), attached(3, "a.txt", "b.txt"), attached(4, "x.png", "y.png")]);
+  render(BotChatPage, { botId: bot.bot_id });
+  // The menu differs only in the classes that reveal it on hover.
+  const look = (button: HTMLElement) =>
+    [...button.classList].filter((name) => !name.includes("opacity")).sort();
+  for (const name of ["report.pdf", "a.txt", "x.png"]) {
+    const download = await screen.findByRole("button", { name: `Download ${name}` });
+    const file = download.closest<HTMLElement>("[data-bot-file-path]")!;
+    expect(look(within(file).getByRole("button", { name: "Message actions" }))).toEqual(
+      look(download),
+    );
+  }
+});
+
 test("a block in the middle of a reply shows its card between two bubbles of one message", async () => {
   const middle = message(
     2,

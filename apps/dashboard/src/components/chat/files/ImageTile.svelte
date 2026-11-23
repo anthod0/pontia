@@ -63,9 +63,9 @@
         <span class="text-[11px] font-medium">{$t('downloads.failed')}</span>
       </div>
     {:else}
-      <div class={['absolute right-1.5 bottom-1.5 transition-opacity', state.imageUrl && 'opacity-0 group-hover/tile:opacity-100 group-focus-within/tile:opacity-100 pointer-coarse:hidden']}><FileAction {state} overlay small /></div>
+      <div class={['absolute right-1.5 bottom-1.5 transition-opacity', state.imageUrl && 'opacity-0 group-hover/tile:opacity-100 group-focus-within/tile:opacity-100 pointer-coarse:hidden']}><FileAction {state} /></div>
     {/if}
   {/if}
-  {#if itemActions}<div class="absolute top-1.5 right-1.5 *:bg-background/90">{@render itemActions()}</div>{/if}
+  {#if itemActions}<div class="absolute top-1.5 right-1.5">{@render itemActions()}</div>{/if}
   {#if highlighted}<div class="pointer-events-none absolute inset-0 ring-3 ring-primary ring-inset"></div>{/if}
 </div>

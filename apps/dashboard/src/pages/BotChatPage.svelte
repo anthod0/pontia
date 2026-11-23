@@ -7,6 +7,7 @@
   import { Button } from '$lib/components/ui/button/index.js'
   import { MessageResponse } from '$lib/components/ai-elements/message/index.js'
   import SharedFiles from '../components/chat/files/SharedFiles.svelte'
+  import { fileActionButton } from '../components/chat/files/fileActionButton'
   import MessageComposer from '../components/chat/MessageComposer.svelte'
   import { parseUploadMessage } from '$lib/uploads/message'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
@@ -212,11 +213,12 @@
 {/snippet}
 
 <!-- A long press on touch selects text, so touch rows always show this button.
-     With a mouse it appears while its message or file is hovered or keyboard-focused, and while its menu is open. -->
+     With a mouse it appears while its message or file is hovered or keyboard-focused, and while its menu is open.
+     On a file it matches the file's download button. -->
 {#snippet menuButton(id: string, file = false)}
-  <Button variant="ghost" size="icon-sm" aria-haspopup="menu" aria-label={$t('bots.messageActions')}
-    class={['shrink-0 self-end text-muted-foreground opacity-0 transition-opacity focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100',
-      file ? 'group-hover/file:opacity-100 group-has-focus-visible/file:opacity-100' : 'group-hover/entry:opacity-100 group-has-focus-visible/entry:opacity-100']}
+  <Button {...(file ? fileActionButton : { variant: 'ghost', size: 'icon-sm' } as const)} aria-haspopup="menu" aria-label={$t('bots.messageActions')}
+    class={['opacity-0 focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100',
+      file ? 'group-hover/file:opacity-100 group-has-focus-visible/file:opacity-100' : 'self-end text-muted-foreground transition-opacity group-hover/entry:opacity-100 group-has-focus-visible/entry:opacity-100']}
     onclick={(event: MouseEvent) => actions?.openMenu(id, event)}><DotsThreeIcon weight="bold" /></Button>
 {/snippet}
 
