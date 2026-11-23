@@ -14,6 +14,7 @@ hkdf = "0.12"
 hmac = "0.12"
 hostname = "0.4"
 pontia-agent-control.workspace = true
+pontia-client-codex.workspace = true
 pontia-bot.workspace = true
 pontia-clients.workspace = true
 pontia-runtime.workspace = true
@@ -36,6 +37,7 @@ clap_complete = "4.6.11"
 indicatif = "0.18.6"
 
 [dev-dependencies]
+sqlx.workspace = true
 axum = "0.8"
 pontia-application.workspace = true
 pontia-http.workspace = true

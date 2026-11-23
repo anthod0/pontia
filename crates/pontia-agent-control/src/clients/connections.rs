@@ -31,7 +31,7 @@ struct Connections {
 pub struct ClientControlService {
     pool: SqlitePool,
     clients: crate::clients::ClientRegistry,
-    pontia_home: PathBuf,
+    pub(super) pontia_home: PathBuf,
     connections: Arc<Mutex<Connections>>,
     identity_gate: Arc<Mutex<()>>,
 }

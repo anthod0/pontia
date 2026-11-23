@@ -105,17 +105,17 @@ impl SignalTarget {
         Ok(Self::Task(TaskPort(port)))
     }
 
-    pub(super) fn terminate(self) -> Result<()> {
+    pub(super) fn signal(self, signo: i32) -> Result<()> {
         match self {
             Self::Child { pid, _guard } => {
-                let status = unsafe { libc::kill(pid, libc::SIGTERM) };
+                let status = unsafe { libc::kill(pid, signo) };
                 let error = std::io::Error::last_os_error();
                 if status != 0 && error.raw_os_error() != Some(libc::ESRCH) {
                     return Err(error.into());
                 }
                 Ok(())
             }
-            Self::Audit(token, signal) => match unsafe { signal(&token, libc::SIGTERM) } {
+            Self::Audit(token, signal) => match unsafe { signal(&token, signo) } {
                 0 | libc::ESRCH => Ok(()),
                 status => Err(std::io::Error::from_raw_os_error(status).into()),
             },

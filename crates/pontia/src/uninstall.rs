@@ -56,10 +56,6 @@ impl PreparedUninstall {
         })
     }
 
-    pub fn service_installed(&self) -> bool {
-        self.service.is_some()
-    }
-
     pub fn remaining_data_hint(&self) -> String {
         let path = self
             .pontia_home

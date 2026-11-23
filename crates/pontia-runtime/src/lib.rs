@@ -7,6 +7,7 @@ pub mod client_setup;
 mod detached;
 pub mod executable;
 mod in_process;
+pub mod launch_lock;
 pub mod local_service;
 mod manager;
 mod paths;
@@ -20,7 +21,7 @@ pub use detached::{detached_command, reap_detached_child};
 pub use manager::GenericRuntimeManager;
 pub use process::{ProcessFingerprint, ProcessObservation};
 use std::path::PathBuf;
-pub use tmux::{is_alive, pane_binding, spawn_tmux_session};
+pub use tmux::{is_alive, kill_owned_pane, pane_binding, pane_processes, spawn_tmux_session};
 pub use types::{AgentInput, RuntimeStartRequest, RuntimeStartResult, TmuxLaunchOptions};
 
 #[derive(Debug, Clone, PartialEq, Eq)]

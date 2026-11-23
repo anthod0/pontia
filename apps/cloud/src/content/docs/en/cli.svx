@@ -24,6 +24,8 @@ Use `pontia COMMAND --help` for the exact options in your installed version.
 | `pontia --version` | Print the installed version |
 | `pontia completions SHELL` | Print the completion script for a shell |
 
+If Pontia-started agents are running, `pontia down` and `pontia uninstall` list their Sessions and require `--force` to stop them before continuing. This check also works when the service is offline. With `--force`, an older Codex background server whose ownership cannot be verified is left running with a warning.
+
 `pontia uninstall` shows the cleanup list and asks for confirmation; use `--yes` to skip the prompt. It keeps the binaries, configuration, credentials, history, cloud registration, and Agent Client installations. Open a new terminal after cleanup. Run `pontia init` to set up again.
 
 `pontia setup` accepts `pi`, `codex`, or `claude` and applies the recommended configuration without additional Client options.

@@ -24,6 +24,8 @@ Use `pontia COMMAND --help` para ver as opções exatas da versão instalada.
 | `pontia --version` | Exibir a versão instalada |
 | `pontia completions SHELL` | Exibir o script de autocompletar de um shell |
 
+Se houver agentes iniciados pelo Pontia em execução, `pontia down` e `pontia uninstall` listam as Sessions correspondentes. Use `--force` para encerrar esses agentes e prosseguir. A verificação funciona mesmo com o serviço offline. Com `--force`, um servidor Codex em segundo plano de uma versão anterior cuja origem não possa ser confirmada continua em execução e o comando exibe um aviso.
+
 `pontia uninstall` exibe a lista de limpeza e pede confirmação; use `--yes` para dispensar a confirmação. Os binários, configurações, credenciais, histórico, registro do dispositivo na nuvem e instalações dos Agent Clients são preservados. Abra um novo terminal após a limpeza. Execute `pontia init` para configurar novamente.
 
 `pontia setup` aceita `pi`, `codex` ou `claude` e aplica a configuração recomendada sem opções adicionais de Client.

@@ -16,19 +16,30 @@ pub fn spawn_tmux_session(
     workspace: &Path,
     launch_command: &str,
 ) -> std::io::Result<ExitStatus> {
+    spawn_session(tmux_session, workspace, launch_command, None)
+}
+
+pub(crate) fn spawn_session(
+    tmux_session: &str,
+    workspace: &Path,
+    launch_command: &str,
+    runtime: Option<&str>,
+) -> std::io::Result<ExitStatus> {
     let command = || {
         let mut command = tmux_launcher()?;
-        command
-            .args([
-                "new-session",
-                "-d",
-                "-s",
-                tmux_session,
-                "-c",
-                &workspace.display().to_string(),
-                launch_command,
-            ])
-            .status()
+        command.args([
+            "new-session",
+            "-d",
+            "-s",
+            tmux_session,
+            "-c",
+            &workspace.display().to_string(),
+            launch_command,
+        ]);
+        if let Some(runtime) = runtime {
+            command.args([";", "set-option", "-p", "@pontia_runtime", runtime]);
+        }
+        command.status()
     };
 
     let first = command()?;

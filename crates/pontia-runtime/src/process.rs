@@ -14,6 +14,7 @@ pub struct ProcessIdentity {
 struct ProcessInfo {
     pub start_time_seconds: u64,
     pub status: ProcessStatus,
+    parent: Option<u32>,
 }
 
 struct ProcessTable {
@@ -38,6 +39,7 @@ impl ProcessTable {
                     ProcessInfo {
                         start_time_seconds: process.start_time(),
                         status: process.status(),
+                        parent: process.parent().map(|id| id.as_u32()),
                     },
                 )
             })
@@ -107,6 +109,32 @@ pub struct ProcessFingerprint {
     pub start_time_seconds: u64,
 }
 
+/// One process table for checking a collection of persisted runtime identities.
+pub struct ProcessSnapshot {
+    boot_time: Option<u64>,
+    table: ProcessTable,
+}
+
+impl ProcessSnapshot {
+    pub fn capture() -> Self {
+        Self {
+            boot_time: system_boot_time_seconds(),
+            table: ProcessTable::refresh_all(),
+        }
+    }
+
+    pub fn observe(&self, process: &ProcessFingerprint) -> ProcessObservation {
+        match self.boot_time {
+            None => ProcessObservation::Unknown,
+            Some(boot) if boot != process.boot_time_seconds => ProcessObservation::Exited,
+            _ => self.table.observe(ProcessIdentity {
+                pid: process.pid,
+                start_time_seconds: process.start_time_seconds,
+            }),
+        }
+    }
+}
+
 impl ProcessFingerprint {
     pub fn capture(pid: u32) -> Option<Self> {
         let boot_time_seconds = system_boot_time_seconds()?;
@@ -116,6 +144,58 @@ impl ProcessFingerprint {
             pid,
             start_time_seconds: identity.start_time_seconds,
         })
+    }
+
+    pub fn descendants(&self) -> Vec<Self> {
+        let table = ProcessTable::refresh_all();
+        let mut children = Vec::new();
+        if table.observe(ProcessIdentity {
+            pid: self.pid,
+            start_time_seconds: self.start_time_seconds,
+        }) != ProcessObservation::Alive
+            || Some(self.boot_time_seconds) != system_boot_time_seconds()
+        {
+            return children;
+        }
+        let mut parents = vec![self.pid];
+        while let Some(parent) = parents.pop() {
+            for (&pid, info) in &table.processes {
+                if info.parent == Some(parent) && pid != parent {
+                    parents.push(pid);
+                    children.push(Self {
+                        boot_time_seconds: self.boot_time_seconds,
+                        pid,
+                        start_time_seconds: info.start_time_seconds,
+                    });
+                }
+            }
+        }
+        children
+    }
+
+    pub fn is_in_process_tree(&self, root: u32) -> bool {
+        let table = ProcessTable::refresh_all();
+        if Some(self.boot_time_seconds) != system_boot_time_seconds()
+            || table.observe(ProcessIdentity {
+                pid: self.pid,
+                start_time_seconds: self.start_time_seconds,
+            }) != ProcessObservation::Alive
+        {
+            return false;
+        }
+        let mut pid = self.pid;
+        loop {
+            if pid == root {
+                return true;
+            }
+            let Some(parent) = table.get(pid).and_then(|p| p.parent) else {
+                return false;
+            };
+            if pid == parent {
+                return false;
+            }
+            pid = parent;
+        }
     }
 
     pub fn observe(&self) -> ProcessObservation {

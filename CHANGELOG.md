@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `config.toml` ignores unknown keys and tables instead of failing to load.
+- `pontia down` and `pontia uninstall` list running agents started by Pontia. Use `--force` to terminate them before stopping the service.
 
 ### Fixed
 
