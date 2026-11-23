@@ -51,6 +51,16 @@ for (const tools of [null, [], ["Read", "Bash", "Glob"]] as const) {
     host.submit(first, "task");
     const options = fixture.options!;
     assert.equal(options.permissionMode, "bypassPermissions");
+    assert.ok(options.disallowedTools?.includes("AskUserQuestion"));
+    assert.equal(
+      (
+        await options.onElicitation!(
+          { serverName: "test", message: "confirm" },
+          { signal: new AbortController().signal, requestId: "elicit" },
+        )
+      )?.action,
+      "decline",
+    );
     assert.equal(options.allowDangerouslySkipPermissions, true);
     assert.equal(options.sandbox?.enabled, false);
     assert.deepEqual(options.tools, tools === null ? undefined : [...tools]);
@@ -64,7 +74,7 @@ for (const tools of [null, [], ["Read", "Bash", "Glob"]] as const) {
     const bash = await options.canUseTool!("Bash", { command: "pwd" }, context);
     assert.equal(bash?.behavior, "allow");
     assert.equal(
-      events.some((event) => event.kind === "permission_requested"),
+      events.some((event) => event.kind === "interaction_requested"),
       false,
     );
   });
@@ -449,11 +459,11 @@ test("unsupported questions and elicitation decline without auto-approval or a n
   );
   assert.equal(permission?.behavior, "deny");
   const elicitation = await options.onElicitation!(
-    { serverName: "test", message: "input", mode: "form" },
+    { serverName: "test", message: "input", mode: "url" },
     { signal: new AbortController().signal, requestId: "request" },
   );
   assert.equal(elicitation?.action, "decline");
-  assert.deepEqual(options.disallowedTools, ["AskUserQuestion"]);
+  assert.deepEqual(options.disallowedTools, []);
   assert.equal(options.permissionMode, "default");
   assert.equal(options.tools, undefined);
   assert.deepEqual(options.settingSources, ["user", "project", "local"]);

@@ -125,7 +125,7 @@
           {#if interaction.state === 'pending'}
             <div class="mt-3 flex flex-wrap gap-2">
               {#each interaction.options as option (option.key)}
-                <Button variant={option.intent === 'positive' ? 'default' : 'destructive'} disabled={submitting.has(interaction.interaction_id)} onclick={() => respond(interaction, option.key)}>{option.label}</Button>
+                <Button class="h-auto max-w-full whitespace-normal py-1.5 text-left [overflow-wrap:anywhere]" variant={option.intent === 'positive' ? 'default' : 'destructive'} disabled={submitting.has(interaction.interaction_id)} onclick={() => respond(interaction, option.key)}>{option.label}</Button>
               {/each}
             </div>
           {:else if interaction.state === 'resolved'}

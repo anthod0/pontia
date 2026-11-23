@@ -179,3 +179,22 @@ test("keeps the authoritative conflict outcome when pending refresh races with i
   await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
   expect(screen.queryByRole("button", { name: "Skip" })).toBeNull();
 });
+
+test("submits a long permission scope by its option key", async () => {
+  const option = {
+    key: "allow_always",
+    label: "Always allow in this session: Bash(npm run integration --workspace apps/dashboard)",
+    intent: "positive" as const,
+  };
+  const pending = interaction();
+  pending.options.splice(1, 0, option);
+  mocks.list.mockResolvedValue([pending]);
+  mocks.respond.mockResolvedValue({
+    ...pending,
+    state: "resolved",
+    response: { option_key: option.key },
+  });
+  render(SessionInteractions, { sessionId: "session-1" });
+  await fireEvent.click(await screen.findByRole("button", { name: option.label }));
+  expect(mocks.respond).toHaveBeenCalledExactlyOnceWith("session-1", "choice-1", "allow_always");
+});

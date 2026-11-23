@@ -13,7 +13,7 @@ use pontia_core::{
     domain::{DomainEvent, EventType, TurnState},
 };
 use serde_json::{Value, json};
-use std::{path::Path, process::Stdio, sync::Arc, time::Duration};
+use std::{collections::HashMap, path::Path, process::Stdio, sync::Arc, time::Duration};
 use tokio::{io::AsyncWriteExt, process::Command, sync::OnceCell};
 
 fn source_unavailable() -> Error {
@@ -278,8 +278,9 @@ impl NativeHistory for History {
                         message: "Reversed native message boundaries".into(),
                     });
                 }
+                let mut questions = HashMap::new();
                 for (index, message) in messages.iter().enumerate().take(end).skip(start) {
-                    render(message, index, &range.turn_id, &mut items);
+                    render(message, index, &range.turn_id, &mut items, &mut questions);
                 }
             }
             Ok(items)
@@ -366,7 +367,36 @@ impl NativeHistory for History {
     }
 }
 
-fn render(message: &Value, position: usize, turn: &str, items: &mut Vec<TurnTimelineItem>) {
+// The SDK history reader exposes the original question input and the native text
+// result. Match against the actual choices so punctuation inside labels is preserved.
+fn answered_questions(questions: &[Value], content: &str) -> Option<String> {
+    let mut remaining = content.strip_prefix("Your questions have been answered: ")?;
+    let mut lines = Vec::new();
+    for (i, question) in questions.iter().enumerate() {
+        if i > 0 {
+            remaining = remaining.strip_prefix(", ")?;
+        }
+        let prompt = question["question"].as_str()?;
+        remaining = remaining.strip_prefix(&format!(r#""{prompt}"=""#))?;
+        let (answer, suffix) = question["options"]
+            .as_array()?
+            .iter()
+            .filter_map(|o| o["label"].as_str())
+            .filter_map(|label| Some((label, remaining.strip_prefix(label)?.strip_prefix('"')?)))
+            .find(|(_, suffix)| suffix.starts_with(", ") || suffix.starts_with(". "))?;
+        remaining = suffix;
+        lines.push(format!("{prompt} → {answer}"));
+    }
+    Some(lines.join("\n"))
+}
+
+fn render(
+    message: &Value,
+    position: usize,
+    turn: &str,
+    items: &mut Vec<TurnTimelineItem>,
+    questions: &mut HashMap<String, Vec<Value>>,
+) {
     if message["isCompactSummary"] == true
         || message["is_meta"] == true
         || message["isCompletedLocalCommand"] == true
@@ -375,10 +405,8 @@ fn render(message: &Value, position: usize, turn: &str, items: &mut Vec<TurnTime
     }
     let role = message["type"].as_str().unwrap_or("unknown");
     let content = &message["message"]["content"];
-    let blocks = content
-        .as_array()
-        .cloned()
-        .unwrap_or_else(|| vec![json!({"type":"text","text":content.as_str().unwrap_or("")})]);
+    let text_block = [json!({"type":"text","text":content.as_str().unwrap_or("")})];
+    let blocks = content.as_array().map(Vec::as_slice).unwrap_or(&text_block);
     for (index, block) in blocks.iter().enumerate() {
         let (kind, role, text, title, call_id, status) = match block["type"].as_str() {
             Some("text") => (
@@ -397,6 +425,27 @@ fn render(message: &Value, position: usize, turn: &str, items: &mut Vec<TurnTime
                 None,
                 None,
             ),
+            Some("tool_use") if block["name"] == "AskUserQuestion" => {
+                let id = block["id"].as_str();
+                let prompts = block["input"]["questions"].as_array();
+                if let (Some(id), Some(prompts)) = (id, prompts) {
+                    questions.insert(id.to_owned(), prompts.clone());
+                }
+                let text = prompts
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|q| q["question"].as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                (
+                    "tool_call",
+                    "assistant",
+                    text,
+                    Some("Questions and answers".into()),
+                    id.map(str::to_owned),
+                    None,
+                )
+            }
             Some("tool_use") => (
                 "tool_call",
                 "assistant",
@@ -408,10 +457,19 @@ fn render(message: &Value, position: usize, turn: &str, items: &mut Vec<TurnTime
             Some("tool_result") => (
                 "tool_result",
                 "tool",
-                block["content"]
-                    .as_str()
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| block["content"].to_string()),
+                {
+                    let content = &block["content"];
+                    block["tool_use_id"]
+                        .as_str()
+                        .and_then(|id| questions.remove(id))
+                        .and_then(|questions| answered_questions(&questions, content.as_str()?))
+                        .unwrap_or_else(|| {
+                            content
+                                .as_str()
+                                .map(str::to_owned)
+                                .unwrap_or_else(|| content.to_string())
+                        })
+                },
                 None,
                 block["tool_use_id"].as_str().map(str::to_owned),
                 Some(
@@ -483,5 +541,49 @@ impl TurnTimelineReader for SdkOnly {
         _: TurnTimelineReadRequest,
     ) -> std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError> {
         Err(source_unavailable().into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sdk_question_results_show_answers_and_keep_declines_readable() {
+        let questions = json!([
+            {"question":"Which tone?", "options":[{"label":"Formal"},{"label":"Casual"}]},
+            {"question":"Say \"yes\"?", "options":[{"label":"Yes, please"}]}
+        ]);
+        let mut items = Vec::new();
+        let mut calls = HashMap::new();
+        let call = json!({"type":"assistant","message":{"content":[
+            {"type":"tool_use","name":"AskUserQuestion","id":"ask","input":{"questions":questions}}
+        ]}});
+        render(&call, 0, "turn", &mut items, &mut calls);
+        let result = |content: &str| {
+            json!({"type":"user","message":{"content":[
+                {"type":"tool_result","tool_use_id":"ask","content":content}
+            ]}})
+        };
+        render(
+            &result(
+                r#"Your questions have been answered: "Which tone?"="Casual", "Say "yes"?"="Yes, please". You can now continue with these answers in mind."#,
+            ),
+            1,
+            "turn",
+            &mut items,
+            &mut calls,
+        );
+        assert_eq!(
+            items[0].item.title.as_deref(),
+            Some("Questions and answers")
+        );
+        assert_eq!(
+            items[1].item.content_preview,
+            "Which tone? → Casual\nSay \"yes\"? → Yes, please"
+        );
+        render(&call, 2, "turn", &mut items, &mut calls);
+        render(&result("User declined"), 3, "turn", &mut items, &mut calls);
+        assert_eq!(items[3].item.content_preview, "User declined");
     }
 }

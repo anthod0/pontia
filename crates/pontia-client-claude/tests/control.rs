@@ -1017,19 +1017,22 @@ async fn parallel_approvals_are_claimed_once_and_never_release_the_turn_boundary
     assert!(left.is_ok() || right.is_ok());
     h.interactions(&session, &["resolved", "pending"]).await;
     h.wait_session(&session, "waiting_for_interaction").await;
-    service.respond(&h.app, &session, b, "deny").await.unwrap();
+    service
+        .respond(&h.app, &session, b, "allow_always")
+        .await
+        .unwrap();
     let resolved = h.interactions(&session, &["resolved", "resolved"]).await;
     h.wait_session(&session, "busy").await;
     service.respond(&h.app, &session, a, "allow").await.unwrap();
     let choices: Vec<_> = h
         .wire(&session)
         .into_iter()
-        .filter(|v| v["method"] == "permission")
+        .filter(|v| v["method"] == "interaction")
         .collect();
     assert_eq!(choices.len(), 2);
-    assert_ne!(choices[0]["permission_id"], choices[1]["permission_id"]);
+    assert_ne!(choices[0]["interaction_key"], choices[1]["interaction_key"]);
     assert_eq!(choices[0]["option"], resolved[0]["response"]["option_key"]);
-    assert_eq!(choices[1]["option"], "deny");
+    assert_eq!(choices[1]["option"], "allow_always");
     let ingest = h.app.event_ingest_service();
     let interaction_reports: Vec<_> = ingest
         .list_events(&session)
@@ -1095,6 +1098,25 @@ async fn parallel_approvals_are_claimed_once_and_never_release_the_turn_boundary
 }
 
 #[tokio::test]
+async fn rejects_oversized_host_cards_and_registers_the_next_valid_request() {
+    let h = Harness::new().await;
+    let session = h.create("approval-limits").await;
+    h.gate(&session, 1, "start");
+    let cards = h.interactions(&session, &["pending"]).await;
+    assert_eq!(cards[0]["title"], "Allow Write?");
+    assert_eq!(cards[0]["description"], "fixture.txt");
+    assert_eq!(cards[0]["options"][1]["key"], "allow_always");
+    assert_eq!(
+        h.wire(&session)
+            .iter()
+            .filter(|v| v["method"] == "invalid_card" && v["code"] == -32602)
+            .count(),
+        4
+    );
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn conflicting_authorization_expires_the_original_and_releases_the_wait() {
     let h = Harness::new().await;
     let session = h.create("approval-conflict").await;
@@ -1116,7 +1138,7 @@ async fn conflicting_authorization_expires_the_original_and_releases_the_wait() 
             .count(),
         1
     );
-    assert!(!wire.iter().any(|v| v["method"] == "permission"));
+    assert!(!wire.iter().any(|v| v["method"] == "interaction"));
     h.stop().await;
 }
 
@@ -1164,7 +1186,7 @@ async fn cancellation_disconnect_and_host_loss_reject_stale_choices_without_turn
         assert_eq!(
             h.wire(&session)
                 .iter()
-                .filter(|v| v["method"] == "permission")
+                .filter(|v| v["method"] == "interaction")
                 .count(),
             usize::from(action == "lost-during-choice")
         );
@@ -1224,7 +1246,7 @@ async fn approvals_cannot_be_resolved_from_another_session_in_the_same_workspace
         .await
         .unwrap();
     h.interactions(&b, &["pending"]).await;
-    assert!(!h.wire(&b).iter().any(|v| v["method"] == "permission"));
+    assert!(!h.wire(&b).iter().any(|v| v["method"] == "interaction"));
     h.app
         .session_commands()
         .terminate_session(&b)

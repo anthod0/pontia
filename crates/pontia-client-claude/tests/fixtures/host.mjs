@@ -54,7 +54,7 @@ if (process.argv[2] === "history") {
   const permissions = new Set();
   const expire = () => {
     for (const id of permissions)
-      event({ kind: "permission_settled", permission_id: id, outcome: "expired" });
+      event({ kind: "interaction_settled", interaction_key: id, outcome: "expired" });
     permissions.clear();
   };
   const record = (value) =>
@@ -66,10 +66,10 @@ if (process.argv[2] === "history") {
   function hostObservation(host, sequence, event) {
     let suffix;
     if (event.kind === "started") suffix = event.input_id + ":start";
-    else if (event.kind === "permission_requested") suffix = event.permission_id;
-    else if (event.kind === "permission_settled") {
+    else if (event.kind === "interaction_requested") suffix = event.interaction_key;
+    else if (event.kind === "interaction_settled") {
       event.authorization_digest = "a".repeat(64);
-      return {host_id:host, sequence, event, registration_key:`claude:${host}:${event.permission_id}`,report_key:`claude:${host}:${event.permission_id}:settled`};
+      return {host_id:host, sequence, event, registration_key:`claude:${host}:${event.interaction_key}`,report_key:`claude:${host}:${event.interaction_key}:settled`};
     }
     else if (event.kind === "finished") suffix = event.result_id;
     else if (["ready", "model", "context_usage", "compaction"].includes(event.kind)) suffix = sequence;
@@ -197,18 +197,18 @@ if (process.argv[2] === "history") {
           delta: request.text,
         });
         send({ type: "response", id: request.id, status: "accepted" });
-      } else if (request.method === "permission") {
+      } else if (request.method === "interaction") {
         if (active?.text === "approval-lost") process.exit(0);
         if (
-          !permissions.delete(request.permission_id) ||
-          !["allow", "deny"].includes(request.option)
+          !permissions.delete(request.interaction_key) ||
+          !["allow", "allow_always", "deny"].includes(request.option)
         ) {
           send({ type: "response", id: request.id, status: "rejected" });
           return;
         }
         event({
-          kind: "permission_settled",
-          permission_id: request.permission_id,
+          kind: "interaction_settled",
+          interaction_key: request.interaction_key,
           outcome: "resolved",
         });
         send({ type: "response", id: request.id, status: "accepted" });
@@ -287,13 +287,31 @@ if (process.argv[2] === "history") {
           const id = `permission-${active.number}-${n}`;
           permissions.add(id);
           const request = {
-            kind: "permission_requested",
+            kind: "interaction_requested",
             authorization_digest: "a".repeat(64),
-            permission_id: id,
-            tool: "Write",
+            interaction_key: id,
+            title: "Allow Write?",
+            description: "fixture.txt",
+            options: [
+              { key: "allow", label: "Allow once", intent: "positive" },
+              { key: "allow_always", label: "Always allow in this session: Write", intent: "positive" },
+              { key: "deny", label: "Deny", intent: "negative" },
+            ],
             blocking: active.text !== "approval-background",
           };
-          event(request);
+          if (active.text === "approval-limits") {
+            const invalid = [
+              { title: "文".repeat(257) }, { description: "文".repeat(4001) },
+              { options: [{ ...request.options[0], label: "文".repeat(201) }] },
+              { options: Array.from({ length: 9 }, (_, i) => ({ ...request.options[0], key: String(i) })) },
+            ];
+            Promise.all(invalid.map((fields,i) =>
+              event({ ...request, ...fields, interaction_key: id + ":invalid:" + i })
+                .catch(error => record({method:"invalid_card",code:error.code}))
+            )).then(() => event(request));
+          } else {
+            event(request);
+          }
           if (active.text === "approval-conflict") {
             event({ ...request, authorization_digest: "b".repeat(64) }).catch((error) => {
               record({ method: "permission_conflict", code: error.code });

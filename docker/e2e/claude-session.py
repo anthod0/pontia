@@ -56,7 +56,7 @@ def check_policy(session, records):
         delta = record.get("attachment", {})
         if delta.get("type") == "deferred_tools_delta":
             tools.update(delta["addedNames"])
-    assert tools.isdisjoint(DENIED | {"Skill"}), tools
+    assert tools.isdisjoint(DENIED | {"Skill", "AskUserQuestion"}), tools
     assert not any(name.startswith("mcp__") for name in tools), tools
 
     runtime, = session["runtimes"]
@@ -129,6 +129,8 @@ def check_bot_and_helper(request, marker):
     wait_for(f"helper {session_id} did not exit",
              lambda: request("sessions/" + session_id)["session"]["state"] == "exited")
     assert any(shlex.split(command) == shlex.split(close) for command in commands(transcript(request, bot_session_id)))
+    for sid in (bot_session_id, session_id):
+        assert not request(f"sessions/{sid}/interactions")["interactions"]
     print(f'{session_id} reported {answer}, Bot forwarded the answer and closed the helper', flush=True)
 
 
@@ -154,7 +156,8 @@ def check_workflow(request, marker):
             return detail
         assert detail["state"] not in ("failed", "idle"), (workflow, detail["state"], detail["failure_message"])
         for interaction in request(session + "/interactions?state=pending")["interactions"]:
-            assert interaction["description"] in ("Bash", "Write"), interaction["description"]
+            summary = interaction["description"]
+            assert str(handoff) in summary or "pontia workflow submit" in summary, summary
             request(f'{session}/interactions/{interaction["interaction_id"]}/response', {"option_key": "allow"}, "PUT")
 
     detail = wait_for(f"{workflow} did not complete", completed)
