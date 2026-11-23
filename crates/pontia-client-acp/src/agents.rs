@@ -121,7 +121,7 @@ impl AcpAgents {
                     },
                     compaction: Some(CompactionProtocol::Kiro),
                     interjection: None,
-                    restricted_execution: None,
+                    restricted_execution: Some(&RestrictedExecution::Kiro),
                 },
             ),
         ])

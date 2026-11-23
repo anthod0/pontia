@@ -328,6 +328,63 @@ async fn antigravity_prepares_its_workspace_agent_again_on_process_recovery() {
 }
 
 #[tokio::test]
+async fn ordinary_kiro_workspaces_keep_the_native_agent_and_their_configuration() {
+    let h = Harness::new(&[("ACP_KIRO", "1")]).await;
+    h.create("kiro").await.unwrap();
+    for request in h.wire() {
+        if matches!(
+            request["method"].as_str(),
+            Some("session/new" | "session/load")
+        ) {
+            assert!(request["params"]["_meta"].get("kiro").is_none());
+        }
+    }
+    assert!(!h.root.path().join(".kiro").exists());
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn kiro_selects_its_workspace_agent_on_creation_and_recovery() {
+    use pontia_agent_control::client_contract::ClientConfiguration;
+    use pontia_client_acp::configuration::AcpConfiguration;
+
+    let h = Harness::new(&[("ACP_KIRO", "1")]).await;
+    let config = AcpConfiguration::new(h.config.clone());
+    let policy = config.restricted_execution_policy("kiro").unwrap();
+    let cwd = h.root.path().join("bot/readonly");
+    std::fs::create_dir_all(&cwd).unwrap();
+    let session = create(
+        &h,
+        json!({
+            "metadata":{"acp_agent_id":"kiro"}, "execution_policy":policy, "workspace":cwd,
+            "ownership":{"application_id":"bot","reference":"test-readonly"}
+        }),
+    )
+    .await
+    .unwrap();
+    let agent = cwd.join(".kiro/agents/pontia-restricted.json");
+    std::fs::remove_file(&agent).unwrap();
+    h.crash_agent(&session);
+    h.wait_ready(&session, 2).await;
+    let definition: Value = serde_json::from_slice(&std::fs::read(agent).unwrap()).unwrap();
+    assert_eq!(definition["tools"], json!(["read", "shell", "web"]));
+    assert_eq!(h.requests("session/new"), 1);
+    assert!(h.requests("session/load") >= 2);
+    for frame in h.wire() {
+        if matches!(
+            frame["method"].as_str(),
+            Some("session/new" | "session/load")
+        ) {
+            assert_eq!(
+                frame["params"]["_meta"]["kiro"]["modeId"],
+                "pontia-restricted"
+            );
+        }
+    }
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn kiro_prompts_include_bound_instructions_once_per_context_and_replay_user_text() {
     let mut h = Harness::new(&[("ACP_KIRO", "1"), ("ACP_STOP_REASON", "end_turn")]).await;
     let session = create(

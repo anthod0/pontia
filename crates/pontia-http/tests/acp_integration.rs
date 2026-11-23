@@ -96,13 +96,12 @@ async fn creation_options_follow_enabled_settings_for_native_and_acp_clients() {
         assert_eq!(options["options"][0]["model_catalog_key"], json!(key));
 
         let bots = get(&app, "/api/v1/bots/clients").await;
-        assert_eq!(
+        assert!(
             bots["clients"]
                 .as_array()
                 .unwrap()
                 .iter()
-                .any(|item| { item["client_type"] == client && item["client_key"] == key }),
-            key != "kiro"
+                .any(|item| { item["client_type"] == client && item["client_key"] == key })
         );
 
         let (status, body) = call(&app, "PATCH", &path, json!({"enabled":false})).await;

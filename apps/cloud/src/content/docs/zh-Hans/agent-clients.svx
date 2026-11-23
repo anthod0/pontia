@@ -18,7 +18,7 @@ Pontia 包含以下 Agent Client：
 | Grok Build | `grok` | 在 Agent Clients 中启用 (ACP) |
 | Kiro | `kiro-cli` | 使用 `kiro-cli login` 登录 |
 
-Bot、记忆检索和 Dreaming 可以选择 Antigravity，使用受限 agent 读取文件、运行终端命令和搜索网页。Workspace 中的普通 helper 使用 Antigravity 原有的工具和审批方式。
+Bot、记忆检索和 Dreaming 可以选择 Antigravity 或 Kiro，使用受限 agent 读取文件、运行终端命令和搜索网页。Workspace 中的普通 helper 使用所选客户端原有的工具和审批方式。
 
 ## 在初始化时选择 Client
 

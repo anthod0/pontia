@@ -54,7 +54,7 @@ impl ClientConfiguration for AcpConfiguration {
             self.agents
                 .get(key)
                 .and_then(|agent| agent.restricted_execution),
-            Some(crate::RestrictedExecution::Antigravity)
+            Some(crate::RestrictedExecution::Antigravity | crate::RestrictedExecution::Kiro)
         )
     }
 
