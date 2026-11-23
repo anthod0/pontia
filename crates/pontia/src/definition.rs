@@ -9,7 +9,7 @@ pub fn render_systemd(
     pontia_home: &Path,
     auth_origin: &str,
 ) -> Result<String, String> {
-    render_systemd_with_environment(pontiad, pontia_home, auth_origin, &[])
+    render_systemd_with_environment(pontiad, pontia_home, auth_origin, &[], &[])
 }
 
 pub fn render_systemd_with_environment(
@@ -17,6 +17,7 @@ pub fn render_systemd_with_environment(
     pontia_home: &Path,
     auth_origin: &str,
     environment_paths: &[(String, PathBuf)],
+    executable_search_path: &[PathBuf],
 ) -> Result<String, String> {
     let pontiad = utf8_path(pontiad, "pontiad executable")?;
     let pontia_home = utf8_path(pontia_home, "PONTIA_HOME")?;
@@ -32,6 +33,12 @@ pub fn render_systemd_with_environment(
         }
         let path = utf8_path(path, name)?;
         environment.push_str(&format!("Environment=\"{name}={}\"\n", systemd_quote(path)));
+    }
+    if !executable_search_path.is_empty() {
+        environment.push_str(&format!(
+            "Environment=\"PATH={}\"\n",
+            systemd_quote(&render_search_path(executable_search_path)?)
+        ));
     }
     Ok(format!(
         "[Unit]\nDescription=Pontia Control Plane\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=\"{}\"\nEnvironment=\"PONTIA_HOME={}\"\nEnvironment=\"PONTIA_AUTH_ORIGIN={}\"\n{}Restart=on-failure\n\n[Install]\nWantedBy=default.target\n",
@@ -69,18 +76,10 @@ pub fn render_launchd_with_environment(
         ));
     }
     if !executable_search_path.is_empty() {
-        for path in executable_search_path {
-            utf8_path(path, "launchd executable search directory")?;
-        }
-        let path = std::env::join_paths(executable_search_path).map_err(|error| {
-            format!("launchd executable search path cannot be represented: {error}")
-        })?;
-        let path = path
-            .to_str()
-            .ok_or_else(|| "launchd executable search path is not valid UTF-8".to_string())?;
+        let path = render_search_path(executable_search_path)?;
         environment.push_str(&format!(
             "    <key>PATH</key>\n    <string>{}</string>\n",
-            xml_escape(path)?
+            xml_escape(&path)?
         ));
     }
     Ok(format!(
@@ -121,4 +120,14 @@ fn validate_environment_name(name: &str) -> Result<(), String> {
     } else {
         Ok(())
     }
+}
+
+fn render_search_path(paths: &[PathBuf]) -> Result<String, String> {
+    for path in paths {
+        utf8_path(path, "service executable search directory")?;
+    }
+    std::env::join_paths(paths)
+        .map_err(|error| format!("service executable search path cannot be represented: {error}"))?
+        .into_string()
+        .map_err(|_| "service executable search path is not valid UTF-8".into())
 }

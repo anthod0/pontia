@@ -440,28 +440,20 @@ fn launchd_sets_and_preserves_client_home_and_search_paths() {
         configured.persisted_client_paths(&definition).unwrap(),
         vec![("CODEX_HOME".into(), "/Users/alice/Codex Home".into())]
     );
-    let preserved = LaunchdManager::with_environment_paths(
-        &runner,
-        501,
-        vec!["CODEX_HOME"],
-        &[],
-        vec!["/usr/local/bin".into()],
-    )
-    .render_definition(
-        Path::new("/opt/pontiad"),
-        Path::new("/Users/alice/.pontia"),
-        "https://pontia.dev",
-        Some(&definition),
-    )
-    .unwrap();
+    let preserved =
+        LaunchdManager::with_environment_paths(&runner, 501, vec!["CODEX_HOME"], &[], Vec::new())
+            .render_definition(
+                Path::new("/opt/pontiad"),
+                Path::new("/Users/alice/.pontia"),
+                "https://pontia.dev",
+                Some(&definition),
+            )
+            .unwrap();
 
     assert!(
         preserved.contains("<key>CODEX_HOME</key>\n    <string>/Users/alice/Codex Home</string>")
     );
-    assert!(
-        preserved
-            .contains("<key>PATH</key>\n    <string>/usr/local/bin:/opt/homebrew/bin</string>")
-    );
+    assert_eq!(preserved, definition);
 }
 
 #[test]
@@ -656,4 +648,58 @@ fn launchd_uninstall_removes_definition_after_unloading_the_job() {
             .iter()
             .any(|(_, args)| args == &["bootout", "gui/501/dev.pontia.pontiad"])
     );
+}
+
+#[test]
+fn services_save_preserve_and_explicitly_replace_search_paths() {
+    use pontia_runtime::local_service::service_executable_search_path;
+    use std::ffi::OsStr;
+
+    let runner = FakeRunner::default();
+    let search_path = service_executable_search_path(Some(OsStr::new(
+        "/custom/pontia/bin::relative:/opt/agent tools%&/bin:/usr/bin:/custom/pontia/bin",
+    )))
+    .unwrap();
+    let replacement =
+        service_executable_search_path(Some(OsStr::new("/new/agents:/usr/bin"))).unwrap();
+    for (systemd, saved_path, refreshed_path) in [
+        (
+            true,
+            "Environment=\"PATH=/custom/pontia/bin:/opt/agent tools%%&/bin:/usr/bin\"",
+            "Environment=\"PATH=/new/agents:/usr/bin\"",
+        ),
+        (
+            false,
+            "<key>PATH</key>\n    <string>/custom/pontia/bin:/opt/agent tools%&amp;/bin:/usr/bin</string>",
+            "<key>PATH</key>\n    <string>/new/agents:/usr/bin</string>",
+        ),
+    ] {
+        let manager = |paths| -> Box<dyn ServiceManager> {
+            if systemd {
+                Box::new(SystemdManager::new(&runner).with_executable_search_path(paths))
+            } else {
+                Box::new(LaunchdManager::new(&runner, 501).with_executable_search_path(paths))
+            }
+        };
+        let configured = manager(search_path.clone());
+        let unattended = manager(Vec::new());
+        let refreshed = manager(replacement.clone());
+        let render = |manager: &dyn ServiceManager, previous: Option<&str>| {
+            manager
+                .render_definition(
+                    Path::new("/opt/pontiad"),
+                    Path::new("/custom/pontia"),
+                    "https://pontia.dev",
+                    previous,
+                )
+                .unwrap()
+        };
+        let saved = render(configured.as_ref(), None);
+        assert!(saved.contains(saved_path), "{saved}");
+        let preserved = render(unattended.as_ref(), Some(&saved));
+        assert_eq!(preserved, saved);
+        let updated = render(refreshed.as_ref(), Some(&saved));
+        assert!(updated.contains(refreshed_path), "{updated}");
+        assert_eq!(updated, render(refreshed.as_ref(), None));
+    }
 }

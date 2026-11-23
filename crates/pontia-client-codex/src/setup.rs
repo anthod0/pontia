@@ -10,7 +10,7 @@ use pontia_agent_control::client_contract::{
 };
 use pontia_runtime::local_service::{
     CommandOutput, CommandRunner, DefinitionStore, absolute_utf8_path,
-    launchd_executable_search_path, systemd_quote, xml_escape,
+    service_executable_search_path, systemd_quote, xml_escape,
 };
 
 pub const CODEX_SYSTEMD_SERVICE_NAME: &str = "pontia-codex.service";
@@ -284,16 +284,8 @@ pub fn inspect<R: CommandRunner + ?Sized>(
         )?;
     }
 
-    let preferred_paths = executable
-        .parent()
-        .map(Path::to_path_buf)
-        .into_iter()
-        .collect::<Vec<_>>();
-    let executable_search_path = launchd_executable_search_path(
-        vars.get("PATH").map(|path| OsStr::new(path.as_str())),
-        user_home,
-        &preferred_paths,
-    )?;
+    let executable_search_path =
+        service_executable_search_path(vars.get("PATH").map(|path| OsStr::new(path.as_str())))?;
     Ok(CodexSetup {
         executable,
         home,

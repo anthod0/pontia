@@ -13,6 +13,7 @@ fn renders_systemd_user_service() {
         Path::new("/home/alice/Pontia Home%dev"),
         AUTH_ORIGIN,
         &[],
+        &[],
     )
     .expect("valid paths");
 
@@ -29,6 +30,7 @@ fn systemd_rendering_escapes_unit_syntax() {
         Path::new("/home/alice/pontia\\\"home"),
         AUTH_ORIGIN,
         &[("CODEX_HOME".into(), "/home/alice/codex%home".into())],
+        &[],
     )
     .expect("valid paths");
 
@@ -103,6 +105,7 @@ fn renderers_reject_relative_paths() {
             Path::new("/home/alice"),
             AUTH_ORIGIN,
             &[],
+            &[],
         )
         .is_err()
     );
@@ -124,7 +127,7 @@ fn renderers_reject_non_utf8_paths() {
 
     let path = Path::new(OsStr::from_bytes(b"/home/alice/\xff"));
     assert!(
-        render_systemd_with_environment(Path::new("/usr/bin/pontiad"), path, AUTH_ORIGIN, &[])
+        render_systemd_with_environment(Path::new("/usr/bin/pontiad"), path, AUTH_ORIGIN, &[], &[])
             .is_err()
     );
     assert!(render_launchd(Path::new("/usr/bin/pontiad"), path, AUTH_ORIGIN).is_err());

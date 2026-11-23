@@ -14,6 +14,7 @@ pub struct SystemdManager<'a, R> {
     runner: &'a R,
     environment_names: Vec<&'static str>,
     environment_paths: Vec<(String, PathBuf)>,
+    executable_search_path: Vec<PathBuf>,
 }
 
 impl<'a, R: CommandRunner> SystemdManager<'a, R> {
@@ -30,7 +31,13 @@ impl<'a, R: CommandRunner> SystemdManager<'a, R> {
             runner,
             environment_names,
             environment_paths: paths.to_vec(),
+            executable_search_path: Vec::new(),
         }
+    }
+
+    pub fn with_executable_search_path(mut self, paths: Vec<PathBuf>) -> Self {
+        self.executable_search_path = paths;
+        self
     }
 
     /// Resolve the actual executable of the running per-user daemon.
@@ -102,7 +109,17 @@ impl<R: CommandRunner> ServiceManager for SystemdManager<'_, R> {
                 paths.push(((*name).to_string(), path));
             }
         }
-        render_systemd_with_environment(pontiad, pontia_home, auth_origin, &paths)
+        let search_path = if self.executable_search_path.is_empty() {
+            previous_definition
+                .map(|definition| parse_systemd_environment_path(definition, "PATH"))
+                .transpose()?
+                .flatten()
+                .map(|path| std::env::split_paths(&path).collect())
+                .unwrap_or_default()
+        } else {
+            self.executable_search_path.clone()
+        };
+        render_systemd_with_environment(pontiad, pontia_home, auth_origin, &paths, &search_path)
     }
 
     fn persisted_home(&self, definition: &str) -> Result<PathBuf, String> {
@@ -240,6 +257,11 @@ impl<'a, R: CommandRunner> LaunchdManager<'a, R> {
         }
     }
 
+    pub fn with_executable_search_path(mut self, paths: Vec<PathBuf>) -> Self {
+        self.executable_search_path = paths;
+        self
+    }
+
     fn domain(&self) -> String {
         format!("gui/{}", self.uid)
     }
@@ -304,16 +326,16 @@ impl<R: CommandRunner> ServiceManager for LaunchdManager<'_, R> {
             }
         }
 
-        let mut search_path = self.executable_search_path.clone();
-        if let Some(previous) = previous_definition
-            && let Some(previous_path) = parse_launchd_environment_value(previous, "PATH")?
-        {
-            for path in std::env::split_paths(&previous_path) {
-                if !search_path.contains(&path) {
-                    search_path.push(path);
-                }
-            }
-        }
+        let search_path = if self.executable_search_path.is_empty() {
+            previous_definition
+                .map(|definition| parse_launchd_environment_value(definition, "PATH"))
+                .transpose()?
+                .flatten()
+                .map(|path| std::env::split_paths(&path).collect())
+                .unwrap_or_default()
+        } else {
+            self.executable_search_path.clone()
+        };
         render_launchd_with_environment(pontiad, pontia_home, auth_origin, &paths, &search_path)
     }
 

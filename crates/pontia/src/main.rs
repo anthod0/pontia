@@ -31,8 +31,7 @@ use pontia::{
 };
 use pontia_agent_control::client_contract::ClientIntegration;
 use pontia_config::AppConfig;
-#[cfg(target_os = "macos")]
-use pontia_runtime::local_service::launchd_executable_search_path;
+use pontia_runtime::local_service::service_executable_search_path;
 use pontia_runtime::local_service::{CommandRunner, DefinitionStore};
 use std::sync::Arc;
 
@@ -64,6 +63,7 @@ Saves the credential to $PONTIA_HOME/auth.json.";
 
 const UP_HELP: &str = "\
 Creates the API token if missing and restarts a running service.
+Refreshes the service PATH from this terminal, keeping absolute directories in order.
 Run after editing $PONTIA_HOME/config.toml. The printed Dashboard URL contains the token.
 
 For configuration options, see https://pontia.dev/docs/configuration.md";
@@ -535,6 +535,10 @@ fn update_service_config<M: ServiceManager>(
 fn run_lifecycle(command: LifecycleCommand) -> Result<bool, String> {
     service_manager_preflight()?;
     let runner = ProcessCommandRunner;
+    let search_path = match command {
+        LifecycleCommand::Up => service_executable_search_path(env::var_os("PATH").as_deref())?,
+        LifecycleCommand::Down => Vec::new(),
+    };
 
     #[cfg(target_os = "linux")]
     {
@@ -544,13 +548,14 @@ fn run_lifecycle(command: LifecycleCommand) -> Result<bool, String> {
                 &runner,
                 pontia_clients::service_path_variables(),
                 &[],
-            ),
+            )
+            .with_executable_search_path(search_path),
         )
     }
 
     #[cfg(target_os = "macos")]
     {
-        let manager = launchd_manager(&runner, &[])?;
+        let manager = launchd_manager(&runner, &[])?.with_executable_search_path(search_path);
         run_with_manager(command, &manager)
     }
 
@@ -828,7 +833,10 @@ fn start_init_service(
             &runner,
             pontia_clients::service_path_variables(),
             environment_paths,
-        ),
+        )
+        .with_executable_search_path(service_executable_search_path(
+            env::var_os("PATH").as_deref(),
+        )?),
         config,
         config_changed,
     )
@@ -842,7 +850,9 @@ fn start_init_service(
 ) -> Result<(), String> {
     let runner = ProcessCommandRunner;
     start_init_with_manager(
-        &launchd_manager(&runner, environment_paths)?,
+        &launchd_manager(&runner, environment_paths)?.with_executable_search_path(
+            service_executable_search_path(env::var_os("PATH").as_deref())?,
+        ),
         config,
         config_changed,
     )
@@ -1093,7 +1103,7 @@ fn launchd_manager<'a, R: CommandRunner>(
         current_uid(runner)?,
         pontia_clients::service_path_variables(),
         environment_paths,
-        launchd_executable_search_path(env::var_os("PATH").as_deref(), &user_home()?, &[])?,
+        Vec::new(),
     ))
 }
 
