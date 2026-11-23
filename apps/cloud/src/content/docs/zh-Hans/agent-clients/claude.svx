@@ -63,7 +63,7 @@ pontia setup claude
 
 ## Claude Code Session 的运行方式
 
-Pontia 服务重启期间，Claude Code 可以继续执行当前任务。Session 退出后，你仍可浏览其历史，并发送新消息来恢复同一个对话。
+Session 退出后，你仍可浏览其历史，并发送新消息来恢复同一个对话。
 
 请求失败时，Claude Agent SDK 可能会重试。SDK 重试期间，Dashboard 会显示失败信息，例如认证错误。重试通知并不表示任务已完成或已失败。重试期间也可以退出 Session。
 
