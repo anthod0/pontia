@@ -57,7 +57,6 @@ copy_paths=(
   apps/cloud/node_modules apps/cloud/.svelte-kit apps/cloud/build
   clients/pi/node_modules
   clients/claude/node_modules clients/claude/dist
-  target
 )
 # Each shared path is authoritative in the primary checkout; missing paths are skipped.
 shared_paths=(
@@ -124,7 +123,7 @@ files, directories = [], []
 def collect(relative):
     path = source / relative
     mode = path.lstat().st_mode
-    if relative.name.endswith(".pid") or relative.name in {".cargo-lock", ".cargo-artifact-lock"}:
+    if relative.name.endswith(".pid"):
         return
     if stat.S_ISLNK(mode) or stat.S_ISREG(mode):
         files.append(relative)
@@ -251,22 +250,6 @@ for relative in files:
                 )
             lines.append(line)
         repaired = "".join(lines)
-    elif relative.parts[0] == "target" and relative.suffix == ".d":
-        # rustc depfiles backslash-escape spaces in filenames.
-        escaped_source = str(source).replace(" ", r"\ ")
-        escaped_destination = str(destination).replace(" ", r"\ ")
-        dep_pattern = re.compile(re.escape(escaped_source) + r'(?=/|:|\s|$)')
-        def relocate_depfile(match):
-            tail = match.string[match.end():]
-            for path in shared:
-                prefix = "/" + str(path).replace(" ", r"\ ")
-                if tail.startswith(prefix) and (len(tail) == len(prefix) or tail[len(prefix)] in "/ \t\r\n:"):
-                    return escaped_source
-            return escaped_destination
-        repaired = "".join(
-            line if line.lstrip().startswith("#") else dep_pattern.sub(relocate_depfile, line)
-            for line in text.splitlines(keepends=True)
-        )
     elif str(source) in text:
         warn(f"unhandled source path in copied text; assess/regenerate before use: {relative}")
     if repaired != text:
