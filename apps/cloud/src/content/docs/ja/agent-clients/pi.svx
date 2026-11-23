@@ -49,7 +49,7 @@ Pontia から Session を作成・再開する場合は、選択した Workspace
 
 会話履歴は Pi のネイティブなデータから読み込まれます。Pontia で会話を閲覧して再開できるよう、このデータを残しておいてください。
 
-## Pi のコマンドを上書きする
+<h2 id="override-the-pi-command">Pi のコマンドを上書きする</h2>
 
 デフォルトの TUI コマンドは `pi` です。別の実行ファイルやラッパーを使うには、`$PONTIA_HOME/config.toml` で設定します。
 

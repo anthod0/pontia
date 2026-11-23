@@ -109,26 +109,10 @@ pontia status
 Now list the available Client entries:
 
 ```sh
-pontia client list --json
+pontia client list
 ```
 
-The result is JSON with an `agent_clients` array. Locate each selected entry by its `client_type` and check its `effective_config`. Check that `tui_command` points to an executable available to the Pontia service.
-
-If you need an executable override, write a JSON file containing the desired `config_overrides`, preserving any existing values. For example:
-
-```json
-{"tui_command": "/absolute/path/to/client"}
-```
-
-Apply it to the entry's `id` from the list:
-
-```sh
-pontia client set --id <CLIENT_ID> --config <JSON_FILE>
-```
-
-Use the original Pi or Codex executable path in the file, then check that `effective_config` reflects the change.
-
-Run `pontia client list` again to confirm that each selected entry shows `enabled`. Step 7 verifies these Clients by starting Sessions from the Remote Dashboard.
+Confirm that each selected entry shows `enabled`. If the Pontia service cannot find `pi`, see [Override the Pi command](/docs/agent-clients/pi#override-the-pi-command). Step 7 verifies these Clients by starting Sessions from the Remote Dashboard.
 
 ### 5. Sign in to Pontia Cloud
 

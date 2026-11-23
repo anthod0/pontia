@@ -115,7 +115,7 @@ impl Harness {
         .external_api_token(Some("fixture-token".into()))
         .build();
         pontia_agent_control::agent_clients::AgentClientService::new(app.db(), clients.clone())
-            .save("claude-agent", "default", Some(true), None)
+            .save("claude-agent", "default", true)
             .await
             .unwrap();
         let tasks = clients

@@ -30,8 +30,6 @@ const peer = (key: string): AgentClientView => ({
   detection: { status: "unknown", detail: null },
   setup_command: null,
   has_record: true,
-  config_overrides: { name: key },
-  effective_config: { name: key, command: "inherited-command" },
   created_at: null,
   updated_at: null,
 });
@@ -44,40 +42,23 @@ beforeEach(() => {
   api.listAgentClients.mockResolvedValue([peer("grok"), pi]);
 });
 
-test("a client that is not detected remains configurable and saves only its database overrides", async () => {
+test("a client shows its settings without a configuration editor or effective configuration", async () => {
   api.listAgentClients.mockResolvedValue([
     { ...pi, detection: { status: "not_detected", detail: null } },
   ]);
   const user = userEvent.setup();
-  api.patchAgentClient.mockImplementation(async (target, patch) => ({
-    ...target,
-    config_overrides: patch.config_overrides,
-  }));
   render(AgentClientsPage);
   await user.click(await screen.findByRole("button", { name: /pi/ }));
-  const editor = screen.getByLabelText("Database overrides (JSON)");
-  expect(editor).toHaveValue(JSON.stringify({ name: "pi" }, null, 2));
-  await user.clear(editor);
-  await user.click(editor);
-  await user.paste('{"name":"Renamed"}');
-  await user.click(screen.getByRole("button", { name: "Save overrides" }));
-  await waitFor(() =>
-    expect(api.patchAgentClient).toHaveBeenCalledWith(
-      expect.objectContaining({ client_type: "pi", client_key: "default" }),
-      { config_overrides: { name: "Renamed" } },
-    ),
-  );
+  expect(screen.getByRole("switch", { name: "Enabled" })).toBeEnabled();
+  expect(screen.queryByRole("textbox")).toBeNull();
+  expect(screen.queryByText("Effective configuration")).toBeNull();
 });
 
-test("disable preserves the edited override draft and reset removes the entire selected record", async () => {
+test("disable sends only the enabled setting and reset removes the entire selected record", async () => {
   const user = userEvent.setup();
   api.patchAgentClient.mockImplementation(async (target, patch) => ({ ...target, ...patch }));
   render(AgentClientsPage);
   await user.click(await screen.findByRole("button", { name: /pi/ }));
-  const editor = screen.getByLabelText("Database overrides (JSON)");
-  await user.clear(editor);
-  await user.click(editor);
-  await user.paste('{"name":"Unsaved"}');
   await user.click(screen.getByRole("switch", { name: "Enabled" }));
   await waitFor(() =>
     expect(api.patchAgentClient).toHaveBeenCalledWith(
@@ -85,10 +66,10 @@ test("disable preserves the edited override draft and reset removes the entire s
       { enabled: false },
     ),
   );
-  expect(editor).toHaveValue('{"name":"Unsaved"}');
-  await user.click(screen.getByRole("button", { name: "Restore inheritance" }));
+  expect(screen.getByRole("switch", { name: "Enabled" })).not.toBeChecked();
+  await user.click(screen.getByRole("button", { name: "Restore default" }));
   const dialog = screen.getByRole("alertdialog");
-  await user.click(within(dialog).getByRole("button", { name: "Restore inheritance" }));
+  await user.click(within(dialog).getByRole("button", { name: "Restore default" }));
   await waitFor(() =>
     expect(api.resetAgentClient).toHaveBeenCalledWith(
       expect.objectContaining({ client_key: "default" }),
@@ -96,36 +77,25 @@ test("disable preserves the edited override draft and reset removes the entire s
   );
 });
 
-test("invalid JSON and failed saves keep the user draft without modifying another peer", async () => {
+test("a failed toggle shows the error", async () => {
   const user = userEvent.setup();
+  api.patchAgentClient.mockRejectedValue(new Error("Rejected"));
   render(AgentClientsPage);
   await user.click(await screen.findByRole("button", { name: /pi/ }));
-  const editor = screen.getByLabelText("Database overrides (JSON)");
-  await user.clear(editor);
-  await user.click(editor);
-  await user.paste("[]");
-  await user.click(screen.getByRole("button", { name: "Save overrides" }));
-  await screen.findByRole("alert");
-  expect(api.patchAgentClient).not.toHaveBeenCalled();
-  api.patchAgentClient.mockRejectedValue(new Error("Rejected"));
-  await user.clear(editor);
-  await user.click(editor);
-  await user.paste('{"command":null}');
-  await user.click(screen.getByRole("button", { name: "Save overrides" }));
-  await waitFor(() => expect(api.patchAgentClient).toHaveBeenCalledTimes(1));
-  expect(editor).toHaveValue('{"command":null}');
+  await user.click(screen.getByRole("switch", { name: "Enabled" }));
+  expect(await screen.findByText("Rejected")).toBeInTheDocument();
 });
 
-test("Grok can be enabled and reset without a launch overrides editor", async () => {
+test("Grok can be enabled and reset", async () => {
   const user = userEvent.setup();
   render(AgentClientsPage);
   await user.click(await screen.findByRole("button", { name: /grok/ }));
   expect(screen.queryByRole("button", { name: "Add custom client" })).toBeNull();
   expect(screen.queryByRole("textbox")).toBeNull();
   expect(screen.getByRole("switch", { name: "Enabled" })).toBeEnabled();
-  await user.click(screen.getByRole("button", { name: "Restore inheritance" }));
+  await user.click(screen.getByRole("button", { name: "Restore default" }));
   await user.click(
-    within(screen.getByRole("alertdialog")).getByRole("button", { name: "Restore inheritance" }),
+    within(screen.getByRole("alertdialog")).getByRole("button", { name: "Restore default" }),
   );
   await waitFor(() =>
     expect(api.resetAgentClient).toHaveBeenCalledWith(
@@ -151,16 +121,12 @@ const operation = (status: "running" | "succeeded" | "failed") => ({
   output: "Setup output",
 });
 
-test("setup enables the selected client and preserves an unsaved override draft", async () => {
+test("setup enables the selected client", async () => {
   const user = userEvent.setup();
   api.listAgentClients.mockResolvedValue([setupClient()]);
   api.setupAgentClient.mockResolvedValue(operation("running"));
   render(AgentClientsPage);
   await user.click(await screen.findByRole("button", { name: /^Pi/ }));
-  const editor = screen.getByLabelText("Database overrides (JSON)");
-  await user.clear(editor);
-  await user.click(editor);
-  await user.paste('{"name":"Unsaved"}');
   await user.click(screen.getByRole("button", { name: "Initialize" }));
   expect(api.setupAgentClient).toHaveBeenCalledWith(setupClient());
   expect(screen.getByRole("button", { name: "Initializing…" })).toBeDisabled();
@@ -169,7 +135,6 @@ test("setup enables the selected client and preserves an unsaved override draft"
   await waitFor(() => expect(screen.getByRole("switch", { name: "Enabled" })).toBeChecked(), {
     timeout: 4000,
   });
-  expect(editor).toHaveValue('{"name":"Unsaved"}');
   expect(screen.getByRole("button", { name: "Initialize" })).toBeEnabled();
 });
 

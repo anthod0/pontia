@@ -321,12 +321,7 @@ export function sessionEvent(
   };
 }
 
-function agentClient(
-  clientType: string,
-  clientKey: string,
-  name: string,
-  command: string,
-): AgentClientView {
+function agentClient(clientType: string, clientKey: string, name: string): AgentClientView {
   return {
     id: btoa(JSON.stringify([clientType, clientKey])).replace(/=+$/, ""),
     client_type: clientType,
@@ -340,13 +335,6 @@ function agentClient(
         : `pontia setup ${clientType === "claude-agent" ? "claude" : clientType}`,
     enabled: true,
     has_record: false,
-    config_overrides: {},
-    effective_config: {
-      name,
-      command,
-      args: clientType === "acp" ? ["agent", "stdio"] : [],
-      env: {},
-    },
     created_at: null,
     updated_at: null,
   };
@@ -750,10 +738,10 @@ export function createSampleData(): MockData {
     ],
     clientSetup: null,
     agentClients: [
-      agentClient("pi", "pi", "Pi", "pi"),
-      agentClient("codex", "codex", "Codex", "codex"),
-      agentClient("claude-agent", "claude-agent", "Claude Code", "claude"),
-      agentClient("acp", "grok", "Grok Build", "grok"),
+      agentClient("pi", "pi", "Pi"),
+      agentClient("codex", "codex", "Codex"),
+      agentClient("claude-agent", "claude-agent", "Claude Code"),
+      agentClient("acp", "grok", "Grok Build"),
     ],
     creationOptions,
     models,

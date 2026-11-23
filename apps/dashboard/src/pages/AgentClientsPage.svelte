@@ -12,12 +12,11 @@
   import ProhibitIcon from 'phosphor-svelte/lib/ProhibitIcon'
   import ClientIcon from '../components/chat/ClientIcon.svelte'
   import { isTransientNetworkError } from '../api/client'
-  import type { AgentClientView, AgentClientSetupOperation, JsonObject } from '../api/types'
+  import type { AgentClientView, AgentClientSetupOperation } from '../api/types'
   import { formatDateTime } from '../lib/format'
   import { Button } from '$lib/components/ui/button/index.js'
   import { Label } from '$lib/components/ui/label/index.js'
   import { Switch } from '$lib/components/ui/switch/index.js'
-  import { Textarea } from '$lib/components/ui/textarea/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js'
@@ -26,7 +25,6 @@
 
   let clients = $state<AgentClientView[]>([])
   let selected = $state<AgentClientView | null>(null)
-  let draft = $state('{}')
   let error = $state('')
   let saving = $state(false)
   let startingSetup = $state(false)
@@ -40,17 +38,12 @@
 
   function select(client: AgentClientView) {
     selected = client
-    draft = JSON.stringify(client.config_overrides, null, 2)
     error = ''
   }
 
   async function refresh() {
     clients = await listAgentClients()
-    if (selected) {
-      const current = clients.find((client) => client.id === selected?.id)
-      selected = current ?? null
-      draft = JSON.stringify(current?.config_overrides ?? {}, null, 2)
-    }
+    if (selected) selected = clients.find((client) => client.id === selected?.id) ?? null
   }
 
   onMount(() => {
@@ -65,7 +58,7 @@
           (setupOperation?.id !== operation.id || setupOperation.status === 'running')
         setupOperation = operation
         setupConnectionError = ''
-        if (completed) await refreshClientSettings()
+        if (completed) await refresh()
       } catch (cause) {
         if (!controller.signal.aborted) setupConnectionError = cause instanceof Error ? cause.message : String(cause)
       } finally {
@@ -79,18 +72,13 @@
     return () => { controller.abort(); clearTimeout(timer) }
   })
 
-  async function refreshClientSettings() {
-    clients = await listAgentClients()
-    if (selected) selected = clients.find((client) => client.id === selected?.id) ?? null
-  }
-
   async function setup(client: AgentClientView) {
     startingSetup = true
     error = ''
     try {
       setupOperation = await setupAgentClient(client)
       setupConnectionError = ''
-      if (setupOperation.status !== 'running') await refreshClientSettings()
+      if (setupOperation.status !== 'running') await refresh()
     } catch (cause) {
       if (isTransientNetworkError(cause)) setupConnectionError = String(cause)
       else error = cause instanceof Error ? cause.message : String(cause)
@@ -104,17 +92,6 @@
     error = ''
     try { await action() } catch (cause) { error = cause instanceof Error ? cause.message : String(cause) }
     finally { saving = false }
-  }
-
-  function save(client: AgentClientView) {
-    return perform(async () => {
-      const overrides: unknown = JSON.parse(draft)
-      if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) throw new Error($t('clients.objectRequired'))
-      const saved = await patchAgentClient(client, { config_overrides: overrides as JsonObject })
-      clients = await listAgentClients()
-      select(saved)
-      toast.success($t('clients.saved'), { description: $t('clients.environmentPriority') })
-    })
   }
 
   function toggle(client: AgentClientView) {
@@ -131,13 +108,13 @@
     return perform(async () => {
       await resetAgentClient(client)
       await refresh()
-      toast.success($t('clients.restored'), { description: client.client_type === 'acp' ? undefined : $t('clients.defaultsApplied') })
+      toast.success($t('clients.restored'))
     })
   }
 </script>
 
 {#snippet restoreButton()}
-  <Button type="button" variant="ghost" disabled={busy} onclick={() => resetOpen = true}><ArrowCounterClockwiseIcon class="size-4" /> {$t('clients.restoreInheritance')}</Button>
+  <Button type="button" variant="ghost" disabled={busy} onclick={() => resetOpen = true}><ArrowCounterClockwiseIcon class="size-4" /> {$t('clients.restoreDefault')}</Button>
 {/snippet}
 
 <section class="space-y-6">
@@ -183,7 +160,7 @@
             <div class="min-w-0 space-y-1">
               <h3 class="truncate text-lg font-semibold text-heading">{selected.name}</h3>
               <p class="text-xs text-muted-foreground">
-                {selected.client_type} / {selected.short_id} · {selected.has_record ? $t('clients.databaseUpdated', { date: formatDateTime(selected.updated_at, $currentLocale) }) : $t('clients.inherited')}
+                {selected.client_type} / {selected.short_id} · {selected.has_record ? $t('clients.databaseUpdated', { date: formatDateTime(selected.updated_at, $currentLocale) }) : $t('clients.default')}
               </p>
               <p class="break-all font-mono text-xs text-muted-foreground" title={$t('clients.uniqueId')}>{selected.id}</p>
               <div role="status" class="space-y-1 pt-2 text-sm">
@@ -231,29 +208,7 @@
             </section>
           {/if}
 
-          <div class="grid gap-6 {selected.client_type !== 'acp' ? 'xl:grid-cols-2' : ''}">
-            {#if selected.client_type !== 'acp'}
-              <form class="space-y-2" onsubmit={(event) => { event.preventDefault(); if (selected) save(selected) }}>
-                <Label for="client-overrides">{$t('clients.overrides')}</Label>
-                <Textarea id="client-overrides" bind:value={draft} rows={12} spellcheck={false} class="min-h-56 font-mono text-xs" disabled={busy} />
-                <p class="text-xs text-muted-foreground">{$t('clients.overridesDescription')}</p>
-                <div class="flex flex-wrap items-center gap-2 pt-2">
-                  <Button type="submit" disabled={busy}>{$t('clients.saveOverrides')}</Button>
-                  {#if selected.has_record}{@render restoreButton()}{/if}
-                </div>
-              </form>
-            {/if}
-            <div class="space-y-2">
-              <h4 class="text-sm leading-none font-medium">{$t('clients.effectiveConfiguration')}</h4>
-              <pre class="max-h-[22rem] min-h-56 overflow-auto rounded-md bg-muted p-3 font-mono text-xs leading-5">{JSON.stringify(selected.effective_config, null, 2)}</pre>
-              {#if selected.client_type !== 'acp'}
-                <p class="text-xs text-muted-foreground">{$t('clients.configurationDescription')}</p>
-              {/if}
-            </div>
-          </div>
-          {#if selected.client_type === 'acp' && selected.has_record}
-            {@render restoreButton()}
-          {/if}
+          {#if selected.has_record}{@render restoreButton()}{/if}
         </div>
       {:else}
         <p class="py-2 text-sm text-muted-foreground">{$t('clients.selectClient')}</p>
@@ -265,6 +220,6 @@
 <AlertDialog.Root bind:open={resetOpen}>
   <AlertDialog.Content>
     <AlertDialog.Header><AlertDialog.Title>{$t('clients.restoreConfirm')}</AlertDialog.Title><AlertDialog.Description>{$t('clients.restoreBefore')} {selected?.name}{$t('clients.restoreAfter')}</AlertDialog.Description></AlertDialog.Header>
-    <AlertDialog.Footer><AlertDialog.Cancel>{$t('common.cancel')}</AlertDialog.Cancel><AlertDialog.Action onclick={() => selected && reset(selected)}>{$t('clients.restoreInheritance')}</AlertDialog.Action></AlertDialog.Footer>
+    <AlertDialog.Footer><AlertDialog.Cancel>{$t('common.cancel')}</AlertDialog.Cancel><AlertDialog.Action onclick={() => selected && reset(selected)}>{$t('clients.restoreDefault')}</AlertDialog.Action></AlertDialog.Footer>
   </AlertDialog.Content>
 </AlertDialog.Root>

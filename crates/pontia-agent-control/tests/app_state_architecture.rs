@@ -20,7 +20,7 @@ async fn runtime_registration_and_resume_publish_to_the_application_broker() {
     pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
         db.clone(),
     )
-    .save("generic", "default", Some(true), None)
+    .save("generic", "default", true)
     .await
     .unwrap();
     static SPEC: std::sync::OnceLock<pontia_agent_control::client_contract::AgentClientSpec> =

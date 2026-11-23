@@ -7,7 +7,6 @@ license.workspace = true
 [dependencies]
 pontia-agent-control.workspace = true
 pontia-core.workspace = true
-pontia-config.workspace = true
 pontia-runtime.workspace = true
 pontia-storage-sqlite.workspace = true
 pontia-version.workspace = true

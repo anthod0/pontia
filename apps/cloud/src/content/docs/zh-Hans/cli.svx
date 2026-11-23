@@ -71,9 +71,8 @@ pontia completions powershell | Out-String | Invoke-Expression
 | 命令 | 用途 |
 | --- | --- |
 | `pontia client list` | 列出每个 Agent Client 条目及其短 ID、名称、类型和启用状态 |
-| `pontia client list --json` | 以 JSON 列出每个条目，包括其 ID、配置覆盖项和生效配置 |
+| `pontia client list --json` | 以 JSON 列出每个条目，包括其 ID |
 | `pontia client show CLIENT` | 显示一个条目 |
-| `pontia client set CLIENT --config JSON_FILE` | 用一个 JSON 对象替换该条目的配置覆盖项 |
 | `pontia client enable CLIENT` | 允许新 Session 使用该条目 |
 | `pontia client disable CLIENT` | 禁止新 Session 使用该条目；现有 Session 不受影响 |
 | `pontia client reset CLIENT` | 删除该条目已保存的设置，同时会禁用它 |

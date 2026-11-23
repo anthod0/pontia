@@ -15,7 +15,7 @@ Cada linha explica uma verificação de serviço, configuração, login ou regis
 
 ## O serviço não inicia
 
-Valide `$PONTIA_HOME/config.toml` em busca de TOML inválido, valores desconhecidos, caminhos inacessíveis ou uma porta já em uso. O endereço padrão é `127.0.0.1:8080`.
+Valide `$PONTIA_HOME/config.toml` em busca de TOML inválido, valores inválidos, caminhos inacessíveis ou uma porta já em uso. O endereço padrão é `127.0.0.1:8080`.
 
 No Linux, inspecione o serviço de usuário:
 

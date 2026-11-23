@@ -646,7 +646,7 @@ async fn persistent_submission_survives_response_loss_and_database_reopen() {
     pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
         pool.clone(),
     )
-    .save("generic", "default", Some(true), None)
+    .save("generic", "default", true)
     .await
     .unwrap();
     let state = AppState::builder(

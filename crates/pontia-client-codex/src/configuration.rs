@@ -1,21 +1,10 @@
 use pontia_agent_control::client_contract::ClientConfiguration;
-use pontia_config::ConfigurationLayers;
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 
 pub(crate) const SPAWN_AGENT: &str = "spawn_agent";
 
-pub struct CodexConfiguration(pub ConfigurationLayers);
-
-impl CodexConfiguration {
-    pub fn new(file: Value) -> Self {
-        Self(ConfigurationLayers {
-            defaults: json!({}),
-            file,
-            environment: json!({}),
-        })
-    }
-}
+pub struct CodexConfiguration;
 
 impl ClientConfiguration for CodexConfiguration {
     fn restricted_execution_policy(
@@ -87,15 +76,15 @@ impl ClientConfiguration for CodexConfiguration {
     fn key(&self, _metadata: &Value) -> Result<String> {
         Ok("default".into())
     }
-    fn merged(&self, _key: &str, overrides: &Value) -> Value {
-        self.0.resolve(overrides)
+    fn merged(&self, _key: &str) -> Value {
+        json!({})
     }
-    fn resolve(&self, key: &str, overrides: &Value) -> Result<Value> {
+    fn resolve(&self, key: &str) -> Result<Value> {
         if key != "default" {
             return Err(Error::Domain(
                 "Codex requires the default client key".into(),
             ));
         }
-        Ok(self.merged(key, overrides))
+        Ok(self.merged(key))
     }
 }

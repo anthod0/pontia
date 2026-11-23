@@ -124,11 +124,11 @@ impl ClientConfiguration for Client {
     fn key(&self, _: &Value) -> Result<String> {
         Ok("default".into())
     }
-    fn merged(&self, _: &str, overrides: &Value) -> Value {
-        overrides.clone()
+    fn merged(&self, _: &str) -> Value {
+        json!({})
     }
-    fn resolve(&self, _: &str, overrides: &Value) -> Result<Value> {
-        Ok(overrides.clone())
+    fn resolve(&self, _: &str) -> Result<Value> {
+        Ok(json!({}))
     }
 }
 
@@ -665,7 +665,7 @@ async fn fixture_with_clients(
     }
     for spec in specs {
         AgentClientService::new(pool.clone(), registry.clone())
-            .save(spec.client_type, "default", Some(true), None)
+            .save(spec.client_type, "default", true)
             .await
             .unwrap();
     }
@@ -1575,7 +1575,7 @@ async fn profile_selected_from_a_handoff_launches_with_its_current_configuration
         .await
         .unwrap();
     AgentClientService::new(control.db(), control.clients())
-        .save("generic", "default", Some(false), None)
+        .save("generic", "default", false)
         .await
         .unwrap();
     let before: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions")

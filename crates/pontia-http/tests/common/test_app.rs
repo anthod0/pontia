@@ -158,7 +158,7 @@ impl TestAppBuilder {
             );
         for client in ["generic", "pi", "codex"] {
             settings
-                .save(client, "default", Some(true), None)
+                .save(client, "default", true)
                 .await
                 .expect("enable fixture client");
         }

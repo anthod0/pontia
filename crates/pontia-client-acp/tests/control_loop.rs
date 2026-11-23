@@ -118,7 +118,7 @@ impl Harness {
         let management =
             pontia_agent_control::agent_clients::AgentClientService::new(app.db(), app.clients());
         for key in [first, "second"] {
-            management.save("acp", key, Some(true), None).await.unwrap();
+            management.save("acp", key, true).await.unwrap();
         }
         let tasks = clients
             .start_services(app.clone(), ClientServicePhase::Transport)

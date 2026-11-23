@@ -68,7 +68,7 @@ impl Fixture {
         pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
             pool.clone(),
         )
-        .save("generic", "default", Some(true), None)
+        .save("generic", "default", true)
         .await
         .unwrap();
         let resolver = Arc::new(Resolver {

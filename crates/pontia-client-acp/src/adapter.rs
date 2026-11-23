@@ -120,7 +120,7 @@ impl ClientSession for AcpAdapter {
                 .filter(|row| row.client_type == "acp" && row.enabled)
             {
                 let id = &record.client_key;
-                let Ok(agent) = self.config.definition(id, &record.overrides()?) else {
+                let Ok(agent) = self.config.definition(id) else {
                     continue;
                 };
                 options.push(SessionCreationOption {

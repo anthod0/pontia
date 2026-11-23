@@ -25,7 +25,7 @@ async fn state() -> (AgentControl, tempfile::TempDir) {
     pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
         db.clone(),
     )
-    .save("pi", "default", Some(true), None)
+    .save("pi", "default", true)
     .await
     .unwrap();
     (
@@ -142,7 +142,7 @@ async fn disabling_pi_blocks_new_native_registration_but_preserves_existing_regi
     let (pi, _requests) = client(&state);
     let (session, runtime) = register(&pi, root.path()).await;
     pontia_agent_control::agent_clients::AgentClientService::new(state.db(), state.clients())
-        .save("pi", "default", Some(false), None)
+        .save("pi", "default", false)
         .await
         .unwrap();
     let (new_pi, _requests) = client(&state);

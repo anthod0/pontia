@@ -24,14 +24,14 @@ impl ClientConfiguration for Configuration {
     fn key(&self, _: &Value) -> Result<String> {
         Ok("a".into())
     }
-    fn merged(&self, _: &str, overrides: &Value) -> Value {
-        overrides.clone()
+    fn merged(&self, _: &str) -> Value {
+        json!({})
     }
-    fn resolve(&self, key: &str, overrides: &Value) -> Result<Value> {
+    fn resolve(&self, key: &str) -> Result<Value> {
         if !self.keys().iter().any(|known| known == key) {
             return Err(Error::Domain("Unknown client key".into()));
         }
-        Ok(overrides.clone())
+        Ok(json!({}))
     }
 }
 
@@ -75,10 +75,7 @@ impl Fixture {
                 pool.clone(),
             );
         for key in ["a", "b"] {
-            settings
-                .save("generic", key, Some(true), None)
-                .await
-                .unwrap();
+            settings.save("generic", key, true).await.unwrap();
         }
 
         let mut registry = ClientRegistry::default();

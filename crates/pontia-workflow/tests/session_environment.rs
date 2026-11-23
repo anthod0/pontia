@@ -50,7 +50,7 @@ async fn replanner_restart_and_recovered_resume_keep_the_original_patch_context(
     pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
         pool.clone(),
     )
-    .save("generic", "default", Some(true), None)
+    .save("generic", "default", true)
     .await
     .unwrap();
     let launcher = Arc::new(Launcher::default());

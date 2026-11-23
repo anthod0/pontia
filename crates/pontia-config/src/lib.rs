@@ -3,7 +3,7 @@ use std::{collections::HashMap, net::SocketAddr, path::PathBuf};
 use serde::Deserialize;
 
 mod client_configuration;
-pub use client_configuration::{ClientConfigurationSources, ConfigurationLayers, merge};
+pub use client_configuration::{ClientConfigurationSources, ConfigurationLayers};
 mod bot;
 mod environment;
 mod file_config;
@@ -43,7 +43,6 @@ pub struct AppConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct RemoteConfig {
     pub device_id: Option<String>,
 }

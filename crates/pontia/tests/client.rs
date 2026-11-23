@@ -8,7 +8,7 @@ use std::{
 };
 
 fn entry(client: &str, key: &str, id: &str, short: &str) -> Value {
-    json!({"id":id,"client_type":client,"client_key":key,"name":"Editable display name","short_id":short,"enabled":true,"detection":{"status":"detected","detail":null},"setup_command":null,"has_record":false,"config_overrides":{},"effective_config":{},"created_at":null,"updated_at":null})
+    json!({"id":id,"client_type":client,"client_key":key,"name":"Editable display name","short_id":short,"enabled":true,"detection":{"status":"detected","detail":null},"setup_command":null,"has_record":false,"created_at":null,"updated_at":null})
 }
 
 fn run(
@@ -17,11 +17,6 @@ fn run(
     expected: Option<(&str, &str, Option<Value>)>,
 ) -> std::process::Output {
     let root = tempfile::tempdir().unwrap();
-    std::fs::write(
-        root.path().join("overrides.json"),
-        r#"{"tui_command":"database-pi"}"#,
-    )
-    .unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let addr = listener.local_addr().unwrap();
@@ -207,11 +202,6 @@ fn management_commands_send_only_the_requested_database_fields() {
             "PATCH",
             Some(json!({"enabled":false})),
         ),
-        (
-            vec!["set", "pi", "--config", "overrides.json"],
-            "PATCH",
-            Some(json!({"config_overrides":{"tui_command":"database-pi"}})),
-        ),
         (vec!["reset", "pi"], "DELETE", None),
     ] {
         assert!(
@@ -237,15 +227,4 @@ fn missing_or_conflicting_target_selectors_are_rejected() {
         assert!(!output.status.success());
         assert!(output.stdout.is_empty());
     }
-}
-
-#[test]
-fn set_rejects_acp_without_sending_a_patch() {
-    let output = run(
-        &["set", "grok", "--config", "overrides.json"],
-        vec![entry("acp", "grok", "opaque", "grok")],
-        None,
-    );
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("configuration overrides"));
 }

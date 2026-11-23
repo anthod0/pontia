@@ -32,11 +32,11 @@ impl pontia_agent_control::client_contract::ClientConfiguration for Launcher {
     fn key(&self, _: &serde_json::Value) -> Result<String> {
         Ok("default".into())
     }
-    fn merged(&self, _: &str, overrides: &serde_json::Value) -> serde_json::Value {
-        overrides.clone()
+    fn merged(&self, _: &str) -> serde_json::Value {
+        json!({})
     }
-    fn resolve(&self, _: &str, overrides: &serde_json::Value) -> Result<serde_json::Value> {
-        Ok(overrides.clone())
+    fn resolve(&self, _: &str) -> Result<serde_json::Value> {
+        Ok(json!({}))
     }
 }
 impl ClientLauncher for Launcher {
@@ -68,7 +68,7 @@ async fn creation_restart_and_recovered_resume_keep_launch_context_out_of_events
     pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
         pool.clone(),
     )
-    .save("generic", "default", Some(true), None)
+    .save("generic", "default", true)
     .await
     .unwrap();
     let launcher = Arc::new(Launcher::default());
@@ -288,7 +288,7 @@ async fn owned_creation_is_idempotent_and_keeps_the_original_environment() {
     pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
         pool.clone(),
     )
-    .save("generic", "default", Some(true), None)
+    .save("generic", "default", true)
     .await
     .unwrap();
     let launcher = Arc::new(Launcher::default());

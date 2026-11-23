@@ -27,9 +27,7 @@ use std::{path::Path, sync::Arc};
 
 pub fn registration() -> ClientRegistration {
     ClientRegistration {
-        configuration: Some(Arc::new(crate::configuration::CodexConfiguration::new(
-            json!({}),
-        ))),
+        configuration: Some(Arc::new(crate::configuration::CodexConfiguration)),
         interactions: Some(Arc::new(CodexClient)),
         service: Some(Arc::new(crate::service::CodexBackgroundService)),
         instructions: Some(Arc::new(crate::instructions::CodexInstructionsPolicy)),

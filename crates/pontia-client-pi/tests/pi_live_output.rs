@@ -37,7 +37,7 @@ impl Session {
         pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
             db.clone(),
         )
-        .save("pi", "default", Some(true), None)
+        .save("pi", "default", true)
         .await
         .unwrap();
         let state = AgentControl::builder(db, root.path().into())

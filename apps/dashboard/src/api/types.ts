@@ -96,8 +96,6 @@ export interface AgentClientView {
   };
   setup_command: string | null;
   has_record: boolean;
-  config_overrides: JsonObject;
-  effective_config: JsonObject;
   created_at: string | null;
   updated_at: string | null;
 }

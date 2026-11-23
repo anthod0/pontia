@@ -109,26 +109,10 @@ pontia status
 现在列出可用的 Client 条目：
 
 ```sh
-pontia client list --json
+pontia client list
 ```
 
-结果是包含 `agent_clients` 数组的 JSON。通过 `client_type` 找到每个所选条目，并检查其 `effective_config`。确认 `tui_command` 指向 Pontia 服务可用的可执行文件。
-
-如果需要覆盖可执行文件，请编写一个包含所需 `config_overrides` 的 JSON 文件，并保留现有值。例如：
-
-```json
-{"tui_command": "/absolute/path/to/client"}
-```
-
-将其应用到列表中该条目的 `id`：
-
-```sh
-pontia client set --id <CLIENT_ID> --config <JSON_FILE>
-```
-
-在文件中使用原始的 Pi 或 Codex 可执行文件路径，然后检查 `effective_config` 是否反映了该更改。
-
-再次运行 `pontia client list`，确认每个所选条目都显示 `enabled`。第 7 步会通过从 Remote Dashboard 启动 Session 来验证这些 Client。
+确认每个所选条目都显示 `enabled`。如果 Pontia 服务找不到 `pi`，请参阅[覆盖 Pi 命令](/docs/agent-clients/pi#override-the-pi-command)。第 7 步会通过从 Remote Dashboard 启动 Session 来验证这些 Client。
 
 ### 5. 登录 Pontia Cloud
 

@@ -145,11 +145,11 @@ impl ClientConfiguration for Configuration {
     fn key(&self, _: &Value) -> Result<String> {
         Ok("default".into())
     }
-    fn merged(&self, _: &str, _: &Value) -> Value {
+    fn merged(&self, _: &str) -> Value {
         json!({})
     }
-    fn resolve(&self, key: &str, overrides: &Value) -> Result<Value> {
-        if key != "default" || overrides.as_object().is_none_or(|map| !map.is_empty()) {
+    fn resolve(&self, key: &str) -> Result<Value> {
+        if key != "default" {
             return Err(unsupported());
         }
         Ok(json!({}))

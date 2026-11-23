@@ -14,7 +14,6 @@ import type {
   BotClient,
   BotConfiguration,
   BotDeletionBlockers,
-  JsonObject,
   AgentProfileView,
   ApiEnvelope,
   CreateSessionInput,
@@ -205,7 +204,7 @@ export function createApi(device: DeviceRuntime) {
 
   async function patchAgentClient(
     target: Pick<AgentClientView, "client_type" | "client_key">,
-    settings: { enabled?: boolean; config_overrides?: JsonObject },
+    settings: { enabled: boolean },
   ): Promise<AgentClientView> {
     return (
       await request<{ agent_client: AgentClientView }>(agentClientPath(target), {

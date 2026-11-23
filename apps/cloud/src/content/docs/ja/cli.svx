@@ -65,9 +65,8 @@ pontia completions powershell | Out-String | Invoke-Expression
 | コマンド | 用途 |
 | --- | --- |
 | `pontia client list` | すべての Agent Client エントリを、短縮 ID、名前、種類、有効状態とともに一覧表示します |
-| `pontia client list --json` | すべてのエントリを、ID、設定のオーバーライド、実効設定を含む JSON で一覧表示します |
+| `pontia client list --json` | すべてのエントリを、ID を含む JSON で一覧表示します |
 | `pontia client show CLIENT` | 1 つのエントリを表示します |
-| `pontia client set CLIENT --config JSON_FILE` | エントリの設定オーバーライドを JSON オブジェクトで置き換えます |
 | `pontia client enable CLIENT` | 新しい Session でそのエントリを使えるようにします |
 | `pontia client disable CLIENT` | 新しい Session でそのエントリを使えないようにします。既存の Session は変わりません |
 | `pontia client reset CLIENT` | エントリの保存済み設定を削除します。これによりエントリも無効になります |

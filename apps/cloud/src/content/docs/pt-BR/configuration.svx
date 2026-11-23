@@ -38,7 +38,6 @@ roots = [
 | `default_client_type` | Identificador do Client padrão; o valor suportado atualmente é `pi` |
 | `dashboard.source` | Diretório de build do Dashboard local ou arquivo remoto `.tar.gz`, `.tgz` ou `.zip` contendo exatamente um `index.html` |
 | `runtime.pi.tui_command` | Executável ou comando do Pi usado nas Sessions do Pi iniciadas |
-| `runtime.codex.tui_command` | Executável do Codex usado ao abrir uma Session do Codex na TUI nativa; o padrão é `codex` |
 | `workspace_browser.roots` | Diretórios que o Dashboard pode navegar para ativar Workspaces |
 
 O padrão de `dashboard.source` na versão de release é o arquivo do Dashboard correspondente à versão instalada do Pontia. Arquivos remotos do Dashboard ficam em cache em `$PONTIA_HOME/cache/dashboard`; um cache existente ainda pode ser servido se a atualização falhar.
@@ -97,7 +96,7 @@ O processo em execução aceita estas substituições:
 | `PONTIA_DEFAULT_CLIENT_TYPE` | `default_client_type` |
 | `PONTIA_WORKSPACE_ROOTS` | Raízes de Workspace como entradas `root_id|label|path` separadas por ponto e vírgula |
 | `PONTIA_DASHBOARD_SOURCE` | `dashboard.source`; um valor vazio desativa o serviço do Dashboard |
-| `PONTIA_PI_TUI_COMMAND` | `runtime.pi.tui_command`; um valor vazio o limpa |
+| `PONTIA_PI_TUI_COMMAND` | `runtime.pi.tui_command`; um valor vazio usa `pi` |
 | `PONTIA_AUTH_ORIGIN` | Origem HTTPS do Pontia Cloud; destinada a implantações controladas e desenvolvimento |
 
 Os valores de ambiente têm precedência sobre os valores do arquivo para o processo em execução. Para a configuração persistente do serviço, use o `config.toml`. O serviço instalado armazena `PONTIA_HOME`, `PONTIA_AUTH_ORIGIN` e os caminhos necessários dos Agent Clients separadamente.
