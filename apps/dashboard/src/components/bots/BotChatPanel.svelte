@@ -32,6 +32,7 @@
   import { fileKindOf } from '../chat/fileKind'
   import { createRecentFiles, withRecentFile } from '$lib/botRecentFiles'
   import { createPanelTab, type PanelTab } from '$lib/botPanelTab'
+  import { SidePanelOpen } from '$lib/sidePanelOpen.svelte'
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
   import { promptValueAfterEnter } from '$lib/promptEnterBehavior'
 
@@ -50,7 +51,8 @@
     return () => action?.set(null)
   })
   const device = useDeviceRuntime()
-  let open = $state(false)
+  // The panel stays open or closed across Bot chats, like its tab.
+  const panel = new SidePanelOpen('pontia.botPanelOpen')
   const tab = createPanelTab()
   let file = $state.raw<FilePreviewTarget | null>(null)
   // The panel lives as long as its Bot chat page, which is recreated for another Bot.
@@ -62,12 +64,12 @@
   const context = createQuery(() => ({
     queryKey: ['bot-message-context', bot.bot_id, selected],
     queryFn: ({ signal }) => device.api.getBotMessageContext(bot.bot_id, selected!, signal),
-    enabled: open && tab.current === 'context' && selected !== null,
+    enabled: panel.current && tab.current === 'context' && selected !== null,
   }), () => device.queryClient)
   const todos = createQuery(() => ({
     queryKey: ['bot-todos', bot.bot_id],
     queryFn: ({ signal }) => device.api.getBotTodos(bot.bot_id, signal),
-    enabled: open && tab.current === 'todo',
+    enabled: panel.current && tab.current === 'todo',
     staleTime: 0,
   }), () => device.queryClient)
 
@@ -75,23 +77,23 @@
     file = target
     recentFiles.current = withRecentFile(recentFiles.current, { sessionId: target.sessionId, path: target.path })
     tab.current = 'files'
-    open = true
+    panel.current = true
   }
 
   export function viewContext(id: string) {
     selected = id
     tab.current = 'context'
-    open = true
+    panel.current = true
   }
 
   export function viewTodos() {
     tab.current = 'todo'
-    open = true
+    panel.current = true
   }
 
   export function refresh() {
-    if (open && tab.current === 'todo') void todos.refetch()
-    if (open && tab.current === 'context' && selected) void context.refetch()
+    if (panel.current && tab.current === 'todo') void todos.refetch()
+    if (panel.current && tab.current === 'context' && selected) void context.refetch()
   }
 
   function summary(message: BotMessage) {
@@ -102,8 +104,8 @@
   }
 
   async function closeOnMobile() {
-    if (!window.matchMedia('(min-width: 1024px)').matches) {
-      open = false
+    if (!panel.wide) {
+      panel.current = false
       await tick()
     }
   }
@@ -173,8 +175,8 @@
 
 {#snippet sidebarButton()}
   <div class="pointer-events-auto mr-3 flex h-12 shrink-0 items-center rounded-lg bg-popover px-0.5 ring-1 ring-foreground/10 max-md:mt-2 md:h-8 md:px-1">
-    <Button variant="ghost" size="icon" class={['relative size-11 md:size-7', open && 'bg-muted text-heading']}
-      aria-label={count > 0 ? $t('bots.sidebarWithTodos', { count }) : $t('nav.sidebar')} title={$t('nav.sidebar')} aria-pressed={open} onclick={() => { open = !open }}>
+    <Button variant="ghost" size="icon" class={['relative size-11 md:size-7', panel.current && 'bg-muted text-heading']}
+      aria-label={count > 0 ? $t('bots.sidebarWithTodos', { count }) : $t('nav.sidebar')} title={$t('nav.sidebar')} aria-pressed={panel.current} onclick={() => { panel.current = !panel.current }}>
       <SidebarSimpleIcon class="size-5 -scale-x-100 md:size-4" />{@render badge(true)}
     </Button>
   </div>
@@ -253,7 +255,7 @@
   </li>
 {/snippet}
 
-{#if open}
+{#if panel.current}
   <aside data-bot-chat-panel aria-label={$t('nav.sidebar')} class="fixed inset-y-0 right-0 z-50 flex w-full min-w-0 flex-col border-l bg-surface pt-[env(safe-area-inset-top)] lg:w-[var(--file-preview-width)]">
     <FilePreviewResizer />
     <Tabs.Root bind:value={() => tab.current, next => { tab.current = next as PanelTab }} class="min-h-0 flex-1 gap-0">
@@ -264,7 +266,7 @@
           <Tabs.Trigger value="todo" class="h-full px-2.5"><ListChecksIcon />{$t('bots.todos')}{@render badge()}</Tabs.Trigger>
           <Tabs.Trigger value="search" class="h-full px-2.5"><MagnifyingGlassIcon />{$t('bots.searchTab')}</Tabs.Trigger>
         </Tabs.List>
-        <Button variant="ghost" size="icon-sm" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => { open = false }}><XIcon /></Button>
+        <Button variant="ghost" size="icon-sm" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => { panel.current = false }}><XIcon /></Button>
       </header>
       <Tabs.Content value="files" class="flex min-h-0 flex-col">
         {#if file}
@@ -316,7 +318,7 @@
         {/if}
       </Tabs.Content>
       <Tabs.Content value="search" class="flex min-h-0 flex-col">
-        <BotMessageSearch {bot} active={open && tab.current === 'search'} bind:text={searchText} selected={searchSelected} onselect={jumpToResult} />
+        <BotMessageSearch {bot} active={panel.current && tab.current === 'search'} bind:text={searchText} selected={searchSelected} onselect={jumpToResult} />
       </Tabs.Content>
       <Tabs.Content value="todo" class="flex min-h-0 flex-col">
         <div class="min-h-0 flex-1 overflow-auto overscroll-contain p-3">
