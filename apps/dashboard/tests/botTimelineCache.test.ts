@@ -19,6 +19,7 @@ const bot = (bot_id: string, name = "Bot"): Bot => ({
   client_type: "pi",
   client_key: "default",
   model: "test",
+  reasoning_effort: null,
 });
 
 function message(n: number, content = String(n)): BotMessage {

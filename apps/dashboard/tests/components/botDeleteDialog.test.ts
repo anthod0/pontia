@@ -19,6 +19,7 @@ const bot = (bot_id: string): Bot => ({
   client_type: "pi",
   client_key: "default",
   model: "provider/model",
+  reasoning_effort: null,
 });
 const helper = { session_id: "helper-1", client_type: "pi", title: "Fix the build" } as SessionView;
 

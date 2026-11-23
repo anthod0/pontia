@@ -49,6 +49,7 @@ fn profile(description: &str) -> LaunchableAgentProfile {
         client_type: "codex".into(),
         client_key: "default".into(),
         model: "gpt-6-astra".into(),
+        reasoning_effort: None,
     }
 }
 

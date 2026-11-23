@@ -356,6 +356,7 @@ function agentProfile(
     client_type: client,
     client_key: client,
     model,
+    reasoning_effort: null,
     system_prompt: `You are ${name}. ${description}`,
     created_at: ago(60 * 24 * 10),
     updated_at: ago(60 * 24 * 2),

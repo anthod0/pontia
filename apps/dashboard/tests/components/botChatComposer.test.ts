@@ -40,6 +40,7 @@ async function openChat(entries: BotEntry[] = []) {
       client_type: "pi",
       client_key: "default",
       model: "test",
+      reasoning_effort: null,
     },
     entries,
     next_before: null,

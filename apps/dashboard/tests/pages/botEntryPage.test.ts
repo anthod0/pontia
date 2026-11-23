@@ -16,6 +16,7 @@ const first: Bot = {
   client_type: "pi",
   client_key: "default",
   model: "provider/model",
+  reasoning_effort: null,
 };
 
 beforeEach(() => {
@@ -78,6 +79,7 @@ test("creates the first Bot from client and model and opens it on the selected d
       client_type: "pi",
       client_key: "default",
       model: "provider/model",
+      reasoning_effort: null,
       avatar_shape: "mochi",
       avatar_color: "rose",
     },

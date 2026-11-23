@@ -57,6 +57,7 @@ struct Client {
     launch_directories: Mutex<std::collections::HashMap<String, String>>,
     fail_next_launch: Mutex<bool>,
     launch_modes: Mutex<std::collections::HashMap<String, LaunchMode>>,
+    launched_efforts: Mutex<std::collections::HashMap<String, Option<String>>>,
     launched_models: Mutex<std::collections::HashMap<String, Option<String>>>,
     launched_policies:
         Mutex<std::collections::HashMap<String, pontia_core::execution_policy::ExecutionPolicy>>,
@@ -112,6 +113,33 @@ impl ClientConfiguration for Client {
         }
         Ok(())
     }
+    fn supports_startup_reasoning_effort(&self) -> bool {
+        true
+    }
+    fn list_models<'a>(
+        &'a self,
+        _: &'a Value,
+        _: &'a Path,
+    ) -> ClientOperation<'a, pontia_agent_control::agent_clients::AgentClientModels> {
+        Box::pin(async {
+            Ok(pontia_agent_control::agent_clients::AgentClientModels {
+                models: vec![pontia_agent_control::sessions::SessionModel {
+                    id: MODEL.into(),
+                    name: MODEL.into(),
+                    description: String::new(),
+                    default_reasoning_effort: None,
+                    reasoning_efforts: ["low", "high"]
+                        .map(|id| pontia_agent_control::sessions::ReasoningEffortOption {
+                            id: id.into(),
+                            name: id.into(),
+                            description: String::new(),
+                        })
+                        .into(),
+                }],
+                default_model: Some(MODEL.into()),
+            })
+        })
+    }
     fn supports_startup_model(&self) -> bool {
         true
     }
@@ -141,6 +169,10 @@ impl ClientLauncher for Client {
         self.launch_modes.lock().unwrap().insert(
             request.runtime.session_id.clone(),
             request.runtime.launch_mode,
+        );
+        self.launched_efforts.lock().unwrap().insert(
+            request.runtime.session_id.clone(),
+            request.runtime.reasoning_effort.clone(),
         );
         self.launched_models.lock().unwrap().insert(
             request.runtime.session_id.clone(),
@@ -259,6 +291,7 @@ fn bot_configuration(name: &str, model: &str) -> BotConfiguration {
         client_type: "generic".into(),
         client_key: "default".into(),
         model: model.into(),
+        reasoning_effort: None,
     }
 }
 
@@ -1225,6 +1258,7 @@ fn profile(id: &str, model: &str, system_prompt: Option<&str>) -> UpsertAgentPro
         client_type: Some("generic".into()),
         client_key: Some("default".into()),
         model: Some(model.into()),
+        reasoning_effort: None,
         system_prompt: system_prompt.map(Into::into),
     }
 }
@@ -1288,7 +1322,13 @@ async fn general_helper_follows_a_corrected_bot_model_and_ignores_legacy_helper_
         .unwrap();
     conversation
         .records()
-        .update(&bot.bot_id, bot_configuration("Bot", MODEL))
+        .update(
+            &bot.bot_id,
+            BotConfiguration {
+                reasoning_effort: Some("low".into()),
+                ..bot_configuration("Bot", MODEL)
+            },
+        )
         .await
         .unwrap();
     conversation.send(&bot.bot_id, "retry").await.unwrap();
@@ -1300,9 +1340,17 @@ async fn general_helper_follows_a_corrected_bot_model_and_ignores_legacy_helper_
         .current_session_id
         .unwrap();
     let helpers = HelperService::new(control.clone(), conversation.clone());
+    assert_eq!(
+        client.launched_efforts.lock().unwrap()[&session].as_deref(),
+        Some("low")
+    );
     let response = create_helper(&helpers, &session, None).await.unwrap();
     let helper = response["session_id"].as_str().unwrap();
     assert_eq!(launched_model(&client, helper), Some(MODEL.into()));
+    assert_eq!(
+        client.launched_efforts.lock().unwrap()[helper].as_deref(),
+        Some("low")
+    );
     assert_eq!(instructions(&control, helper).await, HELPER_INSTRUCTIONS);
 }
 
@@ -1338,13 +1386,77 @@ async fn general_helper_launches_with_the_current_bot_client_key() {
 }
 
 #[tokio::test]
+async fn bot_and_profile_efforts_must_be_offered_by_the_selected_model() {
+    let (_root, _pool, _client, control, conversation) = fixture().await;
+    let (id, session) = bot(&conversation).await;
+    let invalid = BotConfiguration {
+        reasoning_effort: Some("missing".into()),
+        ..bot_configuration("Bot", MODEL)
+    };
+    assert!(matches!(
+        conversation.records().update(&id, invalid).await,
+        Err(Error::Domain(_))
+    ));
+    assert!(
+        conversation
+            .records()
+            .get(&id)
+            .await
+            .unwrap()
+            .reasoning_effort
+            .is_none()
+    );
+    let profiles = control.agent_profiles();
+    profiles
+        .create(profile("reviewer", MODEL, None), None)
+        .await
+        .unwrap();
+    let update = |fields: Value| {
+        let mut input = fields;
+        input["profile_id"] = json!("reviewer");
+        serde_json::from_value(
+            json!({"session_id":session, "command":{"action":"update","input":input}}),
+        )
+        .unwrap()
+    };
+    assert!(matches!(
+        conversation
+            .profile_command(update(json!({"reasoning_effort":"missing"})))
+            .await,
+        Err(Error::Domain(_))
+    ));
+    for (fields, effort) in [
+        (json!({"reasoning_effort":"high"}), Some("high")),
+        (json!({"name":"Reviewer"}), Some("high")),
+        (json!({"clear_reasoning_effort":true}), None),
+    ] {
+        conversation.profile_command(update(fields)).await.unwrap();
+        assert_eq!(
+            profiles
+                .resolve_launch("reviewer")
+                .await
+                .unwrap()
+                .reasoning_effort
+                .as_deref(),
+            effort
+        );
+    }
+}
+
+#[tokio::test]
 async fn profile_helper_uses_the_profile_launch_config_and_keeps_its_instruction_snapshot() {
     let (_root, _pool, client, control, conversation) = fixture().await;
     let (id, session) = bot(&conversation).await;
     let helpers = HelperService::new(control.clone(), conversation.clone());
     let profiles = control.agent_profiles();
     profiles
-        .create(profile("specialist", MODEL, Some("Review only")), None)
+        .create(
+            UpsertAgentProfileRequest {
+                reasoning_effort: Some("high".into()),
+                ..profile("specialist", MODEL, Some("Review only"))
+            },
+            None,
+        )
         .await
         .unwrap();
     let mut changed = bot_configuration("changed", "missing/model");
@@ -1355,6 +1467,10 @@ async fn profile_helper_uses_the_profile_launch_config_and_keeps_its_instruction
         .unwrap();
     let target = response["session_id"].as_str().unwrap();
     assert_eq!(launched_model(&client, target), Some(MODEL.into()));
+    assert_eq!(
+        client.launched_efforts.lock().unwrap()[target].as_deref(),
+        Some("high")
+    );
     let binding = instructions(&control, target).await;
     assert!(
         !binding.contains(pontia_agent_control::standalone_session_instructions()),

@@ -171,6 +171,9 @@ pub(super) fn document(
             inline_data(&format!("{}/{}", profile.client_type, profile.client_key))
         ));
         output.push_str(&format!("  - Model: {}\n", inline_data(&profile.model)));
+        if let Some(effort) = &profile.reasoning_effort {
+            output.push_str(&format!("  - Reasoning effort: {}\n", inline_data(effort)));
+        }
         output.push_str(&field(
             "Description",
             profile.description.as_deref().unwrap_or("None yet."),

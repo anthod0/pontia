@@ -169,7 +169,12 @@ impl AgentControl {
     }
 
     pub fn agent_profiles(&self) -> crate::AgentProfileService {
-        crate::AgentProfileService::new(self.db(), self.clients(), self.control_changes())
+        crate::AgentProfileService::new(
+            self.db(),
+            self.clients(),
+            self.control_changes(),
+            self.pontia_home(),
+        )
     }
 
     pub fn agent_events(&self) -> AgentEventBroker {

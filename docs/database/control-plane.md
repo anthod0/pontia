@@ -18,7 +18,8 @@ CREATE TABLE bots (
     avatar_shape TEXT NOT NULL DEFAULT 'classic',
     avatar_color TEXT NOT NULL DEFAULT 'blue',
     idle_since TEXT,
-    idle_turn_id TEXT
+    idle_turn_id TEXT,
+    reasoning_effort TEXT
 );
 
 CREATE TABLE bot_messages (
@@ -270,7 +271,8 @@ CREATE TABLE agent_profiles (
   ),
   system_prompt TEXT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  reasoning_effort TEXT CHECK (reasoning_effort IS NULL OR model IS NOT NULL)
 );
 
 CREATE TABLE agent_bindings (

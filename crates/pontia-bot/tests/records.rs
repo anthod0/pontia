@@ -86,7 +86,12 @@ impl Fixture {
         Self {
             bots: BotService::new(pool.clone(), root.path(), registry.clone()),
             messages: MessageService::new(pool.clone()),
-            profiles: AgentProfileService::new(pool.clone(), registry.clone(), Default::default()),
+            profiles: AgentProfileService::new(
+                pool.clone(),
+                registry.clone(),
+                Default::default(),
+                root.path(),
+            ),
             root,
             pool,
             registry,
@@ -103,6 +108,7 @@ fn configuration(name: &str, key: &str, model: &str) -> BotConfiguration {
         client_type: "generic".into(),
         client_key: key.into(),
         model: model.into(),
+        reasoning_effort: None,
     }
 }
 
@@ -251,6 +257,7 @@ async fn initialization_leaves_a_deleted_legacy_helper_profile_deleted() {
                 client_type: Some("generic".into()),
                 client_key: Some("a".into()),
                 model: Some("model-a".into()),
+                reasoning_effort: None,
                 system_prompt: None,
             },
             None,

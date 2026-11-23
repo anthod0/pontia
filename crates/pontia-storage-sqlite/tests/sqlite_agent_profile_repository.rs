@@ -12,6 +12,7 @@ fn record(name: &str) -> AgentProfileWriteRecord {
         client_type: None,
         client_key: None,
         model: None,
+        reasoning_effort: None,
         system_prompt: Some("Review carefully".into()),
     }
 }

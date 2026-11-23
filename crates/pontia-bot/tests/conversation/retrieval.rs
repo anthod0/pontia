@@ -33,7 +33,22 @@ async fn retrieval_delivers_its_reply_then_exits_and_notifies_the_bot_once() {
     let (root, pool, client, control, conversation) = fixture().await;
     let (id, session) = bot(&conversation).await;
     let helpers = HelperService::new(control.clone(), conversation.clone());
+    conversation
+        .records()
+        .update(
+            &id,
+            BotConfiguration {
+                reasoning_effort: Some("low".into()),
+                ..bot_configuration("Bot", MODEL)
+            },
+        )
+        .await
+        .unwrap();
     let reader = retrieve(&helpers, &session, Some("workspace-a")).await;
+    assert_eq!(
+        client.launched_efforts.lock().unwrap()[&reader].as_deref(),
+        Some("low")
+    );
     assert!(client.launched_policies.lock().unwrap()[&reader].disable_skills);
     assert!(
         control

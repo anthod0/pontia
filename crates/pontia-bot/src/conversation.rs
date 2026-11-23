@@ -691,7 +691,7 @@ impl ConversationService {
             .control
             .session_commands()
             .create_session(CreateSessionRequest {
-                reasoning_effort: None,
+                reasoning_effort: bot.reasoning_effort.clone(),
                 launch_mode: pontia_core::LaunchMode::Background,
                 execution_policy: self.restricted_execution_policy(
                     &bot.client_type,

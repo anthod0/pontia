@@ -93,6 +93,7 @@ async fn profiles_publish_only_successful_creation_deletion_and_description_chan
         client_type: None,
         client_key: None,
         model: None,
+        reasoning_effort: None,
         system_prompt: None,
     };
     service.create(request.clone(), None).await.unwrap();

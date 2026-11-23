@@ -16,6 +16,7 @@ pub struct AgentProfileService {
     changes: crate::ControlChanges,
     clients: crate::clients::ClientRegistry,
     pool: SqlitePool,
+    home: std::path::PathBuf,
 }
 
 impl AgentProfileService {
@@ -23,11 +24,13 @@ impl AgentProfileService {
         pool: SqlitePool,
         clients: crate::clients::ClientRegistry,
         changes: crate::ControlChanges,
+        home: &std::path::Path,
     ) -> Self {
         Self {
             pool,
             clients,
             changes,
+            home: home.to_owned(),
         }
     }
 }

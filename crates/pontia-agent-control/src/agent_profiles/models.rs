@@ -8,6 +8,7 @@ pub struct AgentProfileView {
     pub client_type: Option<String>,
     pub client_key: Option<String>,
     pub model: Option<String>,
+    pub reasoning_effort: Option<String>,
     pub system_prompt: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -22,6 +23,7 @@ pub struct UpsertAgentProfileRequest {
     pub client_type: Option<String>,
     pub client_key: Option<String>,
     pub model: Option<String>,
+    pub reasoning_effort: Option<String>,
     pub system_prompt: Option<String>,
 }
 
@@ -30,6 +32,7 @@ pub struct ProfileLaunchConfig {
     pub client_type: Option<String>,
     pub client_key: Option<String>,
     pub model: Option<String>,
+    pub reasoning_effort: Option<String>,
     pub system_prompt: Option<String>,
 }
 
@@ -42,4 +45,5 @@ pub struct LaunchableAgentProfile {
     pub client_type: String,
     pub client_key: String,
     pub model: String,
+    pub reasoning_effort: Option<String>,
 }

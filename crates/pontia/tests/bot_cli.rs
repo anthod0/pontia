@@ -578,10 +578,12 @@ async fn profile_commands_send_grouped_actions_and_reject_incomplete_updates() {
                 "acp/vendor/grok",
                 "--model",
                 "m",
+                "--reasoning-effort",
+                "high",
                 "--system-prompt",
                 "- Review changes",
             ],
-            json!({"action":"create","input":{"profile_id":"review","name":"Review","description":"Check code","client":client,"model":"m","system_prompt":"- Review changes"}}),
+            json!({"action":"create","input":{"profile_id":"review","name":"Review","description":"Check code","client":client,"model":"m","reasoning_effort":"high","system_prompt":"- Review changes"}}),
         ),
         (
             vec![
@@ -590,8 +592,9 @@ async fn profile_commands_send_grouped_actions_and_reject_incomplete_updates() {
                 "review",
                 "--clear-description",
                 "--clear-system-prompt",
+                "--clear-reasoning-effort",
             ],
-            json!({"action":"update","input":{"profile_id":"review","name":null,"description":null,"system_prompt":null,"client":null,"model":null,"clear_description":true,"clear_system_prompt":true}}),
+            json!({"action":"update","input":{"profile_id":"review","name":null,"description":null,"system_prompt":null,"client":null,"model":null,"clear_description":true,"clear_system_prompt":true,"reasoning_effort":null,"clear_reasoning_effort":true}}),
         ),
     ] {
         let args = [&["profile"][..], &args[..]].concat();
@@ -610,6 +613,7 @@ async fn profile_commands_send_grouped_actions_and_reject_incomplete_updates() {
         vec![],
         vec!["--client", "acp/vendor/grok"],
         vec!["--description", "x", "--clear-description"],
+        vec!["--reasoning-effort", "low", "--clear-reasoning-effort"],
         vec!["--system-prompt", "x", "--clear-system-prompt"],
         vec!["--client", "acp", "--model", "m"],
         vec!["--client", "acp/", "--model", "m"],

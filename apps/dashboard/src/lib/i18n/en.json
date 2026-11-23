@@ -291,6 +291,7 @@
   "chat.new": "New chat",
   "common.rename": "Rename",
   "common.exit": "Exit",
+  "effort.unavailable": "The saved reasoning effort is unavailable. Choose a new value.",
   "effort.title": "Reasoning effort",
   "effort.value": "Reasoning effort: {value}",
   "effort.defaultValue": "Default ({value})",

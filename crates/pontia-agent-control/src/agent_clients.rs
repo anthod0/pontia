@@ -126,6 +126,44 @@ impl AgentClientService {
         configuration.list_models(&effective, directory).await
     }
 
+    pub async fn validate_model_selection(
+        &self,
+        client: &str,
+        key: &str,
+        model: &str,
+        reasoning_effort: Option<&str>,
+        directory: &std::path::Path,
+    ) -> Result<()> {
+        if reasoning_effort.is_some()
+            && !self
+                .configuration(client)?
+                .supports_startup_reasoning_effort()
+        {
+            return Err(Error::CapabilityUnavailable(format!(
+                "Client {client}/{key} cannot set reasoning effort"
+            )));
+        }
+        let catalog = self.list_models(client, key, directory).await?;
+        let entry = catalog
+            .models
+            .iter()
+            .find(|entry| entry.id == model)
+            .ok_or_else(|| {
+                Error::Domain(format!("Model {model} is unavailable for {client}/{key}"))
+            })?;
+        if let Some(effort) = reasoning_effort
+            && !entry
+                .reasoning_efforts
+                .iter()
+                .any(|option| option.id == effort)
+        {
+            return Err(Error::Domain(format!(
+                "Reasoning effort {effort} is unavailable for model {model}"
+            )));
+        }
+        Ok(())
+    }
+
     /// Disabled entries must still have a valid effective configuration.
     pub async fn save(&self, client: &str, key: &str, enabled: bool) -> Result<()> {
         self.configuration(client)?

@@ -79,6 +79,7 @@ pub struct Bot {
     pub client_type: String,
     pub client_key: String,
     pub model: String,
+    pub reasoning_effort: Option<String>,
     pub current_session_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -104,6 +105,7 @@ pub struct BotConfiguration {
     pub client_type: String,
     pub client_key: String,
     pub model: String,
+    pub reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -146,8 +148,8 @@ impl BotService {
         self.validate(&configuration).await?;
         let mut tx = self.pool.begin().await.map_err(Error::from)?;
         let bot: Bot = sqlx::query_as(
-            "INSERT INTO bots (bot_id, name, description, avatar_shape, avatar_color, client_type, client_key, model)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
+            "INSERT INTO bots (bot_id, name, description, avatar_shape, avatar_color, client_type, client_key, model, reasoning_effort)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
         )
         .bind(format!("bot_{}", uuid::Uuid::now_v7()))
         .bind(configuration.name.trim())
@@ -157,6 +159,7 @@ impl BotService {
         .bind(configuration.client_type)
         .bind(configuration.client_key)
         .bind(configuration.model)
+        .bind(configuration.reasoning_effort)
         .fetch_one(&mut *tx)
         .await
         .map_err(Error::from)?;
@@ -197,7 +200,7 @@ impl BotService {
     pub async fn update(&self, bot_id: &str, configuration: BotConfiguration) -> Result<Bot> {
         self.validate(&configuration).await?;
         Ok(sqlx::query_as(
-            "UPDATE bots SET name = ?, description = ?, client_type = ?, client_key = ?, model = ?,
+            "UPDATE bots SET name = ?, description = ?, client_type = ?, client_key = ?, model = ?, reasoning_effort = ?,
              avatar_shape = COALESCE(?, avatar_shape), avatar_color = COALESCE(?, avatar_color),
              updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE bot_id = ? RETURNING *",
         )
@@ -206,6 +209,7 @@ impl BotService {
         .bind(configuration.client_type)
         .bind(configuration.client_key)
         .bind(configuration.model)
+        .bind(configuration.reasoning_effort)
         .bind(configuration.avatar_shape)
         .bind(configuration.avatar_color)
         .bind(bot_id)
@@ -344,6 +348,18 @@ impl BotService {
             if value.trim().is_empty() {
                 return Err(Error::Domain(format!("{field} cannot be empty")));
             }
+        }
+        if let Some(effort) = &configuration.reasoning_effort {
+            return self
+                .clients
+                .validate_model_selection(
+                    &configuration.client_type,
+                    &configuration.client_key,
+                    &configuration.model,
+                    Some(effort),
+                    &self.home,
+                )
+                .await;
         }
         self.clients
             .resolve(&configuration.client_type, &configuration.client_key)

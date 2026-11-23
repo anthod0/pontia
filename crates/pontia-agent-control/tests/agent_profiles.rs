@@ -65,7 +65,7 @@ async fn fixture_with_changes(
     let mut clients = ClientRegistry::default();
     clients.register(client);
     (
-        AgentProfileService::new(pool.clone(), clients, changes),
+        AgentProfileService::new(pool.clone(), clients, changes, std::path::Path::new(".")),
         settings,
         pool,
     )
@@ -105,6 +105,7 @@ fn request() -> UpsertAgentProfileRequest {
         client_type: None,
         client_key: None,
         model: None,
+        reasoning_effort: None,
         system_prompt: Some("Review carefully".into()),
     }
 }
@@ -156,6 +157,10 @@ async fn crud_and_launch_use_current_profile() {
 async fn rejects_empty_identifiers_partial_defaults_and_invalid_instructions() {
     let (service, _, _) = fixture().await;
     let mut invalid = Vec::new();
+    invalid.push(UpsertAgentProfileRequest {
+        reasoning_effort: Some("high".into()),
+        ..request()
+    });
     let mut input = request();
     input.profile_id = " ".into();
     invalid.push(input);
@@ -307,7 +312,8 @@ async fn rejects_launch_defaults_for_clients_without_configuration() {
         .unwrap();
     let mut clients = ClientRegistry::default();
     clients.register(test_registration());
-    let service = AgentProfileService::new(pool, clients, Default::default());
+    let service =
+        AgentProfileService::new(pool, clients, Default::default(), std::path::Path::new("."));
     let mut input = configured();
     input.system_prompt = None;
     assert!(matches!(

@@ -5,6 +5,7 @@
   import type { AgentClientView, AgentProfileView } from '../../api/types'
   import ClientIcon from '../../components/chat/ClientIcon.svelte'
   import ClientModelSelect from '../../components/chat/ClientModelSelect.svelte'
+  import ReasoningEffortSelect from '../../components/chat/ReasoningEffortSelect.svelte'
   import ModelSelectPlaceholder from '../../components/chat/ModelSelectPlaceholder.svelte'
   import { copyText } from '../../lib/copyText'
   import { dashboardPath } from '$lib/navigation'
@@ -38,6 +39,7 @@
   let copied = $state(false)
   let errors = $state<AgentProfileDraftErrors>({})
   let error = $state('')
+  let effortUnavailable = $state(false)
   let modelAvailable = $state(false)
   const selectedClient = $derived(clients.find((client) => client.client_type === draft.client_type && client.client_key === draft.client_key))
 
@@ -51,6 +53,8 @@
     draft.client_type = client.client_type
     draft.client_key = client.client_key
     draft.model = ''
+    draft.reasoning_effort = ''
+    effortUnavailable = false
     modelAvailable = false
   }
 
@@ -62,7 +66,7 @@
 
   async function save(event: SubmitEvent) {
     event.preventDefault()
-    if (saving) return
+    if (saving || effortUnavailable) return
     error = ''
     const result = buildAgentProfileInput(draft, { creating: !profile })
     errors = result.ok ? {} : result.errors
@@ -135,7 +139,16 @@
     <div class="grid content-start gap-2">
       <Label for={`${id}-model`}>{$t('model.title')}</Label>
       {#if selectedClient}
-        {#key selectedClient.id}<ClientModelSelect id={`${id}-model`} client={selectedClient} bind:value={draft.model} bind:available={modelAvailable} disabled={saving} />{/key}
+        {#key selectedClient.id}
+          <ClientModelSelect id={`${id}-model`} client={selectedClient} bind:value={draft.model} bind:available={modelAvailable} disabled={saving}>
+            {#snippet children(selectedModel)}
+              {#if selectedModel}
+                <ReasoningEffortSelect class="w-full" options={selectedModel.reasoning_efforts ?? []} defaultEffort={selectedModel.default_reasoning_effort}
+                  savedValue={profile?.model === draft.model ? profile.reasoning_effort : null} bind:value={draft.reasoning_effort} bind:unavailable={effortUnavailable} disabled={saving} />
+              {/if}
+            {/snippet}
+          </ClientModelSelect>
+        {/key}
       {:else}
         <ModelSelectPlaceholder id={`${id}-model`} label={draft.model || $t('model.choose')} />
       {/if}
@@ -157,6 +170,6 @@
       <Button type="button" variant="ghost" class="text-destructive hover:text-destructive" disabled={saving} aria-label={$t('profiles.deleteNamed', { name: profile.name })} onclick={() => profile && ondelete?.(profile)}><TrashIcon class="size-4" />{$t('common.delete')}</Button>
     {/if}
     {#if oncancel}<Button type="button" variant="outline" disabled={saving} onclick={oncancel}>{$t('common.cancel')}</Button>{/if}
-    <Button type="submit" disabled={saving || (!profile && !clients.length)}>{$t(profile ? 'common.save' : 'profiles.create')}</Button>
+    <Button type="submit" disabled={saving || effortUnavailable || (!profile && !clients.length)}>{$t(profile ? 'common.save' : 'profiles.create')}</Button>
   </div>
 </form>

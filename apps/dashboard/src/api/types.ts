@@ -29,6 +29,7 @@ export interface BotConfiguration {
   client_type: string;
   client_key: string;
   model: string;
+  reasoning_effort: string | null;
 }
 
 export interface Bot extends BotConfiguration {
@@ -318,6 +319,7 @@ export interface AgentProfileView {
   client_type: string | null;
   client_key: string | null;
   model: string | null;
+  reasoning_effort: string | null;
   system_prompt: string | null;
   created_at: string;
   updated_at: string;
@@ -330,6 +332,7 @@ export interface UpsertAgentProfileInput {
   client_type?: string | null;
   client_key?: string | null;
   model?: string | null;
+  reasoning_effort?: string | null;
   system_prompt?: string | null;
 }
 

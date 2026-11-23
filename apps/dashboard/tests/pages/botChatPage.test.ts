@@ -24,6 +24,7 @@ const bot: Bot = {
   client_type: "pi",
   client_key: "default",
   model: "test",
+  reasoning_effort: null,
 };
 
 beforeEach(() => {
