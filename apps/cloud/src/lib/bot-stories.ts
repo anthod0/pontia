@@ -43,7 +43,7 @@ export type Chat = {
   todoClosedAt?: number;
 };
 
-export type Visual = "profiles" | "worktrees" | "memory" | "files" | "devices";
+export type Visual = "sessions" | "profiles" | "worktrees" | "memory" | "files" | "devices";
 
 /** One Bot tab. Its demo plays steps 0..steps-1 and the last step is the complete picture. */
 export type Story = {
@@ -96,6 +96,15 @@ export const stories: Story[] = [
       todoClosedAt: 4,
     },
   }),
+  {
+    name: "Juno",
+    shape: "drop",
+    color: "#458588",
+    label: m.story_work_label,
+    caption: m.story_work_caption,
+    visual: "sessions",
+    steps: 5,
+  },
   {
     name: "Remy",
     shape: "blob",
