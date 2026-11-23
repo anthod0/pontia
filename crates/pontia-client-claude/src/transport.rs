@@ -26,6 +26,7 @@ pub(crate) async fn launch(
     root: &Path,
     script: &Path,
     environment: &std::collections::BTreeMap<String, String>,
+    reasoning_effort: Option<&str>,
     events: &EventIngestService,
 ) -> Result<()> {
     let mut bootstrap = json!({"session_id":peer.session,"runtime_id":peer.runtime,"cwd":peer.cwd,"pontia_home":root});
@@ -43,6 +44,9 @@ pub(crate) async fn launch(
     }
     if let Some(model) = &peer.model {
         bootstrap["model"] = json!(model);
+    }
+    if let Some(effort) = reasoning_effort {
+        bootstrap["reasoning_effort"] = json!(effort);
     }
     if let Some(resume) = &peer.resume {
         bootstrap["resume"] = json!(resume);

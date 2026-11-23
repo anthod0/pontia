@@ -15,6 +15,7 @@ export interface Bootstrap {
   pontia_home: string;
   cwd: string;
   model?: string;
+  reasoning_effort?: string;
   resume?: string;
   system_prompt?: string;
   execution_policy?: ExecutionPolicy;
@@ -41,6 +42,7 @@ export function bootstrap(value: unknown): Bootstrap {
   };
   if (data.system_prompt !== undefined) result.system_prompt = string(data.system_prompt);
   if (data.model !== undefined) result.model = string(data.model);
+  if (data.reasoning_effort !== undefined) result.reasoning_effort = string(data.reasoning_effort);
   if (data.resume !== undefined) result.resume = string(data.resume);
   if (data.execution_policy !== undefined) {
     const policy = object(data.execution_policy);

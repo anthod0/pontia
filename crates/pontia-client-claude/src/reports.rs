@@ -50,6 +50,7 @@ impl<'a> HostReport<'a> {
             },
             Some("ready") => EventType::SessionReady,
             Some("model") => EventType::SessionModelUpdated,
+            Some("reasoning_effort") => EventType::SessionReasoningEffortUpdated,
             Some("context_usage") => EventType::SessionContextUsageUpdated,
             Some("compaction") => match event["phase"].as_str() {
                 Some("started") => EventType::SessionCompactionStarted,
@@ -162,6 +163,9 @@ impl Peer {
                 }
                 match kind {
                     EventType::SessionModelUpdated => json!({"model":field(event,"model")?}),
+                    EventType::SessionReasoningEffortUpdated => {
+                        json!({"reasoning_effort":event.get("reasoning_effort").ok_or_else(invalid)?})
+                    }
                     EventType::SessionContextUsageUpdated => {
                         json!({"context_usage":event["context_usage"]})
                     }

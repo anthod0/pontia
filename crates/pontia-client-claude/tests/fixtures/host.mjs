@@ -72,7 +72,7 @@ if (process.argv[2] === "history") {
       return {host_id:host, sequence, event, registration_key:`claude:${host}:${event.interaction_key}`,report_key:`claude:${host}:${event.interaction_key}:settled`};
     }
     else if (event.kind === "finished") suffix = event.result_id;
-    else if (["ready", "model", "context_usage", "compaction"].includes(event.kind)) suffix = sequence;
+    else if (["ready", "model", "reasoning_effort", "context_usage", "compaction"].includes(event.kind)) suffix = sequence;
     return {host_id: host, sequence, report_key: suffix && `claude:${host}:${suffix}`, event};
   }
   const captured = [];
@@ -100,6 +100,7 @@ if (process.argv[2] === "history") {
     host,
     system_prompt: config.system_prompt ?? null,
     execution_policy: config.execution_policy,
+    reasoning_effort: config.reasoning_effort,
     resume: config.resume ?? null,
     native,
     pid: process.pid,
@@ -129,6 +130,8 @@ if (process.argv[2] === "history") {
             connection.registered({sessionId:config.session_id,runtimeId:config.runtime_id,clientSessionKey:native});
           } else event({ kind: "ready", native_session_id: native });
           if (!pendingReady) event({ kind: "model", model: config.model ?? "sonnet" });
+          if (active.text === "observe capped effort" || active.text === "observe no effort")
+            event({kind: "reasoning_effort", reasoning_effort: active.text === "observe capped effort" ? "low" : null});
           if (config.resume && !pendingReady) estimate(664);
           ready = true;
         }
