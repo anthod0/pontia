@@ -1,4 +1,5 @@
 pub mod app;
+pub mod git;
 mod git_status;
 mod idempotency;
 pub mod queries;

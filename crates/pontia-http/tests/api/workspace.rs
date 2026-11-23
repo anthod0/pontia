@@ -14,6 +14,7 @@ const TOKEN: &str = "test-token";
 
 mod admission;
 mod availability;
+mod git;
 
 async fn test_state(roots: Vec<WorkspaceRootConfig>) -> AppState {
     test_state_with_file_picker(roots, FilePickerConfig::default()).await

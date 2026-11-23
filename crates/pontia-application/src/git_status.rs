@@ -7,13 +7,12 @@ use sqlx::SqlitePool;
 use std::{
     collections::HashMap,
     future::Future,
-    process::Command,
+    path::Path,
     sync::Arc,
-    sync::mpsc,
     time::{Duration, Instant},
 };
 
-use crate::{ExternalQueryService, WorkspaceGitStatusView};
+use crate::{ExternalQueryService, WorkspaceGitStatusView, git::command::run_git_text};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct ParsedGitStatus {
@@ -193,48 +192,12 @@ async fn refresh_workspace_git_status_now(
 }
 
 async fn observe_git_status(workspace_path: &str) -> Result<ParsedGitStatus> {
-    let repo_root = run_git(workspace_path, &["rev-parse", "--show-toplevel"]).await?;
-    let status = run_git(workspace_path, &["status", "--porcelain=v2", "--branch"]).await?;
+    let workspace_path = Path::new(workspace_path);
+    let repo_root = run_git_text(workspace_path, &["rev-parse", "--show-toplevel"]).await?;
+    let status = run_git_text(workspace_path, &["status", "--porcelain=v2", "--branch"]).await?;
     let mut parsed = parse_porcelain_v2_status(&status)?;
     parsed.repo_root = Some(repo_root.trim().to_string());
     Ok(parsed)
-}
-
-async fn run_git(workspace_path: &str, args: &[&str]) -> Result<String> {
-    let workspace_path = workspace_path.to_string();
-    let args = args
-        .iter()
-        .map(|arg| (*arg).to_string())
-        .collect::<Vec<_>>();
-    tokio::task::spawn_blocking(move || run_git_blocking(workspace_path, args))
-        .await
-        .map_err(|err| Error::Domain(format!("git task join failed: {err}")))?
-}
-
-fn run_git_blocking(workspace_path: String, args: Vec<String>) -> Result<String> {
-    let command_label = args.join(" ");
-    let (sender, receiver) = mpsc::channel();
-    std::thread::spawn(move || {
-        let output = Command::new("git")
-            .args(["-C", workspace_path.as_str()])
-            .args(&args)
-            .output();
-        let _ = sender.send(output);
-    });
-
-    let output = receiver
-        .recv_timeout(Duration::from_secs(5))
-        .map_err(|_| Error::Domain(format!("git {command_label} timed out")))??;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(Error::Domain(if stderr.is_empty() {
-            format!("git {command_label} failed")
-        } else {
-            stderr
-        }));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 fn parse_porcelain_v2_status(output: &str) -> Result<ParsedGitStatus> {

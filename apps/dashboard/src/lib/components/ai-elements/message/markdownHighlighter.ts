@@ -73,6 +73,34 @@ export function highlightMarkdownCode(code: string, language: string): string {
   }
 }
 
+/**
+ * Highlights code and returns one HTML string per line, or null when the language is not
+ * loaded. Each line holds only token spans; place them inside a `.shiki` element so the dark
+ * theme applies.
+ */
+export function highlightCodeLines(code: string, language: string): string[] | null {
+  const normalizedLanguage = language.trim().toLowerCase();
+  if (!normalizedLanguage || !loadedLanguages.has(normalizedLanguage)) return null;
+  try {
+    const { tokens } = highlighter.codeToTokens(code, {
+      lang: normalizedLanguage,
+      themes: { light: "gruvbox-light-soft", dark: "gruvbox-dark-soft" },
+    });
+    return tokens.map((line) =>
+      line
+        .map((token) => {
+          const style = Object.entries(token.htmlStyle ?? {})
+            .map(([property, value]) => `${property}:${value}`)
+            .join(";");
+          return `<span style="${escapeHtml(style)}">${escapeHtml(token.content)}</span>`;
+        })
+        .join(""),
+    );
+  } catch {
+    return null;
+  }
+}
+
 function fallbackCode(code: string): string {
   return `<pre class="shiki shiki-fallback"><code>${escapeHtml(code)}</code></pre>`;
 }

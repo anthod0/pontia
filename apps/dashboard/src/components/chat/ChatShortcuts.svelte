@@ -9,6 +9,7 @@
   import ShortcutKeys from '$lib/components/shortcuts/ShortcutKeys.svelte'
   import { adjacentSessionId, isChatRoute, sessionIdAtShortcutIndex, sessionIdFromChatPath } from '$lib/shortcuts/sessionNavigation'
   import { helpShortcuts, messageInputShortcuts, matchChatShortcut } from '$lib/shortcuts/definitions'
+  import { useGitPanel } from './git/gitPanelContext.svelte'
   const device = useDeviceRuntime();
   const { createSessionOverviewQuery } = device.sessionOverview;
   const { selectedWorkspaceId } = device.sidebarWorkspaceFilter;
@@ -16,6 +17,7 @@
   let { newChatHandle }: { newChatHandle?: string } = $props()
 
   let shortcutsOpen = $state(false)
+  const gitPanel = useGitPanel()
   const overviewQuery = createSessionOverviewQuery()
   const overview = $derived(snapshotSessionOverview(overviewQuery.data))
   const shortcutSessions = $derived(recentActiveSessions(overview, $selectedWorkspaceId))
@@ -68,6 +70,12 @@
       return
     }
     if (!sessionChat) return
+    if (shortcut.action === 'toggleGit') {
+      // Consume the key even on pages without the panel, so Option+G does not type a symbol.
+      event.preventDefault()
+      if (gitPanel?.source) gitPanel.toggle()
+      return
+    }
     // The dashboard layout switches devices and New Chat selectors switch the rest; consume the key here so Option+letter does not type a symbol.
     if (shortcut.action === 'previousDevice' || shortcut.action === 'switchAgentClient' || shortcut.action === 'switchWorkspace') {
       event.preventDefault()

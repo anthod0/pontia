@@ -10,6 +10,7 @@ export type ChatShortcutAction =
   | "previousDevice"
   | "switchAgentClient"
   | "switchWorkspace"
+  | "toggleGit"
   | "showHelp";
 
 // "Mod" is the platform's primary modifier: Cmd on Apple platforms, Ctrl elsewhere.
@@ -36,6 +37,7 @@ export const chatShortcuts: Record<ChatShortcutAction, ShortcutDefinition> = {
   previousDevice: { keys: ["Alt", "M"], label: "shortcuts.previousDevice" },
   switchAgentClient: { keys: ["Alt", "C"], label: "shortcuts.switchAgentClient" },
   switchWorkspace: { keys: ["Alt", "W"], label: "shortcuts.switchWorkspace" },
+  toggleGit: { keys: ["Alt", "G"], label: "shortcuts.toggleGit" },
   showHelp: { keys: ["Alt", "?"], label: "shortcuts.title" },
 };
 
@@ -72,6 +74,7 @@ const letterActions: Record<
   KeyN: "newChat",
   KeyL: "focusInput",
   KeyM: "previousDevice",
+  KeyG: "toggleGit",
 };
 
 // Shift reverses the direction.

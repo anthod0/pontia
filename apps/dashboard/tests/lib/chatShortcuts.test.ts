@@ -29,6 +29,9 @@ describe("matchChatShortcut", () => {
     expect(matchChatShortcut(keydown({ altKey: true, code: "KeyM", key: "µ" }))).toEqual({
       action: "previousDevice",
     });
+    expect(matchChatShortcut(keydown({ altKey: true, code: "KeyG", key: "©" }))).toEqual({
+      action: "toggleGit",
+    });
     expect(
       matchChatShortcut(keydown({ altKey: true, shiftKey: true, code: "KeyM", key: "M" })),
     ).toBeNull();

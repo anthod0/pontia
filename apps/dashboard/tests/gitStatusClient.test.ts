@@ -35,3 +35,23 @@ describe("workspace git status API client", () => {
     });
   });
 });
+
+describe("workspace git changes API client", () => {
+  test("requests one file's diff with its group and original path", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      expect(url).toBe(
+        "/api/v1/workspaces/workspace-1/git/diff?path=docs%2Fnew+name.md&group=staged&orig_path=docs%2Fold.md",
+      );
+      return jsonResponse({ data: { diff: { path: "docs/new name.md", hunks: [] } } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(
+      await testDevice.api.getWorkspaceGitDiff("workspace-1", {
+        path: "docs/new name.md",
+        orig_path: "docs/old.md",
+        group: "staged",
+      }),
+    ).toMatchObject({ path: "docs/new name.md" });
+  });
+});

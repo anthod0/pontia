@@ -38,6 +38,9 @@ import type {
   WorkspaceDirectoryListingView,
   FilePickerResultView,
   WorkspaceGitStatusView,
+  GitChangeGroup,
+  GitChangesView,
+  GitDiffView,
   WorkspaceRootView,
   WorkspaceView,
   WorkflowDetailView,
@@ -646,6 +649,33 @@ export function createApi(device: DeviceRuntime) {
     ).git_status;
   }
 
+  async function getWorkspaceGitChanges(
+    workspaceId: string,
+    options: ReadRequestOptions = {},
+  ): Promise<GitChangesView> {
+    return (
+      await request<{ changes: GitChangesView }>(
+        `/workspaces/${encodeURIComponent(workspaceId)}/git/changes`,
+        options,
+      )
+    ).changes;
+  }
+
+  async function getWorkspaceGitDiff(
+    workspaceId: string,
+    file: { path: string; orig_path?: string; group: GitChangeGroup },
+    options: ReadRequestOptions = {},
+  ): Promise<GitDiffView> {
+    const params = new URLSearchParams({ path: file.path, group: file.group });
+    if (file.orig_path) params.set("orig_path", file.orig_path);
+    return (
+      await request<{ diff: GitDiffView }>(
+        `/workspaces/${encodeURIComponent(workspaceId)}/git/diff?${params}`,
+        options,
+      )
+    ).diff;
+  }
+
   async function listWorkspaceRoots(
     options: ReadRequestOptions = {},
   ): Promise<WorkspaceRootView[]> {
@@ -974,6 +1004,8 @@ export function createApi(device: DeviceRuntime) {
     renameWorkspace,
     deleteWorkspace,
     refreshWorkspaceGitStatus,
+    getWorkspaceGitChanges,
+    getWorkspaceGitDiff,
     listWorkspaceRoots,
     listWorkspaceRootEntries,
     listWorkspaceFilePickerEntries,

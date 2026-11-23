@@ -17,7 +17,7 @@ serde_json.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
 time = { workspace = true, features = ["formatting", "parsing", "serde"] }
-tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }
+tokio = { version = "1", features = ["io-util", "macros", "process", "rt", "sync", "time"] }
 tracing = "0.1"
 uuid = { workspace = true, features = ["v7", "serde"] }
 sha2 = "0.10"
