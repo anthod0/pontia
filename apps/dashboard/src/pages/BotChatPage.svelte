@@ -7,7 +7,7 @@
   import { Button } from '$lib/components/ui/button/index.js'
   import { MessageResponse } from '$lib/components/ai-elements/message/index.js'
   import SharedFiles from '../components/chat/files/SharedFiles.svelte'
-  import { fileActionButton } from '../components/chat/files/fileActionButton'
+  import { fileActionButton, fileActionClass, type FileActionLook } from '../components/chat/files/fileActionButton'
   import MessageComposer from '../components/chat/MessageComposer.svelte'
   import { parseUploadMessage } from '$lib/uploads/message'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
@@ -213,12 +213,16 @@
 {/snippet}
 
 <!-- A long press on touch selects text, so touch rows always show this button.
-     With a mouse it appears while its message or file is hovered or keyboard-focused, and while its menu is open.
-     On a file it matches the file's download button. -->
-{#snippet menuButton(id: string, file = false)}
-  <Button {...(file ? fileActionButton : { variant: 'ghost', size: 'icon-sm' } as const)} aria-haspopup="menu" aria-label={$t('bots.messageActions')}
-    class={['opacity-0 focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100',
-      file ? 'group-hover/file:opacity-100 group-has-focus-visible/file:opacity-100' : 'self-end text-muted-foreground transition-opacity group-hover/entry:opacity-100 group-has-focus-visible/entry:opacity-100']}
+     With a mouse it appears while its message is hovered or keyboard-focused, and while its menu is open. -->
+{#snippet menuButton(id: string)}
+  <Button variant="ghost" size="icon-sm" aria-haspopup="menu" aria-label={$t('bots.messageActions')}
+    class="shrink-0 self-end text-muted-foreground opacity-0 transition-opacity focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100 group-hover/entry:opacity-100 group-has-focus-visible/entry:opacity-100"
+    onclick={(event: MouseEvent) => actions?.openMenu(id, event)}><DotsThreeIcon weight="bold" /></Button>
+{/snippet}
+
+<!-- A file's menu looks like its download action and always shows; image tiles keep their own reveal. -->
+{#snippet fileMenuButton(id: string, look: FileActionLook)}
+  <Button {...fileActionButton} class={fileActionClass[look]} aria-haspopup="menu" aria-label={$t('bots.messageActions')}
     onclick={(event: MouseEvent) => actions?.openMenu(id, event)}><DotsThreeIcon weight="bold" /></Button>
 {/snippet}
 
@@ -255,8 +259,8 @@
                     />
                   {:else if fileSession}
                     <SharedFiles paths={part.paths} sessionId={fileSession} highlighted={highlighted === entry.id ? highlightedPath : null}
-                      itemProps={file => ({ ...quotableProps, class: 'group/file', 'data-bot-file-path': file.path })}>
-                      {#snippet itemActions()}{@render menuButton(entry.id, true)}{/snippet}
+                      itemProps={file => ({ ...quotableProps, 'data-bot-file-path': file.path })}>
+                      {#snippet itemActions(look: FileActionLook)}{@render fileMenuButton(entry.id, look)}{/snippet}
                     </SharedFiles>
                   {/if}
                 {/each}

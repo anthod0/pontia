@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
+  import type { FileActionLook } from './fileActionButton'
   import type { HTMLAttributes } from 'svelte/elements'
   import { t } from '$lib/i18n'
   import { useDeviceRuntime } from '../../../device/context'
@@ -8,12 +9,12 @@
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import FileXIcon from 'phosphor-svelte/lib/FileXIcon'
   import FileDetails from './FileDetails.svelte'
-  import FileAction from './FileAction.svelte'
+  import FileActions from './FileActions.svelte'
   import { observeFile, type SharedFileState } from './sharedFileState.svelte'
 
   /** One file as an icon or thumbnail, its name and status, and its download action. */
   let { itemActions, state, onenlarge, class: className = '', ...rest }: HTMLAttributes<HTMLDivElement> & {
-    itemActions?: Snippet
+    itemActions?: Snippet<[FileActionLook]>
     state: SharedFileState
     /** Opens the image viewer at this file. */
     onenlarge?: () => void
@@ -54,6 +55,5 @@
       <div class="min-w-0 flex-1"><FileDetails {state} /></div>
     </button>
   {/if}
-  <FileAction {state} />
-  {@render itemActions?.()}
+  <FileActions {itemActions} {state} />
 </div>

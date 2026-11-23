@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
+  import type { FileActionLook } from './fileActionButton'
   import type { HTMLAttributes } from 'svelte/elements'
   import { t } from '$lib/i18n'
   import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
@@ -9,7 +10,7 @@
 
   /** Rows of a multi-file share. Long lists show their first rows until expanded. */
   let { itemActions, states, expanded = $bindable(false), highlighted = null, onenlarge, itemProps }: {
-    itemActions?: Snippet
+    itemActions?: Snippet<[FileActionLook]>
     states: SharedFileState[]
     expanded?: boolean
     highlighted?: string | null

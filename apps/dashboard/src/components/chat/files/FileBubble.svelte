@@ -1,16 +1,17 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
+  import type { FileActionLook } from './fileActionButton'
   import type { HTMLAttributes } from 'svelte/elements'
   import { t } from '$lib/i18n'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import FileDetails from './FileDetails.svelte'
-  import FileAction from './FileAction.svelte'
+  import FileActions from './FileActions.svelte'
   import FileRow from './FileRow.svelte'
   import { observeFile, type SharedFileState } from './sharedFileState.svelte'
 
   /** A share of one file: an image with a caption, or a file row. */
   let { itemActions, state, highlighted = false, onenlarge, itemProps = {} }: {
-    itemActions?: Snippet
+    itemActions?: Snippet<[FileActionLook]>
     state: SharedFileState
     highlighted?: boolean
     onenlarge: () => void
@@ -31,8 +32,7 @@
       {/if}
       <figcaption class="flex items-center gap-3 px-3 py-2">
         <div class="min-w-0 flex-1"><FileDetails {state} /></div>
-        <FileAction {state} />
-        {@render itemActions?.()}
+        <FileActions {itemActions} {state} />
       </figcaption>
     </figure>
   {:else}
