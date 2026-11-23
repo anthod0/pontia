@@ -1,6 +1,5 @@
 <script lang="ts">
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
-	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
 	import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon';
 	import ArrowBendUpLeftIcon from 'phosphor-svelte/lib/ArrowBendUpLeftIcon';
 	import AgentBadge from './AgentBadge.svelte';
@@ -29,26 +28,21 @@
 		<ol class="feed">
 			{#each chat.lines as line, index (index)}
 				{#if index <= step}
-					{#if line.kind === 'divider'}
-						<li class="divider"><span>{line.text()}</span></li>
-					{:else}
-						<li class={['line', line.kind, line.earlier && index < step && 'earlier']}>
-							{#if line.related}
-								<span class="related"><ArrowBendUpLeftIcon size={11} />{m.story_related()} · <span>{line.related()}</span></span>
-							{/if}
-							<span class={['bubble', line.alert && 'alert', line.todo && 'todo']}>
-								{#if line.quote}<span class="quote">{line.quote()}</span>{/if}
-								{#if line.alert}<WarningCircleIcon size={13} weight="bold" />{/if}
-								<span>{line.text()}</span>
+					<li class={['line', line.kind]}>
+						{#if line.related}
+							<span class="related"><ArrowBendUpLeftIcon size={11} />{m.story_related()} · <span>{line.related()}</span></span>
+						{/if}
+						<span class={['bubble', line.todo && 'todo']}>
+							{#if line.quote}<span class="quote">{line.quote()}</span>{/if}
+							<span>{line.text()}</span>
+						</span>
+						{#if line.todo}
+							{@const closed = chat.todoClosedAt !== undefined && step >= chat.todoClosedAt}
+							<span class={['todo-tag', closed && 'closed']}>
+								{#if closed}<CheckIcon size={10} weight="bold" />{story.name} · {m.story_todo_closed()}{:else}<i></i>{m.story_todo_badge()}{/if}
 							</span>
-							{#if line.todo}
-								{@const closed = chat.todoClosedAt !== undefined && step >= chat.todoClosedAt}
-								<span class={['todo-tag', closed && 'closed']}>
-									{#if closed}<CheckIcon size={10} weight="bold" />{story.name} · {m.story_todo_closed()}{:else}<i></i>{m.story_todo_badge()}{/if}
-								</span>
-							{/if}
-						</li>
-					{/if}
+						{/if}
+					</li>
 				{/if}
 			{/each}
 		</ol>
@@ -60,7 +54,7 @@
 	<ul class="sessions">
 		{#each sessions as session (session.title())}
 			{@const state = session.states[step]}
-			<li class={['session card enter', state]}>
+			<li class="session card enter">
 				<AgentBadge agent={session} />
 				<span class="title">{session.title()}</span>
 				<span class="state-cell"><StoryState {state} /></span>
@@ -85,12 +79,9 @@
 	.line { display: flex; flex-direction: column; gap: 3px; max-width: 86%; animation: enter 360ms var(--ease-out) both; }
 	.line.user { align-self: flex-end; align-items: flex-end; }
 	.line.bot { align-self: flex-start; align-items: flex-start; }
-	.earlier { opacity: 0.55; transition: opacity 300ms; }
 	.bubble { display: inline-flex; flex-direction: column; gap: 4px; padding: 8px 12px; border-radius: 14px; font-size: 13px; line-height: 1.45; }
 	.user .bubble { border-bottom-right-radius: 4px; background: var(--button); color: white; }
 	.bot .bubble { border: 1px solid var(--border); border-bottom-left-radius: 4px; background: var(--surface); color: var(--foreground); }
-	.bubble.alert { flex-direction: row; align-items: flex-start; border-color: color-mix(in srgb, var(--coverage-partial) 45%, var(--border)); }
-	.bubble.alert :global(svg) { flex-shrink: 0; margin-top: 3px; color: var(--coverage-partial); }
 	.bubble.todo { border-color: color-mix(in srgb, var(--primary) 55%, var(--border)); }
 	.quote { padding-left: 8px; border-left: 2px solid rgb(255 255 255 / 55%); font-size: 12px; opacity: 0.85; display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
 	.related { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; font-size: 11px; color: var(--muted-foreground); white-space: nowrap; }
@@ -98,21 +89,18 @@
 	.todo-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 500; color: var(--primary); }
 	.todo-tag i { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); }
 	.todo-tag.closed { color: var(--muted-foreground); }
-	.divider { display: flex; align-items: center; gap: 10px; font: 10px var(--font-mono); color: var(--muted-foreground); animation: enter 360ms var(--ease-out) both; }
-	.divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 	.status { display: flex; align-items: center; gap: 8px; height: 34px; padding-inline: 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted-foreground); }
 	.status-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 	.sessions { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; }
 	.session { display: grid; grid-template-columns: 1fr auto; gap: 4px 14px; align-items: center; padding: 12px 16px; }
-	.session.error { border-color: color-mix(in srgb, var(--coverage-partial) 45%, var(--border)); }
 	.title { grid-column: 1; font-size: 14px; font-weight: 500; color: var(--heading); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.state-cell { grid-column: 2; grid-row: 1 / 3; }
 
 	@keyframes enter { from { opacity: 0; translate: 0 6px; } }
 	@keyframes pop { from { scale: 0.4; } }
 	@keyframes bob { 50% { translate: 0 -2px; } }
-	@media (prefers-reduced-motion: reduce) { .line, .divider, .count, .working { animation: none; } }
+	@media (prefers-reduced-motion: reduce) { .line, .count, .working { animation: none; } }
 
 	/* Narrow screens: the chat fills the width and the Sessions follow as a compact list. */
 	@media (max-width: 760px) {

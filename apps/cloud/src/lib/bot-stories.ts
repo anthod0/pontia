@@ -2,14 +2,9 @@ import { m } from "$lib/paraglide/messages";
 
 // Avatar shapes and colours mirror apps/dashboard/src/components/bots/avatar.ts.
 export const shapes = {
-  classic:
-    "M19 38C26 23 46 22 55 30C61 35 69 30 78 32C93 36 95 62 81 74C67 86 31 86 18 72C8 61 13 47 19 38Z",
   mochi: "M51 30C72 30 84 44 88 62C91 74 92 84 80 84H22C10 84 11 74 14 62C18 44 30 30 51 30Z",
-  cloud:
-    "M18 72C8 62 12 46 22 42C22 30 36 26 44 32C48 24 62 24 66 32C74 26 88 32 84 44C94 50 92 66 82 74C68 86 32 86 18 72Z",
   drop: "M51 18C60 32 87 42 87 64C87 81 70 84 51 84C32 84 15 81 15 64C15 42 42 32 51 18Z",
   blob: "M24 34C34 22 52 30 62 26C76 20 92 34 86 52C82 64 92 76 78 82C64 88 50 78 36 84C20 90 10 76 14 62C17 52 15 44 24 34Z",
-  ghost: "M18 50C18 32 32 24 51 24C70 24 84 32 84 50V76Q73 90 62 79Q51 90 40 79Q29 90 18 76Z",
   onigiri: "M51.0 32.0Q68.6 50.3 79.0 72.0Q51.0 76.0 23.0 72.0Q33.4 50.3 51.0 32.0Z",
   egg: "M51 18C70 18 84 44 84 62C84 78 70 86 51 86C32 86 18 78 18 62C18 44 32 18 51 18Z",
   pudding:
@@ -18,18 +13,14 @@ export const shapes = {
 export type Shape = keyof typeof shapes;
 
 type Text = () => string;
-export type SessionState = "hidden" | "running" | "done" | "error";
-type Line =
-  | {
-      kind: "user" | "bot";
-      text: Text;
-      earlier?: boolean;
-      related?: Text;
-      quote?: Text;
-      todo?: boolean;
-      alert?: boolean;
-    }
-  | { kind: "divider"; text: Text };
+export type SessionState = "hidden" | "running" | "done";
+type Line = {
+  kind: "user" | "bot";
+  text: Text;
+  related?: Text;
+  quote?: Text;
+  todo?: boolean;
+};
 
 export type Agent = { client: string; logo?: string; darkLogo?: string };
 
@@ -52,7 +43,7 @@ export type Chat = {
   todoClosedAt?: number;
 };
 
-export type Visual = "profiles" | "worktrees" | "memory" | "files" | "devices" | "restart";
+export type Visual = "profiles" | "worktrees" | "memory" | "files" | "devices";
 
 /** One Bot tab. Its demo plays steps 0..steps-1 and the last step is the complete picture. */
 export type Story = {
@@ -69,31 +60,6 @@ function chatStory(story: Omit<Story, "steps" | "visual" | "chat"> & { chat: Cha
 }
 
 export const stories: Story[] = [
-  chatStory({
-    name: "Atlas",
-    shape: "classic",
-    color: "#458588",
-    label: m.story_context_label,
-    caption: m.story_context_caption,
-    chat: {
-      lines: [
-        { kind: "user", text: m.story_context_ask, earlier: true },
-        { kind: "bot", text: m.story_context_reply, earlier: true },
-        { kind: "divider", text: m.story_context_divider },
-        { kind: "user", text: m.story_context_follow_up },
-        { kind: "bot", text: m.story_context_answer, related: m.story_context_ask },
-      ],
-      sessions: [
-        {
-          ...pi,
-          title: m.story_context_task,
-          states: ["hidden", "hidden", "hidden", "running", "done"],
-        },
-      ],
-      status: [null, null, null, m.story_context_task, null],
-      todos: [0, 0, 0, 0, 0],
-    },
-  }),
   chatStory({
     name: "Mika",
     shape: "egg",
@@ -130,27 +96,15 @@ export const stories: Story[] = [
       todoClosedAt: 4,
     },
   }),
-  chatStory({
-    name: "Juno",
-    shape: "cloud",
-    color: "#5f6fa3",
-    label: m.story_alert_label,
-    caption: m.story_alert_caption,
-    chat: {
-      lines: [
-        { kind: "user", text: m.story_alert_ask },
-        { kind: "bot", text: m.story_alert_ack },
-        { kind: "bot", text: m.story_alert_failure, alert: true },
-        { kind: "bot", text: m.story_alert_report, related: m.story_alert_ask },
-      ],
-      sessions: [
-        { ...claude, title: m.story_task_api, states: ["hidden", "running", "error", "error"] },
-        { ...claude, title: m.story_alert_retry, states: ["hidden", "hidden", "running", "done"] },
-      ],
-      status: [null, m.story_task_api, m.story_alert_retry, null],
-      todos: [0, 0, 0, 0],
-    },
-  }),
+  {
+    name: "Remy",
+    shape: "blob",
+    color: "#b16286",
+    label: m.story_memory_label,
+    caption: m.story_memory_caption,
+    visual: "memory",
+    steps: 4,
+  },
   {
     name: "Kai",
     shape: "mochi",
@@ -170,15 +124,6 @@ export const stories: Story[] = [
     steps: 5,
   },
   {
-    name: "Remy",
-    shape: "blob",
-    color: "#b16286",
-    label: m.story_memory_label,
-    caption: m.story_memory_caption,
-    visual: "memory",
-    steps: 4,
-  },
-  {
     name: "Pip",
     shape: "onigiri",
     color: "#d65d0e",
@@ -195,15 +140,6 @@ export const stories: Story[] = [
     caption: m.story_devices_caption,
     visual: "devices",
     steps: 3,
-  },
-  {
-    name: "Sol",
-    shape: "ghost",
-    color: "#c45a76",
-    label: m.story_restart_label,
-    caption: m.story_restart_caption,
-    visual: "restart",
-    steps: 4,
   },
 ];
 
