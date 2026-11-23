@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+"""Remove a worktree, its local branch, and its Cargo build cache."""
+
+import argparse
+from contextlib import ExitStack
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+
+
+def fail(message):
+    raise SystemExit(f"remove-workspace: {message}")
+
+
+def output(args, cwd):
+    return subprocess.check_output(args, cwd=cwd, text=True).strip()
+
+
+def worktrees(repo):
+    records = output(["git", "worktree", "list", "--porcelain", "-z"], repo)
+    return [
+        dict(field.split(" ", 1) if " " in field else (field, "")
+             for field in record.split("\0"))
+        for record in records.rstrip("\0").split("\0\0")
+    ]
+
+
+def cargo_paths(checkout):
+    metadata = json.loads(output([
+        "cargo", "metadata", "--no-deps", "--offline", "--locked", "--format-version", "1",
+    ], checkout))
+    return Path(metadata["build_directory"]), Path(metadata["target_directory"])
+
+
+def overlaps(first, second):
+    return first.is_relative_to(second) or second.is_relative_to(first)
+
+
+def lock_builds(stack, roots):
+    for root in set(roots):
+        for name in (".cargo-build-lock", ".cargo-artifact-lock", ".cargo-lock"):
+            for pattern in (f"*/{name}", f"*/*/{name}"):
+                for path in root.glob(pattern):
+                    if path.is_symlink():
+                        fail(f"Cargo lock is a symbolic link: {path}")
+                    lock = stack.enter_context(path.open("r+"))
+                    try:
+                        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    except BlockingIOError:
+                        fail(f"Cargo is using {root}; wait for the build to finish")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        epilog="Run outside the workspace being removed. Uses PONTIA_WORKSPACE_ROOT or ~/worktrees.",
+    )
+    parser.add_argument("name", help="workspace name passed to create-workspace")
+    parser.add_argument("--dry-run", action="store_true", help="preview without deleting anything")
+    parser.add_argument("--force", action="store_true",
+                        help="discard uncommitted files and commits not merged into the main checkout")
+    args = parser.parse_args()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", args.name):
+        fail("name must be one directory component: letters, digits, dots, underscores or hyphens")
+
+    calling_repo = output(["git", "rev-parse", "--show-toplevel"], Path(__file__).resolve().parent)
+    entries = worktrees(calling_repo)
+    primary = Path(entries[0]["worktree"]).resolve()
+    workspace_root = Path(os.environ.get("PONTIA_WORKSPACE_ROOT", str(Path.home() / "worktrees")))
+    if not workspace_root.is_absolute():
+        fail("workspace root must be an absolute path")
+    destination = workspace_root / primary.name / args.name
+    if destination.is_symlink():
+        fail(f"workspace is a symbolic link: {destination}")
+    destination = destination.resolve()
+    entry = next((item for item in entries if Path(item["worktree"]).resolve() == destination), None)
+    if entry is None or not destination.is_dir():
+        fail(f"workspace is not a registered, existing worktree: {destination}")
+    if destination == primary:
+        fail("cannot remove the main checkout")
+    if Path.cwd().resolve().is_relative_to(destination):
+        fail("run this command outside the workspace being removed")
+    if "locked" in entry:
+        fail("worktree is locked; unlock it explicitly before removing it")
+    branch_ref = entry.get("branch")
+    if not branch_ref or not branch_ref.startswith("refs/heads/"):
+        fail("workspace must have a local branch checked out")
+    if any(item is not entry and item.get("branch") == branch_ref for item in entries):
+        fail("branch is also checked out in another worktree")
+    branch = branch_ref.removeprefix("refs/heads/")
+
+    if not args.force:
+        if output(["git", "status", "--porcelain", "--untracked-files=all"], destination):
+            fail("workspace has uncommitted files; commit them or use --force to discard them")
+        merged = subprocess.run(["git", "merge-base", "--is-ancestor", branch_ref, "HEAD"], cwd=primary)
+        if merged.returncode == 1:
+            fail("branch has commits not merged into the main checkout; use --force to discard them")
+        merged.check_returncode()
+
+    cache, artifacts = cargo_paths(destination)
+    if not cache.is_absolute() or cache.resolve() != cache:
+        fail(f"Cargo cache must be an absolute path without symbolic links: {cache}")
+    if any(path.is_relative_to(cache) for path in (Path.home().resolve(), destination, primary)):
+        fail(f"Cargo cache contains a protected directory: {cache}")
+    if cache.exists():
+        tag = cache / "CACHEDIR.TAG"
+        if not tag.is_file() or tag.is_symlink() or not tag.read_text().startswith(
+            "Signature: 8a477f597d28d172789f06886806bc55\n"
+        ):
+            fail(f"Cargo cache has no valid cache directory tag: {cache}")
+        for other in entries:
+            checkout = Path(other["worktree"]).resolve()
+            if checkout == destination:
+                continue
+            if overlaps(cache, checkout):
+                fail(f"Cargo cache overlaps another checkout: {checkout}")
+            if checkout.is_dir():
+                other_cache, other_artifacts = cargo_paths(checkout)
+                if any(overlaps(cache, path.resolve()) for path in (other_cache, other_artifacts)):
+                    fail(f"Cargo cache is shared with another worktree: {checkout}")
+
+    with ExitStack() as stack:
+        lock_builds(stack, (cache, artifacts))
+        print(f"Worktree: {destination}", flush=True)
+        print(f"Branch:   {branch}", flush=True)
+        print(f"Cache:    {cache}", flush=True)
+        if args.dry_run:
+            return
+        remove = ["git", "worktree", "remove"]
+        if args.force:
+            remove.append("--force")
+        subprocess.run([*remove, "--", str(destination)], cwd=primary, check=True)
+        if cache.exists():
+            shutil.rmtree(cache)
+        subprocess.run(["git", "branch", "-D", "--", branch], cwd=primary, check=True)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (subprocess.CalledProcessError, OSError) as error:
+        fail(str(error))
