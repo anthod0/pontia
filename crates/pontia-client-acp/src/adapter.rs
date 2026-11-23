@@ -210,17 +210,21 @@ impl ClientSession for AcpAdapter {
                 .map(Ok)
                 .unwrap_or_else(std::env::current_dir)?;
             let mut launch = definition.launch.clone();
-            if matches!(
-                definition.restricted_execution,
-                Some(crate::RestrictedExecution::Antigravity)
-            ) && request.execution_policy != Default::default()
-            {
-                crate::antigravity::prepare_launch(
-                    &root,
-                    &cwd,
-                    &request.execution_policy,
-                    &mut launch,
-                )?;
+            if request.execution_policy != Default::default() {
+                match definition.restricted_execution {
+                    Some(crate::RestrictedExecution::Antigravity) => {
+                        crate::antigravity::prepare_launch(
+                            &root,
+                            &cwd,
+                            &request.execution_policy,
+                            &mut launch,
+                        )?;
+                    }
+                    Some(crate::RestrictedExecution::Kiro) => {
+                        crate::kiro::restricted::prepare(&root, &cwd)?;
+                    }
+                    _ => {}
+                }
             }
             peer::runtime_event(
                 &events,

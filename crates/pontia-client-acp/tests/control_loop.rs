@@ -83,10 +83,14 @@ impl Harness {
                         .interjection
                         .unwrap()
                 }),
-            restricted_execution: flags
-                .iter()
-                .any(|(key, _)| *key == "ACP_ANTIGRAVITY")
-                .then_some(&pontia_client_acp::RestrictedExecution::Antigravity),
+            restricted_execution: if kiro {
+                Some(&pontia_client_acp::RestrictedExecution::Kiro)
+            } else {
+                flags
+                    .iter()
+                    .any(|(key, _)| *key == "ACP_ANTIGRAVITY")
+                    .then_some(&pontia_client_acp::RestrictedExecution::Antigravity)
+            },
             new_session_instructions_meta_key: None,
             launch: AcpLaunch {
                 command: command.into(),

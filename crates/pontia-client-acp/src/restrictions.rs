@@ -1,3 +1,5 @@
+use std::{fs, io::Write, path::Path};
+
 use agent_client_protocol::{
     UntypedMessage,
     v1::schema::{Meta, SessionId},
@@ -10,6 +12,7 @@ use crate::peer::{Peer, protocol_error};
 #[derive(Debug)]
 pub enum RestrictedExecution {
     Antigravity,
+    Kiro,
     AgentProfile(&'static AgentProfile),
 }
 
@@ -37,6 +40,7 @@ impl RestrictedExecution {
     pub(crate) fn policy(&self) -> ExecutionPolicy {
         let disabled_tools = match self {
             Self::AgentProfile(profile) => profile.disabled_tools,
+            Self::Kiro => return crate::kiro::restricted::policy(),
             Self::Antigravity => crate::antigravity::DISABLED_TOOLS,
         };
         ExecutionPolicy {
@@ -124,9 +128,13 @@ impl SessionPolicy {
                 ))
             };
         };
-        let RestrictedExecution::AgentProfile(recipe) = recipe else {
-            crate::antigravity::validate(policy)?;
-            return Ok(Self::default());
+        let recipe = match recipe {
+            RestrictedExecution::Kiro => return crate::kiro::restricted::resolve(policy),
+            RestrictedExecution::Antigravity => {
+                crate::antigravity::validate(policy)?;
+                return Ok(Self::default());
+            }
+            RestrictedExecution::AgentProfile(profile) => profile,
         };
         if policy.tools.is_some()
             || policy.disable_mcp
@@ -175,4 +183,28 @@ impl SessionPolicy {
             meta,
         })
     }
+}
+
+pub(crate) fn managed_agent_directory(home: &Path, cwd: &Path) -> Result<()> {
+    if cwd.canonicalize()?.parent() != Some(home.join("bot").canonicalize()?.as_path()) {
+        return Err(Error::Domain(
+            "Restricted ACP Sessions require a Pontia-managed Bot directory".into(),
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn write_config(directory: &Path, name: &str, contents: &str) -> Result<()> {
+    fs::create_dir_all(directory)?;
+    let path = directory.join(name);
+    match fs::read(&path) {
+        Ok(current) if current == contents.as_bytes() => return Ok(()),
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    let mut file = tempfile::NamedTempFile::new_in(directory)?;
+    file.write_all(contents.as_bytes())?;
+    file.persist(path).map_err(|error| error.error)?;
+    Ok(())
 }

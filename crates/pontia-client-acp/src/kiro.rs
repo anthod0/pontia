@@ -1,3 +1,4 @@
+pub(crate) mod restricted;
 mod steering;
 pub(crate) use steering::{Notes, Steers, steer, steering_supported};
 

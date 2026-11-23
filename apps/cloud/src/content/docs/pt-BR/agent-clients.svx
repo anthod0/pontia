@@ -18,7 +18,7 @@ O Pontia inclui estes Agent Clients:
 | Grok Build | `grok` | Ative em Agent Clients (ACP) |
 | Kiro | `kiro-cli` | Faça login com `kiro-cli login` |
 
-Selecione o Antigravity para um Bot, para recuperar memórias ou para Dreaming. O agente restrito pode ler arquivos, executar comandos no terminal e pesquisar na web. Helpers em um Workspace usam as ferramentas e as permissões habituais do Antigravity.
+Selecione o Antigravity ou o Kiro para um Bot, para recuperar memórias ou para Dreaming. O agente restrito pode ler arquivos, executar comandos no terminal e pesquisar na web. Helpers em um Workspace usam as ferramentas e as permissões habituais do cliente selecionado.
 
 ## Escolha os Clients durante a inicialização
 
