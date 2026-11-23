@@ -480,7 +480,7 @@ impl InboxCommandService {
                 self.notify_available(session_id);
             }
             Err(Error::Conflict {
-                code: "steer_requires_prompt",
+                code: "steer_requires_prompt" | "steer_method_unavailable",
                 ..
             }) if delivery_policy == "steer" => {
                 inbox_repository.wait_after_idle(&message_id).await?;

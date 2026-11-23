@@ -140,7 +140,7 @@ impl ControlQueryService {
                 .bind(session_id)
                 .fetch_one(&mut *tx)
                 .await?;
-        let has_unsettled_input = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM inbox_messages WHERE session_id=? AND (state IN ('pending','resuming','dispatching','unknown') OR (state='dispatched' AND turn_id IS NULL)))").bind(session_id).fetch_one(&mut *tx).await?;
+        let has_unsettled_input = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM inbox_messages WHERE session_id=? AND (state IN ('pending','resuming','dispatching','unknown') OR (state='dispatched' AND turn_id IS NULL AND steer_target_turn_id IS NULL)))").bind(session_id).fetch_one(&mut *tx).await?;
         let inbox = sqlx::query_as(
             "SELECT message_id,state,turn_id FROM inbox_messages WHERE session_id=?",
         )

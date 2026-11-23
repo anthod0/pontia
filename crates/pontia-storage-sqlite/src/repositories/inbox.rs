@@ -138,7 +138,11 @@ impl SqliteInboxRepository {
                WHERE message_id = ? AND state = 'pending'
                  AND NOT EXISTS (SELECT 1 FROM inbox_messages AS in_flight
                      WHERE in_flight.session_id = inbox_messages.session_id
-                     AND (in_flight.state IN ('dispatching','resuming') OR (in_flight.state IN ('dispatched','unknown') AND in_flight.turn_id IS NULL AND NOT EXISTS (SELECT 1 FROM inbox_messages retry WHERE retry.retry_of_message_id=in_flight.message_id))))"#,
+                     AND (in_flight.state IN ('dispatching','resuming') OR (
+                         in_flight.turn_id IS NULL
+                         AND (in_flight.state='unknown' OR (in_flight.state='dispatched' AND in_flight.steer_target_turn_id IS NULL))
+                         AND NOT EXISTS (SELECT 1 FROM inbox_messages retry WHERE retry.retry_of_message_id=in_flight.message_id)
+                     )))"#,
         )
         .bind(message_id)
         .execute(&self.pool)

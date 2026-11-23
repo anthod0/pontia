@@ -80,6 +80,7 @@ async fn permission_replay_keeps_one_responder_and_conflict_cancels_it_once() {
             raw_results: Default::default(),
             thought: None,
             cancelled: false,
+            prompt_index: None,
             history_index: 0,
             history_end: 0,
         });

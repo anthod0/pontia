@@ -56,23 +56,8 @@ impl InboxCommandService {
                             Error::NotFound(format!("session {session_id} not found"))
                         })?;
                     if session.capabilities.accept_task && !session.capabilities.steer {
-                        // Hold submission order while enqueue_message reacquires the session lock to drain.
                         drop(guard);
-                        let outcome = self
-                            .enqueue_message(
-                                &new_message_id().to_string(),
-                                session_id,
-                                SubmitInboxMessageRequest {
-                                    input,
-                                    delivery_policy: "after_idle".into(),
-                                    metadata,
-                                    branch_target_turn_id: None,
-                                },
-                                None,
-                                false,
-                            )
-                            .await?;
-                        return outcome.live_delivery();
+                        return self.queue_live_input(session_id, input).await;
                     }
                     InputIntent::Steer {
                         turn_id: turn.turn_id,
@@ -92,8 +77,33 @@ impl InboxCommandService {
                 }) if Instant::now() < deadline => {
                     sleep(Duration::from_millis(25)).await;
                 }
+                Err(Error::Conflict {
+                    code: "steer_method_unavailable",
+                    ..
+                }) => {
+                    drop(guard);
+                    return self.queue_live_input(session_id, input).await;
+                }
                 result => return result.map(|_| LiveInputDelivery::Accepted),
             }
         }
+    }
+
+    async fn queue_live_input(&self, session_id: &str, input: String) -> Result<LiveInputDelivery> {
+        let outcome = self
+            .enqueue_message(
+                &new_message_id().to_string(),
+                session_id,
+                SubmitInboxMessageRequest {
+                    input,
+                    delivery_policy: "after_idle".into(),
+                    metadata: json!({}),
+                    branch_target_turn_id: None,
+                },
+                None,
+                false,
+            )
+            .await?;
+        outcome.live_delivery()
     }
 }

@@ -262,3 +262,171 @@ async fn live_input_queues_only_when_the_busy_peer_lacks_steering() {
         h.stop().await;
     }
 }
+
+#[tokio::test]
+async fn missing_interject_queues_live_input_and_disables_only_this_peer() {
+    let h = Harness::new(&[("ACP_INTERJECT", "unsupported")]).await;
+    let session = h.create("first").await.unwrap();
+    let turn = start(&h, &session).await;
+    assert_eq!(h.requests("_x.ai/interject"), 0);
+    let inbox = h.app.inbox_commands();
+    assert_eq!(
+        inbox
+            .submit_live_input(&session, "end_turn".into())
+            .await
+            .unwrap(),
+        pontia_agent_control::LiveInputDelivery::Queued
+    );
+    let messages = inbox.list_messages(&session).await.unwrap();
+    assert!(
+        !h.app
+            .queries()
+            .get_session(&session)
+            .await
+            .unwrap()
+            .unwrap()
+            .capabilities
+            .steer
+    );
+    finish_queued(
+        &h,
+        &session,
+        &turn,
+        &serde_json::to_value(messages.iter().find(|m| m.state == "pending").unwrap()).unwrap(),
+    )
+    .await;
+    assert_eq!(h.requests("_x.ai/interject"), 1);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn native_interjections_keep_distinct_inputs_in_wire_and_replay_order() {
+    for mode in ["echo-first", "receipt-first", "promote"] {
+        let mut h = Harness::new(&[("ACP_INTERJECT", mode)]).await;
+        let session = h.create("first").await.unwrap();
+        let turn = start(&h, &session).await;
+        let mut rows = vec![];
+        for _ in 0..2 {
+            let msg = h
+                .app
+                .inbox_commands()
+                .submit_message(
+                    &session,
+                    SubmitInboxMessageRequest {
+                        input: "再看一下🦓".into(),
+                        metadata: json!({}),
+                        delivery_policy: "steer".into(),
+                        branch_target_turn_id: None,
+                    },
+                )
+                .await
+                .unwrap()
+                .data["inbox_message"]
+                .clone();
+            assert_eq!(msg["state"], "dispatched", "{mode} {msg}");
+            assert!(msg["turn_id"].is_null());
+            rows.push(msg["message_id"].as_str().unwrap().to_owned());
+        }
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let snapshot = h.app.live_output().snapshot(&session, &turn).unwrap();
+                if serde_json::to_value(snapshot.items)
+                    .unwrap()
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter(|i| i["kind"] == "user_input")
+                    .count()
+                    == 2
+                {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        if mode == "receipt-first" {
+            h.restart().await;
+        }
+        h.release("release-1");
+        let expected = if mode == "promote" { 3 } else { 1 };
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while h.events(&session, "turn.completed").await != expected {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let history = h.history(&session).await.unwrap();
+        let extra: Vec<_> = history
+            .items
+            .iter()
+            .filter(|i| i.item.content_preview == "再看一下🦓")
+            .collect();
+        assert_eq!(extra.len(), 2);
+        if mode == "promote" {
+            assert_ne!(extra[0].turn_id, extra[1].turn_id);
+            assert!(extra.iter().all(|i| i.turn_id.as_deref() != Some(&turn)));
+        } else {
+            assert!(extra.iter().all(|i| i.turn_id.as_deref() == Some(&turn)));
+            for row in rows {
+                assert_eq!(
+                    h.app
+                        .inbox_commands()
+                        .get_message(&session, &row)
+                        .await
+                        .unwrap()
+                        .unwrap()
+                        .turn_id
+                        .as_deref(),
+                    Some(turn.as_str())
+                );
+            }
+        }
+        assert_eq!(h.requests("session/prompt"), 1);
+        assert_eq!(h.requests("session/cancel"), 0);
+        h.stop().await;
+    }
+}
+
+#[tokio::test]
+async fn unrecognized_interjection_receipt_keeps_the_prompt_running_without_resubmission() {
+    let h = Harness::new(&[("ACP_INTERJECT", "unknown")]).await;
+    let session = h.create("first").await.unwrap();
+    let turn = start(&h, &session).await;
+    assert_eq!(submit(&h, &session, "steer").await["state"], "unknown");
+    h.release("release-1");
+    h.wait_turn(&session, &turn, "completed").await;
+    h.app.inbox_commands().drain_inbox(&session).await.unwrap();
+    assert_eq!(h.requests("session/prompt"), 1);
+    assert_eq!(h.requests("_x.ai/interject"), 1);
+    assert_eq!(h.requests("session/cancel"), 0);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn unavailable_interjection_method_returns_dashboard_message_to_inbox() {
+    let h = Harness::new(&[("ACP_INTERJECT", "unsupported")]).await;
+    let session = h.create("first").await.unwrap();
+    let turn = start(&h, &session).await;
+    let message = submit(&h, &session, "steer").await;
+    assert_eq!(message["delivery_policy"], "after_idle");
+    assert_eq!(message["state"], "pending");
+    finish_queued(&h, &session, &turn, &message).await;
+    assert_eq!(h.requests("_x.ai/interject"), 1);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn disconnected_interjection_is_unknown_and_never_resubmitted() {
+    let h = Harness::new(&[("ACP_INTERJECT", "disconnect")]).await;
+    let session = h.create("first").await.unwrap();
+    start(&h, &session).await;
+    assert_eq!(submit(&h, &session, "steer").await["state"], "unknown");
+    h.app.inbox_commands().drain_inbox(&session).await.unwrap();
+    assert_eq!(h.requests("session/prompt"), 1);
+    assert_eq!(h.requests("_x.ai/interject"), 1);
+    assert_eq!(h.requests("session/cancel"), 0);
+    h.stop().await;
+}

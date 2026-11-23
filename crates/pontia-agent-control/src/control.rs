@@ -33,6 +33,7 @@ impl<T> ControlResult<T> {
 
 #[derive(Debug, Default)]
 pub struct InputReceipt {
+    pub turn_pending: bool,
     pub native_turn_id: Option<String>,
     pub runtime_id: Option<String>,
 }

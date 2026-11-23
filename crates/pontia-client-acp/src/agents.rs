@@ -11,12 +11,25 @@ pub struct AcpLaunch {
     pub env: BTreeMap<String, String>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct InterjectionProtocol {
+    pub method: &'static str,
+    pub echo: &'static str,
+    pub queue: &'static str,
+    pub terminal: &'static str,
+    pub promoted_prefix: &'static str,
+    pub interjection_marker: &'static str,
+    pub display_text: &'static str,
+    pub prompt_index: &'static str,
+}
+
 #[derive(Debug, Clone)]
 pub struct AcpAgentDefinition {
     pub name: String,
     pub launch: AcpLaunch,
     pub new_session_instructions_meta_key: Option<String>,
     pub capabilities: AgentClientCapabilities,
+    pub interjection: Option<&'static InterjectionProtocol>,
     pub restricted_execution: Option<&'static RestrictedExecution>,
 }
 
@@ -36,6 +49,16 @@ impl AcpAgents {
                 },
                 new_session_instructions_meta_key: Some("rules".into()),
                 capabilities: crate::ACP_MAX_CAPABILITIES,
+                interjection: Some(&InterjectionProtocol {
+                    method: "_x.ai/interject",
+                    echo: "_x.ai/session/interjection",
+                    queue: "_x.ai/queue/changed",
+                    terminal: "_x.ai/session_notification",
+                    promoted_prefix: "interject-fallback-",
+                    interjection_marker: "/_meta/interjection",
+                    display_text: "/content/_meta/displayText",
+                    prompt_index: "/_meta/promptIndex",
+                }),
                 restricted_execution: Some(&GROK_RESTRICTED),
             },
         )])

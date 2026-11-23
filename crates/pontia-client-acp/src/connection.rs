@@ -29,18 +29,23 @@ struct Context {
     native: Option<SessionId>,
     steer: bool,
     #[serde(default)]
+    interject: bool,
+    #[serde(default)]
     compact_command: bool,
     compaction: Option<crate::compaction::Pending>,
     system_prompt: Option<SystemPrompt>,
     current_model: Option<String>,
     config_options: Vec<SessionConfigOption>,
     active: Option<Prompt>,
+    promoted: Option<String>,
+    #[serde(default)]
+    interjections: std::collections::HashMap<String, crate::steering::Interjection>,
 }
 
 pub(crate) fn context(state: &SessionState) -> Value {
-    json!({"ready":state.ready,"blocked":state.blocked,"native":state.native,"steer":state.negotiated.steer,"compact_command":state.negotiated.compact_command,"compaction":state.compaction,
+    json!({"ready":state.ready,"blocked":state.blocked,"native":state.native,"steer":state.negotiated.steer,"interject":state.negotiated.interject,"protocol":state.agent.interjection,"compact_command":state.negotiated.compact_command,"compaction":state.compaction,
         "compaction_events":state.agent.compaction_events(),
-        "system_prompt":state.system_prompt,"current_model":state.current_model,"config_options":state.config_options,"active":state.active})
+        "system_prompt":state.system_prompt,"current_model":state.current_model,"config_options":state.config_options,"promoted":state.promoted,"interjections":state.interjections,"active":state.active})
 }
 
 impl Peer {
@@ -80,7 +85,10 @@ pub(crate) async fn restore(
     state.ready = context.ready;
     state.native = context.native;
     state.negotiated.steer = context.steer;
+    state.negotiated.interject = context.interject && state.agent.interjection.is_some();
     state.negotiated.compact_command = context.compact_command;
+    state.promoted = context.promoted;
+    state.interjections = context.interjections;
     state.compaction = context.compaction;
     state.system_prompt = context.system_prompt;
     state.current_model = context.current_model;

@@ -36,6 +36,7 @@ pub(crate) struct Prompt {
     pub cancelled: bool,
     pub history_index: usize,
     pub history_end: usize,
+    pub prompt_index: Option<usize>,
 }
 
 pub(crate) struct SessionState {
@@ -52,6 +53,8 @@ pub(crate) struct SessionState {
     pub verified_model: Option<String>,
     pub config_options: Vec<SessionConfigOption>,
     pub active: Option<Prompt>,
+    pub interjections: HashMap<String, crate::steering::Interjection>,
+    pub promoted: Option<String>,
     pub compaction: Option<crate::compaction::Pending>,
     pub checkpoints: Vec<crate::compaction::Checkpoint>,
     pub closing: bool,
@@ -92,15 +95,28 @@ impl SessionState {
             if let Err(error) = result {
                 self.history_error = Some(format!("ACP session/load failed: {error}"));
             } else if self.history_error.is_none()
-                && !self.history.iter().enumerate().all(|(index, known)| {
-                    replay.get(index).is_some_and(|loaded| {
-                        loaded.role == known.role
-                            && (loaded.text == known.text
-                                || (known.role == "assistant"
-                                    && index + 1 == self.history.len()
-                                    && loaded.text.starts_with(&known.text)))
+                && !self
+                    .history
+                    .iter()
+                    .take_while(|m| {
+                        m.prompt
+                            .is_none_or(|i| !self.interjections.values().any(|v| v.prompt == i))
                     })
-                })
+                    .enumerate()
+                    .all(|(index, known)| {
+                        replay.get(index).is_some_and(|loaded| {
+                            loaded.role == known.role
+                                && (known
+                                    .tool
+                                    .as_ref()
+                                    .zip(loaded.tool.as_ref())
+                                    .is_some_and(|(a, b)| a.0 == b.0)
+                                    || loaded.text == known.text
+                                    || (known.role == "assistant"
+                                        && index + 1 == self.history.len()
+                                        && loaded.text.starts_with(&known.text)))
+                        })
+                    })
             {
                 self.history_error =
                     Some("ACP replay did not preserve the known native message history".into());
@@ -116,6 +132,10 @@ impl SessionState {
         }
     }
 
+    pub fn promotion_pending(&self) -> bool {
+        self.promoted.is_some() && self.active.as_ref().is_none_or(|p| !p.request_id.is_null())
+    }
+
     pub fn refresh_capabilities(&mut self) {
         self.capabilities = capabilities::live(
             &self.agent,
@@ -128,7 +148,7 @@ impl SessionState {
                 active: self.active.is_some(),
                 history_ok: self.history_error.is_none(),
                 replaying: self.replay.is_some(),
-                blocked: self.blocked || self.compaction.is_some(),
+                blocked: self.blocked || self.compaction.is_some() || self.promotion_pending(),
             },
         );
     }
@@ -264,6 +284,8 @@ impl Peer {
             verified_model: None,
             config_options: Vec::new(),
             active: None,
+            interjections: HashMap::new(),
+            promoted: None,
             closing: false,
             checkpoints: Vec::new(),
             compaction: None,
@@ -282,7 +304,8 @@ impl Peer {
             .await
             .active
             .as_ref()
-            .map(|prompt| prompt.request_id.clone());
+            .map(|prompt| prompt.request_id.clone())
+            .filter(|id| !id.is_null());
         let bridge_relay = relay.clone();
         let bridge_receipts = receipts.clone();
         let (ready, attached) = watch::channel(false);
@@ -360,7 +383,13 @@ impl Peer {
                             crate::compaction::replay(&mut *update_state.lock().await, message.params());
                             return Ok(());
                         }
-                        if message.method() != "session/update" { return Ok(()); }
+                        if message.method() != "session/update" {
+                            if let Some(peer) = recovered_peer.get().and_then(Weak::upgrade)
+                                && let Err(error) = peer.interjection_echo(message.method(), message.params()).await {
+                                tracing::warn!(%error, "ACP interjection echo rejected");
+                            }
+                            return Ok(());
+                        }
                         let notification: SessionNotification = match serde_json::from_value(message.params().clone()) {
                             Ok(notification) => notification,
                             Err(error) => {
@@ -541,7 +570,11 @@ impl Peer {
                 "ACP peer did not negotiate protocol v1".into(),
             ));
         }
-        self.state.lock().await.negotiated = Negotiated::from_initialize(&initialize)?;
+        {
+            let mut state = self.state.lock().await;
+            state.negotiated =
+                Negotiated::from_initialize(&initialize, state.agent.interjection.is_some())?;
+        }
         let instructions = pontia_agent_control::SessionInstructionsService::new(self.events.db())
             .session_instructions(&self.session)
             .await?
@@ -643,7 +676,7 @@ impl Peer {
             if !state.current || state.closing {
                 return Err(crate::history::unavailable());
             }
-            if state.active.is_some() || state.compaction.is_some() {
+            if state.active.is_some() || state.promoted.is_some() || state.compaction.is_some() {
                 return Ok(());
             }
             if state.replay.is_some() {
@@ -689,7 +722,11 @@ impl Peer {
                         let _ = peer.terminate().await;
                         return;
                     }
-                    let result = shared.lock().await.finish_load(result);
+                    let mut state = shared.lock().await;
+                    let mut result = state.finish_load(result);
+                    if result.is_ok() && !state.interjections.is_empty() {
+                        result = peer.reconcile_interjections(&mut state).await;
+                    }
                     let _ = send.send(result);
                 };
                 // Verification sends another request on this connection. Let its reader
@@ -742,7 +779,7 @@ pub(crate) async fn fact(
     kind: EventType,
     key: String,
     data: Value,
-) -> Result<()> {
+) -> Result<pontia_agent_control::EventIngestResult> {
     let mut data = data;
     data["runtime_id"] = json!(runtime);
     events
@@ -757,8 +794,7 @@ pub(crate) async fn fact(
         .map_err(|error| match error {
             pontia_agent_control::EventReportError::InvalidFact(message) => Error::Domain(message),
             pontia_agent_control::EventReportError::Ingestion(error) => error,
-        })?;
-    Ok(())
+        })
 }
 
 async fn update(
@@ -797,8 +833,9 @@ async fn update(
     }
     // Retain field presence: schema serialization omits empty collections and
     // JSON null, which are meaningful replacement/return values for live tools.
+    let protocol = state.agent.interjection;
     if let Some(replay) = &mut state.replay {
-        if crate::history::collect(replay, update).is_err() {
+        if crate::history::collect(replay, update, protocol).is_err() {
             state.history_error = Some(
                 "ACP history replay contains unsupported or unassociated message content".into(),
             );
@@ -809,7 +846,7 @@ async fn update(
         return Ok(());
     }
     if update["sessionUpdate"] != "user_message_chunk" && state.history_error.is_none() {
-        let _ = crate::history::collect(&mut state.history, update);
+        let _ = crate::history::collect(&mut state.history, update, protocol);
     }
     let prompt = state.active.as_mut().expect("checked active prompt");
     // Only known prompt activity is evidence of started; extension notifications,

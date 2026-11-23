@@ -3,10 +3,26 @@ use std::sync::Arc;
 use agent_client_protocol::UntypedMessage;
 use pontia_agent_control::{EventIngestService, control::InputReceipt, runtime::ControlTarget};
 use pontia_core::{Error, Result};
-use serde_json::json;
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use tokio::sync::oneshot;
 
 use crate::peer::{Peer, protocol_error};
+
+#[derive(Serialize, Deserialize)]
+pub(crate) struct Interjection {
+    pub request_id: Value,
+    pub turn: String,
+    pub prompt: usize,
+    pub digest: String,
+    pub message: Option<String>,
+    pub shown: bool,
+}
+
+pub(crate) fn text_digest(text: &str) -> String {
+    format!("{:x}", Sha256::digest(text.as_bytes()))
+}
 
 fn prompt_required() -> Error {
     Error::Conflict {
@@ -21,6 +37,7 @@ pub(crate) async fn send(
     target: &ControlTarget,
     turn: &str,
     input: &str,
+    message: Option<&str>,
 ) -> Result<InputReceipt> {
     let mut state = peer.state.lock().await;
     target.validate(&events.db()).await?;
@@ -33,6 +50,82 @@ pub(crate) async fn send(
         || state.active.as_ref().map(|prompt| prompt.turn.as_str()) != Some(turn)
     {
         return Err(prompt_required());
+    }
+    if state.negotiated.interject {
+        let protocol = state.agent.interjection.expect("negotiated protocol");
+        let id = pontia_core::ids::new_dispatch_id().to_string();
+        let request = peer.connection.prepare_request(
+            UntypedMessage::new(
+                protocol.method,
+                json!({"sessionId":state.native,"interjectionId":id,"text":input}),
+            )
+            .map_err(protocol_error)?,
+        );
+        let key = serde_json::to_string(request.id())?;
+        let prompt = state
+            .active
+            .as_ref()
+            .and_then(|p| p.prompt_index)
+            .ok_or_else(prompt_required)?;
+        state.interjections.insert(
+            id.clone(),
+            Interjection {
+                request_id: serde_json::to_value(request.id())?,
+                turn: turn.into(),
+                digest: text_digest(input),
+                message: message.map(str::to_owned),
+                prompt,
+                shown: false,
+            },
+        );
+        if let Err(error) = peer.remember(&state, None).await {
+            state.interjections.remove(&id);
+            return Err(error);
+        }
+        let result_peer = peer.clone();
+        let (send, receive) = oneshot::channel();
+        request
+            .on_receiving_result(async move |result| {
+                let outcome = match result {
+                    Ok(value)
+                        if value.pointer("/result/status").and_then(Value::as_str)
+                            == Some("queued") =>
+                    {
+                        Ok(())
+                    }
+                    Err(error)
+                        if error.code == agent_client_protocol::ErrorCode::METHOD_NOT_FOUND =>
+                    {
+                        let mut state = result_peer.state.lock().await;
+                        state.negotiated.interject = false;
+                        state.interjections.remove(&id);
+                        state.refresh_capabilities();
+                        let result = result_peer.remember(&state, None).await;
+                        result.and(Err(Error::Conflict {
+                            code: "steer_method_unavailable",
+                            message: "The client does not implement interjection".into(),
+                        }))
+                    }
+                    Err(error) => Err(protocol_error(error)),
+                    Ok(_) => Err(Error::ControlUnknown(
+                        "ACP interjection receipt has unknown status".into(),
+                    )),
+                };
+                let _ = send.send(outcome);
+                Ok(())
+            })
+            .map_err(protocol_error)?;
+        peer.receipts.wait(key).await?;
+        drop(state);
+        tokio::time::timeout(std::time::Duration::from_secs(30), receive)
+            .await
+            .map_err(|_| Error::ControlUnknown("ACP interjection receipt timed out".into()))?
+            .map_err(|_| Error::ControlUnknown("ACP interjection response was lost".into()))??;
+        return Ok(InputReceipt {
+            turn_pending: true,
+            native_turn_id: None,
+            runtime_id: target.runtime_id.clone(),
+        });
     }
     let request = peer.connection.prepare_request(
         UntypedMessage::new(
@@ -113,7 +206,80 @@ pub(crate) async fn send(
         .await
         .map_err(|_| Error::ControlUnknown("ACP steering response was lost".into()))??;
     Ok(InputReceipt {
+        turn_pending: false,
         native_turn_id: None,
         runtime_id: target.runtime_id.clone(),
     })
+}
+
+impl Peer {
+    pub(crate) async fn reconcile_interjections(
+        &self,
+        state: &mut crate::peer::SessionState,
+    ) -> Result<()> {
+        let inbox = pontia_storage_sqlite::repositories::inbox::SqliteInboxRepository::new(
+            self.events.db(),
+        );
+        for entry in state.interjections.values() {
+            let Some(message) = &entry.message else {
+                continue;
+            };
+            let mut prompt = None;
+            let consumed = state
+                .history
+                .iter()
+                .filter(|m| {
+                    if m.prompt.is_some() {
+                        prompt = m.prompt;
+                    }
+                    prompt == Some(entry.prompt)
+                        && m.interjection
+                        && text_digest(m.display.as_deref().unwrap_or(&m.text)) == entry.digest
+                })
+                .count();
+            let sent = state
+                .interjections
+                .values()
+                .filter(|other| other.prompt == entry.prompt && other.digest == entry.digest)
+                .count();
+            if consumed == sent {
+                inbox
+                    .link_started_turn(&self.session, message, &entry.turn)
+                    .await?;
+            }
+        }
+        state.interjections.clear();
+        self.remember(state, None).await
+    }
+
+    pub(crate) async fn interjection_echo(&self, method: &str, params: &Value) -> Result<()> {
+        let mut state = self.state.lock().await;
+        if !state.current
+            || !state.agent.interjection.is_some_and(|p| p.echo == method)
+            || state.native.as_ref().map(|s| s.0.as_ref()) != params["sessionId"].as_str()
+        {
+            return Ok(());
+        }
+        let Some(id) = params["interjectionId"].as_str() else {
+            return Ok(());
+        };
+        let Some(entry) = state.interjections.get_mut(id) else {
+            return Ok(());
+        };
+        let Some(text) = params["text"].as_str() else {
+            return Ok(());
+        };
+        if entry.shown || text_digest(text) != entry.digest {
+            return Ok(());
+        }
+        entry.shown = true;
+        let turn = entry.turn.clone();
+        if let Some(prompt) = state.active.as_mut().filter(|p| p.turn == turn)
+            && let Some(output) = self.events.live_output()
+        {
+            crate::live_output::user_input(&output, &self.session, &self.runtime, prompt, text)
+                .await?;
+        }
+        self.remember(&state, None).await
+    }
 }

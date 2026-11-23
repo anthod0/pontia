@@ -191,6 +191,7 @@ async fn acp_tools_use_existing_http_snapshot_updates_reconnect_and_closed_event
         AcpAgentDefinition {
             name: "test".into(),
             capabilities: ACP_MAX_CAPABILITIES,
+            interjection: None,
             restricted_execution: None,
             new_session_instructions_meta_key: None,
             launch: AcpLaunch {
@@ -303,6 +304,7 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
     let config = AcpAgentDefinition {
         name: "Company Agent".into(),
         capabilities: ACP_MAX_CAPABILITIES,
+        interjection: None,
         restricted_execution: None,
         new_session_instructions_meta_key: None,
         launch: AcpLaunch {

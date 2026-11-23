@@ -13,12 +13,26 @@ pub(crate) enum Observation {
     },
     Started {
         turn: String,
-        anchor: usize,
+        anchor: Value,
     },
     Finished {
         turn: String,
-        anchor: usize,
+        anchor: Value,
         reason: String,
+    },
+    PromotionPending {
+        native: String,
+    },
+    PromotionStarted {
+        native: String,
+        digest: String,
+        summary: String,
+        index: usize,
+    },
+    PromotionFinished {
+        native: String,
+        reason: String,
+        index: usize,
     },
     Compacted {
         operation: String,
@@ -64,6 +78,14 @@ pub(super) struct PendingReport {
     confirmed: Option<oneshot::Sender<Result<()>>>,
 }
 
+struct Promotion {
+    id: String,
+    digest: String,
+    summary: String,
+    index: usize,
+    started: bool,
+}
+
 #[derive(Default)]
 pub(super) struct Reports {
     pending: VecDeque<PendingReport>,
@@ -72,6 +94,11 @@ pub(super) struct Reports {
     writing: std::collections::HashSet<String>,
     pub wake: Arc<Notify>,
     started: Option<String>,
+    promotion: Option<Promotion>,
+    next_index: usize,
+    original_terminal: Option<(String, String)>,
+    original_native: Option<String>,
+    finished: Option<String>,
     pub(super) close_request_id: Option<Value>,
     closed: bool,
 }
@@ -128,8 +155,141 @@ impl Reports {
             self.started = Some(turn.into());
             self.push(Observation::Started {
                 turn: turn.into(),
-                anchor: anchor as usize,
+                anchor: json!(anchor),
             });
+        }
+    }
+
+    fn finish_original(&mut self, context: &Value, reason: String) {
+        let prompt = &context["active"];
+        let Some(turn) = prompt["turn"].as_str() else {
+            return;
+        };
+        if self.finished.as_deref() == Some(turn) {
+            return;
+        }
+        self.start(prompt);
+        self.finished = Some(turn.into());
+        self.permissions
+            .retain(|_, p| self.writing.contains(&p.key));
+        let pending = context["interjections"]
+            .as_object()
+            .is_some_and(|entries| entries.values().any(|e| e["turn"] == turn));
+        let anchor = prompt["prompt_index"]
+            .as_u64()
+            .filter(|_| pending)
+            .map_or_else(|| prompt["history_end"].clone(), |i| json!({"prompt": i+1}));
+        self.push(Observation::Finished {
+            turn: turn.into(),
+            anchor,
+            reason,
+        });
+    }
+
+    fn observe_promotion(&mut self, context: &Value, frame: &Value) {
+        let params = &frame["params"];
+        let method = &frame["method"];
+        let protocol = &context["protocol"];
+        if context["interject"] != true
+            || params["sessionId"] != context["native"]
+            || params["_meta"]["isReplay"] == true
+        {
+            return;
+        }
+        if method == &protocol["queue"]
+            && params["runningKind"] == "prompt"
+            && let (Some(id), Some(text), Some(prefix)) = (
+                params["runningPromptId"].as_str(),
+                params["runningText"].as_str(),
+                protocol["promoted_prefix"].as_str(),
+            )
+        {
+            if !id.starts_with(prefix) {
+                self.original_native = Some(id.into());
+                self.original_terminal = None;
+                if let Some(index) = context["active"]["prompt_index"].as_u64() {
+                    self.next_index = index as usize + 1;
+                }
+            } else if self.promotion.as_ref().is_none_or(|p| p.id != id) {
+                let index = self.next_index;
+                self.next_index += 1;
+                self.promotion = Some(Promotion {
+                    id: id.into(),
+                    digest: crate::steering::text_digest(text),
+                    summary: text.chars().take(200).collect(),
+                    index,
+                    started: false,
+                });
+                self.push(Observation::PromotionPending { native: id.into() });
+            }
+            return;
+        }
+        let update = &params["update"];
+        let terminal =
+            method == &protocol["terminal"] && update["sessionUpdate"] == "turn_completed";
+        if terminal
+            && update["prompt_id"]
+                .as_str()
+                .is_some_and(|id| Some(id) == self.original_native.as_deref())
+            && let (Some(turn), Some(reason)) = (
+                context["active"]["turn"].as_str(),
+                update["stop_reason"].as_str(),
+            )
+        {
+            self.original_terminal = Some((turn.into(), reason.into()));
+            return;
+        }
+        let Some(Promotion {
+            id,
+            digest,
+            summary,
+            index,
+            started,
+        }) = self.promotion.as_mut()
+        else {
+            return;
+        };
+        let activity = method == "session/update"
+            && params["_meta"]["promptId"] == *id
+            && matches!(
+                update["sessionUpdate"].as_str(),
+                Some(
+                    "agent_message_chunk"
+                        | "agent_thought_chunk"
+                        | "tool_call"
+                        | "tool_call_update"
+                        | "plan"
+                )
+            );
+        let completed = terminal && update["prompt_id"] == *id;
+        if !activity && !completed {
+            return;
+        }
+        let native = id.clone();
+        let index = *index;
+        if !*started {
+            *started = true;
+            let digest = digest.clone();
+            let summary = summary.clone();
+            if let Some((turn, reason)) = self.original_terminal.take()
+                && context["active"]["turn"] == turn
+            {
+                self.finish_original(context, reason);
+            }
+            self.push(Observation::PromotionStarted {
+                native: native.clone(),
+                digest,
+                summary,
+                index,
+            });
+        }
+        if completed && let Some(reason) = update["stop_reason"].as_str() {
+            self.push(Observation::PromotionFinished {
+                native,
+                reason: reason.into(),
+                index,
+            });
+            self.promotion = None;
         }
     }
 
@@ -171,6 +331,22 @@ impl Reports {
         if context["ready"] != true {
             return true;
         }
+        if !context["protocol"].is_null() && frame["params"]["_meta"]["isReplay"] == true {
+            return true;
+        }
+        if context["interject"] == true
+            && frame.pointer("/error/code").and_then(Value::as_i64) == Some(-32601)
+            && frame.get("method").is_none()
+            && let Some(requests) = context["interjections"].as_object_mut()
+            && let Some(id) = requests
+                .iter()
+                .find(|(_, v)| v["request_id"] == frame["id"])
+                .map(|(id, _)| id.clone())
+        {
+            requests.remove(&id);
+            context["interject"] = json!(false);
+        }
+        self.observe_promotion(context, frame);
         let prompt = context["active"].clone();
         let update = &frame["params"]["update"];
         if context["compaction_events"] == true
@@ -202,7 +378,7 @@ impl Reports {
                     | "tool_call"
                     | "tool_call_update"
                     | "plan",
-                ) => self.start(&prompt),
+                ) if prompt["request_id"] != Value::Null => self.start(&prompt),
                 _ => {}
             }
         }
@@ -224,20 +400,9 @@ impl Reports {
         if !prompt.is_null()
             && frame.get("method").is_none()
             && frame["id"] == prompt["request_id"]
-            && let (Some(turn), Some(anchor), Some(reason)) = (
-                prompt["turn"].as_str(),
-                prompt["history_end"].as_u64(),
-                frame.pointer("/result/stopReason").and_then(Value::as_str),
-            )
+            && let Some(reason) = frame.pointer("/result/stopReason").and_then(Value::as_str)
         {
-            self.start(&prompt);
-            self.permissions
-                .retain(|_, p| self.writing.contains(&p.key));
-            self.push(Observation::Finished {
-                turn: turn.into(),
-                anchor: anchor as usize,
-                reason: reason.into(),
-            });
+            self.finish_original(context, reason.into());
         }
         true
     }
