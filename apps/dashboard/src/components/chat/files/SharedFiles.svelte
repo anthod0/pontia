@@ -18,7 +18,7 @@
   import type { AttachedFile } from '../../../api/types'
 
   /**
-   * The attached files of one message as a single card: one file keeps the single-file bubble, files
+   * The files of one attachments block as a single card: one file keeps the single-file bubble, files
    * that can all be previewed as images become a mosaic, and anything else a list.
    */
   let { itemActions, paths, sessionId, highlighted = null, itemProps = () => ({}) }: {

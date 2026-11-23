@@ -229,7 +229,6 @@
         {#if 'content' in entry}
           {@const quoted = entry.kind === 'user_input' ? parseQuotedMessage(entry.content) : { text: entry.content, quote: null }}
           {@const parts = entry.kind === 'user_input' ? { ...parseUploadMessage(quoted.text), quote: quoted.quote } : { ...quoted, files: [] }}
-          {@const attachments = entry.kind === 'bot_reply' ? splitAttachments(entry.content) : { text: parts.text, paths: [] }}
           {@const fileSession = timeline.fileLinkSession?.session_id}
           <div class={['flex gap-1', entry.kind === 'user_input' ? 'justify-end' : 'justify-start']}>
             {#if entry.kind === 'user_input'}{@render menuButton(entry.id)}{/if}
@@ -239,33 +238,34 @@
                   {#each parts.files as file}<li class="rounded-md border bg-background px-2 py-1 text-xs [overflow-wrap:anywhere]" title={file.path}>{$t('files.uploadedPrefix')} {file.name}</li>{/each}
                 </ul>
               {/if}
-              {#if attachments.text}
-                {#if entry.kind === 'bot_reply'}
-                  <MessageResponse
-                    content={attachments.text}
-                    markdown
-                    sessionId={timeline.fileLinkSession?.session_id}
-                    linkBase={timeline.fileLinkSession?.workspace ? `${timeline.fileLinkSession.workspace.replace(/\/+$/, '')}/` : null}
-                    class="size-auto {botBubbleClass} {highlightableClass} break-words [&_code]:bg-background [&_th]:bg-background [&_[data-code-block]]:bg-background"
-                    {...quotableProps}
-                    data-bot-quote-source
-                  />
-                {:else}
-                  <div class="{userBubbleClass} {highlightableClass} text-sm leading-6" {...quotableProps}>
-                    {#if parts.quote}
-                      {@const current = parts.quote}
-                      {@const target = current.messageId}
-                      <BotQuoteBlock quote={current} speaker={quoteSpeaker(current)} image={quoteImage(current)} missing={missingQuotes.includes(target)} busy={jumping === target} onjump={() => void jumpTo(target, current.kind === 'file' ? current.path : null)} />
-                    {/if}
-                    <p class="whitespace-pre-wrap [overflow-wrap:anywhere]" data-bot-quote-source>{parts.text}</p>
-                  </div>
-                {/if}
-              {/if}
-              {#if attachments.paths.length && fileSession}
-                <SharedFiles paths={attachments.paths} sessionId={fileSession} highlighted={highlighted === entry.id ? highlightedPath : null}
-                  itemProps={file => ({ ...quotableProps, class: 'group/file', 'data-bot-file-path': file.path })}>
-                  {#snippet itemActions()}{@render menuButton(entry.id, true)}{/snippet}
-                </SharedFiles>
+              {#if entry.kind === 'bot_reply'}
+                {#each splitAttachments(entry.content) as part}
+                  {#if part.kind === 'text'}
+                    <MessageResponse
+                      content={part.text}
+                      markdown
+                      sessionId={timeline.fileLinkSession?.session_id}
+                      linkBase={timeline.fileLinkSession?.workspace ? `${timeline.fileLinkSession.workspace.replace(/\/+$/, '')}/` : null}
+                      class="size-auto {botBubbleClass} {highlightableClass} break-words [&_code]:bg-background [&_th]:bg-background [&_[data-code-block]]:bg-background"
+                      {...quotableProps}
+                      data-bot-quote-source
+                    />
+                  {:else if fileSession}
+                    <SharedFiles paths={part.paths} sessionId={fileSession} highlighted={highlighted === entry.id ? highlightedPath : null}
+                      itemProps={file => ({ ...quotableProps, class: 'group/file', 'data-bot-file-path': file.path })}>
+                      {#snippet itemActions()}{@render menuButton(entry.id, true)}{/snippet}
+                    </SharedFiles>
+                  {/if}
+                {/each}
+              {:else if parts.text}
+                <div class="{userBubbleClass} {highlightableClass} text-sm leading-6" {...quotableProps}>
+                  {#if parts.quote}
+                    {@const current = parts.quote}
+                    {@const target = current.messageId}
+                    <BotQuoteBlock quote={current} speaker={quoteSpeaker(current)} image={quoteImage(current)} missing={missingQuotes.includes(target)} busy={jumping === target} onjump={() => void jumpTo(target, current.kind === 'file' ? current.path : null)} />
+                  {/if}
+                  <p class="whitespace-pre-wrap [overflow-wrap:anywhere]" data-bot-quote-source>{parts.text}</p>
+                </div>
               {/if}
               {#if entry.status === 'failed'}
                 <div class="mt-1 flex items-center justify-end gap-2 text-xs text-destructive">
