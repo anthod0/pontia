@@ -116,6 +116,7 @@ impl Peer {
                 binding,
                 metadata,
                 model,
+                reasoning_effort,
                 cwd,
             } => {
                 AgentBindingService::new(events.db())
@@ -135,6 +136,14 @@ impl Peer {
                     crate::models::report(events, session, runtime, &model, report.key.clone())
                         .await?;
                 }
+                crate::models::report_effort(
+                    events,
+                    session,
+                    runtime,
+                    reasoning_effort,
+                    report.key.clone(),
+                )
+                .await?;
                 let running: bool = sqlx::query_scalar(
                     "SELECT state='running' FROM session_runtimes WHERE runtime_id=?",
                 )
@@ -234,6 +243,9 @@ impl Peer {
             }
             Observation::Model { model } => {
                 crate::models::report(events, session, runtime, &model, report.key).await?;
+            }
+            Observation::ReasoningEffort { effort } => {
+                crate::models::report_effort(events, session, runtime, effort, report.key).await?;
             }
             Observation::Started { turn, anchor } => {
                 fact(

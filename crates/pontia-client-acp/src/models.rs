@@ -2,11 +2,14 @@ pub(crate) mod probe;
 
 use crate::peer::{Peer, SessionState, protocol_error};
 use agent_client_protocol::v1::schema::{
-    SessionConfigKind, SessionConfigOption, SessionConfigOptionCategory, SessionConfigSelect,
-    SessionConfigSelectOption, SessionConfigSelectOptions, SetSessionConfigOptionRequest,
+    SessionConfigKind, SessionConfigOption, SessionConfigOptionCategory as Category,
+    SessionConfigSelect, SessionConfigSelectOption, SessionConfigSelectOptions,
+    SetSessionConfigOptionRequest,
 };
 use pontia_agent_control::{
-    EventIngestService, agent_clients::AgentClientModels, sessions::SessionModel,
+    EventIngestService,
+    agent_clients::AgentClientModels,
+    sessions::{ReasoningEffortOption, SessionModel},
 };
 use pontia_core::{Error, Result, domain::EventType};
 use serde_json::json;
@@ -22,13 +25,12 @@ pub(crate) fn deferred_options(
         .is_some_and(|meta| meta.contains_key("kiro"))
 }
 
-fn model_option(
+fn selector(
     options: &[SessionConfigOption],
+    category: Category,
 ) -> Option<(&SessionConfigOption, &SessionConfigSelect)> {
     options.iter().find_map(|option| match &option.kind {
-        SessionConfigKind::Select(select)
-            if option.category == Some(SessionConfigOptionCategory::Model) =>
-        {
+        SessionConfigKind::Select(select) if option.category.as_ref() == Some(&category) => {
             Some((option, select))
         }
         _ => None,
@@ -36,7 +38,19 @@ fn model_option(
 }
 
 pub(crate) fn current(options: &[SessionConfigOption]) -> Option<String> {
-    model_option(options).map(|(_, select)| select.current_value.to_string())
+    selector(options, Category::Model).map(|(_, select)| select.current_value.to_string())
+}
+
+pub(crate) fn effort(options: &[SessionConfigOption]) -> Option<String> {
+    selector(options, Category::ThoughtLevel).map(|(_, select)| select.current_value.to_string())
+}
+
+// Kiro can publish just the current model before its model catalog arrives.
+fn pending_catalog(options: &[SessionConfigOption]) -> bool {
+    let Some((_, model)) = selector(options, Category::Model) else {
+        return true;
+    };
+    selector(options, Category::ThoughtLevel).is_none() && values(model).count() <= 1
 }
 
 fn values(select: &SessionConfigSelect) -> impl Iterator<Item = &SessionConfigSelectOption> {
@@ -50,57 +64,94 @@ fn values(select: &SessionConfigSelect) -> impl Iterator<Item = &SessionConfigSe
 }
 
 fn catalog(options: &[SessionConfigOption]) -> AgentClientModels {
-    let Some((_, select)) = model_option(options) else {
+    let Some((_, select)) = selector(options, Category::Model) else {
         return AgentClientModels {
             models: Vec::new(),
             default_model: None,
         };
     };
+    let thought_level = selector(options, Category::ThoughtLevel).map(|(_, select)| select);
     AgentClientModels {
         models: values(select)
-            .map(|model| SessionModel {
-                reasoning_efforts: vec![],
-                default_reasoning_effort: None,
-                id: model.value.to_string(),
-                name: model.name.clone(),
-                description: model.description.clone().unwrap_or_default(),
+            .map(|model| {
+                let effort = thought_level.filter(|_| model.value == select.current_value);
+                SessionModel {
+                    reasoning_efforts: effort
+                        .into_iter()
+                        .flat_map(values)
+                        .map(|level| ReasoningEffortOption {
+                            id: level.value.to_string(),
+                            name: level.name.clone(),
+                            description: level.description.clone().unwrap_or_default(),
+                        })
+                        .collect(),
+                    default_reasoning_effort: effort.map(|level| level.current_value.to_string()),
+                    id: model.value.to_string(),
+                    name: model.name.clone(),
+                    description: model.description.clone().unwrap_or_default(),
+                }
             })
             .collect(),
         default_model: Some(select.current_value.to_string()),
     }
 }
 
-pub(crate) async fn select(peer: &std::sync::Arc<Peer>, model: &str, resuming: bool) -> Result<()> {
-    if let Some(profile) = peer.policy.profile {
-        profile.check_model(peer, Some(model)).await?;
+pub(crate) async fn select(
+    peer: &std::sync::Arc<Peer>,
+    model: Option<&str>,
+    reasoning_effort: Option<&str>,
+    resuming: bool,
+) -> Result<()> {
+    let pending = {
+        let state = peer.state.lock().await;
+        (state.negotiated.deferred_models && pending_catalog(&state.config_options))
+            .then(|| state.model_options_available.subscribe())
+    };
+    if let Some(mut available) = pending {
+        // A single-model Agent can legitimately have no thought-level selector.
+        let _ = tokio::time::timeout(MODEL_OPTIONS_WAIT, available.wait_for(|complete| *complete))
+            .await;
+        if model.is_some() && current(&peer.state.lock().await.config_options).is_none() {
+            return Err(Error::CapabilityUnavailable(
+                "ACP model options did not arrive".into(),
+            ));
+        }
     }
-    let mut state = peer.state.lock().await;
-    if state.negotiated.deferred_models && model_option(&state.config_options).is_none() {
-        let mut available = state.model_options_available.subscribe();
-        drop(state);
-        tokio::time::timeout(MODEL_OPTIONS_WAIT, available.changed())
-            .await
-            .map_err(|_| Error::CapabilityUnavailable("ACP model options did not arrive".into()))?
-            .map_err(|_| {
-                Error::ControlUnknown("ACP connection closed during model selection".into())
-            })?;
-        state = peer.state.lock().await;
+    if let Some(model) = model {
+        if let Some(profile) = peer.policy.profile {
+            profile.check_model(peer, Some(model)).await?;
+        }
+        set(peer, Category::Model, model, resuming).await?;
     }
-    let Some((option, select)) = model_option(&state.config_options) else {
-        // An Agent may restore its own model without offering a selector on load.
+    if let Some(effort) = reasoning_effort {
+        set(peer, Category::ThoughtLevel, effort, resuming).await?;
+    }
+    Ok(())
+}
+
+async fn set(
+    peer: &std::sync::Arc<Peer>,
+    category: Category,
+    value: &str,
+    resuming: bool,
+) -> Result<()> {
+    let state = peer.state.lock().await;
+    let is_model = category == Category::Model;
+    let Some((option, select)) = selector(&state.config_options, category.clone()) else {
         if resuming {
             return Ok(());
         }
-        return Err(Error::CapabilityUnavailable(
-            "ACP Agent did not provide model options".into(),
-        ));
+        return Err(Error::CapabilityUnavailable(format!(
+            "ACP Agent did not provide a {category:?} selector"
+        )));
     };
-    if (resuming || peer.policy.profile.is_some()) && state.current_model.as_deref() == Some(model)
+    if (resuming || is_model && peer.policy.profile.is_some())
+        && select.current_value.0.as_ref() == value
     {
         return Ok(());
     }
-    if !values(select).any(|value| value.value.to_string() == model) {
-        return Err(Error::Domain(format!("ACP model is unavailable: {model}")));
+    if is_model && !values(select).any(|entry| entry.value.0.as_ref() == value) {
+        return Err(Error::Domain(format!("ACP model is unavailable: {value}")));
     }
     let native = state.native.clone().expect("initialized ACP Session");
     let request = peer
@@ -108,11 +159,11 @@ pub(crate) async fn select(peer: &std::sync::Arc<Peer>, model: &str, resuming: b
         .prepare_request(SetSessionConfigOptionRequest::new(
             native.clone(),
             option.id.clone(),
-            model,
+            value,
         ));
     let key = serde_json::to_string(request.id())?;
     let result_peer = peer.clone();
-    let model = model.to_owned();
+    let value = value.to_owned();
     let (send, receive) = tokio::sync::oneshot::channel();
     request
         .on_receiving_result(async move |result| {
@@ -121,13 +172,13 @@ pub(crate) async fn select(peer: &std::sync::Arc<Peer>, model: &str, resuming: b
                 let mut state = result_peer.state.lock().await;
                 if !state.current {
                     return Err(Error::ControlUnknown(
-                        "ACP connection closed during model selection".into(),
+                        "ACP connection closed during option selection".into(),
                     ));
                 }
                 replace(&mut state, response.config_options);
-                if state.current_model.as_deref() != Some(&model) {
+                if is_model && state.current_model.as_deref() != Some(&value) {
                     return Err(Error::Domain(format!(
-                        "ACP Agent did not select model: {model}"
+                        "ACP Agent did not select model: {value}"
                     )));
                 }
                 result_peer.remember(&state, None).await
@@ -141,8 +192,8 @@ pub(crate) async fn select(peer: &std::sync::Arc<Peer>, model: &str, resuming: b
     peer.receipts.wait(key).await?;
     receive
         .await
-        .map_err(|_| Error::ControlUnknown("ACP model selection response was lost".into()))??;
-    if let Some(profile) = peer.policy.profile {
+        .map_err(|_| Error::ControlUnknown("ACP option selection response was lost".into()))??;
+    if is_model && let Some(profile) = peer.policy.profile {
         profile.verify(peer, &native).await?;
     }
     Ok(())
@@ -153,8 +204,10 @@ pub(crate) fn replace(state: &mut SessionState, options: Vec<SessionConfigOption
     if state.current_model != model {
         state.verified_model = None;
     }
-    if model.is_some() {
-        state.model_options_available.send_replace(());
+    if state.negotiated.deferred_models {
+        state
+            .model_options_available
+            .send_replace(!pending_catalog(&options));
     }
     state.current_model = model;
     state.config_options = options;
@@ -175,6 +228,26 @@ pub(crate) async fn report(
         EventType::SessionModelUpdated,
         key,
         json!({"model":model}),
+    )
+    .await
+    .map(|_| ())
+}
+
+pub(crate) async fn report_effort(
+    events: &EventIngestService,
+    session: &str,
+    runtime: &str,
+    effort: Option<String>,
+    key: String,
+) -> Result<()> {
+    crate::peer::fact(
+        events,
+        session,
+        runtime,
+        None,
+        EventType::SessionReasoningEffortUpdated,
+        key,
+        json!({"reasoning_effort":effort}),
     )
     .await
     .map(|_| ())

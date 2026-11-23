@@ -51,7 +51,7 @@ pub(crate) fn context(state: &SessionState) -> Value {
     json!({"ready":state.ready,"blocked":state.blocked,"native":state.native,"steer":state.negotiated.steer,"kiro_steer":state.negotiated.kiro_steer,"interject":state.negotiated.interject,"protocol":state.agent.interjection,"compact_command":state.negotiated.compact_command,"compaction":state.compaction,
         "compaction_events":state.agent.compaction_events(), "compaction_protocol":state.agent.compaction,
         "model_windows":state.model_windows,
-        "system_prompt":state.system_prompt,"prompt_prefix":state.prompt_prefix,"current_model":state.current_model,"config_options":state.config_options,"promoted":state.promoted,"interjections":state.interjections,"active":state.active})
+        "system_prompt":state.system_prompt,"prompt_prefix":state.prompt_prefix,"current_model":state.current_model,"reasoning_effort":crate::models::effort(&state.config_options),"config_options":state.config_options,"promoted":state.promoted,"interjections":state.interjections,"active":state.active})
 }
 
 impl Peer {

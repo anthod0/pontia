@@ -9,6 +9,7 @@ pub(crate) enum Observation {
         binding: String,
         metadata: Value,
         model: Option<String>,
+        reasoning_effort: Option<String>,
         cwd: String,
     },
     Started {
@@ -65,6 +66,9 @@ pub(crate) enum Observation {
     },
     Model {
         model: String,
+    },
+    ReasoningEffort {
+        effort: Option<String>,
     },
     Permission {
         frame: Value,
@@ -456,11 +460,19 @@ impl Reports {
             && let Ok(options) = serde_json::from_value::<
                 Vec<agent_client_protocol::v1::schema::SessionConfigOption>,
             >(options.clone())
-            && let Some(model) = crate::models::current(&options)
-            && context["current_model"] != model
         {
-            context["current_model"] = json!(model);
-            self.push(Observation::Model { model });
+            if let Some(model) = crate::models::current(&options)
+                && context["current_model"] != model
+            {
+                context["current_model"] = json!(model);
+                self.push(Observation::Model { model });
+            }
+            let effort = crate::models::effort(&options);
+            if context["reasoning_effort"].as_str() != effort.as_deref() {
+                context["reasoning_effort"] = json!(effort);
+                self.push(Observation::ReasoningEffort { effort });
+            }
+            context["config_options"] = json!(options);
         }
         if !prompt.is_null()
             && frame.get("method").is_none()
