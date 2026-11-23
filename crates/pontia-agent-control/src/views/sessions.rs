@@ -55,6 +55,7 @@ pub struct SessionView {
     pub runtimes: Vec<pontia_storage_sqlite::repositories::session_runtimes::SessionRuntimeRecord>,
     pub timeline_unavailable_reason: Option<String>,
     pub model: Option<String>,
+    pub reasoning_effort: Option<String>,
     pub context_usage: Option<ContextUsageView>,
     pub lineage: Option<SessionLineageView>,
     pub created_at: String,
@@ -94,6 +95,10 @@ pub(crate) fn row_to_view(row: SessionRow) -> Result<SessionView> {
         runtimes: Vec::new(),
         timeline_unavailable_reason: None,
         model,
+        reasoning_effort: metadata
+            .get("reasoning_effort")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
         context_usage,
         lineage: None,
         created_at: row.created_at,

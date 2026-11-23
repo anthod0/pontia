@@ -585,7 +585,7 @@
         }
         return
       }
-      if (streamEvent.event.type === 'session.model_updated') {
+      if (streamEvent.event.type === 'session.model_updated' || streamEvent.event.type === 'session.reasoning_effort_updated') {
         void loadSessionDetail(selectedSessionId, { showLoading: false })
         return
       }

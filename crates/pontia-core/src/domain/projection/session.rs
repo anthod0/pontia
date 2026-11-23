@@ -83,6 +83,24 @@ impl ProjectionState {
         Ok(())
     }
 
+    pub(super) fn apply_reasoning_effort(&mut self, event: &DomainEvent) -> Result<()> {
+        let effort = event
+            .payload
+            .get("reasoning_effort")
+            .filter(|value| value.is_null() || value.as_str().is_some_and(|s| !s.trim().is_empty()))
+            .ok_or_else(|| {
+                Error::Domain("payload.reasoning_effort must be a non-empty string or null".into())
+            })?;
+        if let Some(session) = self.sessions.get_mut(&event.session_id) {
+            if !session.metadata.is_object() {
+                session.metadata = json!({});
+            }
+            session.metadata["reasoning_effort"] = effort.clone();
+            session.state_version += 1;
+        }
+        Ok(())
+    }
+
     pub(super) fn apply_context_usage(&mut self, event: &DomainEvent) -> Result<()> {
         let Some(session) = self.sessions.get_mut(&event.session_id) else {
             return Ok(());

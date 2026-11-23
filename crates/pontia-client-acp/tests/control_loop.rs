@@ -447,6 +447,7 @@ async fn explicit_retry_after_rejected_initialization_reuses_the_only_runtime() 
             h.app.event_ingest_service(),
             h.root.path(),
             pontia_runtime::RuntimeStartRequest {
+                reasoning_effort: None,
                 launch_mode: Default::default(),
                 execution_policy: Default::default(),
                 model: None,
@@ -703,6 +704,7 @@ async fn reprovisioning_a_bound_session_cannot_replace_native_identity_or_add_ru
             h.app.event_ingest_service(),
             h.root.path(),
             pontia_runtime::RuntimeStartRequest {
+                reasoning_effort: None,
                 launch_mode: Default::default(),
                 execution_policy: Default::default(),
                 model: None,

@@ -71,6 +71,8 @@ async fn list_models(connection: &Connection) -> Result<AgentClientModels> {
                 default_model = Some(string(model, "model")?.into());
             }
             models.push(SessionModel {
+                reasoning_efforts: vec![],
+                default_reasoning_effort: None,
                 id: string(model, "model")?.into(),
                 name: string(model, "displayName")?.into(),
                 description: model["description"].as_str().unwrap_or_default().into(),

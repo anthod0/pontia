@@ -126,6 +126,7 @@ mod tests {
             log_path: &log_path,
         };
         let request = RuntimeStartRequest {
+            reasoning_effort: None,
             launch_mode: Default::default(),
             execution_policy: Default::default(),
             model: None,
@@ -188,6 +189,7 @@ mod tests {
             log_path: &tempdir.path().join("runtime.log"),
         };
         let request = RuntimeStartRequest {
+            reasoning_effort: None,
             launch_mode: Default::default(),
             execution_policy: Default::default(),
             model: None,

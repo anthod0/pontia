@@ -271,6 +271,41 @@ test("selects the client default model without sending it on creation", async ()
   }
 });
 
+test("keeps a supported effort across model changes and clears it for a model without that level", async () => {
+  const user = userEvent.setup();
+  const high = { id: "high", name: "high", description: "" };
+  const catalog = vi.spyOn(testDevice.api, "listAgentClientModels").mockResolvedValue({
+    models: [
+      { id: "a", name: "First", description: "", reasoning_efforts: [high] },
+      { id: "b", name: "Second", description: "", reasoning_efforts: [high] },
+      { id: "c", name: "Third", description: "", reasoning_efforts: [] },
+    ],
+    default_model: "a",
+  });
+  try {
+    render(NewChatPage);
+    await user.click(await screen.findByLabelText("Reasoning effort"));
+    await user.click(await screen.findByText("high", { exact: true }));
+    const chooseModel = async (name: string) => {
+      document.body.style.pointerEvents = "";
+      await user.click(document.getElementById("session-model")!);
+      await user.click(await screen.findByRole("button", { name, exact: true }));
+    };
+    await chooseModel("Second");
+    expect(screen.getByLabelText("Reasoning effort")).toHaveTextContent("high");
+    await chooseModel("Third");
+    expect(screen.queryByLabelText("Reasoning effort")).toBeNull();
+    await chooseModel("First");
+    document.body.style.pointerEvents = "";
+    await user.type(screen.getByPlaceholderText("Describe a task…"), "Use the default");
+    await user.click(screen.getByRole("button", { name: /start session/i }));
+    await waitFor(() => expect(mocks.createSession).toHaveBeenCalledOnce());
+    expect(mocks.createSession.mock.calls[0][0]).not.toHaveProperty("reasoning_effort");
+  } finally {
+    catalog.mockRestore();
+  }
+});
+
 test("falls back to the first agent client when the remembered one is unavailable", async () => {
   window.localStorage.setItem("pontia.chat.lastCreationOptionId:local", "removed-client");
   render(NewChatPage);
@@ -322,7 +357,14 @@ test("creates a session with initial prompt, workspace, and client then opens it
     initial_turn: turn({ session_id: "session-new" }),
   } satisfies CreateSessionResult);
   const catalog = vi.spyOn(testDevice.api, "listAgentClientModels").mockResolvedValue({
-    models: [{ id: "provider/model", name: "Selected model", description: "" }],
+    models: [
+      {
+        id: "provider/model",
+        name: "Selected model",
+        description: "",
+        reasoning_efforts: [{ id: "high", name: "high", description: "" }],
+      },
+    ],
     default_model: null,
   });
   render(NewChatPage);
@@ -332,6 +374,9 @@ test("creates a session with initial prompt, workspace, and client then opens it
   );
   await user.click(await screen.findByRole("button", { name: "Client default model" }));
   await user.click(await screen.findByRole("button", { name: "Selected model" }));
+  document.body.style.pointerEvents = "";
+  await user.click(await screen.findByLabelText("Reasoning effort"));
+  await user.click(await screen.findByText("high"));
   catalog.mockRestore();
   await fireEvent.click(screen.getByRole("button", { name: /start session/i }));
 
@@ -340,6 +385,7 @@ test("creates a session with initial prompt, workspace, and client then opens it
       client_type: "pi",
       workspace_id: "workspace-1",
       model: "provider/model",
+      reasoning_effort: "high",
       title: "Implement the dashboard chat flow",
       include_standalone_session_instructions: true,
       initial_task: {

@@ -9,6 +9,7 @@ export type InternalEventType =
   | "session.ready"
   | "session.exited"
   | "session.model_updated"
+  | "session.reasoning_effort_updated"
   | "session.context_usage_updated"
   | "session.compaction_started"
   | "session.compaction_completed"

@@ -96,9 +96,9 @@ async fn lists_configured_client_models_without_a_session_and_closes_the_process
     let (app, db, root) = fixture_with_state(
         json!({"success":true,"data":{"models":[
             {"provider":"one","id":"same","name":"First"},
-            {"provider":"two","id":"same","name":"Second"}
+            {"provider":"two","id":"same","name":"Second","reasoning":true,"thinkingLevelMap":{"off":null,"minimal":null,"low":null,"max":"max"}}
         ]}}),
-        json!({"success":true,"data":{"model":{"provider":"two","id":"same","name":"Second"}}}),
+        json!({"success":true,"data":{"thinkingLevel":"medium","model":{"provider":"two","id":"same","name":"Second"}}}),
     )
     .await;
     let (status, response) = request(&app, "pi/default", true).await;
@@ -107,8 +107,12 @@ async fn lists_configured_client_models_without_a_session_and_closes_the_process
     assert_eq!(
         response["data"]["models"],
         json!([
-            {"id":"one/same","name":"First","description":"one"},
-            {"id":"two/same","name":"Second","description":"two"}
+            {"id":"one/same","name":"First","description":"one","reasoning_efforts":[],"default_reasoning_effort":null},
+            {"id":"two/same","name":"Second","description":"two","default_reasoning_effort":"medium","reasoning_efforts":[
+                {"id":"medium","name":"medium","description":""},
+                {"id":"high","name":"high","description":""},
+                {"id":"max","name":"max","description":""}
+            ]}
         ])
     );
     assert!(root.path().join("closed").exists());
@@ -117,6 +121,21 @@ async fn lists_configured_client_models_without_a_session_and_closes_the_process
         .await
         .unwrap();
     assert_eq!(sessions, 0);
+}
+
+#[tokio::test]
+async fn non_reasoning_default_model_reports_its_native_default_without_selectable_efforts() {
+    let model = json!({"provider":"provider","id":"chat","name":"Chat","reasoning":false});
+    let (app, _, _root) = fixture_with_state(
+        json!({"success":true,"data":{"models":[model]}}),
+        json!({"success":true,"data":{"model":model,"thinkingLevel":"off"}}),
+    )
+    .await;
+    let (status, response) = request(&app, "pi/default", true).await;
+    assert_eq!(status, StatusCode::OK);
+    let model = &response["data"]["models"][0];
+    assert_eq!(model["reasoning_efforts"], json!([]));
+    assert_eq!(model["default_reasoning_effort"], "off");
 }
 
 #[tokio::test]

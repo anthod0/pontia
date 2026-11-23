@@ -138,6 +138,7 @@ impl ProjectionState {
             && event.event_type != EventType::SessionTitleUpdated
             && event.event_type != EventType::SessionContextUsageUpdated
             && event.event_type != EventType::SessionModelUpdated
+            && event.event_type != EventType::SessionReasoningEffortUpdated
             && !(self.execution_lifetime == SessionExecutionLifetime::Subscription
                 && event.event_type.is_turn_event())
         {
@@ -201,6 +202,7 @@ impl ProjectionState {
             | EventType::TurnTimelineBoundaryRecovered
             | EventType::TurnTopologyRecovered => Ok(()),
             EventType::SessionModelUpdated => self.apply_model(event),
+            EventType::SessionReasoningEffortUpdated => self.apply_reasoning_effort(event),
             EventType::SessionContextUsageUpdated => self.apply_context_usage(event),
             EventType::TurnCreated | EventType::TurnQueued => {
                 self.apply_turn(event, TurnState::Queued)

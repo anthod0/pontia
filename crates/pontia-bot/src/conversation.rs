@@ -311,6 +311,7 @@ impl ConversationService {
             self.task_execution_policy(client_type, client_key, disable_skills)?;
         let metadata = self.session_metadata(client_type, client_key).await?;
         Ok(CreateSessionRequest {
+            reasoning_effort: None,
             launch_mode: Default::default(),
             execution_policy,
             model: Some(model.into()),
@@ -690,6 +691,7 @@ impl ConversationService {
             .control
             .session_commands()
             .create_session(CreateSessionRequest {
+                reasoning_effort: None,
                 launch_mode: pontia_core::LaunchMode::Background,
                 execution_policy: self.restricted_execution_policy(
                     &bot.client_type,

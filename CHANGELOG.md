@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Choose the reasoning effort for supported Pi models in New chat or the session creation API. Session details show the level Pi reports.
+
 ## [0.8.11] - 2026-11-23
 
 ### Added

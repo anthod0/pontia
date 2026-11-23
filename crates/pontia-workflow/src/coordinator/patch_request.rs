@@ -161,6 +161,7 @@ where
                 );
                 self.sessions
                     .create_session(CreateSessionRequest {
+                        reasoning_effort: None,
                         launch_mode: Default::default(),
                         execution_policy: Default::default(),
                         model: None,

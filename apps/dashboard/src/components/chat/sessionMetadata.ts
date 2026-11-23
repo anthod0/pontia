@@ -190,6 +190,13 @@ export function sessionMetadataItems(
       value: session.model,
       title: session.model,
     });
+  if (session.reasoning_effort)
+    items.push({
+      key: "reasoning_effort",
+      label: translate("effort.title"),
+      value: session.reasoning_effort,
+      title: session.reasoning_effort,
+    });
   if (gitStatus)
     items.push({
       key: "git",

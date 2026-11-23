@@ -144,6 +144,7 @@ fn session_request(
         workflow.workflow_id.clone(),
     )]);
     CreateSessionRequest {
+        reasoning_effort: None,
         launch_mode: Default::default(),
         execution_policy: Default::default(),
         model: launch.model,

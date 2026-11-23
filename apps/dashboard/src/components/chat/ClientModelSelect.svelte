@@ -2,7 +2,8 @@
   import { createQuery } from '@tanstack/svelte-query'
   import { t } from '$lib/i18n'
   import { useDeviceRuntime } from '../../device/context'
-  import type { AgentClientView } from '../../api/types'
+  import type { Snippet } from 'svelte'
+  import type { AgentClientView, SessionModel } from '../../api/types'
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import { selectTriggerClass } from '$lib/components/ui/select/index.js'
@@ -11,7 +12,8 @@
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
 
-  let { id, client, workspaceId, value = $bindable(''), available = $bindable(false), allowDefault = false, disabled = false, class: className = 'w-full' }: {
+  let { id, client, workspaceId, value = $bindable(''), available = $bindable(false), allowDefault = false, children, disabled = false, class: className = 'w-full' }: {
+    children?: Snippet<[SessionModel | undefined]>
     id: string
     class?: string
     client: Pick<AgentClientView, "name" | "client_type" | "client_key">
@@ -94,3 +96,4 @@
     {/if}
   </Dialog.Content>
 </Dialog.Root>
+{@render children?.(selected)}

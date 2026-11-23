@@ -12,6 +12,7 @@ pub struct RuntimeStartRequest {
     #[serde(default)]
     pub execution_policy: pontia_core::execution_policy::ExecutionPolicy,
     pub model: Option<String>,
+    pub reasoning_effort: Option<String>,
     pub session_id: String,
     pub runtime_id: Option<String>,
     pub client_type: String,

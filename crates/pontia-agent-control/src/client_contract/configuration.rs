@@ -25,6 +25,10 @@ pub trait ClientConfiguration: Send + Sync {
         Ok(())
     }
 
+    fn supports_startup_reasoning_effort(&self) -> bool {
+        false
+    }
+
     fn supports_startup_model(&self) -> bool {
         false
     }
