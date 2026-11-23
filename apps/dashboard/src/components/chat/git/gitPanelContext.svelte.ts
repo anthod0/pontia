@@ -1,6 +1,6 @@
 import { getContext, setContext, untrack } from "svelte";
 import { get, type Writable } from "svelte/store";
-import { PersistedState } from "$lib/storage";
+import { SidePanelOpen } from "$lib/sidePanelOpen.svelte";
 import type { DeviceRuntime } from "../../../device/runtime";
 import type { GitDiffTarget } from "../../../queries/workspaces";
 import type { FilePreviewTarget } from "../filePreviewContext";
@@ -8,21 +8,12 @@ import type { FilePreviewTarget } from "../filePreviewContext";
 /** The Workspace whose changes the panel shows, registered by the session page. */
 export type GitPanelSource = { device: DeviceRuntime; workspaceId: string };
 
-const openSerializer = {
-  parse: (saved: string) => saved === "true",
-  stringify: (open: boolean) => (open ? "true" : null),
-};
-
-const desktopQuery = "(min-width: 1024px)";
-
 /**
  * The Git panel shares the right-hand slot with the file preview, which takes the slot while
- * it is open. On wide screens whether the panel is open is saved per browser and kept across
- * sessions; on phones the full-screen panel stays closed until it is opened.
+ * it is open. On wide screens it stays open or closed across sessions.
  */
 export class GitPanel {
-  #saved = new PersistedState("pontia.gitPanelOpen", false, openSerializer);
-  #phoneOpen = $state(false);
+  #open = new SidePanelOpen("pontia.gitPanelOpen");
   #preview: Writable<FilePreviewTarget | null>;
   source = $state.raw<GitPanelSource | null>(null);
   /** The last Workspace shown, kept while the session page loads so an open diff survives. */
@@ -37,16 +28,7 @@ export class GitPanel {
   }
 
   get open(): boolean {
-    return this.#desktop() ? this.#saved.current : this.#phoneOpen;
-  }
-
-  #setOpen(open: boolean): void {
-    if (this.#desktop()) this.#saved.current = open;
-    else this.#phoneOpen = open;
-  }
-
-  #desktop(): boolean {
-    return typeof window !== "undefined" && window.matchMedia(desktopQuery).matches;
+    return this.#open.current;
   }
 
   /**
@@ -75,7 +57,7 @@ export class GitPanel {
   }
 
   close(): void {
-    this.#setOpen(false);
+    this.#open.current = false;
     this.file = null;
   }
 
@@ -91,7 +73,7 @@ export class GitPanel {
 
   #show(): void {
     this.#preview.set(null);
-    this.#setOpen(true);
+    this.#open.current = true;
     this.focusRequest++;
   }
 }

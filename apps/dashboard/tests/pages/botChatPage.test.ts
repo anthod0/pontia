@@ -494,3 +494,60 @@ test("the sidebar button shows the open todo count and reopens the tab last used
   expect(screen.getByRole("tab", { name: /Todo/ })).toHaveAttribute("aria-selected", "true");
   expect(await screen.findByText("No todos")).toBeVisible();
 });
+
+test("on wide screens the side panel stays open or closed across Bot chats and reloads", async () => {
+  localStorage.clear();
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === "(min-width: 1024px)",
+    addEventListener() {},
+    removeEventListener() {},
+  }));
+  vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue({
+    bot,
+    entries: [],
+    next_before: null,
+    file_link_session: null,
+    open_todo_count: 0,
+    notice_session_id: null,
+    generation_notice: null,
+    status: { kind: "idle" },
+  });
+  const first = render(BotChatPreviewHarness, { botId: bot.bot_id });
+  await fireEvent.click(await screen.findByRole("button", { name: "Sidebar" }));
+  expect(screen.getByRole("complementary", { name: "Sidebar" })).toBeVisible();
+
+  first.unmount();
+  expect(localStorage.getItem("pontia.botPanelOpen")).toBe("true");
+  const second = render(BotChatPreviewHarness, { botId: "b" });
+  expect(await screen.findByRole("complementary", { name: "Sidebar" })).toBeVisible();
+  await fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+  second.unmount();
+  render(BotChatPreviewHarness, { botId: bot.bot_id });
+  const button = await screen.findByRole("button", { name: "Sidebar" });
+  expect(button).toHaveAttribute("aria-pressed", "false");
+  expect(screen.queryByRole("complementary", { name: "Sidebar" })).not.toBeInTheDocument();
+});
+
+test("on phones the side panel starts closed and does not save its state", async () => {
+  localStorage.clear();
+  localStorage.setItem("pontia.botPanelOpen", "true");
+  vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue({
+    bot,
+    entries: [],
+    next_before: null,
+    file_link_session: null,
+    open_todo_count: 0,
+    notice_session_id: null,
+    generation_notice: null,
+    status: { kind: "idle" },
+  });
+  render(BotChatPreviewHarness, { botId: bot.bot_id });
+  const button = await screen.findByRole("button", { name: "Sidebar" });
+  expect(screen.queryByRole("complementary", { name: "Sidebar" })).not.toBeInTheDocument();
+
+  await fireEvent.click(button);
+  expect(screen.getByRole("complementary", { name: "Sidebar" })).toBeVisible();
+  await fireEvent.click(screen.getByRole("button", { name: "Close" }));
+  expect(localStorage.getItem("pontia.botPanelOpen")).toBe("true");
+});
