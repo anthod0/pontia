@@ -10,7 +10,7 @@
   import type { SessionView, WorkspaceGitStatusView } from '../../api/types'
   import ClientIcon from './ClientIcon.svelte'
   import GitStatusInline from './GitStatusInline.svelte'
-  import type { SessionMetadataItem } from './sessionMetadata'
+  import { isOutsideGitRepository, type SessionMetadataItem } from './sessionMetadata'
 
   interface Props {
     session: SessionView
@@ -71,7 +71,7 @@
             <dd class="min-w-0 break-words font-mono text-xs" title={field.item.title} aria-label={`${field.item.label}: ${field.item.title}`}>
               {#if field.key === 'git' && gitStatus}
                 <span class="flex flex-wrap gap-1"><GitStatusInline {gitStatus} /></span>
-                {#if gitStatus.state === 'error'}<span class="text-destructive">{field.item.title}</span>{/if}
+                {#if gitStatus.state === 'error' && !isOutsideGitRepository(gitStatus)}<span class="text-destructive">{field.item.title}</span>{/if}
               {:else}
                 {field.key === 'workspace' ? field.item.title : field.item.value}
               {/if}

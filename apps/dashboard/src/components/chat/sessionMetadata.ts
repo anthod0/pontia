@@ -81,6 +81,14 @@ export function sessionWorkspacePath(
   );
 }
 
+export function isOutsideGitRepository(status: WorkspaceGitStatusView | undefined): boolean {
+  return (
+    status?.state === "error" &&
+    status.repo_root === null &&
+    status.failure?.startsWith("domain error: fatal: not a git repository (or any ") === true
+  );
+}
+
 export function gitStatusLabel(
   status: WorkspaceGitStatusView | undefined,
   translate: Translator = defaultTranslate,
@@ -130,6 +138,7 @@ export function gitStatusAriaLabel(
   status: WorkspaceGitStatusView | undefined,
   translate: Translator = defaultTranslate,
 ): string {
+  if (isOutsideGitRepository(status)) return translate("git.noBranch");
   return translate("git.status", {
     branch: gitBranchLabel(status, translate),
     status: gitStatusLabel(status, translate),
@@ -143,7 +152,8 @@ export function gitStatusTitle(
   translate: Translator = defaultTranslate,
 ): string {
   const error = session.workspace_id ? gitStatusErrors[session.workspace_id] : null;
-  return status?.failure ?? error ?? gitStatusAriaLabel(status, translate);
+  const failure = isOutsideGitRepository(status) ? null : status?.failure;
+  return failure ?? error ?? gitStatusAriaLabel(status, translate);
 }
 
 export function gitStatusToneClass(status: WorkspaceGitStatusView | undefined): string {
@@ -184,7 +194,9 @@ export function sessionMetadataItems(
     items.push({
       key: "git",
       label: "Git",
-      value: `${gitBranchLabel(gitStatus, translate)} · ${gitStatusLabel(gitStatus, translate)}`,
+      value: isOutsideGitRepository(gitStatus)
+        ? translate("git.noBranch")
+        : `${gitBranchLabel(gitStatus, translate)} · ${gitStatusLabel(gitStatus, translate)}`,
       title: gitStatusTitle(session, gitStatus, gitStatusErrors, translate),
     });
   const contextUsageLabel = sessionContextUsageLabel(session, translate);
