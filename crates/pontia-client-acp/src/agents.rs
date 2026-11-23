@@ -83,6 +83,28 @@ impl AcpAgents {
                     restricted_execution: Some(&GROK_RESTRICTED),
                 },
             ),
+            (
+                "kiro".into(),
+                AcpAgentDefinition {
+                    name: "Kiro".into(),
+                    launch: AcpLaunch {
+                        command: "kiro-cli".into(),
+                        args: vec!["acp".into(), "--agent-engine=v3".into()],
+                        env: BTreeMap::new(),
+                    },
+                    new_session_instructions_meta_key: None,
+                    capabilities: AgentClientCapabilities {
+                        steer: false,
+                        manual_compaction: false,
+                        compaction_events: false,
+                        compaction_history: false,
+                        context_usage: Default::default(),
+                        ..crate::ACP_MAX_CAPABILITIES
+                    },
+                    interjection: None,
+                    restricted_execution: None,
+                },
+            ),
         ])
     }
 

@@ -6,6 +6,7 @@ use crate::{ACP_MAX_CAPABILITIES, AcpAgentDefinition};
 pub(crate) struct AgentBounds {
     capabilities: AgentClientCapabilities,
     pub prompt_steering: bool,
+    pub one_time_permissions_only: bool,
     pub interjection: Option<&'static crate::InterjectionProtocol>,
 }
 
@@ -26,6 +27,7 @@ impl AgentBounds {
         Self {
             capabilities: caps,
             prompt_steering: agent_id == "antigravity",
+            one_time_permissions_only: agent_id == "kiro",
             interjection: definition.and_then(|agent| agent.interjection),
         }
     }
@@ -36,6 +38,7 @@ pub(crate) struct Negotiated {
     pub steer: bool,
     pub interject: bool,
     pub compact_command: bool,
+    pub deferred_models: bool,
 }
 
 impl Negotiated {
@@ -55,6 +58,7 @@ impl Negotiated {
             )));
         }
         Ok(Self {
+            deferred_models: crate::models::deferred_options(caps),
             compact_command: response
                 .meta
                 .as_ref()
@@ -188,6 +192,7 @@ mod tests {
             steer: true,
             compact_command: true,
             interject: false,
+            deferred_models: false,
         };
         assert!(live(&bounds, negotiated, idle()).unwrap().manual_compaction);
         let other = live(&AgentBounds::of("another", None), negotiated, idle()).unwrap();

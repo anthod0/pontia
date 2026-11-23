@@ -5,6 +5,7 @@
   import codex from '../../assets/client-icons/codex.svg?raw'
   import claude from '../../assets/client-icons/claude.svg?raw'
   import grok from '../../assets/client-icons/grok.svg?raw'
+  import kiro from '../../assets/client-icons/kiro.svg?raw'
 
   interface Props {
     clientType: string | undefined
@@ -16,10 +17,12 @@
 
   const clientIcons: Record<string, string> = { pi, codex, 'claude-agent': claude }
 
+  const acpIcons = new Map([['grok', grok], ['kiro', kiro]])
+
   const icon = $derived.by(() => {
     if (!clientType) return undefined
     if (clientType !== 'acp') return clientIcons[clientType]
-    return acpAgentId === 'grok' ? grok : undefined
+    return typeof acpAgentId === 'string' ? acpIcons.get(acpAgentId) : undefined
   })
 </script>
 

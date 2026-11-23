@@ -53,6 +53,7 @@ pub async fn run(config: Bootstrap) -> Result<()> {
         .args(&config.args)
         .envs(&config.environment)
         .env("PONTIA_SESSION_ID", &config.session_id)
+        .env("PONTIA_RUNTIME_INSTANCE_ID", &config.runtime_id)
         .current_dir(&config.cwd)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

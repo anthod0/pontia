@@ -62,6 +62,17 @@ def model_config():
     ]}
 
 
+def session_config(request, fields):
+    if os.environ.get("ACP_MODELS") == "deferred":
+        response(request, {**fields, "configOptions": []})
+        send({"method": "session/update", "params": {"sessionId": native_id, "update": {
+            "sessionUpdate": "config_option_update", **model_config()
+        }}})
+    else:
+        options = {} if request["method"] == "session/load" and os.environ.get("ACP_MODELS") == "new-only" else model_config()
+        response(request, {**fields, **options})
+
+
 def wait_for(name):
     while not (root / name).exists():
         time.sleep(0.005)
@@ -72,7 +83,7 @@ def prompt(request, ordinal, cancellation):
     wait_for(f"update-{ordinal}")
     if os.environ.get("ACP_READ_SESSION_ENV") == "1":
         value = subprocess.check_output(["sh", "-c", 'printf %s "$PONTIA_SESSION_ID"'], text=True)
-        log({"session_environment": value, "native": native_id, "test_marker": os.environ.get("ACP_SESSION_MARKER")})
+        log({"session_environment": value, "runtime": os.environ.get("PONTIA_RUNTIME_INSTANCE_ID"), "native": native_id, "test_marker": os.environ.get("ACP_SESSION_MARKER")})
     if os.environ.get("ACP_PERMISSION") == "1":
         options = [
             {"optionId": "once:原", "name": "Allow once", "kind": "allow_once"},
@@ -173,6 +184,10 @@ for line in sys.stdin:
             caps["sessionCapabilities"]["systemPrompt"] = {}
         if os.environ.get("ACP_ANTIGRAVITY") == "1":
             caps["_meta"] = {"antigravity": {"systemPrompt": {"append": True}}}
+        if os.environ.get("ACP_MODELS") == "deferred":
+            caps["_meta"] = {"kiro": {}}
+        if os.environ.get("ACP_DELETE"):
+            caps["sessionCapabilities"]["delete"] = {}
         if os.environ.get("ACP_OPTIONS"):
             caps["sessionCapabilities"]["options"] = {}
         if os.environ.get("ACP_INTERJECT"):
@@ -204,7 +219,7 @@ for line in sys.stdin:
             continue
         if os.environ.get("ACP_HOLD_NEW") == "1":
             wait_for("release-new")
-        response(request, {"sessionId": native_id, **model_config()})
+        session_config(request, {"sessionId": native_id})
     elif method == "session/load":
         if os.environ.get("ACP_REJECT_SYSTEM_PROMPT") == "load" and request["params"].get("systemPrompt"):
             send({"id": request["id"], "error": {"code": -32602, "message": "Instructions rejected"}})
@@ -240,7 +255,7 @@ for line in sys.stdin:
                     send({"method": "session/update", "params": {"sessionId": native, "update": update}})
         if (root / "orphan-replay").exists():
             send({"method": "session/update", "params": {"sessionId": native_id, "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "orphan answer"}}}})
-        response(request, {} if os.environ.get("ACP_MODELS") == "new-only" else model_config())
+        session_config(request, {})
         if os.environ.get("ACP_PAUSE_INPUT_AFTER_LOAD") == "1":
             (root / "input-paused").touch()
             wait_for("resume-input")
@@ -321,6 +336,8 @@ for line in sys.stdin:
                 "sessionId": native_id,
                 "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": " after cancel"}}
             }})
+    elif method == "session/delete" and os.environ.get("ACP_DELETE") and request["params"]["sessionId"] == native_id:
+        response(request, {})
     elif method == "session/close":
         if os.environ.get("ACP_HOLD_CLOSE") == "1":
             wait_for("release-close")

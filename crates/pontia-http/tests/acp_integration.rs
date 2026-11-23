@@ -84,6 +84,7 @@ async fn creation_options_follow_enabled_settings_for_native_and_acp_clients() {
         ("claude-agent", "default", json!({})),
         ("acp", "antigravity", json!({"acp_agent_id":"antigravity"})),
         ("acp", "grok", json!({"acp_agent_id":"grok"})),
+        ("acp", "kiro", json!({"acp_agent_id":"kiro"})),
     ] {
         let path = format!("/api/v1/agent-clients/{client}/{key}");
         let (status, body) = call(&app, "PATCH", &path, json!({"enabled":true})).await;
@@ -101,7 +102,7 @@ async fn creation_options_follow_enabled_settings_for_native_and_acp_clients() {
                 .unwrap()
                 .iter()
                 .any(|item| { item["client_type"] == client && item["client_key"] == key }),
-            key != "antigravity"
+            !matches!(key, "antigravity" | "kiro")
         );
 
         let (status, body) = call(&app, "PATCH", &path, json!({"enabled":false})).await;

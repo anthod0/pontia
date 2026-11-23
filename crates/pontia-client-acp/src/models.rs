@@ -11,6 +11,17 @@ use pontia_agent_control::{
 use pontia_core::{Error, Result, domain::EventType};
 use serde_json::json;
 
+const MODEL_OPTIONS_WAIT: std::time::Duration = std::time::Duration::from_secs(10);
+
+pub(crate) fn deferred_options(
+    capabilities: &agent_client_protocol::v1::schema::AgentCapabilities,
+) -> bool {
+    capabilities
+        .meta
+        .as_ref()
+        .is_some_and(|meta| meta.contains_key("kiro"))
+}
+
 fn model_option(
     options: &[SessionConfigOption],
 ) -> Option<(&SessionConfigOption, &SessionConfigSelect)> {
@@ -63,7 +74,18 @@ pub(crate) async fn select(peer: &std::sync::Arc<Peer>, model: &str, resuming: b
     if let Some(profile) = peer.policy.profile {
         profile.check_model(peer, Some(model)).await?;
     }
-    let state = peer.state.lock().await;
+    let mut state = peer.state.lock().await;
+    if state.negotiated.deferred_models && model_option(&state.config_options).is_none() {
+        let mut available = state.model_options_available.subscribe();
+        drop(state);
+        tokio::time::timeout(MODEL_OPTIONS_WAIT, available.changed())
+            .await
+            .map_err(|_| Error::CapabilityUnavailable("ACP model options did not arrive".into()))?
+            .map_err(|_| {
+                Error::ControlUnknown("ACP connection closed during model selection".into())
+            })?;
+        state = peer.state.lock().await;
+    }
     let Some((option, select)) = model_option(&state.config_options) else {
         // An Agent may restore its own model without offering a selector on load.
         if resuming {
@@ -130,6 +152,9 @@ pub(crate) fn replace(state: &mut SessionState, options: Vec<SessionConfigOption
     let model = current(&options);
     if state.current_model != model {
         state.verified_model = None;
+    }
+    if model.is_some() {
+        state.model_options_available.send_replace(());
     }
     state.current_model = model;
     state.config_options = options;
