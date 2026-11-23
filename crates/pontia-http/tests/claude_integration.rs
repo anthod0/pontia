@@ -209,19 +209,35 @@ async fn claude_http_exit_history_and_resume_preserve_the_conversation() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED, "{submitted}");
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let (_, view) = call(&h.app, "GET", &base, Value::Null).await;
+            let usage = &view["data"]["session"]["context_usage"];
+            if usage["confidence"] == "estimated" {
+                assert_eq!(usage["used_tokens"], 664);
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
     std::fs::write(h.root.path().join(format!("start-{session}-2")), "").unwrap();
     let second = wait_turn(&h.app, session, "running").await;
     assert_ne!(first, second);
     let (_, resumed) = call(&h.app, "GET", &base, Value::Null).await;
     assert_eq!(resumed["data"]["session"]["model"], "haiku");
     let session_view = &resumed["data"]["session"];
-    assert_eq!(session_view["capabilities"]["context_usage"], "estimated");
+    assert_eq!(session_view["capabilities"]["context_usage"], "exact");
     let usage = &session_view["context_usage"];
-    assert_eq!(usage["used_tokens"], 4000);
+    assert_eq!(usage["used_tokens"], 14710);
     assert_eq!(usage["max_tokens"], 200000);
-    assert_eq!(usage["remaining_tokens"], 196000);
-    assert_eq!(usage["usage_ratio"], 0.02);
-    assert_eq!(usage["confidence"], "estimated");
+    assert_eq!(usage["remaining_tokens"], 185290);
+    assert_eq!(usage["usage_ratio"], 0.07355);
+    assert_eq!(usage["confidence"], "exact");
+    assert_eq!(usage["input_tokens"], 14000);
+    assert_eq!(usage["output_tokens"], 73);
+    assert_eq!(usage["cache_tokens"], 710);
     std::fs::write(h.root.path().join(format!("finish-{session}-2")), "").unwrap();
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {

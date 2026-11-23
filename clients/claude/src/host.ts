@@ -1,4 +1,11 @@
-import { query, type Options, type Query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import {
+  query,
+  type Options,
+  type Query,
+  type SDKMessage,
+  type SDKAssistantMessage,
+  type SDKPartialAssistantMessage,
+} from "@anthropic-ai/claude-agent-sdk";
 import { Compaction } from "./compaction.js";
 import { Input } from "./input.js";
 import { Permissions } from "./permissions.js";
@@ -37,8 +44,11 @@ export class Host {
   private native?: string;
   private unavailable?: string;
   private retrying = false;
-  private usagePending = false;
-  private usageReading = false;
+  private usageRevision = 0;
+  private contextModel?: string;
+  private usageMessageId?: string;
+  private streamUsage?: SDKAssistantMessage["message"]["usage"];
+  private contextSummary?: ReturnType<Query["getContextUsage"]>;
   private controlConnected = true;
   private closing = false;
   private closed = false;
@@ -257,16 +267,6 @@ export class Host {
       for await (const message of execution) {
         try {
           this.message(message);
-          if (
-            !this.unavailable &&
-            message.session_id === this.native &&
-            !("parent_tool_use_id" in message && message.parent_tool_use_id) &&
-            (message.type === "assistant" ||
-              message.type === "result" ||
-              (message.type === "system" &&
-                (message.subtype === "init" || message.subtype === "compact_boundary")))
-          )
-            void this.refreshContextUsage(execution);
         } catch (error) {
           this.fail(
             error instanceof Error ? error.message : "sdk_message_invalid",
@@ -286,35 +286,79 @@ export class Host {
     }
   }
 
-  private async refreshContextUsage(execution: ReturnType<QueryFactory>): Promise<void> {
-    this.usagePending = true;
-    if (this.usageReading) return;
-    this.usageReading = true;
+  private async reportContextUsage(usage?: SDKAssistantMessage["message"]["usage"]): Promise<void> {
+    const revision = ++this.usageRevision;
     try {
-      while (this.usagePending && !this.closing && !this.unavailable) {
-        this.usagePending = false;
-        const usage = await execution.getContextUsage({ detail: "summary" });
-        if (this.closing || this.unavailable) return;
-        const used = usage.totalTokens;
-        const max = usage.rawMaxTokens;
-        if (!Number.isSafeInteger(used) || used < 0 || !Number.isSafeInteger(max) || max <= 0)
-          continue;
-        this.emit({
-          kind: "context_usage",
-          context_usage: {
-            used_tokens: used,
-            max_tokens: max,
-            remaining_tokens: Math.max(0, max - used),
-            usage_ratio: Math.min(1, used / max),
-            confidence: "estimated",
-          },
-        });
+      // /context measures against the resolved compaction window, including policy overrides.
+      if (!usage || !this.contextSummary)
+        this.contextSummary = this.execution!.getContextUsage({ detail: "summary" });
+      const { rawMaxTokens: max, totalTokens } = await this.contextSummary;
+      if (revision !== this.usageRevision || this.closing || this.unavailable) return;
+      const cache =
+        (usage?.cache_creation_input_tokens ?? 0) + (usage?.cache_read_input_tokens ?? 0);
+      const used = usage ? usage.input_tokens + cache : totalTokens;
+      if (!Number.isSafeInteger(max) || max <= 0) {
+        this.contextSummary = undefined;
+        return;
       }
+      if (!Number.isSafeInteger(used) || used < 0) return;
+      this.emit({
+        kind: "context_usage",
+        context_usage: {
+          used_tokens: used,
+          max_tokens: max,
+          remaining_tokens: Math.max(0, max - used),
+          usage_ratio: Math.min(1, used / max),
+          ...(usage
+            ? {
+                confidence: "exact",
+                input_tokens: usage.input_tokens,
+                output_tokens: usage.output_tokens,
+                cache_tokens: cache,
+              }
+            : { confidence: "estimated" }),
+        },
+      });
     } catch {
-      // Usage observation must not interrupt the task or expose SDK diagnostics.
+      if (revision !== this.usageRevision) return;
+      this.contextSummary = undefined;
       if (!this.closing) console.error("Claude context usage query failed");
-    } finally {
-      this.usageReading = false;
+    }
+  }
+
+  private observeReply(message: SDKAssistantMessage | SDKPartialAssistantMessage): void {
+    if (message.parent_tool_use_id) return;
+    if (message.type === "assistant") {
+      if (
+        message.agent_id ||
+        message.error ||
+        message.message.model === "<synthetic>" ||
+        message.message.id === this.usageMessageId ||
+        !message.message.usage
+      )
+        return;
+      this.usageMessageId = message.message.id;
+      void this.reportContextUsage(message.message.usage);
+      return;
+    }
+    const event = message.event;
+    if (event.type === "message_start") {
+      this.usageMessageId = event.message.id;
+      this.streamUsage = event.message.usage;
+    }
+    if (event.type === "message_delta" && this.streamUsage) {
+      // Streamed assistant envelopes carry the initial counts. The delta finalizes this request.
+      const initial = this.streamUsage;
+      this.streamUsage = undefined;
+      const final = event.usage;
+      void this.reportContextUsage({
+        ...initial,
+        input_tokens: final.input_tokens ?? initial.input_tokens,
+        cache_creation_input_tokens:
+          final.cache_creation_input_tokens ?? initial.cache_creation_input_tokens,
+        cache_read_input_tokens: final.cache_read_input_tokens ?? initial.cache_read_input_tokens,
+        output_tokens: final.output_tokens ?? initial.output_tokens,
+      });
     }
   }
 
@@ -332,6 +376,10 @@ export class Host {
         this.emit({ kind: "ready", native_session_id: this.native });
       }
       this.emit({ kind: "model", model: message.model });
+      if (this.contextModel !== message.model) {
+        this.contextModel = message.model;
+        void this.reportContextUsage();
+      }
       return;
     }
     if (message.type === "system" && message.subtype === "api_retry") {
@@ -354,6 +402,13 @@ export class Host {
       if (!this.native || message.session_id !== this.native)
         throw new Error("native_identity_mismatch");
       this.compaction.accept(message);
+      if (
+        message.subtype === "compact_boundary" &&
+        !("parent_tool_use_id" in message && message.parent_tool_use_id)
+      ) {
+        this.streamUsage = undefined;
+        void this.reportContextUsage();
+      }
       return;
     }
     if (["stream_event", "assistant", "result", "user"].includes(message.type)) {
@@ -363,7 +418,10 @@ export class Host {
         this.retrying = false;
         this.emit({ kind: "retry", reason: null });
       }
-      if (!this.compaction.accept(message)) this.current?.accept(message);
+      if (this.compaction.accept(message)) return;
+      this.current?.accept(message);
+      if (message.type === "assistant" || message.type === "stream_event")
+        this.observeReply(message);
     }
   }
 }

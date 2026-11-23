@@ -611,82 +611,184 @@ test("multiple steering messages are delivered in order and all must resolve bef
   assert.equal(events.filter((e) => e.kind === "finished").length, 1);
 });
 
-test("context snapshots refresh on init, replies, result and compaction without accumulating tokens", async (t) => {
+function apiReply(input: string, inputTokens: number) {
+  const reply = assistant(input, undefined, "message-" + inputTokens);
+  return {
+    ...reply,
+    message: {
+      ...reply.message,
+      model: "sonnet",
+      usage: {
+        input_tokens: inputTokens,
+        cache_creation_input_tokens: 233,
+        cache_read_input_tokens: 477,
+        output_tokens: 73,
+      },
+    },
+  };
+}
+
+const compactBoundary = {
+  type: "system",
+  subtype: "compact_boundary",
+  session_id: native,
+  uuid: "usage-compact",
+  compact_metadata: { trigger: "auto", pre_tokens: 14710, post_tokens: 519 },
+};
+
+test("main API replies replace initial and post-compaction estimates with per-request usage", async (t) => {
   const { fixture, events, host } = setup();
   t.after(() => host.close());
-  let snapshot = usage(40000);
+  let snapshot = usage(500);
   fixture.onContextUsage(async () => snapshot);
-  host.submit(first, "task");
-  const observed = () => events.filter((e) => e.kind === "context_usage").at(-1)?.context_usage;
+  const observations = () =>
+    events.filter((e) => e.kind === "context_usage").map((e) => e.context_usage);
+  const end = (input: string) =>
+    result(input, {
+      usage: { input_tokens: 9000000 },
+      modelUsage: { haiku: { contextWindow: 100000 }, sonnet: { contextWindow: 1000000 } },
+    });
+  host.submit(first, "first task");
   fixture.messages.push(init());
   await settle();
-  assert.deepEqual(observed(), {
-    used_tokens: 40000,
-    max_tokens: 200000,
-    remaining_tokens: 160000,
-    usage_ratio: 0.2,
-    confidence: "estimated",
-  });
-  snapshot = usage(50000);
-  fixture.messages.push(assistant());
+  fixture.messages.push(apiReply(first, 13000));
   await settle();
-  assert.equal(observed()?.used_tokens, 50000);
-  snapshot = usage(210000);
-  fixture.messages.push(result(first, { usage: { input_tokens: 9000000 } }));
+  assert.equal(observations().at(-1)?.used_tokens, 13710);
+  fixture.messages.push(end(first));
   await settle();
-  assert.deepEqual(observed(), {
-    used_tokens: 210000,
-    max_tokens: 200000,
-    remaining_tokens: 0,
-    usage_ratio: 1,
-    confidence: "estimated",
-  });
-  snapshot = usage(10000);
+  host.submit(second, "second task");
+  fixture.messages.push(init());
+  fixture.messages.push(apiReply(second, 14000));
+  fixture.messages.push(apiReply(second, 14000));
+  fixture.messages.push({ ...apiReply(second, 80000), parent_tool_use_id: "subagent" });
   fixture.messages.push({
-    type: "system",
-    subtype: "compact_boundary",
-    session_id: native,
-    uuid: "usage-compact",
-    compact_metadata: { trigger: "auto", pre_tokens: 20000 },
+    ...stream({ type: "message_start", message: apiReply(second, 80000).message }),
+    parent_tool_use_id: "subagent",
   });
+  fixture.messages.push({
+    ...stream({ type: "message_delta", usage: { output_tokens: 10 } }),
+    parent_tool_use_id: "subagent",
+  });
+  fixture.messages.push(end(second));
   await settle();
-  assert.equal(observed()?.used_tokens, 10000);
-  snapshot = usage(99000);
-  fixture.messages.push({ ...assistant(), parent_tool_use_id: "subagent" });
+  assert.deepEqual(
+    observations().map((u) => [u.used_tokens, u.confidence]),
+    [
+      [500, "estimated"],
+      [13710, "exact"],
+      [14710, "exact"],
+    ],
+  );
+  assert.deepEqual(observations().at(-1), {
+    used_tokens: 14710,
+    max_tokens: 200000,
+    remaining_tokens: 185290,
+    usage_ratio: 0.07355,
+    input_tokens: 14000,
+    cache_tokens: 710,
+    output_tokens: 73,
+    confidence: "exact",
+  });
+  snapshot = usage(622);
+  fixture.messages.push(compactBoundary);
   await settle();
-  assert.equal(observed()?.used_tokens, 10000);
+  assert.deepEqual(observations().at(-1), {
+    used_tokens: 622,
+    max_tokens: 200000,
+    remaining_tokens: 199378,
+    usage_ratio: 0.00311,
+    confidence: "estimated",
+  });
 });
 
-test("invalid or failed context queries preserve usage and do not block task completion", async (t) => {
-  const { fixture, events, host } = setup();
+test("resume uses the local estimate until the next main API reply", async (t) => {
+  const { fixture, events, host } = setup(native);
   t.after(() => host.close());
-  fixture.onContextUsage(async () => usage(100));
-  host.submit(first, "task");
+  fixture.onContextUsage(async () => usage(664));
+  host.submit(first, "resumed task");
   fixture.messages.push(init());
   await settle();
+  fixture.messages.push(apiReply(first, 16000));
+  fixture.messages.push(result());
+  await settle();
+  assert.deepEqual(
+    events
+      .filter((e) => e.kind === "context_usage")
+      .map((e) => [e.context_usage.used_tokens, e.context_usage.confidence]),
+    [
+      [664, "estimated"],
+      [16710, "exact"],
+    ],
+  );
+});
+
+test("a delayed window lookup publishes only the latest usage observation", async (t) => {
+  const { fixture, events, host } = setup();
+  t.after(() => host.close());
+  let resolve!: (snapshot: ReturnType<typeof usage>) => void;
+  fixture.onContextUsage(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  host.submit(first, "task");
+  fixture.messages.push(init());
+  fixture.messages.push(apiReply(first, 13000));
+  await settle();
+  resolve(usage(100));
+  await settle();
+
+  // This exact reply is waiting on an earlier lookup when compaction supersedes it.
+  fixture.messages.push(compactBoundary);
+  fixture.messages.push(apiReply(first, 14000));
+  await settle();
+  const older = resolve;
+  fixture.messages.push({ ...compactBoundary, uuid: "newer-boundary" });
+  await settle();
+  resolve(usage(520));
+  await settle();
+  older(usage(600));
+  await settle();
+  assert.deepEqual(
+    events
+      .filter((e) => e.kind === "context_usage")
+      .map((e) => [e.context_usage.used_tokens, e.context_usage.confidence]),
+    [
+      [13710, "exact"],
+      [520, "estimated"],
+    ],
+  );
+});
+
+test("API usage recovers after a failed initial window lookup", async (t) => {
+  const { fixture, events, host } = setup();
+  t.after(() => host.close());
   fixture.onContextUsage(async () => {
     throw new Error("private SDK error");
   });
-  fixture.messages.push(assistant());
+  host.submit(first, "task");
+  fixture.messages.push(init());
   await settle();
-  fixture.onContextUsage(async () => usage(NaN));
+  fixture.onContextUsage(async () => usage(100, 10000));
+  fixture.messages.push(apiReply(first, 13000));
   fixture.messages.push(result());
   await settle();
-  assert.equal(host.status().unavailable, null);
   assert.equal(host.status().finished, true);
-  assert.equal(events.filter((e) => e.kind === "context_usage").length, 1);
-  fixture.onContextUsage(async () => usage(200));
-  fixture.messages.push({
-    type: "system",
-    subtype: "compact_boundary",
-    session_id: native,
-    uuid: "usage-compact",
-    compact_metadata: { trigger: "auto", pre_tokens: 20000 },
-  });
-  await settle();
-  assert.equal(
-    events.filter((e) => e.kind === "context_usage").at(-1)?.context_usage.used_tokens,
-    200,
+  assert.deepEqual(
+    events.filter((e) => e.kind === "context_usage").map((e) => e.context_usage),
+    [
+      {
+        used_tokens: 13710,
+        max_tokens: 10000,
+        remaining_tokens: 0,
+        usage_ratio: 1,
+        input_tokens: 13000,
+        output_tokens: 73,
+        cache_tokens: 710,
+        confidence: "exact",
+      },
+    ],
   );
 });
 
