@@ -21,10 +21,14 @@ use crate::{
     peer::{Peers, SessionState},
 };
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub(crate) struct Message {
     pub role: &'static str,
     pub text: String,
+    pub display: Option<String>,
+    pub prompt: Option<usize>,
+    pub interjection: bool,
+    pub(crate) tool: Option<(String, Option<String>)>,
 }
 
 pub(crate) fn user_bytes(messages: &[Message]) -> usize {
@@ -42,6 +46,7 @@ pub(crate) fn append(messages: &mut Vec<Message>, role: &'static str, text: &str
         messages.push(Message {
             role,
             text: text.into(),
+            ..Default::default()
         });
     }
 }
@@ -54,7 +59,23 @@ pub(crate) fn unavailable() -> Error {
 
 // Cursors measure UTF-8 bytes in the native user-text stream, not chunks or
 // guessed rounds. Rechunking and prompts with no Agent output preserve offsets.
-pub(crate) fn collect(messages: &mut Vec<Message>, update: &Value) -> Result<()> {
+pub(crate) fn collect(
+    messages: &mut Vec<Message>,
+    update: &Value,
+    protocol: Option<&crate::InterjectionProtocol>,
+) -> Result<()> {
+    if protocol.is_some()
+        && update["sessionUpdate"] == "tool_call"
+        && let (Some(call), Some(title)) = (update["toolCallId"].as_str(), update["title"].as_str())
+    {
+        messages.push(Message {
+            role: "tool_call",
+            text: title.into(),
+            tool: Some((call.into(), update["status"].as_str().map(str::to_owned))),
+            ..Default::default()
+        });
+        return Ok(());
+    }
     let role = match update["sessionUpdate"].as_str() {
         Some("user_message_chunk") => "user",
         Some("agent_message_chunk") => "assistant",
@@ -67,11 +88,65 @@ pub(crate) fn collect(messages: &mut Vec<Message>, update: &Value) -> Result<()>
     if role == "assistant" && messages.is_empty() {
         return Err(unavailable());
     }
+    if let Some(protocol) = protocol.filter(|_| role == "user") {
+        let prompt = update
+            .pointer(protocol.prompt_index)
+            .and_then(Value::as_u64)
+            .map(|n| n as usize);
+        let interjection = update.pointer(protocol.interjection_marker) == Some(&Value::Bool(true));
+        if interjection || prompt.is_some() {
+            messages.push(Message {
+                role,
+                text: text.into(),
+                prompt,
+                interjection,
+                tool: None,
+                display: interjection
+                    .then(|| {
+                        update
+                            .pointer(protocol.display_text)?
+                            .as_str()
+                            .map(str::to_owned)
+                    })
+                    .flatten(),
+            });
+            return Ok(());
+        }
+    }
     append(messages, role, text);
     Ok(())
 }
 
-fn cursor(binding: &AgentBindingResolveRequest, index: usize) -> String {
+#[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+pub(crate) enum Anchor {
+    Bytes(usize),
+    Prompt { prompt: usize },
+}
+
+impl Anchor {
+    fn offset(self, messages: &[Message]) -> Result<usize> {
+        match self {
+            Self::Bytes(n) => Ok(n),
+            Self::Prompt { prompt } => {
+                let mut offset = 0;
+                let mut next = 0;
+                for message in messages.iter().filter(|m| m.role == "user") {
+                    if let Some(index) = message.prompt {
+                        if index == prompt {
+                            return Ok(offset);
+                        }
+                        next = index + 1;
+                    }
+                    offset += message.text.len();
+                }
+                (next == prompt).then_some(offset).ok_or_else(unavailable)
+            }
+        }
+    }
+}
+
+fn cursor(binding: &AgentBindingResolveRequest, index: Anchor) -> String {
     json!([
         "acp-replay-v1",
         binding.id,
@@ -80,13 +155,9 @@ fn cursor(binding: &AgentBindingResolveRequest, index: usize) -> String {
     ])
     .to_string()
 }
-fn index(binding: &AgentBindingResolveRequest, value: &str) -> Result<usize> {
+fn index(binding: &AgentBindingResolveRequest, value: &str) -> Result<Anchor> {
     let parsed: Value = serde_json::from_str(value)?;
-    let index = parsed
-        .get(3)
-        .and_then(Value::as_u64)
-        .and_then(|n| usize::try_from(n).ok())
-        .ok_or_else(unavailable)?;
+    let index: Anchor = serde_json::from_value(parsed[3].clone()).map_err(|_| unavailable())?;
     if cursor(binding, index) != value {
         return Err(unavailable());
     }
@@ -103,7 +174,7 @@ impl ClientData for AcpAdapter {
             .as_object_mut()
             .and_then(|p| p.remove("acp_history_anchor"));
         NativeEventEvidence {
-            entry_anchor: anchor.and_then(|v| v.as_u64().map(|n| n.to_string())),
+            entry_anchor: anchor.map(|value| value.to_string()),
             topology: None,
         }
     }
@@ -160,11 +231,11 @@ impl ClientData for AcpAdapter {
             }
             let position = anchor
                 .ok_or_else(unavailable)?
-                .parse::<usize>()
+                .parse::<Value>()
                 .map_err(|_| unavailable())?;
             Ok(CapturedTimelineBoundary {
                 kind,
-                cursor: cursor(binding, position),
+                cursor: cursor(binding, serde_json::from_value(position)?),
             })
         })())
     }
@@ -215,6 +286,12 @@ impl AcpHistory {
         if !state.current || state.history_error.is_some() || state.replay.is_some() {
             return Err(unavailable());
         }
+        if !state.interjections.is_empty() {
+            return Err(Error::Conflict {
+                code: "timeline_pending",
+                message: "Waiting for native interjection history".into(),
+            });
+        }
         Ok(state)
     }
 
@@ -223,11 +300,12 @@ impl AcpHistory {
         turn_id: &str,
         head: &str,
         tail: Option<&str>,
-        total: usize,
+        messages: &[Message],
     ) -> std::result::Result<(usize, usize), TurnTimelineReadError> {
-        let start = index(&self.binding, head)?;
+        let total = user_bytes(messages);
+        let start = index(&self.binding, head)?.offset(messages)?;
         let end = tail
-            .map(|tail| index(&self.binding, tail))
+            .map(|tail| index(&self.binding, tail)?.offset(messages))
             .transpose()?
             .unwrap_or(total);
         if start > end || end > total {
@@ -246,15 +324,18 @@ impl NativeHistory for AcpHistory {
     ) -> HistoryRead<'_, std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError>> {
         Box::pin(async move {
             let state = self.snapshot().await?;
-            let total = user_bytes(&state.history);
             let mut items = Vec::new();
             for (number, turn) in selection.turns.iter().enumerate() {
                 if !selection.selected_turn_ids.contains(&turn.turn_id) {
                     continue;
                 }
                 let head = turn.head_cursor.as_deref().ok_or_else(unavailable)?;
-                let (start, end) =
-                    self.offsets(&turn.turn_id, head, turn.tail_cursor.as_deref(), total)?;
+                let (start, end) = self.offsets(
+                    &turn.turn_id,
+                    head,
+                    turn.tail_cursor.as_deref(),
+                    &state.history,
+                )?;
                 items.extend(render(&state.history, start, end, Some(&turn.turn_id))?);
                 // A checkpoint between two Turns belongs on the following page.
                 let last = number + 1 == selection.turns.len();
@@ -262,7 +343,7 @@ impl NativeHistory for AcpHistory {
                     .iter()
                     .rev()
                     .find_map(|t| t.tail_cursor.as_deref())
-                    .map(|tail| index(&self.binding, tail))
+                    .map(|tail| index(&self.binding, tail)?.offset(&state.history))
                     .transpose()?
                     .unwrap_or(0);
                 items.extend(
@@ -291,13 +372,12 @@ impl NativeHistory for AcpHistory {
                 return render(&state.history, 0, user_bytes(&state.history), None)
                     .map_err(Into::into);
             }
-            let total = user_bytes(&state.history);
             for range in ranges {
                 let (start, end) = self.offsets(
                     &range.turn_id,
                     &range.head_cursor,
                     range.tail_cursor.as_deref(),
-                    total,
+                    &state.history,
                 )?;
                 items.extend(render(&state.history, start, end, Some(&range.turn_id))?);
             }
@@ -324,7 +404,8 @@ fn render(
 ) -> Result<Vec<TurnTimelineItem>> {
     let mut position = 0;
     let mut items = Vec::new();
-    for message in messages {
+    let has_tools = messages.iter().any(|m| m.tool.is_some());
+    for (order, message) in messages.iter().enumerate() {
         let offset = position;
         let text = if message.role == "user" {
             position += message.text.len();
@@ -333,7 +414,11 @@ fn render(
             if from >= to {
                 continue;
             }
-            message.text.get(from..to).ok_or_else(unavailable)?
+            if from == 0 && to == message.text.len() {
+                message.display.as_deref().unwrap_or(&message.text)
+            } else {
+                message.text.get(from..to).ok_or_else(unavailable)?
+            }
         } else {
             if position <= start || position > end {
                 continue;
@@ -348,15 +433,19 @@ fn render(
             item: TimelineItem {
                 // Timeline consumers use item IDs as ordering keys when ACP
                 // provides no timestamp. Preserve numeric native order lexically.
-                item_id: format!("acp:{:020}:{}", start.max(offset), message.role),
+                item_id: if has_tools && message.role != "user" {
+                    format!("acp:{:020}:assistant:{order:020}", start.max(offset))
+                } else {
+                    format!("acp:{:020}:{}", start.max(offset), message.role)
+                },
                 kind: message.role.into(),
                 raw_kind: None,
                 role: message.role.into(),
-                title: None,
-                status: None,
+                title: message.tool.as_ref().map(|_| message.text.clone()),
+                status: message.tool.as_ref().and_then(|(_, status)| status.clone()),
                 occurred_at: None,
                 content_preview: text.into(),
-                call_id: None,
+                call_id: message.tool.as_ref().map(|(id, _)| id.clone()),
                 managed_tool_use: None,
             },
         });
@@ -402,5 +491,62 @@ impl TurnTimelineReader for ProtocolOnly {
         _request: TurnTimelineReadRequest,
     ) -> std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError> {
         Err(unavailable().into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn captured_interjections_render_in_native_order_and_in_the_consuming_prompt() {
+        let agents = crate::AcpAgents::builtin();
+        let recipe = agents.get("grok").unwrap().interjection;
+        for line in include_str!("../tests/fixtures/interjection-history.jsonl").lines() {
+            let case: Value = serde_json::from_str(line).unwrap();
+            let mut messages = Vec::new();
+            for update in case["updates"].as_array().unwrap() {
+                collect(&mut messages, update, recipe).unwrap();
+            }
+            let promoted = matches!(case["case"].as_str(), Some("E8" | "E9" | "E10" | "E12"));
+            let mut expected_user_texts =
+                vec![case["updates"][0]["content"]["text"].as_str().unwrap()];
+            let sent = case["sent"].as_array().unwrap();
+            if !promoted {
+                expected_user_texts.extend(sent.iter().map(|v| v.as_str().unwrap()));
+            }
+            let end = Anchor::Prompt { prompt: 1 }.offset(&messages).unwrap();
+            let first = render(&messages, 0, end, Some("original")).unwrap();
+            assert_eq!(
+                first
+                    .iter()
+                    .filter(|i| i.item.role == "user")
+                    .map(|i| i.item.content_preview.as_str())
+                    .collect::<Vec<_>>(),
+                expected_user_texts
+            );
+            assert!(
+                first
+                    .windows(2)
+                    .all(|pair| pair[0].item.item_id < pair[1].item.item_id)
+            );
+            if case["case"] == "E5" {
+                let i = first
+                    .iter()
+                    .position(|i| i.item.content_preview == sent[0])
+                    .unwrap();
+                assert_eq!(first[i - 1].item.kind, "tool_call");
+                assert_eq!(first[i + 1].item.role, "assistant");
+            }
+            if promoted {
+                for (i, text) in sent.iter().enumerate() {
+                    let start = Anchor::Prompt { prompt: i + 1 }.offset(&messages).unwrap();
+                    let end = Anchor::Prompt { prompt: i + 2 }.offset(&messages).unwrap();
+                    let followup = render(&messages, start, end, Some("promotion")).unwrap();
+                    assert_eq!(followup[0].item.content_preview, text.as_str().unwrap());
+                    assert_eq!(followup[1].item.role, "assistant");
+                }
+            }
+        }
     }
 }

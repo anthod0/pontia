@@ -3,11 +3,14 @@ use pontia_core::{Error, Result, client_capabilities::AgentClientCapabilities};
 
 use crate::{ACP_MAX_CAPABILITIES, AcpAgentDefinition};
 
-pub(crate) struct AgentBounds(AgentClientCapabilities);
+pub(crate) struct AgentBounds {
+    capabilities: AgentClientCapabilities,
+    pub interjection: Option<&'static crate::InterjectionProtocol>,
+}
 
 impl AgentBounds {
     pub fn compaction_events(&self) -> bool {
-        self.0.compaction_events
+        self.capabilities.compaction_events
     }
 
     pub fn of(agent_id: &str, definition: Option<&AcpAgentDefinition>) -> Self {
@@ -19,18 +22,22 @@ impl AgentBounds {
             caps.compaction_events = false;
             caps.compaction_history = false;
         }
-        Self(caps)
+        Self {
+            capabilities: caps,
+            interjection: definition.and_then(|agent| agent.interjection),
+        }
     }
 }
 
 #[derive(Default, Clone, Copy)]
 pub(crate) struct Negotiated {
     pub steer: bool,
+    pub interject: bool,
     pub compact_command: bool,
 }
 
 impl Negotiated {
-    pub fn from_initialize(response: &InitializeResponse) -> Result<Self> {
+    pub fn from_initialize(response: &InitializeResponse, private: bool) -> Result<Self> {
         let caps = &response.agent_capabilities;
         let mut missing = Vec::new();
         if !caps.load_session {
@@ -51,6 +58,12 @@ impl Negotiated {
                 .as_ref()
                 .and_then(|meta| meta.get("availableCommands")?.as_array())
                 .is_some_and(|commands| commands.iter().any(|cmd| cmd["name"] == "compact")),
+            interject: private
+                && response
+                    .meta
+                    .as_ref()
+                    .and_then(|meta| meta.get("steering"))
+                    .is_none(),
             steer: response
                 .meta
                 .as_ref()
@@ -77,8 +90,8 @@ pub(crate) fn live(
     state: Live,
 ) -> Option<AgentClientCapabilities> {
     (state.current && state.ready && state.has_native && !state.closing).then(|| {
-        let mut caps = bounds.0.clone();
-        caps.steer &= negotiated.steer;
+        let mut caps = bounds.capabilities.clone();
+        caps.steer &= negotiated.steer || negotiated.interject;
         caps.interrupt &= state.active;
         caps.manual_compaction &=
             negotiated.compact_command && !state.active && !state.blocked && !state.replaying;
@@ -130,7 +143,10 @@ mod tests {
     fn grok_live_capabilities_follow_the_protocol_and_session_state() {
         let agents = AcpAgents::builtin();
         let bounds = AgentBounds::of("grok", agents.get("grok"));
-        assert_eq!(bounds.0, AgentBounds::of("grok", None).0);
+        assert_eq!(
+            bounds.capabilities,
+            AgentBounds::of("grok", None).capabilities
+        );
         for state in [
             Live {
                 current: false,
@@ -169,6 +185,7 @@ mod tests {
         let negotiated = Negotiated {
             steer: true,
             compact_command: true,
+            interject: false,
         };
         assert!(live(&bounds, negotiated, idle()).unwrap().manual_compaction);
         let other = live(&AgentBounds::of("another", None), negotiated, idle()).unwrap();
@@ -262,7 +279,7 @@ mod tests {
             let response =
                 serde_json::from_value(json!({"protocolVersion":1, "agentCapabilities":caps}))
                     .unwrap();
-            assert!(matches!(Negotiated::from_initialize(&response),
+            assert!(matches!(Negotiated::from_initialize(&response, false),
                 Err(Error::CapabilityUnavailable(message)) if message == format!("ACP peer missing required capabilities: {missing}")));
         }
         for supported in [None, Some(false), Some(true)] {
@@ -272,9 +289,12 @@ mod tests {
             }
             let response = serde_json::from_value(value).unwrap();
             assert_eq!(
-                Negotiated::from_initialize(&response).unwrap().steer,
+                Negotiated::from_initialize(&response, false).unwrap().steer,
                 supported == Some(true)
             );
+            let builtin = Negotiated::from_initialize(&response, true).unwrap();
+            assert_eq!(builtin.steer, supported == Some(true));
+            assert_eq!(builtin.interject, supported.is_none());
         }
     }
 }

@@ -327,13 +327,14 @@ impl ClientSession for AcpAdapter {
         target: &'a ControlTarget,
         input: &'a str,
         turn: Option<&'a str>,
-        _message: Option<&'a str>,
+        message: Option<&'a str>,
         intent: &'a InputIntent,
     ) -> ClientOperation<'a, InputReceipt> {
         Box::pin(async move {
             if let InputIntent::Steer { turn_id } = intent {
                 let peer = self.peer(&target.session_id).await?;
-                return crate::steering::send(&peer, &events, target, turn_id, input).await;
+                return crate::steering::send(&peer, &events, target, turn_id, input, message)
+                    .await;
             }
             let turn = turn.ok_or_else(|| {
                 Error::Domain("ACP input requires explicit Pontia Turn identity".into())
@@ -341,7 +342,9 @@ impl ClientSession for AcpAdapter {
             let peer = self.peer(&target.session_id).await?;
             let reload = {
                 let state = peer.state.lock().await;
-                state.current && state.active.is_none() && state.history_error.is_some()
+                state.current
+                    && state.active.is_none()
+                    && (state.history_error.is_some() || !state.interjections.is_empty())
             };
             if reload {
                 peer.load().await?;
@@ -373,6 +376,7 @@ impl ClientSession for AcpAdapter {
                 return Err(unavailable());
             }
             if state.blocked
+                || state.promoted.is_some()
                 || state.compaction.is_some()
                 || state.replay.is_some()
                 || state.active.is_some()
@@ -384,7 +388,24 @@ impl ClientSession for AcpAdapter {
             }
             let native = state.native.clone().ok_or_else(unavailable)?;
             let history_index = crate::history::user_bytes(&state.history);
-            crate::history::append(&mut state.history, "user", input);
+            let prompt_index = state.negotiated.interject.then(|| {
+                state
+                    .history
+                    .iter()
+                    .filter_map(|m| m.prompt)
+                    .max()
+                    .map_or(0, |i| i + 1)
+            });
+            if let Some(index) = prompt_index {
+                state.history.push(crate::history::Message {
+                    role: "user",
+                    text: input.into(),
+                    prompt: Some(index),
+                    ..Default::default()
+                });
+            } else {
+                crate::history::append(&mut state.history, "user", input);
+            }
             let sent = peer.connection.prepare_request(PromptRequest::new(
                 native,
                 vec![ContentBlock::Text(TextContent::new(input))],
@@ -397,6 +418,7 @@ impl ClientSession for AcpAdapter {
                 raw_results: Default::default(),
                 thought: None,
                 cancelled: false,
+                prompt_index,
                 history_index,
                 history_end: history_index + input.len(),
             });
@@ -421,6 +443,7 @@ impl ClientSession for AcpAdapter {
             state.refresh_capabilities();
             drop(state);
             Ok(InputReceipt {
+                turn_pending: false,
                 native_turn_id: None,
                 runtime_id: target.runtime_id.clone(),
             })
@@ -475,6 +498,17 @@ impl ClientSession for AcpAdapter {
     ) -> ClientOperation<'a, ClientExitOutcome> {
         Box::pin(async move {
             let peer = self.peer(&target.session_id).await?;
+            if mode == ClientExitMode::IfIdle {
+                let needs_replay = {
+                    let state = peer.state.lock().await;
+                    state.active.is_none()
+                        && state.promoted.is_none()
+                        && !state.interjections.is_empty()
+                };
+                if needs_replay {
+                    peer.load().await?;
+                }
+            }
             let native = {
                 let mut state = peer.state.lock().await;
                 target.validate(&events.db()).await?;
@@ -483,6 +517,8 @@ impl ClientSession for AcpAdapter {
                 }
                 if mode == ClientExitMode::IfIdle
                     && (state.active.is_some()
+                        || state.promoted.is_some()
+                        || !state.interjections.is_empty()
                         || state.compaction.is_some()
                         || !state.permissions.is_empty()
                         || state.replay.is_some())
@@ -598,7 +634,10 @@ impl ClientSession for AcpAdapter {
                 return Ok(false);
             };
             let state = peer.state.lock().await;
-            Ok(state.current && !state.closing && state.capabilities.is_some())
+            Ok(state.current
+                && !state.closing
+                && !state.promotion_pending()
+                && state.capabilities.is_some())
         })
     }
 

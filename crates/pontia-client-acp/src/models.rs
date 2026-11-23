@@ -150,4 +150,5 @@ pub(crate) async fn report(
         json!({"model":model}),
     )
     .await
+    .map(|_| ())
 }

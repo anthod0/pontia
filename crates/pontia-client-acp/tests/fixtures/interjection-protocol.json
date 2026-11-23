@@ -1,0 +1,56 @@
+{
+  "initialize": {
+    "loadSession": true,
+    "promptCapabilities": {
+      "image": true,
+      "audio": false,
+      "embeddedContext": true
+    },
+    "mcpCapabilities": {
+      "http": true,
+      "sse": true
+    },
+    "sessionCapabilities": {
+      "list": {},
+      "resume": {},
+      "close": {}
+    },
+    "auth": {},
+    "_meta": {
+      "x.ai/fs_notify": true,
+      "x.ai/hooks": {
+        "blockingEvents": [
+          "pre_tool_use",
+          "stop",
+          "subagent_stop"
+        ],
+        "decisions": [
+          "deny",
+          "block"
+        ],
+        "stopSignals": [
+          "continue",
+          "stopReason",
+          "additionalContext"
+        ]
+      },
+      "x.ai/capabilities": {
+        "toolOverrides": {
+          "x_keyword_search": true,
+          "x_semantic_search": true,
+          "x_user_search": false,
+          "x_thread_fetch": false
+        }
+      }
+    }
+  },
+  "method_not_found": {
+    "code": -32601,
+    "message": "Method not found"
+  },
+  "receipt": {
+    "result": {
+      "status": "queued"
+    }
+  }
+}

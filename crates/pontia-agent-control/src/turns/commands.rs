@@ -142,7 +142,8 @@ impl TurnCommandService {
             let receipt = adapter
                 .input(&target, input, &metadata, &intent, None)
                 .await;
-            return Ok((Some(turn_id.clone()), receipt));
+            let pending = matches!(&receipt, ControlResult::Accepted(r) | ControlResult::Sent(r) if r.turn_pending);
+            return Ok(((!pending).then(|| turn_id.clone()), receipt));
         }
         let turn_id = self
             .prepare_initial(session_id, &input, &metadata)

@@ -101,6 +101,7 @@ impl ClientAdapter {
             }
         }
         Ok(InputReceipt {
+            turn_pending: false,
             native_turn_id: None,
             runtime_id: target.runtime_id.clone(),
         })

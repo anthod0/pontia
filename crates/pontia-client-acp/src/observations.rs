@@ -12,6 +12,74 @@ impl Peer {
         let session = &self.session;
         let runtime = &self.runtime;
         match report.observation {
+            Observation::PromotionPending { native } => {
+                let mut state = self.state.lock().await;
+                state.promoted = Some(native);
+                state.refresh_capabilities();
+                self.remember(&state, None).await?;
+            }
+            Observation::PromotionStarted {
+                native,
+                digest,
+                summary,
+                index,
+            } => {
+                let key = format!("acp:promoted:{native}");
+                let result = fact(
+                    events,
+                    session,
+                    runtime,
+                    None,
+                    EventType::TurnStarted,
+                    key,
+                    json!({"acp_history_anchor":{"prompt":index},"input":{"summary":summary}}),
+                )
+                .await?;
+                let turn = result
+                    .turn_id
+                    .ok_or_else(|| Error::Domain("Missing observed Turn identity".into()))?;
+                let mut state = self.state.lock().await;
+                let mut candidates = state
+                    .interjections
+                    .values()
+                    .filter(|entry| entry.digest == digest);
+                if let Some(entry) = candidates.next()
+                    && candidates.next().is_none()
+                    && let Some(message) = &entry.message
+                {
+                    pontia_storage_sqlite::repositories::inbox::SqliteInboxRepository::new(
+                        events.db(),
+                    )
+                    .link_started_turn(session, message, &turn)
+                    .await?;
+                }
+                state.active = Some(crate::peer::Prompt {
+                    turn,
+                    prompt_index: Some(index),
+                    request_id: serde_json::Value::Null,
+                    started: true,
+                    sequence: 0,
+                    raw_results: Default::default(),
+                    thought: None,
+                    cancelled: false,
+                    history_index: 0,
+                    history_end: 0,
+                });
+                state.promoted = Some(native);
+                state.refresh_capabilities();
+                self.remember(&state, None).await?;
+            }
+            Observation::PromotionFinished {
+                native,
+                reason,
+                index,
+            } => {
+                let turn: String = sqlx::query_scalar("SELECT turn_id FROM events WHERE session_id=? AND event_type='turn.started' AND report_key=?")
+                    .bind(session).bind(format!("acp:promoted:{native}")).fetch_one(&events.db()).await?;
+                self.state.lock().await.promoted = None;
+                self.finish_turn(turn, reason, json!({"prompt":index+1}))
+                    .await?;
+            }
             Observation::Setup {
                 binding,
                 metadata,
@@ -142,40 +210,7 @@ impl Peer {
                 anchor,
                 reason,
             } => {
-                let kind = match reason.as_str() {
-                    "end_turn" => EventType::TurnCompleted,
-                    "cancelled" => EventType::TurnInterrupted,
-                    "max_tokens" | "max_turn_requests" | "refusal" => EventType::TurnFailed,
-                    _ => {
-                        return Err(Error::Domain(format!(
-                            "Unknown ACP prompt stop reason: {reason}"
-                        )));
-                    }
-                };
-                let mut data = json!({"acp_history_anchor":anchor});
-                if kind == EventType::TurnFailed {
-                    data["failure"] = json!({"message":format!("ACP prompt stopped: {reason}")});
-                }
-                fact(
-                    events,
-                    session,
-                    runtime,
-                    Some(&turn),
-                    kind,
-                    format!("acp:{turn}:{kind}"),
-                    data,
-                )
-                .await?;
-                let mut state = self.state.lock().await;
-                if state.active.as_ref().is_some_and(|p| p.turn == turn) {
-                    state.active = None;
-                    self.remember(&state, None).await?;
-                    let permissions = std::mem::take(&mut state.permissions);
-                    state.refresh_capabilities();
-                    drop(state);
-                    crate::interactions::expire(&self.interactions, session, permissions, None)
-                        .await?;
-                }
+                self.finish_turn(turn, reason, anchor).await?;
             }
             Observation::Delivered {
                 registration,
@@ -214,6 +249,51 @@ impl Peer {
                     "Permission requires its native responder".into(),
                 ));
             }
+        }
+        Ok(())
+    }
+
+    async fn finish_turn(
+        &self,
+        turn: String,
+        reason: String,
+        anchor: serde_json::Value,
+    ) -> Result<()> {
+        let events = &self.events;
+        let session = &self.session;
+        let runtime = &self.runtime;
+        let kind = match reason.as_str() {
+            "end_turn" => EventType::TurnCompleted,
+            "cancelled" => EventType::TurnInterrupted,
+            "max_tokens" | "max_turn_requests" | "refusal" => EventType::TurnFailed,
+            _ => {
+                return Err(Error::Domain(format!(
+                    "Unknown ACP prompt stop reason: {reason}"
+                )));
+            }
+        };
+        let mut data = json!({"acp_history_anchor":anchor});
+        if kind == EventType::TurnFailed {
+            data["failure"] = json!({"message":format!("ACP prompt stopped: {reason}")});
+        }
+        fact(
+            events,
+            session,
+            runtime,
+            Some(&turn),
+            kind,
+            format!("acp:{turn}:{kind}"),
+            data,
+        )
+        .await?;
+        let mut state = self.state.lock().await;
+        if state.active.as_ref().is_some_and(|p| p.turn == turn) {
+            state.active = None;
+            self.remember(&state, None).await?;
+            let permissions = std::mem::take(&mut state.permissions);
+            state.refresh_capabilities();
+            drop(state);
+            crate::interactions::expire(&self.interactions, session, permissions, None).await?;
         }
         Ok(())
     }

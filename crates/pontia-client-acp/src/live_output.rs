@@ -61,17 +61,28 @@ pub(crate) async fn publish(
                 .and_then(Value::as_str)
                 .filter(|text| !text.is_empty())
             {
+                let item_id = publisher
+                    .items
+                    .iter()
+                    .rev()
+                    .find_map(|item| match item {
+                        LiveOutputItem::UserInput { item_id, .. } => {
+                            Some(format!("response-{item_id}"))
+                        }
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| "response".into());
                 if publisher.prompt.sequence == 0 {
                     publisher
                         .snapshot(vec![LiveOutputItem::AssistantText {
-                            item_id: "response".into(),
+                            item_id,
                             text: text.into(),
                         }])
                         .await?;
                 } else {
                     publisher
                         .send(LiveOutputUpdate::AssistantTextDelta {
-                            item_id: "response".into(),
+                            item_id,
                             delta: text.into(),
                         })
                         .await?;
@@ -136,8 +147,7 @@ struct Publisher<'a> {
 }
 
 impl Publisher<'_> {
-    /// Consecutive thought chunks extend one item. Assistant text always extends
-    /// the single response item, so adjacency is tracked per update, not per item.
+    /// Consecutive thought chunks extend one item until other output arrives.
     async fn thought(&mut self, text: &str) -> Result<()> {
         let item_id = self
             .prompt

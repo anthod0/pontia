@@ -18,6 +18,8 @@ threading.Thread(target=watch_root, daemon=True).start()
 lock = threading.Lock()
 active = None
 number = 0
+interjections = []
+protocol = json.loads(Path(__file__).with_name("interjection-protocol.json").read_text())
 native_id = f"native-{os.getpid()}" if os.environ.get("ACP_UNIQUE_ID") == "1" else "native-id"
 
 
@@ -135,6 +137,20 @@ def prompt(request, ordinal, cancellation):
         os._exit(0)
     reason = "cancelled" if cancellation.is_set() else os.environ.get("ACP_STOP_REASON", request["params"]["prompt"][0]["text"])
     active = None
+    if os.environ.get("ACP_INTERJECT") == "promote" and interjections:
+        followups = list(interjections)
+        interjections.clear()
+        for i, text in enumerate(followups):
+            native = f"interject-fallback-{ordinal}-{i}"
+            send({"method":"_x.ai/queue/changed","params":{"sessionId":native_id,"runningText":text,"runningPromptId":native,"runningKind":"prompt","entries":[]}})
+            if i == 0:
+                response(request, {"stopReason":reason})
+            remember({"sessionUpdate":"user_message_chunk","_meta":{"promptIndex":ordinal+i},"content":{"type":"text","text":text}})
+            update = {"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":f"followup {i}"}}
+            remember(update)
+            send({"method":"session/update","params":{"sessionId":native_id,"_meta":{"promptId":native},"update":update}})
+            send({"method":"_x.ai/session_notification","params":{"sessionId":native_id,"update":{"sessionUpdate":"turn_completed","prompt_id":native,"stop_reason":"end_turn"}}})
+        return
     response(request, {"stopReason": reason})
     if os.environ.get("ACP_RESULT_MARKER") == "1":
         (root / f"result-written-{ordinal}").touch()
@@ -157,6 +173,8 @@ for line in sys.stdin:
             caps["sessionCapabilities"]["systemPrompt"] = {}
         if os.environ.get("ACP_OPTIONS"):
             caps["sessionCapabilities"]["options"] = {}
+        if os.environ.get("ACP_INTERJECT"):
+            caps = protocol["initialize"]
         response(request, {"protocolVersion": 1, "agentCapabilities": caps,
                            **({"_meta": {"steering": {"supported": os.environ["ACP_STEERING"] == "1"}}} if "ACP_STEERING" in os.environ else {}),
                            "agentInfo": {"name": "fixture", "title": "Test Agent", "version": "arbitrary-release", "_meta": {"build": "fixture-build"}}})
@@ -254,7 +272,11 @@ for line in sys.stdin:
     elif method == "session/prompt":
         if os.environ.get("ACP_MODELS"):
             log({"prompt_model": model_config()["configOptions"][1]["currentValue"]})
-        remember({"sessionUpdate": "user_message_chunk", "content": request["params"]["prompt"][0]})
+        initial = {"sessionUpdate": "user_message_chunk", "content": request["params"]["prompt"][0]}
+        if os.environ.get("ACP_INTERJECT"):
+            initial["_meta"] = {"promptIndex":number}
+            send({"method":"_x.ai/queue/changed","params":{"sessionId":native_id,"runningText":initial["content"]["text"],"runningPromptId":f"initial-{number}","runningKind":"prompt","entries":[]}})
+        remember(initial)
         if active is not None:
             log({"overlap": True})
         number += 1
@@ -262,6 +284,26 @@ for line in sys.stdin:
         threading.Thread(target=prompt, args=(request, number, active), daemon=True).start()
         if os.environ.get("ACP_REPLY_BACKPRESSURE") == "1":
             wait_for(f"drain-input-{number}")
+    elif method == "_x.ai/interject" and os.environ.get("ACP_INTERJECT") == "unsupported":
+        send({"id":request["id"],"error":protocol["method_not_found"]})
+    elif method == "_x.ai/interject":
+        params = request["params"]
+        echo = {"method":"_x.ai/session/interjection","params":params}
+        mode = os.environ["ACP_INTERJECT"]
+        if mode == "disconnect":
+            os._exit(0)
+        if mode == "unknown":
+            response(request, {"result":{"status":"unrecognized"}})
+            continue
+        if mode == "echo-first":
+            send(echo)
+        response(request, protocol["receipt"])
+        send(echo)
+        if mode == "promote":
+            interjections.append(params["text"])
+        else:
+            remember({"sessionUpdate":"user_message_chunk","_meta":{"interjection":True},"content":{
+                "type":"text","text":"<user_query>"+params["text"]+"</user_query>","_meta":{"displayText":params["text"]}}})
     elif method == "_session/steering":
         outcome = os.environ.get("ACP_STEERING_OUTCOME", "injected")
         if outcome == "disconnect":

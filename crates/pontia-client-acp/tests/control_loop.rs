@@ -64,6 +64,16 @@ impl Harness {
         let config = AcpAgentDefinition {
             name: "Controlled Agent".into(),
             capabilities: ACP_MAX_CAPABILITIES,
+            interjection: flags
+                .iter()
+                .any(|(key, _)| *key == "ACP_INTERJECT")
+                .then(|| {
+                    AcpAgents::builtin()
+                        .get("grok")
+                        .unwrap()
+                        .interjection
+                        .unwrap()
+                }),
             restricted_execution: None,
             new_session_instructions_meta_key: None,
             launch: AcpLaunch {

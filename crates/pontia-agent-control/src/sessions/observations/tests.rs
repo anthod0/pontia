@@ -133,6 +133,7 @@ async fn input_receipts_link_facts_in_either_order_without_creating_turns() {
         sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary,metadata) VALUES (?,?,'dispatching','after_idle','input','{}')")
             .bind(id).bind(&fixture.session).execute(&fixture.state.db()).await.unwrap();
         let receipt = crate::control::InputReceipt {
+            turn_pending: false,
             native_turn_id: Some(id.into()),
             runtime_id: Some("runtime".into()),
         };
@@ -212,6 +213,7 @@ async fn input_receipts_link_facts_in_either_order_without_creating_turns() {
             &fixture.session,
             "stale",
             &crate::control::InputReceipt {
+                turn_pending: false,
                 native_turn_id: Some("fact-first".into()),
                 runtime_id: Some("old-runtime".into()),
             },
@@ -466,6 +468,7 @@ async fn obsolete_turn_observation_and_receipt_cannot_link_inbox() {
             &fixture.session,
             "pending",
             &crate::control::InputReceipt {
+                turn_pending: false,
                 native_turn_id: Some("native".into()),
                 runtime_id: Some("runtime".into()),
             },

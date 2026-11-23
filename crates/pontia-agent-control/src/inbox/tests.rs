@@ -818,6 +818,7 @@ async fn duplicate_submission_preserves_native_receipt_and_original_contents() {
             "session",
             "message",
             &crate::control::InputReceipt {
+                turn_pending: false,
                 native_turn_id: Some("native-turn".into()),
                 runtime_id: Some("runtime".into()),
             },

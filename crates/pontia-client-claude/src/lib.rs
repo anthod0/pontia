@@ -290,6 +290,7 @@ impl ClientSession for Adapter {
                     return Err(error);
                 }
                 return Ok(InputReceipt {
+                    turn_pending: false,
                     native_turn_id: None,
                     runtime_id: Some(peer.runtime.clone()),
                 });
@@ -333,6 +334,7 @@ impl ClientSession for Adapter {
                 return Err(error);
             }
             Ok(InputReceipt {
+                turn_pending: false,
                 native_turn_id: None,
                 runtime_id: Some(peer.runtime.clone()),
             })

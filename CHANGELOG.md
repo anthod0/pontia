@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Messages sent to a busy Grok Session, Bot, or helper join its current turn at the next tool or model transition. Grok starts a follow-up turn if the message arrives after the last transition.
 - `config.toml` ignores unknown keys and tables instead of failing to load.
 - `pontia down` and `pontia uninstall` list running agents started by Pontia. Use `--force` to terminate them before stopping the service.
 - You can run `pontia update` while Sessions are busy or have messages waiting for delivery. Agents continue working when the service restarts.

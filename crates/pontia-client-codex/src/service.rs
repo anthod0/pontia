@@ -263,6 +263,7 @@ impl CodexService {
         let _ =
             observation_changes().send((runtime.root.clone(), runtime.target, session_id.into()));
         Ok(pontia_agent_control::control::InputReceipt {
+            turn_pending: false,
             native_turn_id: accepted
                 .get("turnId")
                 .or_else(|| accepted.pointer("/turn/id"))
