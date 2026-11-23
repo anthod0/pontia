@@ -51,9 +51,11 @@
   }
 
   function handleKeydown(event: KeyboardEvent): void {
-    if (!isChatRoute(dashboardRelativePath())) return
     const shortcut = matchChatShortcut(event)
     if (!shortcut) return
+    const path = dashboardRelativePath()
+    const sessionChat = isChatRoute(path)
+    if (!sessionChat && !path.startsWith('/bots/')) return
 
     if (shortcut.action === 'showHelp') {
       event.preventDefault()
@@ -65,6 +67,7 @@
       focusChatInput()
       return
     }
+    if (!sessionChat) return
     // The dashboard layout switches devices and New Chat selectors switch the rest; consume the key here so Option+letter does not type a symbol.
     if (shortcut.action === 'previousDevice' || shortcut.action === 'switchAgentClient' || shortcut.action === 'switchWorkspace') {
       event.preventDefault()
@@ -76,7 +79,7 @@
       return
     }
 
-    const currentSessionId = sessionIdFromChatPath(dashboardRelativePath())
+    const currentSessionId = sessionIdFromChatPath(path)
     const sessionId = shortcut.action === 'openChatByPosition'
       ? sessionIdAtShortcutIndex(shortcutSessions, shortcut.position)
       : adjacentSessionId(shortcutSessions, currentSessionId, shortcut.action === 'nextChat' ? 1 : -1)

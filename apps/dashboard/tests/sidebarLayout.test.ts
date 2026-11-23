@@ -755,15 +755,19 @@ test("chat shortcuts move down and up the active sessions in sidebar order", asy
   expect(mocks.navigate).toHaveBeenLastCalledWith("/chat/session-top");
 });
 
-test("chat help shortcut opens a kbd shortcut reference dialog", async () => {
-  render(AppShellHost);
+test.each(["/dashboard", "/dashboard/bots/test-bot"])(
+  "chat help shortcut opens a kbd shortcut reference dialog on %s",
+  async (path) => {
+    window.history.pushState({}, "", path);
+    render(AppShellHost);
 
-  await fireEvent.keyDown(window, { key: "?", code: "Slash", altKey: true, shiftKey: true });
+    await fireEvent.keyDown(window, { key: "?", code: "Slash", altKey: true, shiftKey: true });
 
-  const dialog = screen.getByRole("dialog", { name: /keyboard shortcuts/i });
-  expect(within(dialog).getByText(/next active chat/i)).toBeInTheDocument();
-  expect(within(dialog).getByText(/focus chat input/i)).toBeInTheDocument();
-});
+    const dialog = screen.getByRole("dialog", { name: /keyboard shortcuts/i });
+    expect(within(dialog).getByText(/next active chat/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/focus chat input/i)).toBeInTheDocument();
+  },
+);
 
 test("chat header help button opens the shortcuts dialog", async () => {
   render(AppShellHost);
@@ -817,18 +821,40 @@ test("chat shortcuts are scoped to chat routes and work while typing", async () 
   input.remove();
 });
 
-test("chat new and focus shortcuts work on chat routes", async () => {
+test.each(["/dashboard", "/dashboard/bots/test-bot"])(
+  "Alt+L moves focus from another control to the chat input on %s",
+  async (path) => {
+    window.history.pushState({}, "", path);
+    const { container } = render(AppShellHost);
+    const input = document.createElement("textarea");
+    input.setAttribute("data-chat-shortcut-focus-target", "true");
+    container.appendChild(input);
+    const button = screen.getByRole("button", { name: /keyboard shortcuts/i });
+    button.focus();
+
+    await fireEvent.keyDown(button, { key: "l", code: "KeyL", altKey: true });
+    expect(input).toHaveFocus();
+  },
+);
+
+test("bot chat leaves session navigation shortcuts unhandled", async () => {
+  window.history.pushState({}, "", "/dashboard/bots/test-bot");
+  mocks.sessions.set([chatSession("session-recent", "idle", "2026-05-14T04:00:00Z")]);
   render(AppShellHost);
-  const input = document.createElement("textarea");
-  input.setAttribute("data-chat-shortcut-focus-target", "true");
-  document.body.appendChild(input);
+
+  for (const code of ["KeyJ", "KeyK", "Digit1", "Digit9", "KeyN"]) {
+    const event = new KeyboardEvent("keydown", { code, altKey: true, cancelable: true });
+    await fireEvent(window, event);
+    expect(event.defaultPrevented).toBe(false);
+  }
+  expect(mocks.navigate).not.toHaveBeenCalled();
+});
+
+test("chat new shortcut opens a new chat", async () => {
+  render(AppShellHost);
 
   await fireEvent.keyDown(window, { key: "n", code: "KeyN", altKey: true });
   expect(mocks.navigate).toHaveBeenLastCalledWith("/");
-
-  await fireEvent.keyDown(window, { key: "l", code: "KeyL", altKey: true });
-  expect(document.activeElement).toBe(input);
-  input.remove();
 });
 
 test("chat new shortcut on a session route preserves the current session workspace", async () => {
