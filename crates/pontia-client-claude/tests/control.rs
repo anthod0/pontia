@@ -68,6 +68,17 @@ async fn replayed_host_observations_return_original_receipts_after_turn_and_peer
             h.wait_session(&session, "idle").await;
             std::fs::remove_file(h.root.path().join(format!("{gate}-{session}-1"))).unwrap();
         }
+        let usage = h
+            .app
+            .queries()
+            .get_session(&session)
+            .await
+            .unwrap()
+            .unwrap()
+            .context_usage
+            .unwrap();
+        assert_eq!(usage.used_tokens, Some(622));
+        assert_eq!(usage.confidence, "estimated");
         let h = if reconnect { h.restart().await } else { h };
         h.submit(&session, "replay reports").await;
         let wire = tokio::time::timeout(Duration::from_secs(8), async {
@@ -119,6 +130,7 @@ async fn replayed_host_observations_return_original_receipts_after_turn_and_peer
                 "turn.completed",
                 "session.compaction_started",
                 "session.compaction_completed",
+                "session.context_usage_updated",
                 "session.compaction_started",
                 "session.compaction_failed"
             ]

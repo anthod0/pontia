@@ -11,8 +11,10 @@ export type HostEvent =
         max_tokens: number;
         remaining_tokens: number;
         usage_ratio: number;
-        confidence: "estimated";
-      };
+      } & (
+        | { confidence: "estimated" }
+        | { confidence: "exact"; input_tokens: number; output_tokens: number; cache_tokens: number }
+      );
     }
   | { kind: "started"; input_id: string }
   | { kind: "text"; input_id: string; item_id: string; delta: string }

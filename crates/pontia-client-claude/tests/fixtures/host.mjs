@@ -88,6 +88,13 @@ if (process.argv[2] === "history") {
     if (value.kind === "ready") connection.registered({sessionId: config.session_id, runtimeId: config.runtime_id, clientSessionKey: native});
     return report;
   };
+  const estimate = (used) => event({
+    kind: "context_usage",
+    context_usage: {
+      used_tokens: used, max_tokens: 200000, remaining_tokens: 200000 - used,
+      usage_ratio: used / 200000, confidence: "estimated",
+    },
+  });
   record({
     method: "spawn",
     host,
@@ -122,6 +129,7 @@ if (process.argv[2] === "history") {
             connection.registered({sessionId:config.session_id,runtimeId:config.runtime_id,clientSessionKey:native});
           } else event({ kind: "ready", native_session_id: native });
           if (!pendingReady) event({ kind: "model", model: config.model ?? "sonnet" });
+          if (config.resume && !pendingReady) estimate(664);
           ready = true;
         }
         // Receipt is deliberately delivered before execution begins.
@@ -227,6 +235,7 @@ if (process.argv[2] === "history") {
     }
     if (compacting && existsSync(join(config.cwd, `compact-${config.session_id}-1`))) {
       event({ kind: "compaction", phase: "completed", data: { operation_id: compacting, trigger: "manual", native_compaction_id: randomUUID(), tokens_before: 20000, tokens_after: 2000 } });
+      estimate(622);
       compacting = undefined;
     }
     if (!active) return;
@@ -261,11 +270,14 @@ if (process.argv[2] === "history") {
       event({
         kind: "context_usage",
         context_usage: {
-          used_tokens: 4000,
+          used_tokens: 14710,
           max_tokens: 200000,
-          remaining_tokens: 196000,
-          usage_ratio: 0.02,
-          confidence: "estimated",
+          remaining_tokens: 185290,
+          usage_ratio: 0.07355,
+          input_tokens: 14000,
+          cache_tokens: 710,
+          output_tokens: 73,
+          confidence: "exact",
         },
       });
       event({ kind: "started", input_id: active.id, input:active.input });

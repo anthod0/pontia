@@ -106,7 +106,12 @@ test(
                   : [{ type: "text", text: "fixture answer" }],
           stop_reason: [1, 3, 5, 7, 9, 11, 13].includes(requests.length) ? "tool_use" : "end_turn",
           stop_sequence: null,
-          usage: { input_tokens: 12, output_tokens: 3 },
+          usage: {
+            input_tokens: 12000 + 1000 * requests.length,
+            cache_creation_input_tokens: 233,
+            cache_read_input_tokens: 477,
+            output_tokens: 3,
+          },
         };
         if (!body.stream) {
           response.setHeader("content-type", "application/json");
@@ -116,7 +121,20 @@ test(
         response.writeHead(200, { "content-type": "text/event-stream" });
         const send = (frame: { type: string; [key: string]: unknown }) =>
           response.write(`event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`);
-        send({ type: "message_start", message: { ...message, content: [], stop_reason: null } });
+        send({
+          type: "message_start",
+          message: {
+            ...message,
+            usage: {
+              ...message.usage,
+              input_tokens: 1,
+              cache_read_input_tokens: 0,
+              output_tokens: 1,
+            },
+            content: [],
+            stop_reason: null,
+          },
+        });
         for (const [index, block] of message.content.entries()) {
           send({
             type: "content_block_start",
@@ -137,7 +155,11 @@ test(
         send({
           type: "message_delta",
           delta: { stop_reason: message.stop_reason, stop_sequence: null },
-          usage: { output_tokens: 3 },
+          usage: {
+            input_tokens: message.usage.input_tokens,
+            cache_read_input_tokens: 477,
+            output_tokens: 73,
+          },
         });
         send({ type: "message_stop" });
         response.end();
@@ -156,6 +178,7 @@ test(
     );
     Object.assign(env, {
       CLAUDE_CONFIG_DIR: config,
+      CLAUDE_CODE_AUTO_COMPACT_WINDOW: "200k",
       TMPDIR: temporary,
       ANTHROPIC_BASE_URL: `http://127.0.0.1:${address.port}`,
       ANTHROPIC_API_KEY: "fixture-not-a-secret",
@@ -255,14 +278,26 @@ test(
         events.filter((event) => event.kind === "tool" && event.call_id === "read-fixture").length,
         1,
       );
-      const usageDeadline = Date.now() + 5000;
-      while (!events.some((event) => event.kind === "context_usage")) {
-        assert.ok(Date.now() < usageDeadline, "real SDK did not report context usage");
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      }
-      const context = events.find((event) => event.kind === "context_usage")!.context_usage;
-      assert.ok(context.used_tokens > 0);
-      assert.ok(context.max_tokens > 0);
+      const latestUsage = () =>
+        events.filter((event) => event.kind === "context_usage").at(-1)?.context_usage;
+      assert.deepEqual(
+        events.flatMap((e) =>
+          e.kind === "context_usage" && e.context_usage.confidence === "exact"
+            ? [e.context_usage.output_tokens]
+            : [],
+        ),
+        [73, 73],
+      );
+      assert.deepEqual(latestUsage(), {
+        used_tokens: 14710,
+        max_tokens: 200000,
+        remaining_tokens: 185290,
+        usage_ratio: 0.07355,
+        input_tokens: 14000,
+        output_tokens: 73,
+        cache_tokens: 710,
+        confidence: "exact",
+      });
       const toolResults = events.filter((event) => event.kind === "tool_result");
       assert.equal(toolResults.length, 1);
       assert.equal(toolResults[0]!.failed, false);
@@ -270,6 +305,7 @@ test(
       const native = host.status().native_session_id;
       assert.ok(native);
       await finish(host, randomUUID(), "Second isolated task", "fixture answer", "allow");
+      assert.equal(latestUsage()?.used_tokens, 16710);
       assert.ok(requests[2]!.model.includes("haiku"));
       assert.ok(requests[0]!.model.includes("haiku"));
       assert.equal(host.status().native_session_id, native);
