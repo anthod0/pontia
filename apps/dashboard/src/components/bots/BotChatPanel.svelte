@@ -15,6 +15,7 @@
   import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon'
   import XIcon from 'phosphor-svelte/lib/XIcon'
   import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon'
+  import SidebarSimpleIcon from 'phosphor-svelte/lib/SidebarSimpleIcon'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import * as Tabs from '$lib/components/ui/tabs/index.js'
@@ -30,6 +31,7 @@
   import BotMessageSearch from './BotMessageSearch.svelte'
   import { fileKindOf } from '../chat/fileKind'
   import { createRecentFiles, withRecentFile } from '$lib/botRecentFiles'
+  import { createPanelTab, type PanelTab } from '$lib/botPanelTab'
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
   import { promptValueAfterEnter } from '$lib/promptEnterBehavior'
 
@@ -44,12 +46,12 @@
   } = $props()
   const action = useTopBarAction()
   onMount(() => {
-    action?.set(todoButton)
+    action?.set(sidebarButton)
     return () => action?.set(null)
   })
   const device = useDeviceRuntime()
   let open = $state(false)
-  let tab = $state('files')
+  const tab = createPanelTab()
   let file = $state.raw<FilePreviewTarget | null>(null)
   // The panel lives as long as its Bot chat page, which is recreated for another Bot.
   // svelte-ignore state_referenced_locally
@@ -60,44 +62,36 @@
   const context = createQuery(() => ({
     queryKey: ['bot-message-context', bot.bot_id, selected],
     queryFn: ({ signal }) => device.api.getBotMessageContext(bot.bot_id, selected!, signal),
-    enabled: open && tab === 'context' && selected !== null,
+    enabled: open && tab.current === 'context' && selected !== null,
   }), () => device.queryClient)
   const todos = createQuery(() => ({
     queryKey: ['bot-todos', bot.bot_id],
     queryFn: ({ signal }) => device.api.getBotTodos(bot.bot_id, signal),
-    enabled: open && tab === 'todo',
+    enabled: open && tab.current === 'todo',
     staleTime: 0,
   }), () => device.queryClient)
 
   export function openFile(target: FilePreviewTarget) {
     file = target
     recentFiles.current = withRecentFile(recentFiles.current, { sessionId: target.sessionId, path: target.path })
-    tab = 'files'
+    tab.current = 'files'
     open = true
   }
 
   export function viewContext(id: string) {
     selected = id
-    tab = 'context'
+    tab.current = 'context'
     open = true
   }
 
   export function viewTodos() {
-    tab = 'todo'
+    tab.current = 'todo'
     open = true
   }
 
-  function toggle(next: string) {
-    if (open && tab === next) open = false
-    else {
-      tab = next
-      open = true
-    }
-  }
-
   export function refresh() {
-    if (open && tab === 'todo') void todos.refetch()
-    if (open && tab === 'context' && selected) void context.refetch()
+    if (open && tab.current === 'todo') void todos.refetch()
+    if (open && tab.current === 'context' && selected) void context.refetch()
   }
 
   function summary(message: BotMessage) {
@@ -177,15 +171,11 @@
   {#if count > 0}<Badge class={['h-4 min-w-4 rounded-full px-1 text-[0.625rem] tabular-nums', corner && 'pointer-events-none absolute top-0.5 right-0.5 md:-top-1 md:-right-1']}>{count > 99 ? '99+' : count}</Badge>{/if}
 {/snippet}
 
-{#snippet todoButton()}
+{#snippet sidebarButton()}
   <div class="pointer-events-auto mr-3 flex h-12 shrink-0 items-center rounded-lg bg-popover px-0.5 ring-1 ring-foreground/10 max-md:mt-2 md:h-8 md:px-1">
-    <Button variant="ghost" size="icon" class={['size-11 md:size-7', open && tab === 'search' && 'bg-muted text-heading']}
-      aria-label={$t('bots.search')} title={$t('bots.search')} aria-pressed={open && tab === 'search'} onclick={() => toggle('search')}>
-      <MagnifyingGlassIcon class="size-5 md:size-4" />
-    </Button>
-    <Button variant="ghost" size="icon" class={['relative size-11 md:size-7', open && tab === 'todo' && 'bg-muted text-heading']}
-      aria-label={`${$t('bots.todos')} ${count}`} title={$t('bots.todos')} aria-pressed={open && tab === 'todo'} onclick={() => toggle('todo')}>
-      <ListChecksIcon class="size-5 md:size-4" />{@render badge(true)}
+    <Button variant="ghost" size="icon" class={['relative size-11 md:size-7', open && 'bg-muted text-heading']}
+      aria-label={count > 0 ? $t('bots.sidebarWithTodos', { count }) : $t('nav.sidebar')} title={$t('nav.sidebar')} aria-pressed={open} onclick={() => { open = !open }}>
+      <SidebarSimpleIcon class="size-5 -scale-x-100 md:size-4" />{@render badge(true)}
     </Button>
   </div>
 {/snippet}
@@ -266,7 +256,7 @@
 {#if open}
   <aside data-bot-chat-panel aria-label={$t('nav.sidebar')} class="fixed inset-y-0 right-0 z-50 flex w-full min-w-0 flex-col border-l bg-surface pt-[env(safe-area-inset-top)] lg:w-[var(--file-preview-width)]">
     <FilePreviewResizer />
-    <Tabs.Root bind:value={tab} class="min-h-0 flex-1 gap-0">
+    <Tabs.Root bind:value={() => tab.current, next => { tab.current = next as PanelTab }} class="min-h-0 flex-1 gap-0">
       <header class="flex h-12 shrink-0 items-center justify-between gap-1 border-b px-2">
         <Tabs.List variant="line" aria-label={$t('nav.sidebar')} class="h-full gap-0">
           <Tabs.Trigger value="files" class="h-full px-2.5"><FileTextIcon />{$t('bots.files')}</Tabs.Trigger>
@@ -326,7 +316,7 @@
         {/if}
       </Tabs.Content>
       <Tabs.Content value="search" class="flex min-h-0 flex-col">
-        <BotMessageSearch {bot} active={open && tab === 'search'} bind:text={searchText} selected={searchSelected} onselect={jumpToResult} />
+        <BotMessageSearch {bot} active={open && tab.current === 'search'} bind:text={searchText} selected={searchSelected} onselect={jumpToResult} />
       </Tabs.Content>
       <Tabs.Content value="todo" class="flex min-h-0 flex-col">
         <div class="min-h-0 flex-1 overflow-auto overscroll-contain p-3">

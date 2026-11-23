@@ -48,13 +48,15 @@ function serve(entries: BotEntry[], older: BotEntry[] = []) {
 
 async function openSearch() {
   render(BotChatPreviewHarness, { botId: bot.bot_id });
-  await fireEvent.click(await screen.findByRole("button", { name: "Search messages" }));
+  await fireEvent.click(await screen.findByRole("button", { name: "Sidebar" }));
+  await fireEvent.click(screen.getByRole("tab", { name: "Search" }));
   const panel = screen.getByRole("complementary");
   const input = within(panel).getByRole("searchbox", { name: "Search messages" });
   return { panel: within(panel), input };
 }
 
 beforeEach(() => {
+  localStorage.clear();
   vi.spyOn(Element.prototype, "clientHeight", "get").mockImplementation(function (
     this: HTMLElement,
   ) {
@@ -190,9 +192,10 @@ test("focuses the search field when switching to it from another tab", async () 
   vi.spyOn(testDevice.api, "getBotTodos").mockResolvedValue({ open: [], recently_resolved: [] });
   const search = vi.spyOn(testDevice.api, "searchBotMessages");
   render(BotChatPreviewHarness, { botId: bot.bot_id });
-  await fireEvent.click(await screen.findByRole("button", { name: "Todo 0" }));
+  await fireEvent.click(await screen.findByRole("button", { name: "Sidebar" }));
+  await fireEvent.click(screen.getByRole("tab", { name: "Todo" }));
   await screen.findByText("No todos");
-  await fireEvent.click(screen.getByRole("button", { name: "Search messages" }));
+  await fireEvent.click(screen.getByRole("tab", { name: "Search" }));
   await waitFor(() =>
     expect(screen.getByRole("searchbox", { name: "Search messages" })).toHaveFocus(),
   );

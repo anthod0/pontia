@@ -60,6 +60,7 @@
   "bots.viewContext": "View context",
   "bots.noSelection": "No message selected",
   "bots.todos": "Todo",
+  "bots.sidebarWithTodos": "{count, plural, one {Sidebar, # todo} other {Sidebar, # todos}}",
   "bots.ignored": "Ignored",
   "common.undo": "Undo",
   "bots.recentlyResolved": "Recently resolved",
