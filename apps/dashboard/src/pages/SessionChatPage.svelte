@@ -33,7 +33,7 @@
   } from '$lib/session-chat/liveOutput'
   import { hasTimelineSnapshot } from "../stores/timeline";
   import SessionComposerDock from '../components/chat/SessionComposerDock.svelte'
-  import GitPanelSession from '../components/chat/git/GitPanelSession.svelte'
+  import SessionPanelSession from '../components/chat/sessionPanel/SessionPanelSession.svelte'
   import SessionInteractions from '../components/chat/SessionInteractions.svelte'
   import ScrollToBottomButton from '../components/chat/ScrollToBottomButton.svelte'
   import { scrollDocumentToBottom } from '../lib/session-chat/autoScroll'
@@ -338,7 +338,7 @@
     }
   }
 
-  /** An Agent turn may have changed files; the Git panel reads them again if it is open. */
+  /** An Agent turn may have changed files; the Git tab reads them again if it shows. */
   function refreshGitAfterTurn(): void {
     const workspaceId = currentSelectedSession()?.workspace_id
     if (workspaceId) void invalidateWorkspaceGit(workspaceId)
@@ -993,8 +993,8 @@
 
 <svelte:window onpopstate={() => void selectSessionFromLocation()} />
 
-{#if selectedSession?.workspace_id}
-  <GitPanelSession workspaceId={selectedSession.workspace_id} gitStatus={selectedSessionGitStatus} />
+{#if selectedSession}
+  <SessionPanelSession sessionId={selectedSession.session_id} workspaceId={selectedSession.workspace_id} />
 {/if}
 
 <section class="flex flex-col gap-4 pb-[var(--chat-bottom-padding)]" style={`--chat-top-offset: 4rem; --chat-bottom-padding: ${composerHeight + 16}px; --chat-composer-height: ${composerHeight}px`}>

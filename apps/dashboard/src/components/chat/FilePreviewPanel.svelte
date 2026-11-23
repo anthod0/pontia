@@ -14,7 +14,6 @@
   import { ApiError } from '../../api/errors'
   import DeviceProvider from '../../device/DeviceProvider.svelte'
   import { provideFilePreviewNavigator, type FilePreviewTarget } from './filePreviewContext'
-  import FilePreviewResizer from './FilePreviewResizer.svelte'
   import { toast } from 'svelte-sonner'
   import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon'
   import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
@@ -43,7 +42,7 @@
   } as const
   const skeletonLines = [42, 68, 55, 0, 74, 61, 83, 36, 0, 58, 70, 47, 64, 29]
 
-  let { target, onclose, embedded = false }: { target: FilePreviewTarget; onclose: () => void; embedded?: boolean } = $props()
+  let { target, onclose }: { target: FilePreviewTarget; onclose: () => void } = $props()
   // The panel is recreated for each target opened from outside, so history starts from the initial target.
   // svelte-ignore state_referenced_locally
   let history = $state<HistoryEntry[]>([{ path: target.path, anchor: target.anchor ?? null, view: 'preview', scrollTop: 0 }])
@@ -146,8 +145,7 @@
   <div class="file-source font-mono text-xs leading-relaxed">{@html highlighted}</div>
 {/snippet}
 
-<svelte:element this={embedded ? 'div' : 'aside'} bind:this={panel} aria-label={$t('files.preview')} data-file-preview class={['flex min-h-0 min-w-0 flex-col', embedded ? 'flex-1' : 'fixed inset-y-0 right-0 z-50 w-full border-l bg-surface lg:w-[var(--file-preview-width)]']}>
-  {#if !embedded}<FilePreviewResizer />{/if}
+<div bind:this={panel} aria-label={$t('files.preview')} data-file-preview class="flex min-h-0 min-w-0 flex-1 flex-col">
   <Tabs.Root bind:value={view} class="min-h-0 flex-1 gap-0">
     <header class="flex shrink-0 items-center gap-1 border-b px-2 py-2">
       {#if history.length > 1}
@@ -167,7 +165,7 @@
       <Button variant="ghost" size="icon-sm" disabled={receiving} onclick={download} aria-label={$t('files.downloadNamed', { name })} title={receiving ? $t('files.receiving') : $t('files.download')}>
         {#if receiving}<CircleNotchIcon class="size-4 animate-spin" />{:else}<DownloadSimpleIcon class="size-4" />{/if}
       </Button>
-      <Button variant="ghost" size="icon-sm" onclick={onclose} aria-label={$t(embedded ? 'files.closeFile' : 'common.close')} title={$t(embedded ? 'files.closeFile' : 'common.close')}><XIcon class="size-4" /></Button>
+      <Button variant="ghost" size="icon-sm" onclick={onclose} aria-label={$t('files.closeFile')} title={$t('files.closeFile')}><XIcon class="size-4" /></Button>
     </header>
     <span class="sr-only" role="status">{copied ? $t('common.copied') : receiving ? $t('files.receiving') : ''}</span>
     {#if task?.error}
@@ -224,7 +222,7 @@
       </div>
     {/if}
   </Tabs.Root>
-</svelte:element>
+</div>
 
 <style>
   .file-source :global(pre.shiki) {

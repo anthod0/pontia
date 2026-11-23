@@ -1,9 +1,10 @@
 <script lang="ts">
   import SessionConversation from '../../src/lib/components/session-chat/SessionConversation.svelte'
   import FilePreviewPanel from '../../src/components/chat/FilePreviewPanel.svelte'
-  import { provideFilePreview } from '../../src/components/chat/filePreviewContext'
+  import { provideFilePreviewNavigator, type FilePreviewTarget } from '../../src/components/chat/filePreviewContext'
   let { paths }: { paths: string[] } = $props()
-  const preview = provideFilePreview()
+  let preview = $state.raw<FilePreviewTarget | null>(null)
+  provideFilePreviewNavigator({ open: target => { preview = target } })
   const content = $derived(['```attachments', ...paths, '```'].join('\n'))
 </script>
 
@@ -14,6 +15,6 @@
     { id: 'a1', role: 'assistant', content, status: 'sent', turnId: 't1', createdAt: '' },
   ]}
 />
-{#if $preview}
-  <FilePreviewPanel target={$preview} onclose={() => preview.set(null)} />
+{#if preview}
+  <aside aria-label="Preview panel"><FilePreviewPanel target={preview} onclose={() => { preview = null }} /></aside>
 {/if}

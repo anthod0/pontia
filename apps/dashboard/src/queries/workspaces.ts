@@ -18,7 +18,7 @@ import type { DeviceRuntime } from "../device/runtime";
 
 export type GitDiffTarget = { path: string; orig_path?: string; group: GitChangeGroup };
 
-/** How often the open Git panel re-reads the change list. */
+/** How often the open Git tab re-reads the change list. */
 const GIT_CHANGES_POLL_MS = 5_000;
 
 export function createWorkspaceQueries(device: DeviceRuntime) {
@@ -126,7 +126,7 @@ export function createWorkspaceQueries(device: DeviceRuntime) {
     });
   }
 
-  /** Reads only while `enabled`, so a closed Git panel sends no requests. */
+  /** Reads only while `enabled`, so a hidden Git tab sends no requests. */
   function createWorkspaceGitChangesQuery(workspaceId: () => string, enabled: () => boolean) {
     return createQuery(
       () => ({
@@ -151,7 +151,7 @@ export function createWorkspaceQueries(device: DeviceRuntime) {
     );
   }
 
-  /** Re-reads the Git panel's data for a Workspace, for example after an Agent turn ends. */
+  /** Re-reads the Git tab's data for a Workspace, for example after an Agent turn ends. */
   function invalidateWorkspaceGit(workspaceId: string): Promise<void> {
     return device.queryClient.invalidateQueries({ queryKey: workspaceKeys.git(workspaceId) });
   }
