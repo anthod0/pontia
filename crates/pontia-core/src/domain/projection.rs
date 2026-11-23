@@ -256,26 +256,7 @@ impl ProjectionState {
                 event.event_type
             )));
         }
-        if event.event_type.is_runtime_event() {
-            if event.turn_id.is_some() {
-                return Err(Error::Domain(format!(
-                    "event {} cannot carry turn_id",
-                    event.event_type
-                )));
-            }
-            if event
-                .payload
-                .get("runtime_id")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .is_none_or(str::is_empty)
-            {
-                return Err(Error::Domain(format!(
-                    "event {} requires payload.runtime_id",
-                    event.event_type
-                )));
-            }
-        }
+        event.validate_runtime_shape()?;
         match (&event.timeline_boundary, event.event_type) {
             (None, _)
             | (Some(TimelineBoundary::Head { .. }), EventType::TurnStarted)

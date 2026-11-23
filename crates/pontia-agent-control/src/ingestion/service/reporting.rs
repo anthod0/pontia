@@ -350,7 +350,7 @@ mod tests {
             ))
             .await
             .unwrap();
-        sqlx::query("INSERT INTO session_runtimes(runtime_id,session_id,role,state,created_at) VALUES ('original','session','tui','running','2026-01-01')")
+        sqlx::query("INSERT INTO session_runtimes(runtime_id,session_id,role,state,created_at) VALUES ('original','session','generic_control','running','2026-01-01')")
             .execute(&db).await.unwrap();
         let report = ReportedEvent::new(
             "first".into(),

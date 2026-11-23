@@ -13,6 +13,7 @@ impl crate::client_contract::ClientEventInterpreter for ReadyRuntimeEvent {
         let mut runtime = event.clone();
         runtime.event_id = format!("{}:runtime", event.event_id);
         runtime.event_type = pontia_core::domain::EventType::RuntimeReady;
+        runtime.payload["role"] = serde_json::json!("generic_control");
         Ok(Some(runtime))
     }
 }
@@ -33,7 +34,7 @@ async fn initial_input_uses_the_injected_channel_after_ready() {
     .execute(&pool)
     .await
     .unwrap();
-    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES ('sess_pi', 'rtinst_pi', '/unused/tmux', '%1', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#).execute(&pool).await.unwrap();
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES ('sess_pi', 'rtinst_pi', '/unused/tmux', '%1', 'generic_control', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#).execute(&pool).await.unwrap();
     sqlx::query("UPDATE session_runtimes SET state='starting' WHERE session_id='sess_pi'")
         .execute(&pool)
         .await
@@ -69,7 +70,7 @@ async fn initial_input_uses_the_injected_channel_after_ready() {
                 &crate::runtime::ControlTarget {
                     session_id: "sess_pi".into(),
                     runtime_id: Some("rtinst_pi".into()),
-                    control_runtime_role: Some("tui"),
+                    control_runtime_role: Some("generic_control"),
                 },
                 "initial input",
                 &json!({}),

@@ -346,7 +346,12 @@ impl SqliteSessionRepository {
         .await?)
     }
 
-    pub async fn starting_sessions_before(&self, cutoff: &str) -> Result<Vec<StartingSessionRow>> {
+    pub async fn starting_sessions_before(
+        &self,
+        cutoff: &str,
+        client_type: &str,
+        role: Option<&str>,
+    ) -> Result<Vec<StartingSessionRow>> {
         Ok(sqlx::query_as::<_, StartingSessionRow>(
             r#"SELECT s.session_id, s.client_type,
                       r.runtime_id, r.tmux_socket_path, r.tmux_pane_id, r.process_fingerprint,
@@ -354,8 +359,8 @@ impl SqliteSessionRepository {
                        AND e.event_type IN ('session.starting','session.resuming')
                        ORDER BY e.rowid DESC LIMIT 1) AS startup_event_id
                FROM sessions s
-               LEFT JOIN session_runtimes r ON r.session_id = s.session_id AND r.role = 'tui'
-               WHERE s.state = 'starting'
+               LEFT JOIN session_runtimes r ON r.session_id = s.session_id AND r.role = ?
+               WHERE s.client_type = ? AND s.state = 'starting'
                  AND (
                      SELECT e.created_at
                      FROM events e
@@ -366,6 +371,8 @@ impl SqliteSessionRepository {
                  ) <= ?
                ORDER BY s.session_id"#,
         )
+        .bind(role)
+        .bind(client_type)
         .bind(cutoff)
         .fetch_all(&self.pool)
         .await?)

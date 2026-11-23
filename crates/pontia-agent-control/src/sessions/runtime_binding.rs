@@ -22,7 +22,7 @@ impl SessionCommandService {
         runtime: &RuntimeStartResult,
         role: Option<&str>,
     ) -> Result<()> {
-        let record = runtime_binding_record(session_id, runtime)?;
+        let record = runtime_binding_record(session_id, runtime, role)?;
         let result = SqliteSessionRuntimeRepository::new(self.pool.clone())
             .upsert_binding_guarded(record, role)
             .await;
@@ -37,10 +37,11 @@ impl SessionCommandService {
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
         session_id: &str,
         runtime: &RuntimeStartResult,
+        role: Option<&str>,
     ) -> Result<()> {
         let result = SqliteSessionRuntimeRepository::upsert_binding_in_tx(
             tx,
-            runtime_binding_record(session_id, runtime)?,
+            runtime_binding_record(session_id, runtime, role)?,
         )
         .await;
         if result.is_err() {

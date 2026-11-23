@@ -22,6 +22,8 @@ pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
     context_usage: ContextUsageCapability::Estimated,
 };
 
+pub(crate) const CONTROL_RUNTIME_ROLE: &str = "pi_tui";
+
 pub const SPEC: AgentClientSpec = AgentClientSpec {
     client_type: "pi",
     default_for_creation: true,
@@ -33,7 +35,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
             restart_requires_exit: true,
             process_observation: Some(
                 pontia_agent_control::client_contract::ProcessObservationBehavior {
-                    role: "tui",
+                    role: CONTROL_RUNTIME_ROLE,
                     observe_starting: false,
                     exit_event: pontia_agent_control::PontiaEventType::SessionExited,
                     exit_reason: "agent_process_fingerprint_missing",
@@ -43,7 +45,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         },
         native_turn_identity: false,
         native_turn_metadata_key: None,
-        control_runtime_role: Some("tui"),
+        control_runtime_role: Some(CONTROL_RUNTIME_ROLE),
         runtime: RuntimeBehavior::Tmux(TmuxRuntimeBehavior {
             hook_log: Some(HookLogBehavior {
                 file_name: "pi-hook.log",

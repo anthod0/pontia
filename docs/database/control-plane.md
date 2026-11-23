@@ -641,7 +641,8 @@ CREATE TABLE workflow_runtime_snapshots (
     runtime_id TEXT PRIMARY KEY NOT NULL,
     session_id TEXT NOT NULL,
     role TEXT NOT NULL,
-    state TEXT NOT NULL
+    state TEXT NOT NULL,
+    is_control INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX idx_workflow_runtime_snapshots_session ON workflow_runtime_snapshots(session_id);

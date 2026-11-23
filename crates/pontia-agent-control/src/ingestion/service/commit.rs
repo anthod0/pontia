@@ -45,6 +45,7 @@ impl EventCommitter {
         expected_session_state: Option<SessionState>,
         interaction: Option<crate::interactions::InteractionWrite<'_>>,
     ) -> Result<CommitOutcome> {
+        event.validate_runtime_shape()?;
         // Launch settings belong to the Session, not its durable or broadcast events.
         let runtime_environment = if event.event_type == EventType::SessionCreated {
             event
@@ -239,7 +240,9 @@ impl EventCommitter {
             let runtime_id = event.payload["runtime_id"]
                 .as_str()
                 .expect("runtime event shape was validated");
-            let role = event.payload["role"].as_str().unwrap_or("tui");
+            let role = event.payload["role"]
+                .as_str()
+                .expect("runtime event shape was validated");
             let already_exited: bool = sqlx::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM session_runtimes WHERE runtime_id=? AND session_id=? AND role=? AND state='exited')",
             )
@@ -402,7 +405,9 @@ async fn project_runtime_in_tx(
     let runtime_id = event.payload["runtime_id"]
         .as_str()
         .expect("runtime event shape was validated");
-    let role = event.payload["role"].as_str().unwrap_or("tui");
+    let role = event.payload["role"]
+        .as_str()
+        .expect("runtime event shape was validated");
     if matches!(
         event.event_type,
         EventType::RuntimeStarting | EventType::RuntimeReady

@@ -85,12 +85,13 @@ impl AgentBindingService {
     pub async fn pending_session_context(
         &self,
         client_type: &str,
+        role: Option<&str>,
         session_id: &str,
         client_session_key: &str,
     ) -> Result<Option<AgentBindingSessionContext>> {
         let pending: Option<(String, String)> = sqlx::query_as(
-                "SELECT s.session_id, r.runtime_id FROM sessions s JOIN session_runtimes r USING(session_id) LEFT JOIN agent_bindings a USING(session_id) WHERE s.session_id = ? AND s.client_type = ? AND s.state = 'starting' AND r.state = 'starting' AND r.role = 'tui' AND a.id IS NULL"
-            ).bind(session_id).bind(client_type).fetch_optional(&self.pool).await?;
+                "SELECT s.session_id, r.runtime_id FROM sessions s JOIN session_runtimes r USING(session_id) LEFT JOIN agent_bindings a USING(session_id) WHERE s.session_id = ? AND s.client_type = ? AND s.state = 'starting' AND r.state = 'starting' AND r.role = ? AND a.id IS NULL"
+            ).bind(session_id).bind(client_type).bind(role).fetch_optional(&self.pool).await?;
         Ok(
             pending.map(|(session_id, runtime_id)| AgentBindingSessionContext {
                 session_id,
@@ -108,6 +109,7 @@ impl AgentBindingService {
     pub async fn session_context_for_client_session(
         &self,
         client_type: &str,
+        role: Option<&str>,
         client_session_key: &str,
     ) -> Result<Option<AgentBindingSessionContext>> {
         let Some(binding) = self
@@ -117,13 +119,13 @@ impl AgentBindingService {
             return Ok(None);
         };
 
-        let runtime_id = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone()).runtime_id(&binding.session_id, Some("tui")).await?;
+        let runtime_id = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone()).runtime_id(&binding.session_id, role).await?;
         let Some(row) = sqlx::query(
             r#"SELECT s.state AS session_state,
                       r.runtime_id,
                       COALESCE(s.workspace_ref, a.launch_cwd) AS launch_cwd
                FROM sessions s
-               JOIN session_runtimes r ON r.session_id = s.session_id AND r.role = 'tui'
+               JOIN session_runtimes r ON r.session_id = s.session_id
                JOIN agent_bindings a ON a.session_id = s.session_id
                WHERE s.session_id = ? AND r.runtime_id = ?"#,
         )

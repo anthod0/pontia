@@ -119,9 +119,9 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
-        sqlx::query("INSERT INTO session_runtimes(runtime_id,session_id,role,state,created_at) VALUES ('runtime','session','tui','starting','2000-01-01T00:00:00Z')").execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO session_runtimes(runtime_id,session_id,role,state,created_at) VALUES ('runtime','session','generic_control','starting','2000-01-01T00:00:00Z')").execute(&pool).await.unwrap();
         sqlx::query("INSERT INTO events(event_id,session_id,client_type,event_type,source,occurred_at,payload) VALUES ('historical-ready','session','pi','session.ready','agent_client','2000-01-01T00:00:00Z','{\"runtime_id\":\"runtime\"}')").execute(&pool).await.unwrap();
-        let readiness = RuntimeReadinessService::new(pool.clone(), Some("tui"));
+        let readiness = RuntimeReadinessService::new(pool.clone(), Some("generic_control"));
         assert!(
             !readiness
                 .is_ready("session", "pi", "runtime")
@@ -155,7 +155,7 @@ mod tests {
         let (pool, _pontia_home) = pool().await;
         let readiness = RuntimeReadinessService::with_options(
             pool,
-            Some("tui"),
+            Some("generic_control"),
             Duration::from_millis(5),
             Duration::from_millis(1),
         );

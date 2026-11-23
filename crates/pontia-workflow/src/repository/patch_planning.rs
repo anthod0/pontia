@@ -28,7 +28,7 @@ impl SqliteWorkflowRepository {
                  AND w.state = 'running'
                  AND w.active_patch_id IS NULL
                  AND w.activating_node_id IS NULL
-                 AND r.state IN ('starting','running') AND r.role = 'tui'
+                 AND r.state IN ('starting','running') AND r.is_control
                  AND r.runtime_id = ?
                  AND t.state IN ('queued', 'running')
                  AND NOT EXISTS (
@@ -169,7 +169,7 @@ impl SqliteWorkflowRepository {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let runtime_id: Option<String> = sqlx::query_scalar(
             r#"SELECT runtime_id FROM workflow_runtime_snapshots
-               WHERE session_id = ? AND state = 'running' AND role = 'tui'
+               WHERE session_id = ? AND state = 'running' AND is_control
                  AND runtime_id IS NOT NULL"#,
         )
         .bind(session_id)

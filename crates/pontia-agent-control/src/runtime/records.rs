@@ -5,6 +5,7 @@ use pontia_storage_sqlite::repositories::session_runtimes::SessionRuntimeRecord;
 pub(crate) fn runtime_binding_record(
     session_id: &str,
     runtime: &RuntimeStartResult,
+    role: Option<&str>,
 ) -> Result<SessionRuntimeRecord> {
     Ok(SessionRuntimeRecord {
         runtime_id: runtime
@@ -12,7 +13,9 @@ pub(crate) fn runtime_binding_record(
             .ok_or_else(|| Error::Domain("launch returned no runtime_id".into()))?
             .into(),
         session_id: session_id.into(),
-        role: "tui".into(),
+        role: role
+            .ok_or_else(|| Error::Domain("launch requires a declared control runtime role".into()))?
+            .into(),
         state: "starting".into(),
         start_command: runtime.metadata["start_command"]
             .as_str()

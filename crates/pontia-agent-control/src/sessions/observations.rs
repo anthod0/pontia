@@ -127,9 +127,18 @@ impl NativeSessionService {
         Ok(session)
     }
 
-    pub async fn provision(&self, session: &str, runtime: &RuntimeStartResult) -> Result<()> {
+    async fn provision(
+        &self,
+        client: &str,
+        session: &str,
+        runtime: &RuntimeStartResult,
+    ) -> Result<()> {
         crate::runtime::NativeRuntimeBindings::new(self.pool.clone())
-            .provision(session, runtime)
+            .provision(
+                session,
+                runtime,
+                self.events.clients().control_runtime_role(client),
+            )
             .await
     }
 
@@ -159,7 +168,7 @@ impl NativeSessionService {
         let observation = observation?;
         let identity = observation.identity;
         let session = self.observed_session(client, &identity.launch_cwd).await?;
-        self.provision(&session, &observation.provisioned_runtime)
+        self.provision(client, &session, &observation.provisioned_runtime)
             .await?;
         self.confirm(
             UpsertAgentBindingRequest {

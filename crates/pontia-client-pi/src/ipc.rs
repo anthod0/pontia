@@ -229,7 +229,11 @@ async fn dispatch(
         }
         let bindings = AgentBindingService::new(state.db());
         let context = match bindings
-            .session_context_for_client_session("pi", &query.client_session_key)
+            .session_context_for_client_session(
+                "pi",
+                crate::SPEC.adapter.control_runtime_role,
+                &query.client_session_key,
+            )
             .await?
         {
             Some(context) => Some(context),
@@ -237,6 +241,7 @@ async fn dispatch(
                 bindings
                     .pending_session_context(
                         "pi",
+                        crate::SPEC.adapter.control_runtime_role,
                         &query.client_session_key,
                         &query.client_session_key,
                     )

@@ -123,7 +123,7 @@ async fn generic_runtime_preserves_session_metadata_and_stable_identity() {
     .await;
     let metadata = binding_fields(&state, &session_id).await;
     let runtime_handle = scope.runtime_handle(&state, &session_id).await;
-    assert_eq!(metadata["runtime_role"], "tui");
+    assert_eq!(metadata["runtime_role"], "generic_control");
     assert_eq!(metadata["handle"], "@reviewer");
     assert_eq!(metadata["role"], "execution reviewer");
     assert_eq!(runtime_handle, metadata["runtime_id"].as_str().unwrap());

@@ -150,7 +150,7 @@ async fn runtime_bound_streaming_requires_the_current_session_runtime() {
         .await
         .is_err()
     );
-    sqlx::query("INSERT INTO session_runtimes(session_id,runtime_id,role,state,created_at) VALUES ('session','runtime','tui','running','2026-10-01T00:00:00Z')").execute(&app.db()).await.unwrap();
+    sqlx::query("INSERT INTO session_runtimes(session_id,runtime_id,role,state,created_at) VALUES ('session','runtime','generic_control','running','2026-10-01T00:00:00Z')").execute(&app.db()).await.unwrap();
     snapshot(
         &app,
         producer(LiveOutputSource::RuntimeBound {

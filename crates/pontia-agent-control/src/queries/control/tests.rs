@@ -155,7 +155,7 @@ async fn input_uses_client_capabilities_without_fetching_display_details() -> Re
     )
     .execute(&db)
     .await?;
-    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, role, state, created_at) VALUES ('session', 'runtime', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#).execute(&db).await?;
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, role, state, created_at) VALUES ('session', 'runtime', 'generic_control', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#).execute(&db).await?;
     assert!(app.queries().get_session("session").await.is_err());
     assert!(
         app.turn_commands()

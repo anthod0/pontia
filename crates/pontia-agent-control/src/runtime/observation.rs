@@ -81,15 +81,22 @@ impl RuntimeObservationService {
         let cutoff = (OffsetDateTime::now_utc() - STARTUP_TIMEOUT)
             .format(&Rfc3339)
             .map_err(|error| Error::Domain(format!("invalid startup timeout cutoff: {error}")))?;
-        let sessions = SqliteSessionRepository::new(self.pool.clone())
-            .starting_sessions_before(&cutoff)
-            .await?;
+        let repository = SqliteSessionRepository::new(self.pool.clone());
+        let mut sessions = Vec::new();
+        for client in self.clients.registrations() {
+            sessions.extend(
+                repository
+                    .starting_sessions_before(
+                        &cutoff,
+                        client.spec.client_type,
+                        client.spec.adapter.control_runtime_role,
+                    )
+                    .await?,
+            );
+        }
 
         for session in sessions {
             let _identity_guard = self.control.lock_identity().await;
-            if self.clients.spec(&session.client_type).is_none() {
-                continue;
-            }
             let timeout_seconds = STARTUP_TIMEOUT.as_secs();
             let mut payload = json!({
                 "reason": "startup_timeout",

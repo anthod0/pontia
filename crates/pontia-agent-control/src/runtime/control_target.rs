@@ -65,7 +65,7 @@ impl ControlTarget {
 
     pub async fn tmux_pane(&self, pool: &SqlitePool) -> Result<(String, String)> {
         let binding = SqliteSessionRuntimeRepository::new(pool.clone())
-            .tmux_pane_binding(&self.session_id)
+            .tmux_pane_binding(&self.session_id, self.control_runtime_role)
             .await?
             .ok_or_else(|| Error::CapabilityUnavailable("missing tmux pane binding".into()))?;
         if binding.runtime_id != self.runtime_id {

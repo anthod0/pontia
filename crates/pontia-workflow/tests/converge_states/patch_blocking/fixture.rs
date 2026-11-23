@@ -148,7 +148,7 @@ pub(super) async fn seed_requester(
         .unwrap();
     sqlx::query("INSERT INTO turns (turn_id, session_id, state, topology_status) VALUES ('turn_requester', 'sess_requester', 'running', 'root')")
         .execute(pool).await.unwrap();
-    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, role, state, created_at) VALUES ('sess_requester', 'runtime_requester', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, role, state, created_at) VALUES ('sess_requester', 'runtime_requester', 'generic_control', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
         .execute(pool).await.unwrap();
     insert_fact(
         pool,
@@ -206,7 +206,7 @@ pub(super) async fn seed_replanner_session(
         .bind(session_id).bind(turn_id).bind(metadata.to_string()).execute(pool).await.unwrap();
     sqlx::query("INSERT INTO turns (turn_id, session_id, state, topology_status) VALUES (?, ?, 'running', 'root')")
         .bind(turn_id).bind(session_id).execute(pool).await.unwrap();
-    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, role, state, created_at) VALUES (?, ?, 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, role, state, created_at) VALUES (?, ?, 'generic_control', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
 .bind(session_id)
 .bind(runtime_id).execute(pool).await.unwrap();
     insert_fact(

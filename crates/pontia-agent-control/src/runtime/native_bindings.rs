@@ -14,11 +14,14 @@ impl NativeRuntimeBindings {
         &self,
         session: &str,
         runtime: &RuntimeStartResult,
+        role: Option<&str>,
     ) -> Result<()> {
         pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(
             self.pool.clone(),
         )
-        .upsert_binding(crate::runtime::runtime_binding_record(session, runtime)?)
+        .upsert_binding(crate::runtime::runtime_binding_record(
+            session, runtime, role,
+        )?)
         .await
     }
 

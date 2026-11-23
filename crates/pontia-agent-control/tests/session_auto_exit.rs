@@ -114,7 +114,7 @@ async fn fixture() -> (tempfile::TempDir, AgentControl, Arc<Channel>) {
     let root = tempfile::tempdir().unwrap();
     let state = open(root.path()).await;
     sqlx::raw_sql("INSERT INTO sessions(session_id,client_type,state) VALUES ('session','generic','idle');
-        INSERT INTO session_runtimes(session_id,runtime_id,role,state,created_at) VALUES ('session','runtime','tui','running','2026-01-01T00:00:00Z');
+        INSERT INTO session_runtimes(session_id,runtime_id,role,state,created_at) VALUES ('session','runtime','generic_control','running','2026-01-01T00:00:00Z');
         INSERT INTO agent_bindings(id,session_id,client_type,launch_cwd,client_session_key) VALUES ('binding','session','generic','/unused','native');")
         .execute(&state.db()).await.unwrap();
     let channel = connect(&state).await;

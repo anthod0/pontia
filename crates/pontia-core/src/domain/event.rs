@@ -374,6 +374,32 @@ pub struct DomainEvent {
 }
 
 impl DomainEvent {
+    pub fn validate_runtime_shape(&self) -> crate::error::Result<()> {
+        if self.event_type.is_runtime_event() {
+            if self.turn_id.is_some() {
+                return Err(Error::Domain(format!(
+                    "event {} cannot carry turn_id",
+                    self.event_type
+                )));
+            }
+            for field in ["runtime_id", "role"] {
+                if self
+                    .payload
+                    .get(field)
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .is_none_or(str::is_empty)
+                {
+                    return Err(Error::Domain(format!(
+                        "event {} requires payload.{field}",
+                        self.event_type
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn new(
         event_id: String,
         session_id: String,

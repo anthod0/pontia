@@ -23,7 +23,7 @@ impl SqliteWorkflowRepository {
                WHERE p.state = 'planning' AND w.state = 'replanning'
                  AND w.active_replanner_session_id = ?
                  AND p.replanner_session_id = ? AND p.replanner_runtime_id = ?
-                 AND r.state IN ('starting','running') AND r.role = 'tui' AND r.runtime_id = ?
+                 AND r.state IN ('starting','running') AND r.is_control AND r.runtime_id = ?
                  AND t.state IN ('queued', 'running')"#,
         )
         .bind(&request.session_id)
@@ -219,7 +219,7 @@ impl SqliteWorkflowRepository {
                  AND w.active_replanner_session_id = ?
                  AND p.replanner_session_id = ?
                  AND p.replanner_runtime_id = ?
-                 AND r.state IN ('starting','running') AND r.role = 'tui' AND r.runtime_id = ?
+                 AND r.state IN ('starting','running') AND r.is_control AND r.runtime_id = ?
                  AND t.state IN ('queued', 'running')"#,
         )
         .bind(&request.session_id)

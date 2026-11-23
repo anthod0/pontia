@@ -52,7 +52,7 @@ impl SqliteWorkflowRepository {
                 .await?;
         self.refresh_session(&session_id).await?;
         self.synchronize().await?;
-        Ok(sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM workflow_recoveries a JOIN workflow_session_snapshots s ON s.session_id=a.session_id JOIN workflow_runtime_snapshots r ON r.session_id=s.session_id WHERE a.recovery_id=? AND s.state IN ('idle','busy','waiting_for_interaction','interrupted') AND r.state IN ('starting','running') AND r.role='tui' AND r.runtime_id=a.runtime_id)")
+        Ok(sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM workflow_recoveries a JOIN workflow_session_snapshots s ON s.session_id=a.session_id JOIN workflow_runtime_snapshots r ON r.session_id=s.session_id WHERE a.recovery_id=? AND s.state IN ('idle','busy','waiting_for_interaction','interrupted') AND r.state IN ('starting','running') AND r.is_control AND r.runtime_id=a.runtime_id)")
             .bind(id).fetch_one(&self.pool).await?)
     }
 
@@ -134,7 +134,7 @@ impl SqliteWorkflowRepository {
         self.refresh_session(&session_id).await?;
         self.synchronize().await?;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        let result=sqlx::query("UPDATE workflow_recoveries SET state='dispatching',runtime_id=(SELECT runtime_id FROM workflow_runtime_snapshots WHERE session_id=workflow_recoveries.session_id AND state = 'running' AND role='tui'),updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE recovery_id=? AND state='preparing' AND EXISTS (SELECT 1 FROM workflow_session_snapshots s JOIN workflow_runtime_snapshots r ON r.session_id=s.session_id WHERE s.session_id=workflow_recoveries.session_id AND s.state='idle' AND r.state IN ('starting','running') AND r.role='tui' AND r.runtime_id IS NOT NULL) AND EXISTS (SELECT 1 FROM workflow_inbox_snapshots WHERE message_id=workflow_recoveries.message_id AND state='resuming')")
+        let result=sqlx::query("UPDATE workflow_recoveries SET state='dispatching',runtime_id=(SELECT runtime_id FROM workflow_runtime_snapshots WHERE session_id=workflow_recoveries.session_id AND state = 'running' AND is_control),updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE recovery_id=? AND state='preparing' AND EXISTS (SELECT 1 FROM workflow_session_snapshots s JOIN workflow_runtime_snapshots r ON r.session_id=s.session_id WHERE s.session_id=workflow_recoveries.session_id AND s.state='idle' AND r.state IN ('starting','running') AND r.is_control AND r.runtime_id IS NOT NULL) AND EXISTS (SELECT 1 FROM workflow_inbox_snapshots WHERE message_id=workflow_recoveries.message_id AND state='resuming')")
             .bind(id).execute(&mut *tx).await?;
         if result.rows_affected() != 1 {
             return Err(Error::StateConflict(

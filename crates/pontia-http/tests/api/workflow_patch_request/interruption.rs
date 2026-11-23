@@ -33,7 +33,7 @@ impl SessionCreator for ReplannerCreator {
         .execute(&self.0)
         .await
         .expect("create dedicated Re-planner Session");
-        sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, role, state, created_at) VALUES ('sess_patch_replanner', 'runtime_patch_replanner', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
+        sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, role, state, created_at) VALUES ('sess_patch_replanner', 'runtime_patch_replanner', 'pi_tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
         .execute(&self.0)
         .await
         .expect("bind Re-planner Runtime");
