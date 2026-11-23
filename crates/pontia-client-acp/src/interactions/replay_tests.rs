@@ -64,7 +64,7 @@ async fn permission_replay_keeps_one_responder_and_conflict_cancels_it_once() {
             policy: Default::default(),
             peers: Default::default(),
             reconnect: mpsc::unbounded_channel().0,
-            agent: crate::capabilities::AgentBounds::of(None),
+            agent: crate::capabilities::AgentBounds::of("test", None),
         },
     )
     .await

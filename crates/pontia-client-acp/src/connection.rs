@@ -28,6 +28,9 @@ struct Context {
     blocked: bool,
     native: Option<SessionId>,
     steer: bool,
+    #[serde(default)]
+    compact_command: bool,
+    compaction: Option<crate::compaction::Pending>,
     system_prompt: Option<SystemPrompt>,
     current_model: Option<String>,
     config_options: Vec<SessionConfigOption>,
@@ -35,7 +38,8 @@ struct Context {
 }
 
 pub(crate) fn context(state: &SessionState) -> Value {
-    json!({"ready":state.ready,"blocked":state.blocked,"native":state.native,"steer":state.negotiated.steer,
+    json!({"ready":state.ready,"blocked":state.blocked,"native":state.native,"steer":state.negotiated.steer,"compact_command":state.negotiated.compact_command,"compaction":state.compaction,
+        "compaction_events":state.agent.compaction_events(),
         "system_prompt":state.system_prompt,"current_model":state.current_model,"config_options":state.config_options,"active":state.active})
 }
 
@@ -76,6 +80,8 @@ pub(crate) async fn restore(
     state.ready = context.ready;
     state.native = context.native;
     state.negotiated.steer = context.steer;
+    state.negotiated.compact_command = context.compact_command;
+    state.compaction = context.compaction;
     state.system_prompt = context.system_prompt;
     state.current_model = context.current_model;
     state.config_options = context.config_options;
@@ -154,7 +160,7 @@ impl AcpAdapter {
                 requests,
                 status["context"].clone(),
                 crate::peer::PeerOwner {
-                    agent: crate::capabilities::AgentBounds::of(definition),
+                    agent: crate::capabilities::AgentBounds::of(&agent_key, definition),
                     policy,
                     peers: Arc::downgrade(&self.peers),
                     reconnect: self.reconnect.clone(),

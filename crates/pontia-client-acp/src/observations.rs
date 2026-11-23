@@ -56,6 +56,40 @@ impl Peer {
                     json!({"client_session_key": binding, "launch_cwd": cwd, "binding_metadata": metadata}),
                 ).await?;
             }
+            Observation::Compacted {
+                operation,
+                manual,
+                tokens_before,
+                tokens_after,
+            } => {
+                fact(
+                    events,
+                    session,
+                    runtime,
+                    None,
+                    EventType::SessionCompactionCompleted,
+                    format!("acp:compacted:{operation}"),
+                    json!({"operation_id":operation,"trigger":if manual {"manual"} else {"unknown"},
+                        "tokens_before":tokens_before,"tokens_after":tokens_after}),
+                )
+                .await?;
+                if manual {
+                    self.finish_compaction(&operation).await?;
+                }
+            }
+            Observation::CompactionFailed {
+                operation,
+                manual,
+                aborted,
+                message,
+            } => {
+                fact(events, session, runtime, None, EventType::SessionCompactionFailed,
+                    format!("acp:compaction_failed:{operation}"),
+                    json!({"operation_id":operation,"trigger":if manual {"manual"} else {"unknown"},"aborted":aborted,"error_message":message})).await?;
+                if manual {
+                    self.finish_compaction(&operation).await?;
+                }
+            }
             Observation::Usage { used, size } => {
                 if size == 0 {
                     return Err(Error::Domain("ACP usage capacity is zero".into()));

@@ -34,6 +34,8 @@ pontia init
 pontia client enable grok
 ```
 
+Grok 会话空闲或已中断时，可以在 Dashboard 中使用 `/compact` 压缩对话上下文。压缩后可以在同一会话中继续对话，并在时间线上查看压缩记录。
+
 Bot、助手和 dreaming 均可选用 Grok Build。这些会话保留终端和读取工具，关闭 Grok 专门用于编辑文件、媒体落盘、工作树、子 Agent、工作流、定时、后台任务、监控和调用 MCP 的工具。Bot、检索助手和 dreaming 还会关闭技能自动发现。发送给运行中 Grok Bot 或助手的消息由 Pontia 排队，在当前轮结束后投递。
 
 运行 `pontia setup pi`、`pontia setup codex` 或 `pontia setup claude` 来安装或修复本地集成。省略 Client 名称即可交互式选择。Setup 也会启用该 Client。
