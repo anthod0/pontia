@@ -71,6 +71,13 @@ impl HttpEntrypoints {
     pub fn new(state: impl Into<HttpState>) -> Self {
         let state = state.into();
         let external_api = external_api_router(state.clone());
+        let shutdown_api = Router::new()
+            .route("/api/v1/shutdown", post(api::shutdown_agents))
+            .route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                api::authenticate,
+            ))
+            .with_state(state.clone());
         let local_http = Router::new()
             .route("/healthz", get(health::healthz))
             .route("/dashboard", get(dashboard::dashboard))
@@ -78,7 +85,8 @@ impl HttpEntrypoints {
             .route("/dashboard/assets/{*path}", get(dashboard::dashboard_asset))
             .route("/dashboard/{*path}", get(dashboard::dashboard_path))
             .with_state(state)
-            .merge(external_api.clone());
+            .merge(external_api.clone())
+            .merge(shutdown_api);
 
         Self {
             external_api,

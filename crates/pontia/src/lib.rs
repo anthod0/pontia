@@ -8,6 +8,5 @@ pub mod manager;
 pub mod private_file;
 pub mod runtime_io;
 pub mod setup;
-pub mod shutdown;
 pub mod terminal;
 pub mod uninstall;

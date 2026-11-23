@@ -2007,6 +2007,28 @@ async fn replay_for_another_native_session_is_unavailable_not_empty_history() {
 }
 
 #[tokio::test]
+async fn shutdown_lock_prevents_automatic_replacement_of_an_exited_agent() {
+    let h = Harness::new(&[]).await;
+    let session = h.create("first").await.unwrap();
+    let prior_loads = h.requests("session/load");
+    let lock = pontia_runtime::launch_lock::shutdown(h.app.pontia_home()).unwrap();
+    h.crash_agent(&session);
+    h.wait_runtime_exited(&session).await;
+    let recovered = tokio::time::timeout(
+        Duration::from_secs(2),
+        h.wait_requests("session/load", prior_loads + 1),
+    )
+    .await;
+    assert!(
+        recovered.is_err(),
+        "ACP created a replacement during shutdown"
+    );
+    assert_eq!(h.events(&session, "runtime.starting").await, 1);
+    drop(lock);
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn shutdown_during_recovery_cancels_held_load_and_leaves_identity_and_lifecycle_intact() {
     let mut h = Harness::new(&[]).await;
     let session = h.create("first").await.unwrap();

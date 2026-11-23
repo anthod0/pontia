@@ -7,8 +7,21 @@ pub enum ClientServicePhase {
     Observation,
 }
 
+pub struct PreparedServiceShutdown {
+    pub listing: Vec<String>,
+    pub terminate: ClientOperation<'static, Option<String>>,
+}
+
 /// Client-owned transports and observers hosted by the control-plane service.
 pub trait ClientService: Send + Sync {
+    fn inspect_shutdown<'a>(
+        &'a self,
+        _root: &'a std::path::Path,
+        _events: Option<&'a crate::EventIngestService>,
+    ) -> ClientOperation<'a, Option<PreparedServiceShutdown>> {
+        Box::pin(async { Ok(None) })
+    }
+
     fn uses_control_socket(&self) -> bool {
         false
     }

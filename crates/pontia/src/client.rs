@@ -61,6 +61,43 @@ impl ClientApi {
         })
     }
 
+    fn authorized(&self, method: Method, url: reqwest::Url) -> reqwest::RequestBuilder {
+        let request = self.http.request(method, url);
+        match &self.token {
+            Some(token) => request.bearer_auth(token),
+            None => request,
+        }
+    }
+
+    pub async fn shutdown(
+        &self,
+        action: &pontia_agent_control::runtime::shutdown::ShutdownRequest,
+    ) -> Result<Option<reqwest::Response>, String> {
+        let url = self.base.join("shutdown").map_err(|e| e.to_string())?;
+        let response = self
+            .authorized(Method::POST, url)
+            .json(action)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        let status = response.status();
+        if status.is_success() {
+            return Ok(Some(response));
+        }
+        let body: Value = response.json().await.map_err(|e| e.to_string())?;
+        let message = body["error"]["message"]
+            .as_str()
+            .unwrap_or("Shutdown request failed");
+        if status == reqwest::StatusCode::CONFLICT && body["error"]["code"] == "different_instance"
+        {
+            return Ok(None);
+        }
+        if body["error"]["code"] == "shutdown_failed" {
+            return Err(message.into());
+        }
+        Err(format!("{status}: {message}"))
+    }
+
     async fn request(
         &self,
         method: Method,
@@ -74,10 +111,7 @@ impl ClientApi {
                 .push(client)
                 .push(key);
         }
-        let mut request = self.http.request(method, url);
-        if let Some(token) = &self.token {
-            request = request.bearer_auth(token);
-        }
+        let mut request = self.authorized(method, url);
         if let Some(body) = body {
             request = request.json(&body);
         }

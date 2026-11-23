@@ -31,6 +31,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     adapter: AgentClientAdapter {
         lifecycle: pontia_agent_control::client_contract::SessionLifecycleBehavior {
             coupled_runtime: true,
+            shutdown_requires_managed_launch: true,
             confirmed_exit_recovery: true,
             restart_requires_exit: true,
             process_observation: Some(

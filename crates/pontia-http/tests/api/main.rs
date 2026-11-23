@@ -21,6 +21,7 @@ mod session_create;
 mod session_inbox;
 mod session_overview;
 mod session_workspace_linking;
+mod shutdown;
 mod support;
 mod test_app_support;
 mod turn_submit;

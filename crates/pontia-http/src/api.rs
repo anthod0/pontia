@@ -26,6 +26,8 @@ mod live_output;
 mod response;
 mod session_guard;
 mod sessions;
+mod shutdown;
+pub(crate) use shutdown::shutdown_agents;
 mod timeline;
 mod turns;
 mod workflows;

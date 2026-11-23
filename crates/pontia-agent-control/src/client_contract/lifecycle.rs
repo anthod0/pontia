@@ -19,6 +19,7 @@ pub struct ProcessObservationBehavior {
 pub struct SessionLifecycleBehavior {
     pub execution_lifetime: SessionExecutionLifetime,
     pub coupled_runtime: bool,
+    pub shutdown_requires_managed_launch: bool,
     pub confirmed_exit_recovery: bool,
     pub restart_requires_exit: bool,
     pub process_observation: Option<ProcessObservationBehavior>,
@@ -28,6 +29,7 @@ impl SessionLifecycleBehavior {
     pub const DEFAULT: Self = Self {
         execution_lifetime: SessionExecutionLifetime::Execution,
         coupled_runtime: false,
+        shutdown_requires_managed_launch: false,
         confirmed_exit_recovery: false,
         restart_requires_exit: false,
         process_observation: None,
