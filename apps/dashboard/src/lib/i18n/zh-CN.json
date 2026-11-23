@@ -60,6 +60,7 @@
   "bots.viewContext": "查看上下文",
   "bots.noSelection": "未选择消息",
   "bots.todos": "待办",
+  "bots.sidebarWithTodos": "侧栏，{count} 个待办",
   "bots.ignored": "已忽略",
   "common.undo": "撤销",
   "bots.recentlyResolved": "最近已处理",

@@ -428,7 +428,7 @@ test("shows the files opened before in an empty Files tab and reopens one from t
   attachments(["notes.md", "plan.md"]);
   const first = render(BotChatPreviewHarness, { botId: bot.bot_id });
 
-  await fireEvent.click(await screen.findByRole("button", { name: "Todo 0" }));
+  await fireEvent.click(await screen.findByRole("button", { name: "Sidebar" }));
   await fireEvent.click(screen.getByRole("tab", { name: "Files" }));
   expect(await screen.findByText("No open file")).toBeVisible();
 
@@ -442,7 +442,7 @@ test("shows the files opened before in an empty Files tab and reopens one from t
   // After a reload the list is still there, newest first.
   first.unmount();
   render(BotChatPreviewHarness, { botId: bot.bot_id });
-  await fireEvent.click(await screen.findByRole("button", { name: "Todo 0" }));
+  await fireEvent.click(await screen.findByRole("button", { name: "Sidebar" }));
   await fireEvent.click(screen.getByRole("tab", { name: "Files" }));
   const list = await screen.findByRole("region", { name: "Recently opened" });
   expect(
@@ -459,4 +459,37 @@ test("shows the files opened before in an empty Files tab and reopens one from t
   await fireEvent.click(screen.getByRole("button", { name: "Close file" }));
   await fireEvent.click(await screen.findByRole("button", { name: "Clear list" }));
   expect(await screen.findByText("No open file")).toBeVisible();
+});
+
+test("the sidebar button shows the open todo count and reopens the tab last used", async () => {
+  localStorage.clear();
+  vi.spyOn(testDevice.api, "getBotTodos").mockResolvedValue({ open: [], recently_resolved: [] });
+  vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue({
+    bot,
+    entries: [],
+    next_before: null,
+    file_link_session: null,
+    open_todo_count: 3,
+    notice_session_id: null,
+    generation_notice: null,
+    status: { kind: "idle" },
+  });
+  const first = render(BotChatPreviewHarness, { botId: bot.bot_id });
+  const button = await screen.findByRole("button", { name: "Sidebar, 3 todos" });
+  expect(button).toHaveTextContent("3");
+  expect(button).toHaveAttribute("aria-pressed", "false");
+
+  await fireEvent.click(button);
+  expect(button).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute("aria-selected", "true");
+  await fireEvent.click(screen.getByRole("tab", { name: /Todo/ }));
+  await screen.findByText("No todos");
+  await fireEvent.click(button);
+  expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+
+  first.unmount();
+  render(BotChatPreviewHarness, { botId: bot.bot_id });
+  await fireEvent.click(await screen.findByRole("button", { name: "Sidebar, 3 todos" }));
+  expect(screen.getByRole("tab", { name: /Todo/ })).toHaveAttribute("aria-selected", "true");
+  expect(await screen.findByText("No todos")).toBeVisible();
 });
