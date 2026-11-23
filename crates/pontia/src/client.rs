@@ -3,19 +3,11 @@ use pontia_agent_control::agent_clients::AgentClientDetails;
 use pontia_config::AppConfig;
 use reqwest::Method;
 use serde_json::{Value, json};
-use std::path::PathBuf;
 
 const CLIENT_HELP: &str = "\
 Requires a running service. Output is JSON, except for 'list' without --json.
 
 For Client setup, see https://pontia.dev/docs/agent-clients.md";
-
-const SET_HELP: &str = "\
-The JSON object replaces all existing overrides. Supported key: tui_command.
-
-Example:
-  echo '{\"tui_command\": \"/usr/local/bin/pi\"}' > pi.json
-  pontia client set pi --config pi.json";
 
 #[derive(Debug, Args)]
 #[command(after_help = CLIENT_HELP)]
@@ -32,17 +24,8 @@ enum ClientCommandKind {
         #[arg(long)]
         json: bool,
     },
-    /// Show one entry, including its effective configuration
+    /// Show one entry
     Show(Target),
-    /// Replace an entry's configuration overrides
-    #[command(after_help = SET_HELP)]
-    Set {
-        #[command(flatten)]
-        target: Target,
-        /// JSON object with the new overrides
-        #[arg(long, value_name = "JSON_FILE")]
-        config: PathBuf,
-    },
     /// Allow new Sessions to use an entry
     Enable(Target),
     /// Stop new Sessions from using an entry
@@ -179,8 +162,7 @@ async fn manage(api: &ClientApi, command: ClientCommandKind) -> Result<Value, St
         ClientCommandKind::Show(target)
         | ClientCommandKind::Enable(target)
         | ClientCommandKind::Disable(target)
-        | ClientCommandKind::Reset(target)
-        | ClientCommandKind::Set { target, .. } => target,
+        | ClientCommandKind::Reset(target) => target,
     };
     let entries = api.list().await?;
     let matches = entries
@@ -219,24 +201,6 @@ async fn manage(api: &ClientApi, command: ClientCommandKind) -> Result<Value, St
                 &entry.client_type,
                 &entry.client_key,
                 json!({"enabled": false}),
-            )
-            .await
-        }
-        ClientCommandKind::Set { config, .. } => {
-            if entry.client_type == "acp" {
-                return Err("ACP Agents do not accept configuration overrides".into());
-            }
-            let contents = std::fs::read(&config)
-                .map_err(|error| format!("Cannot read {}: {error}", config.display()))?;
-            let overrides: Value = serde_json::from_slice(&contents)
-                .map_err(|error| format!("Invalid configuration JSON: {error}"))?;
-            if !overrides.is_object() {
-                return Err("Configuration must be a JSON object".into());
-            }
-            api.patch(
-                &entry.client_type,
-                &entry.client_key,
-                json!({"config_overrides": overrides}),
             )
             .await
         }

@@ -187,7 +187,7 @@ impl ClientRegistry {
                 .as_ref()
                 .and_then(|configuration| {
                     let key = configuration.keys().into_iter().next()?;
-                    let effective = configuration.merged(&key, &serde_json::json!({}));
+                    let effective = configuration.merged(&key);
                     Some(configuration.presentation(&key, &effective).0)
                 })
                 .unwrap_or_else(|| client.into());

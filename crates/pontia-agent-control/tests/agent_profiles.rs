@@ -23,14 +23,14 @@ impl ClientConfiguration for Configuration {
     fn key(&self, _: &Value) -> Result<String> {
         Ok("default".into())
     }
-    fn merged(&self, _: &str, overrides: &Value) -> Value {
-        overrides.clone()
+    fn merged(&self, _: &str) -> Value {
+        json!({})
     }
-    fn resolve(&self, key: &str, overrides: &Value) -> Result<Value> {
+    fn resolve(&self, key: &str) -> Result<Value> {
         if key != "default" {
             return Err(Error::Domain("Unknown client key".into()));
         }
-        Ok(overrides.clone())
+        Ok(json!({}))
     }
 }
 struct Instructions;
@@ -58,10 +58,7 @@ async fn fixture_with_changes(
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
     let settings = SqliteAgentClientRepository::new(pool.clone());
-    settings
-        .save("generic", "default", Some(true), None)
-        .await
-        .unwrap();
+    settings.save("generic", "default", true).await.unwrap();
     let mut client = test_registration();
     client.configuration = Some(Arc::new(Configuration));
     client.instructions = Some(Arc::new(Instructions));
@@ -272,18 +269,12 @@ async fn rejects_unknown_and_disabled_clients_at_save_and_launch() {
     let mut input = configured();
     input.client_type = Some("missing".into());
     assert!(service.create(input).await.is_err());
-    settings
-        .save("generic", "unknown", Some(true), None)
-        .await
-        .unwrap();
+    settings.save("generic", "unknown", true).await.unwrap();
     let mut input = configured();
     input.client_key = Some("unknown".into());
     assert!(service.create(input).await.is_err());
     service.create(configured()).await.unwrap();
-    settings
-        .save("generic", "default", Some(false), None)
-        .await
-        .unwrap();
+    settings.save("generic", "default", false).await.unwrap();
     assert!(matches!(
         service.resolve_launch("reviewer").await,
         Err(Error::CapabilityUnavailable(_))
@@ -304,7 +295,7 @@ async fn rejects_launch_defaults_for_clients_without_configuration() {
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
     SqliteAgentClientRepository::new(pool.clone())
-        .save("generic", "default", Some(true), None)
+        .save("generic", "default", true)
         .await
         .unwrap();
     let mut clients = ClientRegistry::default();
@@ -342,10 +333,7 @@ async fn launchable_profiles_follow_current_launch_admission_in_id_order() {
         .create(configured_profile("unparsable", "model-u"))
         .await
         .unwrap();
-    settings
-        .save("generic", "unknown", Some(true), None)
-        .await
-        .unwrap();
+    settings.save("generic", "unknown", true).await.unwrap();
     // The client configuration no longer accepts this saved key.
     sqlx::query("UPDATE agent_profiles SET client_key = 'unknown' WHERE profile_id = 'unparsable'")
         .execute(&pool)
@@ -377,10 +365,7 @@ async fn launchable_profiles_follow_current_launch_admission_in_id_order() {
         (listed[0].model.as_str(), listed[0].description.as_deref()),
         ("model-new", Some("Updated"))
     );
-    settings
-        .save("generic", "default", Some(false), None)
-        .await
-        .unwrap();
+    settings.save("generic", "default", false).await.unwrap();
     assert!(service.list_launchable().await.unwrap().is_empty());
 }
 

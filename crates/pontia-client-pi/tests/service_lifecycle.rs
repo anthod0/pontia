@@ -62,7 +62,7 @@ async fn background_rpc_process_reconnects_and_confirms_idle_exit() {
     pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
         pool.clone(),
     )
-    .save("pi", "default", Some(true), None)
+    .save("pi", "default", true)
     .await
     .unwrap();
     pontia_agent_control::workspaces::upsert_canonical_workspace(

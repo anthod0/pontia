@@ -53,18 +53,13 @@ Path('closed').touch()
     let mut clients = ClientRegistry::default();
     let mut pi = pontia_client_pi::registration(None);
     pi.configuration = Some(Arc::new(pontia_client_pi::config::PiConfiguration::new(
-        json!({}),
+        json!({"tui_command":format!("python3 '{}'", script.display())}),
         json!({}),
     )));
     clients.register(pi);
     clients.register(pontia_client_codex::registration());
     AgentClientService::new(db.clone(), clients.clone())
-        .save(
-            "pi",
-            "default",
-            Some(true),
-            Some(json!({"tui_command":format!("python3 '{}'", script.display())})),
-        )
+        .save("pi", "default", true)
         .await
         .unwrap();
     let state = AppState::builder(

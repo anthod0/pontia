@@ -78,20 +78,14 @@ async fn creation_options_follow_enabled_settings_for_native_and_acp_clients() {
     let options_path = "/api/v1/session-creation-options";
     assert_eq!(get(&app, options_path).await["options"], json!([]));
 
-    for (client, key, overrides, metadata) in [
-        ("pi", "default", json!({}), json!({})),
-        ("codex", "default", json!({}), json!({})),
-        ("claude-agent", "default", json!({}), json!({})),
-        ("acp", "grok", json!({}), json!({"acp_agent_id":"grok"})),
+    for (client, key, metadata) in [
+        ("pi", "default", json!({})),
+        ("codex", "default", json!({})),
+        ("claude-agent", "default", json!({})),
+        ("acp", "grok", json!({"acp_agent_id":"grok"})),
     ] {
         let path = format!("/api/v1/agent-clients/{client}/{key}");
-        let (status, body) = call(
-            &app,
-            "PATCH",
-            &path,
-            json!({"enabled":true,"config_overrides":overrides}),
-        )
-        .await;
+        let (status, body) = call(&app, "PATCH", &path, json!({"enabled":true})).await;
         assert_eq!(status, StatusCode::OK, "{body}");
         let options = get(&app, options_path).await;
         assert_eq!(options["options"].as_array().unwrap().len(), 1);
@@ -225,7 +219,7 @@ async fn acp_tools_use_existing_http_snapshot_updates_reconnect_and_closed_event
     pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
         pool.clone(),
     )
-    .save("acp", "test", Some(true), None)
+    .save("acp", "test", true)
     .await
     .unwrap();
     let app = AppState::builder(
@@ -343,7 +337,7 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
     pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
         pool.clone(),
     )
-    .save("acp", "company-id", Some(true), None)
+    .save("acp", "company-id", true)
     .await
     .unwrap();
     let app = AppState::builder(

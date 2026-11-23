@@ -111,7 +111,7 @@ async fn npm_install_reports_authentication_retries_without_fabricating_turns() 
         .clients(clients.clone())
         .build();
     pontia_agent_control::agent_clients::AgentClientService::new(app.db(), clients.clone())
-        .save("claude-agent", "default", Some(true), None)
+        .save("claude-agent", "default", true)
         .await
         .unwrap();
     let tasks = clients

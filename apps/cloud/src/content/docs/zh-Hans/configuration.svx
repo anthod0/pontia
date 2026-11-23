@@ -38,7 +38,6 @@ roots = [
 | `default_client_type` | 默认 Client 标识符；当前支持的值为 `pi` |
 | `dashboard.source` | 本地 Dashboard 构建目录，或仅包含一个 `index.html` 的远程 `.tar.gz`、`.tgz` 或 `.zip` 归档 |
 | `runtime.pi.tui_command` | 启动 Pi Session 时使用的 Pi 可执行文件或命令 |
-| `runtime.codex.tui_command` | 在原生 TUI 中打开 Codex Session 时使用的 Codex 可执行文件；默认为 `codex` |
 | `workspace_browser.roots` | Dashboard 可浏览以激活 Workspace 的目录 |
 
 `dashboard.source` 的发布版默认值是与已安装 Pontia 版本匹配的 Dashboard 归档。远程 Dashboard 归档缓存在 `$PONTIA_HOME/cache/dashboard` 下；刷新失败时仍可使用已有缓存提供服务。
@@ -97,7 +96,7 @@ cleanup_interval_hours = 24
 | `PONTIA_DEFAULT_CLIENT_TYPE` | `default_client_type` |
 | `PONTIA_WORKSPACE_ROOTS` | Workspace 根目录，格式为以分号分隔的 `root_id|label|path` 条目 |
 | `PONTIA_DASHBOARD_SOURCE` | `dashboard.source`；空值会禁用 Dashboard 服务 |
-| `PONTIA_PI_TUI_COMMAND` | `runtime.pi.tui_command`；空值会清除它 |
+| `PONTIA_PI_TUI_COMMAND` | `runtime.pi.tui_command`；空值表示使用 `pi` |
 | `PONTIA_AUTH_ORIGIN` | Pontia Cloud HTTPS origin；用于受控部署和开发 |
 
 对于运行中的进程，环境变量的值优先于文件中的值。持久服务配置请使用 `config.toml`。已安装的服务会单独保存 `PONTIA_HOME`、`PONTIA_AUTH_ORIGIN` 和所需的 Agent Client 路径。

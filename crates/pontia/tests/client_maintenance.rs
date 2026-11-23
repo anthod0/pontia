@@ -54,8 +54,6 @@ fn entry(has_record: bool, enabled: bool) -> AgentClientDetails {
         enabled,
         detection: ClientDetection::detected("pi"),
         setup_command: None,
-        config_overrides: serde_json::json!({}),
-        effective_config: serde_json::json!({}),
         created_at: None,
         updated_at: None,
     }

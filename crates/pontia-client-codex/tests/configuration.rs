@@ -4,7 +4,6 @@ use pontia_agent_control::{
 use pontia_client_codex::configuration::CodexConfiguration;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::json;
-use std::sync::Arc;
 
 #[tokio::test]
 async fn tool_selection_denials_and_mcp_disabling_are_rejected_before_creation() {
@@ -14,7 +13,7 @@ async fn tool_selection_denials_and_mcp_disabling_are_rejected_before_creation()
     let mut clients = ClientRegistry::default();
     clients.register(pontia_client_codex::registration());
     AgentClientService::new(pool.clone(), clients.clone())
-        .save("codex", "default", Some(true), None)
+        .save("codex", "default", true)
         .await
         .unwrap();
     let app = AgentControl::builder(pool.clone(), root.path().into())
@@ -43,7 +42,7 @@ async fn tool_selection_denials_and_mcp_disabling_are_rejected_before_creation()
         0
     );
     use pontia_agent_control::client_contract::ClientConfiguration;
-    let configuration = CodexConfiguration::new(json!({}));
+    let configuration = CodexConfiguration;
     let mut restricted = configuration
         .restricted_execution_policy("default")
         .unwrap();
@@ -61,7 +60,7 @@ async fn tool_selection_denials_and_mcp_disabling_are_rejected_before_creation()
 }
 
 #[tokio::test]
-async fn codex_configuration_preserves_admission_without_consuming_legacy_tui_settings() {
+async fn codex_entry_settings_control_session_admission() {
     let root = tempfile::tempdir().unwrap();
     let pool = connect_sqlite(&format!("sqlite://{}", root.path().join("db").display()))
         .await
@@ -74,12 +73,8 @@ async fn codex_configuration_preserves_admission_without_consuming_legacy_tui_se
     )
     .await
     .unwrap();
-    let mut client = pontia_client_codex::registration();
-    client.configuration = Some(Arc::new(CodexConfiguration::new(
-        json!({"tui_command":"file-codex"}),
-    )));
     let mut clients = ClientRegistry::default();
-    clients.register(client);
+    clients.register(pontia_client_codex::registration());
     let app = AgentControl::builder(pool.clone(), root.path().into())
         .clients(clients.clone())
         .build();
@@ -105,67 +100,20 @@ async fn codex_configuration_preserves_admission_without_consuming_legacy_tui_se
         create().await,
         Err(pontia_core::Error::CapabilityUnavailable(_))
     ));
-    service
-        .save("codex", "default", Some(true), None)
-        .await
-        .unwrap();
-    let first = create().await.unwrap().session_id().unwrap().to_owned();
-    service
-        .save(
-            "codex",
-            "default",
-            None,
-            Some(json!({"tui_command":"database-codex"})),
-        )
-        .await
-        .unwrap();
-    let second = create().await.unwrap().session_id().unwrap().to_owned();
-    for session in [&first, &second] {
-        let metadata: String =
-            sqlx::query_scalar("SELECT metadata FROM sessions WHERE session_id=?")
-                .bind(session)
-                .fetch_one(&pool)
-                .await
-                .unwrap();
-        let metadata: serde_json::Value = serde_json::from_str(&metadata).unwrap();
-        assert!(metadata.get("codex_tui_command").is_none());
-    }
-    service
-        .save("codex", "default", Some(false), None)
-        .await
-        .unwrap();
+    service.save("codex", "default", true).await.unwrap();
+    create().await.unwrap();
+    service.save("codex", "default", false).await.unwrap();
     assert!(matches!(
         create().await,
         Err(pontia_core::Error::CapabilityUnavailable(_))
     ));
-    service
-        .save(
-            "codex",
-            "default",
-            Some(true),
-            Some(json!({"tui_command":null})),
-        )
-        .await
-        .unwrap();
-    assert!(
-        service
-            .get("codex", "default", &context)
-            .await
-            .unwrap()
-            .enabled
-    );
+    service.save("codex", "default", true).await.unwrap();
     create().await.unwrap();
     service.delete("codex", "default").await.unwrap();
     assert!(matches!(
         create().await,
         Err(pontia_core::Error::CapabilityUnavailable(_))
     ));
-    // Saving configuration without an enabled field still enables a new entry.
-    service
-        .save("codex", "default", None, Some(json!({})))
-        .await
-        .unwrap();
-    create().await.unwrap();
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM session_runtimes")
             .fetch_one(&pool)

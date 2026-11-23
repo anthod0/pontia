@@ -15,7 +15,7 @@ pontia doctor
 
 ## 服务无法启动
 
-检查 `$PONTIA_HOME/config.toml` 中是否有无效的 TOML、未知值、无法访问的路径或已被占用的端口。默认地址为 `127.0.0.1:8080`。
+检查 `$PONTIA_HOME/config.toml` 中是否有无效的 TOML、无效值、无法访问的路径或已被占用的端口。默认地址为 `127.0.0.1:8080`。
 
 在 Linux 上，检查用户服务：
 

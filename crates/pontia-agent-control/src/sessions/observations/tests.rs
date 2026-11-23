@@ -76,7 +76,7 @@ impl Fixture {
         pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
             pool.clone(),
         )
-        .save("native-test", "default", Some(true), None)
+        .save("native-test", "default", true)
         .await
         .unwrap();
         static SPEC: std::sync::OnceLock<crate::client_contract::AgentClientSpec> =

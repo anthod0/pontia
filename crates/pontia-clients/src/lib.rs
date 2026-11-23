@@ -46,17 +46,7 @@ pub fn registration(config: &AppConfig) -> ClientRegistry {
             .unwrap_or_else(|| serde_json::json!({})),
     )));
     clients.register(pi);
-    let mut codex = pontia_client_codex::registration();
-    codex.configuration = Some(Arc::new(
-        pontia_client_codex::configuration::CodexConfiguration::new(
-            sources
-                .runtime_file
-                .get("codex")
-                .cloned()
-                .unwrap_or_else(|| serde_json::json!({})),
-        ),
-    ));
-    clients.register(codex);
+    clients.register(pontia_client_codex::registration());
     clients.register(pontia_client_claude::registration());
     clients.register(pontia_client_acp::registration());
     for integration in integrations() {

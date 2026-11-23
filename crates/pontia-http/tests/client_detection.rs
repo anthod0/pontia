@@ -22,7 +22,7 @@ fn pi_checks_effective_command_without_executing_it() {
         json!({"tui_command":"custom-pi"}),
         json!({}),
     );
-    let effective = config.merged("default", &json!({}));
+    let effective = config.merged("default");
     assert_eq!(
         config.detect(&effective, &context).status,
         DetectionStatus::NotDetected
@@ -69,7 +69,7 @@ fn codex_detection_skips_pontia_launcher_and_tracks_native_executable() {
         pontia_home: root.path(),
     };
     let integration = pontia_client_codex::setup::integration();
-    let config = pontia_client_codex::configuration::CodexConfiguration::new(json!({}));
+    let config = pontia_client_codex::configuration::CodexConfiguration;
     assert_eq!(
         integration.detect(&context).status,
         DetectionStatus::NotDetected
@@ -139,7 +139,7 @@ fn acp_detects_the_executable_from_its_definition_on_path() {
     let config = pontia_client_acp::configuration::AcpConfiguration::new(
         pontia_client_acp::AcpAgents::builtin(),
     );
-    let effective = config.resolve("grok", &json!({})).unwrap();
+    let effective = config.resolve("grok").unwrap();
     assert_eq!(
         config.detect(&effective, &context).status,
         DetectionStatus::NotDetected

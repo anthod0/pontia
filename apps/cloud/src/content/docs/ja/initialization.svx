@@ -109,26 +109,10 @@ pontia status
 次に、利用可能な Client エントリーを一覧表示します:
 
 ```sh
-pontia client list --json
+pontia client list
 ```
 
-結果は `agent_clients` 配列を含む JSON です。選択した各エントリーを `client_type` で見つけ、その `effective_config` を確認します。`tui_command` が Pontia サービスから利用できる実行ファイルを指していることを確認してください。
-
-実行ファイルを上書きする必要がある場合は、既存の値を保持したまま、目的の `config_overrides` を含む JSON ファイルを作成します。例:
-
-```json
-{"tui_command": "/absolute/path/to/client"}
-```
-
-一覧のエントリーの `id` に適用します:
-
-```sh
-pontia client set --id <CLIENT_ID> --config <JSON_FILE>
-```
-
-ファイルには元の Pi または Codex の実行ファイルのパスを指定し、`effective_config` に変更が反映されていることを確認してください。
-
-もう一度 `pontia client list` を実行し、選択した各エントリーが `enabled` になっていることを確認します。ステップ 7 では、Remote Dashboard から Session を開始して、これらの Client を確認します。
+選択した各エントリーが `enabled` になっていることを確認します。Pontia サービスが `pi` を見つけられない場合は、[Pi コマンドの上書き](/docs/agent-clients/pi#override-the-pi-command)を参照してください。ステップ 7 では、Remote Dashboard から Session を開始して、これらの Client を確認します。
 
 ### 5. Pontia Cloud にサインインする
 

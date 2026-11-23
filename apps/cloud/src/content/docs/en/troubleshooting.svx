@@ -15,7 +15,7 @@ Each line explains a service, configuration, login, or remote-registration check
 
 ## The service does not start
 
-Validate `$PONTIA_HOME/config.toml` for invalid TOML, unknown values, inaccessible paths, or a port already in use. The default address is `127.0.0.1:8080`.
+Validate `$PONTIA_HOME/config.toml` for invalid TOML, invalid values, inaccessible paths, or a port already in use. The default address is `127.0.0.1:8080`.
 
 On Linux, inspect the user service:
 

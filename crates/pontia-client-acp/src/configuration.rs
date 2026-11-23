@@ -21,21 +21,11 @@ impl AcpConfiguration {
         Self { agents }
     }
 
-    pub(crate) fn definition(&self, key: &str, overrides: &Value) -> Result<&AcpAgentDefinition> {
+    pub(crate) fn definition(&self, key: &str) -> Result<&AcpAgentDefinition> {
         validate_agent_id(key)?;
-        let agent = self
-            .agents
+        self.agents
             .get(key)
-            .ok_or_else(|| Error::Domain(format!("Unknown ACP Agent: {key}")))?;
-        if !overrides
-            .as_object()
-            .is_some_and(|fields| fields.is_empty())
-        {
-            return Err(Error::Domain(
-                "ACP Agents do not accept configuration overrides".into(),
-            ));
-        }
-        Ok(agent)
+            .ok_or_else(|| Error::Domain(format!("Unknown ACP Agent: {key}")))
     }
 }
 
@@ -130,14 +120,14 @@ impl ClientConfiguration for AcpConfiguration {
         Ok(key.into())
     }
 
-    fn merged(&self, key: &str, _overrides: &Value) -> Value {
+    fn merged(&self, key: &str) -> Value {
         self.agents
             .get(key)
             .map(effective_config)
             .unwrap_or_else(|| json!({}))
     }
 
-    fn resolve(&self, key: &str, overrides: &Value) -> Result<Value> {
-        self.definition(key, overrides).map(effective_config)
+    fn resolve(&self, key: &str) -> Result<Value> {
+        self.definition(key).map(effective_config)
     }
 }

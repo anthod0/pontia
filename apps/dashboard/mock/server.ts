@@ -514,18 +514,13 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
     "/agent-clients/:type/:key",
     ({ device, params: [type, key], body }) => {
       const client = findAgentClient(device, type, key);
-      if (type === "acp" && body.config_overrides && Object.keys(body.config_overrides).length) {
-        throw new HttpError(
-          400,
-          "invalid_request",
-          "ACP Agents do not accept configuration overrides",
-        );
+      if (Object.keys(body).some((key) => key !== "enabled")) {
+        throw new HttpError(400, "invalid_request", "Unknown client setting");
       }
-      if (typeof body.enabled === "boolean") client.enabled = body.enabled;
-      if (body.config_overrides) {
-        client.config_overrides = body.config_overrides as JsonObject;
-        client.effective_config = { ...client.effective_config, ...client.config_overrides };
+      if (typeof body.enabled !== "boolean") {
+        throw new HttpError(400, "invalid_request", "enabled must be a boolean");
       }
+      client.enabled = body.enabled;
       client.has_record = true;
       client.updated_at = now();
       client.created_at ??= client.updated_at;
@@ -540,7 +535,6 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
       Object.assign(client, {
         enabled: false,
         has_record: false,
-        config_overrides: {},
         created_at: null,
         updated_at: null,
       });

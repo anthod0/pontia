@@ -375,7 +375,7 @@ impl Harness {
             .clients(clients.clone())
             .build();
         pontia_agent_control::agent_clients::AgentClientService::new(app.db(), clients.clone())
-            .save("claude-agent", "default", Some(true), None)
+            .save("claude-agent", "default", true)
             .await
             .unwrap();
         let tasks = clients

@@ -70,21 +70,14 @@ pub async fn patch_agent_client(
     let object = value
         .as_object()
         .ok_or_else(|| ApiError::invalid_request("Expected a settings object"))?;
-    if object
-        .keys()
-        .any(|key| key != "enabled" && key != "config_overrides")
-    {
+    if object.keys().any(|key| key != "enabled") {
         return Err(ApiError::invalid_request("Unknown client setting"));
     }
     let enabled = object
         .get("enabled")
-        .map(|value| {
-            value
-                .as_bool()
-                .ok_or_else(|| ApiError::invalid_request("enabled must be a boolean"))
-        })
-        .transpose()?;
-    let overrides = object.get("config_overrides").cloned();
+        .ok_or_else(|| ApiError::invalid_request("enabled is required"))?
+        .as_bool()
+        .ok_or_else(|| ApiError::invalid_request("enabled must be a boolean"))?;
     if !state
         .control()
         .clients()
@@ -94,7 +87,7 @@ pub async fn patch_agent_client(
         return Err(ApiError::invalid_request("Unknown client integration"));
     }
     let service = AgentClientService::new(state.db(), state.control().clients());
-    service.save(&client, &key, enabled, overrides).await?;
+    service.save(&client, &key, enabled).await?;
     let vars = std::env::vars().collect();
     let context = DetectionContext {
         vars: &vars,

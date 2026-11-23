@@ -1,10 +1,8 @@
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use pontia_core::{Error, Result};
-use pontia_storage_sqlite::repositories::agent_clients::{
-    AgentClientRow, SqliteAgentClientRepository,
-};
+use pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 use sqlx::SqlitePool;
 use std::collections::BTreeSet;
 
@@ -12,18 +10,6 @@ use crate::{
     client_contract::{ClientConfiguration, ClientDetection, DetectionContext},
     clients::ClientRegistry,
 };
-
-fn effective_configuration(
-    configuration: &dyn ClientConfiguration,
-    key: &str,
-    record: Option<AgentClientRow>,
-) -> Result<Value> {
-    let overrides = record
-        .map(|row| row.overrides())
-        .transpose()?
-        .unwrap_or_else(|| json!({}));
-    configuration.resolve(key, &overrides)
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentClientDetails {
@@ -36,8 +22,6 @@ pub struct AgentClientDetails {
     pub detection: ClientDetection,
     pub setup_command: Option<String>,
     pub has_record: bool,
-    pub config_overrides: Value,
-    pub effective_config: Value,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
 }
@@ -104,12 +88,7 @@ impl AgentClientService {
         if record.is_none() && !configuration.keys().iter().any(|known| known == key) {
             return Err(Error::NotFound("Client entry not found".into()));
         }
-        let overrides = record
-            .as_ref()
-            .map(AgentClientRow::overrides)
-            .transpose()?
-            .unwrap_or_else(|| json!({}));
-        let effective = configuration.merged(key, &overrides);
+        let effective = configuration.merged(key);
         let (name, short_id) = configuration.presentation(key, &effective);
         Ok(AgentClientDetails {
             id: URL_SAFE_NO_PAD.encode(serde_json::to_vec(&(client, key))?),
@@ -123,20 +102,14 @@ impl AgentClientService {
                 .map(|integration| format!("pontia setup {}", integration.setup_name())),
             enabled: record.as_ref().is_some_and(|row| row.enabled),
             has_record: record.is_some(),
-            config_overrides: overrides,
             detection: configuration.detect(&effective, context),
-            effective_config: effective,
             created_at: record.as_ref().map(|row| row.created_at.clone()),
             updated_at: record.map(|row| row.updated_at),
         })
     }
 
     pub async fn resolve(&self, client: &str, key: &str) -> Result<Value> {
-        effective_configuration(
-            self.configuration(client)?,
-            key,
-            self.repository.get(client, key).await?,
-        )
+        self.configuration(client)?.resolve(key)
     }
 
     pub async fn list_models(
@@ -153,37 +126,12 @@ impl AgentClientService {
         configuration.list_models(&effective, directory).await
     }
 
-    /// Validate the final configuration, not the partial database layer. Disabled entries
-    /// must still be valid. Each write replaces the supplied database object atomically.
-    pub async fn save(
-        &self,
-        client: &str,
-        key: &str,
-        enabled: Option<bool>,
-        overrides: Option<Value>,
-    ) -> Result<()> {
-        if enabled.is_none() && overrides.is_none() {
-            return Err(Error::Domain("No client setting supplied".into()));
-        }
-        if let Some(overrides) = &overrides {
-            if !overrides.is_object() {
-                return Err(Error::Domain("Client overrides must be an object".into()));
-            }
-            self.configuration(client)?
-                .resolve(key, overrides)
-                .map_err(|error| Error::Domain(error.to_string()))?;
-        } else {
-            // Loading persistence errors must not turn into validation errors.
-            let current = self.repository.get(client, key).await?;
-            effective_configuration(self.configuration(client)?, key, current)
-                .map_err(|error| Error::Domain(error.to_string()))?;
-        }
-        let encoded = overrides
-            .map(|value| serde_json::to_string(&value))
-            .transpose()?;
-        self.repository
-            .save(client, key, enabled, encoded.as_deref())
-            .await
+    /// Disabled entries must still have a valid effective configuration.
+    pub async fn save(&self, client: &str, key: &str, enabled: bool) -> Result<()> {
+        self.configuration(client)?
+            .resolve(key)
+            .map_err(|error| Error::Domain(error.to_string()))?;
+        self.repository.save(client, key, enabled).await
     }
 
     pub async fn delete(&self, client: &str, key: &str) -> Result<()> {
@@ -218,7 +166,7 @@ impl AgentClientService {
         entry
             .configuration
             .as_ref()
-            .map(|configuration| effective_configuration(configuration.as_ref(), key, record))
+            .map(|configuration| configuration.resolve(key))
             .transpose()
     }
 }

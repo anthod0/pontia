@@ -7,9 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `config.toml` ignores unknown keys and tables instead of failing to load.
+
 ### Fixed
 
 - Pi, Claude Code and ACP can reconnect after a temporary-file cleaner removes the control socket. If an agent’s control protocol is incompatible with pontiad, Dashboard explains that the Session must be restarted.
+
+### Removed
+
+- Removed Agent Client configuration overrides: the JSON editor and effective configuration on the Dashboard Agent Clients page, `pontia client set`, and the `config_overrides` and `effective_config` fields of the Agent Client API. `PATCH /api/v1/agent-clients/{client}/{key}` now accepts only `enabled`. Upgrading deletes saved overrides. Set the Pi command with `[runtime.pi].tui_command` in `config.toml` or `PONTIA_PI_TUI_COMMAND`.
 
 ## [0.8.10] - 2026-11-23
 

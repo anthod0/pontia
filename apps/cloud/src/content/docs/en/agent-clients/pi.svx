@@ -49,7 +49,7 @@ When you create or resume a Session through Pontia, it launches Pi in `tmux` in 
 
 Conversation history is read from Pi's native data. Keep that data available to browse and resume conversations through Pontia.
 
-## Override the Pi command
+<h2 id="override-the-pi-command">Override the Pi command</h2>
 
 The default TUI command is `pi`. To use another executable or wrapper, set it in `$PONTIA_HOME/config.toml`:
 

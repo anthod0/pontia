@@ -165,7 +165,7 @@ impl Fixture {
         pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
             pool.clone(),
         )
-        .save("codex", "default", Some(true), None)
+        .save("codex", "default", true)
         .await
         .unwrap();
         let mut clients = ClientRegistry::default();
@@ -219,7 +219,7 @@ impl Fixture {
 #[tokio::test]
 async fn restricted_session_starts_with_native_agents_disabled() {
     use pontia_agent_control::client_contract::ClientConfiguration;
-    let config = crate::configuration::CodexConfiguration::new(json!({}));
+    let config = crate::configuration::CodexConfiguration;
     let base = config.restricted_execution_policy("default").unwrap();
     assert_eq!(base.tools, None);
     assert_eq!(base.disabled_tools, vec!["spawn_agent"]);

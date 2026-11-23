@@ -497,7 +497,7 @@ fn remote_registration_configures_only_the_device_id() {
 }
 
 #[test]
-fn legacy_remote_connection_fields_are_rejected() {
+fn legacy_remote_connection_fields_are_ignored() {
     for field in [
         "edge_url = 'wss://edge.example/tunnel'",
         "ca_certificate = '/opt/pontia/ca.pem'",
@@ -508,6 +508,13 @@ fn legacy_remote_connection_fields_are_rejected() {
             format!("[remote]\ndevice_id = '0195e7c1-1b22-7c33-9d44-123456789abc'\n{field}\n"),
         )
         .unwrap();
-        assert!(AppConfig::from_vars(&vars_for_home(root.path())).is_err());
+        let remote = AppConfig::from_vars(&vars_for_home(root.path()))
+            .unwrap()
+            .remote
+            .unwrap();
+        assert_eq!(
+            remote.device_id.as_deref(),
+            Some("0195e7c1-1b22-7c33-9d44-123456789abc")
+        );
     }
 }

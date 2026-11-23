@@ -53,8 +53,8 @@ pub trait ClientConfiguration: Send + Sync {
     /// Display name and stable CLI selector, owned by the integration.
     fn presentation(&self, key: &str, effective: &Value) -> (String, String);
     fn key(&self, metadata: &Value) -> Result<String>;
-    /// Merged values remain inspectable even when changed lower layers make them
+    /// Merged values remain inspectable even when the startup configuration makes them
     /// invalid for launching. Writes and Session creation must use `resolve`.
-    fn merged(&self, key: &str, overrides: &Value) -> Value;
-    fn resolve(&self, key: &str, overrides: &Value) -> Result<Value>;
+    fn merged(&self, key: &str) -> Value;
+    fn resolve(&self, key: &str) -> Result<Value>;
 }

@@ -11,10 +11,7 @@ async fn disabling_and_deleting_a_record_only_affects_new_sessions() {
         .await
         .unwrap()
         .unwrap();
-    management
-        .save("acp", "first", Some(false), None)
-        .await
-        .unwrap();
+    management.save("acp", "first", false).await.unwrap();
     assert!(matches!(
         h.create("first").await,
         Err(Error::CapabilityUnavailable(_))
@@ -49,10 +46,7 @@ async fn disabling_and_deleting_a_record_only_affects_new_sessions() {
         Err(Error::CapabilityUnavailable(_))
     ));
     assert_eq!(h.requests("session/new"), 1);
-    management
-        .save("acp", "first", Some(true), None)
-        .await
-        .unwrap();
+    management.save("acp", "first", true).await.unwrap();
     h.create("first").await.unwrap();
     let startup = h
         .wire()
@@ -130,19 +124,13 @@ async fn obsolete_saved_entries_do_not_hide_valid_creation_options() {
         pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
             h.app.db(),
         );
-    for key in ["first", "removed"] {
-        records
-            .save("acp", key, Some(true), Some(r#"{"command":"old"}"#))
-            .await
-            .unwrap();
-    }
+    records.save("acp", "removed", true).await.unwrap();
     let options = h.app.clients().creation_options(&h.app.db()).await.unwrap();
     let keys: Vec<_> = options
         .iter()
         .map(|entry| entry.metadata["acp_agent_id"].as_str().unwrap())
         .collect();
-    assert_eq!(keys, ["second"]);
-    assert!(h.create("first").await.is_err());
+    assert_eq!(keys, ["first", "second"]);
     assert!(h.create("removed").await.is_err());
     h.stop().await;
 }

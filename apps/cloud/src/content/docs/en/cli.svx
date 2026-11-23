@@ -71,9 +71,8 @@ pontia completions powershell | Out-String | Invoke-Expression
 | Command | Purpose |
 | --- | --- |
 | `pontia client list` | List every Agent Client entry with its short ID, name, type, and enabled state |
-| `pontia client list --json` | List every entry as JSON, including its ID, configuration overrides, and effective configuration |
+| `pontia client list --json` | List every entry as JSON, including its ID |
 | `pontia client show CLIENT` | Show one entry |
-| `pontia client set CLIENT --config JSON_FILE` | Replace the entry's configuration overrides with a JSON object |
 | `pontia client enable CLIENT` | Allow new Sessions to use the entry |
 | `pontia client disable CLIENT` | Stop new Sessions from using the entry; existing Sessions are unchanged |
 | `pontia client reset CLIENT` | Delete the entry's saved settings, which also disables it |

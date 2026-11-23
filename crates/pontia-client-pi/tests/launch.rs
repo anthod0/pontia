@@ -433,7 +433,7 @@ fn resume_rejects_missing_invalid_or_different_native_session_before_launch() {
 }
 
 #[test]
-fn creation_reads_current_database_settings_with_environment_file_and_default_precedence() {
+fn creation_uses_environment_file_and_default_command_precedence() {
     let _guard = path_env_lock().lock().unwrap();
     let root = tempfile::tempdir().unwrap();
     let log = root.path().join("tmux.log");
@@ -457,20 +457,14 @@ fn creation_reads_current_database_settings_with_environment_file_and_default_pr
         )
         .await
         .unwrap();
-        for (file, environment, fallback, overridden) in [
+        for (file, environment, expected) in [
             (
                 json!({"tui_command":"file-pi"}),
                 json!({"tui_command":"env-pi"}),
                 "env-pi",
-                "env-pi",
             ),
-            (
-                json!({"tui_command":"file-pi"}),
-                json!({}),
-                "file-pi",
-                "database-pi",
-            ),
-            (json!({}), json!({}), "pi", "database-pi"),
+            (json!({"tui_command":"file-pi"}), json!({}), "file-pi"),
+            (json!({}), json!({}), "pi"),
         ] {
             let mut client = pontia_client_pi::registration(None);
             client.configuration = Some(std::sync::Arc::new(
@@ -482,10 +476,7 @@ fn creation_reads_current_database_settings_with_environment_file_and_default_pr
                 .clients(clients.clone())
                 .build();
             let service = AgentClientService::new(pool.clone(), clients);
-            service
-                .save("pi", "default", Some(true), None)
-                .await
-                .unwrap();
+            service.save("pi", "default", true).await.unwrap();
             let create = || async {
                 let result = app
                     .session_commands()
@@ -504,38 +495,8 @@ fn creation_reads_current_database_settings_with_environment_file_and_default_pr
                 .unwrap();
                 (session, command)
             };
-            let (old_session, original) = create().await;
-            assert_eq!(original, format!("{fallback} --approve"));
-            service
-                .save(
-                    "pi",
-                    "default",
-                    None,
-                    Some(json!({"tui_command":"database-pi"})),
-                )
-                .await
-                .unwrap();
-            assert_eq!(create().await.1, format!("{overridden} --approve"));
-            let old_command: String =
-                sqlx::query_scalar("SELECT start_command FROM session_runtimes WHERE session_id=?")
-                    .bind(&old_session)
-                    .fetch_one(&pool)
-                    .await
-                    .unwrap();
-            assert_eq!(old_command, original);
-            let clear = service
-                .save("pi", "default", None, Some(json!({"tui_command":null})))
-                .await;
-            if environment.get("tui_command").is_some() {
-                clear.unwrap();
-                assert_eq!(create().await.1, "env-pi --approve");
-            } else {
-                assert!(clear.is_err());
-            }
-            service
-                .save("pi", "default", Some(false), None)
-                .await
-                .unwrap();
+            assert_eq!(create().await.1, format!("{expected} --approve"));
+            service.save("pi", "default", false).await.unwrap();
             for selection in [json!({}), json!({"client_type":"pi"})] {
                 assert!(matches!(
                     app.session_commands()
@@ -551,11 +512,8 @@ fn creation_reads_current_database_settings_with_environment_file_and_default_pr
                     .await,
                 Err(pontia_core::Error::CapabilityUnavailable(_))
             ));
-            service
-                .save("pi", "default", Some(true), None)
-                .await
-                .unwrap();
-            assert_eq!(create().await.1, format!("{fallback} --approve"));
+            service.save("pi", "default", true).await.unwrap();
+            assert_eq!(create().await.1, format!("{expected} --approve"));
             service.delete("pi", "default").await.unwrap();
             app.shutdown().notify();
         }

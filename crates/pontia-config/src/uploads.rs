@@ -3,7 +3,7 @@ use std::num::NonZeroU32;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct UploadsConfig {
     pub incomplete_retention_days: NonZeroU32,
     pub completed_retention_days: NonZeroU32,

@@ -74,68 +74,53 @@ async fn request(
 }
 
 #[tokio::test]
-async fn invalid_effective_values_remain_manageable_after_environment_changes() {
+async fn invalid_file_values_remain_listable_and_block_enabling() {
     let root = tempfile::tempdir().unwrap();
     let db = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&db).await.unwrap();
-    let router = |environment| {
-        let mut clients = ClientRegistry::default();
-        let mut pi = pontia_client_pi::registration(None);
-        pi.configuration = Some(Arc::new(pontia_client_pi::config::PiConfiguration::new(
-            json!({}),
-            environment,
-        )));
-        clients.register(pi);
-        clients.register(pontia_client_codex::registration());
-        pontia_http::router(
-            AppState::builder(
-                pontia_agent_control::AgentControl::builder(db.clone(), root.path().into())
-                    .clients(clients)
-                    .build(),
-            )
-            .external_api_token(Some("test-token".into()))
-            .build(),
+    let mut clients = ClientRegistry::default();
+    let mut pi = pontia_client_pi::registration(None);
+    pi.configuration = Some(Arc::new(pontia_client_pi::config::PiConfiguration::new(
+        json!({"tui_command":" "}),
+        json!({}),
+    )));
+    clients.register(pi);
+    clients.register(pontia_client_codex::registration());
+    let app = pontia_http::router(
+        AppState::builder(
+            pontia_agent_control::AgentControl::builder(db, root.path().into())
+                .clients(clients)
+                .build(),
         )
-    };
-    let with_environment = router(json!({"tui_command":"env-pi"}));
-    assert_eq!(
-        request(
-            &with_environment,
-            "PATCH",
-            "/pi/default",
-            Some(json!({"config_overrides":{"tui_command":null}})),
-            true
-        )
-        .await
-        .0,
-        StatusCode::OK
+        .external_api_token(Some("test-token".into()))
+        .build(),
     );
-    let restarted = router(json!({}));
-    let (status, listed) = request(&restarted, "GET", "", None, true).await;
+    let (status, listed) = request(&app, "GET", "", None, true).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(listed["data"]["agent_clients"].as_array().unwrap().len(), 2);
     assert_eq!(
         request(
-            &restarted,
+            &app,
+            "PATCH",
+            "/pi/default",
+            Some(json!({"enabled":true})),
+            true
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        request(
+            &app,
             "PATCH",
             "/codex/default",
-            Some(json!({"enabled":false})),
+            Some(json!({"enabled":true})),
             true
         )
         .await
         .0,
         StatusCode::OK
-    );
-    assert_eq!(
-        request(&restarted, "DELETE", "/pi/default", None, true)
-            .await
-            .0,
-        StatusCode::OK
-    );
-    let (_, reset) = request(&restarted, "GET", "/pi/default", None, true).await;
-    assert_eq!(
-        reset["data"]["agent_client"]["effective_config"]["tui_command"],
-        "pi"
     );
 }
 
@@ -187,17 +172,15 @@ async fn management_lists_builtin_entries_and_rejects_unknown_acp_clients() {
         && entry["enabled"] == false
         && entry["created_at"].is_null()
         && entry["updated_at"].is_null()));
-    for path in ["/acp/pi", "/acp/grok"] {
-        let (status, _) = request(
-            &app,
-            "PATCH",
-            path,
-            Some(json!({"config_overrides":{"command":"other"}})),
-            true,
-        )
-        .await;
-        assert_eq!(status, StatusCode::BAD_REQUEST);
-    }
+    let (status, _) = request(
+        &app,
+        "PATCH",
+        "/acp/pi",
+        Some(json!({"enabled":true})),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -254,32 +237,22 @@ async fn unconfigured_clients_cannot_create_sessions() {
 }
 
 #[tokio::test]
-async fn patch_preserves_omitted_management_fields_and_replaces_overrides() {
+async fn patch_updates_the_enabled_setting_and_delete_restores_inheritance() {
     let (app, _root) = app().await;
     let (_, original) = request(&app, "GET", "/pi/default", None, true).await;
     let (status, saved) = request(
         &app,
         "PATCH",
         "/pi/default",
-        Some(json!({"enabled":false,"config_overrides":{"tui_command":"db-pi"}})),
+        Some(json!({"enabled":false})),
         true,
     )
     .await;
     assert_eq!(status, StatusCode::OK);
     let entry = &saved["data"]["agent_client"];
-    assert_eq!(entry["config_overrides"]["tui_command"], "db-pi");
-    assert_eq!(entry["effective_config"]["tui_command"], "env-pi");
+    assert_eq!(entry["enabled"], false);
+    assert_eq!(entry["has_record"], true);
     assert!(entry["created_at"].is_string());
-    let (status, configured) = request(
-        &app,
-        "PATCH",
-        "/pi/default",
-        Some(json!({"config_overrides":{"tui_command":"updated-pi"}})),
-        true,
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(configured["data"]["agent_client"]["enabled"], false);
     let (_, enabled) = request(
         &app,
         "PATCH",
@@ -288,23 +261,11 @@ async fn patch_preserves_omitted_management_fields_and_replaces_overrides() {
         true,
     )
     .await;
+    assert_eq!(enabled["data"]["agent_client"]["enabled"], true);
     assert_eq!(
-        enabled["data"]["agent_client"]["config_overrides"],
-        configured["data"]["agent_client"]["config_overrides"]
+        enabled["data"]["agent_client"]["created_at"],
+        entry["created_at"]
     );
-    let (_, replaced) = request(
-        &app,
-        "PATCH",
-        "/pi/default",
-        Some(json!({"config_overrides":{}})),
-        true,
-    )
-    .await;
-    assert_eq!(
-        replaced["data"]["agent_client"]["config_overrides"],
-        json!({})
-    );
-    assert_eq!(replaced["data"]["agent_client"]["enabled"], true);
     for _ in 0..2 {
         assert_eq!(
             request(&app, "DELETE", "/pi/default", None, true).await.0,
@@ -326,7 +287,7 @@ async fn reserved_acp_ids_cannot_create_management_records_or_sessions() {
                 &app,
                 "PATCH",
                 &format!("/acp/{id}"),
-                Some(json!({"config_overrides":{"command":"agent"}})),
+                Some(json!({"enabled":true})),
                 true
             )
             .await
@@ -358,8 +319,8 @@ async fn invalid_patches_are_atomic_and_unknown_queries_are_not_found() {
     for invalid in [
         json!({}),
         json!({"enabled":null}),
-        json!({"config_overrides":null}),
-        json!({"config_overrides":[]}),
+        json!({"config_overrides":{}}),
+        json!({"enabled":true,"config_overrides":{}}),
         json!({"unknown":true}),
     ] {
         assert_eq!(

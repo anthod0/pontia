@@ -50,5 +50,28 @@ fn rejects_invalid_upload_retention_and_intervals() {
             );
         }
     }
-    assert!(load("[uploads]\nretention_days = 7\n").is_err());
+}
+
+#[test]
+fn unknown_top_level_and_nested_keys_are_ignored() {
+    let config = load(
+        "future_setting = true\n\
+         [future_table]\nkey = 1\n\
+         [uploads]\nretention_days = 7\ncompleted_retention_days = 90\n\
+         [bot]\nfuture_limit = 1\ncontext_window_percent = 70\n\
+         [remote]\nfuture_field = \"x\"\n\
+         [dashboard]\nfuture_field = 1\n\
+         [file_picker]\nfuture_field = 1\n\
+         [workspace_browser]\nfuture_field = 1\n\
+         [runtime.pi]\ntui_command = \"custom-pi\"\nfuture_field = 1\n",
+    )
+    .unwrap();
+    assert_eq!(config.uploads.completed_retention_days.get(), 90);
+    assert_eq!(config.uploads.incomplete_retention_days.get(), 7);
+    assert_eq!(config.bot.context_window_percent, 70);
+    assert_eq!(config.remote.unwrap().device_id, None);
+    assert_eq!(
+        config.client_configuration.runtime_file["pi"]["tui_command"],
+        "custom-pi"
+    );
 }

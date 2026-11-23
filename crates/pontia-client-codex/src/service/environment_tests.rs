@@ -141,7 +141,7 @@ set = {{ PROBE_NATIVE = "native", PONTIA_SESSION_ID = "wrong-native" }}
         pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
             pool.clone(),
         )
-        .save("codex", "default", Some(true), None)
+        .save("codex", "default", true)
         .await
         .unwrap();
         let mut clients = ClientRegistry::default();
@@ -430,7 +430,7 @@ set = {{ PROBE_NATIVE = "native", PONTIA_SESSION_ID = "wrong-native" }}
         pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
             pool.clone(),
         )
-        .save("codex", "default", Some(true), None)
+        .save("codex", "default", true)
         .await
         .unwrap();
         let mut clients = ClientRegistry::default();

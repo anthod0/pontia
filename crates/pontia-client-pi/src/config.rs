@@ -7,7 +7,7 @@ pub struct PiConfiguration(pub ConfigurationLayers);
 
 impl PiConfiguration {
     pub fn new(file: Value, mut environment: Value) -> Self {
-        // An empty environment setting retains its existing meaning: use the built-in command.
+        // An empty PONTIA_PI_TUI_COMMAND selects the built-in command.
         if environment.get("tui_command").is_some_and(Value::is_null) {
             environment["tui_command"] = json!("pi");
         }
@@ -92,14 +92,14 @@ impl ClientConfiguration for PiConfiguration {
         Ok("default".into())
     }
 
-    fn merged(&self, _key: &str, overrides: &Value) -> Value {
-        self.0.resolve(overrides)
+    fn merged(&self, _key: &str) -> Value {
+        self.0.resolve()
     }
-    fn resolve(&self, key: &str, overrides: &Value) -> Result<Value> {
+    fn resolve(&self, key: &str) -> Result<Value> {
         if key != "default" {
             return Err(Error::Domain("Pi requires the default client key".into()));
         }
-        let value = self.merged(key, overrides);
+        let value = self.merged(key);
         command(&value)?;
         Ok(value)
     }
