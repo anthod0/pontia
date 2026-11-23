@@ -286,7 +286,6 @@ fn external_api_router(state: HttpState) -> Router {
             get(api::session_creation_options),
         )
         .route("/api/v1/sessions/overview", get(api::session_overview))
-        .route("/api/v1/update/blockers", get(api::update_blockers))
         .route(
             "/api/v1/sessions/{session_id}",
             get(api::get_session).patch(api::update_session),

@@ -31,5 +31,4 @@ mod workflow_submission;
 mod workspace;
 
 mod session_files;
-mod update;
 mod uploads;
