@@ -2,7 +2,7 @@ use std::{path::PathBuf, process::Command, time::Duration};
 
 use super::{AppState, StatusCode, json, post_upsert, request_json, test_state, upsert_body};
 #[tokio::test]
-async fn current_runtime_exit_abandons_its_active_turn() {
+async fn current_runtime_exit_interrupts_its_active_turn() {
     let (state, _app) = test_state().await;
     let workspace = crate::common::test_app::registered_workspace(&state).await;
     let workspace = workspace
@@ -49,14 +49,15 @@ async fn current_runtime_exit_abandons_its_active_turn() {
     )
     .await;
     assert_eq!(turn_status, StatusCode::OK, "{turn_body:?}");
-    assert_eq!(turn_body["data"]["turn"]["state"], "abandoned");
+    assert_eq!(turn_body["data"]["turn"]["state"], "interrupted");
     assert_eq!(
-        turn_body["data"]["turn"]["metadata"]["terminal_provenance"]["reason"],
-        "session_exited_without_terminal_fact"
-    );
-    assert_eq!(
-        turn_body["data"]["turn"]["metadata"]["terminal_provenance"]["event_type"],
-        "session.exited"
+        turn_body["data"]["turn"]["metadata"]["terminal_provenance"],
+        json!({
+            "event_id": exit["event_id"],
+            "event_type": "session.exited",
+            "reason": "session_exited_without_terminal_fact",
+            "source": "pontia_projection"
+        })
     );
 }
 

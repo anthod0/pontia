@@ -27,7 +27,7 @@ impl PiHistory {
         let needed = |t: &TurnHistoryCandidate| {
             t.head_cursor.is_none()
                 || t.topology == TurnTopology::Unknown
-                || (t.state == TurnState::Abandoned && t.tail_cursor.is_none())
+                || (t.state == TurnState::Interrupted && t.tail_cursor.is_none())
         };
         let generations = turns
             .iter()
@@ -130,7 +130,7 @@ impl PiHistory {
             }
             // Verify head membership before using it for recovery or topology.
             let context = snapshot.chain(None, head.anchor.as_deref())?;
-            let tail = if turn.state == TurnState::Abandoned && turn.tail_cursor.is_none() {
+            let tail = if turn.state == TurnState::Interrupted && turn.tail_cursor.is_none() {
                 self.recover_tail(snapshot, &head, &turns[index + 1..])?
             } else {
                 None

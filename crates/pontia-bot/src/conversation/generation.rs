@@ -20,7 +20,6 @@ fn should_reconcile(event: &DomainEvent) -> bool {
             | EventType::TurnStarted
             | EventType::TurnCompleted
             | EventType::TurnFailed
-            | EventType::TurnAbandoned
             | EventType::TurnInterrupted
     )
 }

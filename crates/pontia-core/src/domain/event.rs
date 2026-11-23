@@ -99,8 +99,6 @@ pub enum EventType {
     TurnFailed,
     #[serde(rename = "turn.dispatch_failed")]
     TurnDispatchFailed,
-    #[serde(rename = "turn.abandoned")]
-    TurnAbandoned,
     #[serde(rename = "turn.interrupt_requested")]
     TurnInterruptRequested,
     #[serde(rename = "turn.interrupted")]
@@ -137,7 +135,6 @@ impl EventType {
         Self::TurnFailed,
         Self::TurnInterrupted,
         Self::TurnDispatchFailed,
-        Self::TurnAbandoned,
     ];
 
     pub fn is_interaction_event(self) -> bool {
@@ -165,7 +162,6 @@ impl EventType {
                 | Self::TurnCompleted
                 | Self::TurnFailed
                 | Self::TurnDispatchFailed
-                | Self::TurnAbandoned
                 | Self::TurnInterruptRequested
                 | Self::TurnInterrupted
         )
@@ -234,7 +230,6 @@ impl std::fmt::Display for EventType {
             Self::TurnCompleted => "turn.completed",
             Self::TurnFailed => "turn.failed",
             Self::TurnDispatchFailed => "turn.dispatch_failed",
-            Self::TurnAbandoned => "turn.abandoned",
             Self::TurnInterruptRequested => "turn.interrupt_requested",
             Self::TurnInterrupted => "turn.interrupted",
             Self::InboxMessageQueued => "inbox.message_queued",
@@ -280,7 +275,6 @@ impl std::str::FromStr for EventType {
             "turn.completed" => Ok(Self::TurnCompleted),
             "turn.failed" => Ok(Self::TurnFailed),
             "turn.dispatch_failed" => Ok(Self::TurnDispatchFailed),
-            "turn.abandoned" => Ok(Self::TurnAbandoned),
             "turn.interrupt_requested" => Ok(Self::TurnInterruptRequested),
             "turn.interrupted" => Ok(Self::TurnInterrupted),
             "inbox.message_queued" => Ok(Self::InboxMessageQueued),

@@ -166,8 +166,7 @@ export function mergeLiveOutputMessages(
     const activeOnCurrentBranch =
       overlay.turn_id === activeTurnId && (turn.state === "queued" || turn.state === "running");
     const terminalWithoutHistory =
-      withoutNativeHistory &&
-      ["completed", "failed", "interrupted", "abandoned"].includes(turn.state);
+      withoutNativeHistory && ["completed", "failed", "interrupted"].includes(turn.state);
     if (
       (!activeOnCurrentBranch && !transcriptForTurn.length && !terminalWithoutHistory) ||
       (overlay.awaitingSnapshot && !overlay.closed && !terminalWithoutHistory)

@@ -707,7 +707,6 @@
   "state.running": "运行中",
   "state.completed": "已完成",
   "state.failed": "失败",
-  "state.abandoned": "已放弃",
   "state.pending": "待处理",
   "state.paused": "已暂停",
   "state.replanning": "重新规划中",

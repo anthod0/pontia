@@ -9,7 +9,7 @@ async fn reporting_service_rejects_pontia_owned_event_types() {
     let (state, _pontia_home) = test_state().await;
     create_session(&state, "sess_owned_event", "generic").await;
 
-    for fact_type in ["session.created", "turn.dispatch_failed", "turn.abandoned"] {
+    for fact_type in ["session.created", "turn.dispatch_failed"] {
         let body = report_fact(
             state.clone(),
             json!({

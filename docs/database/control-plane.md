@@ -182,7 +182,7 @@ CREATE TABLE sessions (
 CREATE TABLE turns (
   turn_id TEXT PRIMARY KEY NOT NULL,
   session_id TEXT NOT NULL,
-  state TEXT NOT NULL,
+  state TEXT NOT NULL, -- queued, running, completed, failed, interrupted
   state_version INTEGER NOT NULL DEFAULT 0,
   input_summary TEXT,
   output_summary TEXT,
@@ -632,7 +632,7 @@ CREATE TABLE workflow_session_snapshots (
 CREATE TABLE workflow_turn_snapshots (
     turn_id TEXT PRIMARY KEY NOT NULL,
     session_id TEXT NOT NULL,
-    state TEXT NOT NULL
+    state TEXT NOT NULL -- queued, running, completed, failed, interrupted
 );
 
 CREATE INDEX idx_workflow_turn_snapshots_session ON workflow_turn_snapshots(session_id);

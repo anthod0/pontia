@@ -149,9 +149,9 @@ async fn crash_recovery_preserves_facts_and_supports_updates_refresh_pagination_
     append(&path, "crash-user", Some("answer1"), "user");
     append(&path, "tool-call", Some("crash-user"), "assistant");
     fixture.history_crash().await;
-    let abandoned = service.get_turn(&crashed).await.unwrap().unwrap();
-    assert_eq!(abandoned.state, TurnState::Abandoned);
-    assert!(abandoned.tail_cursor.is_none());
+    let interrupted = service.get_turn(&crashed).await.unwrap().unwrap();
+    assert_eq!(interrupted.state, TurnState::Interrupted);
+    assert!(interrupted.tail_cursor.is_none());
     assert!(matches!(
         TurnTimelineService::new(service.clone())
             .tree_history("session".into(), None, 20)
@@ -194,10 +194,10 @@ async fn crash_recovery_preserves_facts_and_supports_updates_refresh_pagination_
     }
     let recovered = service.get_turn(&crashed).await.unwrap().unwrap();
     assert!(recovered.tail_cursor.is_some());
-    assert_eq!(recovered.state, abandoned.state);
-    assert_eq!(recovered.state_version, abandoned.state_version);
-    assert_eq!(recovered.metadata, abandoned.metadata);
-    assert_eq!(recovered.output_summary, abandoned.output_summary);
+    assert_eq!(recovered.state, interrupted.state);
+    assert_eq!(recovered.state_version, interrupted.state_version);
+    assert_eq!(recovered.metadata, interrupted.metadata);
+    assert_eq!(recovered.output_summary, interrupted.output_summary);
     let binding_after = AgentBindingService::new(fixture.state.db())
         .binding_for_session("session")
         .await

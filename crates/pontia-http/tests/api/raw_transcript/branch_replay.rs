@@ -69,7 +69,7 @@ async fn post_external_json(
 }
 
 #[tokio::test]
-async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without_mutation() {
+async fn branch_replay_resolves_root_middle_latest_and_interrupted_targets_without_mutation() {
     let temp = tempdir().unwrap();
     let (state, _pontia_home) = test_state().await;
     let session_id = "sess_branch_resolve";
@@ -95,11 +95,11 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
             "{\"type\":\"message\",\"id\":\"middle-answer\",\"parentId\":\"middle-user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"middle answer\"}]}}\n"
         ),
         concat!(
-            "{\"type\":\"message\",\"id\":\"abandoned-user\",\"parentId\":\"middle-answer\",\"message\":{\"role\":\"user\",\"content\":\"abandoned\"}}\n",
-            "{\"type\":\"message\",\"id\":\"abandoned-answer\",\"parentId\":\"abandoned-user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"abandoned answer\"}]}}\n"
+            "{\"type\":\"message\",\"id\":\"interrupted-user\",\"parentId\":\"middle-answer\",\"message\":{\"role\":\"user\",\"content\":\"interrupted\"}}\n",
+            "{\"type\":\"message\",\"id\":\"interrupted-answer\",\"parentId\":\"interrupted-user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"interrupted answer\"}]}}\n"
         ),
         concat!(
-            "{\"type\":\"message\",\"id\":\"latest-user\",\"parentId\":\"abandoned-answer\",\"message\":{\"role\":\"user\",\"content\":\"latest\"}}\n",
+            "{\"type\":\"message\",\"id\":\"latest-user\",\"parentId\":\"interrupted-answer\",\"message\":{\"role\":\"user\",\"content\":\"latest\"}}\n",
             "{\"type\":\"message\",\"id\":\"latest-answer\",\"parentId\":\"latest-user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"latest answer\"}]}}\n"
         ),
     ];
@@ -149,13 +149,13 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
         ),
         (
             "turn_01900000-0000-7000-8000-000000000003",
-            "msg_branch_abandoned",
-            "abandoned-user",
-            "abandoned-answer",
+            "msg_branch_interrupted",
+            "interrupted-user",
+            "interrupted-answer",
             "linked",
             Some("turn_01900000-0000-7000-8000-000000000002"),
-            "abandoned",
-            "abandoned replacement",
+            "interrupted",
+            "interrupted replacement",
         ),
         (
             "turn_01900000-0000-7000-8000-000000000004",
@@ -172,7 +172,7 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
         None,
         Some("root-answer"),
         Some("middle-answer"),
-        Some("abandoned-answer"),
+        Some("interrupted-answer"),
     ];
     let mut offset = 0;
     for (index, (turn_id, _, _, tail_anchor, topology, parent_turn_id, state_name, _)) in

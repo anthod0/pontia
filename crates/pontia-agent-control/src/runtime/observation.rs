@@ -10,7 +10,6 @@ use pontia_runtime::{GenericRuntimeManager, ProcessFingerprint, ProcessObservati
 use pontia_storage_sqlite::repositories::{
     session_runtimes::{ActiveProcessBindingRow, SqliteSessionRuntimeRepository},
     sessions::SqliteSessionRepository,
-    turns::SqliteTurnRepository,
 };
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
@@ -261,23 +260,7 @@ impl RuntimeObservationService {
     }
 
     async fn record_runtime_error(&self, session_id: &str, client_type: &str) -> Result<()> {
-        let ingest = self.ingest_service();
-        if let Some(active_turn) = SqliteTurnRepository::new(self.pool.clone())
-            .active_turn(session_id)
-            .await?
-        {
-            ingest
-                .ingest_pontia_event(PontiaEvent::new(
-                    session_id.to_string(),
-                    Some(active_turn.turn_id),
-                    PontiaEventSource::RuntimeManager,
-                    client_type.to_string(),
-                    PontiaEventType::TurnAbandoned,
-                    json!({ "failure": { "message": "runtime is not alive" } }),
-                ))
-                .await?;
-        }
-        ingest
+        self.ingest_service()
             .ingest_pontia_event(PontiaEvent::new(
                 session_id.to_string(),
                 None,

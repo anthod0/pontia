@@ -41,7 +41,7 @@ impl ProjectionState {
         Ok(())
     }
 
-    pub(super) fn abandon_active_turn_for_terminal_session(
+    pub(super) fn interrupt_active_turn_for_terminal_session(
         &mut self,
         event: &DomainEvent,
         reason: &str,
@@ -53,7 +53,7 @@ impl ProjectionState {
             return Ok(());
         };
 
-        turn.state = TurnState::Abandoned;
+        turn.state = TurnState::Interrupted;
         turn.state_version += 1;
         if !turn.metadata.is_object() {
             turn.metadata = json!({});
@@ -207,7 +207,7 @@ impl ProjectionState {
                 session.state = SessionState::Busy;
                 session.state_version += 1;
             }
-            TurnState::Completed | TurnState::Failed | TurnState::Abandoned => {
+            TurnState::Completed | TurnState::Failed => {
                 if session.state == SessionState::Busy {
                     session.state = SessionState::Idle;
                     session.state_version += 1;

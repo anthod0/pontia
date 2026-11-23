@@ -100,7 +100,7 @@ impl TurnHistoryRecoverer for PiTimelineAdapter {
             {
                 continue;
             }
-            let needs_tail = turn.state == TurnState::Abandoned && turn.tail_cursor.is_none();
+            let needs_tail = turn.state == TurnState::Interrupted && turn.tail_cursor.is_none();
             if !needs_tail && turn.topology != TurnTopology::Unknown {
                 continue;
             }

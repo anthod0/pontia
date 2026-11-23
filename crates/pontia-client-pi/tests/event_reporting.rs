@@ -329,27 +329,22 @@ async fn terminal_reports_keep_the_first_event_and_do_not_broadcast_again() {
         assert_eq!(duplicate.event_id, first.event_id);
         assert_eq!(duplicate.state_version, first.state_version);
     }
-    for kind in [
-        PontiaEventType::TurnDispatchFailed,
-        PontiaEventType::TurnAbandoned,
-    ] {
-        let ignored = fixture
-            .state
-            .event_ingest_service()
-            .ingest_pontia_event(PontiaEvent::new(
-                "session",
-                Some(turn.clone()),
-                PontiaEventSource::RuntimeManager,
-                "pi",
-                kind,
-                json!({}),
-            ))
-            .await
-            .unwrap();
-        assert!(ignored.duplicate);
-        assert_eq!(ignored.event_id, first.event_id);
-        assert_eq!(ignored.state_version, first.state_version);
-    }
+    let ignored = fixture
+        .state
+        .event_ingest_service()
+        .ingest_pontia_event(PontiaEvent::new(
+            "session",
+            Some(turn.clone()),
+            PontiaEventSource::RuntimeManager,
+            "pi",
+            PontiaEventType::TurnDispatchFailed,
+            json!({}),
+        ))
+        .await
+        .unwrap();
+    assert!(ignored.duplicate);
+    assert_eq!(ignored.event_id, first.event_id);
+    assert_eq!(ignored.state_version, first.state_version);
     for (supplied_turn, leaf) in [(turn.as_str(), "different"), ("different-turn", "last")] {
         let conflict = fixture
             .report_with_key(
