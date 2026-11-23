@@ -202,12 +202,18 @@ for line in sys.stdin:
         if request["params"]["sessionId"] != native_id:
             send({"id": request["id"], "error": {"code": -32602, "message": "Wrong native identity"}})
             continue
+        if os.environ.get("ACP_COMPACT"):
+            commands = [] if (root / "remove-compact").exists() else [{"name": "compact", "description": "Compress context"}]
+            send({"method": "session/update", "params": {"sessionId": native_id, "update": {
+                "sessionUpdate": "available_commands_update", "availableCommands": commands}}})
         history = root / "history.jsonl"
         if history.exists():
             for update in history.read_text().splitlines():
                 native = "wrong-native-id" if (root / "wrong-replay").exists() else native_id
                 update = json.loads(update)
-                if os.environ.get("ACP_RECHUNK") == "1":
+                if update.get("sessionUpdate") == "compaction_checkpoint":
+                    send({"method": "_x.ai/session/update", "params": {"sessionId": native, "update": update, "_meta": {"isReplay": True}}})
+                elif os.environ.get("ACP_RECHUNK") == "1":
                     for character in update["content"]["text"]:
                         send({"method": "session/update", "params": {"sessionId": native, "update": {**update, "content": {"type": "text", "text": character}}}})
                 else:
@@ -221,6 +227,17 @@ for line in sys.stdin:
         if os.environ.get("ACP_BREAK_INPUT") == "1":
             sys.stdin.read(1)
             os._exit(0)
+    elif method == "_x.ai/compact_conversation" and os.environ.get("ACP_COMPACT"):
+        wait_for("release-compact")
+        if (root / "reject-compact").exists():
+            send({"id": request["id"], "error": {"code": -32000, "message": "Compaction rejected"}})
+            continue
+        remember({"sessionUpdate": "compaction_checkpoint", "checkpoint_id": "cp-one",
+                  "created_at": "2026-11-23T00:00:00Z"})
+        send({"method": "_x.ai/session_notification", "params": {"sessionId": native_id,
+              "_meta": {"eventId": "compact-one"}, "update": {"sessionUpdate": "auto_compact_completed",
+              "tokens_before": 1024, "tokens_after": 1024}}})
+        response(request, {})
     elif method == "session/set_config_option":
         params = request["params"]
         if (os.environ.get("ACP_REJECT_MODEL") == "1" or params["sessionId"] != native_id

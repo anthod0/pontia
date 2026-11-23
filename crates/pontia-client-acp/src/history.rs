@@ -18,7 +18,7 @@ use serde_json::{Value, json};
 
 use crate::{
     adapter::AcpAdapter,
-    peer::{Peer, Peers},
+    peer::{Peers, SessionState},
 };
 
 #[derive(Clone)]
@@ -193,7 +193,7 @@ struct AcpHistory {
     binding: AgentBindingResolveRequest,
 }
 impl AcpHistory {
-    async fn peer(&self) -> Result<Arc<Peer>> {
+    async fn snapshot(&self) -> Result<tokio::sync::OwnedMutexGuard<SessionState>> {
         let peer = self
             .peers
             .lock()
@@ -210,40 +210,95 @@ impl AcpHistory {
             return Err(unavailable());
         }
         drop(state);
-        Ok(peer)
+        peer.load().await?;
+        let state = peer.state.clone().lock_owned().await;
+        if !state.current || state.history_error.is_some() || state.replay.is_some() {
+            return Err(unavailable());
+        }
+        Ok(state)
+    }
+
+    fn offsets(
+        &self,
+        turn_id: &str,
+        head: &str,
+        tail: Option<&str>,
+        total: usize,
+    ) -> std::result::Result<(usize, usize), TurnTimelineReadError> {
+        let start = index(&self.binding, head)?;
+        let end = tail
+            .map(|tail| index(&self.binding, tail))
+            .transpose()?
+            .unwrap_or(total);
+        if start > end || end > total {
+            return Err(TurnTimelineReadError::InvalidRange {
+                turn_id: turn_id.into(),
+                message: "ACP replay no longer contains this range".into(),
+            });
+        }
+        Ok((start, end))
     }
 }
 impl NativeHistory for AcpHistory {
+    fn read_session_timeline(
+        &self,
+        selection: SessionTimelineSelection,
+    ) -> HistoryRead<'_, std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError>> {
+        Box::pin(async move {
+            let state = self.snapshot().await?;
+            let total = user_bytes(&state.history);
+            let mut items = Vec::new();
+            for (number, turn) in selection.turns.iter().enumerate() {
+                if !selection.selected_turn_ids.contains(&turn.turn_id) {
+                    continue;
+                }
+                let head = turn.head_cursor.as_deref().ok_or_else(unavailable)?;
+                let (start, end) =
+                    self.offsets(&turn.turn_id, head, turn.tail_cursor.as_deref(), total)?;
+                items.extend(render(&state.history, start, end, Some(&turn.turn_id))?);
+                // A checkpoint between two Turns belongs on the following page.
+                let last = number + 1 == selection.turns.len();
+                let previous_end = selection.turns[..number]
+                    .iter()
+                    .rev()
+                    .find_map(|t| t.tail_cursor.as_deref())
+                    .map(|tail| index(&self.binding, tail))
+                    .transpose()?
+                    .unwrap_or(0);
+                items.extend(
+                    state
+                        .checkpoints
+                        .iter()
+                        .filter(|cp| cp.offset >= previous_end && (last || cp.offset < end))
+                        .map(|cp| cp.item()),
+                );
+            }
+            if selection.turns.is_empty() {
+                items.extend(state.checkpoints.iter().map(|cp| cp.item()));
+            }
+            items.sort_by(|a, b| a.item.item_id.cmp(&b.item.item_id));
+            Ok(items)
+        })
+    }
     fn read_ranges(
         &self,
         ranges: Vec<TurnTimelineRange>,
     ) -> HistoryRead<'_, std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError>> {
         Box::pin(async move {
-            let peer = self.peer().await?;
-            peer.load().await?;
-            let state = peer.state.lock().await;
-            if !state.current || state.history_error.is_some() || state.replay.is_some() {
-                return Err(unavailable().into());
-            }
+            let state = self.snapshot().await?;
             let mut items = Vec::new();
             if ranges.is_empty() {
                 return render(&state.history, 0, user_bytes(&state.history), None)
                     .map_err(Into::into);
             }
+            let total = user_bytes(&state.history);
             for range in ranges {
-                let start = index(&self.binding, &range.head_cursor)?;
-                let end = range
-                    .tail_cursor
-                    .as_deref()
-                    .map(|tail| index(&self.binding, tail))
-                    .transpose()?
-                    .unwrap_or_else(|| user_bytes(&state.history));
-                if start > end || end > user_bytes(&state.history) {
-                    return Err(TurnTimelineReadError::InvalidRange {
-                        turn_id: range.turn_id,
-                        message: "ACP replay no longer contains this range".into(),
-                    });
-                }
+                let (start, end) = self.offsets(
+                    &range.turn_id,
+                    &range.head_cursor,
+                    range.tail_cursor.as_deref(),
+                    total,
+                )?;
                 items.extend(render(&state.history, start, end, Some(&range.turn_id))?);
             }
             Ok(items)

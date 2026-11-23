@@ -20,6 +20,18 @@ pub(crate) enum Observation {
         anchor: usize,
         reason: String,
     },
+    Compacted {
+        operation: String,
+        manual: bool,
+        tokens_before: Option<u64>,
+        tokens_after: Option<u64>,
+    },
+    CompactionFailed {
+        operation: String,
+        manual: bool,
+        aborted: bool,
+        message: String,
+    },
     Usage {
         used: u64,
         size: u64,
@@ -161,10 +173,21 @@ impl Reports {
         }
         let prompt = context["active"].clone();
         let update = &frame["params"]["update"];
+        if context["compaction_events"] == true
+            && let Some(observation) = crate::compaction::observe(context, frame)
+        {
+            self.push(observation);
+        }
         let own_update = frame["method"] == "session/update"
             && frame["params"]["sessionId"] == context["native"];
         if own_update {
             match update["sessionUpdate"].as_str() {
+                Some("available_commands_update") => {
+                    if let Some(commands) = update["availableCommands"].as_array() {
+                        context["compact_command"] =
+                            json!(commands.iter().any(|cmd| cmd["name"] == "compact"));
+                    }
+                }
                 Some("usage_update") => {
                     if let (Some(used), Some(size)) =
                         (update["used"].as_u64(), update["size"].as_u64())

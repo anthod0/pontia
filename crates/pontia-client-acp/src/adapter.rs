@@ -251,7 +251,7 @@ impl ClientSession for AcpAdapter {
                 }
             };
             let setup = async {
-                peer.state.lock().await.agent = AgentBounds::of(Some(definition));
+                peer.state.lock().await.agent = AgentBounds::of(selected, Some(definition));
                 let (native, metadata) = peer.initialize(
                     &cwd,
                     bound_identity.as_ref().map(|identity| identity[1].as_str()),
@@ -372,7 +372,11 @@ impl ClientSession for AcpAdapter {
             if !state.current || state.closing || state.capabilities.is_none() {
                 return Err(unavailable());
             }
-            if state.blocked || state.replay.is_some() || state.active.is_some() {
+            if state.blocked
+                || state.compaction.is_some()
+                || state.replay.is_some()
+                || state.active.is_some()
+            {
                 return Err(Error::Conflict {
                     code: "input_busy",
                     message: "ACP prompt is still active".into(),
@@ -479,6 +483,7 @@ impl ClientSession for AcpAdapter {
                 }
                 if mode == ClientExitMode::IfIdle
                     && (state.active.is_some()
+                        || state.compaction.is_some()
                         || !state.permissions.is_empty()
                         || state.replay.is_some())
                 {
@@ -518,6 +523,25 @@ impl ClientSession for AcpAdapter {
                 .map_err(|error| {
                     Error::ControlUnknown(format!("ACP Session close unconfirmed: {error}"))
                 })?
+        })
+    }
+
+    fn compact<'a>(
+        &'a self,
+        events: EventIngestService,
+        target: &'a ControlTarget,
+        operation_id: &'a str,
+    ) -> ClientOperation<'a, ()> {
+        Box::pin(async move {
+            let peer = self.peer(&target.session_id).await?;
+            target.validate(&events.db()).await?;
+            if target.instance()? != peer.runtime {
+                return Err(unavailable());
+            }
+            let operation = operation_id.to_owned();
+            tokio::spawn(async move { crate::compaction::request(&peer, operation).await })
+                .await
+                .map_err(|error| Error::ControlUnknown(error.to_string()))?
         })
     }
 

@@ -6,16 +6,27 @@ use crate::{ACP_MAX_CAPABILITIES, AcpAgentDefinition};
 pub(crate) struct AgentBounds(AgentClientCapabilities);
 
 impl AgentBounds {
-    pub fn of(definition: Option<&AcpAgentDefinition>) -> Self {
-        Self(definition.map_or(ACP_MAX_CAPABILITIES, |agent| {
+    pub fn compaction_events(&self) -> bool {
+        self.0.compaction_events
+    }
+
+    pub fn of(agent_id: &str, definition: Option<&AcpAgentDefinition>) -> Self {
+        let mut caps = definition.map_or(ACP_MAX_CAPABILITIES, |agent| {
             agent.capabilities.intersection(&ACP_MAX_CAPABILITIES)
-        }))
+        });
+        if agent_id != "grok" {
+            caps.manual_compaction = false;
+            caps.compaction_events = false;
+            caps.compaction_history = false;
+        }
+        Self(caps)
     }
 }
 
 #[derive(Default, Clone, Copy)]
 pub(crate) struct Negotiated {
     pub steer: bool,
+    pub compact_command: bool,
 }
 
 impl Negotiated {
@@ -35,6 +46,11 @@ impl Negotiated {
             )));
         }
         Ok(Self {
+            compact_command: response
+                .meta
+                .as_ref()
+                .and_then(|meta| meta.get("availableCommands")?.as_array())
+                .is_some_and(|commands| commands.iter().any(|cmd| cmd["name"] == "compact")),
             steer: response
                 .meta
                 .as_ref()
@@ -64,6 +80,9 @@ pub(crate) fn live(
         let mut caps = bounds.0.clone();
         caps.steer &= negotiated.steer;
         caps.interrupt &= state.active;
+        caps.manual_compaction &=
+            negotiated.compact_command && !state.active && !state.blocked && !state.replaying;
+        caps.compaction_history &= state.history_ok && !state.replaying;
         caps.timeline &= state.history_ok && !state.replaying;
         caps.accept_task &= !state.replaying && !state.blocked;
         caps
@@ -110,8 +129,8 @@ mod tests {
     #[test]
     fn grok_live_capabilities_follow_the_protocol_and_session_state() {
         let agents = AcpAgents::builtin();
-        let bounds = AgentBounds::of(agents.get("grok"));
-        assert_eq!(bounds.0, AgentBounds::of(None).0);
+        let bounds = AgentBounds::of("grok", agents.get("grok"));
+        assert_eq!(bounds.0, AgentBounds::of("grok", None).0);
         for state in [
             Live {
                 current: false,
@@ -137,6 +156,8 @@ mod tests {
             report_turn_started: true,
             report_turn_finished: true,
             timeline: true,
+            compaction_events: true,
+            compaction_history: true,
             stream_output: true,
             context_usage: ContextUsageCapability::Exact,
             ..Default::default()
@@ -145,7 +166,13 @@ mod tests {
             live(&bounds, Negotiated::default(), idle()).unwrap(),
             expected
         );
-        let negotiated = Negotiated { steer: true };
+        let negotiated = Negotiated {
+            steer: true,
+            compact_command: true,
+        };
+        assert!(live(&bounds, negotiated, idle()).unwrap().manual_compaction);
+        let other = live(&AgentBounds::of("another", None), negotiated, idle()).unwrap();
+        assert!(!other.manual_compaction && !other.compaction_events && !other.compaction_history);
         for (state, timeline, accept_task) in [
             (
                 Live {
@@ -186,6 +213,7 @@ mod tests {
                 AgentClientCapabilities {
                     steer: true,
                     interrupt: true,
+                    compaction_history: timeline,
                     timeline,
                     accept_task,
                     ..expected.clone()
@@ -195,7 +223,7 @@ mod tests {
         let mut agent = agents.get("grok").unwrap().clone();
         agent.capabilities.steer = false;
         assert!(
-            !live(&AgentBounds::of(Some(&agent)), negotiated, idle())
+            !live(&AgentBounds::of("grok", Some(&agent)), negotiated, idle())
                 .unwrap()
                 .steer
         );

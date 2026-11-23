@@ -14,6 +14,9 @@ use serde_json::{Value, json};
 #[path = "control_loop/configuration.rs"]
 mod configuration;
 
+#[path = "control_loop/compaction.rs"]
+mod compaction;
+
 #[path = "control_loop/live_output.rs"]
 mod live_output;
 
@@ -85,7 +88,12 @@ impl Harness {
                 .clone(),
             ..config.clone()
         };
-        let config = AcpAgents::new([("first".into(), config), ("second".into(), second)]);
+        let first = if flags.iter().any(|(key, _)| *key == "ACP_COMPACT") {
+            "grok"
+        } else {
+            "first"
+        };
+        let config = AcpAgents::new([(first.into(), config), ("second".into(), second)]);
         clients.register(pontia_client_acp::registration_with_relay(
             config.clone(),
             env!("CARGO_BIN_EXE_pontia-acp-test-relay").into(),
@@ -109,7 +117,7 @@ impl Harness {
             .build();
         let management =
             pontia_agent_control::agent_clients::AgentClientService::new(app.db(), app.clients());
-        for key in ["first", "second"] {
+        for key in [first, "second"] {
             management.save("acp", key, Some(true), None).await.unwrap();
         }
         let tasks = clients

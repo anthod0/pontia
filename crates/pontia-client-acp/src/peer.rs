@@ -52,6 +52,8 @@ pub(crate) struct SessionState {
     pub verified_model: Option<String>,
     pub config_options: Vec<SessionConfigOption>,
     pub active: Option<Prompt>,
+    pub compaction: Option<crate::compaction::Pending>,
+    pub checkpoints: Vec<crate::compaction::Checkpoint>,
     pub closing: bool,
     pub permissions: HashMap<String, crate::interactions::Permission>,
     pub history: Vec<crate::history::Message>,
@@ -126,7 +128,7 @@ impl SessionState {
                 active: self.active.is_some(),
                 history_ok: self.history_error.is_none(),
                 replaying: self.replay.is_some(),
-                blocked: self.blocked,
+                blocked: self.blocked || self.compaction.is_some(),
             },
         );
     }
@@ -263,6 +265,8 @@ impl Peer {
             config_options: Vec::new(),
             active: None,
             closing: false,
+            checkpoints: Vec::new(),
+            compaction: None,
             permissions: HashMap::new(),
             history: Vec::new(),
             replay: None,
@@ -350,6 +354,10 @@ impl Peer {
                                     }
                                 }
                             }
+                            return Ok(());
+                        }
+                        if message.method() == "_x.ai/session/update" {
+                            crate::compaction::replay(&mut *update_state.lock().await, message.params());
                             return Ok(());
                         }
                         if message.method() != "session/update" { return Ok(()); }
@@ -635,7 +643,7 @@ impl Peer {
             if !state.current || state.closing {
                 return Err(crate::history::unavailable());
             }
-            if state.active.is_some() {
+            if state.active.is_some() || state.compaction.is_some() {
                 return Ok(());
             }
             if state.replay.is_some() {
@@ -648,6 +656,7 @@ impl Peer {
                 .native
                 .clone()
                 .ok_or_else(crate::history::unavailable)?;
+            state.checkpoints.clear();
             state.replay = Some(Vec::new());
             state.history_error = None;
             state.refresh_capabilities();
@@ -769,6 +778,14 @@ async fn update(
             state.history_error =
                 Some("ACP replay returned a different native Session identity".into());
         }
+        return Ok(());
+    }
+    if let SessionUpdate::AvailableCommandsUpdate(commands) = notification.update {
+        state.negotiated.compact_command = commands
+            .available_commands
+            .iter()
+            .any(|cmd| cmd.name == "compact");
+        state.refresh_capabilities();
         return Ok(());
     }
     if let SessionUpdate::ConfigOptionUpdate(config) = notification.update {
