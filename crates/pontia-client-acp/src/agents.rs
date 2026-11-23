@@ -38,30 +38,53 @@ pub struct AcpAgents(Arc<BTreeMap<String, AcpAgentDefinition>>);
 
 impl AcpAgents {
     pub fn builtin() -> Self {
-        Self::new([(
-            "grok".into(),
-            AcpAgentDefinition {
-                name: "Grok Build".into(),
-                launch: AcpLaunch {
-                    command: "grok".into(),
-                    args: vec!["agent".into(), "stdio".into()],
-                    env: BTreeMap::new(),
+        Self::new([
+            (
+                "antigravity".into(),
+                AcpAgentDefinition {
+                    name: "Google Antigravity".into(),
+                    launch: AcpLaunch {
+                        command: "agy".into(),
+                        args: vec!["acp".into()],
+                        env: BTreeMap::new(),
+                    },
+                    new_session_instructions_meta_key: None,
+                    capabilities: AgentClientCapabilities {
+                        steer: false,
+                        manual_compaction: false,
+                        compaction_events: false,
+                        compaction_history: false,
+                        ..crate::ACP_MAX_CAPABILITIES
+                    },
+                    interjection: None,
+                    restricted_execution: None,
                 },
-                new_session_instructions_meta_key: Some("rules".into()),
-                capabilities: crate::ACP_MAX_CAPABILITIES,
-                interjection: Some(&InterjectionProtocol {
-                    method: "_x.ai/interject",
-                    echo: "_x.ai/session/interjection",
-                    queue: "_x.ai/queue/changed",
-                    terminal: "_x.ai/session_notification",
-                    promoted_prefix: "interject-fallback-",
-                    interjection_marker: "/_meta/interjection",
-                    display_text: "/content/_meta/displayText",
-                    prompt_index: "/_meta/promptIndex",
-                }),
-                restricted_execution: Some(&GROK_RESTRICTED),
-            },
-        )])
+            ),
+            (
+                "grok".into(),
+                AcpAgentDefinition {
+                    name: "Grok Build".into(),
+                    launch: AcpLaunch {
+                        command: "grok".into(),
+                        args: vec!["agent".into(), "stdio".into()],
+                        env: BTreeMap::new(),
+                    },
+                    new_session_instructions_meta_key: Some("rules".into()),
+                    capabilities: crate::ACP_MAX_CAPABILITIES,
+                    interjection: Some(&InterjectionProtocol {
+                        method: "_x.ai/interject",
+                        echo: "_x.ai/session/interjection",
+                        queue: "_x.ai/queue/changed",
+                        terminal: "_x.ai/session_notification",
+                        promoted_prefix: "interject-fallback-",
+                        interjection_marker: "/_meta/interjection",
+                        display_text: "/content/_meta/displayText",
+                        prompt_index: "/_meta/promptIndex",
+                    }),
+                    restricted_execution: Some(&GROK_RESTRICTED),
+                },
+            ),
+        ])
     }
 
     pub fn new(agents: impl IntoIterator<Item = (String, AcpAgentDefinition)>) -> Self {

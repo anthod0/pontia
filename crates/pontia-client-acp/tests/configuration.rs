@@ -3,12 +3,16 @@ use pontia_client_acp::{AcpAgents, configuration::AcpConfiguration};
 use serde_json::json;
 
 #[test]
-fn grok_launch_and_management_settings() {
+fn builtin_launch_and_management_settings() {
     let configuration = AcpConfiguration::new(AcpAgents::builtin());
-    assert_eq!(configuration.keys(), ["grok"]);
+    assert_eq!(configuration.keys(), ["antigravity", "grok"]);
     assert_eq!(
         configuration.resolve("grok").unwrap(),
         json!({"name":"Grok Build","command":"grok","args":["agent","stdio"],"env":{}})
+    );
+    assert_eq!(
+        configuration.resolve("antigravity").unwrap(),
+        json!({"name":"Google Antigravity","command":"agy","args":["acp"],"env":{}})
     );
     assert!(configuration.resolve("unknown").is_err());
     for key in [".", "..", ""] {
