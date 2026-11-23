@@ -859,9 +859,8 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
   [
     "GET",
     "/workspaces/:id/git/branches",
-    ({ device, params: [id] }) => ({
+    () => ({
       branches: {
-        repo_root: findWorkspace(device, id).canonical_path,
         head: "refs/heads/main",
         branches: mockGitBranches,
       },

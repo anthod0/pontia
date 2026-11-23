@@ -407,14 +407,146 @@ async fn git_history_rejects_invalid_refs_and_commits() {
 }
 
 #[tokio::test]
-async fn git_branches_reports_non_git_workspace() {
+async fn git_branches_is_not_found_outside_a_repository() {
     let root = tempfile::tempdir().unwrap();
     fs::create_dir(root.path().join("notes")).unwrap();
     let (state, id, _pontia_home) = workspace_for(root.path(), "notes").await;
 
     let (status, body) = get_json(state, &format!("/api/v1/workspaces/{id}/git/branches")).await;
 
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+}
+
+#[tokio::test]
+async fn git_history_handles_detached_head_merges_and_signature_config() {
+    let root = tempfile::tempdir().unwrap();
+    let app = root.path().join("app");
+    repo_with_history(&app);
+    // Reading history never runs the repository's signature verifier.
+    let verifier = root.path().join("verify-signature");
+    let marker = root.path().join("verifier-ran");
+    fs::write(
+        &verifier,
+        format!("#!/bin/sh\ntouch '{}'\nexit 1\n", marker.display()),
+    )
+    .unwrap();
+    fs::set_permissions(
+        &verifier,
+        std::os::unix::fs::PermissionsExt::from_mode(0o755),
+    )
+    .unwrap();
+    git(&app, &["config", "log.showSignature", "true"]);
+    git(&app, &["config", "gpg.program", verifier.to_str().unwrap()]);
+    sign_head(&app);
+    git(
+        &app,
+        &[
+            "-c",
+            "user.email=test@example.com",
+            "-c",
+            "user.name=Test",
+            "merge",
+            "-q",
+            "--no-ff",
+            "-m",
+            "merge feature",
+            "feature",
+        ],
+    );
+    git(&app, &["update-ref", "refs/remotes/origin/main", "HEAD~1"]);
+    git(
+        &app,
+        &[
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/main",
+        ],
+    );
+    git(&app, &["checkout", "-q", "--detach", "HEAD~1"]);
+    let (state, id, _pontia_home) = workspace_for(root.path(), "app").await;
+    let base = format!("/api/v1/workspaces/{id}/git");
+
+    let (status, body) = get_json(state.clone(), &format!("{base}/branches")).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert!(body["data"]["branches"]["repo_root"].is_null());
-    assert_eq!(body["data"]["branches"]["branches"], json!([]));
+    assert_eq!(body["data"]["branches"]["head"], "HEAD");
+    let mut refs = body["data"]["branches"]["branches"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|branch| {
+            (
+                branch["ref"].as_str().unwrap(),
+                branch["remote"].as_bool().unwrap(),
+            )
+        })
+        .collect::<Vec<_>>();
+    refs.sort();
+    // origin/HEAD points at another branch and is left out.
+    assert_eq!(
+        refs,
+        vec![
+            ("refs/heads/feature", false),
+            ("refs/heads/main", false),
+            ("refs/remotes/origin/main", true),
+        ]
+    );
+
+    let (status, body) = get_json(
+        state.clone(),
+        &format!("{base}/commits?ref=refs%2Fheads%2Fmain"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    // Commits made in the same second may list in either order after the merge.
+    let mut listed = subjects(&body);
+    assert_eq!(listed.remove(0), "merge feature");
+    listed.sort();
+    assert_eq!(
+        listed,
+        vec!["add logo", "feature work", "initial", "update readme"]
+    );
+    let merge = &body["data"]["commits"]["commits"][0];
+    assert_eq!(merge["parents"].as_array().unwrap().len(), 2);
+    let merge = merge["sha"].as_str().unwrap().to_string();
+
+    // A merge lists the files it brings in from the merged branch.
+    let (_, body) = get_json(state.clone(), &format!("{base}/commits/{merge}")).await;
+    assert_eq!(body["data"]["commit"]["files"][0]["path"], "feature.txt");
+
+    // Later pages can start from the tip the first page read.
+    let (status, body) = get_json(state, &format!("{base}/commits?ref={merge}&skip=3")).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(subjects(&body).len(), 2);
+    assert_eq!(subjects(&body)[1], "initial");
+    assert!(!marker.exists(), "the signature verifier ran");
+}
+
+/// Replaces HEAD with the same commit carrying a (fake) signature header.
+fn sign_head(app: &Path) {
+    let output = |args: &[&str], input: Option<&[u8]>| {
+        use std::io::Write;
+        let mut child = std::process::Command::new("git")
+            .args(args)
+            .current_dir(app)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        if let Some(input) = input {
+            child.stdin.take().unwrap().write_all(input).unwrap();
+        }
+        let output = child.wait_with_output().unwrap();
+        assert!(output.status.success(), "git {args:?}");
+        String::from_utf8(output.stdout).unwrap()
+    };
+    let commit = output(&["cat-file", "commit", "HEAD"], None);
+    let (header, message) = commit.split_once("\n\n").unwrap();
+    let signed = format!(
+        "{header}\ngpgsig -----BEGIN PGP SIGNATURE-----\n \n iQEz\n -----END PGP SIGNATURE-----\n\n{message}"
+    );
+    let sha = output(
+        &["hash-object", "-t", "commit", "-w", "--stdin"],
+        Some(signed.as_bytes()),
+    );
+    git(app, &["update-ref", "HEAD", sha.trim()]);
 }

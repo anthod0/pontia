@@ -32,6 +32,7 @@
   const local = $derived(branches.filter(branch => !branch.remote))
   const remote = $derived(branches.filter(branch => branch.remote))
   const selected = $derived(branches.find(branch => branch.ref === ref))
+  const branchLabel = $derived(selected?.name ?? (ref === 'HEAD' ? $t('git.detachedHead') : $t('git.noBranch')))
   let list = $state<HTMLElement>()
 
   export function fetching(): boolean {
@@ -66,7 +67,7 @@
       <div class="space-y-1.5"><Skeleton class="h-3.5" style="width: {width}%" /><Skeleton class="h-3 w-[40%]" /></div>
     {/each}
   </div>
-{:else if !ref}
+{:else if !branches.length && !ref}
   <Empty.Root class="min-h-0 p-8">
     <Empty.Header>
       <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><GitCommitIcon class="size-6" /></Empty.Media>
@@ -76,11 +77,11 @@
   </Empty.Root>
 {:else}
   <div class="flex shrink-0 items-center gap-2 border-b px-3 py-2">
-    <Select.Root type="single" value={ref} onValueChange={(next) => git.chooseRef(next)}>
-      <Select.Trigger class="h-8 min-w-0 flex-1 max-lg:h-10" aria-label={$t('git.branchToShow', { branch: selected?.name ?? $t('git.detachedHead') })}
+    <Select.Root type="single" value={ref ?? undefined} onValueChange={(next) => git.chooseRef(next)}>
+      <Select.Trigger class="h-8 min-w-0 flex-1 max-lg:h-10" aria-label={$t('git.branchToShow', { branch: branchLabel })}
         title={$t('git.branchPickerHint')}>
         <GitBranchIcon class="size-4 text-muted-foreground" />
-        <span class="min-w-0 flex-1 truncate text-left font-mono text-[13px]">{selected?.name ?? $t('git.detachedHead')}</span>
+        <span class="min-w-0 flex-1 truncate text-left font-mono text-[13px]">{branchLabel}</span>
         {#if selected?.current}<span class="shrink-0 text-xs text-muted-foreground">{$t('common.current')}</span>{/if}
       </Select.Trigger>
       <Select.Content align="start" class="max-h-80 w-72">
@@ -107,7 +108,15 @@
   </div>
 
   <div class="min-h-0 flex-1 overflow-auto overscroll-contain">
-    {#if commitsQuery.isError && !commits.length}
+    {#if !ref}
+      <Empty.Root class="min-h-0 p-8">
+        <Empty.Header>
+          <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><GitCommitIcon class="size-6" /></Empty.Media>
+          <Empty.Title>{$t('git.noCommits')}</Empty.Title>
+          <Empty.Description>{$t('git.noCommitsDescription')}</Empty.Description>
+        </Empty.Header>
+      </Empty.Root>
+    {:else if commitsQuery.isError && !commits.length}
       <Alert.Root variant="destructive" class="m-3 w-auto">
         <WarningCircleIcon />
         <Alert.Title>{$t('git.historyFailed')}</Alert.Title>

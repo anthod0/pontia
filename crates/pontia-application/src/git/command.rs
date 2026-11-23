@@ -26,7 +26,15 @@ pub(crate) async fn run_git(
     let mut child = Command::new("git")
         .arg("-C")
         .arg(dir)
-        .args(["-c", "core.fsmonitor=false", "-c", "core.quotePath=false"])
+        .args([
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "core.quotePath=false",
+            // Signature checks print before the requested format and run `gpg.program`.
+            "-c",
+            "log.showSignature=false",
+        ])
         .args(args)
         .env("GIT_OPTIONAL_LOCKS", "0")
         .env("GIT_LITERAL_PATHSPECS", "1")

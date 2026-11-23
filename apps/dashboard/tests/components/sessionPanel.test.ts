@@ -57,7 +57,6 @@ const changes: GitChangesView = {
 const sha = (n: number) => String(n).repeat(40);
 
 const branches: GitBranchesView = {
-  repo_root: "/repo",
   head: "refs/heads/main",
   branches: [
     { name: "main", ref: "refs/heads/main", remote: false, current: true },
@@ -140,10 +139,10 @@ beforeEach(() => {
   vi.spyOn(testDevice.api, "getWorkspaceGitBranches").mockResolvedValue(branches);
   vi.spyOn(testDevice.api, "getWorkspaceGitCommits").mockImplementation(async (_, ref, skip) =>
     ref === "refs/heads/main"
-      ? skip === 0
-        ? { commits: [summary(1, "add history view"), summary(2, "fix list")], has_more: true }
-        : { commits: [summary(3, "older work")], has_more: false }
-      : { commits: [summary(9, "feature commit")], has_more: false },
+      ? { commits: [summary(1, "add history view"), summary(2, "fix list")], has_more: true }
+      : ref === sha(1) && skip === 2
+        ? { commits: [summary(3, "older work")], has_more: false }
+        : { commits: [summary(9, "feature commit")], has_more: false },
   );
   vi.spyOn(testDevice.api, "getWorkspaceGitCommit").mockResolvedValue(commit);
   vi.spyOn(testDevice.api, "getWorkspaceGitCommitDiff").mockResolvedValue({
@@ -324,6 +323,24 @@ test("toggling Git opens the Git tab, then closes the panel", async () => {
   await waitFor(() => expect(screen.queryByRole("complementary")).toBeNull());
 });
 
+test("before the first commit, still offers the other branches", async () => {
+  vi.mocked(testDevice.api.getWorkspaceGitBranches).mockResolvedValue({
+    head: null,
+    branches: [{ name: "main", ref: "refs/heads/main", remote: false, current: false }],
+  });
+  render(SessionPanelHarness);
+  const panel = await openTab("Git");
+  await fireEvent.click(await within(panel).findByRole("tab", { name: "History" }));
+  expect(await within(panel).findByText("No commits yet")).toBeVisible();
+  expect(testDevice.api.getWorkspaceGitCommits).not.toHaveBeenCalled();
+
+  const picker = within(panel).getByRole("combobox", { name: "Branch to show: No branch" });
+  await fireEvent.keyDown(picker, { key: "ArrowDown" });
+  await screen.findByRole("option", { name: /main/ });
+  await fireEvent.keyDown(picker, { key: "Enter" });
+  await within(panel).findByRole("button", { name: /add history view/ });
+});
+
 test("shows a message for a Workspace outside a Git repository", async () => {
   vi.mocked(testDevice.api.getWorkspaceGitChanges).mockResolvedValue({
     repo_root: null,
@@ -369,7 +386,10 @@ test("keeps what the Git tab opened when the same Workspace attaches again", () 
 test("reads a chosen branch's history and a commit's file diffs without checking out", async () => {
   render(SessionPanelHarness);
   const panel = await openTab("Git");
-  await fireEvent.click(await within(panel).findByRole("tab", { name: "History" }));
+  // History is read only once it shows.
+  await within(panel).findByRole("tab", { name: "History" });
+  expect(testDevice.api.getWorkspaceGitBranches).not.toHaveBeenCalled();
+  await fireEvent.click(within(panel).getByRole("tab", { name: "History" }));
 
   // The checked-out branch shows first.
   await within(panel).findByRole("button", { name: /add history view/ });
@@ -382,12 +402,12 @@ test("reads a chosen branch's history and a commit's file diffs without checking
   const picker = within(panel).getByRole("combobox", { name: "Branch to show: main" });
   expect(picker).toHaveTextContent("Current");
 
-  // More history loads on request.
+  // More history loads on request, from the tip the first page read.
   await fireEvent.click(within(panel).getByRole("button", { name: "Load more" }));
   await within(panel).findByRole("button", { name: /older work/ });
   expect(testDevice.api.getWorkspaceGitCommits).toHaveBeenLastCalledWith(
     "workspace-1",
-    "refs/heads/main",
+    sha(1),
     2,
     expect.anything(),
   );

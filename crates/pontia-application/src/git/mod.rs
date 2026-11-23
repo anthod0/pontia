@@ -13,8 +13,8 @@ use std::path::PathBuf;
 pub use changes::{ChangeGroup, ChangedFileView, GitChangesView, MAX_CHANGED_FILES};
 pub use diff::{DiffHunkView, DiffLineKind, DiffLineView, GitDiffView};
 pub use history::{
-    COMMIT_PAGE_SIZE, GitBranchView, GitBranchesView, GitCommitDiffView, GitCommitFileView,
-    GitCommitSummaryView, GitCommitView, GitCommitsView,
+    GitBranchView, GitBranchesView, GitCommitDiffView, GitCommitFileView, GitCommitSummaryView,
+    GitCommitView, GitCommitsView,
 };
 
 pub struct WorkspaceGitService {
@@ -56,19 +56,9 @@ impl WorkspaceGitService {
     }
 
     pub async fn branches(&self, workspace_id: &str) -> Result<GitBranchesView> {
-        let Some(repo_root) = self.repo_root(workspace_id).await? else {
-            return Ok(GitBranchesView {
-                repo_root: None,
-                head: None,
-                branches: Vec::new(),
-            });
-        };
+        let repo_root = self.require_repo_root(workspace_id).await?;
         let (head, branches) = history::branches(&repo_root).await?;
-        Ok(GitBranchesView {
-            repo_root: Some(repo_root.to_string_lossy().into_owned()),
-            head,
-            branches,
-        })
+        Ok(GitBranchesView { head, branches })
     }
 
     /// One page of the history reachable from `ref_name`, newest first.

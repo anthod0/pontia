@@ -152,7 +152,6 @@ test("picks a Workspace, shows its changes and diff, and remembers it for the Bo
 
 test("shows the chosen Workspace's commit history and forgets the commit for another Workspace", async () => {
   vi.spyOn(testDevice.api, "getWorkspaceGitBranches").mockResolvedValue({
-    repo_root: "/repo/pontia",
     head: "refs/heads/main",
     branches: [{ name: "main", ref: "refs/heads/main", remote: false, current: true }],
   });

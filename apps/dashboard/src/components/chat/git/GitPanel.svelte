@@ -107,7 +107,7 @@
         onopen={(file) => { git.commitFile = { path: file.path, orig_path: file.orig_path } }} />
     {/key}
   {:else}
-    {@render header({ changes, refresh, fetching: changesQuery.isFetching || !!history?.fetching() })}
+    {@render header({ changes, refresh, fetching: changesQuery.isFetching || (git.view === 'history' && !!history?.fetching()) })}
 
     {#if changesQuery.isError && !changes}
       <Alert.Root variant="destructive" class="m-3 w-auto">
@@ -189,7 +189,8 @@
           </footer>
         </Tabs.Content>
         <Tabs.Content value="history" class="flex min-h-0 flex-col">
-          <GitHistory bind:this={history} {device} {workspaceId} {git} />
+          <!-- History is read only while it shows. -->
+          {#if git.view === 'history'}<GitHistory bind:this={history} {device} {workspaceId} {git} />{/if}
         </Tabs.Content>
       </Tabs.Root>
     {/if}

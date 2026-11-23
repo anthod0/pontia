@@ -12,7 +12,7 @@ use super::{
 };
 
 /// Commits returned per page of history.
-pub const COMMIT_PAGE_SIZE: usize = 50;
+const COMMIT_PAGE_SIZE: usize = 50;
 /// Field separator in `--format` output; it cannot occur in names or subjects git prints.
 const FIELD: char = '\x1f';
 /// The ref shown for a detached HEAD.
@@ -31,8 +31,6 @@ pub struct GitBranchView {
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct GitBranchesView {
-    /// `None` when the Workspace is not inside a Git work tree.
-    pub repo_root: Option<String>,
     /// The checked-out branch ref, `HEAD` when detached, or `None` before the first commit.
     pub head: Option<String>,
     pub branches: Vec<GitBranchView>,
@@ -75,7 +73,7 @@ pub struct GitCommitView {
     pub committer_name: String,
     pub committed_at: String,
     pub subject: String,
-    /// The message after the subject line, without surrounding blank lines.
+    /// The message after its first paragraph, which forms the subject.
     pub body: String,
     /// Files changed against the first parent; a root commit lists every file it adds.
     pub files: Vec<GitCommitFileView>,
@@ -173,7 +171,9 @@ pub(crate) async fn commits(
     )
     .await
     .map_err(|error| match error {
-        Error::Domain(message) if message.contains("bad revision") => {
+        Error::Domain(message)
+            if message.contains("bad revision") || message.contains("bad object") =>
+        {
             Error::NotFound(format!("ref {ref_name} not found"))
         }
         error => error,
@@ -210,14 +210,14 @@ pub(crate) async fn commit(repo_root: &Path, sha: &str) -> Result<GitCommitView>
         &[
             "show",
             "--no-patch",
-            "--format=%H%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%cn%x1f%cI%x1f%B",
+            "--format=%H%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%cn%x1f%cI%x1f%s%x1f%b",
             "--end-of-options",
             &object,
         ],
     )
     .await
     .map_err(|error| commit_not_found(error, sha))?;
-    let fields = header.splitn(8, FIELD).collect::<Vec<_>>();
+    let fields = header.splitn(9, FIELD).collect::<Vec<_>>();
     let [
         sha,
         parents,
@@ -226,15 +226,14 @@ pub(crate) async fn commit(repo_root: &Path, sha: &str) -> Result<GitCommitView>
         authored_at,
         committer_name,
         committed_at,
-        message,
+        subject,
+        body,
     ] = fields[..]
     else {
         return Err(Error::Domain(format!(
             "unexpected git show output for {sha}"
         )));
     };
-    let message = message.trim();
-    let (subject, body) = message.split_once('\n').unwrap_or((message, ""));
 
     let tree_args = |format: &'static str| {
         [
@@ -346,8 +345,12 @@ fn split_parents(parents: &str) -> Vec<String> {
     parents.split_whitespace().map(str::to_string).collect()
 }
 
-/// Accepts the detached HEAD or a full branch or remote-tracking ref name.
+/// Accepts the detached HEAD, a full branch or remote-tracking ref name, or a full commit name
+/// (later pages of history start from the tip the first page read).
 fn validate_ref(ref_name: &str) -> Result<()> {
+    if validate_sha(ref_name).is_ok() {
+        return Ok(());
+    }
     let branch = ref_name
         .strip_prefix("refs/heads/")
         .or_else(|| ref_name.strip_prefix("refs/remotes/"));
@@ -448,6 +451,7 @@ mod tests {
         ] {
             assert!(validate_ref(invalid).is_err(), "{invalid:?}");
         }
+        validate_ref(&"a".repeat(40)).expect("commit");
         validate_sha(&"a".repeat(40)).expect("sha-1");
         validate_sha(&"0".repeat(64)).expect("sha-256");
         for invalid in ["abc123", "--all", &"g".repeat(40), &"a".repeat(41)] {

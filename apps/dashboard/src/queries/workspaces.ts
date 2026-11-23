@@ -172,16 +172,30 @@ export function createWorkspaceQueries(device: DeviceRuntime) {
     );
   }
 
-  /** The history reachable from `ref`, newest first, one page at a time; a null `ref` reads nothing. */
+  /**
+   * The history reachable from `ref`, newest first, one page at a time; a null `ref` reads
+   * nothing. Later pages start from the tip the first page read, so new commits on the branch
+   * do not shift them.
+   */
   function createWorkspaceGitCommitsQuery(workspaceId: () => string, ref: () => string | null) {
     return createInfiniteQuery(
       () => ({
         queryKey: workspaceKeys.gitCommits(workspaceId(), ref() ?? ""),
         queryFn: ({ pageParam, signal }) =>
-          device.api.getWorkspaceGitCommits(workspaceId(), ref()!, pageParam, { signal }),
-        initialPageParam: 0,
+          device.api.getWorkspaceGitCommits(
+            workspaceId(),
+            pageParam?.tip ?? ref()!,
+            pageParam?.skip ?? 0,
+            { signal },
+          ),
+        initialPageParam: null as { tip: string; skip: number } | null,
         getNextPageParam: (last, pages) =>
-          last.has_more ? pages.reduce((total, page) => total + page.commits.length, 0) : undefined,
+          last.has_more
+            ? {
+                tip: pages[0]!.commits[0]!.sha,
+                skip: pages.reduce((total, page) => total + page.commits.length, 0),
+              }
+            : undefined,
         enabled: ref() !== null,
         staleTime: 0,
       }),

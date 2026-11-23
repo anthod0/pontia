@@ -484,7 +484,6 @@ export interface GitBranch {
 }
 
 export interface GitBranchesView {
-  repo_root: string | null;
   /** The checked-out branch ref, `HEAD` when detached, or null before the first commit. */
   head: string | null;
   branches: GitBranch[];
