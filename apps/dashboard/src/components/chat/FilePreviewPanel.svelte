@@ -50,6 +50,8 @@
   const path = $derived(current.path)
   const name = $derived(path.slice(path.lastIndexOf('/') + 1))
   const language = $derived(textFileLanguage(path))
+  const htmlPreview = $derived(language === 'html' && name.includes('.'))
+  const hasPreview = $derived(language === 'markdown' || htmlPreview)
   const key = $derived(downloadKey(target.device.id, target.sessionId, { path }))
   const task = $derived($downloads.find(task => task.key === key))
   const receiving = $derived(task?.status === 'receiving')
@@ -59,7 +61,7 @@
   let copyTimer: ReturnType<typeof setTimeout> | undefined
   let view = $state('preview')
   let panel: HTMLElement
-  const highlighted = $derived(text === null || (language === 'markdown' && view === 'preview') ? '' : highlightMarkdownCode(text, language))
+  const highlighted = $derived(text === null || (hasPreview && view === 'preview') ? '' : highlightMarkdownCode(text, language))
 
   provideFilePreviewNavigator({
     open(next) {
@@ -152,7 +154,7 @@
         <Button variant="ghost" size="icon-sm" onclick={back} aria-label={$t('files.previewBack')} title={$t('files.previewBack')}><ArrowLeftIcon class="size-4" /></Button>
       {/if}
       <h2 class="min-w-0 flex-1 truncate text-sm font-medium" title={name}>{name}</h2>
-      {#if language === 'markdown' && text}
+      {#if hasPreview && text}
         <Tabs.List aria-label={$t('files.previewMode')} class="shrink-0">
           <Tabs.Trigger value="preview" aria-label={$t('files.preview')} title={$t('files.preview')}><EyeIcon class="size-4" /></Tabs.Trigger>
           <Tabs.Trigger value="source" aria-label={$t('files.source')} title={$t('files.source')}><CodeIcon class="size-4" /></Tabs.Trigger>
@@ -205,13 +207,19 @@
           <Empty.Title>{$t('files.emptyFile')}</Empty.Title>
         </Empty.Header>
       </Empty.Root>
-    {:else if language === 'markdown'}
-      <Tabs.Content value="preview" class="min-h-0 flex-1 overflow-auto overscroll-contain p-4" data-file-preview-content>
-        {#key target.device}
-          <DeviceProvider device={target.device}>
-            <MessageResponse content={text} markdown sessionId={target.sessionId} linkBase={path} class="h-auto" />
-          </DeviceProvider>
-        {/key}
+    {:else if hasPreview}
+      <Tabs.Content value="preview" class={['min-h-0 flex-1', htmlPreview ? 'overflow-hidden' : 'overflow-auto overscroll-contain p-4']} data-file-preview-content>
+        {#if htmlPreview}
+          {#if view === 'preview'}
+            <iframe title={$t('files.previewNamed', { name })} srcdoc={text} sandbox="allow-scripts allow-forms allow-modals" class="block size-full border-0 bg-white"></iframe>
+          {/if}
+        {:else}
+          {#key target.device}
+            <DeviceProvider device={target.device}>
+              <MessageResponse content={text} markdown sessionId={target.sessionId} linkBase={path} class="h-auto" />
+            </DeviceProvider>
+          {/key}
+        {/if}
       </Tabs.Content>
       <Tabs.Content value="source" class="min-h-0 flex-1 overflow-auto overscroll-contain p-4" data-file-preview-content>
         {@render sourceContent()}
