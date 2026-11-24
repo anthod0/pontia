@@ -84,7 +84,7 @@ async function chooseModel(index: number) {
   if (efforts) await fireEvent.click(within(efforts).getByLabelText("Default"));
 }
 
-test("creates the first profile with an ID suggested from its name", async () => {
+test("returns to the list after creating the first profile with a suggested ID", async () => {
   const user = userEvent.setup();
   device.data.agentProfiles = [];
   render(AgentProfilesPage);
@@ -96,6 +96,7 @@ test("creates the first profile with an ID suggested from its name", async () =>
   await screen.findByRole("button", { name: "Model" });
   await user.click(screen.getByRole("button", { name: "Create profile" }));
   await within(list()).findByRole("button", { name: /^Release Writer/ });
+  await waitFor(() => expect(screen.queryByLabelText("Profile ID")).toBeNull());
   expect(device.data.agentProfiles).toEqual([
     expect.objectContaining({
       profile_id: "release-writer",
@@ -128,7 +129,7 @@ test("does not create a profile whose ID pontiad would reject", async () => {
   );
 });
 
-test("switches a profile to another enabled client and model", async () => {
+test("returns to the list after switching a profile to another enabled client and model", async () => {
   device.data.agentClients.find((c) => c.client_type === "claude-agent")!.enabled = false;
   render(AgentProfilesPage);
   await open("Executor");
@@ -137,6 +138,8 @@ test("switches a profile to another enabled client and model", async () => {
   expect(names).toEqual(["Pi", "Codex", "Google Antigravity", "Grok Build"]);
   await chooseModel(2);
   await fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(screen.queryByLabelText("Profile ID")).toBeNull());
+  expect(within(list()).getByRole("button", { name: /^Executor/ })).toBeEnabled();
   await waitFor(() =>
     expect(device.data.agentProfiles[0]).toMatchObject({
       profile_id: "executor",
@@ -167,7 +170,12 @@ test("keeps entered values after a failed save so the user can correct and retry
   );
 });
 
-test("edits and deletes an existing profile whose ID predates the ID format", async () => {
+test("edits and deletes an existing profile whose ID predates the ID format on desktop", async () => {
+  const matchMedia = window.matchMedia;
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    ...matchMedia(query),
+    matches: query === "(min-width: 64rem)",
+  }));
   const user = userEvent.setup();
   device.data.agentProfiles[0].profile_id = "Old Executor";
   render(AgentProfilesPage);
