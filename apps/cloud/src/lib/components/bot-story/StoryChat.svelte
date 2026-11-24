@@ -73,10 +73,10 @@
 	.working { animation: bob 1.6s ease-in-out infinite; }
 	.todo-button { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; padding: 3px 8px; border: 1px solid var(--border); border-radius: 7px; font-size: 11px; font-weight: 500; color: var(--muted-foreground); transition: color 200ms, border-color 200ms; }
 	.todo-button.has-todo { color: var(--heading); border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); }
-	.count { display: grid; place-items: center; min-width: 15px; height: 15px; padding-inline: 4px; border-radius: 999px; background: var(--primary-solid); color: white; font-size: 10px; animation: pop 300ms var(--ease-out); }
+	.count { display: grid; place-items: center; min-width: 15px; height: 15px; padding-inline: 4px; border-radius: 999px; background: var(--primary-solid); color: white; font-size: 10px; animation: pop 160ms var(--ease-out); }
 
 	.feed { display: flex; flex: 1; flex-direction: column; justify-content: flex-end; gap: 8px; min-height: 0; margin: 0; padding: 14px; list-style: none; overflow: hidden; mask-image: linear-gradient(to bottom, transparent, #000 28px); }
-	.line { display: flex; flex-direction: column; gap: 3px; max-width: 86%; animation: enter 360ms var(--ease-out) both; }
+	.line { display: flex; flex-direction: column; gap: 3px; max-width: 86%; animation: enter 180ms var(--ease-out) both; }
 	.line.user { align-self: flex-end; align-items: flex-end; }
 	.line.bot { align-self: flex-start; align-items: flex-start; }
 	.bubble { display: inline-flex; flex-direction: column; gap: 4px; padding: 8px 12px; border-radius: 14px; font-size: 13px; line-height: 1.45; }

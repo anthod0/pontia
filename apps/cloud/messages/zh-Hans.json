@@ -40,8 +40,6 @@
   "bots_title": "Agent 再多，也不用一个个盯。",
   "bots_intro": "把工作交给常驻本机的 Bot。它让多个助手在各自的环境里并行工作，把等你拍板的事列为待办，隔天也能接着做。",
   "bots_pick": "选一个 Bot，看看它怎么干活。",
-  "bots_play": "播放演示",
-  "bots_pause": "暂停演示",
   "story_todo_label": "决定进待办，其他工作照常",
   "story_todo_caption": "要你决定这次做哪些功能时，Bot 会记下待办，其他助手继续工作。你有空再回复，Bot 会逐项关闭。",
   "story_todo_ask": "设置页这周上线吧。",

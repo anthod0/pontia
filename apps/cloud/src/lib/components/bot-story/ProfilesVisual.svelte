@@ -28,7 +28,7 @@
 		{#each lanes as lane, i (lane.agent.client)}
 			<li class="lane" style:--i={i}>
 				{#if step >= 1}
-					<div class="card enter" style:animation-delay="{i * 120}ms">
+					<div class="card enter" style:animation-delay="{i * 60}ms">
 						<span class="profile">{lane.profile()}</span>
 						<AgentBadge agent={lane.agent} />
 						<span class="task">{lane.task()}</span>
@@ -50,10 +50,10 @@
 
 	/* Connectors: a vertical spine on the left of the lanes and one branch per lane. */
 	.lanes { position: relative; display: grid; gap: 12px; margin: 0; padding: 0 0 0 36px; list-style: none; }
-	.lanes::before { content: ''; position: absolute; left: 0; top: 37px; bottom: 37px; width: 2px; background: var(--bot); opacity: 0; transition: opacity 300ms; }
+	.lanes::before { content: ''; position: absolute; left: 0; top: 37px; bottom: 37px; width: 2px; background: var(--bot); opacity: 0; transition: opacity 160ms; }
 	.lanes.open::before { opacity: 0.45; }
 	.lane { position: relative; min-height: 74px; }
-	.lane::before { content: ''; position: absolute; left: -36px; top: 50%; width: 36px; height: 2px; background: var(--bot); opacity: 0; transform-origin: left; transition: opacity 300ms; }
+	.lane::before { content: ''; position: absolute; left: -36px; top: 50%; width: 36px; height: 2px; background: var(--bot); opacity: 0; transform-origin: left; transition: opacity 160ms; }
 	.open .lane::before { opacity: 0.45; }
 	.card { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 12px; align-items: center; padding: 11px 14px; }
 	.profile { padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--bot) 16%, transparent); font-size: 11px; font-weight: 500; color: var(--heading); white-space: nowrap; }

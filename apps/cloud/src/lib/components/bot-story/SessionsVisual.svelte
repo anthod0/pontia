@@ -66,7 +66,7 @@
 						<span class="mono">routes/settings/+page.svelte <b class="added">+18</b> <b class="removed">−4</b></span>
 					</span>
 				</li>
-				<li class="step enter" style:animation-delay="160ms">
+				<li class="step enter" style:animation-delay="80ms">
 					<span class="icon"><TerminalWindowIcon size={15} /></span>
 					<span class="step-body">
 						<span class="step-title">{m.story_work_run()}</span>
@@ -79,7 +79,7 @@
 			{/if}
 			{#if step >= 4}
 				<li class="msg bot enter">{m.story_work_steer_reply()}</li>
-				<li class="step enter" style:animation-delay="160ms">
+				<li class="step enter" style:animation-delay="80ms">
 					<span class="icon"><SpinnerGapIcon size={15} class="spin" /></span>
 					<span class="step-body">
 						<span class="step-title">{m.story_work_editing()}</span>
@@ -99,7 +99,7 @@
 	.feed { display: flex; flex: 1; flex-direction: column; justify-content: flex-end; gap: 8px; padding: 14px; }
 
 	.helpers { display: grid; gap: 6px; margin: 4px 0 0; padding: 0; list-style: none; }
-	.helper { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 10px; align-items: center; padding: 8px 12px; outline: 2px solid transparent; outline-offset: 2px; transition: outline-color 250ms; }
+	.helper { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 10px; align-items: center; padding: 8px 12px; outline: 2px solid transparent; outline-offset: 2px; transition: outline-color 150ms; }
 	.helper.active { outline-color: var(--primary); }
 	.helper :global(.badge) { grid-column: 1; }
 	.helper :global(.state) { grid-column: 2; grid-row: 1 / 3; }

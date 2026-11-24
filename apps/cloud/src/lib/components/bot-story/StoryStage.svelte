@@ -29,8 +29,8 @@
 <style>
 	.stage { display: grid; min-height: 420px; padding: 28px 36px; border: 1px solid var(--border); border-radius: 14px; background: radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0) 0 0 / 22px 22px, var(--surface); }
 
-	.stage :global(.card) { border: 1px solid var(--border); border-radius: 10px; background: var(--background); box-shadow: 0 16px 32px -26px rgb(60 56 54 / 35%); transition: border-color 250ms, opacity 250ms; }
-	.stage :global(.enter) { animation: story-enter 360ms var(--ease-out) both; }
+	.stage :global(.card) { border: 1px solid var(--border); border-radius: 10px; background: var(--background); box-shadow: 0 16px 32px -26px rgb(60 56 54 / 35%); transition: border-color 150ms, opacity 150ms; }
+	.stage :global(.enter) { animation: story-enter 180ms var(--ease-out) both; }
 	.stage :global(.state) { display: inline-flex; align-items: center; gap: 6px; font: 11px var(--font-mono); white-space: nowrap; }
 	.stage :global(.state.running) { color: var(--color-busy); }
 	.stage :global(.state.done) { color: var(--coverage-supported); }

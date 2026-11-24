@@ -40,8 +40,6 @@
   "bots_title": "Stop babysitting your agents.",
   "bots_intro": "Hand work to a persistent Bot on your machine. It runs isolated helpers in parallel, queues decisions as todos, and keeps context across days.",
   "bots_pick": "Pick a Bot to see how it works.",
-  "bots_play": "Play the demo",
-  "bots_pause": "Pause the demo",
   "story_todo_label": "Queues decisions, keeps shipping",
   "story_todo_caption": "Scope calls turn into todos while your other helpers keep running. Reply when you're ready and the Bot closes each one.",
   "story_todo_ask": "Ship the settings page this week.",

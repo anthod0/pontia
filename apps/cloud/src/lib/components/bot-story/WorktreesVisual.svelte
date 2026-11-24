@@ -64,11 +64,11 @@
 	.graph.narrow { display: none; }
 	.graph path { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linecap: round; }
 	.main-line { stroke: var(--border-stronger); }
-	.branch-line { stroke: var(--bot); opacity: 0; transition: opacity 400ms; }
+	.branch-line { stroke: var(--bot); opacity: 0; transition: opacity 200ms; }
 	.branch-line.on { opacity: 0.7; }
 
 	.main-label { position: absolute; left: 0; top: 50%; translate: 0 calc(-100% - 6px); display: inline-flex; align-items: center; gap: 5px; }
-	.merged { position: absolute; right: 0; top: 50%; translate: 0 8px; display: inline-flex; align-items: center; gap: 5px; font: 11px var(--font-mono); color: var(--coverage-supported); opacity: 0; transition: opacity 400ms; }
+	.merged { position: absolute; right: 0; top: 50%; translate: 0 8px; display: inline-flex; align-items: center; gap: 5px; font: 11px var(--font-mono); color: var(--coverage-supported); opacity: 0; transition: opacity 200ms; }
 	.merged.on { opacity: 1; }
 
 	.slot { position: absolute; left: var(--start); width: var(--width); translate: 0 -50%; }
