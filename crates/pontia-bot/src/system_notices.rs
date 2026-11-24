@@ -228,18 +228,30 @@ impl SystemNoticeService {
                 format!("Agent Profile deleted: {profile_id}"),
                 source_session_id,
             ),
-            ControlChange::AgentProfileDescriptionChanged {
+            ControlChange::AgentProfileUpdated {
                 profile_id,
                 source_session_id,
                 description,
-            } => (
-                format!("profile:{profile_id}"),
-                format!(
-                    "Agent Profile description changed: {profile_id}\nDescription: {}",
-                    description.unwrap_or_default()
-                ),
-                source_session_id,
-            ),
+                client_type,
+                client_key,
+                model,
+                reasoning_effort,
+            } => {
+                let client = client_type
+                    .zip(client_key)
+                    .map(|(kind, key)| format!("{kind}/{key}"))
+                    .unwrap_or_default();
+                (
+                    format!("profile:{profile_id}"),
+                    format!(
+                        "Agent Profile updated: {profile_id}\nDescription: {}\nClient: {client}\nModel: {}\nReasoning effort: {}",
+                        description.unwrap_or_default(),
+                        model.unwrap_or_default(),
+                        reasoning_effort.unwrap_or_default()
+                    ),
+                    source_session_id,
+                )
+            }
         };
         let except = match source_session_id {
             Some(session) => match self.conversation.owner_bot_id(&session).await {

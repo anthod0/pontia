@@ -240,7 +240,8 @@ async fn bot_registrations_exclude_the_initiator_and_failed_delivery_is_forgotte
 
 #[tokio::test]
 async fn profile_changes_reach_other_bots_and_skip_the_source() {
-    let (_root, _pool, client, control, service) = fixture().await;
+    let (_root, _pool, client, control, service) =
+        fixture_with_clients(&[&BOT_CLIENT, &NO_STEER_CLIENT]).await;
     let (_, origin) = bot(&service).await;
     let (_, peer) = bot(&service).await;
     let (stop, receiver) = tokio::sync::watch::channel(false);
@@ -252,11 +253,22 @@ async fn profile_changes_reach_other_bots_and_skip_the_source() {
         .create(profile("added", MODEL, None), Some(&origin))
         .await
         .unwrap();
-    let mut edited = profile("edited", MODEL, None);
+    let mut edited = profile("edited", "previous/model", None);
+    edited.description = Some("New description".into());
     for input in [edited.clone(), profile("removed", MODEL, None)] {
         profiles.create(input, Some(&origin)).await.unwrap();
     }
-    edited.description = Some("New description".into());
+    edited.model = Some(MODEL.into());
+    profiles
+        .update("edited", edited.clone(), Some(&origin))
+        .await
+        .unwrap();
+    edited.reasoning_effort = Some("high".into());
+    profiles
+        .update("edited", edited.clone(), Some(&origin))
+        .await
+        .unwrap();
+    edited.client_type = Some("no-steer".into());
     profiles
         .update("edited", edited, Some(&origin))
         .await
@@ -284,7 +296,11 @@ async fn profile_changes_reach_other_bots_and_skip_the_source() {
         .input;
     for message in [
         "created: added",
-        "description changed: edited",
+        "updated: edited",
+        "New description",
+        "Client: no-steer/default",
+        "Model: test/model",
+        "Reasoning effort: high",
         "deleted: removed",
     ] {
         assert!(!origin.contains(message));

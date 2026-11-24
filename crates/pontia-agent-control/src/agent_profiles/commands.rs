@@ -93,7 +93,15 @@ impl AgentProfileService {
         }
         self.validate_configuration(&request, validate_model)
             .await?;
-        let description = request.description.clone();
+        let change = ControlChange::AgentProfileUpdated {
+            source_session_id: source_session_id.map(str::to_owned),
+            profile_id: id.into(),
+            description: request.description.clone(),
+            client_type: request.client_type.clone(),
+            client_key: request.client_key.clone(),
+            model: request.model.clone(),
+            reasoning_effort: request.reasoning_effort.clone(),
+        };
         let Some(changed) = SqliteAgentProfileRepository::new(self.pool.clone())
             .update(request.into())
             .await?
@@ -101,12 +109,7 @@ impl AgentProfileService {
             return Err(Error::NotFound(format!("agent profile {id} not found")));
         };
         if changed {
-            self.changes
-                .publish(ControlChange::AgentProfileDescriptionChanged {
-                    source_session_id: source_session_id.map(str::to_owned),
-                    profile_id: id.into(),
-                    description,
-                });
+            self.changes.publish(change);
         }
         self.require_profile(id).await
     }

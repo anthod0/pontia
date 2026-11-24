@@ -80,7 +80,7 @@ async fn workspace_registration_publishes_committed_insertions_and_reactivations
 }
 
 #[tokio::test]
-async fn profiles_publish_only_successful_creation_deletion_and_description_changes() {
+async fn profiles_publish_successful_changes_to_bot_visible_fields() {
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
     let control = AgentControl::builder(pool, Default::default()).build();
@@ -121,10 +121,14 @@ async fn profiles_publish_only_successful_creation_deletion_and_description_chan
         .unwrap();
     assert_eq!(
         events.try_recv().unwrap(),
-        ControlChange::AgentProfileDescriptionChanged {
+        ControlChange::AgentProfileUpdated {
             source_session_id: None,
             profile_id: "review".into(),
-            description: request.description.clone()
+            description: request.description.clone(),
+            client_type: None,
+            client_key: None,
+            model: None,
+            reasoning_effort: None,
         }
     );
     service.delete("review", None).await.unwrap();

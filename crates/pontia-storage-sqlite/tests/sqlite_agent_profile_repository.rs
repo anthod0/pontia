@@ -42,6 +42,51 @@ async fn creates_updates_and_deletes_profiles() {
 }
 
 #[tokio::test]
+async fn update_detects_each_client_and_model_setting_independently() {
+    let pool = connect_sqlite("sqlite::memory:").await.unwrap();
+    run_migrations(&pool).await.unwrap();
+    let repository = SqliteAgentProfileRepository::new(pool);
+    let mut profile = record("Reviewer");
+    profile.client_type = Some("pi".into());
+    profile.client_key = Some("default".into());
+    profile.model = Some("original".into());
+    repository.create(profile.clone()).await.unwrap();
+
+    profile.model = Some("other".into());
+    assert_eq!(
+        repository.update(profile.clone()).await.unwrap(),
+        Some(true)
+    );
+    profile.client_type = Some("acp".into());
+    assert_eq!(
+        repository.update(profile.clone()).await.unwrap(),
+        Some(true)
+    );
+    profile.client_key = Some("review".into());
+    assert_eq!(
+        repository.update(profile.clone()).await.unwrap(),
+        Some(true)
+    );
+    profile.reasoning_effort = Some("high".into());
+    assert_eq!(
+        repository.update(profile.clone()).await.unwrap(),
+        Some(true)
+    );
+    profile.reasoning_effort = None;
+    assert_eq!(
+        repository.update(profile.clone()).await.unwrap(),
+        Some(true)
+    );
+    profile.system_prompt = None;
+    profile.use_yolo = true;
+    assert_eq!(repository.update(profile).await.unwrap(), Some(false));
+    assert_eq!(
+        repository.update(record("Reviewer")).await.unwrap(),
+        Some(true)
+    );
+}
+
+#[tokio::test]
 async fn removing_builtin_profiles_preserves_user_profiles() {
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     let previous = sqlx::migrate::Migrator {
