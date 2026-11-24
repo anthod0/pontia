@@ -703,3 +703,133 @@ fn services_save_preserve_and_explicitly_replace_search_paths() {
         assert_eq!(updated, render(refreshed.as_ref(), None));
     }
 }
+
+#[test]
+fn systemd_installs_and_removes_the_scheduled_update() {
+    let dir = tempfile::tempdir().unwrap();
+    let runner = FakeRunner::with_outputs(vec![output(0, "", ""); 4]);
+    let manager = SystemdManager::new(&runner);
+    manager
+        .enable_auto_update(dir.path(), Path::new("/opt/Pontia 100%/pontia"))
+        .unwrap();
+
+    let timer = dir.path().join("pontia-update.timer");
+    let service = dir.path().join("pontia-update.service");
+    let schedule = std::fs::read_to_string(&timer).unwrap();
+    let job = std::fs::read_to_string(&service).unwrap();
+    assert!(
+        schedule
+            .lines()
+            .any(|line| line == "OnCalendar=*-*-* 00/6:00:00")
+    );
+    assert!(
+        schedule
+            .lines()
+            .any(|line| line == "RandomizedDelaySec=10m")
+    );
+    assert!(job.lines().any(|line| line == "Type=oneshot"));
+    assert!(
+        job.lines()
+            .any(|line| line == r#"ExecStart="/opt/Pontia 100%%/pontia" update"#)
+    );
+
+    manager.disable_auto_update(dir.path()).unwrap();
+    assert!(!timer.exists() && !service.exists());
+    assert_eq!(
+        runner
+            .calls
+            .into_inner()
+            .into_iter()
+            .map(|(program, args)| format!("{program} {}", args.join(" ")))
+            .collect::<Vec<_>>(),
+        [
+            "systemctl --user daemon-reload",
+            "systemctl --user enable --now pontia-update.timer",
+            "systemctl --user disable --now pontia-update.timer",
+            "systemctl --user daemon-reload",
+        ]
+    );
+}
+
+#[test]
+fn systemd_status_reports_schedule_absence_and_manager_errors() {
+    let runner = FakeRunner::with_outputs(vec![
+        output(
+            0,
+            "ActiveState=active\nUnitFileState=enabled\nLastTriggerUSec=Tue 06:03\nNextElapseUSecRealtime=Tue 12:09",
+            "",
+        ),
+        output(4, "LoadState=not-found", ""),
+        output(1, "", "Failed to connect to bus"),
+    ]);
+    let manager = SystemdManager::new(&runner);
+    let status = manager.auto_update_status().unwrap();
+    for field in ["enabled", "Tue 06:03", "Tue 12:09"] {
+        assert!(status.contains(field));
+    }
+    assert!(manager.auto_update_status().unwrap().contains("disabled"));
+    assert!(manager.auto_update_status().is_err());
+}
+
+#[test]
+fn launchd_installs_an_interval_job_and_removes_it_after_bootout() {
+    let dir = tempfile::tempdir().unwrap();
+    let runner = FakeRunner::with_outputs(vec![
+        output(113, "", "Could not find service"),
+        output(0, "", ""),
+        output(0, "", ""),
+        output(0, "", ""),
+        output(0, "", ""), // Repeat enable for a loaded job.
+        output(0, "", ""),
+        output(0, "", ""),
+    ]);
+    let manager = LaunchdManager::new(&runner, 501);
+    let cli = Path::new("/opt/Pontia & Tools/pontia");
+    manager.enable_auto_update(dir.path(), cli).unwrap();
+    let path = dir.path().join("dev.pontia.update.plist");
+    let plist = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        plist.contains("<string>/opt/Pontia &amp; Tools/pontia</string><string>update</string>")
+    );
+    assert!(plist.contains("<key>StartInterval</key><integer>21600</integer>"));
+    manager.enable_auto_update(dir.path(), cli).unwrap();
+    manager.disable_auto_update(dir.path()).unwrap();
+    assert!(!path.exists());
+    let calls = runner.calls.into_inner();
+    assert!(calls.iter().all(|(program, _)| program == "launchctl"));
+    assert_eq!(calls[1].1, ["enable", "gui/501/dev.pontia.update"]);
+    assert_eq!(calls[2].1, ["bootstrap", "gui/501", path.to_str().unwrap()]);
+    assert_eq!(calls[6].1, ["bootout", "gui/501/dev.pontia.update"]);
+}
+
+#[test]
+fn launchd_status_distinguishes_loaded_missing_and_inaccessible_jobs() {
+    let runner = FakeRunner::with_outputs(vec![
+        output(0, "state = waiting", ""),
+        output(0, "", ""),
+        output(113, "", "Could not find service"),
+        output(1, "", "Permission denied"),
+    ]);
+    let manager = LaunchdManager::new(&runner, 501);
+    let status = manager.auto_update_status().unwrap();
+    assert!(status.contains("enabled") && status.contains("unavailable"));
+    assert!(manager.auto_update_status().unwrap().contains("disabled"));
+    assert!(manager.auto_update_status().is_err());
+}
+
+#[test]
+fn failed_timer_shutdown_preserves_the_installed_schedule() {
+    let dir = tempfile::tempdir().unwrap();
+    let runner = FakeRunner::with_outputs(vec![
+        output(0, "", ""),
+        output(0, "", ""),
+        output(1, "", "Failed to connect to bus: No such process"),
+    ]);
+    let manager = SystemdManager::new(&runner);
+    manager
+        .enable_auto_update(dir.path(), Path::new("/opt/pontia"))
+        .unwrap();
+    assert!(manager.disable_auto_update(dir.path()).is_err());
+    assert!(dir.path().join("pontia-update.timer").exists());
+    assert!(dir.path().join("pontia-update.service").exists());
+}
