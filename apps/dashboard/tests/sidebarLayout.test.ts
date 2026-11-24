@@ -975,6 +975,19 @@ test("settings pages show section tabs in the top bar", () => {
   );
 });
 
+test("the settings top bar back button returns to chat instead of opening the sidebar", async () => {
+  window.history.pushState({}, "", "/dashboard/settings/clients");
+  const onOpenChange = vi.fn();
+  render(TopBarHost, { props: { onOpenChange } });
+
+  const banner = within(screen.getByRole("banner"));
+  expect(banner.queryByRole("button", { name: /toggle sidebar/i })).not.toBeInTheDocument();
+  await fireEvent.click(banner.getByRole("button", { name: "Back to chat" }));
+
+  expect(mocks.navigate).toHaveBeenCalledWith("/");
+  expect(onOpenChange).not.toHaveBeenCalled();
+});
+
 test("the settings tab bar scrolls the current section into view", async () => {
   window.history.pushState({}, "", "/dashboard/settings/memory");
 
