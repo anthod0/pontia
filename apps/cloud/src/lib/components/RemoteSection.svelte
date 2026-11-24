@@ -1,11 +1,9 @@
 <script lang="ts">
 	import { onDestroy, tick } from 'svelte';
-	import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon';
 	import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon';
 	import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon';
 	import ArrowCounterClockwiseIcon from 'phosphor-svelte/lib/ArrowCounterClockwiseIcon';
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
-	import HandPointingIcon from 'phosphor-svelte/lib/HandPointingIcon';
 	import LockSimpleIcon from 'phosphor-svelte/lib/LockSimpleIcon';
 	import SpinnerGapIcon from 'phosphor-svelte/lib/SpinnerGapIcon';
 	import { reveal } from '$lib/reveal';
@@ -99,7 +97,6 @@
 	<div class="intro reveal">
 		<h2 id="remote-title">{m.remote_title()}</h2>
 		<p>{m.remote_text()}</p>
-		<a class="intro-link" href={localizeHref('/docs/dashboard')}>{m.dashboard_guide()}<ArrowRightIcon size={12} /></a>
 	</div>
 
 	<!-- One scene: the same Session in a terminal on the device and on a phone, joined by an encrypted channel. -->
@@ -215,7 +212,6 @@
 				{/if}
 			</div>
 		</div>
-		<p class="hint reveal" style="--i: 4"><HandPointingIcon size={13} />{m.remote_demo_hint()}</p>
 	</div>
 	<p class="sr-only" aria-live="polite">{stateLabel}. {latestReply ? replies[latestReply.id]() : ''}</p>
 </section>
@@ -223,8 +219,6 @@
 <style>
 	.intro { max-width: 560px; }
 	.intro p { margin-top: 14px; font-size: 15px; line-height: 1.75; color: var(--muted-foreground); text-wrap: pretty; }
-	.intro-link { display: inline-flex; align-items: center; gap: 4px; margin-top: 16px; color: var(--primary); font-size: 13px; font-weight: 500; }
-	.intro-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 	/* The stage keeps one aspect ratio and sizes everything in em, so the composition scales as a whole. */
 	.stage { position: relative; container-type: inline-size; aspect-ratio: 1080 / 420; margin-top: 48px; }
@@ -330,9 +324,6 @@
 	.replay { color: var(--primary); font-weight: 500; }
 	.replay:hover { text-decoration: underline; text-underline-offset: 3px; }
 
-	.hint { bottom: 0; left: 0; display: flex; align-items: center; gap: 0.5em; font-size: min(13px, 1.2cqw); color: var(--muted-foreground); }
-	.hint :global(svg) { color: var(--primary); }
-
 	.enter { animation: enter 0.36s var(--ease-out) both; }
 
 	/* Annotations: a number, a short title, and a hairline leading to what they describe. */
@@ -376,6 +367,5 @@
 		.note-below::before { display: none; }
 		.note-encrypted { translate: none; }
 		.phone { align-self: center; width: 250px; height: 400px; }
-		.hint { order: -1; font-size: 13px; }
 	}
 </style>
