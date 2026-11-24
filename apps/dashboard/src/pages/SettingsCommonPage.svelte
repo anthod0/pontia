@@ -4,8 +4,6 @@
   import { useDeviceRuntime } from '../device/context';
   import { onMount } from 'svelte'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
-  import KeyIcon from 'phosphor-svelte/lib/KeyIcon'
-  import BroadcastIcon from 'phosphor-svelte/lib/BroadcastIcon'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -65,7 +63,7 @@
   <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.75fr)]">
     <Card.Root>
       <Card.Header>
-        <Card.Title class="flex items-center gap-2"><KeyIcon class="size-5" /> {$t('auth.externalToken')}</Card.Title>
+        <Card.Title>{$t('auth.externalToken')}</Card.Title>
         <Card.Description>{$t('auth.sentAs')}</Card.Description>
       </Card.Header>
       <Card.Content class="space-y-4">
@@ -84,7 +82,7 @@
 
     <Card.Root>
       <Card.Header>
-        <Card.Title class="flex items-center gap-2"><BroadcastIcon class="size-5" /> {$t('connection.liveStream')}</Card.Title>
+        <Card.Title>{$t('connection.liveStream')}</Card.Title>
         <Card.Description>{$t('connection.streamDescription')}</Card.Description>
       </Card.Header>
       <Card.Content class="space-y-3 text-sm">

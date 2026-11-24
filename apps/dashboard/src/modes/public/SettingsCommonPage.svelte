@@ -42,7 +42,7 @@
       <h2 id="settings-account-title" class="text-sm font-semibold text-heading">{$t('account.title')}</h2>
       {#if accountUrl}
         <Button variant="outline" size="sm" href={accountUrl} target="_blank" rel="noopener">
-          {$t('account.manage')} <ArrowSquareOutIcon class="size-4" />
+          {$t('account.manage')}<ArrowSquareOutIcon data-icon="inline-end" />
         </Button>
       {/if}
     </div>
@@ -73,14 +73,14 @@
       <h2 id="settings-devices-title" class="text-sm font-semibold text-heading">{$t('devices.title')}</h2>
       {#if devicesUrl}
         <Button variant="outline" size="sm" href={devicesUrl} target="_blank" rel="noopener">
-          {$t('devices.manage')} <ArrowSquareOutIcon class="size-4" />
+          {$t('devices.manage')}<ArrowSquareOutIcon data-icon="inline-end" />
         </Button>
       {/if}
     </div>
     <ul class="-mx-3" aria-label={$t('devices.title')}>
       {#each devices as device (device.handle)}
         <li class="flex items-center gap-3 px-3 py-2.5">
-          <DesktopIcon class="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <DesktopIcon class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <div class="min-w-0 flex-1">
             <p class="truncate font-medium text-heading">{device.name}</p>
             <p class="truncate font-mono text-xs text-muted-foreground">{device.handle}</p>

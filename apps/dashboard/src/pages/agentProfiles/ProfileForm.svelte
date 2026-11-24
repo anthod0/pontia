@@ -167,7 +167,7 @@
   {#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
   <div class="flex flex-wrap justify-end gap-2">
     {#if profile && ondelete}
-      <Button type="button" variant="ghost" class="text-destructive hover:text-destructive" disabled={saving} aria-label={$t('profiles.deleteNamed', { name: profile.name })} onclick={() => profile && ondelete?.(profile)}><TrashIcon class="size-4" />{$t('common.delete')}</Button>
+      <Button type="button" variant="ghost" class="text-destructive hover:text-destructive" disabled={saving} aria-label={$t('profiles.deleteNamed', { name: profile.name })} onclick={() => profile && ondelete?.(profile)}><TrashIcon data-icon="inline-start" />{$t('common.delete')}</Button>
     {/if}
     {#if oncancel}<Button type="button" variant="outline" disabled={saving} onclick={oncancel}>{$t('common.cancel')}</Button>{/if}
     <Button type="submit" disabled={saving || effortUnavailable || (!profile && !clients.length)}>{$t(profile ? 'common.save' : 'profiles.create')}</Button>
