@@ -388,7 +388,7 @@ async fn cli_start_and_first_input_join_existing_turn_observation() {
         .unwrap();
     assert_eq!(count, 1);
     drop(cli);
-    assert_eq!(f.session(native, "idle").await, session);
+    assert_eq!(f.session(native, "exited").await, session);
     f.stop().await;
 }
 

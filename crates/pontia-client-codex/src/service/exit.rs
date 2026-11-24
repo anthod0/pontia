@@ -100,6 +100,8 @@ impl CodexService {
         };
         runtime.current_guard().await?;
 
+        self.terminate_proxy_peers(runtime, session).await?;
+
         // Archive can unload even if its receipt is lost. Persist the existing reload
         // suppression before sending it, without projecting an unload or exit fact.
         self.suspend_reload(session).await?;

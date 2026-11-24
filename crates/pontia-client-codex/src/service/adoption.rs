@@ -80,6 +80,9 @@ impl CodexService {
                 Some(&expected_session),
             )
             .await?;
+        let closed = reservation
+            .as_ref()
+            .map(|reservation| reservation.close.clone());
         if let Some(reservation) = reservation {
             if reservation.session != session {
                 return Err(Error::StateConflict(
@@ -95,6 +98,11 @@ impl CodexService {
             Some(guard) => guard,
             None => runtime.lock_session(&session).await,
         };
+        if closed.is_some_and(|closed| *closed.borrow()) {
+            return Err(Error::CapabilityUnavailable(
+                "Codex TUI connection was closed by Session exit".into(),
+            ));
+        }
         if self.root(&session).await? != runtime.root
             || crate::runtime::CodexServerTarget::for_session(&self.pool, &session).await?
                 != runtime.target

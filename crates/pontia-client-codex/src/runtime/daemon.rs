@@ -41,17 +41,7 @@ pub struct DaemonIdentity {
 impl DaemonIdentity {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub fn capture(stream: &UnixStream) -> Result<Self> {
-        let credentials = stream.peer_cred().map_err(protocol_error)?;
-        let pid = credentials
-            .pid()
-            .filter(|pid| *pid > 0)
-            .ok_or_else(|| protocol_error("daemon peer has no process identity"))?;
-        // The daemon is a per-user service. Do not bind another user's process.
-        if credentials.uid() != unsafe { libc::geteuid() } {
-            return Err(protocol_error("daemon belongs to another user"));
-        }
-        let process = pontia_runtime::ProcessFingerprint::capture(pid as u32)
-            .ok_or_else(|| protocol_error("cannot identify Codex server process"))?;
+        let process = peer_process(stream)?;
         Ok(Self {
             instance_id: format!(
                 "codex_{}_{}_{}",
@@ -67,6 +57,20 @@ impl DaemonIdentity {
             "daemon instance verification requires Linux or macOS",
         ))
     }
+}
+
+pub(crate) fn peer_process(stream: &UnixStream) -> Result<pontia_runtime::ProcessFingerprint> {
+    let credentials = stream.peer_cred().map_err(protocol_error)?;
+    let pid = credentials
+        .pid()
+        .filter(|pid| *pid > 0)
+        .ok_or_else(|| protocol_error("socket peer has no process identity"))?;
+    // The daemon is a per-user service. Do not bind another user's process.
+    if credentials.uid() != unsafe { libc::geteuid() } {
+        return Err(protocol_error("socket peer belongs to another user"));
+    }
+    pontia_runtime::ProcessFingerprint::capture(pid as u32)
+        .ok_or_else(|| protocol_error("cannot identify Codex socket peer"))
 }
 
 pub(super) async fn connect_socket(path: &std::path::Path) -> std::io::Result<UnixStream> {
