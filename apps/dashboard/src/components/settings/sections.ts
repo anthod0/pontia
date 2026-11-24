@@ -1,10 +1,10 @@
 import type { MessageKey } from "$lib/i18n";
 import type { Component } from "svelte";
-import BrainIcon from "phosphor-svelte/lib/BrainIcon";
 import FolderIcon from "phosphor-svelte/lib/FolderIcon";
-import RobotIcon from "phosphor-svelte/lib/RobotIcon";
+import NoteIcon from "phosphor-svelte/lib/NoteIcon";
+import ScrollIcon from "phosphor-svelte/lib/ScrollIcon";
 import SlidersHorizontalIcon from "phosphor-svelte/lib/SlidersHorizontalIcon";
-import TerminalWindowIcon from "phosphor-svelte/lib/TerminalWindowIcon";
+import TerminalIcon from "phosphor-svelte/lib/TerminalIcon";
 
 export type SettingsSection = {
   label: MessageKey;
@@ -23,13 +23,13 @@ export const settingsSections: SettingsSection[] = [
   {
     label: "settings.agentClients",
     path: "/settings/clients",
-    icon: TerminalWindowIcon,
+    icon: TerminalIcon,
     match: ["/settings/clients"],
   },
   {
     label: "profiles.title",
     path: "/settings/agent-profiles",
-    icon: RobotIcon,
+    icon: ScrollIcon,
     match: ["/settings/agent-profiles"],
   },
   {
@@ -41,7 +41,7 @@ export const settingsSections: SettingsSection[] = [
   {
     label: "settings.memory",
     path: "/settings/memory",
-    icon: BrainIcon,
+    icon: NoteIcon,
     match: ["/settings/memory"],
   },
 ];
