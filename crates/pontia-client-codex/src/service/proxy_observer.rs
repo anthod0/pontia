@@ -22,15 +22,34 @@ async fn observe(
     root: &std::path::Path,
     observation: Observation,
 ) -> Result<()> {
-    let runtime = CodexRuntime::ensure(root, crate::runtime::CodexServerTarget::User).await?;
-    let connection = runtime.connection().await?;
-    if connection.identity != observation.daemon {
-        return Err(Error::ControlUnknown(
-            "Codex proxy observed a replaced daemon".into(),
-        ));
-    }
+    let runtime = if matches!(observation.event, ObservedEvent::ConnectionClosed(_)) {
+        // A peer departure remains conclusive even if the upstream daemon was lost.
+        let Some(runtime) = CodexRuntime::existing(&root.canonicalize()?).await else {
+            return Ok(());
+        };
+        runtime
+    } else {
+        let runtime = CodexRuntime::ensure(root, crate::runtime::CodexServerTarget::User).await?;
+        if runtime.connection().await?.identity != observation.daemon {
+            return Err(Error::ControlUnknown(
+                "Codex proxy observed a replaced daemon".into(),
+            ));
+        }
+        runtime
+    };
     match observation.event {
+        ObservedEvent::ConnectionClosed(runtimes) => {
+            for (thread, runtime_id) in runtimes {
+                if let Err(error) = service
+                    .end_proxy_runtime(&runtime, &thread, &runtime_id, &observation.daemon)
+                    .await
+                {
+                    tracing::warn!(%thread, %error, "Codex proxy close observation failed");
+                }
+            }
+        }
         ObservedEvent::ThreadOpened {
+            peer,
             runtime_id,
             operation,
             result,
@@ -53,23 +72,13 @@ async fn observe(
                 )
                 .await?;
             service
-                .register_proxy_runtime(&session, &runtime_id)
+                .register_proxy_runtime(&session, &runtime_id, &peer)
                 .await?;
         }
         ObservedEvent::ThreadUnsubscribed { thread, runtime_id } => {
             service
-                .end_proxy_runtime(&runtime, &thread, &runtime_id)
+                .end_proxy_runtime(&runtime, &thread, &runtime_id, &observation.daemon)
                 .await?;
-        }
-        ObservedEvent::ConnectionClosed(runtimes) => {
-            for (thread, runtime_id) in runtimes {
-                if let Err(error) = service
-                    .end_proxy_runtime(&runtime, &thread, &runtime_id)
-                    .await
-                {
-                    tracing::warn!(%thread, %error, "Codex proxy close observation failed");
-                }
-            }
         }
         ObservedEvent::TurnStarted(native) => {
             let Some(binding) = AgentBindingService::new(service.pool.clone())
@@ -94,6 +103,7 @@ async fn observe(
             {
                 return Ok(());
             }
+            let connection = runtime.connection().await?;
             let suspended = service.reload_suspended(session).await?
                 || connection
                     .unloaded_threads

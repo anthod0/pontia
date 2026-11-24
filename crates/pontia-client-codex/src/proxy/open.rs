@@ -9,6 +9,7 @@ use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
 pub(super) struct Prepared {
+    pub runtime: std::sync::Arc<CodexRuntime>,
     pub session: String,
     pub bound: bool,
     pub session_instructions: Option<Value>,
@@ -132,6 +133,7 @@ pub(super) async fn prepare(
         requested["shell_environment_policy"].clone(),
     );
     Ok(Some(Prepared {
+        runtime,
         bound: binding.is_some(),
         session,
         session_instructions,
@@ -140,6 +142,7 @@ pub(super) async fn prepare(
 }
 
 pub(crate) struct Reservation {
+    pub close: tokio::sync::watch::Sender<bool>,
     pub session: String,
     pub bound: tokio::sync::oneshot::Sender<()>,
 }

@@ -11,11 +11,24 @@ use serde_json::json;
 const ROLE: &str = "codex_proxy";
 
 impl CodexService {
+    // A freshly bound proxy has no connections from the previous pontiad instance.
+    pub(super) async fn retire_disconnected_proxy_runtimes(&self) -> Result<()> {
+        let records: Vec<(String, String)> = sqlx::query_as(
+            "SELECT session_id,runtime_id FROM session_runtimes WHERE role=? AND state IN ('starting','running')",
+        ).bind(ROLE).fetch_all(&self.pool).await?;
+        for (session, runtime_id) in records {
+            self.proxy_runtime_fact(&session, &runtime_id, PontiaEventType::RuntimeExited, None)
+                .await?;
+        }
+        Ok(())
+    }
+
     // The caller retains the Session operation lock from adoption through registration.
     pub(super) async fn register_proxy_runtime(
         &self,
         session: &str,
         runtime_id: &str,
+        peer: &pontia_runtime::ProcessFingerprint,
     ) -> Result<()> {
         if SqliteSessionRuntimeRepository::new(self.pool.clone())
             .get(runtime_id)
@@ -28,7 +41,7 @@ impl CodexService {
             PontiaEventType::RuntimeStarting,
             PontiaEventType::RuntimeReady,
         ] {
-            self.proxy_runtime_fact(session, runtime_id, event_type)
+            self.proxy_runtime_fact(session, runtime_id, event_type, Some(peer))
                 .await?;
         }
         Ok(())
@@ -39,6 +52,7 @@ impl CodexService {
         runtime: &CodexRuntime,
         thread: &str,
         runtime_id: &str,
+        daemon: &crate::runtime::daemon::DaemonIdentity,
     ) -> Result<()> {
         let Some(binding) = AgentBindingService::new(self.pool.clone())
             .binding_for_client_session("codex", thread)
@@ -57,9 +71,52 @@ impl CodexService {
         if record.state != "running" {
             return Ok(());
         }
-        self.proxy_runtime_fact(session, runtime_id, PontiaEventType::RuntimeExited)
+        self.proxy_runtime_fact(session, runtime_id, PontiaEventType::RuntimeExited, None)
             .await?;
-        self.finish_proxy_management(runtime, session, thread).await
+        if runtime
+            .connection()
+            .await
+            .is_ok_and(|connection| connection.identity == *daemon)
+        {
+            self.finish_proxy_management(runtime, session, thread)
+                .await?;
+        }
+        Ok(())
+    }
+
+    pub(super) async fn terminate_proxy_peers(
+        &self,
+        runtime: &CodexRuntime,
+        session: &str,
+    ) -> Result<()> {
+        let records = SqliteSessionRuntimeRepository::new(self.pool.clone())
+            .list(session)
+            .await?;
+        let peers = runtime.proxy_peers.attached(session);
+        for peer in &peers {
+            // A native open can already be confirmed while its observation is waiting for this lock.
+            if let Some(record) = records
+                .iter()
+                .find(|record| record.runtime_id == peer.runtime_id && record.state == "running")
+            {
+                let saved = record
+                    .process_fingerprint
+                    .as_deref()
+                    .map(serde_json::from_str::<pontia_runtime::ProcessFingerprint>)
+                    .transpose()?;
+                if saved.as_ref() != Some(&peer.process) {
+                    return Err(Error::ControlUnknown(
+                        "Codex TUI identity differs from its registered runtime".into(),
+                    ));
+                }
+            }
+        }
+        for result in
+            futures_util::future::join_all(peers.iter().map(|peer| peer.terminate())).await
+        {
+            result?;
+        }
+        Ok(())
     }
 
     pub(super) async fn archive_proxy_runtimes(
@@ -103,8 +160,13 @@ impl CodexService {
             .into_iter()
             .filter(|record| record.role == ROLE && record.state == "running")
         {
-            self.proxy_runtime_fact(session, &record.runtime_id, PontiaEventType::RuntimeExited)
-                .await?;
+            self.proxy_runtime_fact(
+                session,
+                &record.runtime_id,
+                PontiaEventType::RuntimeExited,
+                None,
+            )
+            .await?;
             ended = true;
         }
         if ended {
@@ -119,7 +181,12 @@ impl CodexService {
         session: &str,
         runtime_id: &str,
         event_type: PontiaEventType,
+        peer: Option<&pontia_runtime::ProcessFingerprint>,
     ) -> Result<()> {
+        let mut payload = json!({"runtime_id":runtime_id,"role":ROLE});
+        if let Some(peer) = peer {
+            payload["process_fingerprint"] = serde_json::to_string(peer)?.into();
+        }
         self.event_ingest
             .ingest_pontia_event(PontiaEvent::new(
                 session,
@@ -127,7 +194,7 @@ impl CodexService {
                 PontiaEventSource::RuntimeManager,
                 "codex",
                 event_type,
-                json!({"runtime_id":runtime_id,"role":ROLE}),
+                payload,
             ))
             .await?;
         Ok(())

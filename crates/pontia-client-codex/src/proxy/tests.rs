@@ -269,14 +269,6 @@ async fn ephemeral_threads_never_create_runtime_associations() {
         }
         if cli_close {
             client.close(None).await.unwrap();
-            let observation = timeout(Duration::from_secs(3), incoming.recv())
-                .await
-                .unwrap()
-                .unwrap();
-            let ObservedEvent::ConnectionClosed(runtimes) = observation.event else {
-                panic!("expected CLI close")
-            };
-            assert!(runtimes.is_empty());
         } else {
             native.close(None).await.unwrap();
             assert!(receive(&mut client).await.is_close());

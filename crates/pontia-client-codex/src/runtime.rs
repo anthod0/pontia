@@ -75,6 +75,7 @@ pub struct CodexRuntime {
     pub target: CodexServerTarget,
     connection: Arc<Connection>,
     operations: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
+    pub(crate) proxy_peers: Arc<crate::proxy::peers::Peers>,
     subscriptions: Mutex<HashMap<String, (SubscriptionState, u64)>>,
     subscription_sequence: AtomicU64,
     pub(crate) instructions_service: OnceLock<crate::instructions::CodexInstructions>,
@@ -145,8 +146,7 @@ impl CodexRuntime {
         .await)
     }
 
-    #[cfg(test)]
-    pub async fn existing(root: &Path) -> Option<Arc<Self>> {
+    pub(crate) async fn existing(root: &Path) -> Option<Arc<Self>> {
         Self::existing_target(root, CodexServerTarget::User).await
     }
 
@@ -214,8 +214,13 @@ impl CodexRuntime {
             root: root.clone(),
             target,
             socket_path: endpoint.socket,
-            connection,
             operations,
+            proxy_peers: previous
+                .as_ref()
+                .filter(|old| old.connection.identity == connection.identity)
+                .map(|old| old.proxy_peers.clone())
+                .unwrap_or_default(),
+            connection,
             subscriptions: Mutex::new(HashMap::new()),
             subscription_sequence: AtomicU64::new(1),
             instructions_service: OnceLock::new(),

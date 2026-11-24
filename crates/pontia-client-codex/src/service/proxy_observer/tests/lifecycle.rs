@@ -247,7 +247,12 @@ async fn repeated_resume_reuses_runtime_and_reconnect_gets_a_new_runtime() {
         restored.start_command.is_none()
             && restored.tmux_socket_path.is_none()
             && restored.tmux_pane_id.is_none()
-            && restored.process_fingerprint.is_none()
+    );
+    let peer: pontia_runtime::ProcessFingerprint =
+        serde_json::from_str(restored.process_fingerprint.as_deref().unwrap()).unwrap();
+    assert_eq!(
+        Some(peer),
+        pontia_runtime::ProcessFingerprint::capture(std::process::id())
     );
     cli.close(None).await.unwrap();
     f.session(native, "exited").await;
@@ -320,43 +325,194 @@ async fn close_waits_for_queued_registration_and_skips_unadopted_threads() {
     f.stop().await;
 }
 
+// Keep a duplicate of the TUI socket in the forwarding child. Terminating just
+// the registered PID cannot disconnect this transport or prevent a stale resume.
+async fn tui_process(f: &Fixture) -> (tokio::process::Child, crate::runtime::protocol::Socket) {
+    let path = f
+        .root
+        .path()
+        .join(pontia_core::ids::new_runtime_id().to_string());
+    let listener = UnixListener::bind(&path).unwrap();
+    let child = tokio::process::Command::new("python3")
+        .arg("-c")
+        .arg(
+            r#"
+import os, select, socket, sys
+test = socket.socket(socket.AF_UNIX)
+test.connect(sys.argv[1])
+proxy = socket.socket(socket.AF_UNIX)
+proxy.connect(sys.argv[2])
+if os.fork():
+    os.wait()
+    sys.exit()
+while True:
+    for source in select.select([test, proxy], [], [])[0]:
+        data = source.recv(65536)
+        if not data:
+            sys.exit()
+        (proxy if source == test else test).sendall(data)
+"#,
+        )
+        .arg(path)
+        .arg(crate::proxy::socket_path(f.root.path()))
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let wire = tokio::time::timeout(Duration::from_secs(5), async {
+        let stream = listener.accept().await.unwrap().0;
+        tokio_tungstenite::client_async("ws://localhost/", stream)
+            .await
+            .unwrap()
+            .0
+    })
+    .await
+    .unwrap();
+    (child, wire)
+}
+
 #[tokio::test]
-async fn archive_ends_all_proxy_runtimes_even_during_dashboard_exit() {
-    for dashboard in [false, true] {
-        let f = Fixture::new().await;
-        let mut cli = f.client().await;
-        let response = rpc(&mut cli, "thread/fork", json!({})).await;
-        let native = response["result"]["thread"]["id"].as_str().unwrap();
-        let session = f.session(native, "idle").await;
-        let mut second = f.client().await;
-        rpc(&mut second, "thread/resume", json!({"threadId":native})).await;
-        f.runtimes(&session, 2, 0).await;
-        if dashboard {
-            f.app
-                .session_commands()
-                .terminate_session(&session)
-                .await
-                .unwrap();
-        } else {
-            rpc(&mut cli, "thread/archive", json!({"threadId":native})).await;
-        }
-        f.session(native, "exited").await;
-        f.runtimes(&session, 0, 2).await;
-        assert_eq!(f.exit_events(&session).await, 1);
-        assert_eq!(
-            f.management_calls(native).await,
-            if dashboard {
-                vec!["thread/archive", "thread/unarchive"]
-            } else {
-                vec!["thread/unsubscribe"]
-            }
+async fn dashboard_exit_terminates_attached_tuis_and_revokes_their_inherited_connections() {
+    let f = Fixture::new().await;
+    let (mut first, mut cli) = tui_process(&f).await;
+    let response = rpc(&mut cli, "thread/fork", json!({"cwd":f.root.path()})).await;
+    let native = response["result"]["thread"]["id"].as_str().unwrap();
+    let session = f.session(native, "idle").await;
+    let (mut second, mut other) = tui_process(&f).await;
+    rpc(&mut other, "thread/resume", json!({"threadId":native})).await;
+    let records = f.runtimes(&session, 2, 0).await;
+    for child in [&first, &second] {
+        let process = pontia_runtime::ProcessFingerprint::capture(child.id().unwrap()).unwrap();
+        assert!(
+            records
+                .iter()
+                .any(|r| r.process_fingerprint == Some(serde_json::to_string(&process).unwrap()))
         );
-        rpc(&mut cli, "thread/unarchive", json!({"threadId":native})).await;
-        rpc(&mut cli, "thread/resume", json!({"threadId":native})).await;
-        assert_eq!(f.session(native, "idle").await, session);
-        f.runtimes(&session, 1, 1).await;
-        f.stop().await;
     }
+    let (mut detached, mut detached_wire) = tui_process(&f).await;
+    rpc(
+        &mut detached_wire,
+        "thread/resume",
+        json!({"threadId":native}),
+    )
+    .await;
+    f.runtimes(&session, 3, 0).await;
+    rpc(
+        &mut detached_wire,
+        "thread/unsubscribe",
+        json!({"threadId":native}),
+    )
+    .await;
+    f.runtimes(&session, 2, 1).await;
+    let runtime = CodexRuntime::existing(f.root.path()).await.unwrap();
+    let old_connection = runtime.proxy_peers.attached(&session)[0].close.clone();
+    f.app
+        .session_commands()
+        .terminate_session(&session)
+        .await
+        .unwrap();
+    for child in [&mut first, &mut second] {
+        use std::os::unix::process::ExitStatusExt;
+        assert_eq!(child.wait().await.unwrap().signal(), Some(libc::SIGTERM));
+    }
+    for wire in [&mut cli, &mut other] {
+        let _ = wire
+            .send(Message::text(
+                json!({"id":2,"method":"thread/resume","params":{"threadId":native}}).to_string(),
+            ))
+            .await;
+        let reply = tokio::time::timeout(Duration::from_secs(2), wire.next())
+            .await
+            .unwrap();
+        assert!(!matches!(reply, Some(Ok(Message::Text(_)))));
+    }
+    assert!(detached.try_wait().unwrap().is_none());
+    f.runtimes(&session, 0, 3).await;
+    assert_eq!(f.session(native, "exited").await, session);
+    assert_eq!(f.exit_events(&session).await, 1);
+    assert_eq!(
+        f.management_calls(native).await,
+        ["thread/archive", "thread/unarchive"]
+    );
+    // A delayed receipt from the revoked connection must be discarded even if
+    // the native thread is loaded again before the observer reaches the receipt.
+    let connection = runtime.connection().await.unwrap();
+    let mut unmanaged = crate::runtime::protocol::open(&runtime.socket_path)
+        .await
+        .unwrap();
+    let loaded = rpc(&mut unmanaged, "thread/resume", json!({"threadId":native})).await;
+    let (bound, _) = tokio::sync::oneshot::channel();
+    let observation = Observation {
+        daemon: connection.identity.clone(),
+        event: ObservedEvent::ThreadOpened {
+            peer: serde_json::from_str(records[0].process_fingerprint.as_deref().unwrap()).unwrap(),
+            runtime_id: records[0].runtime_id.clone(),
+            operation: crate::proxy::ThreadOperation::Resume,
+            result: Box::new(loaded["result"].clone()),
+            params: json!({"threadId":native}),
+            session_instructions: None,
+            reservation: Some(crate::proxy::open::Reservation {
+                session: session.clone(),
+                close: old_connection,
+                bound,
+            }),
+        },
+    };
+    let service = CodexService::new(f.app.event_ingest_service());
+    assert!(matches!(
+        observe(&service, f.root.path(), observation).await,
+        Err(Error::CapabilityUnavailable(_))
+    ));
+    assert_eq!(f.session(native, "exited").await, session);
+    let mut fresh = f.client().await;
+    rpc(&mut fresh, "thread/resume", json!({"threadId":native})).await;
+    assert_eq!(f.session(native, "idle").await, session);
+    f.runtimes(&session, 1, 3).await;
+    f.stop().await;
+}
+
+#[tokio::test]
+async fn dashboard_exit_rejects_a_mismatched_tui_fingerprint() {
+    let f = Fixture::new().await;
+    let (mut child, mut cli) = tui_process(&f).await;
+    let response = rpc(&mut cli, "thread/fork", json!({"cwd":f.root.path()})).await;
+    let native = response["result"]["thread"]["id"].as_str().unwrap();
+    let session = f.session(native, "idle").await;
+    f.runtimes(&session, 1, 0).await;
+    sqlx::query("UPDATE session_runtimes SET process_fingerprint=json_set(process_fingerprint,'$.start_time_seconds',0) WHERE session_id=?")
+        .bind(&session).execute(&f.app.db()).await.unwrap();
+    assert!(
+        f.app
+            .session_commands()
+            .terminate_session(&session)
+            .await
+            .is_err()
+    );
+    assert!(child.try_wait().unwrap().is_none());
+    assert!(f.management_calls(native).await.is_empty());
+    drop(cli);
+    f.stop().await;
+}
+
+#[tokio::test]
+async fn native_archive_ends_all_proxy_runtimes_and_permits_resubscription() {
+    let f = Fixture::new().await;
+    let mut cli = f.client().await;
+    let response = rpc(&mut cli, "thread/fork", json!({})).await;
+    let native = response["result"]["thread"]["id"].as_str().unwrap();
+    let session = f.session(native, "idle").await;
+    let mut second = f.client().await;
+    rpc(&mut second, "thread/resume", json!({"threadId":native})).await;
+    f.runtimes(&session, 2, 0).await;
+    rpc(&mut cli, "thread/archive", json!({"threadId":native})).await;
+    f.session(native, "exited").await;
+    f.runtimes(&session, 0, 2).await;
+    assert_eq!(f.exit_events(&session).await, 1);
+    assert_eq!(f.management_calls(native).await, ["thread/unsubscribe"]);
+    rpc(&mut cli, "thread/unarchive", json!({"threadId":native})).await;
+    rpc(&mut cli, "thread/resume", json!({"threadId":native})).await;
+    assert_eq!(f.session(native, "idle").await, session);
+    f.runtimes(&session, 1, 1).await;
+    f.stop().await;
 }
 
 #[tokio::test]

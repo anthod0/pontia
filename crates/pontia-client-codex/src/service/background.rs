@@ -34,6 +34,9 @@ impl ClientService for CodexBackgroundService {
             let observer = observer(CodexServerTarget::User);
             observer.prepare().await?;
             let proxy = crate::proxy::Proxy::bind(state.pontia_home()).await?;
+            super::CodexService::new(state.event_ingest_service())
+                .retire_disconnected_proxy_runtimes()
+                .await?;
             tokio::spawn(background.run(state.shutdown().subscribe()));
             tokio::spawn(observer.run(state.shutdown().subscribe()));
             let (observations, incoming) = tokio::sync::mpsc::channel(128);
