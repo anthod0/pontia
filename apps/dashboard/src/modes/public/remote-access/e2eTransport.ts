@@ -327,10 +327,16 @@ export function createRemoteConnection(
     }
     if (response.status === 401 && !reauthorized) {
       request.free();
+      const method = (init.method ?? "GET").toUpperCase();
+      // Edge emits JSON for an admission rejection and strips JSON content types from relayed responses.
+      const replay =
+        method === "GET" ||
+        method === "HEAD" ||
+        (response.headers.get("Content-Type") === "application/json" &&
+          (await response.json().catch(() => null))?.error === "invalid_admission_token");
       // A delayed rejection must not invalidate a replacement session/handshake.
       if (session === active) invalidateE2eSession();
-      const method = (init.method ?? "GET").toUpperCase();
-      if (method === "GET" || method === "HEAD") return e2eFetch(path, init, true);
+      if (replay) return e2eFetch(path, init, true);
       await connectPublicDevice(signal);
       throw new Error("Device connection renewed; the request was not replayed");
     }
