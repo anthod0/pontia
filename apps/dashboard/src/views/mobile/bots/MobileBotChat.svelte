@@ -126,7 +126,7 @@
     <div
       bind:clientHeight={dockHeight}
       use:chromeMetrics={'--mobile-footer-h'}
-      class="pointer-events-none absolute inset-x-0 bottom-0 z-10 [&>div:not(:first-child)]:pointer-events-auto"
+      class="bot-chat-dock pointer-events-none absolute inset-x-0 bottom-0 z-10 [&>div:not(:first-child)]:pointer-events-auto"
     >
       <div class="pointer-events-none flex items-center justify-between gap-1">
         {#if timeline.status.kind !== 'idle'}

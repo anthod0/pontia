@@ -413,6 +413,18 @@ body {
   }
 }
 
+.bot-chat-dock {
+  background: var(--surface);
+}
+.bot-chat-dock::before {
+  content: "";
+  position: absolute;
+  inset: auto 0 100%;
+  height: 20px;
+  background: linear-gradient(to bottom, transparent, var(--surface));
+  pointer-events: none;
+}
+
 .mobile-body:has(.mobile-bot-chat) {
   padding-top: 0;
 }

@@ -43,7 +43,7 @@
   <!-- The feed scrolls beneath the transparent top bar, like the Session chat page. -->
   <section class="mx-auto -mt-12 flex h-dvh max-w-3xl flex-col" aria-label={timeline.bot.name}>
     <BotConversation {chat} oncontext={id=>panel?.viewContext(id)} ontodos={()=>panel?.viewTodos()} />
-    <div class="shrink-0 px-1 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
+    <div class="bot-chat-dock relative shrink-0 px-1 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
       {#if timeline.status.kind === 'processing'}
         {#if !chat.typing}
           <p class="mb-2 flex items-start gap-2 px-2 text-sm leading-5 text-muted-foreground" role="status">
