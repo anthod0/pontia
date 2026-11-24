@@ -5,9 +5,10 @@ export async function launchLocalhostPreview(
   target: { port: number; redirect: string },
   signal: AbortSignal,
   loadingMessage: string,
+  frame?: HTMLIFrameElement,
 ) {
   const name = `pontia-preview-${crypto.randomUUID()}`;
-  const popup = window.open("", name);
+  const popup = frame ? null : window.open("", name);
   if (popup) {
     popup.opener = null;
     popup.document.body.textContent = loadingMessage;
@@ -15,32 +16,35 @@ export async function launchLocalhostPreview(
   try {
     const { origin, token } = await requestPreviewToken(device, target.port, signal);
     function submit() {
-      if (signal.aborted) return;
-      const form = document.createElement("form");
+      if (signal.aborted || (frame && !frame.isConnected)) return;
+      // The initial about:blank frame inherits the Dashboard origin for the exchange.
+      const destination = frame ? frame.contentDocument! : document;
+      const form = destination.createElement("form");
       form.method = "POST";
       form.action = origin + "/__pontia_auth";
-      form.target = popup ? name : "_blank";
-      if (!popup) form.rel = "noopener";
+      if (popup) form.target = name;
+      else if (!frame) form.target = "_blank";
+      if (!frame && !popup) form.rel = "noopener";
       form.hidden = true;
       for (const [key, value] of [
         ["token", token],
         ["redirect", target.redirect],
       ]) {
-        const input = document.createElement("input");
+        const input = destination.createElement("input");
         input.type = "hidden";
         input.name = key;
         input.value = value;
         form.append(input);
       }
-      document.body.append(form);
+      destination.body.append(form);
       try {
         form.submit();
       } finally {
         form.remove();
       }
     }
-    if (!popup) return submit;
-    if (!popup.closed) submit();
+    if (!frame && !popup) return submit;
+    if (!popup?.closed) submit();
   } catch (error) {
     popup?.close();
     throw error;

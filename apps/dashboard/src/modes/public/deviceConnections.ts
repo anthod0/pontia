@@ -79,13 +79,19 @@ export function createDeviceConnections(remote: RemoteAccess) {
     publish();
   }
 
-  async function openPreview(entry: Entry, target: LocalhostPreviewTarget, signal: AbortSignal) {
+  async function openPreview(
+    entry: Entry,
+    target: LocalhostPreviewTarget,
+    signal: AbortSignal,
+    frame?: HTMLIFrameElement,
+  ) {
     try {
       const submit = await remote.launchLocalhostPreview(
         entry,
         target,
         signal,
         translate("preview.loading"),
+        frame,
       );
       if (submit) {
         toast.info(translate("preview.popupBlocked"), {
@@ -122,8 +128,8 @@ export function createDeviceConnections(remote: RemoteAccess) {
       await connection.connect();
       const id = await connection.uploadStorageScope();
       if (connection.signal.aborted) return;
-      const access = createApiAccess(connection, (target) =>
-        openPreview(entry, target, connection.signal),
+      const access = createApiAccess(connection, (target, frame) =>
+        openPreview(entry, target, connection.signal, frame),
       );
       const runtime = new DeviceRuntime(id, access, entry.name);
       entry.runtime = runtime;

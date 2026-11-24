@@ -61,6 +61,45 @@ test("public Markdown link opens a tab before requesting a ticket and posts to t
   expect(document.querySelector("form")).toBeNull();
 });
 
+test.each([true, false])(
+  "posts the ticket only while the preview frame is mounted (%s)",
+  async (mounted) => {
+    const frame = document.createElement("iframe");
+    document.body.append(frame);
+    const open = vi.spyOn(window, "open");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(response)));
+    const post = vi
+      .spyOn(
+        Object.getPrototypeOf(frame.contentDocument!.createElement("form")) as HTMLFormElement,
+        "submit",
+      )
+      .mockImplementation(function (this: HTMLFormElement) {
+        expect(this.target).toBe("");
+        expect(this.ownerDocument).toBe(frame.contentDocument);
+        expect(this.action).toBe(origin + "/__pontia_auth");
+        expect(Object.fromEntries(new FormData(this))).toEqual({
+          token: "secret",
+          redirect: "/app",
+        });
+      });
+    try {
+      const launch = launchLocalhostPreview(
+        device,
+        { port: 5173, redirect: "/app" },
+        signal,
+        "Loading",
+        frame,
+      );
+      if (!mounted) frame.remove();
+      expect(await launch).toBeUndefined();
+      expect(open).not.toHaveBeenCalled();
+      expect(post).toHaveBeenCalledTimes(mounted ? 1 : 0);
+    } finally {
+      frame.remove();
+    }
+  },
+);
+
 test("a blocked popup provides a second user gesture that submits without another request", async () => {
   vi.spyOn(window, "open").mockReturnValue(null);
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(response)));

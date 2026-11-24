@@ -8,31 +8,58 @@ const browser = await chromium.connectOverCDP("http://127.0.0.1:9222");
 const [context] = browser.contexts();
 context.setDefaultTimeout(30_000);
 const dashboard = await context.newPage();
+await dashboard.setViewportSize({ width: 1600, height: 900 });
 const requests = [];
 context.on("request", request => requests.push(request.url()));
 await dashboard.goto(`${dashboardUrl}/chat/${session}`);
-const resultFile = dashboard.locator(`button[title$="preview-${marker}.txt"]`);
+const resultFile = dashboard.locator(`button[title$="preview-${marker}.txt"]`).filter({ hasText: "Result" });
 await resultFile.click({ timeout: 90_000 });
 await dashboard.locator("[data-file-preview-content]").getByText(marker, { exact: true }).waitFor();
 
 async function openPreview(port, status) {
   const path = "/page?a=1#sec";
   const origin = `https://${port}-${device.replaceAll("-", "")}.docker-e2e.p.pontia.dev`;
-  const [response, popup, exchange] = await Promise.all([
+  const [response, exchange] = await Promise.all([
     context.waitForEvent("response", r => r.url().split("#")[0] === origin + "/page?a=1"),
-    context.waitForEvent("page"),
     context.waitForEvent("response", r => r.url() === origin + "/__pontia_auth"),
     dashboard.locator(`a[href="http://localhost:${port}${path}"]`).last().click(),
   ]);
   assert.equal(exchange.status(), 303);
   assert.equal(exchange.request().method(), "POST");
   assert.equal(response.status(), status);
-  await popup.waitForURL(origin + path);
+  assert.equal(response.headers()["content-security-policy"], "frame-ancestors " + new URL(dashboardUrl).origin);
+  const token = new URLSearchParams(exchange.request().postData()).get("token");
+  assert.ok(token && requests.every(url => !url.includes(token)), "A URL contained the iframe credential");
+  const iframe = dashboard.locator("[data-session-panel] iframe");
+  await iframe.contentFrame().locator("body").waitFor();
+  const frame = await (await iframe.elementHandle()).contentFrame();
+  await frame.waitForURL(origin + path);
+  if (status !== 200) return frame;
+  assert.deepEqual(await checkStreams(frame), [["vite-hmr", "updated:change"], "acknowledged"]);
+  const mobile = dashboard.getByRole("button", { name: "Mobile viewport" });
+  const width = await frame.evaluate(() => innerWidth);
+  await mobile.click();
+  assert.ok(width >= 1024);
+  assert.equal(await frame.evaluate(() => innerWidth), 375);
+  await mobile.click();
+  const refresh = context.waitForEvent("response", r => r.url().split("#")[0] === origin + "/page?a=1");
+  await dashboard.locator("[data-session-panel]").getByRole("button", { name: "Refresh" }).click();
+  assert.equal((await refresh).status(), 200);
+  const address = dashboard.getByRole("textbox", { name: "Preview address" });
+  await address.fill("/page?edited=1");
+  await Promise.all([
+    dashboard.waitForEvent("framenavigated", { predicate: f => f.url() === origin + "/page?edited=1" }),
+    address.press("Enter"),
+  ]);
+  const [popup] = await Promise.all([
+    context.waitForEvent("page"),
+    dashboard.getByRole("button", { name: "Open in new tab" }).click(),
+  ]);
+  await popup.waitForURL(origin + "/page?edited=1");
   const cdp = await context.newCDPSession(popup);
   const history = await cdp.send("Page.getNavigationHistory");
   await cdp.detach();
-  const token = new URLSearchParams(exchange.request().postData()).get("token");
-  assert.ok(token && [...requests, ...history.entries.map(entry => entry.url)]
+  assert.ok([...requests, ...history.entries.map(entry => entry.url)]
     .every(url => !url.includes(token)), "A URL contained the preview credential");
   return popup;
 }

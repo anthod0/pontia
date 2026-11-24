@@ -64,6 +64,10 @@ impl Preview {
         assert_eq!(res.headers()[header::CACHE_CONTROL], "no-store");
         assert_eq!(res.headers()[header::REFERRER_POLICY], "no-referrer");
         assert_eq!(res.headers()[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
+        assert_eq!(
+            res.headers()[header::CONTENT_SECURITY_POLICY],
+            format!("frame-ancestors {DASHBOARD}")
+        );
         let cookie = res.headers()[header::SET_COOKIE].to_str().unwrap();
         let (cookie, attrs) = cookie.split_once("; ").unwrap();
         assert_eq!(cookie, format!("__Host-pontia_preview={token}"));

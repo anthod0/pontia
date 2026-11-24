@@ -7,6 +7,7 @@
   import { deviceContext } from '../../../../device/context'
   import type { DeviceRuntime } from '../../../../device/runtime'
   import { parseLocalhostPreviewTarget } from '$lib/localhostPreview'
+  import { useLocalhostPreview } from '../../../../components/chat/localhostPreviewContext'
   import LocalhostPreviewLink from './localhost-preview-link.svelte'
   import MarkdownCodeBlock from './markdown-code-block.svelte'
   import LocalFileLink from './local-file-link.svelte'
@@ -30,6 +31,7 @@
 
 <script lang="ts">
   const device = getContext<DeviceRuntime | undefined>(deviceContext)
+  const openPreview = useLocalhostPreview() ?? device?.access.openLocalhostPreview
   let {
     content,
     markdown = false,
@@ -58,13 +60,13 @@
     <SvelteMarkdown source={content} {streaming} {streamId} {renderers}>
       {#snippet link({ href, title, children })}
         {@const local = sessionId ? resolveLocalFileLink(href, linkBase) : null}
-        {@const preview = device?.access.openLocalhostPreview && parseLocalhostPreviewTarget(href)}
+        {@const preview = openPreview && parseLocalhostPreviewTarget(href)}
         {#if sessionId && local}
           {#key `${sessionId}:${local.path}#${local.anchor}`}
             <LocalFileLink {sessionId} path={local.path} anchor={local.anchor} {title} {children} />
           {/key}
-        {:else if preview && device?.access.openLocalhostPreview}
-          <LocalhostPreviewLink target={preview} open={device.access.openLocalhostPreview} {title} {children} />
+        {:else if preview && openPreview}
+          <LocalhostPreviewLink target={preview} open={openPreview} {title} {children} />
         {:else}
           <a {href} {title} target="_blank" rel="noopener noreferrer">
             {@render children?.()}

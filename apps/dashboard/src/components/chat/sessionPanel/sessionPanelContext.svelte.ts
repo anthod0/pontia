@@ -1,4 +1,5 @@
 import { getContext, setContext, untrack } from "svelte";
+import type { LocalhostPreviewTarget } from "$lib/localhostPreview";
 import { SidePanelOpen } from "$lib/sidePanelOpen.svelte";
 import { PersistedState } from "$lib/storage";
 import type { RecentFile } from "$lib/botRecentFiles";
@@ -35,6 +36,7 @@ export class SessionPanel {
   source = $state.raw<SessionPanelSource | null>(null);
   /** The last Session shown, kept while the next session page loads. */
   #last: SessionPanelSource | null = null;
+  preview = $state.raw<LocalhostPreviewTarget | null>(null);
   /** The file previewed in the Files tab. */
   file = $state.raw<FilePreviewTarget | null>(null);
   /** What the Git tab shows for the Session's Workspace. */
@@ -63,7 +65,10 @@ export class SessionPanel {
   attach(source: SessionPanelSource): () => void {
     untrack(() => {
       const last = this.#last;
-      if (last?.device !== source.device || last.sessionId !== source.sessionId) this.file = null;
+      if (last?.device !== source.device || last.sessionId !== source.sessionId) {
+        this.file = null;
+        this.preview = null;
+      }
       if (last?.device !== source.device || last.workspaceId !== source.workspaceId) {
         this.git.reset();
       }
@@ -84,10 +89,11 @@ export class SessionPanel {
 
   /** Opens the Git tab, or closes the panel when it already shows. */
   toggleGit(): void {
-    if (this.open && this.tab === "git") {
+    if (this.open && !this.preview && this.tab === "git") {
       this.close();
       return;
     }
+    this.preview = null;
     this.tab = "git";
     this.#show(true);
   }
@@ -97,6 +103,11 @@ export class SessionPanel {
     this.focusPending = false;
   }
 
+  openPreview(target: LocalhostPreviewTarget) {
+    this.preview = { ...target };
+    this.#show(false);
+  }
+
   /** Previews a file in the Files tab. This is where local file links in the chat open. */
   openFile(target: FilePreviewTarget): void {
     const recent = this.recentFiles(target.device);
@@ -104,6 +115,7 @@ export class SessionPanel {
       sessionId: target.sessionId,
       path: target.path,
     });
+    this.preview = null;
     this.file = target;
     this.tab = "files";
     this.#show(false);

@@ -10,6 +10,7 @@
   import * as Empty from '$lib/components/ui/empty/index.js'
   import * as Tabs from '$lib/components/ui/tabs/index.js'
   import { sessionRecentFiles, withoutSessionRecentFiles } from '$lib/sessionRecentFiles'
+  import LocalhostPreviewPanel from '../LocalhostPreviewPanel.svelte'
   import FilePreviewPanel from '../FilePreviewPanel.svelte'
   import FilePreviewResizer from '../FilePreviewResizer.svelte'
   import RecentFileList from '../files/RecentFileList.svelte'
@@ -40,6 +41,9 @@
 
 <SidePanel open={panel.open} close={() => panel.close()} bind:ref={element} tabindex={-1} data-session-panel aria-label={$t('nav.sidebar')} onkeydown={(event) => git?.keydown(event)}>
   <FilePreviewResizer />
+  {#if panel.preview}
+    {#key panel.preview}<LocalhostPreviewPanel target={panel.preview} access={device.access} onclose={() => { panel.preview = null }} />{/key}
+  {:else}
   <Tabs.Root bind:value={() => panel.tab, next => { panel.tab = next as SessionPanelTab }} class="min-h-0 flex-1 gap-0">
     <header class="flex h-12 shrink-0 items-center justify-between gap-1 border-b px-2">
       <Tabs.List variant="line" aria-label={$t('nav.sidebar')} class="h-full gap-0">
@@ -92,4 +96,5 @@
       {/if}
     </Tabs.Content>
   </Tabs.Root>
+  {/if}
 </SidePanel>

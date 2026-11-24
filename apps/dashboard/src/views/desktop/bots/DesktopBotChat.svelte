@@ -5,6 +5,7 @@
   import MessageComposer from '../../../components/chat/MessageComposer.svelte'
   import BotAvatar from '../../../components/bots/BotAvatar.svelte'
   import BotChatSkeleton from '../../../components/bots/BotChatSkeleton.svelte'
+  import { provideLocalhostPreview } from '../../../components/chat/localhostPreviewContext'
   import { provideFilePreviewNavigator } from '../../../components/chat/filePreviewContext'
   import BotQuoteBlock from '../../../components/bots/BotQuoteBlock.svelte'
   import DesktopBotPanel from './DesktopBotPanel.svelte'
@@ -13,6 +14,7 @@
   let {chat}: {chat:BotChatController} = $props()
   const timeline = $derived(chat.timeline)
   let panel = $state<DesktopBotPanel>()
+  provideLocalhostPreview(target => panel?.openPreview(target))
   provideFilePreviewNavigator({open: file => panel?.openFile(file)})
   // The feed stays usable after a failed refresh, so the error stays up until a refresh succeeds.
   $effect(() => {

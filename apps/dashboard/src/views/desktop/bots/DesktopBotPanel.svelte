@@ -26,7 +26,9 @@
   import { entryQuote, entryText, parseQuotedMessage, plainText, quoteSummary, type BotQuote } from '$lib/botQuote'
   import type { Bot, BotMessage } from '../../../api/types'
   import { useDeviceRuntime } from '../../../device/context'
+  import type { LocalhostPreviewTarget } from '$lib/localhostPreview'
   import type { FilePreviewTarget } from '../../../components/chat/filePreviewContext'
+  import LocalhostPreviewPanel from '../../../components/chat/LocalhostPreviewPanel.svelte'
   import FilePreviewPanel from '../../../components/chat/FilePreviewPanel.svelte'
   import FilePreviewResizer from '../../../components/chat/FilePreviewResizer.svelte'
   import BotAvatar from '../../../components/bots/BotAvatar.svelte'
@@ -57,6 +59,7 @@
   // The panel stays open or closed across Bot chats, like its tab.
   const panel = new SidePanelOpen('pontia.botPanelOpen')
   const tab = createPanelTab()
+  let preview = $state.raw<LocalhostPreviewTarget | null>(null)
   let file = $state.raw<FilePreviewTarget | null>(null)
   // The panel lives as long as its Bot chat page, which is recreated for another Bot.
   // svelte-ignore state_referenced_locally
@@ -76,7 +79,13 @@
     staleTime: 0,
   }), () => device.queryClient)
 
+  export function openPreview(target: LocalhostPreviewTarget) {
+    preview = { ...target }
+    panel.current = true
+  }
+
   export function openFile(target: FilePreviewTarget) {
+    preview = null
     file = target
     recentFiles.current = withRecentFile(recentFiles.current, { sessionId: target.sessionId, path: target.path })
     tab.current = 'files'
@@ -84,12 +93,14 @@
   }
 
   export function viewContext(id: string) {
+    preview = null
     selected = id
     tab.current = 'context'
     panel.current = true
   }
 
   export function viewTodos() {
+    preview = null
     tab.current = 'todo'
     panel.current = true
   }
@@ -236,6 +247,9 @@
 
 <SidePanel open={panel.current} close={() => panel.current = false} data-bot-chat-panel aria-label={$t('nav.sidebar')}>
   <FilePreviewResizer />
+  {#if preview}
+    {#key preview}<LocalhostPreviewPanel target={preview} access={device.access} onclose={() => { preview = null }} />{/key}
+  {:else}
   <Tabs.Root bind:value={() => tab.current, next => { tab.current = next as PanelTab }} class="min-h-0 flex-1 gap-0">
     <header class="flex h-12 shrink-0 items-center justify-between gap-1 border-b px-2">
       <Tabs.List variant="line" aria-label={$t('nav.sidebar')} class="h-full min-w-0 gap-0">
@@ -337,4 +351,5 @@
       </div>
     </Tabs.Content>
   </Tabs.Root>
+  {/if}
 </SidePanel>

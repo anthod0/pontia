@@ -5,6 +5,10 @@
   import SessionInteractions from '../../../components/chat/SessionInteractions.svelte'
   import type { SessionChatController } from '../../../features/sessions/sessionChat.svelte'
   import SessionFeed from '../../shared/sessions/SessionFeed.svelte'
+  import { provideLocalhostPreview } from '../../../components/chat/localhostPreviewContext'
+  import { useSessionPanel } from '../../../components/chat/sessionPanel/sessionPanelContext.svelte'
+  const panel = useSessionPanel()
+  if (panel) provideLocalhostPreview(target => panel.openPreview(target))
   let composerHeight = $state(180)
   let { chat }: { chat: SessionChatController } = $props()
   const chatDraft = $derived(chat.chatDraft)

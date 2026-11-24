@@ -119,10 +119,35 @@ async fn dispatch(State(hosts): State<Hosts>, req: Request) -> Response {
     let Some(target) = Target::parse(label) else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    if req.uri().path() == "/__pontia_auth" {
-        return auth::exchange(&hosts.edge, target, req).await;
-    }
-    relay(&hosts.edge, target, auth, req).await
+    let mut response = if req.uri().path() == "/__pontia_auth" {
+        auth::exchange(&hosts.edge, target, req).await
+    } else {
+        relay(&hosts.edge, target, auth, req).await
+    };
+    restrict_embedding(response.headers_mut(), &hosts.edge.origins.dashboard);
+    response
+}
+
+fn restrict_embedding(headers: &mut axum::http::HeaderMap, dashboard: &str) {
+    // Browsers ignore X-Frame-Options when an enforced frame-ancestors policy exists.
+    let denies_dashboard = headers
+        .get_all(header::X_FRAME_OPTIONS)
+        .iter()
+        .any(|value| {
+            value.as_bytes().split(|&byte| byte == b',').any(|option| {
+                let option = option.trim_ascii();
+                option.eq_ignore_ascii_case(b"deny") || option.eq_ignore_ascii_case(b"sameorigin")
+            })
+        });
+    let ancestor = if denies_dashboard {
+        "'none'"
+    } else {
+        dashboard
+    };
+    headers.append(
+        header::CONTENT_SECURITY_POLICY,
+        format!("frame-ancestors {ancestor}").parse().unwrap(),
+    );
 }
 
 fn error(status: StatusCode, navigation: bool, message: &str) -> Response {
@@ -284,6 +309,38 @@ async fn legacy_error(response: Response) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn embedding_requires_dashboard_and_preserves_application_restrictions() {
+        let dashboard = "https://app.pontia.dev";
+        for (options, ancestor) in [
+            (None, dashboard),
+            (Some("DENY"), "'none'"),
+            (Some("SameOrigin"), "'none'"),
+        ] {
+            let mut headers = axum::http::HeaderMap::new();
+            headers.insert(
+                header::CONTENT_SECURITY_POLICY,
+                "frame-ancestors 'self'; script-src 'self'".parse().unwrap(),
+            );
+            if let Some(options) = options {
+                headers.insert(header::X_FRAME_OPTIONS, options.parse().unwrap());
+            }
+            restrict_embedding(&mut headers, dashboard);
+            let policies: Vec<_> = headers
+                .get_all(header::CONTENT_SECURITY_POLICY)
+                .iter()
+                .map(|v| v.to_str().unwrap())
+                .collect();
+            assert_eq!(
+                policies,
+                [
+                    "frame-ancestors 'self'; script-src 'self'",
+                    &format!("frame-ancestors {ancestor}")
+                ]
+            );
+        }
+    }
 
     #[test]
     fn authority_requires_a_single_matching_host_and_port() {
