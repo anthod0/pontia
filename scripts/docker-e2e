@@ -177,6 +177,7 @@ class Lab:
                                       if allocation.exists() else "192.0.2.0/24")
         env.update(E2E_CONFIG=str(self.config), E2E_STATE=str(self.state),
                    E2E_IMAGES=self.images, E2E_NETWORK=self.network)
+        env["E2E_CAPABILITY_VERIFICATION_KEY"] = variables(self.config / "cloud.dev.vars")["E2E_CAPABILITY_VERIFICATION_KEY"]
         for offset, service in enumerate(("cloud", "dashboard", "edge", "device", "browser"), 2):
             env[f"E2E_{service.upper()}_IP"] = str(subnet[offset])
         return run([
@@ -251,7 +252,7 @@ class Lab:
         self.compose(["down", "--volumes", "--remove-orphans"])
         if self.resources("network"):
             run(["docker", "network", "rm", self.network], capture_output=True)
-        for name in ("edge/config.json", "edge/access-public-key", "edge/credential", "edge/tls.pem", "cloud-bootstrap.sql",
+        for name in ("edge/config.json", "edge/credential", "edge/tls.pem", "cloud-bootstrap.sql",
                      "browser-login.json", "network.json"):
             (self.state / name).unlink(missing_ok=True)
         print(f"Instance {self.name} removed. Its login credentials are retained in {self.state / 'auth'}.")
@@ -343,7 +344,6 @@ def prepare_edge(state, config):
         credential_hash=b64(hashlib.sha256(secret.encode()).digest()),
     )
     write_private(state / "edge/credential", f"pec_v1_{EDGE_ID}_{secret}\n")
-    write_private(state / "edge/access-public-key", variables(config / "cloud.dev.vars")["E2E_CAPABILITY_VERIFICATION_KEY"] + "\n")
     write_private(state / "edge/config.json", json.dumps({
         "hostname": EDGE_HOST,
         "port": 443,

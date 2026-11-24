@@ -134,10 +134,12 @@ jobs:
       - name: Build binaries
         env:
           RELEASE_PUBLIC_KEY: ${{ vars.RELEASE_PUBLIC_KEY }}
+          E2E_CAPABILITY_VERIFICATION_KEY: ${{ vars.E2E_CAPABILITY_VERIFICATION_KEY }}
           PACKAGES: ${{ matrix.packages }}
           TARGET: ${{ matrix.target }}
         run: |
           test -n "$RELEASE_PUBLIC_KEY"
+          test -n "$E2E_CAPABILITY_VERIFICATION_KEY"
           cargo build --release --locked --target "$TARGET" $PACKAGES
       - name: Verify Apple Silicon code signature
         if: matrix.verify_codesign

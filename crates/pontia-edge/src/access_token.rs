@@ -19,6 +19,13 @@ struct Claims {
 }
 
 impl AccessTokenVerifier {
+    pub fn embedded(edge_id: Uuid) -> Result<Self> {
+        let public_key = option_env!("E2E_CAPABILITY_VERIFICATION_KEY").context(
+            "this build has no Edge access verification key; use an official Pontia release",
+        )?;
+        Self::new(edge_id, public_key)
+    }
+
     pub fn new(edge_id: Uuid, public_key: &str) -> Result<Self> {
         let bytes = URL_SAFE_NO_PAD
             .decode(public_key)
@@ -54,6 +61,16 @@ impl AccessTokenVerifier {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn embedded_verifier_requires_a_build_time_key() {
+        let result = AccessTokenVerifier::embedded(Uuid::now_v7());
+        if option_env!("E2E_CAPABILITY_VERIFICATION_KEY").is_some() {
+            assert!(result.is_ok());
+        } else {
+            assert!(result.is_err());
+        }
+    }
 
     #[test]
     fn requires_an_unpadded_base64url_raw_ed25519_key() {

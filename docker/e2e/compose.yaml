@@ -9,6 +9,8 @@ x-build: &build
   context: ../..
   dockerfile: docker/e2e/Dockerfile
   network: host
+  args:
+    E2E_CAPABILITY_VERIFICATION_KEY: ${E2E_CAPABILITY_VERIFICATION_KEY:?Use scripts/docker-e2e}
   entitlements:
     - network.host
 

@@ -507,9 +507,7 @@ async fn serve() -> Result<()> {
         .init();
     let config = ServiceConfig::read(Path::new(CONFIG_PATH))?;
     let credential = read_edge_credential(CREDENTIAL_PATH.as_ref())?;
-    let public_key = std::fs::read_to_string("/etc/pontia/edge/access-public-key")
-        .context("failed to read /etc/pontia/edge/access-public-key")?;
-    let access_tokens = AccessTokenVerifier::new(credential.edge_id, public_key.trim())?;
+    let access_tokens = AccessTokenVerifier::embedded(credential.edge_id)?;
     let service_credential = credential.value;
     let tls = RustlsConfig::from_pem_file(TLS_PATH, TLS_PATH).await?;
     let origins = BrowserOrigins {

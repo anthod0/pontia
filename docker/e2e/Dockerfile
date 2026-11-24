@@ -59,6 +59,7 @@ RUN set -eu; \
     chmod 755 /usr/local/bin/grok
 
 FROM rust:1-bookworm AS rust-build
+ARG E2E_CAPABILITY_VERIFICATION_KEY
 WORKDIR /src
 COPY Cargo.toml Cargo.lock VERSION ./
 COPY crates ./crates
@@ -70,6 +71,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/src/target \
     touch crates/pontia-storage-sqlite/migrations/*.sql \
+    && test -n "$E2E_CAPABILITY_VERIFICATION_KEY" \
     && cargo build --locked --release -p pontia -p pontiad -p pontia-edge \
     && mkdir -p /out \
     && cp target/release/pontia target/release/pontiad target/release/pontia-edge /out/ \
