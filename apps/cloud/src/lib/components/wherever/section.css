@@ -671,7 +671,7 @@
   .cta:focus-visible .icon {
     transform: translateX(2px);
   }
-  .cta.swap {
+  .cta[inert] {
     opacity: 0;
     scale: 0.6;
   }

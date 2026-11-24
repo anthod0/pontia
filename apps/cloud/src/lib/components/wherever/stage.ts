@@ -141,6 +141,7 @@ export function mountStage(
       return;
     }
     mode = "spring";
+    cta.inert = true;
   }
   function settle() {
     mode = "idle";
@@ -179,6 +180,7 @@ export function mountStage(
         moved: 0,
       };
       mode = "drag";
+      cta.inert = true;
       settled = null;
       vel.x = vel.y = 0;
       you.classList.add("dragging");
@@ -315,10 +317,8 @@ export function mountStage(
     frame = 0,
     visible = false;
   let previousX = 0,
-    previousY = 0,
-    flipTimer = 0;
+    previousY = 0;
   let ctaSide = "right",
-    ctaSwapping = false,
     swing = 0,
     swingV = 0;
   const setCtaSide = (side: string) => {
@@ -401,18 +401,13 @@ export function mountStage(
       );
     };
     const otherSide = ctaSide === "right" ? "left" : "right";
-    const flip = !ctaFits(ctaSide) || (mode === "idle" && covers(ctaSide) && !covers(otherSide));
-    if (!ctaSwapping && flip && ctaFits(otherSide)) {
-      if (rm) setCtaSide(otherSide);
-      else {
-        ctaSwapping = true;
-        cta.classList.add("swap");
-        flipTimer = window.setTimeout(() => {
-          setCtaSide(otherSide);
-          cta.classList.remove("swap");
-          ctaSwapping = false;
-        }, 140);
-      }
+    if (mode === "idle") {
+      const flip =
+        ctaFits(otherSide) && (!ctaFits(ctaSide) || (covers(ctaSide) && !covers(otherSide)));
+      // Change sides only once the existing fade-out has finished.
+      const waitingToFlip = flip && !rm && getComputedStyle(cta).opacity !== "0";
+      if (flip && !waitingToFlip) setCtaSide(otherSide);
+      if (cta.inert !== waitingToFlip) cta.inert = waitingToFlip;
     }
     // The bubble hangs from its tail, so it swings a little when you move it up or down.
     const swingTo = rm ? 0 : clamp((ctaSide === "right" ? -vy : vy) * 0.006, -8, 8);
@@ -550,7 +545,6 @@ export function mountStage(
       observer.disconnect();
       resize.disconnect();
       cancelAnimationFrame(frame);
-      clearTimeout(flipTimer);
     },
   };
 }
