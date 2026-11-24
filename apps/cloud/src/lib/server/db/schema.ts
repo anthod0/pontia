@@ -75,6 +75,9 @@ export const devices = sqliteTable(
     edgeId: text("edge_id")
       .notNull()
       .references(() => edges.id, { onDelete: "restrict" }),
+    edgeMode: text("edge_mode", { enum: ["auto", "fixed"] })
+      .notNull()
+      .default("auto"),
     handle: text().notNull(),
     name: text().notNull(),
     e2ePublicKey: text("e2e_public_key"),

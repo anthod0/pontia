@@ -27,9 +27,11 @@ Pontia 会打印一个验证地址和一次性代码。在浏览器中打开该�
 pontia remote enable
 ```
 
-出现提示时，选择一个可用的 Edge 并确认设备名称。Pontia 会生成用于端到端加密访问的设备身份，并在需要时更新正在运行的服务。
+保留默认的 **Auto** 时，设备每次建连都会探测公共 Edge 和你自己的私有 Edge，优先连接延迟最低的可达节点。选择具体名称可固定 Edge。
 
-如需在没有终端提示的情况下注册，使用 `pontia remote edges` 获取 Edge ID，然后运行 `pontia remote enable --edge EDGE_ID --name "Device name"`。两个选项都必须提供。完整步骤和浏览器授权要求见[非交互式初始化](/docs/initialization#non-interactive-initialization)。
+出现提示时，确认设备名称。Pontia 会生成用于端到端加密访问的设备身份，并在需要时更新正在运行的服务。
+
+无交互登记可运行 `pontia remote enable --edge auto --name "Device name"`。如需固定 Edge，将 `auto` 替换为 `pontia remote edges` 列出的 ID。两个选项都必须提供。完整步骤和浏览器授权要求见[非交互式初始化](/docs/initialization#non-interactive-initialization)。
 
 打开 [app.pontia.dev](https://app.pontia.dev) 访问你已注册的设备。
 

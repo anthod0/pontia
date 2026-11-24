@@ -13,9 +13,9 @@ use std::{
 use axum::{
     Json, Router,
     body::Body,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, Request, Response, StatusCode, header},
-    routing::post,
+    routing::{get, post},
 };
 use axum_server::{Handle, tls_rustls::RustlsConfig};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -50,6 +50,7 @@ struct CloudState {
     issued: Arc<AtomicUsize>,
     delay_redemption: Arc<AtomicBool>,
     tunnel_url: String,
+    slow_tunnel: String,
 }
 
 #[derive(Deserialize)]
@@ -126,12 +127,21 @@ impl TestEdge {
             tickets: tickets.clone(),
             issued: issued.clone(),
             delay_redemption: delay_redemption.clone(),
+            slow_tunnel: format!("{}/tunnel", cloud_origin.replace("https:", "wss:")),
             tunnel_url: tunnel_url.clone(),
         };
         let cloud = Router::new()
             .route(
                 "/api/remote/devices/{device_id}/tunnel-tickets",
                 post(issue),
+            )
+            .route(
+                "/healthz",
+                get(|headers: HeaderMap| async move {
+                    assert!(headers.get(header::AUTHORIZATION).is_none());
+                    tokio::time::sleep(Duration::from_millis(250)).await;
+                    "ok"
+                }),
             )
             .route("/api/edge/tunnel-tickets/redeem", post(redeem))
             .with_state(cloud_state);
@@ -308,6 +318,7 @@ async fn issue(
     State(state): State<CloudState>,
     Path(device_id): Path<Uuid>,
     headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     if headers
         .get(header::AUTHORIZATION)
@@ -315,6 +326,16 @@ async fn issue(
         != Some(&format!("Bearer {CLI_CREDENTIAL}"))
     {
         return Err(StatusCode::UNAUTHORIZED);
+    }
+    match query.get("edge_id").map(String::as_str) {
+        Some("auto") => {
+            return Ok(Json(serde_json::json!({"candidates": [
+                {"id": "0195e7d5-1b22-7c33-9d44-123456789abc", "tunnel_url": state.slow_tunnel},
+                {"id": EDGE_ID, "tunnel_url": state.tunnel_url},
+            ]})));
+        }
+        Some(EDGE_ID) => {}
+        _ => return Err(StatusCode::CONFLICT),
     }
     let ticket = new_ticket();
     state.issued.fetch_add(1, Ordering::SeqCst);

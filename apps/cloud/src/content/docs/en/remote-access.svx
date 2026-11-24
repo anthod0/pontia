@@ -27,9 +27,11 @@ Then register the current device:
 pontia remote enable
 ```
 
-Choose an available Edge and confirm the device name when prompted. Pontia generates the device identity used for end-to-end encrypted access and updates the running service when needed.
+Keep the default **Auto** to connect through the reachable Edge with the lowest measured latency. Your device checks public Edges and your own private Edges each time it connects. Select an Edge by name to pin it.
 
-For registration without terminal prompts, use `pontia remote edges` to get an edge ID, then run `pontia remote enable --edge EDGE_ID --name "Device name"`. Both options are required. See [non-interactive initialization](/docs/initialization#non-interactive-initialization) for the full sequence and browser authorization requirements.
+Confirm the device name when prompted. Pontia generates the device identity used for end-to-end encrypted access and updates the running service when needed.
+
+For registration without prompts, run `pontia remote enable --edge auto --name "Device name"`. To pin an Edge, replace `auto` with an ID from `pontia remote edges`. Both options are required. See [non-interactive initialization](/docs/initialization#non-interactive-initialization) for the full sequence and browser authorization requirements.
 
 Open [app.pontia.dev](https://app.pontia.dev) to access your registered device.
 

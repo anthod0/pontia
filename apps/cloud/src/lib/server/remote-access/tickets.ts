@@ -1,9 +1,9 @@
 import { and, eq, exists } from "drizzle-orm";
 import { consumeEdgeTicket, issueEdgeTicket, type EdgeTicketDependencies } from "../edge-tickets";
 import type { Database } from "../db";
-import { devices } from "../db/schema";
+import { devices, edges } from "../db/schema";
 import { isUuidV7 } from "../uuid";
-import { findOwnedDeviceTarget } from "./resources";
+import { edgeIsAccessibleTo, findOwnedDeviceTarget } from "./resources";
 
 const TICKET_LIFETIME_MS = 60_000;
 
@@ -30,6 +30,45 @@ export function decodeDeviceTunnelPayload(value: unknown): DeviceTunnelPayload |
     return null;
   }
   return { device_id: deviceId };
+}
+
+export async function tunnelCandidates(db: Database, userId: string, deviceId: string) {
+  const device = await db
+    .select({ mode: devices.edgeMode })
+    .from(devices)
+    .where(and(eq(devices.id, deviceId), eq(devices.userId, userId)))
+    .get();
+  if (!device || device.mode === "fixed") return null;
+  return db
+    .select({ id: edges.id, tunnel_url: edges.tunnelUrl })
+    .from(edges)
+    .where(edgeIsAccessibleTo(userId));
+}
+
+export async function bindAutomaticEdge(
+  db: Database,
+  userId: string,
+  deviceId: string,
+  edgeId: string,
+) {
+  const updated = await db
+    .update(devices)
+    .set({ edgeId, updatedAt: new Date().toISOString() })
+    .where(
+      and(
+        eq(devices.id, deviceId),
+        eq(devices.userId, userId),
+        eq(devices.edgeMode, "auto"),
+        exists(
+          db
+            .select({ id: edges.id })
+            .from(edges)
+            .where(and(eq(edges.id, edgeId), edgeIsAccessibleTo(userId))),
+        ),
+      ),
+    )
+    .returning({ id: devices.id });
+  return updated.length === 1;
 }
 
 export async function issueTunnelTicket(

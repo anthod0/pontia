@@ -45,7 +45,7 @@ const REQUEST_BODY_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(15);
 const KEEP_ALIVE_TIMEOUT: Duration = Duration::from_secs(10);
 
-type DeviceSocket = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
+pub(crate) type DeviceSocket = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum TunnelError {

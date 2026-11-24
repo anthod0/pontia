@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import { devices, edges, users } from "../src/lib/server/db/schema";
 import {
@@ -90,6 +91,7 @@ test("device registration creates once and returns the stored record on retry", 
       name: "My device",
       edgeId: registrationEdge,
       edgeName: "Tokyo",
+      edgeMode: "fixed",
       e2ePublicKey: `${deviceId.replaceAll("-", "")}AAAAAAAAAAA`,
       e2eKeyVersion: 1,
     },
@@ -218,4 +220,42 @@ test("registration rejects invalid edges and device conflicts", async () => {
   expect(await findRegisteredDevice(database.db, "user-other", deviceId)).toEqual({
     status: "conflict",
   });
+});
+
+test("automatic registration requires an accessible edge and keeps its binding on retry", async () => {
+  await database.db.insert(users).values([{ id: "owner" }, { id: "other" }]);
+  await insertEdge(edgeSingapore, "Private", "other");
+  const register = () => registerDevice(database.db, "owner", deviceId, "Workstation", "auto");
+  expect(await register()).toEqual({ status: "edge_not_found" });
+  await insertEdge(edgeTokyo, "Public", "other", "public");
+  expect(await register()).toMatchObject({
+    status: "created",
+    device: { edgeMode: "auto", edgeId: edgeTokyo },
+  });
+  await insertEdge(registrationEdge, "Another", "owner");
+  expect(await register()).toMatchObject({
+    status: "existing",
+    device: { edgeMode: "auto", edgeId: edgeTokyo },
+  });
+});
+
+test("the selection migration keeps existing devices pinned and defaults new rows to auto", async () => {
+  const db = new Database(":memory:");
+  try {
+    db.exec("CREATE TABLE devices(id TEXT PRIMARY KEY, edge_id TEXT NOT NULL)");
+    const insert = "INSERT INTO devices (id, edge_id) VALUES (?, ?)";
+    db.run(insert, ["before", edgeTokyo]);
+    const migration = new URL(
+      "../migrations/20261124104004_auto_edge_selection/migration.sql",
+      import.meta.url,
+    );
+    db.exec(await Bun.file(migration).text());
+    db.run(insert, ["after", edgeSingapore]);
+    expect(db.query("SELECT id, edge_id, edge_mode FROM devices ORDER BY id").all()).toEqual([
+      { id: "after", edge_id: edgeSingapore, edge_mode: "auto" },
+      { id: "before", edge_id: edgeTokyo, edge_mode: "fixed" },
+    ]);
+  } finally {
+    db.close();
+  }
 });

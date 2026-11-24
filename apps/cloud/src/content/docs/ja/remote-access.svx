@@ -27,9 +27,11 @@ Pontia が確認用のアドレスとワンタイムコードを表示します�
 pontia remote enable
 ```
 
-プロンプトが表示されたら、利用可能な Edge を選択し、デバイス名を確認します。Pontia は、エンドツーエンドで暗号化されたアクセスに使うデバイスの ID を生成し、必要に応じて動作中のサービスを更新します。
+既定の **Auto** では、デバイスは接続のたびに公開 Edge と自分の非公開 Edge の遅延を測定し、到達可能で最も速い Edge に接続します。名前を選ぶと、その Edge に固定できます。
 
-ターミナルのプロンプトなしで登録するには、`pontia remote edges` で Edge の ID を取得してから、`pontia remote enable --edge EDGE_ID --name "Device name"` を実行します。両方のオプションが必須です。全体の手順とブラウザーでの認可の要件については、[非対話型の初期化](/docs/initialization#non-interactive-initialization)を参照してください。
+プロンプトが表示されたら、デバイス名を確認します。Pontia は、エンドツーエンドで暗号化されたアクセスに使うデバイスの ID を生成し、必要に応じて動作中のサービスを更新します。
+
+非対話で登録するには、`pontia remote enable --edge auto --name "Device name"` を実行します。Edge を固定する場合は、`auto` を `pontia remote edges` で取得した ID に置き換えてください。両方のオプションが必須です。全体の手順とブラウザーでの認可の要件については、[非対話型の初期化](/docs/initialization#non-interactive-initialization)を参照してください。
 
 登録したデバイスにアクセスするには、[app.pontia.dev](https://app.pontia.dev) を開きます。
 

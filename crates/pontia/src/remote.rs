@@ -27,7 +27,7 @@ Example:
 For remote access, see https://pontia.dev/docs/remote-access.md";
 
 const ENABLE_HELP: &str = "\
-Prompts for the edge and name unless both --edge and --name are given.
+The default Edge selection is auto. Use --edge auto or an Edge ID with --name.
 An already registered device keeps its name and edge.
 Use 'pontia remote edit' to change the name or select another Edge.";
 
@@ -65,7 +65,7 @@ enum RemoteCommandKind {
 
 #[derive(Debug, Default, Args)]
 struct EnableArgs {
-    /// Register with this edge from 'pontia remote edges' (requires --name)
+    /// Use auto or an edge ID from 'pontia remote edges' (requires --name)
     #[arg(long, value_name = "EDGE_ID", requires = "name")]
     edge: Option<String>,
     /// Set the device name (requires --edge)
@@ -116,6 +116,14 @@ struct Edge {
     name: String,
 }
 
+#[derive(Debug, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+enum EdgeMode {
+    Auto,
+    #[default]
+    Fixed,
+}
+
 #[derive(Debug, Deserialize)]
 pub(crate) struct Device {
     pub(crate) id: String,
@@ -124,9 +132,28 @@ pub(crate) struct Device {
     pub(crate) name: String,
     pub(crate) edge_id: String,
     pub(crate) edge_name: String,
+    #[serde(default)]
+    edge_mode: EdgeMode,
     e2e_public_key: String,
     pub(crate) e2e_key_version: u64,
     capability_verification_key: String,
+}
+
+impl Device {
+    fn edge_selection(&self) -> &str {
+        match self.edge_mode {
+            EdgeMode::Auto => "auto",
+            EdgeMode::Fixed => &self.edge_id,
+        }
+    }
+
+    fn selection_label(&self) -> String {
+        if self.edge_mode == EdgeMode::Auto {
+            format!("Auto (currently {})", self.edge_name)
+        } else {
+            format!("{} ({})", self.edge_name, self.edge_id)
+        }
+    }
 }
 
 pub(crate) struct RemoteAccess {
@@ -225,10 +252,11 @@ async fn enable_with_args(
         return remote_access(device, ServiceRestart::Required);
     }
 
-    let edges = api.fetch_edges().await?;
+    let mut edges = api.fetch_edges().await?;
     if edges.is_empty() {
         return Err("no edge is currently available for registration".to_string());
     }
+    edges.insert(0, auto_edge());
     let (edge, name) = match (args.edge, args.name) {
         (Some(edge_id), Some(name)) => {
             let edge = edges
@@ -374,15 +402,17 @@ async fn edit(vars: &HashMap<String, String>, args: EditArgs) -> Result<ServiceR
                 },
             );
         }
-        let selected = select_edge(&edges, Some(&current.edge_id))?;
-        if selected.id != current.edge_id {
+        edges.insert(0, auto_edge());
+        let current_selection = current.edge_selection();
+        let selected = select_edge(&edges, Some(current_selection))?;
+        if selected.id != current_selection {
             if !stored_identity_matches(&home.join("e2e-identity.json"), &current)? {
                 return Err("the local device identity does not match Cloud; run `pontia remote enable` to repair it before changing the Edge".into());
             }
             if !Confirm::with_theme(&terminal::theme())
                 .with_prompt(format!(
                     "Change Edge from {} to {} and restart the running service?",
-                    current.edge_name, selected.name
+                    current_selection, selected.name
                 ))
                 .default(false)
                 .interact()
@@ -409,7 +439,7 @@ async fn edit(vars: &HashMap<String, String>, args: EditArgs) -> Result<ServiceR
     println!("Device profile saved.");
     println!("  Device: {}", device.name);
     println!("  Handle: {}", device.handle);
-    println!("  Edge: {} ({})", device.edge_name, device.edge_id);
+    println!("  Edge: {}", device.selection_label());
     println!("  Dashboard: {}", dashboard_url(&device.handle));
     if device.handle != previous_handle {
         println!("  The previous Dashboard URL is no longer valid.");
@@ -584,7 +614,7 @@ async fn rotate_registered_identity(
     api.register_device(
         &device.id,
         &device.name,
-        &device.edge_id,
+        device.edge_selection(),
         &public_key,
         key_version,
         &proof,
@@ -971,14 +1001,14 @@ impl RegistrationApi<'_> {
     }
 }
 
-fn select_edge<'a>(edges: &'a [Edge], current: Option<&str>) -> Result<&'a Edge, String> {
-    if edges.len() == 1 {
-        println!(
-            "{}",
-            terminal::success(format!("Using edge {}", edges[0].name))
-        );
-        return Ok(&edges[0]);
+fn auto_edge() -> Edge {
+    Edge {
+        id: "auto".into(),
+        name: "Auto (lowest latency)".into(),
     }
+}
+
+fn select_edge<'a>(edges: &'a [Edge], current: Option<&str>) -> Result<&'a Edge, String> {
     let names: Vec<&str> = edges.iter().map(|edge| edge.name.as_str()).collect();
     let selected = Select::with_theme(&terminal::theme())
         .with_prompt("Edge to connect through")
@@ -1113,7 +1143,11 @@ fn print_registered(device: &Device, already_registered: bool) {
     println!("{}", terminal::success(status));
     println!("  {}  {name}", terminal::dim("Name     "));
     println!("  {}  {}", terminal::dim("Device ID"), device.id);
-    println!("  {}  {}", terminal::dim("Edge     "), device.edge_name);
+    println!(
+        "  {}  {}",
+        terminal::dim("Edge     "),
+        device.selection_label()
+    );
 }
 
 #[cfg(test)]
@@ -1236,6 +1270,7 @@ mod tests {
             name: "Office Mac".to_string(),
             edge_id: "0195e7c2-1b22-7c33-9d44-123456789abc".to_string(),
             edge_name: "Tokyo".to_string(),
+            edge_mode: EdgeMode::Fixed,
             e2e_public_key: public_key,
             e2e_key_version: 2,
             capability_verification_key: trust_key,

@@ -16,6 +16,7 @@ export type RegisteredDevice = {
   name: string;
   edgeId: string;
   edgeName: string;
+  edgeMode: "auto" | "fixed";
   e2ePublicKey: string;
   e2eKeyVersion: number;
 };
@@ -61,6 +62,7 @@ function registeredDevice(device: StoredDevice): RegisteredDevice {
     name: device.name,
     edgeId: device.edgeId,
     edgeName: device.edgeName,
+    edgeMode: device.edgeMode,
     e2ePublicKey: device.e2ePublicKey ?? "",
     e2eKeyVersion: device.e2eKeyVersion ?? 0,
   };
@@ -83,6 +85,7 @@ async function storedDevice(db: Database, deviceId: string): Promise<StoredDevic
       userId: devices.userId,
       edgeId: devices.edgeId,
       edgeName: edges.name,
+      edgeMode: devices.edgeMode,
       e2ePublicKey: devices.e2ePublicKey,
       e2eKeyVersion: devices.e2eKeyVersion,
     })
@@ -116,7 +119,7 @@ export async function updateRegisteredDevice(
     (update.name === undefined && update.handle === undefined && update.edgeId === undefined) ||
     (update.name !== undefined && !isValidDeviceName(update.name)) ||
     (update.handle !== undefined && !isValidDeviceHandle(update.handle)) ||
-    (update.edgeId !== undefined && !isUuidV7(update.edgeId))
+    (update.edgeId !== undefined && update.edgeId !== "auto" && !isUuidV7(update.edgeId))
   )
     return { status: "invalid_request" };
 
@@ -131,12 +134,19 @@ export async function updateRegisteredDevice(
   try {
     const changed = await db
       .update(devices)
-      .set({ ...update, updatedAt: new Date().toISOString() })
+      .set({
+        name: update.name,
+        handle: update.handle,
+        edgeId: update.edgeId === "auto" ? undefined : update.edgeId,
+        edgeMode:
+          update.edgeId === undefined ? undefined : update.edgeId === "auto" ? "auto" : "fixed",
+        updatedAt: new Date().toISOString(),
+      })
       .where(
         and(
           eq(devices.id, deviceId),
           eq(devices.userId, userId),
-          update.edgeId === undefined
+          update.edgeId === undefined || update.edgeId === "auto"
             ? undefined
             : exists(
                 db
@@ -190,7 +200,7 @@ export async function registerDevice(
 ): Promise<DeviceRegistration> {
   if (
     !isUuidV7(deviceId) ||
-    !isUuidV7(edgeId) ||
+    (edgeId !== "auto" && !isUuidV7(edgeId)) ||
     !isValidDeviceName(name) ||
     !/^[A-Za-z0-9_-]{43}$/.test(e2ePublicKey) ||
     !Number.isSafeInteger(e2eKeyVersion) ||
@@ -199,7 +209,11 @@ export async function registerDevice(
     return { status: "invalid_request" };
   const existing = await storedDevice(db, deviceId);
   if (existing) {
-    if (existing.userId !== userId || existing.edgeId !== edgeId) return { status: "conflict" };
+    if (
+      existing.userId !== userId ||
+      (edgeId === "auto" ? existing.edgeMode !== "auto" : existing.edgeId !== edgeId)
+    )
+      return { status: "conflict" };
     if (e2eKeyVersion <= (existing.e2eKeyVersion ?? 0)) {
       if (e2eKeyVersion !== existing.e2eKeyVersion || e2ePublicKey !== existing.e2ePublicKey)
         return { status: "conflict" };
@@ -227,6 +241,9 @@ export async function registerDevice(
             id: sql<string>`${deviceId}`.as("id"),
             userId: sql<string>`${userId}`.as("user_id"),
             edgeId: edges.id,
+            edgeMode: sql<"auto" | "fixed">`${edgeId === "auto" ? "auto" : "fixed"}`.as(
+              "edge_mode",
+            ),
             handle: sql<string>`${handle}`.as("handle"),
             name: sql<string>`${name}`.as("name"),
             e2ePublicKey: sql<string>`${e2ePublicKey}`.as("e2e_public_key"),
@@ -235,13 +252,21 @@ export async function registerDevice(
             updatedAt: sql<string>`${now}`.as("updated_at"),
           })
           .from(edges)
-          .where(and(eq(edges.id, edgeId), edgeIsAccessibleTo(userId))),
+          .where(
+            and(edgeId === "auto" ? undefined : eq(edges.id, edgeId), edgeIsAccessibleTo(userId)),
+          )
+          .orderBy(asc(edges.name), asc(edges.id))
+          .limit(1),
       )
       .onConflictDoNothing()
       .returning({ id: devices.id });
     const stored = await storedDevice(db, deviceId);
     if (stored) {
-      if (stored.userId !== userId || stored.edgeId !== edgeId) return { status: "conflict" };
+      if (
+        stored.userId !== userId ||
+        (edgeId === "auto" ? stored.edgeMode !== "auto" : stored.edgeId !== edgeId)
+      )
+        return { status: "conflict" };
       return {
         status: created.length === 1 ? "created" : "existing",
         device: registeredDevice(stored),

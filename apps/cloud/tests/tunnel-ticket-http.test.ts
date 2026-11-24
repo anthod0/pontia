@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 import type { RequestEvent } from "@sveltejs/kit";
-import { base64url } from "jose";
+import { eq } from "drizzle-orm";
+import { connectDashboardDevice } from "../src/lib/server/remote-access/device-connect";
+import { updateRegisteredDevice } from "../src/lib/server/remote-access/registration";
+import { base64url, jwtVerify } from "jose";
 import { POST as redeem } from "../src/routes/api/edge/tunnel-tickets/redeem/+server";
 import { POST as issue } from "../src/routes/api/remote/devices/[device_id]/tunnel-tickets/+server";
 import { sha256Base64url } from "../src/lib/server/crypto";
@@ -194,4 +197,62 @@ test("ticket endpoints map database failures to service_unavailable", async () =
   expect(await responseBody(redeemResponse)).toEqual({
     error: "service_unavailable",
   });
+});
+
+test("automatic binding controls the tunnel and Dashboard audience and respects a later pin", async () => {
+  await seedHttpTicketFixture();
+  const publicId = "0195e7d4-1b22-7c33-9d44-123456789abc";
+  const privateId = "0195e7d5-1b22-7c33-9d44-123456789abc";
+  await database.db.insert(users).values({ id: "other" });
+  for (const [id, name, accessScope] of [
+    [publicId, "public", "public"],
+    [privateId, "private", "private"],
+  ] as const) {
+    await database.db.insert(edges).values({
+      id,
+      name,
+      accessScope,
+      userId: "other",
+      dnsLabel: name,
+      tunnelUrl: `wss://${name}.edge.pontia.dev/tunnel`,
+      serviceCredentialHash: name,
+    });
+  }
+  const request = (selection: string) =>
+    callIssue(
+      event(`/api/remote/devices/${deviceId}/tunnel-tickets?edge_id=${selection}`, {
+        token: cliCredential,
+      }),
+    );
+  const candidates = (await (await request("auto")).json()) as { candidates: { id: string }[] };
+  expect(candidates.candidates.map((candidate) => candidate.id).sort()).toEqual([edgeId, publicId]);
+  expect((await request(privateId)).status).toBe(409);
+  expect(await (await request(publicId)).json()).toMatchObject({
+    tunnel_url: "wss://public.edge.pontia.dev/tunnel",
+  });
+  await database.db
+    .update(devices)
+    .set({ e2eKeyVersion: 1, e2ePublicKey: cliSecret })
+    .where(eq(devices.id, deviceId));
+  const key = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+  const signingKey = base64url.encode(
+    new Uint8Array(await crypto.subtle.exportKey("pkcs8", key.privateKey)),
+  );
+  const access = await connectDashboardDevice(
+    database.db,
+    "user-http",
+    "http-device",
+    null,
+    signingKey,
+  );
+  expect(access?.edge_api_origin).toBe("https://public.edge.pontia.dev");
+  const jwt = await jwtVerify(access!.admission_token, key.publicKey, { audience: publicId });
+  expect(jwt.payload.device_id).toBe(deviceId);
+  await updateRegisteredDevice(database.db, "user-http", deviceId, { edgeId });
+  expect((await request(publicId)).status).toBe(409);
+  expect(await (await request("auto")).json()).toMatchObject({
+    tunnel_url: "wss://edge-http.example/tunnel",
+  });
+  await updateRegisteredDevice(database.db, "user-http", deviceId, { edgeId: "auto" });
+  expect((await request(publicId)).status).toBe(200);
 });
