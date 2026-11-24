@@ -40,8 +40,6 @@
   "bots_title": "Chega de ficar de babá dos seus agentes.",
   "bots_intro": "Delegue o trabalho a um Bot que fica ativo na sua máquina. Ele coordena auxiliares em paralelo em ambientes isolados, registra decisões como pendências e mantém o contexto de um dia para o outro.",
   "bots_pick": "Escolha um Bot para ver como ele trabalha.",
-  "bots_play": "Reproduzir a demonstração",
-  "bots_pause": "Pausar a demonstração",
   "story_todo_label": "Decisões pendentes, trabalho em andamento",
   "story_todo_caption": "Dúvidas sobre o escopo viram pendências enquanto os outros auxiliares continuam trabalhando. Responda quando puder e o Bot encerra cada pendência.",
   "story_todo_ask": "Vamos lançar a página de configurações esta semana.",

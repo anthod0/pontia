@@ -29,7 +29,7 @@
 				<ul>
 					{#if step >= 1}
 						<li class="enter"><CheckIcon size={11} weight="bold" />{m.story_memory_pref_pnpm()}</li>
-						<li class="enter" style:animation-delay="120ms"><CheckIcon size={11} weight="bold" />{m.story_memory_pref_short()}</li>
+						<li class="enter" style:animation-delay="60ms"><CheckIcon size={11} weight="bold" />{m.story_memory_pref_short()}</li>
 					{/if}
 				</ul>
 			</div>
@@ -43,7 +43,7 @@
 		<div class={['bots', step >= 3 && 'shared']}>
 			<span class="bot self"><BotAvatarMark shape={story.shape} color={story.color} /></span>
 			{#each others as other, i (other.name)}
-				<span class="bot other" style:transition-delay="{i * 120}ms"><BotAvatarMark shape={other.shape} color={other.color} /></span>
+				<span class="bot other" style:transition-delay="{i * 60}ms"><BotAvatarMark shape={other.shape} color={other.color} /></span>
 			{/each}
 		</div>
 	</div>
@@ -68,7 +68,7 @@
 
 	/* All Bots on the device share the stores; the others light up once Remy has written to them. */
 	.bots { display: flex; justify-content: center; gap: 18px; }
-	.bot { width: 40px; height: 40px; transition: opacity 300ms, filter 300ms, translate 300ms; }
+	.bot { width: 40px; height: 40px; transition: opacity 160ms, filter 160ms, translate 160ms; }
 	.bot.other { opacity: 0.35; filter: saturate(0.3); }
 	.shared .bot.other { opacity: 1; filter: none; translate: 0 -4px; }
 

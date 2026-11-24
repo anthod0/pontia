@@ -60,7 +60,7 @@
 	.layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); min-height: 320px; }
 
 	.switcher { display: grid; align-content: start; gap: 4px; margin: 0; padding: 14px 10px; border-right: 1px solid var(--border); background: var(--surface); list-style: none; }
-	.device { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; font-size: 13px; color: var(--muted-foreground); transition: background-color 250ms, color 250ms; }
+	.device { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; font-size: 13px; color: var(--muted-foreground); transition: background-color 150ms, color 150ms; }
 	.device span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.device.active { background: color-mix(in srgb, var(--bot) 16%, transparent); color: var(--heading); font-weight: 500; }
 
