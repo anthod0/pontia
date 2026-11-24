@@ -22,6 +22,7 @@
   import MobileBotFilesGitScreen from './MobileBotFilesGitScreen.svelte'
   import MobileBotSearchScreen from './MobileBotSearchScreen.svelte'
   import DotsThreeIcon from 'phosphor-svelte/lib/DotsThreeIcon'
+  import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
   let { chat }: { chat: BotChatController } = $props()
   const timeline = $derived(chat.timeline)
   const device = useDeviceRuntime()
@@ -40,7 +41,7 @@
   let contextId = $state('')
   const status = $derived(
     timeline.status.kind === 'idle'
-      ? ''
+      ? $t('state.idle')
       : timeline.status.kind === 'working'
         ? timeline.status.title
         : $t('bots.processing'),
@@ -94,16 +95,8 @@
       class="mobile-glass flex min-h-11 min-w-0 items-center gap-2 rounded-full px-3"
       onclick={() => (menu = true)}
     >
-      <BotAvatar
-        class="size-6"
-        shape={timeline.bot.avatar_shape}
-        color={timeline.bot.avatar_color}
-        working={!!status}
-      />
-      <span class="min-w-0 text-left"
-        ><strong class="block truncate">{timeline.bot.name}</strong>
-        {#if status}<small class="block truncate text-primary">{status}</small>{/if}</span
-      >
+      <RobotIcon class="size-6 shrink-0" aria-hidden="true" />
+      <strong class="truncate">{timeline.bot.name}</strong>
     </button>{/if}
 {/snippet}
 {#snippet menuButton()}<button
@@ -144,9 +137,17 @@
       class="pointer-events-none absolute inset-x-0 bottom-0 z-10 [&>div:not(:first-child)]:pointer-events-auto"
     >
       <div class="pointer-events-none flex items-center justify-between gap-1">
-        {#if status}<p class="mobile-glass truncate rounded-full px-3 py-1 text-sm">{status}</p>{/if}
+        <p class="flex min-w-0 items-center gap-2 px-3 py-1 text-sm text-foreground" role="status">
+          <BotAvatar
+            class="size-5"
+            shape={timeline.bot.avatar_shape}
+            color={timeline.bot.avatar_color}
+            working={timeline.status.kind !== 'idle'}
+          />
+          <span class="truncate">{status}</span>
+        </p>
         {#if timeline.openTodoCount}<button
-            class="mobile-glass pointer-events-auto ml-auto min-h-11 rounded-full px-4"
+            class="mobile-glass pointer-events-auto ml-auto min-h-11 shrink-0 rounded-full px-4"
             onclick={() => (todos = true)}>{$t('bots.todos')} · {timeline.openTodoCount}</button
           >{/if}
       </div>
