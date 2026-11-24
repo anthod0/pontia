@@ -1,4 +1,5 @@
 <script lang="ts">
+  import BottomSheet from '$lib/components/ui/overlay/BottomSheet.svelte'
   import { t } from '$lib/i18n'
   import { dashboardPath } from '$lib/dashboardRoutes'
   import { navigate } from '$lib/navigation'
@@ -32,8 +33,7 @@
 </script>
 
 <Sheet.Root bind:open>
-  <Sheet.Content side="bottom" showCloseButton={false} class="gap-0 rounded-t-2xl px-3 pt-2 pb-[max(1.75rem,env(safe-area-inset-bottom))]">
-    <div aria-hidden="true" class="mx-auto mb-2.5 h-1 w-9 rounded-full bg-border"></div>
+  <BottomSheet dismiss={() => open = false} showCloseButton={false} class="px-3">
     <div class="flex h-11 items-center justify-between pr-1 pl-2">
       <div class="min-w-0">
         <Sheet.Title class="text-base font-semibold text-heading">{$t('settings.title')}</Sheet.Title>
@@ -64,5 +64,5 @@
     <button type="button" class={[optionClass, '[&_svg]:text-muted-foreground']} onclick={backToChat}>
       <ChatCircleIcon />{$t('nav.backToChat')}
     </button>
-  </Sheet.Content>
+  </BottomSheet>
 </Sheet.Root>

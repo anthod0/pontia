@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ResponsiveMenu from '$lib/components/ui/overlay/ResponsiveMenu.svelte'
   import { statusLabel } from '$lib/i18n/status';
   import { t } from '$lib/i18n';
   import { useDeviceRuntime } from '../../device/context';
@@ -40,6 +41,7 @@
   let renameDialogOpen = $state(false)
   let renameError = $state<string | null>(null)
   let sessionManagementBusyId = $state<string | null>(null)
+  let filterTrigger = $state<HTMLButtonElement | null>(null)
   let sessionActionMenuOpenKey = $state<string | null>(null)
   // Set while a row's actions menu was opened by right-clicking the row rather than by its menu button.
   let sessionContextMenu = $state<{ actionKey: string; anchor: MenuAnchor } | null>(null)
@@ -196,6 +198,7 @@
 <svelte:window onpopstate={() => (currentPath = window.location.pathname)} />
 
 {#snippet sessionMenuItem(session: SessionView, actionKey: string)}
+  {@const contextMenu = sessionContextMenu?.actionKey === actionKey ? sessionContextMenu : null}
   <Sidebar.MenuItem>
     <Sidebar.MenuButton class="touch-target:group-has-data-[sidebar=menu-action]/menu-item:pr-16 touch-target:h-11 max-md:pl-2.5 max-md:text-[15px]" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session, $t)} · ${statusLabel(session.state, $t)}`} onclick={() => openSession(session.session_id)} oncontextmenu={(event) => openSessionContextMenu(event, actionKey)}>
       {#if session.pinned_at}
@@ -211,44 +214,43 @@
         <span class={`size-2 rounded-full ${sessionStateDotClass(session.state)}`}></span>
       </span>
     {/if}
-    <DropdownMenu.Root bind:open={() => sessionActionMenuOpenKey === actionKey, (open) => setSessionActionMenuOpen(actionKey, open)}>
-      <Sidebar.MenuAction
-        showOnHover
-        class="touch-target:peer-data-[size=default]/menu-button:top-0 touch-target:right-0 touch-target:size-11 touch-target:after:hidden"
-        aria-label={$t('sessions.actionsFor', { name: sessionChatTitle(session, $t) })}
-        title={$t('sessions.actions')}
-        disabled={renamingSessionId === session.session_id || sessionManagementBusyId === session.session_id}
-        onclick={(event) => event.stopPropagation()}
-      >
-        {#snippet child({ props })}
-          <DropdownMenu.Trigger {...props}>
-            <DotsThreeVerticalIcon />
-          </DropdownMenu.Trigger>
-        {/snippet}
-      </Sidebar.MenuAction>
-      {@const contextMenu = sessionContextMenu?.actionKey === actionKey ? sessionContextMenu : null}
-      <DropdownMenu.Content customAnchor={contextMenu?.anchor} side={contextMenu ? 'bottom' : 'right'} align="start" sideOffset={contextMenu ? 2 : 4} class="w-44">
-        <DropdownMenu.Item onclick={() => startRenamingSession(session)}>
-          <PencilSimpleIcon class="size-4" /> {$t('common.rename')}
-        </DropdownMenu.Item>
-        <DropdownMenu.Item disabled={sessionManagementBusyId === session.session_id} onclick={() => void togglePinSessionFromMenu(session)}>
-          {#if session.pinned_at}
-            <PushPinSlashIcon class="size-4" /> {$t('sessions.unpin')}
-          {:else}
-            <PushPinIcon class="size-4" /> {$t('sessions.pin')}
-          {/if}
-        </DropdownMenu.Item>
-        <DropdownMenu.Item disabled={sessionManagementBusyId === session.session_id} onclick={() => void archiveSessionFromMenu(session)}>
-          <ArchiveIcon class="size-4" /> {$t('common.archive')}
-        </DropdownMenu.Item>
-        {#if !isTerminalSessionState(session.state)}
-          <DropdownMenu.Separator />
-          <DropdownMenu.Item variant="destructive" disabled={sessionManagementBusyId === session.session_id} onclick={() => void exitSessionFromMenu(session)}>
-            <SignOutIcon class="size-4" /> {$t('common.exit')}
-          </DropdownMenu.Item>
+    <ResponsiveMenu bind:open={() => sessionActionMenuOpenKey === actionKey, (open) => setSessionActionMenuOpen(actionKey, open)} label={sessionChatTitle(session, $t)} customAnchor={contextMenu?.anchor} side={contextMenu ? 'bottom' : 'right'} align="start" sideOffset={contextMenu ? 2 : 4} class="w-44">
+      {#snippet trigger()}
+        <Sidebar.MenuAction
+          showOnHover
+          class="touch-target:peer-data-[size=default]/menu-button:top-0 touch-target:right-0 touch-target:size-11 touch-target:after:hidden"
+          aria-label={$t('sessions.actionsFor', { name: sessionChatTitle(session, $t) })}
+          title={$t('sessions.actions')}
+          disabled={renamingSessionId === session.session_id || sessionManagementBusyId === session.session_id}
+          onclick={(event) => event.stopPropagation()}
+        >
+          {#snippet child({ props })}
+            <DropdownMenu.Trigger {...props}>
+              <DotsThreeVerticalIcon />
+            </DropdownMenu.Trigger>
+          {/snippet}
+        </Sidebar.MenuAction>
+      {/snippet}
+      <DropdownMenu.Item onclick={() => startRenamingSession(session)}>
+        <PencilSimpleIcon class="size-4" /> {$t('common.rename')}
+      </DropdownMenu.Item>
+      <DropdownMenu.Item disabled={sessionManagementBusyId === session.session_id} onclick={() => void togglePinSessionFromMenu(session)}>
+        {#if session.pinned_at}
+          <PushPinSlashIcon class="size-4" /> {$t('sessions.unpin')}
+        {:else}
+          <PushPinIcon class="size-4" /> {$t('sessions.pin')}
         {/if}
-      </DropdownMenu.Content>
-    </DropdownMenu.Root>
+      </DropdownMenu.Item>
+      <DropdownMenu.Item disabled={sessionManagementBusyId === session.session_id} onclick={() => void archiveSessionFromMenu(session)}>
+        <ArchiveIcon class="size-4" /> {$t('common.archive')}
+      </DropdownMenu.Item>
+      {#if !isTerminalSessionState(session.state)}
+        <DropdownMenu.Separator />
+        <DropdownMenu.Item variant="destructive" disabled={sessionManagementBusyId === session.session_id} onclick={() => void exitSessionFromMenu(session)}>
+          <SignOutIcon class="size-4" /> {$t('common.exit')}
+        </DropdownMenu.Item>
+      {/if}
+    </ResponsiveMenu>
   </Sidebar.MenuItem>
 {/snippet}
 
@@ -306,46 +308,46 @@
         >
           <ArrowUpRightIcon />
         </button>
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger
-            class={cn(headerButtonClass, filterApplied && 'text-primary')}
-            aria-label={$t('sessions.filter')}
-            title={filterTitle}
-          >
-            <FunnelIcon weight={filterApplied ? 'fill' : 'regular'} />
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content side="right" align="start" class="max-h-96 w-72 overflow-y-auto">
-            <DropdownMenu.Label>{$t('sessions.filterStatus')}</DropdownMenu.Label>
-            <DropdownMenu.RadioGroup bind:value={$sessionScope}>
-              <DropdownMenu.RadioItem value="active">{$t('sessions.activeOnly')}</DropdownMenu.RadioItem>
-              <DropdownMenu.RadioItem value="all">{$t('sessions.all')}</DropdownMenu.RadioItem>
-            </DropdownMenu.RadioGroup>
+        <ResponsiveMenu keepClearOf={filterTrigger} label={$t('sessions.filter')} side="bottom" align="start" class="max-h-96 w-72 overflow-y-auto">
+          {#snippet trigger()}
+            <DropdownMenu.Trigger bind:ref={filterTrigger}
+              class={cn(headerButtonClass, filterApplied && 'text-primary')}
+              aria-label={$t('sessions.filter')}
+              title={filterTitle}
+            >
+              <FunnelIcon weight={filterApplied ? 'fill' : 'regular'} />
+            </DropdownMenu.Trigger>
+          {/snippet}
+          <DropdownMenu.Label>{$t('sessions.filterStatus')}</DropdownMenu.Label>
+          <DropdownMenu.RadioGroup bind:value={$sessionScope}>
+            <DropdownMenu.RadioItem value="active">{$t('sessions.activeOnly')}</DropdownMenu.RadioItem>
+            <DropdownMenu.RadioItem value="all">{$t('sessions.all')}</DropdownMenu.RadioItem>
+          </DropdownMenu.RadioGroup>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Label>{$t('workspace.title')}</DropdownMenu.Label>
+          <DropdownMenu.RadioGroup bind:value={$selectedWorkspaceId}>
+            <DropdownMenu.RadioItem value="">{$t('workspaces.all')}</DropdownMenu.RadioItem>
             <DropdownMenu.Separator />
-            <DropdownMenu.Label>{$t('workspace.title')}</DropdownMenu.Label>
-            <DropdownMenu.RadioGroup bind:value={$selectedWorkspaceId}>
-              <DropdownMenu.RadioItem value="">{$t('workspaces.all')}</DropdownMenu.RadioItem>
-              <DropdownMenu.Separator />
-              {#each workspacesQuery.data ?? [] as workspace (workspace.workspace_id)}
-                <DropdownMenu.RadioItem value={workspace.workspace_id}>
-                  <span class="min-w-0" title={workspace.canonical_path}>
-                    <span class="block truncate">{workspace.name || workspace.display_path}</span>
-                    {#if workspace.name}
-                      <span class="block truncate text-xs text-muted-foreground">{workspace.display_path}</span>
-                    {/if}
-                  </span>
-                </DropdownMenu.RadioItem>
-              {/each}
-            </DropdownMenu.RadioGroup>
-            {#if workspacesQuery.error}
-              <p role="alert" class="px-2 py-1 text-xs text-destructive">{$t('workspaces.loadFailedMessage')}</p>
-              <DropdownMenu.Item onclick={() => void workspacesQuery.refetch()}>{$t('common.retry')}</DropdownMenu.Item>
-            {:else if workspacesQuery.isPending}
-              <p role="status" class="px-2 py-1 text-xs text-muted-foreground">{$t('workspaces.loading')}</p>
-            {:else if !workspacesQuery.data?.length}
-              <p class="px-2 py-1 text-xs text-muted-foreground">{$t('workspaces.empty')}</p>
-            {/if}
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
+            {#each workspacesQuery.data ?? [] as workspace (workspace.workspace_id)}
+              <DropdownMenu.RadioItem value={workspace.workspace_id}>
+                <span class="min-w-0" title={workspace.canonical_path}>
+                  <span class="block truncate">{workspace.name || workspace.display_path}</span>
+                  {#if workspace.name}
+                    <span class="block truncate text-xs text-muted-foreground">{workspace.display_path}</span>
+                  {/if}
+                </span>
+              </DropdownMenu.RadioItem>
+            {/each}
+          </DropdownMenu.RadioGroup>
+          {#if workspacesQuery.error}
+            <p role="alert" class="px-2 py-1 text-xs text-destructive">{$t('workspaces.loadFailedMessage')}</p>
+            <DropdownMenu.Item onclick={() => void workspacesQuery.refetch()}>{$t('common.retry')}</DropdownMenu.Item>
+          {:else if workspacesQuery.isPending}
+            <p role="status" class="px-2 py-1 text-xs text-muted-foreground">{$t('workspaces.loading')}</p>
+          {:else if !workspacesQuery.data?.length}
+            <p class="px-2 py-1 text-xs text-muted-foreground">{$t('workspaces.empty')}</p>
+          {/if}
+        </ResponsiveMenu>
       </span>
     </Sidebar.GroupLabel>
   {#if sessionsOpen}

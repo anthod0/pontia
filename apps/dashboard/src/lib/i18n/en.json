@@ -1,4 +1,6 @@
 {
+  "common.searchOptions": "Search options",
+  "common.noMatchingOptions": "No matching options",
   "bots.avatar": "Avatar",
   "bots.avatarShape": "Shape",
   "bots.avatarColor": "Color",

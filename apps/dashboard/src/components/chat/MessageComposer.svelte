@@ -1,4 +1,6 @@
 <script lang="ts">
+  import ResponsiveDialog from '$lib/components/ui/overlay/ResponsiveDialog.svelte'
+  import ResponsiveMenu from '$lib/components/ui/overlay/ResponsiveMenu.svelte'
   import { t } from '$lib/i18n';
   import { toast } from 'svelte-sonner'
   import { useDeviceRuntime } from '../../device/context';
@@ -292,30 +294,30 @@
 {#snippet actions()}
   {#if visibleMenuGroups.length > 0}
     <div class="shrink-0">
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger>
-          {#snippet child({ props })}
-            <Button {...props} type="button" variant="ghost" size="icon-sm" aria-label={$t('chat.actions')} title={$t('chat.actions')} disabled={disabled || busy}>
-              <DotsThreeVerticalIcon class="size-5" />
-            </Button>
-          {/snippet}
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content side="top" align="end" class="w-64" preventScroll={false} onCloseAutoFocus={restoreCommandFocus}>
-          {#each visibleMenuGroups as group, index}
-            {#if index > 0}<DropdownMenu.Separator />{/if}
-            {#each group.commands as item (item.name)}
-              {@const action = commandActionFor(item)}
-              <DropdownMenu.Item variant={item.name === '/exit' ? 'destructive' : 'default'} onSelect={() => chooseMenuCommand(item)}>
-                <action.icon class="size-4" />
-                <span class="min-w-0 flex-1">
-                  <span class="block">{action.label}</span>
-                </span>
-                <span class="font-mono text-xs text-muted-foreground">{item.name}</span>
-              </DropdownMenu.Item>
-            {/each}
+      <ResponsiveMenu label={$t('chat.actions')} side="top" align="end" class="w-64" preventScroll={false} onCloseAutoFocus={restoreCommandFocus}>
+        {#snippet trigger()}
+          <DropdownMenu.Trigger>
+            {#snippet child({ props })}
+              <Button {...props} type="button" variant="ghost" size="icon-sm" aria-label={$t('chat.actions')} title={$t('chat.actions')} disabled={disabled || busy}>
+                <DotsThreeVerticalIcon class="size-5" />
+              </Button>
+            {/snippet}
+          </DropdownMenu.Trigger>
+        {/snippet}
+        {#each visibleMenuGroups as group, index}
+          {#if index > 0}<DropdownMenu.Separator />{/if}
+          {#each group.commands as item (item.name)}
+            {@const action = commandActionFor(item)}
+            <DropdownMenu.Item variant={item.name === '/exit' ? 'destructive' : 'default'} onSelect={() => chooseMenuCommand(item)}>
+              <action.icon class="size-4" />
+              <span class="min-w-0 flex-1">
+                <span class="block">{action.label}</span>
+              </span>
+              <span class="font-mono text-xs text-muted-foreground">{item.name}</span>
+            </DropdownMenu.Item>
           {/each}
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
+        {/each}
+      </ResponsiveMenu>
     </div>
   {/if}
 {/snippet}
@@ -364,13 +366,13 @@
 
 {#if fullscreen}
   <Dialog.Root bind:open={fullscreenOpen}>
-    <Dialog.Content class="left-0 top-[var(--visual-viewport-top,0px)] flex h-(--visual-viewport-height) max-h-none w-screen max-w-none translate-x-0 translate-y-0 flex-col overflow-hidden rounded-none p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] sm:hidden" showCloseButton={false}>
+    <ResponsiveDialog mode="fullscreen" class="overflow-hidden sm:hidden" showCloseButton={false}>
       <Dialog.Header class="shrink-0">
         <div class="flex items-center justify-between gap-2">
           <Dialog.Title>{$t('chat.expandedComposer')}</Dialog.Title>
           <div class="flex shrink-0 items-center gap-2">
             {@render actions()}
-            <Button type="button" variant="ghost" size="icon-sm" aria-label={$t('chat.closeExpandedComposer')} onclick={() => (fullscreenOpen = false)}>
+            <Button type="button" variant="ghost" size="icon-sm" class="touch-target:size-11" aria-label={$t('chat.closeExpandedComposer')} onclick={() => (fullscreenOpen = false)}>
               <ArrowsInIcon class="size-4" />
             </Button>
           </div>
@@ -395,6 +397,6 @@
           {/if}
         </PromptInput.Toolbar>
       </PromptInput.Root>
-    </Dialog.Content>
+    </ResponsiveDialog>
   </Dialog.Root>
 {/if}

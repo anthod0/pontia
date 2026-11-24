@@ -1254,6 +1254,18 @@ async function openMobileSidebar() {
   return screen.getByRole("dialog", { name: "Sidebar" });
 }
 
+test("a phone user can edit the Bot from its row action button", async () => {
+  mockSidebarBot();
+  const sidebar = await openMobileSidebar();
+  const button = await within(sidebar).findByRole("button", {
+    name: "Release Captain · Bot actions",
+  });
+  await fireEvent.click(button);
+  const menu = await screen.findByRole("menu", { name: "Release Captain" });
+  await fireEvent.click(within(menu).getByRole("menuitem", { name: "Edit Bot" }));
+  expect(await screen.findByRole("dialog", { name: "Edit Bot" })).toBeVisible();
+});
+
 test("mobile sidebar closes with its close button", async () => {
   const sidebar = await openMobileSidebar();
   await fireEvent.click(within(sidebar).getByRole("button", { name: "Close", exact: true }));

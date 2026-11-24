@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ResponsiveMenu from '$lib/components/ui/overlay/ResponsiveMenu.svelte'
   import { t } from '$lib/i18n';
   import ArrowsLeftRightIcon from 'phosphor-svelte/lib/ArrowsLeftRightIcon'
   import CaretUpDownIcon from 'phosphor-svelte/lib/CaretUpDownIcon'
@@ -20,32 +21,32 @@
 <Sidebar.Group class="shrink-0 pb-0 max-md:px-3 group-data-[collapsible=icon]:hidden">
   <Sidebar.Menu>
     <Sidebar.MenuItem>
-      <DropdownMenu.Root>
-        <Sidebar.MenuButton class="text-[13px] max-md:h-11 max-md:px-3 max-md:text-[15px]" aria-label={$t('devices.sidebarDevice')} title={selected ? $t(deviceStateLabel[selected.state]) : undefined}>
-          {#snippet child({ props })}
-            <DropdownMenu.Trigger {...props}>
-              <DesktopIcon class="text-sidebar-foreground/60" />
-              <span class="min-w-0 truncate font-medium">{selected?.name ?? $t('devices.noDevice')}</span>
-              {#if selected}
-                <span class={['size-1.5 shrink-0 rounded-full', deviceStateDotClass[selected.state]]} aria-label={$t(deviceStateLabel[selected.state])}></span>
-              {/if}
-              <span class="flex-1"></span>
-              <CaretUpDownIcon class="text-sidebar-foreground/60" />
-            </DropdownMenu.Trigger>
-          {/snippet}
-        </Sidebar.MenuButton>
-        <DropdownMenu.Content align="start" class="w-(--bits-dropdown-menu-anchor-width) min-w-56">
-          <DropdownMenu.Label class="pl-7">{$t('devices.title')}</DropdownMenu.Label>
-          <DropdownMenu.RadioGroup value={selected?.handle ?? ''} onValueChange={onSelect}>
-            {#each devices as device (device.handle)}
-              <DropdownMenu.RadioItem value={device.handle} class="pr-2 pl-7 *:data-[slot=dropdown-menu-radio-item-indicator]:right-auto *:data-[slot=dropdown-menu-radio-item-indicator]:left-2">
-                <span class="min-w-0 flex-1 truncate">{device.name}</span>
-                <span class="shrink-0 text-xs text-muted-foreground">{$t(deviceStateLabel[device.state])}</span>
-              </DropdownMenu.RadioItem>
-            {/each}
-          </DropdownMenu.RadioGroup>
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
+      <ResponsiveMenu label={$t('devices.title')} align="start" class="w-(--bits-dropdown-menu-anchor-width) min-w-56">
+        {#snippet trigger()}
+          <Sidebar.MenuButton class="text-[13px] max-md:h-11 max-md:px-3 max-md:text-[15px]" aria-label={$t('devices.sidebarDevice')} title={selected ? $t(deviceStateLabel[selected.state]) : undefined}>
+            {#snippet child({ props })}
+              <DropdownMenu.Trigger {...props}>
+                <DesktopIcon class="text-sidebar-foreground/60" />
+                <span class="min-w-0 truncate font-medium">{selected?.name ?? $t('devices.noDevice')}</span>
+                {#if selected}
+                  <span class={['size-1.5 shrink-0 rounded-full', deviceStateDotClass[selected.state]]} aria-label={$t(deviceStateLabel[selected.state])}></span>
+                {/if}
+                <span class="flex-1"></span>
+                <CaretUpDownIcon class="text-sidebar-foreground/60" />
+              </DropdownMenu.Trigger>
+            {/snippet}
+          </Sidebar.MenuButton>
+        {/snippet}
+        <DropdownMenu.Label class="pl-7">{$t('devices.title')}</DropdownMenu.Label>
+        <DropdownMenu.RadioGroup value={selected?.handle ?? ''} onValueChange={onSelect}>
+          {#each devices as device (device.handle)}
+            <DropdownMenu.RadioItem value={device.handle} class="pr-2 pl-7 *:data-[slot=dropdown-menu-radio-item-indicator]:right-auto *:data-[slot=dropdown-menu-radio-item-indicator]:left-2">
+              <span class="min-w-0 flex-1 truncate">{device.name}</span>
+              <span class="shrink-0 text-xs text-muted-foreground">{$t(deviceStateLabel[device.state])}</span>
+            </DropdownMenu.RadioItem>
+          {/each}
+        </DropdownMenu.RadioGroup>
+      </ResponsiveMenu>
       {#if previous}
         <Sidebar.MenuAction
           class="max-md:peer-data-[size=default]/menu-button:top-3"

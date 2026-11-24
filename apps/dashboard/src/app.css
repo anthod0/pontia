@@ -73,6 +73,10 @@
 }
 
 :root {
+  --layer-toolbar: 40;
+  --layer-panel: 50;
+  --layer-modal: 60;
+  --layer-menu: 70;
   --visual-viewport-height: calc(
     100dvh - var(--visual-viewport-top, 0px) - var(--visual-viewport-bottom, 0px)
   );
@@ -232,4 +236,17 @@ body {
 
 #app {
   min-height: 100svh;
+}
+
+@layer components {
+  .bottom-sheet {
+    bottom: var(--visual-viewport-bottom, 0px);
+    max-height: min(
+      var(--menu-room, 100dvh),
+      calc(var(--visual-viewport-height) - env(safe-area-inset-top) - 3.5rem)
+    );
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
 }

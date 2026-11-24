@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ResponsiveDialog from '$lib/components/ui/overlay/ResponsiveDialog.svelte'
   import { t } from '$lib/i18n';
   import { useDeviceRuntime } from '../../device/context';
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
@@ -524,7 +525,7 @@
 
 <Dialog.Root bind:open={renameWorkspaceDialogOpen}>
   {#if renamingWorkspace}
-    <Dialog.Content class="sm:max-w-md">
+    <ResponsiveDialog mode="sheet" dismiss={cancelRenamingWorkspace} class="sm:max-w-md">
       <form onsubmit={(event) => { event.preventDefault(); void confirmRenameWorkspace() }}>
         <Dialog.Header>
           <Dialog.Title>{$t('workspaces.confirmRename')}</Dialog.Title>
@@ -541,7 +542,7 @@
           <Button type="submit" disabled={savingRename}>{savingRename ? $t('common.saving') : $t('workspaces.rename')}</Button>
         </Dialog.Footer>
       </form>
-    </Dialog.Content>
+    </ResponsiveDialog>
   {/if}
 </Dialog.Root>
 

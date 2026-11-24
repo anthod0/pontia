@@ -1,6 +1,8 @@
 <script lang="ts">
+  import BottomSheet from '$lib/components/ui/overlay/BottomSheet.svelte'
   import { toast } from 'svelte-sonner'
   import { t } from '$lib/i18n'
+  import { selectionToolbarPosition } from '$lib/visualViewport'
   import { copyText } from '$lib/copyText'
   import { entryQuote, messageText, quoteSummary, type BotQuote } from '$lib/botQuote'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
@@ -40,6 +42,8 @@
   let sheetOpen = $state(false)
   let anchor = $state({ x: 0, y: 0 })
   let selection = $state<{ target: Target; rect: DOMRect; touch: boolean } | null>(null)
+  let toolbarWidth = $state(0)
+  let toolbarHeight = $state(0)
   let touchSelection = false
   let pointerDown = false
 
@@ -156,9 +160,14 @@
       ['scroll', updateSelection, true],
     ]
     for (const [type, listener, capture] of listeners) element.addEventListener(type, listener, capture)
+    const viewport = window.visualViewport
+    viewport?.addEventListener('resize', updateSelection)
+    viewport?.addEventListener('scroll', updateSelection)
     document.addEventListener('selectionchange', updateSelection)
     return () => {
       for (const [type, listener, capture] of listeners) element.removeEventListener(type, listener, capture)
+      viewport?.removeEventListener('resize', updateSelection)
+      viewport?.removeEventListener('scroll', updateSelection)
       document.removeEventListener('selectionchange', updateSelection)
     }
   })
@@ -223,8 +232,12 @@
   const selectionStyle = $derived.by(() => {
     if (!selection) return ''
     const { rect, touch } = selection
-    const left = Math.min(Math.max(rect.left + rect.width / 2, 56), innerWidth - 56)
-    const top = touch ? Math.min(rect.bottom + 48, innerHeight - 96) : Math.max(rect.top - 8, 48)
+    const viewport = window.visualViewport
+    const x = viewport?.offsetLeft ?? 0
+    const y = viewport?.offsetTop ?? 0
+    const width = viewport?.width ?? window.innerWidth
+    const height = viewport?.height ?? window.innerHeight
+    const { left, top } = selectionToolbarPosition(rect, touch, { x, y, width, height }, toolbarWidth, toolbarHeight)
     return `left: ${left}px; top: ${top}px`
   })
 </script>
@@ -252,8 +265,7 @@
 </DropdownMenu.Root>
 
 <Sheet.Root bind:open={sheetOpen}>
-  <Sheet.Content side="bottom" showCloseButton={false} class="gap-0 rounded-t-2xl px-2 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]" onCloseAutoFocus={restoreFocus}>
-    <div aria-hidden="true" class="mx-auto mb-2 h-1 w-9 rounded-full bg-border"></div>
+  <BottomSheet dismiss={() => sheetOpen = false} showCloseButton={false} class="px-3" onCloseAutoFocus={restoreFocus}>
     <Sheet.Title class="sr-only">{$t('bots.messageActions')}</Sheet.Title>
     {#if target}
       {@const current = target}
@@ -276,18 +288,18 @@
         {/if}
       </div>
     {/if}
-  </Sheet.Content>
+  </BottomSheet>
 </Sheet.Root>
 
 {#if selection && !menuOpen && !sheetOpen}
   {@const current = selection.target}
-  <div role="toolbar" tabindex="-1" aria-label={$t('bots.messageActions')}
-    class={['fixed z-50 flex -translate-x-1/2 gap-0.5 rounded-lg bg-popover p-0.5 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10', !selection.touch && '-translate-y-full']}
+  <div bind:clientWidth={toolbarWidth} bind:clientHeight={toolbarHeight} role="toolbar" tabindex="-1" aria-label={$t('bots.messageActions')}
+    class={['fixed z-(--layer-toolbar) flex -translate-x-1/2 gap-0.5 rounded-lg bg-popover p-0.5 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10', !selection.touch && '-translate-y-full']}
     style={selectionStyle}
     onpointerdown={event => event.preventDefault()}>
-    <button type="button" class="flex items-center gap-1.5 rounded-md px-2.5 py-1 outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => quote(current)}><QuotesIcon class="size-4" />{$t('bots.quote')}</button>
+    <button type="button" class="flex pointer-coarse:min-h-11 items-center gap-1.5 rounded-md px-2.5 py-1 outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => quote(current)}><QuotesIcon class="size-4" />{$t('bots.quote')}</button>
     {#if !selection.touch}
-      <button type="button" class="flex items-center gap-1.5 rounded-md px-2.5 py-1 outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => void copy(current)}><CopyIcon class="size-4" />{$t('common.copy')}</button>
+      <button type="button" class="flex pointer-coarse:min-h-11 items-center gap-1.5 rounded-md px-2.5 py-1 outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => void copy(current)}><CopyIcon class="size-4" />{$t('common.copy')}</button>
     {/if}
   </div>
 {/if}

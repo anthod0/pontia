@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ResponsiveSelect from '$lib/components/ui/overlay/ResponsiveSelect.svelte'
   import { untrack } from 'svelte'
   import { t, type MessageKey } from '$lib/i18n'
   import { useDeviceRuntime } from '../../device/context'
@@ -13,7 +14,6 @@
   import { Label } from '$lib/components/ui/label/index.js'
   import { Switch } from '$lib/components/ui/switch/index.js'
   import { Textarea } from '$lib/components/ui/textarea/index.js'
-  import * as Select from '$lib/components/ui/select/index.js'
   import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js'
   import { Separator } from '$lib/components/ui/separator/index.js'
   import InfoIcon from 'phosphor-svelte/lib/InfoIcon'
@@ -229,19 +229,17 @@
   <div class="grid gap-4 sm:grid-cols-2">
     <div class="grid content-start gap-2">
       <Label for={`${id}-client`}>{$t('clients.agentClient')}</Label>
-      <Select.Root type="single" value={selectedClient?.id ?? ''} onValueChange={(clientId) => { settling = false; chooseClient(clientId) }} disabled={saving}>
-        <Select.Trigger id={`${id}-client`} class="w-full">
+      <ResponsiveSelect value={selectedClient?.id ?? ''} onValueChange={(clientId) => { settling = false; chooseClient(clientId) }} disabled={saving}
+        label={$t('clients.agentClient')} triggerClass="w-full" id={`${id}-client`}
+        options={clients} keyOf={client => client.id} labelOf={client => client.name}>
+        {#snippet trigger()}
           <span class="flex min-w-0 items-center gap-2">
             {#if selectedClient}<ClientIcon clientType={selectedClient.client_type} acpAgentId={selectedClient.client_key} class="size-4 text-foreground" />{/if}
             <span class="truncate">{selectedClient?.name ?? (draft.client_type ? `${draft.client_type} / ${draft.client_key}` : $t('clients.choose'))}</span>
           </span>
-        </Select.Trigger>
-        <Select.Content>
-          {#each clients as client (client.id)}
-            <Select.Item value={client.id} label={client.name}><ClientIcon clientType={client.client_type} acpAgentId={client.client_key} class="size-4 text-foreground" />{client.name}</Select.Item>
-          {/each}
-        </Select.Content>
-      </Select.Root>
+        {/snippet}
+        {#snippet option(client)}<ClientIcon clientType={client.client_type} acpAgentId={client.client_key} class="size-4 text-foreground" />{client.name}{/snippet}
+      </ResponsiveSelect>
       {#if !clients.length}<p role="status" class="text-sm text-muted-foreground">{$t('profiles.noClients')} <a class="underline underline-offset-4" href={dashboardPath('/settings/clients')}>{$t('settings.agentClients')}</a></p>{/if}
     </div>
     <div class="grid content-start gap-2">

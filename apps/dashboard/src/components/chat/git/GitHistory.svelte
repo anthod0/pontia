@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ResponsiveSelect from '$lib/components/ui/overlay/ResponsiveSelect.svelte'
   import { currentLocale, t } from '$lib/i18n'
   import { formatDateTime, formatRelativeTime } from '$lib/format'
   import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
@@ -9,10 +10,8 @@
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
-  import * as Select from '$lib/components/ui/select/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import type { DeviceRuntime } from '../../../device/runtime'
-  import type { GitBranch } from '../../../api/types'
   import { moveRowFocus, shortSha } from './gitChanges'
   import type { GitPanelState } from './gitPanelState.svelte'
 
@@ -31,6 +30,10 @@
   const commits = $derived(commitsQuery.data?.pages.flatMap(page => page.commits) ?? [])
   const local = $derived(branches.filter(branch => !branch.remote))
   const remote = $derived(branches.filter(branch => branch.remote))
+  const options = $derived([
+    ...(head === 'HEAD' ? [{ ref: 'HEAD', name: $t('git.detachedHead'), current: true, remote: false }] : []),
+    ...local, ...remote,
+  ])
   const selected = $derived(branches.find(branch => branch.ref === ref))
   const branchLabel = $derived(selected?.name ?? (ref === 'HEAD' ? $t('git.detachedHead') : $t('git.noBranch')))
   let list = $state<HTMLElement>()
@@ -44,13 +47,6 @@
     if (ref) void commitsQuery.refetch()
   }
 </script>
-
-{#snippet branchItem(branch: GitBranch)}
-  <Select.Item value={branch.ref} label={branch.name} class="py-1.5">
-    <span class="min-w-0 flex-1 truncate font-mono text-[13px]">{branch.name}</span>
-    {#if branch.current}<Badge variant="outline" class="ml-2 shrink-0 font-normal">{$t('common.current')}</Badge>{/if}
-  </Select.Item>
-{/snippet}
 
 {#if branchesQuery.isError}
   <Alert.Root variant="destructive" class="m-3 w-auto">
@@ -77,34 +73,20 @@
   </Empty.Root>
 {:else}
   <div class="flex shrink-0 items-center gap-2 border-b px-3 py-2">
-    <Select.Root type="single" value={ref ?? undefined} onValueChange={(next) => git.chooseRef(next)}>
-      <Select.Trigger class="h-8 min-w-0 flex-1 max-lg:h-10" aria-label={$t('git.branchToShow', { branch: branchLabel })}
-        title={$t('git.branchPickerHint')}>
+    <ResponsiveSelect value={ref ?? undefined} onValueChange={(next) => git.chooseRef(next)}
+      label={$t('git.branchToShow', { branch: branchLabel })} title={$t('git.branchPickerHint')} triggerClass="h-8 min-w-0 flex-1 max-lg:h-10"
+      align="start" contentClass="max-h-80 w-72" itemClass="py-1.5" {options} keyOf={branch => branch.ref} labelOf={branch => branch.name}
+      groupOf={branch => branch.ref === 'HEAD' ? '' : $t(branch.remote ? 'git.remoteBranches' : 'git.localBranches')}>
+      {#snippet trigger()}
         <GitBranchIcon class="size-4 text-muted-foreground" />
         <span class="min-w-0 flex-1 truncate text-left font-mono text-[13px]">{branchLabel}</span>
         {#if selected?.current}<span class="shrink-0 text-xs text-muted-foreground">{$t('common.current')}</span>{/if}
-      </Select.Trigger>
-      <Select.Content align="start" class="max-h-80 w-72">
-        {#if head === 'HEAD'}
-          <Select.Item value="HEAD" label={$t('git.detachedHead')} class="py-1.5">
-            <span class="min-w-0 flex-1 truncate">{$t('git.detachedHead')}</span>
-            <Badge variant="outline" class="ml-2 shrink-0 font-normal">{$t('common.current')}</Badge>
-          </Select.Item>
-        {/if}
-        {#if local.length}
-          <Select.Group>
-            <Select.GroupHeading>{$t('git.localBranches')}</Select.GroupHeading>
-            {#each local as branch (branch.ref)}{@render branchItem(branch)}{/each}
-          </Select.Group>
-        {/if}
-        {#if remote.length}
-          <Select.Group>
-            <Select.GroupHeading>{$t('git.remoteBranches')}</Select.GroupHeading>
-            {#each remote as branch (branch.ref)}{@render branchItem(branch)}{/each}
-          </Select.Group>
-        {/if}
-      </Select.Content>
-    </Select.Root>
+      {/snippet}
+      {#snippet option(branch)}
+        <span class="min-w-0 flex-1 truncate font-mono text-[13px]">{branch.name}</span>
+        {#if branch.current}<Badge variant="outline" class="ml-2 shrink-0 font-normal">{$t('common.current')}</Badge>{/if}
+      {/snippet}
+    </ResponsiveSelect>
   </div>
 
   <div class="min-h-0 flex-1 overflow-auto overscroll-contain">

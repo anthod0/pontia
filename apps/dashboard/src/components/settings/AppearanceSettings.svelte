@@ -1,12 +1,11 @@
 <script lang="ts">
+  import ResponsiveSelect from '$lib/components/ui/overlay/ResponsiveSelect.svelte'
   import { t, languagePreference, type LanguagePreference } from '$lib/i18n';
   import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon'
   import MoonIcon from 'phosphor-svelte/lib/MoonIcon'
   import SunIcon from 'phosphor-svelte/lib/SunIcon'
   import * as ToggleGroup from '$lib/components/ui/toggle-group/index.js'
   import { themePreference, type ThemePreference } from '$lib/theme'
-
-  import * as Select from '$lib/components/ui/select/index.js'
 
   $: options = [
     { value: 'system', label: $t('settings.system'), icon: DesktopIcon },
@@ -47,15 +46,13 @@
       <p class="text-sm font-medium text-heading">{$t('settings.language')}</p>
       <p class="text-xs text-muted-foreground">{$t('settings.languageHint')}</p>
     </div>
-    <Select.Root type="single" value={$languagePreference} onValueChange={(value) => languagePreference.set(value as LanguagePreference)}>
-      <Select.Trigger class="w-40" aria-label={$t('settings.language')}>
+    <ResponsiveSelect value={$languagePreference} onValueChange={(value) => languagePreference.set(value as LanguagePreference)}
+      label={$t('settings.language')} triggerClass="w-40"
+      options={languages} keyOf={language => language.value} labelOf={language => language.label}>
+      {#snippet trigger()}
         {languages.find((language) => language.value === $languagePreference)?.label}
-      </Select.Trigger>
-      <Select.Content>
-        {#each languages as language (language.value)}
-          <Select.Item value={language.value} label={language.label}>{language.label}</Select.Item>
-        {/each}
-      </Select.Content>
-    </Select.Root>
+      {/snippet}
+      {#snippet option(language)}{language.label}{/snippet}
+    </ResponsiveSelect>
   </div>
 </section>

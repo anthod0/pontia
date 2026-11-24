@@ -1,4 +1,6 @@
 {
+  "common.searchOptions": "搜索选项",
+  "common.noMatchingOptions": "没有匹配的选项",
   "bots.avatar": "头像",
   "bots.avatarShape": "形状",
   "bots.avatarColor": "颜色",

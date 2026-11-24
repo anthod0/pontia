@@ -99,7 +99,7 @@
       trapFocus={false}
       side={commandSide}
       align="start"
-      class="w-[min(28rem,calc(100vw-3rem))] gap-0 p-1"
+      class="w-[min(28rem,calc(100vw-3rem))] max-h-[min(18rem,var(--bits-popover-content-available-height),calc(var(--visual-viewport-height)/2))] overflow-y-auto overscroll-contain gap-0 p-1"
       onOpenAutoFocus={(event) => event.preventDefault()}
       onCloseAutoFocus={(event) => event.preventDefault()}
       onInteractOutside={(event) => { if (anchor?.contains(event.target as Node)) event.preventDefault() }}
@@ -113,7 +113,7 @@
             aria-selected={index === selectedIndex}
             disabled={Boolean(command.disabledReason)}
             tabindex={-1}
-            class={`h-auto w-full justify-start gap-3 px-3 py-2 text-left ${index === selectedIndex ? 'bg-accent text-accent-foreground' : ''}`}
+            class={`h-auto pointer-coarse:min-h-11 w-full justify-start gap-3 px-3 py-2 text-left ${index === selectedIndex ? 'bg-accent text-accent-foreground' : ''}`}
             onmouseenter={() => (selectedIndex = index)}
             onpointerdown={(event) => event.preventDefault()}
             onclick={() => choose(command)}

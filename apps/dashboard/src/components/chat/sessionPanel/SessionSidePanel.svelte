@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SidePanel from '$lib/components/ui/overlay/SidePanel.svelte'
   import { t, number } from '$lib/i18n'
   import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
   import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon'
@@ -26,7 +27,7 @@
   const sessionFiles = $derived(sessionRecentFiles(recentFiles.current, source.sessionId))
   const workspacesQuery = device.workspaceQueries.createWorkspacesQuery()
   const workspace = $derived(workspacesQuery.data?.find(item => item.workspace_id === source.workspaceId))
-  let element = $state<HTMLElement>()
+  let element = $state<HTMLElement | null>(null)
   let git = $state<GitPanel>()
 
   // Opening the panel by hand moves focus into it, so the keyboard works there right away.
@@ -37,9 +38,7 @@
   })
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<aside bind:this={element} tabindex="-1" data-session-panel aria-label={$t('nav.sidebar')} onkeydown={(event) => git?.keydown(event)}
-  class="fixed inset-y-0 right-0 z-50 flex w-full min-w-0 flex-col border-l bg-surface outline-none pt-[env(safe-area-inset-top)] lg:w-[var(--file-preview-width)]">
+<SidePanel close={() => panel.close()} bind:ref={element} tabindex={-1} data-session-panel aria-label={$t('nav.sidebar')} onkeydown={(event) => git?.keydown(event)}>
   <FilePreviewResizer />
   <Tabs.Root bind:value={() => panel.tab, next => { panel.tab = next as SessionPanelTab }} class="min-h-0 flex-1 gap-0">
     <header class="flex h-12 shrink-0 items-center justify-between gap-1 border-b px-2">
@@ -93,4 +92,4 @@
       {/if}
     </Tabs.Content>
   </Tabs.Root>
-</aside>
+</SidePanel>

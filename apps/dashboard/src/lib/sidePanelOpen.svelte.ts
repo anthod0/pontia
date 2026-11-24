@@ -1,3 +1,5 @@
+import { pushState } from "$app/navigation";
+import { page } from "$app/state";
 import { MediaQuery } from "svelte/reactivity";
 import { PersistedState } from "./storage";
 
@@ -13,10 +15,12 @@ const openSerializer = {
  */
 export class SidePanelOpen {
   #saved: PersistedState<boolean>;
-  #phoneOpen = $state(false);
+  #key: string;
+  #backPending = false;
   #wide = new MediaQuery("min-width: 1024px");
 
   constructor(key: string) {
+    this.#key = key;
     this.#saved = new PersistedState(key, false, openSerializer);
   }
 
@@ -26,11 +30,24 @@ export class SidePanelOpen {
   }
 
   get current(): boolean {
-    return this.wide ? this.#saved.current : this.#phoneOpen;
+    return this.wide ? this.#saved.current : page.state.sidePanel === this.#key;
   }
 
   set current(open: boolean) {
     if (this.wide) this.#saved.current = open;
-    else this.#phoneOpen = open;
+    else if (!this.#backPending && open !== this.current) {
+      if (open) pushState("", { ...page.state, sidePanel: this.#key });
+      else {
+        this.#backPending = true;
+        window.addEventListener(
+          "popstate",
+          () => {
+            this.#backPending = false;
+          },
+          { once: true },
+        );
+        history.back();
+      }
+    }
   }
 }

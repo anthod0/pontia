@@ -30,3 +30,25 @@ export function installVisualViewportCssVars(win: Window = window): () => void {
     root.style.setProperty("--visual-viewport-bottom", "0px");
   };
 }
+
+/** Fixed toolbar center and attachment edge in layout viewport coordinates. */
+export function selectionToolbarPosition(
+  selection: Pick<DOMRect, "left" | "width" | "top" | "bottom">,
+  touch: boolean,
+  viewport: Pick<DOMRect, "x" | "y" | "width" | "height">,
+  width: number,
+  height: number,
+) {
+  const margin = 4;
+  const half = width / 2;
+  const left = Math.max(
+    viewport.x + half + margin,
+    Math.min(selection.left + selection.width / 2, viewport.x + viewport.width - half - margin),
+  );
+  const min = viewport.y + margin;
+  const max = viewport.y + viewport.height - margin;
+  const top = touch
+    ? Math.max(min, Math.min(selection.bottom + 48, max - height))
+    : Math.max(min + height, Math.min(selection.top - 8, max));
+  return { left, top };
+}

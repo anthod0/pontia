@@ -60,11 +60,11 @@
                 <p class="truncate text-xs text-muted-foreground">{task.deviceName ?? $t('downloads.localDevice')}</p>
               </div>
               {#if task.status === 'receiving'}
-                <Button variant="ghost" size="icon-sm" onclick={() => downloads.cancel(task.id)} aria-label={$t('downloads.cancelNamed', { name: task.name })} title={$t('common.cancel')}><XIcon /></Button>
+                <Button variant="ghost" size="icon-sm" class="touch-target:size-11" onclick={() => downloads.cancel(task.id)} aria-label={$t('downloads.cancelNamed', { name: task.name })} title={$t('common.cancel')}><XIcon /></Button>
               {:else}
                 <div class="flex shrink-0 gap-1">
-                  <Button variant="ghost" size="icon-sm" onclick={() => downloads.retry(task.id)} aria-label={$t('downloads.retryNamed', { name: task.name })} title={$t('common.retry')}><ArrowClockwiseIcon /></Button>
-                  <Button variant="ghost" size="icon-sm" onclick={() => downloads.cancel(task.id)} aria-label={$t('downloads.dismissNamed', { name: task.name })} title={$t('common.dismiss')}><XIcon /></Button>
+                  <Button variant="ghost" size="icon-sm" class="touch-target:size-11" onclick={() => downloads.retry(task.id)} aria-label={$t('downloads.retryNamed', { name: task.name })} title={$t('common.retry')}><ArrowClockwiseIcon /></Button>
+                  <Button variant="ghost" size="icon-sm" class="touch-target:size-11" onclick={() => downloads.cancel(task.id)} aria-label={$t('downloads.dismissNamed', { name: task.name })} title={$t('common.dismiss')}><XIcon /></Button>
                 </div>
               {/if}
             </div>
