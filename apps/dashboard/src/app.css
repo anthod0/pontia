@@ -351,6 +351,7 @@ body {
   font-weight: 600;
 }
 .mobile-icon {
+  flex-shrink: 0;
   display: grid;
   place-items: center;
   width: 44px;

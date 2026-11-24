@@ -13,7 +13,13 @@
 <header class="flex items-center gap-2 px-4 py-2">
   {#if back}<button class="mobile-icon mobile-glass" aria-label={$t(modal ? 'common.close' : 'mobile.back')} onclick={back}>{#if modal}<XIcon />{:else}<CaretLeftIcon />{/if}</button>{/if}
   {#snippet heading()}
-    {#if device}<span class="flex items-center gap-1 text-xs text-muted-foreground"><span class={['size-2 rounded-full',device.state === 'online' ? 'bg-green-600' : 'bg-muted-foreground']}></span>{device.name}{#if switchDevice}<CaretDownIcon />{/if}</span>{/if}
+    {#if device}
+      <span class="flex items-center gap-1 text-xs text-muted-foreground">
+        <span class={['size-2 shrink-0 rounded-full', device.state === 'online' ? 'bg-green-600' : 'bg-muted-foreground']}></span>
+        <span class="truncate">{device.name}</span>
+        {#if switchDevice}<CaretDownIcon class="shrink-0" />{/if}
+      </span>
+    {/if}
     <span class={['block truncate font-semibold text-heading', device ? 'text-[22px]' : 'text-lg']}>{title}</span>
     {#if subtitle}<small class="block truncate text-muted-foreground">{subtitle}</small>{/if}
   {/snippet}

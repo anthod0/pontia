@@ -19,7 +19,7 @@
       <button class="mobile-row" aria-pressed={device.handle === host.activeDevice?.handle}
         onclick={() => stack.back(() => host.selectDevice(device.handle, {keepMobileTab: true}))}>
         <DesktopIcon /><span class="min-w-0 flex-1 truncate text-left">{device.name}</span>
-        <span class={['size-2 rounded-full',deviceStateDotClass[device.state]]}></span>
+        <span class={['size-2 shrink-0 rounded-full',deviceStateDotClass[device.state]]}></span>
         <small>{$t(deviceStateLabel[device.state])}</small>
         {#if device.handle === host.activeDevice?.handle}<CheckIcon class="text-primary" />{/if}
       </button>
