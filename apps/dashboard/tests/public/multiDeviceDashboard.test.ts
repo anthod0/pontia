@@ -583,7 +583,9 @@ test("an account without devices shows setup steps and finds a newly registered 
   fixture.listed.splice(0);
   render(MultiDeviceDashboardHarness);
   expect(await screen.findByRole("heading", { name: "Connect your first device" })).toBeVisible();
-  expect(screen.getByText(/pontia" init/)).toBeVisible();
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "Copy npx @pontia/cli init" }));
+  expect(await navigator.clipboard.readText()).toBe("npx @pontia/cli init");
   expect(redirectToSignIn).not.toHaveBeenCalled();
   fixture.listed.push({
     handle: "office-mac",

@@ -13,12 +13,11 @@
     {
       title: $t('devices.install'),
       description: $t('devices.installDescription'),
-      command: 'curl -fsSL https://get.pontia.dev/install.sh | sh',
+      command: 'npx @pontia/cli init',
     },
     {
       title: $t('devices.initialize'),
       description: $t('devices.initializeDescription'),
-      command: '"$HOME/.local/bin/pontia" init',
     },
     {
       title: $t('devices.openHere'),
@@ -65,7 +64,7 @@
                   {#if copied === index}<CheckIcon />{:else}<CopyIcon />{/if}
                 </Button>
               </div>
-            {:else}
+            {:else if index === steps.length - 1}
               <Button variant="outline" size="sm" onclick={onCheck} disabled={checking}>
                 <ArrowClockwiseIcon class={checking ? 'animate-spin' : undefined} />
                 {checking ? $t('common.checking') : $t('devices.check')}
