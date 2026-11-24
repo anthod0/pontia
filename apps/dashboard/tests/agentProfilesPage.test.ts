@@ -223,3 +223,122 @@ test("reads an individual profile and cannot read it after deletion", async () =
   await testDevice.api.deleteAgentProfile("executor");
   await expect(testDevice.api.getAgentProfile("executor")).rejects.toMatchObject({ status: 404 });
 });
+
+const card = (name: string) => screen.findByRole("button", { name: new RegExp(`^${name}`) });
+
+test("creates a profile from a template whose client and model are available", async () => {
+  const user = userEvent.setup();
+  render(AgentProfilesPage);
+  await user.click(await screen.findByRole("button", { name: "New profile" }));
+  await user.click(await card("Implementer"));
+  await screen.findByText("Applied template");
+  expect(screen.queryByRole("button", { name: /^Code reviewer/ })).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Profile ID")).toHaveValue("implementer");
+  expect(screen.getByLabelText("Name", { exact: true })).toHaveValue("Implementer");
+  expect(screen.getByRole("switch", { name: "Use YOLO mode" })).toBeChecked();
+  expect((screen.getByLabelText("System prompt") as HTMLTextAreaElement).value).toContain(
+    "engineer responsible for implementation",
+  );
+  await screen.findByRole("button", { name: "Model" });
+  expect(screen.getByRole("button", { name: "Model" })).toHaveTextContent("Claude Sonnet 5.5");
+  expect(screen.queryByText(/template recommends/)).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Create profile" }));
+  await waitFor(() =>
+    expect(device.data.agentProfiles.find((p) => p.profile_id === "implementer")).toMatchObject({
+      name: "Implementer",
+      client_type: "pi",
+      model: "anthropic/claude-sonnet-5-5",
+      reasoning_effort: "medium",
+      use_yolo: true,
+    }),
+  );
+});
+
+test("leaves the client and model alone when the template's client is not installed", async () => {
+  const user = userEvent.setup();
+  device.data.agentClients = device.data.agentClients.filter(
+    (c) => c.client_type !== "claude-agent",
+  );
+  render(AgentProfilesPage);
+  await user.click(await screen.findByRole("button", { name: "New profile" }));
+  const researcher = await card("Researcher");
+  expect(researcher).toHaveTextContent("Not installed");
+  await screen.findByRole("button", { name: "Model" });
+  await user.click(researcher);
+  const note = await screen.findByText(/which is not installed on this device/);
+  expect(note.closest("[role=status]")).toHaveTextContent("Claude Code (opus)");
+  expect(within(note.closest("[role=status]") as HTMLElement).getByRole("link")).toHaveTextContent(
+    "Agent Clients",
+  );
+  expect(screen.getByRole("combobox", { name: "Agent client" })).toHaveTextContent("Pi");
+  expect(screen.getByLabelText("Profile ID")).toHaveValue("researcher");
+  await chooseClient("Codex");
+  await waitFor(() => expect(screen.queryByText(/not installed on this device/)).toBeNull());
+});
+
+test("falls back to the client's default model when the template's model is not offered", async () => {
+  const user = userEvent.setup();
+  device.data.clientModels.codex = [];
+  render(AgentProfilesPage);
+  await user.click(await screen.findByRole("button", { name: "New profile" }));
+  await user.click(await card("Code reviewer"));
+  await waitFor(() =>
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Codex does not offer the template's model gpt-6.2-astra",
+    ),
+  );
+  expect(screen.getByRole("combobox", { name: "Agent client" })).toHaveTextContent("Codex");
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Model" })).toHaveTextContent("Claude Sonnet 4.5"),
+  );
+});
+
+test("asks before a template replaces a changed draft", async () => {
+  const user = userEvent.setup();
+  render(AgentProfilesPage);
+  await user.click(await screen.findByRole("button", { name: "New profile" }));
+  await screen.findByRole("button", { name: "Model" });
+  await user.type(screen.getByLabelText("Name", { exact: true }), "Mine");
+  await fireEvent.click(await card("Debugger"));
+  const dialog = await screen.findByRole("alertdialog");
+  expect(dialog).toHaveTextContent("Applying “Debugger” replaces");
+  await fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  expect(screen.getByLabelText("Name", { exact: true })).toHaveValue("Mine");
+  await fireEvent.click(await card("Debugger"));
+  await fireEvent.click(
+    within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Replace" }),
+  );
+  await waitFor(() =>
+    expect(screen.getByLabelText("Name", { exact: true })).toHaveValue("Debugger"),
+  );
+
+  // An unchanged draft switches templates directly, and the applied template only closes the picker.
+  await fireEvent.click(screen.getByRole("button", { name: "Change template" }));
+  expect(await card("Debugger")).toHaveAttribute("aria-pressed", "true");
+  await fireEvent.click(await card("Debugger"));
+  await screen.findByRole("button", { name: "Change template" });
+  await fireEvent.click(screen.getByRole("button", { name: "Change template" }));
+  await fireEvent.click(await card("Test engineer"));
+  await waitFor(() =>
+    expect(screen.getByLabelText("Name", { exact: true })).toHaveValue("Test engineer"),
+  );
+  await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+});
+
+test("starts a profile from a template on the empty state and hides templates while editing", async () => {
+  device.data.agentProfiles = [];
+  render(AgentProfilesPage);
+  await fireEvent.click(await card("Doc writer"));
+  await waitFor(() => expect(screen.getByLabelText("Profile ID")).toHaveValue("doc-writer"));
+  expect(screen.getByRole("combobox", { name: "Agent client" })).toHaveTextContent("Claude Code");
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Model" })).toHaveTextContent("Sonnet"),
+  );
+});
+
+test("does not offer templates while editing an existing profile", async () => {
+  render(AgentProfilesPage);
+  await open("Executor");
+  await screen.findByRole("button", { name: "Save" });
+  expect(screen.queryByText("Start from a template")).not.toBeInTheDocument();
+});

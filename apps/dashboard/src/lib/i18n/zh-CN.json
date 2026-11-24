@@ -853,5 +853,22 @@
   "memory.userEditHint": "保存后，本设备所有 Bot 都会收到通知，改用新的 USER.md。",
   "memory.userSaved": "USER.md 已保存，Bot 会改用新版本。",
   "memory.userConflict": "编辑期间有 Bot 修改了 USER.md，你的修改没有保存。",
-  "memory.userStartOver": "基于最新版本编辑"
+  "memory.userStartOver": "基于最新版本编辑",
+  "profiles.templatesTitle": "从模板开始",
+  "profiles.templatesHint": "选择一个模板填充下面的表单，填充后仍可修改。",
+  "profiles.templatesEmptyHint": "选择一个模板新建 Profile，创建前可以修改所有字段。",
+  "profiles.templateApplied": "已套用模板",
+  "profiles.templateAppliedHint": "，可以继续修改下面的字段。",
+  "profiles.changeTemplate": "更换模板",
+  "profiles.hideTemplates": "收起",
+  "profiles.templateClientMissingShort": "未安装",
+  "profiles.templateClientDisabledShort": "未启用",
+  "profiles.templateClientMissingTitle": "{client} 未安装，套用时不会填充客户端和模型",
+  "profiles.templateClientDisabledTitle": "{client} 未启用，套用时不会填充客户端和模型",
+  "profiles.templateClientMissing": "模板推荐的 {client}（{model}）未在此设备上安装，客户端和模型保持原样。可以直接使用当前选择，或前往 {link} 安装。",
+  "profiles.templateClientDisabled": "模板推荐的 {client}（{model}）未在此设备上启用，客户端和模型保持原样。可以直接使用当前选择，或前往 {link} 启用。",
+  "profiles.templateModelMissing": "{client} 中没有模板推荐的模型 {model}，已使用客户端默认模型。",
+  "profiles.replaceTemplateTitle": "替换已填写的内容？",
+  "profiles.replaceTemplateDescription": "套用「{name}」会覆盖名称、配置 ID、描述、YOLO 模式和系统提示词；客户端和模型仅在此设备可用时覆盖。",
+  "profiles.replace": "替换"
 }

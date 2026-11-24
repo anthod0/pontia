@@ -42,6 +42,8 @@ export interface MockData {
   clientSetup: AgentClientSetupOperation | null;
   creationOptions: Omit<SessionCreationOption, "version">[];
   models: SessionModel[];
+  /** Models a client offers after the shared `models`. */
+  clientModels: Record<string, SessionModel[]>;
   files: string[];
   memory: MockMemoryData;
   nextId: (prefix: string) => string;
@@ -73,6 +75,21 @@ const models: SessionModel[] = [
   { id: "anthropic/claude-opus-4-1", name: "Claude Opus 4.1", description: "anthropic" },
   { id: "openai/gpt-5-codex", name: "GPT-5 Codex", description: "openai" },
 ];
+
+const clientModels: Record<string, SessionModel[]> = {
+  pi: [{ id: "anthropic/claude-sonnet-5-5", name: "Claude Sonnet 5.5", description: "anthropic" }],
+  codex: [
+    {
+      id: "gpt-6.2-astra",
+      name: "GPT-6.2-Astra",
+      description: "Our most capable model for complex coding and professional work.",
+    },
+  ],
+  "claude-agent": [
+    { id: "opus", name: "Opus", description: "Most capable for complex work" },
+    { id: "sonnet", name: "Sonnet", description: "Best for everyday tasks" },
+  ],
+};
 
 const creationOptions: Omit<SessionCreationOption, "version">[] = [
   { id: "pi", name: "Pi", client_type: "pi", model_catalog_key: "default", metadata: {} },
@@ -740,6 +757,7 @@ export function createSampleData(): MockData {
     ],
     creationOptions,
     models,
+    clientModels,
     files: [
       "README.md",
       "justfile",

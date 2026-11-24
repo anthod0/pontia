@@ -853,5 +853,22 @@
   "memory.userEditHint": "When you save, every Bot on this device is told to use the new USER.md.",
   "memory.userSaved": "USER.md saved. Bots will use the new version.",
   "memory.userConflict": "A Bot changed USER.md while you were editing, so your changes were not saved.",
-  "memory.userStartOver": "Edit the latest version"
+  "memory.userStartOver": "Edit the latest version",
+  "profiles.templatesTitle": "Start from a template",
+  "profiles.templatesHint": "Choose a template to fill in the form below. You can still change every field.",
+  "profiles.templatesEmptyHint": "Choose a template to start a new profile. You can change every field before creating it.",
+  "profiles.templateApplied": "Applied template",
+  "profiles.templateAppliedHint": ". You can keep editing the fields below.",
+  "profiles.changeTemplate": "Change template",
+  "profiles.hideTemplates": "Hide",
+  "profiles.templateClientMissingShort": "Not installed",
+  "profiles.templateClientDisabledShort": "Not enabled",
+  "profiles.templateClientMissingTitle": "{client} is not installed. Applying this template leaves the client and model unchanged.",
+  "profiles.templateClientDisabledTitle": "{client} is not enabled. Applying this template leaves the client and model unchanged.",
+  "profiles.templateClientMissing": "The template recommends {client} ({model}), which is not installed on this device, so the client and model were left unchanged. Keep the current choice or install it in {link}.",
+  "profiles.templateClientDisabled": "The template recommends {client} ({model}), which is not enabled on this device, so the client and model were left unchanged. Keep the current choice or enable it in {link}.",
+  "profiles.templateModelMissing": "{client} does not offer the template's model {model}, so the client's default model is used.",
+  "profiles.replaceTemplateTitle": "Replace what you entered?",
+  "profiles.replaceTemplateDescription": "Applying “{name}” replaces the name, profile ID, description, YOLO mode, and system prompt. The client and model are replaced only if they are available on this device.",
+  "profiles.replace": "Replace"
 }
