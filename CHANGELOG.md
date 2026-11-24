@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.16] - 2026-11-25
+
+### Added
+
+- Open a localhost link in the public Dashboard to preview an HTTP service running on the remote device. Previews also support WebSocket connections.
+- Open an HTML file in the Dashboard Files panel to preview the page or switch to the Source tab to read its HTML.
+
+### Changed
+
+- On phones, Dashboard menus and dialogs fit the screen, New Chat selectors wrap, and saving an Agent Profile returns you to the profile list.
+- In the desktop sidebar, active Bots show their current task and idle Bots use a single row. An icon indicates open todos.
+- Online Edges receive an automatic update notification when a stable release is published.
+
+### Fixed
+
+- When a Codex Session exits, its attached terminal interfaces close automatically.
+- When Pontia reconnects to an ACP Session during a Turn, Dashboard explains that history will reload after the Turn ends.
+
 ## [0.8.15] - 2026-11-24
 
 ### Changed
@@ -1207,7 +1225,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.8.14...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.8.16...HEAD
+[0.8.16]: https://github.com/anthod0/pontia/compare/v0.8.15...v0.8.16
 [0.8.14]: https://github.com/anthod0/pontia/compare/v0.8.13...v0.8.14
 [0.8.13]: https://github.com/anthod0/pontia/compare/v0.8.12...v0.8.13
 [0.8.12]: https://github.com/anthod0/pontia/compare/v0.8.11...v0.8.12
