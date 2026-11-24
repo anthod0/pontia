@@ -4,7 +4,6 @@
 	import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon';
 	import CaretLeftIcon from 'phosphor-svelte/lib/CaretLeftIcon';
 	import DotsThreeIcon from 'phosphor-svelte/lib/DotsThreeIcon';
-	import DotsThreeVerticalIcon from 'phosphor-svelte/lib/DotsThreeVerticalIcon';
 	import EyeSlashIcon from 'phosphor-svelte/lib/EyeSlashIcon';
 	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
 	import QuotesIcon from 'phosphor-svelte/lib/QuotesIcon';
@@ -244,7 +243,6 @@
 			}}>
 				<span class="flex size-7 shrink-0 items-center justify-center pl-1 text-foreground"><PlusIcon class="size-4" /></span>
 				<input bind:this={composer} bind:value={draft} class="min-w-0 flex-1 bg-transparent py-2 pl-1.5 text-[13.5px] outline-none placeholder:text-muted-foreground" placeholder="Message" aria-label="Message" />
-				<span class="flex size-7 shrink-0 items-center justify-center text-foreground"><DotsThreeVerticalIcon class="size-5" /></span>
 				<div class="shrink-0 p-1">
 					<button type="submit" disabled={!draft.trim()} aria-label="Send" class="inline-flex h-7 w-7 items-center justify-center gap-1.5 rounded-md bg-primary-solid text-xs font-semibold text-primary-foreground disabled:bg-border disabled:text-inactive @md:w-auto @md:px-3">
 						<span class="hidden @md:inline">Send</span><ArrowUpIcon class="size-3.5" />

@@ -246,7 +246,7 @@
 											{:else if entry.kind === 'bot' && entry.todo}<span class="ml-auto flex items-center gap-0.5"><CheckCircleIcon class="size-3" />Done</span>{/if}
 											{#if entry.kind === 'user' && entry.quote}<span class="flex items-center gap-0.5"><QuotesIcon class="size-3" />Quoted</span>{/if}
 										</span>
-										<span class="line-clamp-3 text-[13px] leading-5 [overflow-wrap:anywhere]">{plainText(entry)}</span>
+										<span class="text-[13px] leading-5 [overflow-wrap:anywhere]">{plainText(entry)}</span>
 										{#if entry.kind === 'user' && entry.failed}<span class="text-xs text-destructive">Message failed to send</span>{/if}
 									</span>
 								</button>
@@ -348,7 +348,7 @@
 			{:else}
 				<section class="demo-scroll min-h-0 flex-1 overflow-auto p-3" aria-label="Choose a workspace">
 					<h2 class="panel-heading px-2 font-medium text-heading">Choose a workspace</h2>
-					<p class="px-2 pt-0.5 pb-2 text-xs text-muted-foreground">Bots have no workspace of their own. Pick one to see its uncommitted changes.</p>
+					<p class="px-2 pt-0.5 pb-2 text-xs text-muted-foreground">Choose a workspace to explore its Git changes.</p>
 					<ul>
 						{#each workspaces as item (item.id)}
 							<li>

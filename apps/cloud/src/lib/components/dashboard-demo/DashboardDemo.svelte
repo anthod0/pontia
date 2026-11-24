@@ -1,9 +1,10 @@
 <script lang="ts">
+	import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon';
+	import * as Tabs from '$lib/components/ui/tabs';
 	import ArrowsLeftRightIcon from 'phosphor-svelte/lib/ArrowsLeftRightIcon';
 	import CaretLeftIcon from 'phosphor-svelte/lib/CaretLeftIcon';
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import CaretUpDownIcon from 'phosphor-svelte/lib/CaretUpDownIcon';
-	import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon';
 	import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon';
 	import DotsThreeIcon from 'phosphor-svelte/lib/DotsThreeIcon';
 	import FunnelIcon from 'phosphor-svelte/lib/FunnelIcon';
@@ -15,6 +16,7 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import { cn } from '$lib/utils';
 	import BotAvatarMark from '$lib/components/bot-story/BotAvatarMark.svelte';
+	import DemoSetup, { settingsSections, type DemoSettingsSection } from './DemoSetup.svelte';
 	import DemoBotChat from './DemoBotChat.svelte';
 	import DemoConversation from './DemoConversation.svelte';
 	import DemoSessionPanel from './DemoSessionPanel.svelte';
@@ -31,15 +33,18 @@
 	// Open on a session whose conversation fits without scrolling.
 	let sessionId = $state('review-api');
 	let workspaceFilter = $state('');
-	// Like the Dashboard, Recent Sessions shows only active sessions until the filter asks for all.
+	// Like the Dashboard, the Session list shows only active sessions until the filter asks for all.
 	let sessionScope = $state<'active' | 'all'>('active');
+	let settingsSection = $state<DemoSettingsSection>('Common');
+	let setup = $state<'new' | 'settings' | 'sessions' | null>(null);
+	let sessionsOpen = $state(true);
 	let mobileSidebarOpen = $state(false);
 	let botId = $state<string | null>(null);
 
 	const device = $derived(devices.find((item) => item.handle === deviceHandle)!);
 	const session = $derived(device.sessions.find((item) => item.id === sessionId)!);
 	const pinnedSessions = $derived(device.sessions.filter((item) => item.pinned));
-	// Like the Dashboard, the workspace filter only scopes Recent Sessions.
+	// Like the Dashboard, pinned Sessions remain visible across workspace filters.
 	const scopedSessions = $derived(device.sessions.filter((item) => !item.pinned && (!workspaceFilter || item.workspaceId === workspaceFilter)));
 	const recentSessions = $derived(sessionScope === 'all' ? scopedSessions : scopedSessions.filter((item) => item.state !== 'exited'));
 	const filterApplied = $derived(Boolean(workspaceFilter) || sessionScope === 'all');
@@ -50,12 +55,18 @@
 
 	const stateDot: Record<Exclude<DemoSessionState, 'exited'>, string> = { busy: 'bg-busy', idle: 'bg-idle', waiting_for_interaction: 'bg-interrupted' };
 	const stateLabel: Record<Exclude<DemoSessionState, 'exited'>, string> = { busy: 'busy', idle: 'idle', waiting_for_interaction: 'waiting for input' };
-	const menuButton = 'flex h-8 w-full min-w-0 items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-hidden [&_svg]:size-4 [&_svg]:shrink-0';
+	const menuButton = 'flex h-8 max-md:min-h-10 w-full min-w-0 items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-hidden [&_svg]:size-4 [&_svg]:shrink-0';
 	const dropdownContent = 'rounded-lg p-1 shadow-none';
 	const dropdownItem = 'gap-1.5 rounded-sm py-1 pl-1.5 text-sm';
 
+	function openView(view: 'new' | 'settings' | 'sessions') {
+		setup = view;
+		mobileSidebarOpen = false;
+	}
+
 	function selectDevice(handle: string): void {
 		if (handle === deviceHandle) return;
+		setup = null;
 		previousDeviceHandle = deviceHandle;
 		deviceHandle = handle;
 		workspaceFilter = '';
@@ -67,6 +78,7 @@
 	}
 
 	function selectSession(next: DemoSession): void {
+		setup = null;
 		if (next.workspaceId !== session.workspaceId) diff = null;
 		if (next.id !== sessionId) file = null;
 		sessionId = next.id;
@@ -75,6 +87,7 @@
 	}
 
 	function selectBot(id: string): void {
+		setup = null;
 		botId = id;
 		mobileSidebarOpen = false;
 	}
@@ -92,7 +105,24 @@
 	}
 
 	function shortcut(event: KeyboardEvent) {
-		if (bot || !event.altKey || event.ctrlKey || event.shiftKey || event.metaKey || event.code !== 'KeyG') return;
+		if (event.key === 'Escape' && mobileSidebarOpen) {
+			mobileSidebarOpen = false;
+			event.preventDefault();
+			return;
+		}
+		if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+			if (event.code === 'KeyN') {
+				event.preventDefault();
+				openView('new');
+				return;
+			}
+			if (event.code === 'KeyM' && previousDevice) {
+				event.preventDefault();
+				selectDevice(previousDevice.handle);
+				return;
+			}
+		}
+		if (setup || bot || !event.altKey || event.ctrlKey || event.shiftKey || event.metaKey || event.code !== 'KeyG') return;
 		event.preventDefault();
 		if (panelOpen && panelTab === 'git') closePanel();
 		else {
@@ -103,7 +133,7 @@
 </script>
 
 {#snippet sessionItem(item: DemoSession)}
-	{@const active = !bot && item.id === session.id}
+	{@const active = !setup && !bot && item.id === session.id}
 	<li class="relative text-sm">
 		<button
 			type="button"
@@ -122,10 +152,6 @@
 	</li>
 {/snippet}
 
-{#snippet groupHeading(label: string)}
-	<span class="flex items-center gap-1 text-xs font-medium">{label}<CaretRightIcon class="size-3 rotate-90" aria-hidden="true" /></span>
-{/snippet}
-
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div onkeydown={shortcut} class="dashboard-demo demo-git-colors @container relative flex h-full overflow-hidden bg-surface text-foreground" role="region" aria-label="Interactive Dashboard demo with sample data">
 	{#if mobileSidebarOpen}
@@ -134,8 +160,8 @@
 
 	<aside
 		class={cn(
-			'absolute inset-y-0 left-0 z-30 w-72 max-w-[85%] flex-col border-e border-border bg-background @3xl:static @3xl:flex @3xl:w-60 @3xl:max-w-none',
-			mobileSidebarOpen ? 'flex' : 'hidden'
+			'absolute inset-y-0 left-0 z-30 flex w-72 max-w-[85%] flex-col transition-transform motion-reduce:transition-none border-e border-border bg-background @3xl:static @3xl:flex @3xl:w-60 @3xl:max-w-none',
+			mobileSidebarOpen ? 'visible translate-x-0' : 'invisible -translate-x-full @3xl:visible @3xl:translate-x-0'
 		)}
 		aria-label="Sidebar"
 	>
@@ -149,18 +175,10 @@
 		<div class="mx-4 h-px shrink-0 bg-border"></div>
 
 		<div class="flex min-h-0 flex-1 flex-col">
-			<div class="p-2" aria-hidden="true">
-				<div class={cn(menuButton, 'mb-2 h-10 bg-primary-solid text-[13px] font-semibold text-primary-foreground')}>
-					<NotePencilIcon />
-					<span>New Chat</span>
-					<span class="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-sm border border-primary-foreground/40 px-1 text-[10px] font-medium text-primary-foreground/80">Alt+N</span>
-				</div>
-			</div>
-
 			<div class="relative shrink-0 p-2 pb-0 text-sm">
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger class={cn(menuButton, 'hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-primary data-[state=open]:bg-accent', previousDevice && 'pr-8')} aria-label="Sidebar device">
-						<DesktopIcon class="text-foreground/60" />
+						<span class="relative"><DesktopIcon class="text-foreground/60" /><span class="absolute -right-0.5 bottom-0 size-1.5 rounded-full bg-idle ring-1 ring-background" aria-label="Online"></span></span>
 						<span class="min-w-0 flex-1 truncate font-medium">{device.name}</span>
 						<CaretUpDownIcon class="text-foreground/60" />
 					</DropdownMenu.Trigger>
@@ -190,48 +208,53 @@
 			</div>
 
 			<div class="demo-scroll min-h-0 flex-1 overflow-y-auto">
+				{#if setup === 'settings'}
+					<nav aria-label="Settings sections" class="space-y-1 p-2">
+						{#each settingsSections as name}
+							<button type="button" class={cn(menuButton, 'hover:bg-muted', settingsSection === name && 'bg-accent font-medium')} aria-current={settingsSection === name ? 'page' : undefined} onclick={() => settingsSection = name}>{name}</button>
+						{/each}
+					</nav>
+				{:else}
 				<div class="p-2">
-					<div class="flex h-8 items-center px-2 text-foreground/70" aria-hidden="true">{@render groupHeading('Bots')}</div>
+					<div class="flex h-8 items-center px-2 text-xs font-semibold text-heading">Bots</div>
 					<ul class="flex flex-col gap-1">
 						{#each device.bots as item (item.id)}
-							{@const active = item.id === bot?.id}
+							{@const active = !setup && item.id === bot?.id}
+							{@const todos = item.entries.filter(entry => entry.kind === 'bot' && entry.todo === 'open').length}
 							<li>
 								<button
 									type="button"
-									class={cn(menuButton, 'h-9 gap-2.5 [&_svg]:size-6 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-primary', active && 'bg-accent font-medium text-accent-foreground')}
+									class={cn(menuButton, 'h-auto min-h-12 max-md:min-h-14 gap-2.5 [&_svg]:size-7 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-primary', active && 'bg-accent font-medium text-accent-foreground')}
 									aria-current={active ? 'page' : undefined}
 									onclick={() => selectBot(item.id)}
 								>
-									<span class="size-6 shrink-0"><BotAvatarMark shape={item.shape} color={item.color} /></span>
-									<span class="truncate">{item.name}</span>
+									<span class="size-7 shrink-0"><BotAvatarMark shape={item.shape} color={item.color} /></span>
+									<span class="flex min-w-0 flex-1 flex-col">
+										<span class="truncate font-medium">{item.name}</span>
+										<span class={cn('truncate text-xs', item.working ? 'text-primary' : 'text-muted-foreground')}>{item.working ?? 'Idle'}</span>
+									</span>
+									{#if todos}<span class="rounded-full bg-primary-solid px-1.5 text-xs text-primary-foreground" aria-label={`${todos} open todos`}>{todos}</span>{/if}
 								</button>
 							</li>
 						{/each}
 					</ul>
 				</div>
-				{#if pinnedSessions.length}
-					<div class="p-2">
-						<div class="flex h-8 items-center px-2 text-foreground/70">{@render groupHeading('Pinned Sessions')}</div>
-						<ul class="flex flex-col gap-1 pr-1">
-							{#each pinnedSessions as item (item.id)}{@render sessionItem(item)}{/each}
-						</ul>
-					</div>
-				{/if}
 				<div class="p-2">
 					<div class="flex h-8 items-center gap-1 px-2 text-foreground/70">
-						{@render groupHeading('Recent Sessions')}
+						<button type="button" class="flex items-center gap-1 text-xs font-medium" aria-expanded={sessionsOpen} onclick={() => sessionsOpen = !sessionsOpen}>Sessions<CaretRightIcon class={cn('size-3', sessionsOpen && 'rotate-90')} /></button>
 						<span class="flex-1"></span>
 						<span class="flex items-center gap-2">
-							<ArrowUpRightIcon class="size-4" aria-hidden="true" />
+							<button type="button" class="grid size-8 place-items-center rounded hover:bg-muted" aria-label="New Chat" onclick={() => openView('new')}><NotePencilIcon class="size-4" /></button>
+							<button type="button" class="grid size-8 place-items-center rounded hover:bg-muted" aria-label="Open all sessions" onclick={() => openView('sessions')}><ArrowUpRightIcon class="size-4" /></button>
 							<DropdownMenu.Root>
 								<DropdownMenu.Trigger
 									class={cn('rounded-sm hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-hidden', filterApplied && 'text-primary')}
-									aria-label="Filter recent sessions"
+									aria-label="Filter sessions"
 									title={`${sessionScope === 'active' ? 'Active sessions' : 'All sessions'} · ${filterWorkspace?.name ?? 'All workspaces'}`}
 								>
 									<FunnelIcon class="size-4" weight={filterApplied ? 'fill' : 'regular'} />
 								</DropdownMenu.Trigger>
-								<DropdownMenu.Content side="right" align="start" class={cn(dropdownContent, 'w-72')}>
+								<DropdownMenu.Content side="bottom" align="end" class={cn(dropdownContent, 'w-72')}>
 									<DropdownMenu.Label class="px-1.5 py-1 font-medium">Status</DropdownMenu.Label>
 									<DropdownMenu.RadioGroup bind:value={sessionScope}>
 										<DropdownMenu.RadioItem closeOnSelect value="active" class={dropdownItem}>Active sessions</DropdownMenu.RadioItem>
@@ -255,7 +278,9 @@
 							</DropdownMenu.Root>
 						</span>
 					</div>
+					{#if sessionsOpen}
 					<ul class="flex flex-col gap-1 pr-1">
+						{#each pinnedSessions as item (item.id)}{@render sessionItem(item)}{/each}
 						{#each recentSessions as item (item.id)}{@render sessionItem(item)}{:else}
 							<li class="px-2 py-1 text-xs text-foreground/60">{sessionScope === 'active' ? 'No active sessions' : 'No recent sessions'}</li>
 						{/each}
@@ -271,17 +296,49 @@
 							</li>
 						{/if}
 					</ul>
+					{/if}
 				</div>
+				{/if}
 			</div>
 		</div>
 
-		<div class="relative p-2" aria-hidden="true">
-			<div class={cn(menuButton, 'h-9 px-3 text-[13px]')}><GearIcon /><span>Settings</span></div>
+		<div class="relative p-2">
+			<button type="button" class={cn(menuButton, 'h-9 px-3 text-[13px] hover:bg-muted')} onclick={() => openView('settings')}><GearIcon /><span>Settings</span></button>
 			<span class="absolute top-3.5 right-3 flex size-5 items-center justify-center"><QuestionIcon class="size-4" /></span>
 		</div>
 	</aside>
 
-	{#if bot}
+	{#if setup === 'sessions'}
+		<section class="demo-scroll min-w-0 flex-1 overflow-auto p-4">
+			<button type="button" class="mb-3 flex items-center gap-1 rounded-md p-1 text-sm hover:bg-muted" onclick={() => setup = null}><CaretLeftIcon />Back to chat</button>
+			<p class="mb-4 text-xl font-semibold">Sessions</p>
+			<Tabs.Root value="all">
+				<Tabs.List variant="line" aria-label="Session views">
+					<Tabs.Trigger value="all">All</Tabs.Trigger>
+					<Tabs.Trigger value="pinned">Pinned</Tabs.Trigger>
+				</Tabs.List>
+				{#each ['all', 'pinned'] as view}
+					<Tabs.Content value={view}>
+						<ul class="divide-y divide-border">
+							{#each (view === 'all' ? device.sessions : pinnedSessions) as item (item.id)}
+								{@render sessionItem(item)}
+							{/each}
+						</ul>
+					</Tabs.Content>
+				{/each}
+			</Tabs.Root>
+		</section>
+	{:else if setup}
+		{#key setup}
+			<DemoSetup {device} mode={setup} bind:section={settingsSection} onsavememory={(text) => device.memory = text} onback={() => setup = null} onstart={(next) => {
+				device.sessions.unshift(next);
+				workspaceFilter = '';
+				sessionsOpen = true;
+				panelOpen = false;
+				selectSession(next);
+			}} />
+		{/key}
+	{:else if bot}
 		{#key bot.id}
 			<DemoBotChat
 				{bot}
@@ -295,20 +352,20 @@
 		<div class="relative flex min-w-0 flex-1 flex-col">
 			<!-- Like the Dashboard, the top bar floats over the conversation. -->
 			<div class="pointer-events-none absolute inset-x-0 top-0 z-10 flex h-12 items-center gap-2 px-3 @3xl:px-4">
-				<div class="pointer-events-auto flex h-8 min-w-0 items-center rounded-lg bg-popover px-1 ring-1 ring-foreground/10">
-					<button type="button" class="flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-muted @3xl:hidden" aria-label="Open sidebar" aria-expanded={mobileSidebarOpen} onclick={() => (mobileSidebarOpen = true)}>
+				<div class="pointer-events-auto flex h-8 max-md:h-10 min-w-0 items-center rounded-lg bg-popover px-1 ring-1 ring-foreground/10">
+					<button type="button" class="flex size-10 shrink-0 items-center justify-center rounded-md hover:bg-muted @3xl:hidden" aria-label="Open sidebar" aria-expanded={mobileSidebarOpen} onclick={() => (mobileSidebarOpen = true)}>
 						<CaretLeftIcon class="size-4" />
 					</button>
 					<span class="mx-1 hidden min-w-0 max-w-80 truncate px-2 py-0.5 text-sm text-heading @3xl:block">{session.title}</span>
 				</div>
 				<span class="flex-1"></span>
-				<span class="pointer-events-auto flex h-8 shrink-0 items-center rounded-lg bg-popover px-1 ring-1 ring-foreground/10 @3xl:hidden" aria-hidden="true">
+				<span class="pointer-events-auto flex h-8 max-md:h-10 shrink-0 items-center rounded-lg bg-popover px-1 ring-1 ring-foreground/10 @3xl:hidden" aria-hidden="true">
 					<span class="flex size-7 items-center justify-center"><DotsThreeIcon class="size-5" weight="bold" /></span>
 				</span>
-				<span class="pointer-events-auto flex h-8 shrink-0 items-center rounded-lg bg-popover px-1 ring-1 ring-foreground/10">
+				<span class="pointer-events-auto flex h-8 max-md:h-10 shrink-0 items-center rounded-lg bg-popover px-1 ring-1 ring-foreground/10">
 					<button
 						type="button"
-						class={cn('relative flex size-7 items-center justify-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary', panelOpen && 'bg-muted text-heading')}
+						class={cn('relative flex size-7 max-md:size-10 items-center justify-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary', panelOpen && 'bg-muted text-heading')}
 						bind:this={panelButton}
 						aria-label="Sidebar"
 						aria-pressed={panelOpen}

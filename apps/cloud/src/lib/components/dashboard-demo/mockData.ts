@@ -7,7 +7,20 @@ export type DemoStep =
   | { kind: "command"; title: string }
   | { kind: "thinking"; text: string };
 
-export type DemoClient = "codex" | "claude" | "pi";
+export const demoClients = {
+  codex: { name: "Codex", logo: "codex", models: ["gpt-6.2-astra", "gpt-6.2-sol"] },
+  claude: { name: "Claude Code", logo: "claude-code", models: ["opus"] },
+  pi: { name: "Pi", logo: "pi", models: ["gpt-6.2-astra"] },
+  kiro: { name: "Kiro", logo: "kiro", models: [] },
+  grok: { name: "Grok Build", logo: "grok-build", models: ["grok-4.7"] },
+  antigravity: {
+    name: "Google Antigravity",
+    logo: "google-antigravity",
+    models: ["gemini-4-neon"],
+  },
+} as const;
+
+export type DemoClient = keyof typeof demoClients;
 
 export type DemoBlock =
   | { kind: "p"; text: string }
@@ -50,6 +63,7 @@ export interface DemoGit {
   upstream: string;
   ahead: number;
   behind: number;
+  commit: { hash: string; subject: string; path: string; diff: string };
   changes: DemoChange[];
 }
 
@@ -95,6 +109,8 @@ export interface DemoBot {
 export interface DemoDevice {
   handle: string;
   name: string;
+  memory: string;
+  clients: DemoClient[];
   bots: DemoBot[];
   workspaces: DemoWorkspace[];
   sessions: DemoSession[];
@@ -104,6 +120,8 @@ export const demoDevices: DemoDevice[] = [
   {
     handle: "studio",
     name: "Studio MacBook",
+    memory: "Link the release notes when a review is ready.",
+    clients: ["codex", "claude", "pi", "grok", "antigravity", "kiro"],
     bots: [
       {
         id: "atlas",
@@ -249,6 +267,12 @@ export const demoDevices: DemoDevice[] = [
         git: {
           branch: "feat/command-menu",
           upstream: "origin/feat/command-menu",
+          commit: {
+            hash: "4c2a9d8",
+            subject: "Register the command menu",
+            path: "src/commands.ts",
+            diff: '@@ -0,0 +1 @@\n+export const commands = ["open", "search"];',
+          },
           ahead: 2,
           behind: 0,
           changes: [
@@ -292,6 +316,12 @@ export const demoDevices: DemoDevice[] = [
         git: {
           branch: "main",
           upstream: "origin/main",
+          commit: {
+            hash: "9ef80c4",
+            subject: "Document the projects endpoint",
+            path: "api.md",
+            diff: "@@ -0,0 +1 @@\n+Use GET /projects to list projects.",
+          },
           ahead: 0,
           behind: 0,
           changes: [
@@ -313,7 +343,7 @@ export const demoDevices: DemoDevice[] = [
         state: "idle",
         pinned: true,
         client: "codex",
-        model: "gpt-5.4",
+        model: "gpt-6.2-astra",
         reasoningEffort: "high",
         context: "38% · 76k / 200k",
         handle: "atlas-ui",
@@ -352,7 +382,7 @@ export const demoDevices: DemoDevice[] = [
         workspaceId: "atlas",
         state: "busy",
         client: "claude",
-        model: "claude-sonnet-4.5",
+        model: "opus",
         reasoningEffort: "high",
         context: "52% · 104k / 200k",
         handle: "atlas-review",
@@ -393,7 +423,7 @@ export const demoDevices: DemoDevice[] = [
         workspaceId: "atlas",
         state: "busy",
         client: "pi",
-        model: "gpt-5.4",
+        model: "gpt-6.2-astra",
         reasoningEffort: "medium",
         context: "21% · 42k / 200k",
         handle: "atlas-tests",
@@ -422,8 +452,8 @@ export const demoDevices: DemoDevice[] = [
         title: "Build the settings page",
         workspaceId: "atlas",
         state: "exited",
-        client: "pi",
-        model: "kimi-k2",
+        client: "grok",
+        model: "grok-4.7",
         context: "64% · 82k / 128k",
         handle: "atlas-settings",
         prompt: "Build a settings page with profile, notifications, and danger zone sections.",
@@ -452,7 +482,7 @@ export const demoDevices: DemoDevice[] = [
         workspaceId: "atlas-docs",
         state: "exited",
         client: "codex",
-        model: "gpt-5.4-mini",
+        model: "gpt-6.2-sol",
         reasoningEffort: "low",
         context: "9% · 18k / 200k",
         handle: "docs-search",
@@ -480,8 +510,8 @@ export const demoDevices: DemoDevice[] = [
         title: "Improve mobile navigation",
         workspaceId: "atlas-docs",
         state: "exited",
-        client: "claude",
-        model: "claude-haiku-4.5",
+        client: "antigravity",
+        model: "gemini-4-neon",
         reasoningEffort: "medium",
         context: "17% · 34k / 200k",
         handle: "docs-nav",
@@ -511,6 +541,8 @@ export const demoDevices: DemoDevice[] = [
   {
     handle: "build-server",
     name: "Build Server",
+    memory: "Include the staging build number in deployment updates.",
+    clients: ["claude", "codex", "pi", "grok"],
     bots: [
       {
         id: "ops",
@@ -563,6 +595,12 @@ export const demoDevices: DemoDevice[] = [
         git: {
           branch: "ops/staging",
           upstream: "origin/ops/staging",
+          commit: {
+            hash: "6bca583",
+            subject: "Configure staging replicas",
+            path: "staging.yaml",
+            diff: "@@ -1 +1 @@\n-replicas: 1\n+replicas: 2",
+          },
           ahead: 1,
           behind: 1,
           changes: [
@@ -588,6 +626,12 @@ export const demoDevices: DemoDevice[] = [
         git: {
           branch: "feat/invoice-export",
           upstream: "origin/feat/invoice-export",
+          commit: {
+            hash: "a850d1e",
+            subject: "Add the invoice export route",
+            path: "routes.ts",
+            diff: '@@ -0,0 +1 @@\n+router.get("/invoices/export", exportInvoices);',
+          },
           ahead: 0,
           behind: 0,
           changes: [],
@@ -602,7 +646,7 @@ export const demoDevices: DemoDevice[] = [
         state: "idle",
         pinned: true,
         client: "claude",
-        model: "claude-sonnet-4.5",
+        model: "opus",
         reasoningEffort: "high",
         context: "47% · 94k / 200k",
         handle: "infra-db",
@@ -629,7 +673,7 @@ export const demoDevices: DemoDevice[] = [
         workspaceId: "infra",
         state: "busy",
         client: "codex",
-        model: "gpt-5.4",
+        model: "gpt-6.2-astra",
         reasoningEffort: "medium",
         context: "29% · 58k / 200k",
         handle: "infra-ci",
@@ -657,7 +701,7 @@ export const demoDevices: DemoDevice[] = [
         workspaceId: "infra",
         state: "waiting_for_interaction",
         client: "pi",
-        model: "gpt-5.4",
+        model: "gpt-6.2-astra",
         reasoningEffort: "medium",
         context: "12% · 24k / 200k",
         handle: "infra-certs",
@@ -680,8 +724,8 @@ export const demoDevices: DemoDevice[] = [
         title: "Add invoice export endpoint",
         workspaceId: "billing-api",
         state: "exited",
-        client: "pi",
-        model: "kimi-k2",
+        client: "grok",
+        model: "grok-4.7",
         context: "31% · 40k / 128k",
         handle: "billing-export",
         prompt: "Add an endpoint that exports a month of invoices as CSV.",
