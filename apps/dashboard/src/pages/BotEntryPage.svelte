@@ -36,7 +36,7 @@
       <h1 class="text-xl font-medium leading-snug">{$t('bots.setupFirst')}</h1>
     </div>
     <p class="text-sm text-muted-foreground">{$t('bots.setupDescription')}</p>
-    <BotSettingsForm onboarding onsaved={(bot) => {
+    <BotSettingsForm onboarding="desktop" onsaved={(bot) => {
       device.queryClient.setQueryData(['bots'], [bot])
     }} />
     <p class="text-sm text-muted-foreground">

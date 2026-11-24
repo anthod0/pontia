@@ -14,9 +14,9 @@
   import { Label } from '$lib/components/ui/label/index.js'
   import { Textarea } from '$lib/components/ui/textarea/index.js'
 
-  let { bot, onboarding = false, oncancel, onsaved, saving = $bindable(false) }: {
+  let { bot, onboarding, oncancel, onsaved, saving = $bindable(false) }: {
     bot?: Bot
-    onboarding?: boolean
+    onboarding?: 'desktop' | 'mobile'
     oncancel?: () => void
     onsaved: (bot: Bot) => void
     saving?: boolean
@@ -82,7 +82,7 @@
 
 <form class="grid gap-4" onsubmit={save}>
   <BotAvatarPicker bind:shape={avatarShape} bind:color={avatarColor} disabled={saving} />
-  {#if !onboarding}
+  {#if onboarding !== 'desktop'}
     <div class="grid gap-2">
       <Label for={`${id}-name`}>{$t('bots.name')}</Label>
       <Input id={`${id}-name`} bind:value={name} required />
@@ -133,7 +133,7 @@
   {#if error}<p class="text-sm text-destructive" role="alert">{error}</p>{/if}
   <div class={['flex justify-end gap-2 touch-target:[&_button]:min-h-11', !onboarding && 'max-md:sticky max-md:bottom-0 max-md:bg-popover max-md:py-1']}>
     {#if oncancel}<Button variant="outline" type="button" disabled={saving} onclick={oncancel}>{$t('common.cancel')}</Button>{/if}
-    <Button type="submit" disabled={saving || !selected || !name.trim() || !modelAvailable || effortUnavailable}>
+    <Button class={onboarding === 'mobile' ? 'w-full' : undefined} type="submit" disabled={saving || !selected || !name.trim() || !modelAvailable || effortUnavailable}>
       {$t(bot ? 'common.save' : onboarding ? 'bots.startChat' : 'bots.create')}
     </Button>
   </div>

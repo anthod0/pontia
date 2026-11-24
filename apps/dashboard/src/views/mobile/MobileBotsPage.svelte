@@ -6,6 +6,7 @@
   import { navigate } from '$lib/navigation'
   import { useMobileStack } from '$lib/mobile/overlayStack.svelte'
   import BotSettingsForm from '../../components/bots/BotSettingsForm.svelte'
+  import PontiaMascot from '../../components/chat/PontiaMascot.svelte'
   import BotAvatar from '../../components/bots/BotAvatar.svelte'
   import { useMobileDirectory } from '../../features/bots/mobileDirectory'
   import { useDeviceRuntime } from '../../device/context'
@@ -55,11 +56,13 @@
     }}
   />{/snippet}
 {#snippet createAction()}
-  <button
-    class="mobile-icon mobile-glass"
-    aria-label={$t('bots.create')}
-    onclick={() => stack.open({ title: $t('bots.create'), content: form, modal: true })}><PlusIcon /></button
-  >
+  {#if directory.error || directory.bots?.length !== 0}
+    <button
+      class="mobile-icon mobile-glass"
+      aria-label={$t('bots.create')}
+      onclick={() => stack.open({ title: $t('bots.create'), content: form, modal: true })}><PlusIcon /></button
+    >
+  {/if}
 {/snippet}
 {#each directory.bots ?? [] as bot, i (bot.bot_id)}
   {@const status = directory.summaries[i]?.status}
@@ -106,9 +109,20 @@
     >
   </button>
 {:else}
-  <p class="py-6 text-sm text-muted-foreground" role="status">
-    {directory.error?.message ?? $t(directory.bots ? 'bots.setupFirst' : 'common.loading')}
-  </p>
+  {#if directory.error || !directory.bots}
+    <p class="py-6 text-sm text-muted-foreground" role="status">
+      {directory.error?.message ?? $t('common.loading')}
+    </p>
+  {:else}
+    <section class="mx-auto grid max-w-md gap-5 py-4">
+      <div class="flex items-center gap-3">
+        <PontiaMascot class="size-10 shrink-0" />
+        <h2 class="text-xl font-semibold text-heading">{$t('bots.setupFirst')}</h2>
+      </div>
+      <p class="text-sm text-muted-foreground">{$t('bots.setupDescription')}</p>
+      <BotSettingsForm onboarding="mobile" onsaved={(bot) => void navigate('/bots/' + encodeURIComponent(bot.bot_id))} />
+    </section>
+  {/if}
 {/each}
 
 {#if selected}<MobileBotMenuSheet bot={selected} bind:open={menu} />{/if}
