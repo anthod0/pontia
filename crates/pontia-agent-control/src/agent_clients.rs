@@ -7,7 +7,7 @@ use sqlx::SqlitePool;
 use std::{collections::BTreeSet, path::Path};
 
 use crate::{
-    client_contract::{ClientConfiguration, ClientDetection, DetectionContext},
+    client_contract::{ClientConfiguration, ClientDetection, DetectionContext, DetectionStatus},
     clients::ClientRegistry,
 };
 
@@ -179,29 +179,34 @@ impl AgentClientService {
         Ok(())
     }
 
-    pub fn probe_enabled_in_background(self, home: std::path::PathBuf, force: bool) {
-        tokio::spawn(async move {
-            let entries = match self.repository.list().await {
-                Ok(entries) => entries,
-                Err(error) => {
-                    tracing::warn!(%error, "Cannot list clients for version detection");
-                    return;
-                }
-            };
-            let vars = std::env::vars().collect();
-            let context = DetectionContext {
-                vars: &vars,
-                pontia_home: &home,
-            };
-            for entry in entries.into_iter().filter(|entry| entry.enabled) {
-                if let Err(error) = self
-                    .probe_version(&entry.client_type, &entry.client_key, &context, force)
-                    .await
-                {
-                    tracing::warn!(%error, client = %entry.client_type, key = %entry.client_key, "Cannot check client version");
-                }
+    pub async fn probe_enabled(self, home: std::path::PathBuf, at_startup: bool) {
+        let entries = match self.repository.list().await {
+            Ok(entries) => entries,
+            Err(error) => {
+                tracing::warn!(%error, "Cannot list clients for probing");
+                return;
             }
-        });
+        };
+        let vars = std::env::vars().collect();
+        let context = DetectionContext {
+            vars: &vars,
+            pontia_home: &home,
+        };
+        for entry in entries.into_iter().filter(|entry| entry.enabled) {
+            let client = &entry.client_type;
+            let key = &entry.client_key;
+            if let Err(error) = self.probe_version(client, key, &context, at_startup).await {
+                tracing::warn!(%error, %client, %key, "Cannot check client version");
+            }
+            if at_startup
+                && let Ok(config) = self.configuration(client)
+                && config.supports_startup_model()
+                && config.detect(&config.merged(key), &context).status == DetectionStatus::Detected
+                && let Err(error) = self.model_catalog(client, key, &home, true).await
+            {
+                tracing::warn!(%error, %client, %key, "Cannot preload client models");
+            }
+        }
     }
 
     pub async fn resolve(&self, client: &str, key: &str) -> Result<Value> {

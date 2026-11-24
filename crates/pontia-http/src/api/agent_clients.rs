@@ -48,7 +48,7 @@ pub async fn list_agent_clients(
         pontia_home: state.pontia_home(),
     };
     let entries = service.list(&context).await?;
-    service.probe_enabled_in_background(state.pontia_home().to_path_buf(), false);
+    tokio::spawn(service.probe_enabled(state.pontia_home().to_path_buf(), false));
     Ok(ok(json!({"agent_clients": entries})))
 }
 

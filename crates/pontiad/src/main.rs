@@ -57,7 +57,7 @@ async fn main() -> Result<()> {
     tokio::spawn(workflow_coordinator.run(app_state.control().shutdown().subscribe()));
     let dashboard =
         http::dashboard::resolve_dashboard(&config.dashboard, &config.pontia_home).await;
-    let versions = pontia_agent_control::agent_clients::AgentClientService::new(
+    let agent_clients = pontia_agent_control::agent_clients::AgentClientService::new(
         app_state.db(),
         app_state.control().clients(),
     );
@@ -138,7 +138,13 @@ async fn main() -> Result<()> {
         config.uploads,
         cleanup_shutdown.subscribe(),
     ));
-    versions.probe_enabled_in_background(config.pontia_home.clone(), true);
+    let mut probe_shutdown = cleanup_shutdown.subscribe();
+    let client_probe = tokio::spawn(async move {
+        tokio::select! {
+            _ = probe_shutdown.wait_for(|stop| *stop) => {}
+            _ = agent_clients.probe_enabled(config.pontia_home, true) => {}
+        }
+    });
     let server_result = http::serve_with_shutdown_timeout(
         listener,
         http_entrypoints.local_http(),
@@ -151,6 +157,7 @@ async fn main() -> Result<()> {
     .await;
 
     cleanup_shutdown.notify();
+    let _ = client_probe.await;
     let _ = upload_cleanup.await;
     client_control.close().await;
     let client_result = client_tasks.join().await;

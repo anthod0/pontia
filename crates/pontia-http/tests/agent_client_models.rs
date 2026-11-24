@@ -7,8 +7,20 @@ use pontia_agent_control::{agent_clients::AgentClientService, clients::ClientReg
 use pontia_application::AppState;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
-use std::sync::Arc;
+use std::{os::unix::fs::PermissionsExt, path::Path, sync::Arc};
 use tower::ServiceExt;
+
+fn clients_with_pi(script: &Path) -> ClientRegistry {
+    let mut clients = ClientRegistry::default();
+    let mut pi = pontia_client_pi::registration(None);
+    pi.configuration = Some(Arc::new(pontia_client_pi::config::PiConfiguration::new(
+        json!({"tui_command":script}),
+        json!({}),
+    )));
+    clients.register(pi);
+    clients.register(pontia_client_codex::registration());
+    clients
+}
 
 async fn fixture_with_state(
     response: Value,
@@ -19,9 +31,12 @@ async fn fixture_with_state(
     std::fs::write(
         &script,
         format!(
-            r#"
+            r#"#!/usr/bin/env python3
 import json, os, sys
 from pathlib import Path
+if sys.argv[1:] == ['--version']:
+    print('1.2.3')
+    sys.exit(0)
 assert sys.argv[1:] == ['--mode', 'rpc', '--no-session']
 assert Path.cwd() == Path(__file__).parent
 request = json.loads(sys.stdin.readline())
@@ -50,14 +65,8 @@ Path('closed').touch()
     .unwrap();
     let db = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&db).await.unwrap();
-    let mut clients = ClientRegistry::default();
-    let mut pi = pontia_client_pi::registration(None);
-    pi.configuration = Some(Arc::new(pontia_client_pi::config::PiConfiguration::new(
-        json!({"tui_command":format!("python3 '{}'", script.display())}),
-        json!({}),
-    )));
-    clients.register(pi);
-    clients.register(pontia_client_codex::registration());
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let clients = clients_with_pi(&script);
     AgentClientService::new(db.clone(), clients.clone())
         .save("pi", "default", true)
         .await
@@ -131,6 +140,42 @@ async fn lists_configured_client_models_without_a_session_and_closes_the_process
         .await
         .unwrap();
     assert_eq!(sessions, 0);
+}
+
+#[tokio::test]
+async fn startup_probe_warms_the_catalog_used_by_cached_http_queries() {
+    let (app, db, root) = fixture(json!({"success":true,"data":{"models":[
+        {"provider":"one","id":"first","name":"First"}
+    ]}}))
+    .await;
+    let script = root.path().join("catalog.py");
+    let service = AgentClientService::new(db, clients_with_pi(&script));
+    service
+        .clone()
+        .probe_enabled(root.path().into(), false)
+        .await;
+    assert!(!root.path().join("pid").exists());
+
+    service.save("pi", "default", false).await.unwrap();
+    service
+        .clone()
+        .probe_enabled(root.path().into(), true)
+        .await;
+    assert!(!root.path().join("pid").exists());
+
+    service.save("pi", "default", true).await.unwrap();
+    service
+        .clone()
+        .probe_enabled(root.path().into(), true)
+        .await;
+    std::fs::remove_file(root.path().join("pid")).unwrap();
+    service.probe_enabled(root.path().into(), true).await;
+    assert!(!root.path().join("pid").exists());
+    std::fs::remove_file(script).unwrap();
+    let (status, cached) = models_request(&app, "pi/default", true, "?prefer_cache=true").await;
+    assert_eq!(status, StatusCode::OK, "{cached}");
+    assert_eq!(cached["data"]["models"][0]["id"], "one/first");
+    assert_eq!(cached["data"]["version"], "1.2.3");
 }
 
 #[tokio::test]
