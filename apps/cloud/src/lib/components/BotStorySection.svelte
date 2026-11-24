@@ -3,7 +3,7 @@
 	import PauseIcon from 'phosphor-svelte/lib/PauseIcon';
 	import PlayIcon from 'phosphor-svelte/lib/PlayIcon';
 	import * as Tabs from '$lib/components/ui/tabs';
-	import BotAvatarMark from './bot-story/BotAvatarMark.svelte';
+	import StoryTabAvatar from './bot-story/StoryTabAvatar.svelte';
 	import StoryStage from './bot-story/StoryStage.svelte';
 	import { reveal } from '$lib/reveal';
 	import { stories } from '$lib/bot-stories';
@@ -81,7 +81,7 @@
 		<Tabs.List bind:ref={list} class="tabs reveal" style="--i: 1" aria-label={m.bots_pick()}>
 			{#each stories as s (s.name)}
 				<Tabs.Trigger value={s.name} class="tab focus-visible:border-transparent focus-visible:ring-0">
-					<span class="body"><BotAvatarMark shape={s.shape} color={s.color} /></span>
+					<span class="avatar"><StoryTabAvatar shape={s.shape} color={s.color} working={s === story} /></span>
 					<b>{s.name}</b>
 				</Tabs.Trigger>
 			{/each}
@@ -117,10 +117,10 @@
 	.section :global(.tab) { display: flex; flex: 0 1 112px; min-width: 0; height: auto; white-space: nowrap; border-radius: 0; background: none; box-shadow: none; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px 12px; border: 0; border-bottom: 2px solid transparent; font: inherit; color: var(--muted-foreground); cursor: pointer; transition: border-color 200ms, color 200ms; }
 	.section :global(.tab:focus-visible), .play:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 	.section :global(.tab[data-state='active']) { border-color: var(--primary); color: var(--heading); }
-	.body { width: 56px; height: 56px; margin-bottom: 4px; transition: scale 200ms var(--ease-out), opacity 200ms, filter 200ms; }
-	.section :global(.tab:not([data-state='active']) .body) { opacity: 0.7; filter: saturate(0.55); scale: 0.86; }
-	.section :global(.tab:hover .body) { opacity: 1; filter: none; }
-	.section :global(.tab[data-state='active'] .body) { animation: bob 4.2s ease-in-out infinite; }
+	.avatar { width: 56px; height: 56px; margin-bottom: 4px; transition: scale 200ms var(--ease-out), opacity 200ms, filter 200ms; }
+	.section :global(.tab:not([data-state='active']) .avatar) { opacity: 0.7; filter: saturate(0.55); scale: 0.86; }
+	.section :global(.tab:hover .avatar) { opacity: 1; filter: none; }
+
 	.section :global(.tab b) { font-size: 14px; font-weight: 500; }
 
 	.caption-row { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 16px; animation: fade 300ms var(--ease-out); }
@@ -131,9 +131,8 @@
 	.play { display: grid; flex-shrink: 0; place-items: center; width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 999px; background: var(--background); color: var(--muted-foreground); cursor: pointer; transition: color 150ms, border-color 150ms; }
 	.play:hover { color: var(--primary); border-color: var(--border-stronger); }
 
-	@keyframes bob { 50% { translate: 0 -5px; } }
 	@keyframes fade { from { opacity: 0; } }
-	@media (prefers-reduced-motion: reduce) { .section :global(.tab[data-state='active'] .body), .caption-row { animation: none; } }
+	@media (prefers-reduced-motion: reduce) { .caption-row { animation: none; } }
 
 	/* Narrow screens: a row of avatars that scrolls sideways. The selected Bot's name leads the caption. */
 	@media (max-width: 760px) {
@@ -141,7 +140,7 @@
 		.section :global(.tabs::-webkit-scrollbar) { display: none; }
 		.section :global(.tab) { flex: none; width: 56px; padding: 6px 4px 8px; scroll-snap-align: center; }
 		.section :global(.tab b) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-		.body { width: 44px; height: 44px; margin-bottom: 0; }
+		.avatar { width: 44px; height: 44px; margin-bottom: 0; }
 		.caption-row { align-items: flex-start; justify-content: space-between; }
 		.caption { text-align: left; }
 		.caption-name { display: inline; color: var(--primary); }
