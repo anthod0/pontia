@@ -199,6 +199,26 @@ test("the sidebar button opens the panel on Files and shows no change count", as
   expect(button).toHaveFocus();
 });
 
+test("returns to the latest localhost page after switching tabs and reopening the sidebar", async () => {
+  let panel!: SessionPanel;
+  render(SessionPanelHarness, { onpanel: (value) => (panel = value) });
+  const url = "http://localhost:3000/report?q=1#total";
+  panel.openPreview({ port: 3000, redirect: "/report?q=1#total", rawHref: url });
+  expect(await screen.findByTitle("Open preview")).toHaveAttribute("src", url);
+
+  const address = screen.getByRole("textbox", { name: "Preview address" });
+  await fireEvent.input(address, { target: { value: "/latest" } });
+  await fireEvent.submit(address.closest("form")!);
+  await fireEvent.click(screen.getByRole("tab", { name: "Files" }));
+  await fireEvent.click(sidebarButton());
+  await fireEvent.click(sidebarButton());
+  await fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
+  expect(await screen.findByTitle("Open preview")).toHaveAttribute(
+    "src",
+    "http://localhost:3000/latest",
+  );
+});
+
 test("lists changes by group in panel order with line counts", async () => {
   render(SessionPanelHarness);
   const panel = await openTab("Git");

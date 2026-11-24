@@ -8,7 +8,7 @@ import type { DeviceRuntime } from "../../../device/runtime";
 import type { FilePreviewTarget } from "../filePreviewContext";
 import { GitPanelState } from "../git/gitPanelState.svelte";
 
-const panelTabs = ["files", "git"] as const;
+const panelTabs = ["files", "preview", "git"] as const;
 
 /** A tab of the session side panel. */
 export type SessionPanelTab = (typeof panelTabs)[number];
@@ -21,9 +21,8 @@ export type SessionPanelSource = {
 };
 
 /**
- * The right-hand side panel of session pages, with a Files tab for file previews and a Git tab
- * for the Workspace's changes. It outlives each session page, so it stays open across sessions,
- * and on wide screens across reloads. It reopens on the tab last used.
+ * The session side panel stays open across Sessions and, on wide screens, across reloads.
+ * It reopens on the tab last used.
  */
 export class SessionPanel {
   // The key comes from when the panel showed only Git; saved keys keep their names.
@@ -89,11 +88,10 @@ export class SessionPanel {
 
   /** Opens the Git tab, or closes the panel when it already shows. */
   toggleGit(): void {
-    if (this.open && !this.preview && this.tab === "git") {
+    if (this.open && this.tab === "git") {
       this.close();
       return;
     }
-    this.preview = null;
     this.tab = "git";
     this.#show(true);
   }
@@ -105,6 +103,7 @@ export class SessionPanel {
 
   openPreview(target: LocalhostPreviewTarget) {
     this.preview = { ...target };
+    this.tab = "preview";
     this.#show(false);
   }
 
@@ -115,7 +114,6 @@ export class SessionPanel {
       sessionId: target.sessionId,
       path: target.path,
     });
-    this.preview = null;
     this.file = target;
     this.tab = "files";
     this.#show(false);

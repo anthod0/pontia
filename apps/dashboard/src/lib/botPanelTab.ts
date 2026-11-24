@@ -1,6 +1,6 @@
 import { PersistedState } from "./storage";
 
-const panelTabs = ["files", "context", "todo", "search", "git"] as const;
+const panelTabs = ["files", "preview", "context", "todo", "search", "git"] as const;
 
 /** A tab of the Bot chat side panel. */
 export type PanelTab = (typeof panelTabs)[number];

@@ -6,6 +6,8 @@
   "mobile.hasTodos": "待办，有待办",
   "mobile.back": "返回",
   "mobile.switched": "已切换到 {name}",
+  "preview.title": "预览",
+  "preview.noneOpen": "点击对话中的本地链接，即可在此预览。",
   "preview.address": "预览地址",
   "preview.mobile": "手机视口",
   "preview.newTab": "在新标签页打开",

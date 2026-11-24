@@ -2,6 +2,7 @@
   import SidePanel from '$lib/components/ui/overlay/SidePanel.svelte'
   import { t, number } from '$lib/i18n'
   import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
+  import GlobeIcon from 'phosphor-svelte/lib/GlobeIcon'
   import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
   import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon'
@@ -41,17 +42,18 @@
 
 <SidePanel open={panel.open} close={() => panel.close()} bind:ref={element} tabindex={-1} data-session-panel aria-label={$t('nav.sidebar')} onkeydown={(event) => git?.keydown(event)}>
   <FilePreviewResizer />
-  {#if panel.preview}
-    {#key panel.preview}<LocalhostPreviewPanel target={panel.preview} access={device.access} onclose={() => { panel.preview = null }} />{/key}
-  {:else}
   <Tabs.Root bind:value={() => panel.tab, next => { panel.tab = next as SessionPanelTab }} class="min-h-0 flex-1 gap-0">
     <header class="flex h-12 shrink-0 items-center justify-between gap-1 border-b px-2">
       <Tabs.List variant="line" aria-label={$t('nav.sidebar')} class="h-full gap-0">
         <Tabs.Trigger value="files" class="h-full px-2.5"><FileTextIcon />{$t('files.title')}</Tabs.Trigger>
+        <Tabs.Trigger value="preview" class="h-full px-2.5"><GlobeIcon />{$t('preview.title')}</Tabs.Trigger>
         <Tabs.Trigger value="git" class="h-full px-2.5"><GitBranchIcon />{$t('git.title')}</Tabs.Trigger>
       </Tabs.List>
       <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => panel.close()}><XIcon class="size-4 max-lg:size-5" /></Button>
     </header>
+    <Tabs.Content value="preview" class="flex min-h-0 flex-col">
+      <LocalhostPreviewPanel bind:target={panel.preview} access={device.access} />
+    </Tabs.Content>
     <Tabs.Content value="files" class="flex min-h-0 flex-col">
       {#if panel.file}
         {#key panel.file}<FilePreviewPanel target={panel.file} onclose={() => panel.closeFile()} />{/key}
@@ -96,5 +98,4 @@
       {/if}
     </Tabs.Content>
   </Tabs.Root>
-  {/if}
 </SidePanel>

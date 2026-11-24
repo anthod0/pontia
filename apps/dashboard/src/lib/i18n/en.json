@@ -6,6 +6,8 @@
   "mobile.hasTodos": "Todo, open todos",
   "mobile.back": "Back",
   "mobile.switched": "Switched to {name}",
+  "preview.title": "Preview",
+  "preview.noneOpen": "Open a localhost link in the chat to preview it here.",
   "preview.address": "Preview address",
   "preview.mobile": "Mobile viewport",
   "preview.newTab": "Open in new tab",

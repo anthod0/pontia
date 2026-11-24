@@ -3,63 +3,67 @@
   import ArrowSquareOutIcon from 'phosphor-svelte/lib/ArrowSquareOutIcon'
   import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon'
   import DeviceMobileIcon from 'phosphor-svelte/lib/DeviceMobileIcon'
-  import XIcon from 'phosphor-svelte/lib/XIcon'
+  import GlobeIcon from 'phosphor-svelte/lib/GlobeIcon'
+  import * as Empty from '$lib/components/ui/empty/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import { Input } from '$lib/components/ui/input/index.js'
   import { t } from '$lib/i18n'
   import { parseLocalhostPreviewTarget, type LocalhostPreviewTarget } from '$lib/localhostPreview'
   import type { ApiAccess } from '../../device/apiAccess'
 
-  let { target, access, onclose }: { target: LocalhostPreviewTarget; access: ApiAccess; onclose: () => void } = $props()
-  // Each clicked link mounts a new panel.
-  // svelte-ignore state_referenced_locally
-  let current = $state.raw(target)
-  // svelte-ignore state_referenced_locally
-  let address = $state(current.rawHref)
+  let { target = $bindable(), access }: { target: LocalhostPreviewTarget | null; access: ApiAccess } = $props()
+  let address = $derived(target?.rawHref ?? '')
   let mobile = $state(false)
   let panelWidth = $state(0)
   const viewportWidth = $derived(mobile ? 375 : Math.max(1024, panelWidth))
   const scale = $derived(panelWidth ? Math.min(1, panelWidth / viewportWidth) : 1)
-  let invalid = $state(false)
+  let invalidAddress = $state<string | null>(null)
   let navigation = $state(0)
 
-  function navigate() {
+  function navigate(current: LocalhostPreviewTarget) {
     const url = URL.parse(address, current.rawHref)
     const next = parseLocalhostPreviewTarget(url?.href)
-    if (!next || url?.origin !== new URL(target.rawHref).origin) {
-      invalid = true
+    if (!next || url?.origin !== new URL(current.rawHref).origin) {
+      invalidAddress = address
       return
     }
-    current = next
-    address = next.rawHref
-    navigation++
+    target = next
   }
 
-  function load(frame: HTMLIFrameElement) {
+  function load(frame: HTMLIFrameElement, current: LocalhostPreviewTarget) {
     if (access.openLocalhostPreview) access.openLocalhostPreview(current, frame)
     else frame.src = current.rawHref
   }
 
-  function openTab() {
+  function openTab(current: LocalhostPreviewTarget) {
     if (access.openLocalhostPreview) access.openLocalhostPreview(current)
     else window.open(current.rawHref, '_blank', 'noopener,noreferrer')
   }
 </script>
 
-<div class="flex h-12 shrink-0 items-center gap-1 border-b px-2">
-  <form class="min-w-0 flex-1" onsubmit={(event) => { event.preventDefault(); navigate() }}>
-    <Input aria-label={$t('preview.address')} aria-invalid={invalid} bind:value={address} oninput={() => invalid = false} />
-  </form>
-  <Button size="icon-sm" variant="ghost" aria-label={$t('common.refresh')} title={$t('common.refresh')} onclick={() => navigation++}><ArrowClockwiseIcon /></Button>
-  <Button size="icon-sm" variant="ghost" aria-label={$t('preview.mobile')} aria-pressed={mobile} title={$t('preview.mobile')} onclick={() => mobile = !mobile}>
-    {#if mobile}<DeviceMobileIcon />{:else}<DesktopIcon />{/if}
-  </Button>
-  <Button size="icon-sm" variant="ghost" aria-label={$t('preview.newTab')} title={$t('preview.newTab')} onclick={openTab}><ArrowSquareOutIcon /></Button>
-  <Button size="icon-sm" variant="ghost" aria-label={$t('common.close')} title={$t('common.close')} onclick={onclose}><XIcon /></Button>
-</div>
-<div bind:clientWidth={panelWidth} class="flex min-h-0 flex-1 justify-center overflow-hidden bg-muted">
-  {#key navigation}
-    <iframe use:load title={$t('preview.open')} class="max-w-none origin-top shrink-0 border-0 bg-white"
-      style:width={viewportWidth + 'px'} style:height={100 / scale + '%'} style:transform={'scale(' + scale + ')'} referrerpolicy="no-referrer"></iframe>
-  {/key}
-</div>
+{#if target}
+  {@const current = target}
+  <div class="flex h-12 shrink-0 items-center gap-1 border-b px-2">
+    <form class="min-w-0 flex-1" onsubmit={(event) => { event.preventDefault(); navigate(current) }}>
+      <Input aria-label={$t('preview.address')} aria-invalid={invalidAddress === address} bind:value={address} oninput={() => invalidAddress = null} />
+    </form>
+    <Button size="icon-sm" variant="ghost" aria-label={$t('common.refresh')} title={$t('common.refresh')} onclick={() => navigation++}><ArrowClockwiseIcon /></Button>
+    <Button size="icon-sm" variant="ghost" aria-label={$t('preview.mobile')} aria-pressed={mobile} title={$t('preview.mobile')} onclick={() => mobile = !mobile}>
+      {#if mobile}<DeviceMobileIcon />{:else}<DesktopIcon />{/if}
+    </Button>
+    <Button size="icon-sm" variant="ghost" aria-label={$t('preview.newTab')} title={$t('preview.newTab')} onclick={() => openTab(current)}><ArrowSquareOutIcon /></Button>
+  </div>
+  <div bind:clientWidth={panelWidth} class="flex min-h-0 flex-1 justify-center overflow-hidden bg-muted">
+    {#key [current, navigation]}
+      <iframe use:load={current} title={$t('preview.open')} class="max-w-none origin-top shrink-0 border-0 bg-white"
+        style:width={viewportWidth + 'px'} style:height={100 / scale + '%'} style:transform={'scale(' + scale + ')'} referrerpolicy="no-referrer"></iframe>
+    {/key}
+  </div>
+{:else}
+  <Empty.Root class="min-h-0 p-8">
+    <Empty.Header>
+      <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><GlobeIcon class="size-6" /></Empty.Media>
+      <Empty.Title>{$t('preview.noneOpen')}</Empty.Title>
+    </Empty.Header>
+  </Empty.Root>
+{/if}

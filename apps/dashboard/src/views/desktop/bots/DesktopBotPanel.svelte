@@ -11,6 +11,7 @@
   import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { useTopBarAction } from '../../../components/layout/topBarAction'
+  import GlobeIcon from 'phosphor-svelte/lib/GlobeIcon'
   import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon'
   import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon'
   import QuotesIcon from 'phosphor-svelte/lib/QuotesIcon'
@@ -81,11 +82,11 @@
 
   export function openPreview(target: LocalhostPreviewTarget) {
     preview = { ...target }
+    tab.current = 'preview'
     panel.current = true
   }
 
   export function openFile(target: FilePreviewTarget) {
-    preview = null
     file = target
     recentFiles.current = withRecentFile(recentFiles.current, { sessionId: target.sessionId, path: target.path })
     tab.current = 'files'
@@ -93,14 +94,12 @@
   }
 
   export function viewContext(id: string) {
-    preview = null
     selected = id
     tab.current = 'context'
     panel.current = true
   }
 
   export function viewTodos() {
-    preview = null
     tab.current = 'todo'
     panel.current = true
   }
@@ -247,13 +246,11 @@
 
 <SidePanel open={panel.current} close={() => panel.current = false} data-bot-chat-panel aria-label={$t('nav.sidebar')}>
   <FilePreviewResizer />
-  {#if preview}
-    {#key preview}<LocalhostPreviewPanel target={preview} access={device.access} onclose={() => { preview = null }} />{/key}
-  {:else}
   <Tabs.Root bind:value={() => tab.current, next => { tab.current = next as PanelTab }} class="min-h-0 flex-1 gap-0">
     <header class="flex h-12 shrink-0 items-center justify-between gap-1 border-b px-2">
-      <Tabs.List variant="line" aria-label={$t('nav.sidebar')} class="h-full min-w-0 gap-0">
+      <Tabs.List variant="line" aria-label={$t('nav.sidebar')} class="h-full min-w-0 justify-start gap-0 overflow-x-auto pb-1.5">
         <Tabs.Trigger value="files" class="h-full px-2.5"><FileTextIcon />{$t('files.title')}</Tabs.Trigger>
+        <Tabs.Trigger value="preview" class="h-full px-2.5"><GlobeIcon />{$t('preview.title')}</Tabs.Trigger>
         <Tabs.Trigger value="context" class="h-full px-2.5"><TreeStructureIcon />{$t('bots.context')}</Tabs.Trigger>
         <Tabs.Trigger value="todo" class="h-full px-2.5"><ListChecksIcon />{$t('bots.todos')}{@render badge()}</Tabs.Trigger>
         <Tabs.Trigger value="search" class="h-full px-2.5"><MagnifyingGlassIcon />{$t('bots.searchTab')}</Tabs.Trigger>
@@ -261,6 +258,9 @@
       </Tabs.List>
       <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11 pointer-coarse:size-11" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => { panel.current = false }}><XIcon /></Button>
     </header>
+    <Tabs.Content value="preview" class="flex min-h-0 flex-col">
+      <LocalhostPreviewPanel bind:target={preview} access={device.access} />
+    </Tabs.Content>
     <Tabs.Content value="files" class="flex min-h-0 flex-col">
       {#if file}
         {#key file}<FilePreviewPanel target={file} onclose={() => { file = null }} />{/key}
@@ -351,5 +351,4 @@
       </div>
     </Tabs.Content>
   </Tabs.Root>
-  {/if}
 </SidePanel>
