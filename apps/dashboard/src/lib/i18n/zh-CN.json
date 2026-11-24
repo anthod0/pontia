@@ -33,7 +33,7 @@
   "bots.delete": "删除 Bot",
   "bots.deleting": "正在删除…",
   "bots.deleteSection": "删除此 Bot",
-  "bots.deleteSectionDescription": "永久删除此 Bot 及其聊天记录。共享的记忆、USER.md 和 Workspace 会保留。",
+  "bots.deleteSectionDescription": "永久删除此 Bot 及其聊天记录。",
   "bots.deleteTitle": "删除 {name}？",
   "bots.deleteDescription": "将永久删除该 Bot、它的聊天记录，以及它与 helper、通知和 Workspace 的关联，无法恢复。",
   "bots.deleteKeeps": "共享的记忆、USER.md 和 Workspace 会保留，helper Session 的历史仍可查看。",
