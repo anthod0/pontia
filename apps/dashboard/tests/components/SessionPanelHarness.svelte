@@ -25,6 +25,6 @@
   <SessionPanelSession {sessionId} {workspaceId} />
   <MessageResponse content="Read [notes](/work/notes.md)." markdown {sessionId} />
 {/key}
-{#if panel.open && panel.source}
+{#if panel.source}
   {#key panel.source.device}<SessionSidePanel {panel} source={panel.source} />{/key}
 {/if}

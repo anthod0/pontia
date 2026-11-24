@@ -236,109 +236,107 @@
   </li>
 {/snippet}
 
-{#if panel.current}
-  <SidePanel close={() => panel.current = false} data-bot-chat-panel aria-label={$t('nav.sidebar')}>
-    <FilePreviewResizer />
-    <Tabs.Root bind:value={() => tab.current, next => { tab.current = next as PanelTab }} class="min-h-0 flex-1 gap-0">
-      <header class="flex h-12 shrink-0 items-center justify-between gap-1 border-b px-2">
-        <Tabs.List variant="line" aria-label={$t('nav.sidebar')} class="h-full min-w-0 gap-0">
-          <Tabs.Trigger value="files" class="h-full px-2.5"><FileTextIcon />{$t('files.title')}</Tabs.Trigger>
-          <Tabs.Trigger value="context" class="h-full px-2.5"><TreeStructureIcon />{$t('bots.context')}</Tabs.Trigger>
-          <Tabs.Trigger value="todo" class="h-full px-2.5"><ListChecksIcon />{$t('bots.todos')}{@render badge()}</Tabs.Trigger>
-          <Tabs.Trigger value="search" class="h-full px-2.5"><MagnifyingGlassIcon />{$t('bots.searchTab')}</Tabs.Trigger>
-          <Tabs.Trigger value="git" class="h-full px-2.5"><GitBranchIcon />{$t('git.title')}</Tabs.Trigger>
-        </Tabs.List>
-        <Button variant="ghost" size="icon-sm" class="shrink-0 max-lg:size-11 pointer-coarse:size-11" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => { panel.current = false }}><XIcon /></Button>
-      </header>
-      <Tabs.Content value="files" class="flex min-h-0 flex-col">
-        {#if file}
-          {#key file}<FilePreviewPanel target={file} onclose={() => { file = null }} />{/key}
-        {:else if recentFiles.current.length}
-          <RecentFileList files={recentFiles.current} onopen={recent => openFile({ device, ...recent })} onclear={() => { recentFiles.current = [] }} />
-        {:else}
-          {@render empty(true)}
-        {/if}
-      </Tabs.Content>
-      <Tabs.Content value="context" class="flex min-h-0 flex-col">
-        {#if !selected}
-          {@render empty(false)}
-        {:else if context.isError}
-          <div role="alert" class="p-3 text-sm">{context.error.message} <Button variant="ghost" size="xs" onclick={() => context.refetch()}>{$t('common.retry')}</Button></div>
-        {:else if context.data}
-          <div class="min-h-0 flex-1 overflow-auto overscroll-contain p-3">
-            {#if context.data.truncated}<p class="pb-3 text-center text-xs text-muted-foreground">{$t('bots.contextTruncated')}</p>{/if}
-            <ol class="relative space-y-2 before:absolute before:inset-y-4 before:left-[18px] before:w-px before:bg-border">
-              {#each context.data.messages as message (message.id)}
-                {@const user = message.kind === 'user_input'}
-                <li class="relative">
-                  <button type="button" aria-current={message.id === selected ? 'true' : undefined}
-                    class={['flex w-full gap-2.5 rounded-xl p-2 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring', message.id === selected && 'bg-muted ring-2 ring-primary/50']}
-                    onclick={() => jump(message.id)}>
-                    <span class="relative grid size-5 shrink-0 place-items-center rounded-full bg-surface ring-4 ring-surface">
-                      {#if user}<span aria-hidden="true" class="grid size-5 place-items-center rounded-full bg-border text-[10px] font-semibold text-heading">{$t('bots.you').slice(0, 1)}</span>
-                      {:else}<BotAvatar shape={bot.avatar_shape} color={bot.avatar_color} class="size-5" />{/if}
-                    </span>
-                    <span class="min-w-0 flex-1">
-                      <span class="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
-                        <span class="font-medium text-heading [overflow-wrap:anywhere]">{user ? $t('bots.you') : bot.name}</span>
-                        <MessageTime value={message.created_at} class="px-0 whitespace-nowrap" />
-                        {#if message.todo?.state === 'open'}<span class="ml-auto rounded bg-primary/10 px-1.5 text-[11px] font-medium whitespace-nowrap text-primary">{$t('bots.todos')}</span>
-                        {:else if message.todo?.state === 'done'}<span class="ml-auto flex items-center gap-0.5 whitespace-nowrap"><CheckCircleIcon class="size-3" />{$t('bots.todoDone')}</span>{/if}
-                        {#if user && parseQuotedMessage(message.content).quote}<span class="flex items-center gap-0.5 whitespace-nowrap"><QuotesIcon class="size-3" />{$t('bots.quoted')}</span>{/if}
-                      </span>
-                      <span class="block text-[13px] leading-5 whitespace-pre-line [overflow-wrap:anywhere]">{fullText(message)}</span>
-                      {#if message.status === 'failed'}<span class="text-xs text-destructive">{$t('bots.sendFailed')}</span>{/if}
-                    </span>
-                  </button>
-                </li>
-              {/each}
-            </ol>
-            {#if context.data.messages.length === 1}<p class="pt-4 text-center text-xs text-muted-foreground">{$t('bots.noRelated')}</p>{/if}
-          </div>
-        {:else}
-          <p role="status" class="p-3 text-sm text-muted-foreground">{$t('common.loading')}</p>
-        {/if}
-      </Tabs.Content>
-      <Tabs.Content value="search" class="flex min-h-0 flex-col">
-        <BotMessageSearch {bot} active={panel.current && tab.current === 'search'} bind:text={searchText} selected={searchSelected} onselect={jumpToResult} />
-      </Tabs.Content>
-      <Tabs.Content value="git" class="flex min-h-0 flex-col">
-        {#if tab.current === 'git'}<BotGitTab botId={bot.bot_id} />{/if}
-      </Tabs.Content>
-      <Tabs.Content value="todo" class="flex min-h-0 flex-col">
+<SidePanel open={panel.current} close={() => panel.current = false} data-bot-chat-panel aria-label={$t('nav.sidebar')}>
+  <FilePreviewResizer />
+  <Tabs.Root bind:value={() => tab.current, next => { tab.current = next as PanelTab }} class="min-h-0 flex-1 gap-0">
+    <header class="flex h-12 shrink-0 items-center justify-between gap-1 border-b px-2">
+      <Tabs.List variant="line" aria-label={$t('nav.sidebar')} class="h-full min-w-0 gap-0">
+        <Tabs.Trigger value="files" class="h-full px-2.5"><FileTextIcon />{$t('files.title')}</Tabs.Trigger>
+        <Tabs.Trigger value="context" class="h-full px-2.5"><TreeStructureIcon />{$t('bots.context')}</Tabs.Trigger>
+        <Tabs.Trigger value="todo" class="h-full px-2.5"><ListChecksIcon />{$t('bots.todos')}{@render badge()}</Tabs.Trigger>
+        <Tabs.Trigger value="search" class="h-full px-2.5"><MagnifyingGlassIcon />{$t('bots.searchTab')}</Tabs.Trigger>
+        <Tabs.Trigger value="git" class="h-full px-2.5"><GitBranchIcon />{$t('git.title')}</Tabs.Trigger>
+      </Tabs.List>
+      <Button variant="ghost" size="icon-sm" class="shrink-0 max-lg:size-11 pointer-coarse:size-11" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => { panel.current = false }}><XIcon /></Button>
+    </header>
+    <Tabs.Content value="files" class="flex min-h-0 flex-col">
+      {#if file}
+        {#key file}<FilePreviewPanel target={file} onclose={() => { file = null }} />{/key}
+      {:else if recentFiles.current.length}
+        <RecentFileList files={recentFiles.current} onopen={recent => openFile({ device, ...recent })} onclear={() => { recentFiles.current = [] }} />
+      {:else}
+        {@render empty(true)}
+      {/if}
+    </Tabs.Content>
+    <Tabs.Content value="context" class="flex min-h-0 flex-col">
+      {#if !selected}
+        {@render empty(false)}
+      {:else if context.isError}
+        <div role="alert" class="p-3 text-sm">{context.error.message} <Button variant="ghost" size="xs" onclick={() => context.refetch()}>{$t('common.retry')}</Button></div>
+      {:else if context.data}
         <div class="min-h-0 flex-1 overflow-auto overscroll-contain p-3">
-          {#if todos.isError}
-            <div role="alert" class="text-sm">{todos.error.message} <Button variant="ghost" size="xs" onclick={() => todos.refetch()}>{$t('common.retry')}</Button></div>
-          {:else if todos.data}
-            {#if todos.data.open.length}
-              <ul class="space-y-2">
-                {#each todos.data.open as message (message.id)}
-                  {@render todoCard(message)}
-                {/each}
-              </ul>
-            {:else}
-              <Empty.Root class="min-h-0 p-6"><Empty.Header>
-                <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><CheckCircleIcon class="size-6" /></Empty.Media>
-                <Empty.Title>{$t('bots.noTodos')}</Empty.Title>
-              </Empty.Header></Empty.Root>
-            {/if}
-            {#if todos.data.recently_resolved.length}
-              <Collapsible.Root class="mt-4">
-                <Collapsible.Trigger class="group flex items-center gap-1 rounded-sm px-1 text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-ring">
-                  <CaretRightIcon class="size-3 transition-transform group-aria-expanded:rotate-90" />{$t('bots.recentlyResolved')} {todos.data.recently_resolved.length}
-                </Collapsible.Trigger>
-                <Collapsible.Content>
-                  <ul class="mt-2 space-y-2">
-                    {#each todos.data.recently_resolved as message (message.id)}{@render todoCard(message)}{/each}
-                  </ul>
-                </Collapsible.Content>
-              </Collapsible.Root>
-            {/if}
-          {:else}
-            <p role="status" class="text-sm text-muted-foreground">{$t('common.loading')}</p>
-          {/if}
+          {#if context.data.truncated}<p class="pb-3 text-center text-xs text-muted-foreground">{$t('bots.contextTruncated')}</p>{/if}
+          <ol class="relative space-y-2 before:absolute before:inset-y-4 before:left-[18px] before:w-px before:bg-border">
+            {#each context.data.messages as message (message.id)}
+              {@const user = message.kind === 'user_input'}
+              <li class="relative">
+                <button type="button" aria-current={message.id === selected ? 'true' : undefined}
+                  class={['flex w-full gap-2.5 rounded-xl p-2 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring', message.id === selected && 'bg-muted ring-2 ring-primary/50']}
+                  onclick={() => jump(message.id)}>
+                  <span class="relative grid size-5 shrink-0 place-items-center rounded-full bg-surface ring-4 ring-surface">
+                    {#if user}<span aria-hidden="true" class="grid size-5 place-items-center rounded-full bg-border text-[10px] font-semibold text-heading">{$t('bots.you').slice(0, 1)}</span>
+                    {:else}<BotAvatar shape={bot.avatar_shape} color={bot.avatar_color} class="size-5" />{/if}
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+                      <span class="font-medium text-heading [overflow-wrap:anywhere]">{user ? $t('bots.you') : bot.name}</span>
+                      <MessageTime value={message.created_at} class="px-0 whitespace-nowrap" />
+                      {#if message.todo?.state === 'open'}<span class="ml-auto rounded bg-primary/10 px-1.5 text-[11px] font-medium whitespace-nowrap text-primary">{$t('bots.todos')}</span>
+                      {:else if message.todo?.state === 'done'}<span class="ml-auto flex items-center gap-0.5 whitespace-nowrap"><CheckCircleIcon class="size-3" />{$t('bots.todoDone')}</span>{/if}
+                      {#if user && parseQuotedMessage(message.content).quote}<span class="flex items-center gap-0.5 whitespace-nowrap"><QuotesIcon class="size-3" />{$t('bots.quoted')}</span>{/if}
+                    </span>
+                    <span class="block text-[13px] leading-5 whitespace-pre-line [overflow-wrap:anywhere]">{fullText(message)}</span>
+                    {#if message.status === 'failed'}<span class="text-xs text-destructive">{$t('bots.sendFailed')}</span>{/if}
+                  </span>
+                </button>
+              </li>
+            {/each}
+          </ol>
+          {#if context.data.messages.length === 1}<p class="pt-4 text-center text-xs text-muted-foreground">{$t('bots.noRelated')}</p>{/if}
         </div>
-      </Tabs.Content>
-    </Tabs.Root>
-  </SidePanel>
-{/if}
+      {:else}
+        <p role="status" class="p-3 text-sm text-muted-foreground">{$t('common.loading')}</p>
+      {/if}
+    </Tabs.Content>
+    <Tabs.Content value="search" class="flex min-h-0 flex-col">
+      <BotMessageSearch {bot} active={panel.current && tab.current === 'search'} bind:text={searchText} selected={searchSelected} onselect={jumpToResult} />
+    </Tabs.Content>
+    <Tabs.Content value="git" class="flex min-h-0 flex-col">
+      {#if tab.current === 'git'}<BotGitTab botId={bot.bot_id} />{/if}
+    </Tabs.Content>
+    <Tabs.Content value="todo" class="flex min-h-0 flex-col">
+      <div class="min-h-0 flex-1 overflow-auto overscroll-contain p-3">
+        {#if todos.isError}
+          <div role="alert" class="text-sm">{todos.error.message} <Button variant="ghost" size="xs" onclick={() => todos.refetch()}>{$t('common.retry')}</Button></div>
+        {:else if todos.data}
+          {#if todos.data.open.length}
+            <ul class="space-y-2">
+              {#each todos.data.open as message (message.id)}
+                {@render todoCard(message)}
+              {/each}
+            </ul>
+          {:else}
+            <Empty.Root class="min-h-0 p-6"><Empty.Header>
+              <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><CheckCircleIcon class="size-6" /></Empty.Media>
+              <Empty.Title>{$t('bots.noTodos')}</Empty.Title>
+            </Empty.Header></Empty.Root>
+          {/if}
+          {#if todos.data.recently_resolved.length}
+            <Collapsible.Root class="mt-4">
+              <Collapsible.Trigger class="group flex items-center gap-1 rounded-sm px-1 text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-ring">
+                <CaretRightIcon class="size-3 transition-transform group-aria-expanded:rotate-90" />{$t('bots.recentlyResolved')} {todos.data.recently_resolved.length}
+              </Collapsible.Trigger>
+              <Collapsible.Content>
+                <ul class="mt-2 space-y-2">
+                  {#each todos.data.recently_resolved as message (message.id)}{@render todoCard(message)}{/each}
+                </ul>
+              </Collapsible.Content>
+            </Collapsible.Root>
+          {/if}
+        {:else}
+          <p role="status" class="text-sm text-muted-foreground">{$t('common.loading')}</p>
+        {/if}
+      </div>
+    </Tabs.Content>
+  </Tabs.Root>
+</SidePanel>

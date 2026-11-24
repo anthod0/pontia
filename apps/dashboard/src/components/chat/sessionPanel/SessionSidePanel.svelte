@@ -38,7 +38,7 @@
   })
 </script>
 
-<SidePanel close={() => panel.close()} bind:ref={element} tabindex={-1} data-session-panel aria-label={$t('nav.sidebar')} onkeydown={(event) => git?.keydown(event)}>
+<SidePanel open={panel.open} close={() => panel.close()} bind:ref={element} tabindex={-1} data-session-panel aria-label={$t('nav.sidebar')} onkeydown={(event) => git?.keydown(event)}>
   <FilePreviewResizer />
   <Tabs.Root bind:value={() => panel.tab, next => { panel.tab = next as SessionPanelTab }} class="min-h-0 flex-1 gap-0">
     <header class="flex h-12 shrink-0 items-center justify-between gap-1 border-b px-2">

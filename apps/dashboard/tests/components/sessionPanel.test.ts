@@ -182,6 +182,7 @@ test("the sidebar button opens the panel on Files and shows no change count", as
   expect(button.textContent?.trim()).toBe("");
   expect(screen.queryByRole("complementary")).toBeNull();
 
+  button.focus();
   await fireEvent.click(button);
   const panel = sidePanel();
   expect(button).toHaveAttribute("aria-pressed", "true");
@@ -195,6 +196,7 @@ test("the sidebar button opens the panel on Files and shows no change count", as
 
   await fireEvent.click(within(panel).getByRole("button", { name: "Close" }));
   expect(screen.queryByRole("complementary")).toBeNull();
+  expect(button).toHaveFocus();
 });
 
 test("lists changes by group in panel order with line counts", async () => {

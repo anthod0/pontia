@@ -22,8 +22,6 @@
   const sessionPanel = useSessionPanel()!
   // Local file links open in the session side panel. The Bot chat page opens them in its own panel.
   provideFilePreviewNavigator({ open: target => sessionPanel.openFile(target) })
-  // The session page registers its Session; other pages show no session side panel.
-  const sessionSource = $derived(sessionPanel.open ? sessionPanel.source : null)
 
   function updatePath(): void {
     currentPath = dashboardRelativePath()
@@ -71,25 +69,36 @@
       </main>
     </FileDropZone>
   </Sidebar.Inset>
-  {#if sessionSource}
-    {#key sessionSource.device}
-      <SessionSidePanel panel={sessionPanel} source={sessionSource} />
+  {#if sessionPanel.source}
+    {#key sessionPanel.source.device}
+      <SessionSidePanel panel={sessionPanel} source={sessionPanel.source} />
     {/key}
   {/if}
 </Sidebar.Provider>
 
 <style>
-  :global(.file-preview-layout) {
-    --file-preview-width: 0px;
+  @property --file-preview-width {
+    syntax: '<length>';
+    inherits: true;
+    initial-value: 0px;
   }
+
   @media (min-width: 1024px) {
-    :global(.file-preview-layout:has([data-session-panel], [data-bot-chat-panel])) {
+    :global(.file-preview-layout) {
       /* Keep in sync with FILE_PREVIEW_MIN_WIDTH and FILE_PREVIEW_RESERVED_WIDTH. */
-      --file-preview-width: clamp(
+      --file-preview-target-width: clamp(
         320px,
         var(--file-preview-saved-width, clamp(360px, 40vw, 640px)),
         calc(100vw - 480px)
       );
+    }
+    :global(.file-preview-layout:has([data-docked-panel-open])) {
+      --file-preview-width: var(--file-preview-target-width);
+    }
+  }
+  @media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
+    :global(body:not(.file-preview-resizing) .file-preview-layout) {
+      transition: --file-preview-width 200ms ease-out;
     }
   }
 </style>
