@@ -913,5 +913,11 @@
   "memory.userView": "USER.md 视图",
   "memory.userRendered": "预览",
   "memory.userSource": "源文本",
-  "memory.userHint": "如需修改，在对话中告诉任意一个 Bot 即可。本设备所有 Bot 读取同一份 USER.md。"
+  "memory.userHint": "可以在这里直接编辑，也可以在对话中告诉任意一个 Bot。本设备所有 Bot 读取同一份 USER.md。",
+  "memory.userWrite": "自己填写",
+  "memory.userEditor": "USER.md 内容",
+  "memory.userEditHint": "保存后，本设备所有 Bot 都会收到通知，改用新的 USER.md。",
+  "memory.userSaved": "USER.md 已保存，Bot 会改用新版本。",
+  "memory.userConflict": "编辑期间有 Bot 修改了 USER.md，你的修改没有保存。",
+  "memory.userStartOver": "基于最新版本编辑"
 }

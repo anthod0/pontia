@@ -56,6 +56,7 @@ import type {
   MemoryListQuery,
   MemoryPage,
   UserFileView,
+  ReplaceUserFileInput,
 } from "./types";
 import type { DeviceRuntime } from "../device/runtime";
 
@@ -453,6 +454,11 @@ export function createApi(device: DeviceRuntime) {
 
   async function getUserFile(options: ReadRequestOptions = {}): Promise<UserFileView> {
     return (await boundedReadRequest<{ user: UserFileView }>("/memory/user", options)).user;
+  }
+
+  async function replaceUserFile(input: ReplaceUserFileInput): Promise<UserFileView> {
+    return (await request<{ user: UserFileView }>("/memory/user", { method: "PUT", body: input }))
+      .user;
   }
 
   async function listMemories(
@@ -1077,6 +1083,7 @@ export function createApi(device: DeviceRuntime) {
     validateExternalApiToken,
     listAgentProfiles,
     getUserFile,
+    replaceUserFile,
     listMemories,
     createAgentProfile,
     deleteAgentProfile,

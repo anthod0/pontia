@@ -16,7 +16,7 @@ use crate::{
     identity::{BotAccess, BotIdentity, BotRole, IdentityError, TOOL_TOKEN_ENV},
     messages::{BotMessage, MessageKind, MessageService, TodoAction, TodoList},
     records::{Bot, BotService},
-    user::UserService,
+    user::{ReplaceUser, UserFile, UserService},
 };
 
 pub mod profiles;
@@ -422,13 +422,31 @@ impl ConversationService {
                 .take(80)
                 .collect();
             let _ = self.notices.send(crate::system_notices::BotNotice {
-                bot_id: bot_id.into(),
+                bot_id: Some(bot_id.into()),
                 key: format!("todo:{id}"),
                 text: format!("User {verb} todo message {id}: \"{summary}\""),
             });
             self.activity(bot_id).notify(ConversationUpdate::Changed);
         }
         Ok(message)
+    }
+
+    /// Saves a Dashboard edit of USER.md and tells every live Bot about the new
+    /// text, so none keeps working from the copy in its handoff context.
+    pub async fn replace_user_file(
+        &self,
+        user: &UserService,
+        input: ReplaceUser,
+    ) -> std::result::Result<UserFile, crate::user::Error> {
+        let (file, changed) = user.replace(input).await?;
+        if changed {
+            let _ = self.notices.send(crate::system_notices::BotNotice {
+                bot_id: None,
+                key: "user".into(),
+                text: crate::handoff::user_edited_notice(&file.text),
+            });
+        }
+        Ok(file)
     }
 
     pub async fn search_messages(

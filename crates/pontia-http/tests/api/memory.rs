@@ -91,3 +91,64 @@ async fn dashboard_reads_memories_and_user_file_with_the_external_api_token() {
     assert_eq!(body["data"]["user"]["text"], "# 关于我\n");
     assert!(body["data"]["user"]["updated_at"].is_string());
 }
+
+async fn put_user(state: AppState, body: Value, token: Option<&str>) -> (StatusCode, Value) {
+    let mut request = Request::builder()
+        .method("PUT")
+        .uri("/api/v1/memory/user")
+        .header(header::CONTENT_TYPE, "application/json");
+    if let Some(token) = token {
+        request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
+    }
+    let response = http::router(state)
+        .oneshot(request.body(Body::from(body.to_string())).expect("request"))
+        .await
+        .expect("response");
+    let status = response.status();
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body")
+        .to_bytes();
+    (status, serde_json::from_slice(&body).expect("json body"))
+}
+
+#[tokio::test]
+async fn dashboard_replaces_user_file_only_when_it_saw_the_current_text() {
+    let (state, pontia_home) = TestApp::builder()
+        .database_name("memory.db")
+        .external_api_token(Some(TOKEN.to_string()))
+        .build_state()
+        .await;
+    let edit = json!({"text": "名字：林\n", "previous_text": ""});
+    assert_eq!(
+        put_user(state.clone(), edit.clone(), None).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+    let (status, body) = put_user(state.clone(), edit, Some(TOKEN)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["data"]["user"]["text"], "名字：林\n");
+    assert!(body["data"]["user"]["updated_at"].is_string());
+    let path = pontia_home.path().join("bot/USER.md");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "名字：林\n");
+
+    let (status, body) = put_user(
+        state.clone(),
+        json!({"text": "名字：陈\n", "previous_text": "旧内容"}),
+        Some(TOKEN),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "state_conflict");
+    let (status, body) = put_user(
+        state.clone(),
+        json!({"text": "字".repeat(2_001), "previous_text": "名字：林\n"}),
+        Some(TOKEN),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    let (status, _) = put_user(state, json!({"text": "x"}), Some(TOKEN)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "名字：林\n");
+}

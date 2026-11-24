@@ -3,7 +3,10 @@ use axum::{
     extract::{Query, State, rejection::JsonRejection},
     http::{HeaderMap, StatusCode},
 };
-use pontia_bot::memory::{Error, ListMemories, MemoryRequest};
+use pontia_bot::{
+    memory::{Error, ListMemories, MemoryRequest},
+    user::{self, ReplaceUser},
+};
 use serde_json::{Value, json};
 
 use super::response::{ApiError, ApiResponse, ok};
@@ -64,5 +67,29 @@ pub async fn get_user_file(
             error.to_string(),
         )
     })?;
+    Ok(ok(json!({ "user": user })))
+}
+
+pub async fn replace_user_file(
+    State(state): State<HttpState>,
+    request: Result<Json<ReplaceUser>, JsonRejection>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
+    let user = state
+        .bots()
+        .replace_user_file(state.user_service(), request)
+        .await
+        .map_err(|error| match error {
+            user::Error::Rejected {
+                reason: reason @ user::Rejection::Changed,
+                ..
+            } => ApiError::custom(StatusCode::CONFLICT, "state_conflict", reason.to_string()),
+            user::Error::Rejected { reason, .. } => ApiError::invalid_request(reason.to_string()),
+            _ => ApiError::custom(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                error.to_string(),
+            ),
+        })?;
     Ok(ok(json!({ "user": user })))
 }

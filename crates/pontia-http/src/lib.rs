@@ -208,7 +208,10 @@ fn external_api_router(state: HttpState) -> Router {
         )
         .route("/api/v1/auth/validate", get(api::validate_auth))
         .route("/api/v1/memories", get(api::list_memories))
-        .route("/api/v1/memory/user", get(api::get_user_file))
+        .route(
+            "/api/v1/memory/user",
+            get(api::get_user_file).put(api::replace_user_file),
+        )
         .route("/api/v1/sessions", post(api::create_session))
         .route(
             "/api/v1/agent-profiles",

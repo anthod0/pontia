@@ -4,7 +4,7 @@ pub use bot_context::{
     workspace_command,
 };
 mod bot_memory;
-pub use bot_memory::{get_user_file, list_memories, memory_command};
+pub use bot_memory::{get_user_file, list_memories, memory_command, replace_user_file};
 mod agent_clients;
 pub mod bots;
 pub use agent_clients::{

@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Choose a reasoning effort level for the default model in Grok Build, Antigravity, and Kiro. Session details show the level the client reports.
 - The Git tab in Sessions and Bot chats has a History view. Choose any local or remote branch to read its commits without checking it out, then open a commit to see its message, the files it changed, and each file's diff.
+- Edit `USER.md` yourself in the About you tab of Dashboard Settings > Memory. After you save, every running Bot is told to use the new version. If a Bot changed the file while you were editing, your save is refused so it cannot overwrite that change.
 
 ## [0.8.12] - 2026-11-24
 

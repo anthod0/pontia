@@ -1,4 +1,10 @@
-import { createInfiniteQuery, createQuery, keepPreviousData } from "@tanstack/svelte-query";
+import {
+  createInfiniteQuery,
+  createMutation,
+  createQuery,
+  keepPreviousData,
+} from "@tanstack/svelte-query";
+import type { ReplaceUserFileInput } from "../api/types";
 import type { DeviceRuntime } from "../device/runtime";
 
 export function createMemoryQueries(device: DeviceRuntime) {
@@ -32,5 +38,15 @@ export function createMemoryQueries(device: DeviceRuntime) {
     );
   }
 
-  return { memoryKeys, createMemoriesQuery, createUserFileQuery };
+  function createReplaceUserFileMutation() {
+    return createMutation(
+      () => ({
+        mutationFn: (input: ReplaceUserFileInput) => device.api.replaceUserFile(input),
+        onSuccess: (user) => device.queryClient.setQueryData(memoryKeys.user(), user),
+      }),
+      () => device.queryClient,
+    );
+  }
+
+  return { memoryKeys, createMemoriesQuery, createUserFileQuery, createReplaceUserFileMutation };
 }
