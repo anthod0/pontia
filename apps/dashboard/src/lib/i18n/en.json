@@ -1,4 +1,6 @@
 {
+  "chat.clientModel": "Client and model",
+  "sessions.recent": "Recent",
   "mobile.chats": "Chats",
   "mobile.navigation": "Main navigation",
   "mobile.hasTodos": "Todo, open todos",

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import type { FilePickerFileView } from '../../../api/types'
+  import FileMentionEditor from '$lib/components/file-picker/FileMentionEditor.svelte'
   import { t } from '$lib/i18n'
   import { useMobileStack } from '$lib/mobile/overlayStack.svelte'
   import { createComposer } from '../../../features/chat/composer.svelte'
@@ -10,12 +12,16 @@
   let {
     value = $bindable(''),
     draftId,
+    workspaceId,
+    autofocus = false,
     commands,
     busy,
     submitDisabled,
     onSubmit,
   }: {
     value: string
+    autofocus?: boolean
+    workspaceId?: string
     draftId: string
     commands: ChatCommand[]
     busy: boolean
@@ -34,6 +40,9 @@
     get draftId() {
       return draftId
     },
+    get retainDraft() {
+      return workspaceId !== undefined
+    },
     get commands() {
       return commands
     },
@@ -48,11 +57,14 @@
       if (expanded) stack.back()
     },
   })
+  const mentionIdentities = new Map<string, FilePickerFileView>()
+  let mentionEditor = $state<FileMentionEditor>()
   let input = $state<HTMLTextAreaElement>()
   let picker = $state<UploadAttachments>()
   let height = $state(0)
   export function focusInput() {
-    input?.focus()
+    if (mentionEditor) mentionEditor.focusEnd()
+    else input?.focus()
   }
   export function submit() {
     return controller.submit()
@@ -69,21 +81,34 @@
 </script>
 
 {#snippet editor()}
-<div class="flex h-full flex-col gap-2">
-  <textarea
-    onpaste={paste}
-    bind:value
-    aria-label={$t('bots.message')}
-    class="min-h-0 w-full flex-1 resize-none rounded-xl border p-3 text-base"
-    {@attach (node) => node.focus()}></textarea>
-  <button
-    class="min-h-11"
-    disabled={controller.cannotSubmit}
-    onclick={() => {
-      if (submit() && !controller.command) stack.back()
-    }}>{$t('common.send')}</button
-  >
-</div>
+  <div class="flex h-full flex-col gap-2">
+    {#if workspaceId !== undefined}
+      <div class="min-h-0 flex-1 overflow-auto" onpastecapture={paste}>
+        <FileMentionEditor
+          bind:value
+          {workspaceId}
+          {mentionIdentities}
+          autofocus
+          placeholder={$t('chat.taskPlaceholder')}
+          class="min-h-32 p-3 text-base"
+        />
+      </div>
+    {:else}
+      <textarea
+        onpaste={paste}
+        bind:value
+        aria-label={$t('bots.message')}
+        class="min-h-0 w-full flex-1 resize-none rounded-xl border p-3 text-base"
+        {@attach (node) => node.focus()}></textarea>
+    {/if}
+    <button
+      class="min-h-11"
+      disabled={controller.cannotSubmit}
+      onclick={() => {
+        if (submit() && !controller.command) stack.back()
+      }}>{$t('common.send')}</button
+    >
+  </div>
 {/snippet}
 {#if controller.uploads}<UploadAttachments
     bind:this={picker}
@@ -98,16 +123,30 @@
     onmousedown={holdFocus}
     onclick={() => picker?.choose()}><PlusIcon /></button
   >
-  <textarea
-    onpaste={paste}
-    bind:this={input}
-    bind:value
-    bind:clientHeight={height}
-    rows="1"
-    aria-label={$t('bots.message')}
-    placeholder={$t('bots.message')}
-    class="my-2 min-w-0 flex-1 resize-none bg-transparent text-base leading-6 outline-none [field-sizing:content] max-h-36"
-  ></textarea>
+  {#if workspaceId !== undefined}
+    <div class="min-w-0 flex-1" bind:clientHeight={height} onpastecapture={paste}>
+      <FileMentionEditor
+        bind:this={mentionEditor}
+        {mentionIdentities}
+        bind:value
+        {autofocus}
+        {workspaceId}
+        placeholder={$t('chat.taskPlaceholder')}
+        class="max-h-36 overflow-auto px-1 py-2 text-base"
+      />
+    </div>
+  {:else}
+    <textarea
+      onpaste={paste}
+      bind:this={input}
+      bind:value
+      bind:clientHeight={height}
+      rows="1"
+      aria-label={$t('bots.message')}
+      placeholder={$t('bots.message')}
+      class="my-2 min-w-0 flex-1 resize-none bg-transparent text-base leading-6 outline-none [field-sizing:content] max-h-36"
+    ></textarea>
+  {/if}
   {#if height > 72}<button
       class="mobile-icon"
       aria-label={$t('chat.expandComposer')}

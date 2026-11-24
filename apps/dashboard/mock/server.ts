@@ -1040,19 +1040,30 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
       return { session: session.view };
     },
   ],
-  ...(["pin", "unpin", "archive"] as const).map((action): [string, string, Handler] => [
-    "POST",
-    `/sessions/:id/${action}`,
-    ({ device, params: [id] }) => {
-      const session = findSession(device, id);
-      if (action === "pin") session.view.pinned_at = now();
-      if (action === "unpin") session.view.pinned_at = null;
-      if (action === "archive") session.view.archived_at = now();
-      touch(session);
-      emit(device, session, `session.${action === "archive" ? "archived" : action + "ned"}`, null);
-      return { session: session.view };
-    },
-  ]),
+  ...(["pin", "unpin", "archive", "unarchive"] as const).map(
+    (action): [string, string, Handler] => [
+      "POST",
+      `/sessions/:id/${action}`,
+      ({ device, params: [id] }) => {
+        const session = findSession(device, id);
+        if (action === "pin") session.view.pinned_at = now();
+        if (action === "unpin") session.view.pinned_at = null;
+        if (action === "archive") {
+          session.view.archived_at = now();
+          session.view.pinned_at = null;
+        }
+        if (action === "unarchive") session.view.archived_at = null;
+        touch(session);
+        emit(
+          device,
+          session,
+          `session.${action.endsWith("archive") ? action + "d" : action + "ned"}`,
+          null,
+        );
+        return { session: session.view };
+      },
+    ],
+  ),
   [
     "GET",
     "/sessions/:id/turns",

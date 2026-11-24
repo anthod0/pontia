@@ -22,15 +22,13 @@
   import { chatShortcuts } from '$lib/shortcuts/definitions'
   import { cn } from '$lib/utils.js'
   import { openContextMenu, type MenuAnchor } from '$lib/contextMenu'
-  import { recentSessions, snapshotSessionOverview } from "../../queries/sessionOverview";
+  import { createSessionList } from '../../features/sessions/sessionList.svelte'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import { sessionStateDotClass } from '$lib/sessionState'
   import RenameSessionDialog from '../chat/RenameSessionDialog.svelte'
   import type { SessionView } from '../../api/types'
   const device = useDeviceRuntime();
   const sidebar = Sidebar.useSidebar();
-  const { archiveSession, pinSession, terminateSession, unpinSession, updateSessionTitle } = device.sessions;
-  const { createSessionOverviewQuery } = device.sessionOverview;
   const { createWorkspacesQuery } = device.workspaceQueries;
 
   let { handle, onNewChat }: { handle?: string; onNewChat: () => void } = $props()
@@ -40,7 +38,6 @@
   let renamingSession = $state<SessionView | null>(null)
   let renameDialogOpen = $state(false)
   let renameError = $state<string | null>(null)
-  let sessionManagementBusyId = $state<string | null>(null)
   let filterTrigger = $state<HTMLButtonElement | null>(null)
   let sessionActionMenuOpenKey = $state<string | null>(null)
   // Set while a row's actions menu was opened by right-clicking the row rather than by its menu button.
@@ -49,13 +46,12 @@
   const { selectedWorkspaceId, sessionScope } = device.sidebarSessionFilter
   const workspacesQuery = createWorkspacesQuery()
   const selectedWorkspace = $derived(workspacesQuery.data?.find((workspace) => workspace.workspace_id === $selectedWorkspaceId))
-  const overviewQuery = createSessionOverviewQuery(false, () => $selectedWorkspaceId || undefined)
-  const overview = $derived(snapshotSessionOverview(overviewQuery.data))
-  const sidebarRecentSessions = $derived(recentSessions(overview, $selectedWorkspaceId, $sessionScope))
-  const hasClosedSessions = $derived(
-    $sessionScope === 'active' && (Boolean(overview.nextCursor) || recentSessions(overview, $selectedWorkspaceId, 'all').length > sidebarRecentSessions.length),
-  )
-  const headerButtonClass = 'flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden max-md:size-9 [&>svg]:size-[15px] max-md:[&>svg]:size-[18px]'
+  const sessions = createSessionList(device, false, () => $selectedWorkspaceId, () => $sessionScope)
+  const overviewQuery = sessions.query
+  const overview = $derived(sessions.overview)
+  const sidebarRecentSessions = $derived(sessions.recent)
+  const hasClosedSessions = $derived(sessions.hasClosed)
+  const headerButtonClass = 'flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden [&>svg]:size-[15px]'
   const filterApplied = $derived(Boolean($selectedWorkspaceId) || $sessionScope === 'all')
   const filterTitle = $derived([
     $sessionScope === 'active' ? $t('sessions.activeOnly') : $t('sessions.all'),
@@ -110,47 +106,19 @@
     renameDialogOpen = true
   }
 
-  async function togglePinSession(session: SessionView): Promise<void> {
-    sessionManagementBusyId = session.session_id
-    try {
-      if (session.pinned_at) await unpinSession(session.session_id)
-      else await pinSession(session.session_id)
-    } finally {
-      sessionManagementBusyId = null
-    }
-  }
-
-  async function archiveSessionFromSidebar(session: SessionView): Promise<void> {
-    sessionManagementBusyId = session.session_id
-    try {
-      await archiveSession(session.session_id)
-    } finally {
-      sessionManagementBusyId = null
-    }
-  }
-
-  async function exitSessionFromSidebar(session: SessionView): Promise<void> {
-    sessionManagementBusyId = session.session_id
-    try {
-      await terminateSession(session.session_id)
-    } finally {
-      sessionManagementBusyId = null
-    }
-  }
-
   async function togglePinSessionFromMenu(session: SessionView): Promise<void> {
     sessionActionMenuOpenKey = null
-    await togglePinSession(session)
+    await sessions.pin(session)
   }
 
   async function archiveSessionFromMenu(session: SessionView): Promise<void> {
     sessionActionMenuOpenKey = null
-    await archiveSessionFromSidebar(session)
+    await sessions.archive(session)
   }
 
   async function exitSessionFromMenu(session: SessionView): Promise<void> {
     sessionActionMenuOpenKey = null
-    await exitSessionFromSidebar(session)
+    await sessions.exit(session)
   }
 
   async function confirmRenameSession(title: string | null): Promise<void> {
@@ -158,7 +126,7 @@
     renamingSessionId = renamingSession.session_id
     renameError = null
     try {
-      await updateSessionTitle(renamingSession.session_id, title)
+      await sessions.rename(renamingSession, title)
       renameDialogOpen = false
       renamingSession = null
     } catch (error) {
@@ -173,16 +141,11 @@
     renamingSession = null
   }
 
-  // Active scope shows only the complete active group, so it never pages the closed-session list.
-  function loadNextPage(): void {
-    if ($sessionScope === 'all' && overview.nextCursor && !overviewQuery.isFetchingNextPage) void overviewQuery.fetchNextPage()
-  }
-
   // Re-observing after each page reports whether the end is still in view, so loading continues until the list
   // fills the sidebar. A failed page is retried only when the end scrolls back into view.
   function observeNextPageSentinel(node: HTMLElement): { destroy: () => void } {
     const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) loadNextPage()
+      if (entry.isIntersecting) sessions.loadNextPage()
     }, { root: node.closest('[data-sidebar="content"]'), rootMargin: '0px 0px 80px 0px' })
     $effect(() => {
       if ($sessionScope === 'all' && overview.nextCursor && !overviewQuery.isFetchingNextPage && !overviewQuery.isFetchNextPageError) {
@@ -200,7 +163,7 @@
 {#snippet sessionMenuItem(session: SessionView, actionKey: string)}
   {@const contextMenu = sessionContextMenu?.actionKey === actionKey ? sessionContextMenu : null}
   <Sidebar.MenuItem>
-    <Sidebar.MenuButton class="touch-target:group-has-data-[sidebar=menu-action]/menu-item:pr-16 touch-target:h-11 max-md:pl-2.5 max-md:text-[15px]" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session, $t)} · ${statusLabel(session.state, $t)}`} onclick={() => openSession(session.session_id)} oncontextmenu={(event) => openSessionContextMenu(event, actionKey)}>
+    <Sidebar.MenuButton class="touch-target:group-has-data-[sidebar=menu-action]/menu-item:pr-16 touch-target:h-11" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session, $t)} · ${statusLabel(session.state, $t)}`} onclick={() => openSession(session.session_id)} oncontextmenu={(event) => openSessionContextMenu(event, actionKey)}>
       {#if session.pinned_at}
         <PushPinIcon class="size-3.5 shrink-0" aria-label={$t('sessions.pinnedSession')} />
       {/if}
@@ -221,7 +184,7 @@
           class="touch-target:peer-data-[size=default]/menu-button:top-0 touch-target:right-0 touch-target:size-11 touch-target:after:hidden"
           aria-label={$t('sessions.actionsFor', { name: sessionChatTitle(session, $t) })}
           title={$t('sessions.actions')}
-          disabled={renamingSessionId === session.session_id || sessionManagementBusyId === session.session_id}
+          disabled={renamingSessionId === session.session_id || sessions.busyId === session.session_id}
           onclick={(event) => event.stopPropagation()}
         >
           {#snippet child({ props })}
@@ -234,19 +197,19 @@
       <DropdownMenu.Item onclick={() => startRenamingSession(session)}>
         <PencilSimpleIcon class="size-4" /> {$t('common.rename')}
       </DropdownMenu.Item>
-      <DropdownMenu.Item disabled={sessionManagementBusyId === session.session_id} onclick={() => void togglePinSessionFromMenu(session)}>
+      <DropdownMenu.Item disabled={sessions.busyId === session.session_id} onclick={() => void togglePinSessionFromMenu(session)}>
         {#if session.pinned_at}
           <PushPinSlashIcon class="size-4" /> {$t('sessions.unpin')}
         {:else}
           <PushPinIcon class="size-4" /> {$t('sessions.pin')}
         {/if}
       </DropdownMenu.Item>
-      <DropdownMenu.Item disabled={sessionManagementBusyId === session.session_id} onclick={() => void archiveSessionFromMenu(session)}>
+      <DropdownMenu.Item disabled={sessions.busyId === session.session_id} onclick={() => void archiveSessionFromMenu(session)}>
         <ArchiveIcon class="size-4" /> {$t('common.archive')}
       </DropdownMenu.Item>
       {#if !isTerminalSessionState(session.state)}
         <DropdownMenu.Separator />
-        <DropdownMenu.Item variant="destructive" disabled={sessionManagementBusyId === session.session_id} onclick={() => void exitSessionFromMenu(session)}>
+        <DropdownMenu.Item variant="destructive" disabled={sessions.busyId === session.session_id} onclick={() => void exitSessionFromMenu(session)}>
           <SignOutIcon class="size-4" /> {$t('common.exit')}
         </DropdownMenu.Item>
       {/if}
@@ -273,8 +236,8 @@
   {#if overviewQuery.error}
     <p role="alert" class="px-4 py-2 text-xs text-destructive">{$t('sessions.sidebarFailed')} {overviewQuery.error.message}</p>
   {/if}
-  <Sidebar.Group class="pt-3.5 max-md:pt-4">
-    <Sidebar.GroupLabel class="sticky top-0 z-10 flex h-8 items-center gap-1 bg-sidebar p-0 pr-0.5 pl-2 max-md:h-9 max-md:text-[13px]">
+  <Sidebar.Group class="pt-3.5">
+    <Sidebar.GroupLabel class="sticky top-0 z-10 flex h-8 items-center gap-1 bg-sidebar p-0 pr-0.5 pl-2">
       <button
         type="button"
         class="flex min-w-0 items-center gap-1 rounded-sm text-left font-medium hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
@@ -374,7 +337,7 @@
           <Sidebar.MenuItem>
             <button
               type="button"
-              class="w-full rounded-md px-2 py-1 text-left text-xs text-sidebar-foreground/60 max-md:px-2.5 max-md:py-1.5 max-md:text-[13px] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+              class="w-full rounded-md px-2 py-1 text-left text-xs text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
               onclick={() => sessionScope.set('all')}
             >
               {$t('sessions.showClosed')}

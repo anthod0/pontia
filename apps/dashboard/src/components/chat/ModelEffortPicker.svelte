@@ -390,7 +390,7 @@
   </div>
 {/snippet}
 
-{#if isMobile.current}
+{#if variant === 'form' && isMobile.current}
   <Sheet.Root bind:open onOpenChange={openChange}>
     <Sheet.Trigger {id} type="button" data-size="default" data-placeholder={selected || current ? undefined : ''} aria-invalid={savedUnavailable || undefined} class={triggerClass} {disabled}>
       {@render triggerContent()}

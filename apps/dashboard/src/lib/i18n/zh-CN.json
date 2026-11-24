@@ -1,4 +1,6 @@
 {
+  "chat.clientModel": "客户端与模型",
+  "sessions.recent": "最近",
   "mobile.chats": "对话",
   "mobile.navigation": "主导航",
   "mobile.hasTodos": "待办，有待办",

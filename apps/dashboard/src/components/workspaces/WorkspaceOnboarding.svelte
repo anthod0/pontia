@@ -15,7 +15,7 @@
   let { canContinue, onContinue, routeScope }: Props = $props()
 </script>
 
-<section class="mx-auto flex min-h-[calc(100svh-5.5rem)] max-w-5xl flex-col justify-center gap-6 md:min-h-[calc(100svh-6.5rem)]" aria-labelledby="workspace-onboarding-title">
+<section class="mx-auto flex min-h-[calc(100svh-5.5rem)] max-w-5xl flex-col max-md:min-h-full max-md:justify-start justify-center gap-6 md:min-h-[calc(100svh-6.5rem)]" aria-labelledby="workspace-onboarding-title">
   <div class="flex items-center gap-3 px-1">
     <PontiaMascot class="size-12 shrink-0" />
     <h1 id="workspace-onboarding-title" class="text-xl font-medium leading-snug">{$t('workspaces.setupFirst')}</h1>
@@ -31,7 +31,7 @@
 
   <WorkspaceBrowser />
 
-  <div class="flex justify-end px-1">
+  <div class="flex justify-end px-1 max-md:mt-auto max-md:[&>button]:w-full">
     <Button disabled={!canContinue} onclick={onContinue}>{$t('workspaces.continueToChat')}</Button>
   </div>
 </section>

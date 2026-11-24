@@ -1,5 +1,9 @@
-import type { QueryFunctionContext } from "@tanstack/svelte-query";
-import type { AgentClientModels, AgentClientView } from "../api/types";
+import {
+  skipToken,
+  type CreateQueryOptions,
+  type QueryFunctionContext,
+} from "@tanstack/svelte-query";
+import type { AgentClientModels, AgentClientView, SessionCreationOption } from "../api/types";
 import type { DeviceRuntime } from "../device/runtime";
 import { readStoredWith, scopedKey, writeStored } from "../lib/storage/webStorage";
 
@@ -65,4 +69,18 @@ export function modelCatalogQuery(
     retry: false,
     refetchOnWindowFocus: false,
   };
+}
+
+export function creationOptionCatalog(
+  device: DeviceRuntime,
+  option: SessionCreationOption | undefined,
+  workspaceId: string,
+): CreateQueryOptions<AgentClientModels> {
+  if (!option?.model_catalog_key)
+    return { queryKey: ["no-creation-model-catalog"], queryFn: skipToken };
+  return modelCatalogQuery(
+    device,
+    { ...option, client_key: option.model_catalog_key },
+    workspaceId,
+  );
 }
