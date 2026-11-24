@@ -1,3 +1,4 @@
+mod grok;
 pub(crate) mod probe;
 
 use crate::peer::{Peer, SessionState, protocol_error};
@@ -70,29 +71,36 @@ fn catalog(options: &[SessionConfigOption]) -> AgentClientModels {
             default_model: None,
         };
     };
-    let thought_level = selector(options, Category::ThoughtLevel).map(|(_, select)| select);
     AgentClientModels {
         models: values(select)
             .map(|model| {
-                let effort = thought_level.filter(|_| model.value == select.current_value);
-                SessionModel {
-                    reasoning_efforts: effort
-                        .into_iter()
-                        .flat_map(values)
-                        .map(|level| ReasoningEffortOption {
-                            id: level.value.to_string(),
-                            name: level.name.clone(),
-                            description: level.description.clone().unwrap_or_default(),
-                        })
-                        .collect(),
-                    default_reasoning_effort: effort.map(|level| level.current_value.to_string()),
+                let mut entry = SessionModel {
+                    reasoning_efforts: Vec::new(),
+                    default_reasoning_effort: None,
                     id: model.value.to_string(),
                     name: model.name.clone(),
                     description: model.description.clone().unwrap_or_default(),
+                };
+                if model.value == select.current_value {
+                    read_efforts(&mut entry, options);
                 }
+                entry
             })
             .collect(),
         default_model: Some(select.current_value.to_string()),
+    }
+}
+
+fn read_efforts(model: &mut SessionModel, options: &[SessionConfigOption]) {
+    if let Some((_, select)) = selector(options, Category::ThoughtLevel) {
+        model.reasoning_efforts = values(select)
+            .map(|level| ReasoningEffortOption {
+                id: level.value.to_string(),
+                name: level.name.clone(),
+                description: level.description.clone().unwrap_or_default(),
+            })
+            .collect();
+        model.default_reasoning_effort = Some(select.current_value.to_string());
     }
 }
 

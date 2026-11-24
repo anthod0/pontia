@@ -53,6 +53,8 @@ def model_config():
         {"value": "fast", "name": "Fast", "description": "Fast model"},
         {"value": "deep", "name": "Deep"},
     ]
+    if os.environ.get("ACP_PROBE_FAILURES"):
+        values[1:1] = [{"value": value, "name": value} for value in ("stalled", "rejected", "ignored")]
     if os.environ.get("ACP_MODELS") == "grouped":
         values = [{"group": "provider", "name": "Provider", "options": values}]
     options = [
@@ -67,7 +69,17 @@ def model_config():
                         "currentValue": effort, "options": [{"group": "levels", "name": "Levels", "options": [
                             {"value": "medium", "name": "Medium"}, {"value": "high", "name": "High", "description": "More thinking"},
                             {"value": "low", "name": "Low"}]}]})
-    return {"configOptions": options}
+        if model == "deep" and os.environ.get("ACP_MODEL_EFFORT"):
+            options[-1].update(currentValue="max", options=[{"value": "max", "name": "Maximum"}])
+    result = {"configOptions": options}
+    if os.environ.get("ACP_GROK_MODELS"):
+        result["models"] = {"currentModelId": "fast", "availableModels": [
+            {"modelId": "deep", "name": "Deep", "_meta": {"supportsReasoningEffort": True,
+             "reasoningEffort": "max", "reasoningEfforts": [{"value": "low", "default": True},
+             {"id": "max", "label": "Maximum", "description": "Thinks longer"}]}},
+            {"modelId": "fast", "name": "Fast", "_meta": {"supportsReasoningEffort": False}},
+        ]}
+    return result
 
 
 def session_config(request, fields):
@@ -202,6 +214,8 @@ for line in sys.stdin:
             caps["sessionCapabilities"]["delete"] = {}
         if os.environ.get("ACP_OPTIONS"):
             caps["sessionCapabilities"]["options"] = {}
+        if os.environ.get("ACP_GROK_MODELS"):
+            caps["_meta"] = {"x.ai/capabilities": {}}
         if os.environ.get("ACP_INTERJECT"):
             caps = protocol["initialize"]
         response(request, {"protocolVersion": 1, "agentCapabilities": caps,
@@ -289,6 +303,11 @@ for line in sys.stdin:
         params = request["params"]
         if os.environ.get("ACP_EFFORT") and params["configId"] == model_config()["configOptions"][-1]["id"]:
             effort = os.environ.get("ACP_EFFECTIVE_EFFORT", params["value"])
+            response(request, model_config())
+            continue
+        if params["value"] == "stalled":
+            continue
+        if params["value"] == "ignored":
             response(request, model_config())
             continue
         if (os.environ.get("ACP_REJECT_MODEL") == "1" or params["sessionId"] != native_id
@@ -400,5 +419,5 @@ for line in sys.stdin:
                 }})
             if os.environ.get("ACP_EXIT_AFTER_CLOSE") == "1":
                 os._exit(0)
-    else:
+    elif "id" in request:
         send({"id": request["id"], "error": {"code": -32601, "message": "Method not found"}})
