@@ -26,6 +26,24 @@ function createVisualViewport(offsetTop: number, height: number, windowHeight: n
 }
 
 describe("installVisualViewportCssVars", () => {
+  test("updates both insets when the keyboard pans a focused field and then closes", () => {
+    const win = createVisualViewport(0, 367, 667);
+    const uninstall = installVisualViewportCssVars(win as unknown as Window);
+    const style = win.document.documentElement.style;
+
+    win.visualViewport.offsetTop = 80;
+    win.visualViewport.dispatch("scroll");
+    expect(style.getPropertyValue("--visual-viewport-top")).toBe("80px");
+    expect(style.getPropertyValue("--visual-viewport-bottom")).toBe("220px");
+
+    win.visualViewport.offsetTop = 0;
+    win.visualViewport.height = 667;
+    win.visualViewport.dispatch("resize");
+    expect(style.getPropertyValue("--visual-viewport-top")).toBe("0px");
+    expect(style.getPropertyValue("--visual-viewport-bottom")).toBe("0px");
+    uninstall();
+  });
+
   test("tracks visual viewport top and bottom offsets as css variables", () => {
     const win = createVisualViewport(24, 500, 800);
 

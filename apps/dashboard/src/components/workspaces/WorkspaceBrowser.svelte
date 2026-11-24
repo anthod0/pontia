@@ -436,7 +436,7 @@
                       <span class="truncate text-xs text-muted-foreground">{workspace.canonical_path}</span>
                     </span>
                   </button>
-                  <div class="flex shrink-0 items-center gap-1 opacity-0 group-hover:opacity-100 group-has-focus-visible:opacity-100">
+                  <div class="flex shrink-0 items-center gap-1 workspace-actions touch-target:gap-2 touch-target:[&_button]:min-h-11 touch-target:[&_button]:min-w-11">
                     <Button size="icon-xs" variant="ghost" aria-label={$t('workspaces.renameNamed', { name: title })} title={$t('workspaces.rename')} onclick={() => startRenamingWorkspace(workspace)}><PencilSimpleIcon /></Button>
                     <Button size="xs" variant="ghost" aria-label={$t('workspaces.deactivateNamed', { name: title })} title={$t('workspaces.removeRegistration')} onclick={() => void deleteRegisteredWorkspace(workspace.workspace_id)} disabled={actionsDisabled}>{$t('workspaces.deactivate')}</Button>
                   </div>
@@ -459,7 +459,7 @@
                 <Button
                   size="xs"
                   variant="ghost"
-                  class="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                  class="workspace-actions touch-target:min-h-11 touch-target:min-w-11"
                   aria-label={$t('workspaces.revokeNamed', { name: title })}
                   title={$t('workspaces.removeRegistration')}
                   onclick={() => void deleteRegisteredWorkspace(workspace.workspace_id)}
@@ -493,7 +493,7 @@
                       {#if entryWorkspace.name && entryWorkspace.name !== entry.name}<span class="truncate text-xs text-muted-foreground">{entryWorkspace.name}</span>{/if}
                     {/if}
                   </button>
-                  <div class="flex shrink-0 items-center gap-1 opacity-0 group-hover:opacity-100 group-has-focus-visible:opacity-100">
+                  <div class="flex shrink-0 items-center gap-1 workspace-actions touch-target:gap-2 touch-target:[&_button]:min-h-11 touch-target:[&_button]:min-w-11">
                     {#if entryWorkspace}
                       <Button size="icon-xs" variant="ghost" aria-label={$t('workspaces.renameNamed', { name: entryWorkspace.name ?? entry.name })} title={$t('workspaces.rename')} onclick={() => startRenamingWorkspace(entryWorkspace)}><PencilSimpleIcon /></Button>
                     {/if}
@@ -524,7 +524,7 @@
 
 <Dialog.Root bind:open={renameWorkspaceDialogOpen}>
   {#if renamingWorkspace}
-    <Dialog.Content class="max-w-md">
+    <Dialog.Content class="sm:max-w-md">
       <form onsubmit={(event) => { event.preventDefault(); void confirmRenameWorkspace() }}>
         <Dialog.Header>
           <Dialog.Title>{$t('workspaces.confirmRename')}</Dialog.Title>
@@ -544,3 +544,12 @@
     </Dialog.Content>
   {/if}
 </Dialog.Root>
+
+<style>
+  @media (width >= 48rem) and (hover: hover) and (pointer: fine) {
+    li:not(:hover):not(:focus-within) :global(.workspace-actions) {
+      opacity: 0;
+      pointer-events: none;
+    }
+  }
+</style>

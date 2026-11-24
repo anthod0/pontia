@@ -232,7 +232,7 @@
         class="h-full min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground" />
       <Kbd class="font-mono">{client.name}</Kbd>
     </div>
-    <div role="listbox" id={`${uid}-models`} aria-label={$t('model.available')} class="min-h-0 flex-1 overflow-y-auto p-1">
+    <div role="listbox" id={`${uid}-models`} aria-label={$t('model.available')} class="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1">
       {@render catalogState()}
       {#if catalog.data}
         {#each rows as row, index (row.key)}
@@ -278,7 +278,7 @@
     {#if activeRow && activeChoices.length}
       {@const activeSelected = activeRow.key === model}
       {@const activeModel = activeRow.model}
-      <div role="listbox" aria-label={$t('effort.title')} class="min-h-0 flex-1 overflow-y-auto p-1">
+      <div role="listbox" aria-label={$t('effort.title')} class="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1">
         {#each activeChoices as choice, index (choice)}
           {@const option = activeModel?.reasoning_efforts?.find((entry) => entry.id === choice)}
           {@const isSelected = activeSelected && effort === choice}
@@ -346,7 +346,7 @@
     <input type="search" aria-label={$t('model.search')} placeholder={$t('model.searchPlaceholder')} bind:value={search}
       class="h-full min-w-0 flex-1 bg-transparent text-base text-foreground outline-none placeholder:text-muted-foreground" />
   </div>
-  <div role="listbox" aria-label={$t('model.available')} class="min-h-0 flex-1 overflow-y-auto px-2">
+  <div role="listbox" aria-label={$t('model.available')} class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2">
     {@render catalogState()}
     {#if catalog.data}
       {#each rows as row (row.key)}

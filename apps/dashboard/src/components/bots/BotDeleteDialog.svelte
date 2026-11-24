@@ -63,7 +63,7 @@
 </script>
 
 <AlertDialog.Root open onOpenChange={(open) => { if (!open && !deleting) onclose() }}>
-  <AlertDialog.Content class="max-h-[calc(100dvh-2rem)] overflow-y-auto">
+  <AlertDialog.Content>
     <AlertDialog.Header>
       <AlertDialog.Title class="break-words">{$t('bots.deleteTitle', { name: bot.name })}</AlertDialog.Title>
       <AlertDialog.Description class="grid gap-2 text-left">

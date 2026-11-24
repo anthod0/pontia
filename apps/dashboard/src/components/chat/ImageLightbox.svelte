@@ -22,7 +22,7 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="inset-0 block max-w-none translate-none rounded-none bg-black/90 p-0 text-white ring-0 sm:max-w-none" showCloseButton={false}>
+  <Dialog.Content class="inset-0 block max-h-none overflow-hidden max-w-none translate-none rounded-none bg-black/90 p-0 text-white ring-0 sm:max-w-none" showCloseButton={false}>
     <Dialog.Title class="sr-only">{active.name}</Dialog.Title>
     <Lightbox
       inline

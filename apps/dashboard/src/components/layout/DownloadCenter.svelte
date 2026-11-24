@@ -48,7 +48,7 @@
       <Dialog.Title>{$t('downloads.title')}</Dialog.Title>
     </Dialog.Header>
     {#if $downloads.length}
-      <ul class="max-h-[min(60svh,28rem)] divide-y overflow-y-auto px-5" aria-label={$t('downloads.title')}>
+      <ul class="max-h-[min(60svh,28rem)] divide-y overflow-y-auto overscroll-contain px-5" aria-label={$t('downloads.title')}>
         {#each $downloads as task (task.id)}
           <li class="py-4">
             <div class="flex items-start gap-3">

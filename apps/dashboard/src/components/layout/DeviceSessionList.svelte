@@ -197,7 +197,7 @@
 
 {#snippet sessionMenuItem(session: SessionView, actionKey: string)}
   <Sidebar.MenuItem>
-    <Sidebar.MenuButton class="group-has-data-[sidebar=menu-action]/menu-item:pr-8 max-md:h-11 max-md:px-2.5 max-md:text-[15px]" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session, $t)} · ${statusLabel(session.state, $t)}`} onclick={() => openSession(session.session_id)} oncontextmenu={(event) => openSessionContextMenu(event, actionKey)}>
+    <Sidebar.MenuButton class="touch-target:group-has-data-[sidebar=menu-action]/menu-item:pr-16 touch-target:h-11 max-md:pl-2.5 max-md:text-[15px]" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session, $t)} · ${statusLabel(session.state, $t)}`} onclick={() => openSession(session.session_id)} oncontextmenu={(event) => openSessionContextMenu(event, actionKey)}>
       {#if session.pinned_at}
         <PushPinIcon class="size-3.5 shrink-0" aria-label={$t('sessions.pinnedSession')} />
       {/if}
@@ -205,7 +205,7 @@
     </Sidebar.MenuButton>
     {#if isSessionVisibleState(session.state)}
       <span
-        class={cn('pointer-events-none absolute top-1.5 right-1 max-md:top-3 flex aspect-square w-5 items-center justify-center transition-opacity group-has-[:focus-visible]/menu-item:opacity-0 group-hover/menu-item:opacity-0 group-data-[collapsible=icon]:hidden', sessionActionMenuOpenKey === actionKey ? 'opacity-0' : 'opacity-100')}
+        class={cn('pointer-events-none absolute top-1.5 right-1 touch-target:top-3 touch-target:right-11 flex aspect-square w-5 items-center justify-center transition-opacity group-has-[:focus-visible]/menu-item:opacity-0 group-hover/menu-item:opacity-0 group-data-[collapsible=icon]:hidden', sessionActionMenuOpenKey === actionKey ? 'opacity-0' : 'opacity-100')}
         aria-label={$t('sessions.state', { state: statusLabel(session.state, $t) })}
       >
         <span class={`size-2 rounded-full ${sessionStateDotClass(session.state)}`}></span>
@@ -214,7 +214,7 @@
     <DropdownMenu.Root bind:open={() => sessionActionMenuOpenKey === actionKey, (open) => setSessionActionMenuOpen(actionKey, open)}>
       <Sidebar.MenuAction
         showOnHover
-        class="max-md:peer-data-[size=default]/menu-button:top-3"
+        class="touch-target:peer-data-[size=default]/menu-button:top-0 touch-target:right-0 touch-target:size-11 touch-target:after:hidden"
         aria-label={$t('sessions.actionsFor', { name: sessionChatTitle(session, $t) })}
         title={$t('sessions.actions')}
         disabled={renamingSessionId === session.session_id || sessionManagementBusyId === session.session_id}

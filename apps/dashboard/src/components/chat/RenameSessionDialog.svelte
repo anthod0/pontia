@@ -40,7 +40,7 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="max-w-md">
+  <Dialog.Content class="sm:max-w-md">
     <form onsubmit={(event) => { event.preventDefault(); submit() }}>
       <Dialog.Header>
         <Dialog.Title>{$t('chat.rename')}</Dialog.Title>

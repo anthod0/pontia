@@ -10,6 +10,18 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+@custom-variant touch-target {
+  @media (width < 48rem), (pointer: coarse), (hover: none) {
+    @slot;
+  }
+}
+
+@media (width < 48rem) {
+  :root {
+    --notification-top: calc(var(--visual-viewport-top, 0px) + env(safe-area-inset-top) + 4rem);
+  }
+}
+
 @theme inline {
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
@@ -61,6 +73,9 @@
 }
 
 :root {
+  --visual-viewport-height: calc(
+    100dvh - var(--visual-viewport-top, 0px) - var(--visual-viewport-bottom, 0px)
+  );
   color-scheme: light;
   --radius: 6px;
   --background: #fffefc;

@@ -364,7 +364,7 @@
 
 {#if fullscreen}
   <Dialog.Root bind:open={fullscreenOpen}>
-    <Dialog.Content class="inset-0 left-0 top-0 flex h-svh max-h-svh w-screen max-w-none translate-x-0 translate-y-0 flex-col overflow-hidden rounded-none p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:hidden" showCloseButton={false}>
+    <Dialog.Content class="left-0 top-[var(--visual-viewport-top,0px)] flex h-(--visual-viewport-height) max-h-none w-screen max-w-none translate-x-0 translate-y-0 flex-col overflow-hidden rounded-none p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] sm:hidden" showCloseButton={false}>
       <Dialog.Header class="shrink-0">
         <div class="flex items-center justify-between gap-2">
           <Dialog.Title>{$t('chat.expandedComposer')}</Dialog.Title>
@@ -381,7 +381,7 @@
       <PromptInput.Root class="mt-2 flex min-h-0 w-full flex-1 flex-col shadow-none" onSubmit={submitAndCloseFullscreen}>
         {#if uploads}<UploadAttachments bind:this={fullscreenUploadPicker} draft={uploads} disabled={disabled || busy || sending} />{/if}
         <PromptInput.Body class="min-h-0 flex-1" onpastecapture={pasteFiles}>
-          <ChatCommandInput bind:this={fullscreenEditor} bind:value {commands} commandSide="bottom" onCommand={executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget autofocus onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-[52px] pr-2" />
+          <ChatCommandInput bind:this={fullscreenEditor} bind:value {commands} commandSide="bottom" onCommand={executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget autofocus onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-[52px] overscroll-contain pr-2" />
         </PromptInput.Body>
         {#if command?.disabledReason}<p role="status" class="pb-2 text-xs text-muted-foreground">{command.disabledReason}</p>{/if}
         <PromptInput.Toolbar class={uploads ? 'shrink-0 pt-0' : 'shrink-0 justify-end pt-0'}>

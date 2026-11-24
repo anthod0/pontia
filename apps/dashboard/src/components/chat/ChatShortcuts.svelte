@@ -100,7 +100,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <Dialog.Root bind:open={shortcutsOpen}>
-  <Dialog.Content class="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
+  <Dialog.Content class="sm:max-w-lg">
     <Dialog.Header>
       <Dialog.Title>{$t('shortcuts.title')}</Dialog.Title>
       <Dialog.Description>{$t('shortcuts.description')}</Dialog.Description>
