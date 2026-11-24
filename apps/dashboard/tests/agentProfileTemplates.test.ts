@@ -4,13 +4,13 @@ import { createAgentProfileDraft } from "../src/pages/agentProfiles/form";
 import {
   applyProfileTemplate,
   draftChanged,
-  profileTemplates,
+  builtInProfileTemplates,
   templateClientNames,
   templateClientStatus,
   templateModel,
 } from "../src/pages/agentProfiles/templates";
 
-const template = (id: string) => profileTemplates.find((entry) => entry.id === id)!;
+const template = (id: string) => builtInProfileTemplates.find((entry) => entry.id === id)!;
 
 function client(
   client_type: string,
@@ -48,7 +48,7 @@ function catalog(models: { id: string; efforts?: string[] }[], default_model: st
 }
 
 test("every template has a valid profile ID, a known client, and text in both languages", () => {
-  for (const entry of profileTemplates) {
+  for (const entry of builtInProfileTemplates) {
     expect(entry.id).toMatch(/^[a-z0-9][a-z0-9._-]*$/);
     expect(templateClientNames[entry.client_type]).toBeTruthy();
     for (const text of Object.values(entry.text)) {
@@ -57,10 +57,12 @@ test("every template has a valid profile ID, a known client, and text in both la
     }
     expect(entry.text["zh-CN"].name).not.toBe(entry.text.en.name);
   }
-  expect(new Set(profileTemplates.map((entry) => entry.id)).size).toBe(profileTemplates.length);
-  expect(profileTemplates.filter((entry) => entry.use_yolo).map((entry) => entry.id)).toEqual([
-    "implementer",
-  ]);
+  expect(new Set(builtInProfileTemplates.map((entry) => entry.id)).size).toBe(
+    builtInProfileTemplates.length,
+  );
+  expect(
+    builtInProfileTemplates.filter((entry) => entry.use_yolo).map((entry) => entry.id),
+  ).toEqual(["implementer"]);
 });
 
 test("fills every field in the interface language when the template's client is enabled", () => {
