@@ -5,7 +5,8 @@
   import ClientIcon from '../../components/chat/ClientIcon.svelte'
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
-  import { profileTemplates, templateClientNames, templateClientStatus, type ProfileTemplate } from './templates'
+  import { profileTemplates } from './publishedTemplates'
+  import { templateClientNames, templateClientStatus, templateIcon, type ProfileTemplate } from './templates'
 
   let { clients, selected, onchoose, class: className }: {
     clients: AgentClientView[]
@@ -16,14 +17,15 @@
 </script>
 
 <div class={cn('no-scrollbar -mx-4 flex snap-x snap-mandatory scroll-px-4 gap-2 overflow-x-auto px-4 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0', className)}>
-  {#each profileTemplates as template (template.id)}
+  {#each $profileTemplates as template (template.id)}
     {@const text = template.text[$currentLocale]}
     {@const status = templateClientStatus(template, clients)}
     {@const clientName = templateClientNames[template.client_type]}
+    {@const Icon = templateIcon(template)}
     <button type="button" aria-pressed={selected === template.id} onclick={() => onchoose(template)}
       class="group/card flex w-64 shrink-0 snap-start flex-col gap-2 rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:border-primary/60 hover:bg-muted/40 focus-visible:ring-3 focus-visible:ring-ring/50 aria-pressed:border-primary aria-pressed:bg-selected sm:w-auto sm:min-w-0">
       <span class="flex min-w-0 items-center gap-2.5">
-        <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-foreground group-aria-pressed/card:bg-background"><template.icon class="size-4" /></span>
+        <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-foreground group-aria-pressed/card:bg-background"><Icon class="size-4" /></span>
         <span class="min-w-0 flex-1 truncate text-sm font-medium text-heading">{text.name}</span>
         {#if template.use_yolo}<span class="inline-flex h-5 shrink-0 items-center rounded-md border px-1.5 text-[0.7rem] font-medium text-muted-foreground">YOLO</span>{/if}
         {#if selected === template.id}<CheckIcon class="size-4 shrink-0 text-primary" />{/if}

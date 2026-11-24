@@ -44,7 +44,7 @@ export function createAgentProfileDraftFromProfile(profile: AgentProfileView): A
 }
 
 /** Matches the format pontiad accepts for new Profile IDs. */
-const profileIdPattern = /^[a-z0-9][a-z0-9._-]*$/;
+export const profileIdPattern = /^[a-z0-9][a-z0-9._-]*$/;
 
 /** Suggests a Profile ID from its name; names without ASCII letters or digits give "". */
 export function profileIdFromName(name: string): string {

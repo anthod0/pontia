@@ -21,7 +21,7 @@
   import SwapIcon from 'phosphor-svelte/lib/SwapIcon'
   import { modelCatalogQuery } from '../../queries/modelCatalog'
   import TemplateCards from './TemplateCards.svelte'
-  import { applyProfileTemplate, draftChanged, templateClient, templateClientNames, templateClientStatus, templateModel, type ProfileTemplate } from './templates'
+  import { applyProfileTemplate, draftChanged, templateClient, templateClientNames, templateClientStatus, templateIcon, templateModel, type ProfileTemplate } from './templates'
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
   import TrashIcon from 'phosphor-svelte/lib/TrashIcon'
@@ -172,8 +172,9 @@
 
 {#if !initial}
   {#if applied && !pickerOpen}
+    {@const AppliedIcon = templateIcon(applied)}
     <div class="flex min-w-0 items-center gap-2.5 rounded-lg border bg-muted/40 px-3 py-2">
-      <span class="flex size-7 shrink-0 items-center justify-center rounded-md bg-background text-foreground"><applied.icon class="size-4" /></span>
+      <span class="flex size-7 shrink-0 items-center justify-center rounded-md bg-background text-foreground"><AppliedIcon class="size-4" /></span>
       <p class="min-w-0 flex-1 text-sm">
         <span class="text-muted-foreground">{$t('profiles.templateApplied')}</span>
         <span class="font-medium text-heading">{applied.text[$currentLocale].name}</span><span class="text-muted-foreground max-sm:hidden">{$t('profiles.templateAppliedHint')}</span>

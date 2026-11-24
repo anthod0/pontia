@@ -4,6 +4,7 @@ import CodeIcon from "phosphor-svelte/lib/CodeIcon";
 import GitDiffIcon from "phosphor-svelte/lib/GitDiffIcon";
 import MagnifyingGlassIcon from "phosphor-svelte/lib/MagnifyingGlassIcon";
 import PencilSimpleLineIcon from "phosphor-svelte/lib/PencilSimpleLineIcon";
+import RobotIcon from "phosphor-svelte/lib/RobotIcon";
 import TestTubeIcon from "phosphor-svelte/lib/TestTubeIcon";
 import type { Locale } from "$lib/i18n";
 import type { AgentClientModels, AgentClientView } from "../../api/types";
@@ -17,7 +18,8 @@ export interface ProfileTemplateText {
 
 export interface ProfileTemplate {
   id: string;
-  icon: Component;
+  /** A key of `templateIcons`; other names show a generic icon. */
+  icon: string;
   client_type: string;
   model: string;
   reasoning_effort?: string;
@@ -32,10 +34,24 @@ export const templateClientNames: Record<string, string> = {
   "claude-agent": "Claude Code",
 };
 
-export const profileTemplates: ProfileTemplate[] = [
+const templateIcons: Record<string, Component> = {
+  bug: BugIcon,
+  code: CodeIcon,
+  "git-diff": GitDiffIcon,
+  "magnifying-glass": MagnifyingGlassIcon,
+  "pencil-simple-line": PencilSimpleLineIcon,
+  "test-tube": TestTubeIcon,
+};
+
+export function templateIcon(template: ProfileTemplate): Component {
+  return templateIcons[template.icon] ?? RobotIcon;
+}
+
+/** Templates shipped with the Dashboard, shown until the published templates are loaded. */
+export const builtInProfileTemplates: ProfileTemplate[] = [
   {
     id: "implementer",
-    icon: CodeIcon,
+    icon: "code",
     client_type: "pi",
     model: "anthropic/claude-sonnet-5-5",
     reasoning_effort: "medium",
@@ -66,7 +82,7 @@ export const profileTemplates: ProfileTemplate[] = [
   },
   {
     id: "code-reviewer",
-    icon: GitDiffIcon,
+    icon: "git-diff",
     client_type: "codex",
     model: "gpt-6.2-astra",
     use_yolo: false,
@@ -94,7 +110,7 @@ export const profileTemplates: ProfileTemplate[] = [
   },
   {
     id: "researcher",
-    icon: MagnifyingGlassIcon,
+    icon: "magnifying-glass",
     client_type: "claude-agent",
     model: "opus",
     use_yolo: false,
@@ -122,7 +138,7 @@ export const profileTemplates: ProfileTemplate[] = [
   },
   {
     id: "debugger",
-    icon: BugIcon,
+    icon: "bug",
     client_type: "codex",
     model: "gpt-6.2-astra",
     use_yolo: false,
@@ -150,7 +166,7 @@ export const profileTemplates: ProfileTemplate[] = [
   },
   {
     id: "test-engineer",
-    icon: TestTubeIcon,
+    icon: "test-tube",
     client_type: "pi",
     model: "anthropic/claude-sonnet-5-5",
     reasoning_effort: "medium",
@@ -181,7 +197,7 @@ export const profileTemplates: ProfileTemplate[] = [
   },
   {
     id: "doc-writer",
-    icon: PencilSimpleLineIcon,
+    icon: "pencil-simple-line",
     client_type: "claude-agent",
     model: "sonnet",
     use_yolo: false,
