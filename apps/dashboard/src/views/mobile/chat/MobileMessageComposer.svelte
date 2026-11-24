@@ -124,7 +124,7 @@
     aria-label={$t('files.upload')}
     disabled={controller.uploadUnavailable}
     onmousedown={holdFocus}
-    onclick={() => picker?.choose()}><PlusIcon /></button
+    onclick={() => picker?.choose()}><PlusIcon class="size-4" /></button
   >
   {#if workspaceId !== undefined}
     <div class="min-w-0 flex-1" bind:clientHeight={height} onpastecapture={paste}>
@@ -161,17 +161,17 @@
           modal: true,
           dismiss: () => (expanded = false),
         })
-      }}><ArrowsOutIcon /></button
+      }}><ArrowsOutIcon class="size-4" /></button
     >{/if}
   {#if onInterrupt && !value.trim() && !controller.attachments.items.length}
-    <button class="mobile-icon bg-destructive text-white" aria-label={$t('chat.interrupt')} disabled={busy} onmousedown={holdFocus} onclick={onInterrupt}><StopIcon weight="fill"/></button>
+    <button class="mobile-icon bg-destructive text-white" aria-label={$t('chat.interrupt')} disabled={busy} onmousedown={holdFocus} onclick={onInterrupt}><StopIcon class="size-4" weight="fill"/></button>
   {:else}
   <button
     class="mobile-icon shrink-0 bg-primary text-primary-foreground disabled:opacity-40"
     disabled={controller.cannotSubmit}
     aria-label={$t('common.send')}
     onmousedown={holdFocus}
-    onclick={() => submit()}><PaperPlaneTiltIcon /></button
+    onclick={() => submit()}><PaperPlaneTiltIcon class="size-4" /></button
   >
   {/if}
 </div>

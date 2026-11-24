@@ -55,7 +55,7 @@
     <button
       class={chip + ' max-w-2/5'}
       disabled={chat.creating || !chat.workspaces.length}
-      onclick={() => (sheet = 'workspace')}><FolderIcon /><span class="truncate">{workspace}</span></button
+      onclick={() => (sheet = 'workspace')}><FolderIcon class="size-4 shrink-0" /><span class="truncate">{workspace}</span></button
     >
     <button
       class={chip}

@@ -32,8 +32,6 @@
   const icon = $derived(svg?.replace(/\bid="([^"]+)"/g, `id="${idPrefix}-$1"`).replace(/url\(#([^)]+)\)/g, `url(#${idPrefix}-$1)`))
 </script>
 
-{#if icon}
-  <span class={cn('inline-flex shrink-0 [&>svg]:size-full', className)} aria-hidden="true">{@html icon}</span>
-{:else}
-  <TerminalWindowIcon class={className} aria-hidden="true" />
-{/if}
+<span class={cn('inline-flex size-4 shrink-0 [&>svg]:size-full [&>svg]:max-h-full [&>svg]:max-w-full', className)} aria-hidden="true">
+  {#if icon}{@html icon}{:else}<TerminalWindowIcon />{/if}
+</span>
