@@ -1,3 +1,5 @@
+mod auto_update;
+
 use std::path::{Path, PathBuf};
 
 use crate::{

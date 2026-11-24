@@ -130,6 +130,9 @@ enum Command {
     /// Update pontia and pontiad to the latest stable release
     #[command(after_help = UPDATE_HELP)]
     Update,
+    /// Manage six-hour automatic update checks (disabled by default)
+    #[command(subcommand)]
+    AutoUpdate(AutoUpdate),
     /// Remove local integrations, shell configuration, and autostart services
     #[command(
         after_help = "Keeps pontia and pontiad, configuration, credentials, history, and cloud registration.\nAgent Client installations and native conversations are kept. Run pontia init to set up again."
@@ -164,6 +167,16 @@ enum Command {
     Workflow(workflow::WorkflowCommand),
     /// Use tools for the current Bot, retrieval or dreaming Session
     Bot(bot::BotCommand),
+}
+
+#[derive(Debug, Subcommand)]
+enum AutoUpdate {
+    /// Install and start the per-user update schedule
+    Enable,
+    /// Stop and remove the per-user update schedule
+    Disable,
+    /// Show the schedule and available run times
+    Status,
 }
 
 #[derive(Debug)]
@@ -325,6 +338,7 @@ async fn execute(command: Command) -> Result<bool, String> {
             }
             Ok(true)
         }
+        Command::AutoUpdate(command) => run_auto_update(command),
         Command::Update => run_update().await,
         Command::Uninstall { yes, force } => run_uninstall(yes, force).await,
         Command::Up => run_lifecycle(LifecycleCommand::Up).await,
@@ -405,6 +419,44 @@ async fn run_uninstall(yes: bool, force: bool) -> Result<bool, String> {
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     Err("pontia uninstall supports only Linux and macOS".into())
+}
+
+fn run_auto_update(command: AutoUpdate) -> Result<bool, String> {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        let runner = ProcessCommandRunner;
+        #[cfg(target_os = "linux")]
+        let (manager, directory) = (
+            SystemdManager::new(&runner),
+            match env::var_os("XDG_CONFIG_HOME").map(PathBuf::from) {
+                Some(path) if path.is_absolute() => path,
+                _ => user_home()?.join(".config"),
+            }
+            .join("systemd/user"),
+        );
+        #[cfg(target_os = "macos")]
+        let (manager, directory) = (
+            LaunchdManager::new(&runner, current_uid(&runner)?),
+            user_home()?.join("Library/LaunchAgents"),
+        );
+        match command {
+            AutoUpdate::Enable => {
+                let cli = env::current_exe().map_err(|error| error.to_string())?;
+                manager.enable_auto_update(&directory, &cli)?;
+                println!("Automatic updates enabled.");
+            }
+            AutoUpdate::Disable => {
+                manager.disable_auto_update(&directory)?;
+                println!("Automatic updates disabled.");
+            }
+            AutoUpdate::Status => println!("{}", manager.auto_update_status()?),
+        }
+        Ok(true)
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    Err(format!(
+        "Automatic updates require systemd on Linux or launchd on macOS ({command:?})."
+    ))
 }
 
 async fn run_update() -> Result<bool, String> {
