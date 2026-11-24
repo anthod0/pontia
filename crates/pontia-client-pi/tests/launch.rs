@@ -85,12 +85,7 @@ fn session_mode_is_applied_on_initial_launch_and_resume_without_accumulating_fla
         (SessionMode::Yolo, vec![]),
         (
             SessionMode::Restricted,
-            vec![
-                "--tools",
-                "read,bash,grep,find,ls",
-                "--no-mcp",
-                "--no-skills",
-            ],
+            vec!["--tools", "read,bash", "--no-mcp", "--no-skills"],
         ),
     ] {
         let mut runtime = launch_request(

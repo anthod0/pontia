@@ -19,6 +19,9 @@ pub struct AgentProfile {
     pub profile_key: &'static str,
     pub profile_name: (&'static str, &'static str),
     pub profile_description: (&'static str, &'static str),
+    pub disabled_env_flags: &'static [&'static str],
+    pub allow_key: &'static str,
+    pub allowed_tools: &'static [&'static str],
     pub deny_key: &'static str,
     pub disabled_tools: &'static [&'static str],
     pub discover_skills_key: &'static str,
@@ -34,6 +37,12 @@ pub struct AgentProfile {
 }
 
 impl AgentProfile {
+    pub(crate) fn configure_launch(&self, launch: &mut crate::AcpLaunch) {
+        for flag in self.disabled_env_flags {
+            launch.env.insert((*flag).into(), "false".into());
+        }
+    }
+
     pub(crate) async fn check_model(&self, peer: &Peer, requested: Option<&str>) -> Result<String> {
         let cwd = peer.state.lock().await.cwd.clone();
         let result = peer
@@ -115,6 +124,7 @@ impl SessionPolicy {
                         json!({
                             (recipe.profile_name.0): recipe.profile_name.1,
                             (recipe.profile_description.0): recipe.profile_description.1,
+                            (recipe.allow_key): recipe.allowed_tools,
                             (recipe.deny_key): recipe.disabled_tools,
                             (recipe.discover_skills_key): false,
                         }),

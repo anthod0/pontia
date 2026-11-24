@@ -301,7 +301,7 @@ async fn antigravity_prepares_its_workspace_agent_again_on_process_recovery() {
     .unwrap();
     let agent = cwd.join(".agents/agents/pontia-restricted.md");
     let original = std::fs::read_to_string(&agent).unwrap();
-    assert!(original.contains("tools: [read_file, run_command, search_web]"));
+    assert!(original.contains("tools: [read_file, run_command]"));
     std::fs::write(&agent, "old definition").unwrap();
     h.crash_agent(&session);
     h.wait_ready(&session, 2).await;
@@ -367,7 +367,7 @@ async fn kiro_selects_its_workspace_agent_on_creation_and_recovery() {
         r#"{"chat.disableInheritingDefaultResources":true}"#
     );
     let definition: Value = serde_json::from_slice(&std::fs::read(agent).unwrap()).unwrap();
-    assert_eq!(definition["tools"], json!(["read", "shell", "web"]));
+    assert_eq!(definition["tools"], json!(["read_file", "execute_bash"]));
     assert_eq!(h.requests("session/new"), 1);
     assert!(h.requests("session/load") >= 2);
     for frame in h.wire() {

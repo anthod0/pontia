@@ -7,7 +7,9 @@ pub(crate) const FILES: &[LaunchFile] = &[LaunchFile {
     contents: "---
 name: pontia-restricted
 description: Pontia restricted Session
-tools: [read_file, run_command, search_web]
+tools: [read_file, run_command]
+inheritMcp: false
+inheritCustomizations: false
 mainAgent: true
 subagent: false
 ---

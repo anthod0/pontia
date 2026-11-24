@@ -255,6 +255,12 @@ impl ClientSession for AcpAdapter {
                 }
             };
             config.env.extend(request.environment);
+            if request.mode == pontia_core::SessionMode::Restricted
+                && let Some(crate::RestrictedExecution::AgentProfile(profile)) =
+                    definition.restricted_execution
+            {
+                profile.configure_launch(&mut config);
+            }
             drop(peers);
             let model_windows = if definition.compaction == Some(crate::CompactionProtocol::Kiro) {
                 crate::kiro::model_windows(&config, &cwd)

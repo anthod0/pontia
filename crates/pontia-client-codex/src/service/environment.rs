@@ -36,7 +36,10 @@ impl CodexService {
             .session_mode(session)
             .await?;
         let response = match connection
-            .call("config/read", json!({"cwd":cwd,"includeLayers":false}))
+            .call(
+                "config/read",
+                json!({"cwd":cwd,"includeLayers":mode == SessionMode::Restricted}),
+            )
             .await
         {
             Err(error) if mode == SessionMode::Restricted => {
@@ -58,21 +61,30 @@ impl CodexService {
             .unwrap_or_default();
         let mut config = environment_config(session, &response["config"], environment)?;
         if mode == SessionMode::Restricted {
-            let servers = response["config"]["mcp_servers"]
-                .as_object()
-                .ok_or_else(|| {
-                    Error::StateConflict(
-                        "Codex config/read expected an object at config.mcp_servers".into(),
-                    )
-                })?;
-            for name in servers.keys() {
-                config["mcp_servers"][name]["enabled"] = json!(false);
+            disable_mcp_servers(&mut config, &response)?;
+            config["skills.config"] = disabled_skills(connection, cwd, &response["config"]).await?;
+            for key in [
+                "agents.enabled",
+                "features.multi_agent",
+                "features.multi_agent_v2",
+                "features.apps",
+                "features.plugins",
+                "features.skill_search",
+                "features.skill_mcp_dependency_install",
+                "skills.bundled.enabled",
+                "skills.include_instructions",
+                "features.goals",
+                "features.image_generation",
+                "features.view_image",
+                "features.sleep_tool",
+                "features.tool_suggest",
+                "tools.update_plan.enabled",
+                "tools.experimental_request_user_input.enabled",
+            ] {
+                config[key] = json!(false);
             }
-            config["agents.enabled"] = json!(false);
-            config["features.multi_agent"] = json!(false);
-            config["features.multi_agent_v2"] = json!(false);
-
-            config["skills.include_instructions"] = json!(false);
+            config["features.skip_host_skill_discovery"] = json!(true);
+            config["web_search"] = json!("disabled");
         }
         if mode.bypasses_approvals() {
             config["approval_policy"] = json!("never");
@@ -90,6 +102,69 @@ impl CodexService {
         }
         Ok(config)
     }
+}
+
+fn disable_mcp_servers(config: &mut Value, response: &Value) -> Result<()> {
+    let servers = response["config"]["mcp_servers"]
+        .as_object()
+        .ok_or_else(|| {
+            Error::StateConflict(
+                "Codex config/read expected an object at config.mcp_servers".into(),
+            )
+        })?;
+    for name in servers.keys() {
+        config["mcp_servers"][name]["enabled"] = json!(false);
+    }
+    // Starting a full-access thread can activate a previously untrusted project layer.
+    // Codex validates the transport even for a disabled server missing from effective config.
+    for layer in response["layers"].as_array().into_iter().flatten() {
+        if layer["name"]["type"] != "project" || layer["disabledReason"].is_null() {
+            continue;
+        }
+        if let Some(project_servers) = layer["config"]["mcp_servers"].as_object() {
+            for (name, server) in project_servers {
+                if config["mcp_servers"].get(name).is_none()
+                    && let Some(key) = ["command", "url"]
+                        .into_iter()
+                        .find(|key| server[*key].is_string())
+                {
+                    config["mcp_servers"][name] = json!({(key):server[key], "enabled":false});
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn disabled_skills(
+    connection: &Connection,
+    cwd: &str,
+    configuration: &Value,
+) -> Result<Value> {
+    #[derive(Deserialize)]
+    struct Skill {
+        name: String,
+    }
+
+    let listed = connection
+        .call("skills/list", json!({"cwds":[cwd],"forceReload":true}))
+        .await?;
+    let skills: Vec<Skill> = serde_json::from_value(listed["data"][0]["skills"].clone())?;
+    // The thread override replaces the native rule list. Keep existing disables,
+    // including rules for skills outside the current catalog.
+    let mut rules: Vec<_> = configuration["skills"]["config"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|rule| rule["enabled"] == false)
+        .cloned()
+        .collect();
+    rules.extend(
+        skills
+            .into_iter()
+            .map(|skill| json!({"name":skill.name,"enabled":false})),
+    );
+    Ok(json!(rules))
 }
 
 pub(crate) fn environment_config(
