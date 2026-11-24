@@ -35,15 +35,22 @@ impl SqliteAgentProfileRepository {
 
     pub async fn update(&self, record: AgentProfileWriteRecord) -> Result<Option<bool>> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        let old: Option<Option<String>> =
-            sqlx::query_scalar("SELECT description FROM agent_profiles WHERE profile_id=?")
-                .bind(&record.profile_id)
-                .fetch_optional(&mut *tx)
-                .await?;
-        let Some(description) = old else {
+        let changed = sqlx::query_scalar::<_, bool>(
+            "SELECT description IS NOT ? OR client_type IS NOT ? OR client_key IS NOT ?
+                 OR model IS NOT ? OR reasoning_effort IS NOT ?
+             FROM agent_profiles WHERE profile_id = ?",
+        )
+        .bind(&record.description)
+        .bind(&record.client_type)
+        .bind(&record.client_key)
+        .bind(&record.model)
+        .bind(&record.reasoning_effort)
+        .bind(&record.profile_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some(changed) = changed else {
             return Ok(None);
         };
-        let changed = description != record.description;
         sqlx::query("UPDATE agent_profiles SET name=?, description=?, client_type=?, client_key=?, model=?, reasoning_effort=?, system_prompt=?, use_yolo=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE profile_id=?")
             .bind(record.name).bind(record.description).bind(record.client_type).bind(record.client_key)
             .bind(record.model).bind(record.reasoning_effort).bind(record.system_prompt).bind(record.use_yolo).bind(record.profile_id)

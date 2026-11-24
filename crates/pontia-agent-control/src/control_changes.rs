@@ -19,10 +19,14 @@ pub enum ControlChange {
         source_session_id: Option<String>,
         profile_id: String,
     },
-    AgentProfileDescriptionChanged {
+    AgentProfileUpdated {
         source_session_id: Option<String>,
         profile_id: String,
         description: Option<String>,
+        client_type: Option<String>,
+        client_key: Option<String>,
+        model: Option<String>,
+        reasoning_effort: Option<String>,
     },
 }
 
