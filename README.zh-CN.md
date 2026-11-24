@@ -1,63 +1,56 @@
 <div align="center">
-  <img src="assets/brand/logo-idle.svg" width="120" alt="Pontia logo">
+  <img src="assets/brand/logo-idle.svg" width="80" alt="Pontia">
   <h1>Pontia</h1>
-  <p><strong>Your device. Your agent cloud.</strong></p>
-  <p>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
-    <a href="https://www.npmjs.com/package/@pontia/cli"><img src="https://img.shields.io/npm/v/@pontia/cli" alt="npm"></a>
-    <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey" alt="Platform: Linux | macOS">
-  </p>
-  <p><a href="https://pontia.dev">🌐 官网</a> · <a href="https://app.pontia.dev">🖥️ Dashboard</a></p>
-  <p><a href="README.md">English</a> · 简体中文</p>
+  <p><strong>把项目交给自己电脑上的长期搭档。</strong></p>
+  <p><a href="https://pontia.dev/zh">官网</a> · <a href="https://app.pontia.dev">打开 Dashboard</a> · <a href="README.md">English</a></p>
 </div>
 
-离开工位，agent 不停工。pi、Codex、Claude Code、Grok Build、Google Antigravity、Kiro 这些编程 agent 照常在你自己的设备上跑，你在任何浏览器里都能查看进度、批准操作、引导方向，手机上也行。Pontia 免费且开源。
+你把项目交给 Lead Bot，它分派 Helper 并行工作，收回文件，把需要你拍板的问题放进 Todo。离开工位后，在手机或电脑浏览器里打开 Dashboard 就能接着聊，也能切换到另一台已注册的设备。
 
-<p align="center">
-  <img src="apps/cloud/static/client-logos/pi.svg" height="28" alt="pi">
-  &nbsp;&nbsp;
-  <picture><source media="(prefers-color-scheme: dark)" srcset="apps/cloud/static/client-logos/codex-dark.svg"><img src="apps/cloud/static/client-logos/codex.svg" height="28" alt="Codex"></picture>
-  &nbsp;&nbsp;
-  <img src="apps/cloud/static/client-logos/claude-code.svg" height="28" alt="Claude Code">
-  &nbsp;&nbsp;
-  <img src="apps/cloud/static/client-logos/grok-build.svg" height="28" alt="Grok Build">
-  &nbsp;&nbsp;
-  <img src="apps/cloud/static/client-logos/google-antigravity.svg" height="28" alt="Google Antigravity">
-  &nbsp;&nbsp;
-  <img src="apps/cloud/static/client-logos/kiro.svg" height="28" alt="Kiro">
-</p>
+```sh
+npx @pontia/cli init
+```
 
-![发布 Bot 汇总两名助手的审查结果，右侧待办面板列出等待决定的发布事项。](assets/screenshots/bot-chat.webp)
+在已登录编程 CLI 的电脑上运行这条命令，完成设备注册后会自动打开 Dashboard。浏览器用 Pontia 账号登录，免配聊天机器人 Token。[查看环境要求](#环境要求)
 
-## 为什么用 Pontia
+**远程会话谁能读？** 浏览器和选中的设备是端到端加密的两个端点。Pontia Cloud 负责登录和连接授权，Edge 对 Dashboard 内容是零知识中继，只接触密文、路由信息、流量大小和时序。你可以选官方 Edge，也可以自托管私有 Edge。Agent 工具按本机配置的权限运行。[安全模型](https://pontia.dev/zh/docs/security) · [自托管 Edge](https://pontia.dev/zh/docs/self-hosted-edge)
 
-- 📱 **装进口袋**：把 Dashboard 添加到手机主屏幕。不在电脑前，也能看进度、批准操作、发下一条指令。
-- 💳 **用你自己的订阅**：Pontia 不卖模型，也不卖 token。agent 用的是你已经付费的账号和套餐。
-- 💻 **终端照常用**：agent 在你的设备上运行，用的是本机的工具和文件。pi、Codex 的 TUI 照常用，对话自动同步到 Dashboard，两边随时切换，不用从头再来。
-- 🤖 **把工作交给 Bot**：像和助理聊天一样和设备上的 Bot 对话。它为每件事开启 Session，多件事同时推进，完成后向你汇报，长期对话里也记得你的项目。
-- 🔒 **端到端加密**：只有你的浏览器和你的设备能读到会话内容。用官方 Edge 或自己部署都行，Edge 只转发密文。
+![Juniper 为一本徒步手册分派两名 Helper，交回地图核对报告，并跟进两项待办。](assets/screenshots/lead-desk.webp)
 
-在 Linux 和 macOS 上，你可以选择 pi、Codex、Claude Code、Grok Build、Google Antigravity 或 Kiro（后三者通过 ACP）运行 Bot 和助手。
+## 一本徒步手册，两名 Helper
 
-## 桌面端 Dashboard
+**周五，你交代 Juniper**：“周六要用 Luma 徒步手册。谁能核对路线图，再校一遍口袋版？”
+
+**Lead Bot Juniper 分派任务**：地图校对员用 Codex 核对岔路口的名称，排版编辑用 Claude Code 检查页码引用。两名 Helper 各有独立的任务上下文。校对员发现同一条步道有两个名字，Juniper 把定名问题放进 Todo，先交回核对报告。与此同时，编辑继续校对索引。
+
+**稍后，你打开手机**：读完报告，在定名待办里回复“用 Cedar Spur”，冬季绕行路线留到稍后再定。下次再做这本手册，Juniper 能找回步道定名的决定，也能从 `USER.md` 读到你一直沿用的规则——里程统一用公里。
+
+## 协作速览
+
+| 范围 | 你可以做什么 |
+| --- | --- |
+| Lead Bot | 在同一个长期对话里交代任务、收取 Helper 报告，在 Todo 中逐项回复需要拍板的问题。 |
+| 设备记忆 | 同一台设备上的 Bot 共享跨会话记忆图谱，关联事实、决定和经验。在设置里检索记忆条目，在 `USER.md` 编辑个人规则与偏好。 |
+| Agent Profiles | 将角色指令、客户端、模型和推理强度存成 Profile，供 Helper 和工作流步骤复用。可以选用本机已登录的 Claude Code、Codex、Pi、Google Antigravity、Kiro 和 Grok Build。 |
+| 远程访问 | 在同一个浏览器里切换已注册的机器。每台机器运行自己的 CLI，工作区和文件留在本地。 |
 
 <table>
   <tr>
-    <td width="50%"><strong>跟进编程会话</strong><br><a href="assets/screenshots/session-tools.webp"><img src="assets/screenshots/session-tools.webp" alt="展开 Codex 的工作步骤，查看读取和编辑的文件以及检查命令。"></a></td>
-    <td width="50%"><strong>对照会话审查 Git 差异</strong><br><a href="assets/screenshots/git-review.webp"><img src="assets/screenshots/git-review.webp" alt="查看已暂存的会话列表修改及其增删行。"></a></td>
+    <td width="50%" valign="top"><a href="assets/screenshots/shared-memory.webp"><img src="assets/screenshots/shared-memory.webp" alt="在记忆库找回步道定名的决定"></a><br><strong>在记忆库找回步道定名的决定</strong></td>
+    <td width="50%" valign="top"><a href="assets/screenshots/role-profiles.webp"><img src="assets/screenshots/role-profiles.webp" alt="设置外业研究员的模型与推理强度"></a><br><strong>设置外业研究员的模型与推理强度</strong></td>
   </tr>
   <tr>
-    <td width="50%"><strong>管理设备上的客户端</strong><br><a href="assets/screenshots/agent-clients.webp"><img src="assets/screenshots/agent-clients.webp" alt="客户端列表和 Claude Code 设置。"></a></td>
-    <td width="50%"><strong>复用代码审查配置</strong><br><a href="assets/screenshots/agent-profiles.webp"><img src="assets/screenshots/agent-profiles.webp" alt="审查助手的客户端、模型和指令配置。"></a></td>
+    <td width="50%" valign="top"><a href="assets/screenshots/private-edge.webp"><img src="assets/screenshots/private-edge.webp" alt="查看私有 Edge 的健康状态"></a><br><strong>查看私有 Edge 的健康状态</strong></td>
+    <td width="50%" valign="top"><a href="assets/screenshots/helper-decisions.webp"><img src="assets/screenshots/helper-decisions.webp" alt="编辑继续校对时，回复一项待办"></a><br><strong>编辑继续校对时，回复一项待办</strong></td>
   </tr>
 </table>
 
-### 手机端 Dashboard
+### 在手机上接着做
 
 <p align="center">
-  <a href="assets/screenshots/mobile-chat.webp"><img src="assets/screenshots/mobile-chat.webp" width="30%" alt="和发布 Bot 对话"></a>
-  <a href="assets/screenshots/mobile-todos.webp"><img src="assets/screenshots/mobile-todos.webp" width="30%" alt="回复待办事项"></a>
-  <a href="assets/screenshots/mobile-model.webp"><img src="assets/screenshots/mobile-model.webp" width="30%" alt="为新会话选择模型"></a>
+  <a href="assets/screenshots/phone-report.webp"><img src="assets/screenshots/phone-report.webp" width="30%" alt="在对话里收取地图报告"></a>
+  <a href="assets/screenshots/phone-decisions.webp"><img src="assets/screenshots/phone-decisions.webp" width="30%" alt="集中处理待办决定"></a>
+  <a href="assets/screenshots/phone-devices.webp"><img src="assets/screenshots/phone-devices.webp" width="30%" alt="切换设备、查看 Bot 进度"></a>
 </p>
 
 ## 快速开始
@@ -79,18 +72,7 @@
 
 ### 初始化
 
-```bash
-npx @pontia/cli init
-```
-
-一条命令完成全部配置：
-
-1. 把 Pontia 装到 `$HOME/.local/bin`。记得把这个目录加进 `PATH`。
-2. 选择客户端并安装对应集成。
-3. 启动 Pontia 服务。
-4. 登录 Pontia Cloud，注册设备并开启远程访问。
-
-配置成功后会自动打开[远程 Dashboard](https://app.pontia.dev)。已经装过 Pontia 的，直接运行 `pontia init`。重复运行会检查并修复安装，已有配置保持不变。
+`pontia init` 会安装所选客户端的集成、启动本机服务，并引导你登录和注册设备。将 `$HOME/.local/bin` 加入 `PATH`，以后可以直接运行 `pontia init` 检查和修复现有安装。
 
 ### 常用命令
 
@@ -119,7 +101,7 @@ pontia doctor
 
 ### 用 shell 脚本安装
 
-没有 Node.js 时，可以用带签名的安装脚本。需要 `curl`、支持 Ed25519 的 OpenSSL，以及系统自带的常用命令行工具。
+也可以直接运行带签名的安装脚本。需要 `curl`、支持 Ed25519 的 OpenSSL，以及系统自带的常用命令行工具。
 
 ```bash
 curl -fsSL https://get.pontia.dev/install.sh | sh
