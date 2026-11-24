@@ -127,7 +127,7 @@
   "remote_demo_state_finished": "Done",
   "remote_demo_composer": "Message the agent",
   "remote_demo_send": "Send",
-  "remote_demo_replay": "Replay the demo",
+  "remote_demo_restart": "Restart",
   "remote_demo_label": "Interactive demo: the same Session on a terminal and a phone",
   "how_pontia_works": "How Pontia works",
   "agent_clients": "Agent Clients",
