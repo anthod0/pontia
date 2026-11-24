@@ -77,7 +77,17 @@ async fn fixture(response: Value) -> (Router, sqlx::SqlitePool, tempfile::TempDi
 }
 
 async fn request(app: &Router, client: &str, authorized: bool) -> (StatusCode, Value) {
-    let mut request = Request::builder().uri(format!("/api/v1/agent-clients/{client}/models"));
+    models_request(app, client, authorized, "").await
+}
+
+async fn models_request(
+    app: &Router,
+    client: &str,
+    authorized: bool,
+    query: &str,
+) -> (StatusCode, Value) {
+    let mut request =
+        Request::builder().uri(format!("/api/v1/agent-clients/{client}/models{query}"));
     if authorized {
         request = request.header("Authorization", "Bearer test-token");
     }
@@ -121,6 +131,53 @@ async fn lists_configured_client_models_without_a_session_and_closes_the_process
         .await
         .unwrap();
     assert_eq!(sessions, 0);
+}
+
+#[tokio::test]
+async fn cached_catalog_survives_version_change_and_failed_refresh() {
+    let (app, db, root) = fixture(json!({"success":true,"data":{"models":[
+        {"provider":"one","id":"first","name":"First","reasoning":true}
+    ]}}))
+    .await;
+    sqlx::query("UPDATE agent_clients SET version = 'v1'")
+        .execute(&db)
+        .await
+        .unwrap();
+    let query = "?prefer_cache=true";
+    let (status, first) = models_request(&app, "pi/default", true, query).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(first["data"]["version"], "v1");
+    assert!(first["data"]["fetched_at"].is_i64());
+    let script = root.path().join("catalog.py");
+    let original = std::fs::read_to_string(&script).unwrap();
+    std::fs::write(&script, "raise RuntimeError('offline')").unwrap();
+    sqlx::query("UPDATE agent_clients SET version = 'v2'")
+        .execute(&db)
+        .await
+        .unwrap();
+    assert!(!request(&app, "pi/default", true).await.0.is_success());
+    let (status, cached) = models_request(&app, "pi/default", true, query).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(cached["data"], first["data"]);
+    std::fs::write(&script, original.replace("First", "Second")).unwrap();
+    let (status, latest) = request(&app, "pi/default", true).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(latest["data"]["version"], "v2");
+    assert_eq!(latest["data"]["models"][0]["name"], "Second");
+    assert_eq!(
+        models_request(&app, "pi/default", true, query).await.1["data"],
+        latest["data"]
+    );
+    sqlx::query("UPDATE agent_clients SET enabled = 0")
+        .execute(&db)
+        .await
+        .unwrap();
+    assert!(
+        !models_request(&app, "pi/default", true, query)
+            .await
+            .0
+            .is_success()
+    );
 }
 
 #[tokio::test]

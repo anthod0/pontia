@@ -653,7 +653,12 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
   [
     "GET",
     "/agent-clients/:type/:key/models",
-    ({ device, params: [type] }) => ({
+    ({ device, params: [type, key] }) => ({
+      version:
+        device.data.agentClients.find(
+          (client) => client.client_type === type && client.client_key === key,
+        )?.version ?? null,
+      fetched_at: Date.now(),
       models: device.data.models.map((model, index) => ({
         ...model,
         reasoning_efforts:

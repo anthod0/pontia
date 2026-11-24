@@ -56,6 +56,41 @@ impl SqliteAgentClientRepository {
         Ok(())
     }
 
+    pub async fn model_catalog(&self, client: &str, key: &str) -> Result<Option<String>> {
+        Ok(sqlx::query_scalar(
+            "SELECT model_catalog FROM agent_clients
+             WHERE client_type = ? AND client_key = ? AND enabled = 1",
+        )
+        .bind(client)
+        .bind(key)
+        .fetch_optional(&self.pool)
+        .await?
+        .flatten())
+    }
+
+    pub async fn save_model_catalog(
+        &self,
+        client: &str,
+        key: &str,
+        version: Option<&str>,
+        catalog: &str,
+        fetched_at: i64,
+    ) -> Result<()> {
+        sqlx::query(
+            "UPDATE agent_clients SET model_catalog = ?
+             WHERE client_type = ? AND client_key = ? AND enabled = 1 AND version IS ?
+             AND (model_catalog IS NULL OR json_extract(model_catalog, '$.fetched_at') <= ?)",
+        )
+        .bind(catalog)
+        .bind(client)
+        .bind(key)
+        .bind(version)
+        .bind(fetched_at)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
     pub async fn begin_version_check(
         &self,
         client: &str,

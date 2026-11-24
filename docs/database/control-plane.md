@@ -144,6 +144,7 @@ CREATE TABLE agent_clients (
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     version TEXT,
     version_checked_at TEXT,
+    model_catalog TEXT,
     PRIMARY KEY (client_type, client_key)
 );
 

@@ -112,10 +112,12 @@ export function createApi(device: DeviceRuntime) {
     clientKey: string,
     signal?: AbortSignal,
     workspaceId?: string,
+    preferCache = false,
   ): Promise<AgentClientModels> {
-    const query = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : "";
+    const query = new URLSearchParams({ prefer_cache: String(preferCache) });
+    if (workspaceId) query.set("workspace_id", workspaceId);
     return request(
-      `/agent-clients/${encodeURIComponent(clientType)}/${encodeURIComponent(clientKey)}/models${query}`,
+      `/agent-clients/${encodeURIComponent(clientType)}/${encodeURIComponent(clientKey)}/models?${query}`,
       { signal },
     );
   }

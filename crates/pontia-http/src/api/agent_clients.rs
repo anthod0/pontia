@@ -11,6 +11,8 @@ use super::response::{ApiError, ApiResponse, ok};
 #[derive(serde::Deserialize)]
 pub struct ModelsQuery {
     workspace_id: Option<String>,
+    #[serde(default)]
+    prefer_cache: bool,
 }
 
 pub async fn list_agent_client_models(
@@ -30,7 +32,9 @@ pub async fn list_agent_client_models(
         None => state.pontia_home().to_path_buf(),
     };
     let service = AgentClientService::new(state.db(), state.control().clients());
-    let models = service.list_models(&client, &key, &directory).await?;
+    let models = service
+        .model_catalog(&client, &key, &directory, query.prefer_cache)
+        .await?;
     Ok(ok(json!(models)))
 }
 

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createQuery } from '@tanstack/svelte-query'
+  import { modelCatalogQuery } from '../../queries/modelCatalog'
   import { t } from '$lib/i18n'
   import { useDeviceRuntime } from '../../device/context'
   import type { Snippet } from 'svelte'
@@ -16,7 +17,7 @@
     children?: Snippet<[SessionModel | undefined]>
     id: string
     class?: string
-    client: Pick<AgentClientView, "name" | "client_type" | "client_key">
+    client: Pick<AgentClientView, "name" | "client_type" | "client_key" | "version">
     workspaceId?: string
     value?: string
     available?: boolean
@@ -26,12 +27,7 @@
   const device = useDeviceRuntime()
   let open = $state(false)
   const catalog = createQuery(
-    () => ({
-      queryKey: ['agent-client-models', client.client_type, client.client_key, workspaceId],
-      queryFn: ({ signal }) => device.api.listAgentClientModels(client.client_type, client.client_key, signal, workspaceId),
-      retry: false,
-      refetchOnWindowFocus: false,
-    }),
+    () => modelCatalogQuery(device, client, workspaceId),
     () => device.queryClient,
   )
   let search = $state('')
@@ -42,7 +38,7 @@
     `${model.name} ${model.id}`.toLowerCase().includes(search.trim().toLowerCase()),
   ) ?? [])
   $effect(() => { if (!allowDefault && !value && defaultModel) value = defaultModel.id })
-  $effect(() => { available = catalog.isSuccess && Boolean(selected) })
+  $effect(() => { available = Boolean(selected) })
 
   function choose(id: string) {
     value = allowDefault && id === catalog.data?.default_model ? '' : id
@@ -52,13 +48,13 @@
 
 <Dialog.Root bind:open>
   <Dialog.Trigger {id} type="button" data-size="default" data-placeholder={selected || current ? undefined : ''} class={cn(selectTriggerClass, className)} {disabled}
-    onclick={() => { search = '' }}>
+    onclick={() => { search = ''; void catalog.refetch({ cancelRefetch: false }) }}>
     <span class="min-w-0 truncate">{selected?.name ?? (current || (allowDefault ? $t('model.default') : $t('model.choose')))}</span>
     <CaretDownIcon class="size-4 shrink-0 text-muted-foreground" />
   </Dialog.Trigger>
   {#if !allowDefault}
     {#if catalog.isPending}<p role="status" class="text-sm text-muted-foreground">{$t('model.loading')}</p>
-    {:else if catalog.isError}
+    {:else if catalog.isError && !catalog.data}
       <p role="alert" class="text-sm text-destructive">{catalog.error.message}</p>
       <Button type="button" variant="outline" disabled={catalog.isFetching} onclick={() => void catalog.refetch()}>{$t('common.retry')}</Button>
     {:else if !catalog.data?.models.length}<p role="status" class="text-sm text-muted-foreground">{$t('model.empty')}</p>
@@ -75,7 +71,7 @@
       <Button type="button" variant="ghost" onclick={() => choose('')}>{$t('model.default')}</Button>
     {/if}
     {#if catalog.isPending}<p role="status">{$t('model.loading')}</p>
-    {:else if catalog.isError}
+    {:else if catalog.isError && !catalog.data}
       <p role="alert" class="text-sm text-destructive">{catalog.error.message}</p>
       <Button type="button" variant="outline" disabled={catalog.isFetching} onclick={() => void catalog.refetch()}>{$t('common.retry')}</Button>
     {:else}
