@@ -6,7 +6,7 @@ use agent_client_protocol::{
     v1::{ConnectionTo, schema::*},
 };
 use pontia_agent_control::{
-    AgentBindingService, ControlQueryService, SessionInstructionsService,
+    AgentBindingService, ControlQueryService,
     client_contract::raw_transcripts::AgentBindingResolveRequest,
 };
 use pontia_core::{Error, Result};
@@ -15,7 +15,7 @@ use super::{Replay, unavailable};
 use crate::{
     adapter::AcpAdapter,
     capabilities::{AgentBounds, Negotiated},
-    instructions::Instructions,
+    instructions,
     restrictions::SessionPolicy,
 };
 
@@ -44,7 +44,7 @@ pub(super) async fn load(
     let policy = ControlQueryService::new(db.clone())
         .session_execution_policy(&source.session_id)
         .await?;
-    let meta = SessionPolicy::resolve(definition.restricted_execution, &policy)?.meta;
+    let mut meta = SessionPolicy::resolve(definition.restricted_execution, &policy)?.meta;
     let mut launch = crate::peer::resolve_command(&definition.launch, cwd)?;
     if policy != Default::default()
         && matches!(
@@ -64,20 +64,12 @@ pub(super) async fn load(
             &environment,
         )?);
     let mut load = LoadSessionRequest::new(SessionId::new(native), cwd.to_owned());
-    load.meta = (!meta.is_empty()).then_some(meta);
     let mut prefix = None;
+    instructions::restore_load_meta(&mut meta, &binding.metadata, db, &source.session_id).await?;
     if binding.metadata["system_prompt_injected"] == true
         && binding.metadata["new_session_instructions_meta_key"].is_null()
     {
-        let text = SessionInstructionsService::new(db.clone())
-            .session_instructions(&source.session_id)
-            .await?
-            .map(serde_json::from_value::<Instructions>)
-            .transpose()?
-            .and_then(|instructions| instructions.system_prompt)
-            .ok_or_else(|| {
-                Error::StateConflict("ACP Session is missing its bound instructions".into())
-            })?;
+        let text = instructions::bound_prompt(db, &source.session_id).await?;
         if binding.metadata["first_prompt_instructions"] == true {
             prefix = Some(crate::instructions::prompt_prefix(&text));
         } else {
@@ -86,6 +78,7 @@ pub(super) async fn load(
             )]));
         }
     }
+    load.meta = (!meta.is_empty()).then_some(meta);
     let bounds = AgentBounds::of(&agent, Some(definition));
     let mut replay = read(&launch, cwd, &bounds, load).await.map_err(|error| {
         Error::CapabilityUnavailable(format!(

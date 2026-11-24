@@ -47,6 +47,7 @@ pub(crate) struct SessionState {
     pub agent: AgentBounds,
     pub negotiated: Negotiated,
     pub system_prompt: Option<SystemPrompt>,
+    load_meta: Option<Meta>,
     pub prompt_prefix: Option<String>,
     pub native: Option<SessionId>,
     pub capabilities: Option<pontia_core::client_capabilities::AgentClientCapabilities>,
@@ -290,6 +291,7 @@ impl Peer {
             agent: owner.agent,
             negotiated: Negotiated::default(),
             system_prompt: None,
+            load_meta: None,
             prompt_prefix: None,
             current_model: None,
             verified_model: None,
@@ -603,8 +605,7 @@ impl Peer {
             .session_capabilities
             .system_prompt
             .is_some();
-        // A native creation-only prompt persists with the Session, even if a later
-        // initialize advertises different capabilities.
+        // Keep the bound instruction format even if a later initialize advertises new capabilities.
         let meta_key = match binding_metadata {
             Some(binding) => binding["new_session_instructions_meta_key"].as_str(),
             None if !supported => crate::instructions::creation_meta_key(
@@ -634,7 +635,7 @@ impl Peer {
                 Error::StateConflict("ACP Session is missing its bound instructions".into())
             })?;
             match meta_key {
-                Some(key) => (None, Some(crate::instructions::creation_meta(key, text))),
+                Some(key) => (None, Some(crate::instructions::prompt_meta(key, text))),
                 None if supported => (
                     Some(SystemPrompt::new(vec![ContentBlock::Text(TextContent::new(text))])),
                     None,
@@ -651,6 +652,14 @@ impl Peer {
             let mut state = self.state.lock().await;
             state.system_prompt = system_prompt.clone();
             state.prompt_prefix = prompt_prefix;
+            // Antigravity rebuilds its custom agent on load, including the appended prompt.
+            let mut load_meta = self.policy.meta.clone();
+            if meta_key == Some(crate::instructions::ANTIGRAVITY_APPEND)
+                && let Some(meta) = &new_session_meta
+            {
+                load_meta.extend(meta.clone());
+            }
+            state.load_meta = Some(load_meta);
         }
         let native = match existing {
             Some(id) => SessionId::new(id.to_owned()),
@@ -708,7 +717,7 @@ impl Peer {
     }
 
     pub async fn load(self: &Arc<Self>) -> Result<()> {
-        let (native, cwd, system_prompt) = {
+        let (native, cwd, system_prompt, meta) = {
             let mut state = self.state.lock().await;
             if !state.current || state.closing {
                 return Err(crate::history::unavailable());
@@ -726,14 +735,36 @@ impl Peer {
                 .native
                 .clone()
                 .ok_or_else(crate::history::unavailable)?;
+            // A reattached relay can have an in-flight setup when it connects. Resolve its
+            // bound prompt on the first load, after the binding has been recorded.
+            let meta = match &state.load_meta {
+                Some(meta) => meta.clone(),
+                None => {
+                    let db = self.events.db();
+                    let binding = pontia_agent_control::AgentBindingService::new(db.clone())
+                        .binding_for_session(&self.session)
+                        .await?
+                        .ok_or_else(crate::history::unavailable)?;
+                    let mut meta = self.policy.meta.clone();
+                    crate::instructions::restore_load_meta(
+                        &mut meta,
+                        &binding.metadata,
+                        &db,
+                        &self.session,
+                    )
+                    .await?;
+                    state.load_meta = Some(meta.clone());
+                    meta
+                }
+            };
             state.checkpoints.clear();
             state.replay = Some(Default::default());
             state.history_error = None;
             state.refresh_capabilities();
-            (native, state.cwd.clone(), state.system_prompt.clone())
+            (native, state.cwd.clone(), state.system_prompt.clone(), meta)
         };
         let mut load = LoadSessionRequest::new(native.clone(), cwd);
-        load.meta = (!self.policy.meta.is_empty()).then(|| self.policy.meta.clone());
+        load.meta = (!meta.is_empty()).then_some(meta);
         load.system_prompt = system_prompt;
         let request = self.connection.prepare_request(load);
         let key = serde_json::to_string(request.id())?;

@@ -1,6 +1,9 @@
 use agent_client_protocol::v1::schema::Meta;
-use pontia_agent_control::client_contract::{ClientInstructions, InstructionsBindingInput};
-use pontia_core::Result;
+use pontia_agent_control::{
+    SessionInstructionsService,
+    client_contract::{ClientInstructions, InstructionsBindingInput},
+};
+use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -29,7 +32,7 @@ pub(crate) fn prompt_prefix(text: &str) -> String {
     format!("Session instructions:\n{text}\n\nUser request:\n")
 }
 
-const ANTIGRAVITY_APPEND: &str = "antigravity.systemPrompt.append";
+pub(crate) const ANTIGRAVITY_APPEND: &str = "antigravity.systemPrompt.append";
 
 pub(crate) fn creation_meta_key<'a>(
     capabilities: Option<&Meta>,
@@ -45,7 +48,7 @@ pub(crate) fn creation_meta_key<'a>(
     }
 }
 
-pub(crate) fn creation_meta(key: &str, text: String) -> Meta {
+pub(crate) fn prompt_meta(key: &str, text: String) -> Meta {
     let entry = match key {
         ANTIGRAVITY_APPEND => (
             "antigravity".into(),
@@ -54,6 +57,31 @@ pub(crate) fn creation_meta(key: &str, text: String) -> Meta {
         key => (key.to_owned(), Value::String(text)),
     };
     Meta::from_iter([entry])
+}
+
+pub(crate) async fn bound_prompt(db: &sqlx::SqlitePool, session: &str) -> Result<String> {
+    SessionInstructionsService::new(db.clone())
+        .session_instructions(session)
+        .await?
+        .map(serde_json::from_value::<Instructions>)
+        .transpose()?
+        .and_then(|instructions| instructions.system_prompt)
+        .ok_or_else(|| Error::StateConflict("ACP Session is missing its bound instructions".into()))
+}
+
+pub(crate) async fn restore_load_meta(
+    meta: &mut Meta,
+    binding: &Value,
+    db: &sqlx::SqlitePool,
+    session: &str,
+) -> Result<()> {
+    if binding["new_session_instructions_meta_key"].as_str() == Some(ANTIGRAVITY_APPEND) {
+        meta.extend(prompt_meta(
+            ANTIGRAVITY_APPEND,
+            bound_prompt(db, session).await?,
+        ));
+    }
+    Ok(())
 }
 
 /// Replay can split a prompt across arbitrary chunks. Strip the wire prefix only
