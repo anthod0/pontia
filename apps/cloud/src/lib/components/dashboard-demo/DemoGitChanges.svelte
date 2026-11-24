@@ -7,6 +7,7 @@
 	import CloudArrowUpIcon from 'phosphor-svelte/lib/CloudArrowUpIcon';
 	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
 	import type { Snippet } from 'svelte';
+	import * as Tabs from '$lib/components/ui/tabs';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import * as Collapsible from '$lib/components/ui/collapsible/index.js';
 	import { cn } from '$lib/utils';
@@ -34,6 +35,7 @@
 	const markTone = { '+': 'text-(color:--demo-git-added)', '-': 'text-destructive', ' ': '' } as const;
 	const iconButton = 'flex size-7 items-center justify-center rounded-md text-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary';
 
+	let view = $state('changes');
 	let collapsed = $state<Partial<Record<DemoChangeGroup, boolean>>>({});
 
 	function count(change: DemoChange, mark: '+' | '-'): number {
@@ -137,6 +139,14 @@
 		</div>
 	{:else}
 		{@render header()}
+		<Tabs.Root bind:value={view} class="min-h-0 flex-1 gap-0">
+			<div class="border-b border-border px-3 py-2">
+				<Tabs.List aria-label="Git views" class="w-full">
+					<Tabs.Trigger value="changes">Changes</Tabs.Trigger>
+					<Tabs.Trigger value="history">History</Tabs.Trigger>
+				</Tabs.List>
+			</div>
+			<Tabs.Content value="changes" class="flex min-h-0 flex-col">
 		<div class="demo-scroll min-h-0 flex-1 overflow-auto">
 			<div class="border-b border-border px-4 py-3">
 				<div class="flex min-w-0 items-center gap-2 text-sm">
@@ -206,6 +216,16 @@
 			<span class="flex-1"></span>
 			<span class="hidden truncate @7xl:inline">{hint}</span>
 		</footer>
+			</Tabs.Content>
+			<Tabs.Content value="history" class="demo-scroll min-h-0 overflow-auto p-3 text-sm">
+				<p class="mb-2 flex items-center gap-2 font-mono text-xs"><GitBranchIcon />{git.branch}</p>
+				<details class="rounded-lg border border-border p-3">
+					<summary class="cursor-pointer">{git.commit.subject} <code class="text-xs text-muted-foreground">{git.commit.hash}</code></summary>
+					<p class="mt-3 font-mono text-xs">{git.commit.path}</p>
+					<pre class="mt-2 overflow-auto rounded bg-muted p-2 text-xs">{git.commit.diff}</pre>
+				</details>
+			</Tabs.Content>
+		</Tabs.Root>
 	{/if}
 </div>
 
