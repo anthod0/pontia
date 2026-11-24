@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createQuery } from '@tanstack/svelte-query'
   import { t } from '$lib/i18n'
-  import { navigate } from '$lib/navigation'
+  import { navigate, routeParam } from '$lib/navigation'
   import { forgetLastPage } from '$lib/lastPage'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js'
@@ -34,6 +34,7 @@
     // Removing the Bot from the cache unmounts the dialogs that render this one, so read props first.
     const id = bot.bot_id
     const done = ondone
+    const viewing = routeParam('bots') === id
     deleting = true
     error = ''
     try {
@@ -49,8 +50,8 @@
     forgetLastPage(device.id, { kind: 'bot', id })
     void device.queryClient.invalidateQueries({ queryKey: ['bots'] })
     done()
-    // The Bot entry opens the first remaining Bot, or the first-Bot setup when none is left.
-    await navigate('/bot', undefined, { replaceState: true })
+    // Leaving the deleted Bot's chat opens the first remaining Bot, or the first-Bot setup when none is left.
+    if (viewing) await navigate('/bot', undefined, { replaceState: true })
     // After navigation the deleted Bot's chat has closed and cannot write its cache again.
     await removeCachedBotTimeline(device.id, id)
   }

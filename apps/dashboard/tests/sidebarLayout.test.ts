@@ -678,6 +678,104 @@ test("sidebar session actions menu unpins pinned sessions", async () => {
   expect(mocks.navigate).not.toHaveBeenCalled();
 });
 
+test("right-clicking a sidebar session opens its actions menu without opening the session", async () => {
+  mocks.sessions.set([{ ...chatSession("session-active", "idle", "2026-05-14T01:00:00Z") }]);
+  render(AppSidebarHost);
+
+  const row = screen.getByText("session-active").closest("button")!;
+  expect(await fireEvent.contextMenu(row, { clientX: 40, clientY: 60 })).toBe(false);
+  const menu = screen.getByRole("menu");
+  expect(
+    within(menu)
+      .getAllByRole("menuitem")
+      .map((item) => item.textContent?.trim()),
+  ).toEqual(["Rename", "Pin", "Archive", "Exit"]);
+  await fireEvent.click(within(menu).getByRole("menuitem", { name: "Pin" }));
+
+  expect(mocks.pinSession).toHaveBeenCalledWith("session-active");
+  expect(mocks.navigate).not.toHaveBeenCalled();
+});
+
+test("shift right-click on a sidebar session keeps the browser menu", async () => {
+  mocks.sessions.set([{ ...chatSession("session-active", "idle", "2026-05-14T01:00:00Z") }]);
+  render(AppSidebarHost);
+
+  const row = screen.getByText("session-active").closest("button")!;
+  expect(await fireEvent.contextMenu(row, { shiftKey: true })).toBe(true);
+  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+});
+
+function mockSidebarBot() {
+  vi.spyOn(testDevice.api, "listBots").mockResolvedValue([
+    {
+      bot_id: "bot-1",
+      name: "Release Captain",
+      description: null,
+      avatar_shape: "classic",
+      avatar_color: "blue",
+      client_type: "pi",
+      client_key: "default",
+      model: "provider/model",
+      reasoning_effort: null,
+    },
+  ]);
+}
+
+async function openBotContextMenu() {
+  render(AppSidebarHost);
+  const link = (await screen.findByText("Release Captain")).closest("a")!;
+  expect(await fireEvent.contextMenu(link, { clientX: 40, clientY: 60 })).toBe(false);
+  return screen.getByRole("menu", { name: "Bot actions" });
+}
+
+test("right-clicking a sidebar Bot offers edit, reload, and delete", async () => {
+  mockSidebarBot();
+  const menu = await openBotContextMenu();
+
+  expect(
+    within(menu)
+      .getAllByRole("menuitem")
+      .map((item) => item.textContent?.trim()),
+  ).toEqual(["Edit Bot", "Reload Bot session", "Delete Bot"]);
+  await fireEvent.click(within(menu).getByRole("menuitem", { name: "Edit Bot" }));
+
+  expect(await screen.findByRole("dialog", { name: "Edit Bot" })).toBeInTheDocument();
+  expect(mocks.navigate).not.toHaveBeenCalled();
+  vi.restoreAllMocks();
+});
+
+test("the sidebar Bot menu reloads the Bot session", async () => {
+  mockSidebarBot();
+  const reload = vi.spyOn(testDevice.api, "reloadBot").mockResolvedValue();
+  const menu = await openBotContextMenu();
+
+  await fireEvent.click(within(menu).getByRole("menuitem", { name: "Reload Bot session" }));
+
+  expect(reload).toHaveBeenCalledWith("bot-1");
+  expect(mocks.navigate).not.toHaveBeenCalled();
+  vi.restoreAllMocks();
+});
+
+test("the sidebar Bot menu deletes only after the delete confirmation", async () => {
+  mockSidebarBot();
+  vi.spyOn(testDevice.api, "getBotDeletionBlockers").mockResolvedValue({
+    running: false,
+    helpers: [],
+  });
+  const remove = vi.spyOn(testDevice.api, "deleteBot").mockResolvedValue();
+  const menu = await openBotContextMenu();
+
+  await fireEvent.click(within(menu).getByRole("menuitem", { name: "Delete Bot" }));
+  const dialog = await screen.findByRole("alertdialog", { name: "Delete Release Captain?" });
+  expect(remove).not.toHaveBeenCalled();
+  const confirm = within(dialog).getByRole("button", { name: "Delete Bot" });
+  await waitFor(() => expect(confirm).toBeEnabled());
+  await fireEvent.click(confirm);
+
+  await waitFor(() => expect(remove).toHaveBeenCalledWith("bot-1"));
+  vi.restoreAllMocks();
+});
+
 test("sidebar only marks new chat active on the default route", () => {
   window.history.pushState({}, "", "/dashboard");
 
