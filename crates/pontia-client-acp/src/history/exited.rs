@@ -41,12 +41,12 @@ pub(super) async fn load(
     let [agent, native] = crate::identity::decode(&binding.client_session_key)?;
     let definition = adapter.config.definition(&agent)?;
     let cwd = Path::new(&binding.launch_cwd);
-    let policy = ControlQueryService::new(db.clone())
-        .session_execution_policy(&source.session_id)
+    let mode = ControlQueryService::new(db.clone())
+        .session_mode(&source.session_id)
         .await?;
-    let mut meta = SessionPolicy::resolve(definition.restricted_execution, &policy)?.meta;
+    let mut meta = SessionPolicy::resolve(definition.restricted_execution, mode)?.meta;
     let mut launch = crate::peer::resolve_command(&definition.launch, cwd)?;
-    if policy != Default::default()
+    if mode == pontia_core::SessionMode::Restricted
         && matches!(
             definition.restricted_execution,
             Some(crate::RestrictedExecution::Antigravity)
@@ -54,7 +54,6 @@ pub(super) async fn load(
     {
         crate::antigravity::configure_launch(
             adapter.root.get().ok_or_else(unavailable)?,
-            &policy,
             &mut launch,
         );
     }

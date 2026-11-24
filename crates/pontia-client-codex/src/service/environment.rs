@@ -46,22 +46,17 @@ impl CodexService {
             .transpose()?
             .unwrap_or_default();
         let mut config = environment_config(session, &response["config"], environment)?;
-        let policy = pontia_agent_control::ControlQueryService::new(self.pool.clone())
-            .session_execution_policy(session)
+        let mode = pontia_agent_control::ControlQueryService::new(self.pool.clone())
+            .session_mode(session)
             .await?;
-        if policy
-            .disabled_tools
-            .iter()
-            .any(|tool| tool == crate::configuration::SPAWN_AGENT)
-        {
+        if mode == pontia_core::SessionMode::Restricted {
             config["agents.enabled"] = json!(false);
             config["features.multi_agent"] = json!(false);
             config["features.multi_agent_v2"] = json!(false);
-        }
-        if policy.disable_skills {
+
             config["skills.include_instructions"] = json!(false);
         }
-        if policy.yolo {
+        if mode.bypasses_approvals() {
             config["approval_policy"] = json!("never");
             config["sandbox_mode"] = json!("danger-full-access");
         }

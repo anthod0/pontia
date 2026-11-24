@@ -50,23 +50,12 @@ impl ClientLauncher for PiLauncher {
             None => command,
         };
         // Pi runs tools without approval or sandboxing. --approve trusts project resources.
-        let mut policy_args = match &runtime.execution_policy.tools {
-            None => String::new(),
-            Some(tools) if tools.is_empty() => " --no-tools".into(),
-            Some(tools) => format!(" --tools {}", quote(&tools.join(","))),
+        let tool_flags = match runtime.mode {
+            pontia_core::SessionMode::Restricted => {
+                " --exclude-tools 'edit,write' --no-mcp --no-skills"
+            }
+            pontia_core::SessionMode::Default | pontia_core::SessionMode::Yolo => "",
         };
-        if !runtime.execution_policy.disabled_tools.is_empty() {
-            policy_args.push_str(&format!(
-                " --exclude-tools {}",
-                quote(&runtime.execution_policy.disabled_tools.join(","))
-            ));
-        }
-        if runtime.execution_policy.disable_mcp {
-            policy_args.push_str(" --no-mcp");
-        }
-        if runtime.execution_policy.disable_skills {
-            policy_args.push_str(" --no-skills");
-        }
         let mut session_args = match request.native_session_key {
             Some(key) => {
                 self.validate_resume(key, request.native_session_file)?;
@@ -82,7 +71,7 @@ impl ClientLauncher for PiLauncher {
         }
         let background = runtime.launch_mode == pontia_core::LaunchMode::Background;
         let mode = if background { " --mode rpc" } else { "" };
-        runtime.start_command = Some(format!("{command}{mode}{policy_args} {session_args}"));
+        runtime.start_command = Some(format!("{command}{mode}{tool_flags} {session_args}"));
         let options = crate::SPEC.launch_options();
         let manager = pontia_runtime::GenericRuntimeManager;
         let mut result = if background {

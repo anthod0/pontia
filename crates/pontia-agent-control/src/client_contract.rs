@@ -1,6 +1,8 @@
 mod channel;
 mod detection;
 pub use detection::{ClientDetection, DetectionContext, DetectionStatus};
+mod launch_file;
+pub use launch_file::LaunchFile;
 mod configuration;
 pub use configuration::ClientConfiguration;
 mod interactions;

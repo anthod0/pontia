@@ -7,7 +7,7 @@ fn tmux_session_name_includes_workspace_name_and_short_session_id() {
     let name = tmux_session_name(&RuntimeStartRequest {
         reasoning_effort: None,
         launch_mode: Default::default(),
-        execution_policy: Default::default(),
+        mode: Default::default(),
         model: None,
         runtime_id: None,
         session_id: "sess_1234567890abcdef".to_string(),
@@ -28,7 +28,7 @@ fn tmux_session_name_falls_back_to_workspace_basename_and_never_uses_full_sessio
     let name = tmux_session_name(&RuntimeStartRequest {
         reasoning_effort: None,
         launch_mode: Default::default(),
-        execution_policy: Default::default(),
+        mode: Default::default(),
         model: None,
         runtime_id: None,
         session_id: "sess_1234567890abcdef".to_string(),

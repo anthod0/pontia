@@ -14,8 +14,9 @@ import { execFileSync } from "node:child_process";
 const lines = createInterface({ input: process.stdin });
 const line = await new Promise((resolve) => lines.once("line", resolve));
 lines.close();
-const config = JSON.parse(line);
+const input = JSON.parse(line);
 if (process.argv[2] === "history") {
+  const config = input;
   try {
     const messages = readFileSync(join(config.cwd, `history-${config.session_id}.jsonl`), "utf8")
       .trim()
@@ -26,6 +27,7 @@ if (process.argv[2] === "history") {
     process.exitCode = 1;
   }
 } else {
+  const config = { ...input, ...input.launch };
   const host = randomUUID();
   const native = config.resume ?? randomUUID();
   const history = (message) =>
@@ -99,7 +101,7 @@ if (process.argv[2] === "history") {
     method: "spawn",
     host,
     system_prompt: config.system_prompt ?? null,
-    execution_policy: config.execution_policy,
+    mode: config.mode,
     reasoning_effort: config.reasoning_effort,
     resume: config.resume ?? null,
     native,

@@ -277,7 +277,11 @@ impl HelperService {
                 model,
                 ownership.clone(),
                 &instructions,
-                retrieval,
+                if retrieval {
+                    pontia_core::SessionMode::Restricted
+                } else {
+                    pontia_core::SessionMode::Default
+                },
             )
             .await?;
         request.reasoning_effort = reasoning_effort.clone();

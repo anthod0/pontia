@@ -2,47 +2,11 @@ use pontia_agent_control::client_contract::ClientConfiguration;
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 
-pub(crate) const SPAWN_AGENT: &str = "spawn_agent";
-
 pub struct CodexConfiguration;
 
 impl ClientConfiguration for CodexConfiguration {
-    fn restricted_execution_policy(
-        &self,
-        _key: &str,
-    ) -> Option<pontia_core::execution_policy::ExecutionPolicy> {
-        Some(pontia_core::execution_policy::ExecutionPolicy {
-            disabled_tools: vec![SPAWN_AGENT.into()],
-            yolo: false,
-            ..Default::default()
-        })
-    }
-
-    fn validate_execution_policy(
-        &self,
-        _key: &str,
-        policy: &pontia_core::execution_policy::ExecutionPolicy,
-    ) -> Result<()> {
-        if policy.tools.is_some() {
-            return Err(Error::CapabilityUnavailable(
-                "Codex cannot restrict its tools to the requested allowlist".into(),
-            ));
-        }
-        if let Some(name) = policy
-            .disabled_tools
-            .iter()
-            .find(|name| name.as_str() != SPAWN_AGENT)
-        {
-            return Err(Error::CapabilityUnavailable(format!(
-                "Codex cannot disable tool {name}"
-            )));
-        }
-        if policy.disable_mcp {
-            return Err(Error::CapabilityUnavailable(
-                "Codex cannot disable MCP through execution policy".into(),
-            ));
-        }
-        Ok(())
+    fn supports_mode(&self, _key: &str, _mode: pontia_core::SessionMode) -> bool {
+        true
     }
 
     fn supports_startup_model(&self) -> bool {

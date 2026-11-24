@@ -351,18 +351,8 @@ async fn seed_pending_memory(
 }
 
 #[tokio::test]
-async fn bot_and_dreaming_use_restricted_policy_while_ordinary_helper_uses_client_defaults() {
+async fn bot_and_dreaming_use_restricted_mode_while_ordinary_helper_uses_client_defaults() {
     let (_root, pool, client, control, conversation) = fixture().await;
-    assert_eq!(
-        client.restricted_execution_policy("default"),
-        Some(pontia_core::execution_policy::ExecutionPolicy {
-            tools: None,
-            disabled_tools: vec!["edit".into(), "write".into()],
-            disable_mcp: true,
-            disable_skills: false,
-            yolo: false,
-        })
-    );
     let (_, bot_session) = bot(&conversation).await;
     let helpers = HelperService::new(control.clone(), conversation.clone());
     let helper_session = helper(&helpers, &bot_session).await;
@@ -370,35 +360,25 @@ async fn bot_and_dreaming_use_restricted_policy_while_ordinary_helper_uses_clien
     let dreaming = DreamingService::new(control.clone(), conversation.clone());
     let dreaming_session = dreaming.start().await.unwrap().unwrap();
 
-    let restricted = pontia_core::execution_policy::ExecutionPolicy {
-        tools: None,
-        disabled_tools: vec!["edit".into(), "write".into()],
-        disable_mcp: true,
-        disable_skills: true,
-        yolo: true,
-    };
+    let restricted = pontia_core::SessionMode::Restricted;
     for (session, expected) in [
         (&bot_session, &restricted),
         (&helper_session, &Default::default()),
         (&dreaming_session, &restricted),
     ] {
         assert_eq!(
-            client.launched_policies.lock().unwrap().get(session),
+            client.session_modes.lock().unwrap().get(session),
             Some(expected)
         );
         assert_eq!(
-            control
-                .queries()
-                .session_execution_policy(session)
-                .await
-                .unwrap(),
+            control.queries().session_mode(session).await.unwrap(),
             *expected
         );
     }
 }
 
 #[tokio::test]
-async fn dreaming_rejects_clients_without_approval_free_restricted_policy_before_creating_state() {
+async fn dreaming_rejects_clients_without_approval_free_restricted_mode_before_creating_state() {
     let (root, pool, client, control, conversation) = fixture().await;
     let (_, bot_session) = bot(&conversation).await;
     seed_pending_memory(pool, &conversation, &bot_session).await;
@@ -406,20 +386,14 @@ async fn dreaming_rejects_clients_without_approval_free_restricted_policy_before
     assert!(conversation.supports_bot_client("generic", "default"));
     assert!(!conversation.supports_bot_client("generic", "other"));
 
-    for support in [
-        PolicySupport::NoRestriction,
-        PolicySupport::RejectYolo,
-        PolicySupport::RejectDisableSkills,
-    ] {
-        *client.policy_support.lock().unwrap() = support;
-        assert!(!conversation.supports_bot_client("generic", "default"));
-        assert!(matches!(
-            dreaming.start().await,
-            Err(Error::CapabilityUnavailable(_))
-        ));
-        assert!(latest_dreaming_session_id(&control).await.is_none());
-        assert!(!root.path().join("bot").join("readonly").exists());
-    }
+    *client.reject_restricted.lock().unwrap() = true;
+    assert!(!conversation.supports_bot_client("generic", "default"));
+    assert!(matches!(
+        dreaming.start().await,
+        Err(Error::CapabilityUnavailable(_))
+    ));
+    assert!(latest_dreaming_session_id(&control).await.is_none());
+    assert!(!root.path().join("bot").join("readonly").exists());
 }
 
 #[tokio::test]
@@ -458,23 +432,13 @@ async fn dreaming_uses_the_oldest_bots_current_model_and_built_in_instructions()
         instructions(&control, &round).await.trim(),
         include_str!("../../src/dreaming/instructions.md").trim()
     );
-    let expected = pontia_core::execution_policy::ExecutionPolicy {
-        tools: None,
-        disabled_tools: vec!["edit".into(), "write".into()],
-        disable_mcp: true,
-        disable_skills: true,
-        yolo: true,
-    };
+    let expected = pontia_core::SessionMode::Restricted;
     assert_eq!(
-        client.launched_policies.lock().unwrap().get(&round),
+        client.session_modes.lock().unwrap().get(&round),
         Some(&expected)
     );
     assert_eq!(
-        control
-            .queries()
-            .session_execution_policy(&round)
-            .await
-            .unwrap(),
+        control.queries().session_mode(&round).await.unwrap(),
         expected
     );
 }

@@ -50,7 +50,7 @@ pontia client enable grok
 
 In an idle or interrupted Grok session, use `/compact` in the Dashboard to compress the conversation context. You can continue in the same session and see compaction checkpoints in its timeline.
 
-Choose Grok Build for a Bot, a helper, or dreaming. In these Sessions, Grok keeps its terminal and read tools. Its dedicated tools for file edits, media output, worktrees, subagents, workflows, scheduling, background tasks, monitoring, and MCP tool calls are disabled. Bots, retrieval helpers, and dreaming also turn off automatic skill discovery.
+In restricted Sessions, Grok Build keeps its terminal and read tools. Its dedicated tools for file edits, media output, worktrees, subagents, workflows, scheduling, background tasks, monitoring, and MCP tool calls are disabled. Restricted Sessions also turn off automatic skill discovery.
 
 Send a message to a busy Grok Session, Bot, or helper to add instructions at the next tool or model transition. Grok finishes its current work. If the turn has passed its last transition, Grok runs the message as a follow-up turn.
 
@@ -68,24 +68,24 @@ A Pontia Session is durably associated with one client-native conversation ident
 
 Each Client uses its own credentials, sandbox, and local permissions. Sign in to each Client and verify that it can perform the intended work before starting the integration.
 
-When creating a Session through `POST /api/v1/sessions`, set `execution_policy` to select tools, exclude tools, disable MCP, or choose its permission mode:
+Choose a Session mode with the optional `mode` field on `POST /api/v1/sessions`. Restarts, resumes, and history forks inherit the mode.
+
+| Mode | Effect |
+| --- | --- |
+| `default` (or omit the field) | Use the Client’s usual settings, as when starting a Session from the Dashboard. |
+| `yolo` | Run Pi, Claude Code, Codex, or Grok Build without approval prompts. Pi already runs tools without approval. |
+| `restricted` | Use the Client’s built-in unattended configuration, including its tool restrictions. Bots, memory retrieval, and Dreaming use this mode. |
+
+For example, to start Pi with its editing tools, MCP, and skills disabled:
 
 ```json
 {
   "client_type": "pi",
   "workspace": "/path/to/registered/workspace",
-  "execution_policy": {
-    "disabled_tools": ["edit", "write"],
-    "disable_mcp": true,
-    "yolo": true
-  }
+  "mode": "restricted"
 }
 ```
 
-Pi and Claude Code accept `tools` and `disabled_tools` using their native, case-sensitive tool names. For example, use `tools: ["read", "bash", "grep"]` for Pi or `tools: ["Read", "Bash", "Glob"]` for Claude Code. Omitting `tools` keeps the Client's normal selection. `disabled_tools` excludes tools even when they appear in `tools`; for Claude Code, an example is `["Edit", "Write", "NotebookEdit", "Agent"]`. Pi accepts native wildcard patterns, and Claude Code accepts native deny rules such as `Bash(git push *)`.
-
-Tool selection follows the Client's native behavior: an empty `tools` list disables Pi tools or Claude Code built-in tools. MCP is controlled separately. Set `disable_mcp: true` to prevent MCP connections and tools in Pi or Claude Code; omitting it leaves the Client's MCP configuration in effect. Disabling an editing tool does not prevent file changes through Bash.
-
-Pi, Claude Code, and Codex accept `yolo: true` to run without Client approval prompts or Client sandboxing. Pi already runs tools this way. Omitting `yolo` keeps the Client's normal permission behavior. These settings apply to the Session and persist across restart, resume, and history forks. Requests for a policy the selected Client cannot enforce are rejected before Session creation.
+Restricted Kiro and Antigravity Sessions install agent files in a Pontia-managed launch directory. The restricted configuration keeps shell access, which can modify files.
 
 See [Troubleshooting](/docs/troubleshooting) when a Client is missing, cannot start, or stops reporting output.

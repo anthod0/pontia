@@ -11,13 +11,27 @@ import { Input } from "./input.js";
 import { Interactions } from "./interactions.js";
 import { FactError, InputFacts, type Emit, type ResultDiagnostic } from "./facts.js";
 
-export interface ExecutionPolicy {
-  tools: string[] | null;
-  disabled_tools: string[];
-  disable_mcp: boolean;
-  disable_skills: boolean;
-  yolo: boolean;
-}
+export type SessionMode = "default" | "yolo" | "restricted";
+
+const restrictedTools = [
+  "Edit",
+  "Write",
+  "NotebookEdit",
+  "Agent",
+  "Task",
+  "SendMessage",
+  "TeamCreate",
+  "TeamDelete",
+  "Workflow",
+  "EnterWorktree",
+  "ExitWorktree",
+  "CronCreate",
+  "CronDelete",
+  "ScheduleWakeup",
+  "RemoteTrigger",
+  "Monitor",
+  "mcp__*",
+];
 
 export type QueryFactory = (args: Parameters<typeof query>[0]) => Pick<
   Query,
@@ -63,7 +77,7 @@ export class Host {
       reasoning_effort?: string;
       resume?: string;
       system_prompt?: string;
-      execution_policy?: ExecutionPolicy;
+      mode?: SessionMode;
     },
     private readonly emit: Emit,
     private readonly createQuery: QueryFactory = query,
@@ -103,8 +117,8 @@ export class Host {
       message: { role: "user", content: text },
     });
     if (!this.execution) {
-      const policy = this.options.execution_policy;
-      const tools = policy?.tools;
+      const restricted = this.options.mode === "restricted";
+      const bypass = restricted || this.options.mode === "yolo";
       const options: Options = {
         cwd: this.options.cwd,
         ...(this.options.model ? { model: this.options.model } : {}),
@@ -122,28 +136,24 @@ export class Host {
             }
           : {}),
         includePartialMessages: true,
-        permissionMode: policy?.yolo ? "bypassPermissions" : "default",
-        ...(policy?.yolo
-          ? { allowDangerouslySkipPermissions: true, sandbox: { enabled: false } }
-          : {}),
-        ...(tools ? { tools } : {}),
-        ...(policy?.disable_mcp ? { strictMcpConfig: true, mcpServers: {} } : {}),
-        ...(policy?.disable_skills ? { extraArgs: { "disable-slash-commands": null } } : {}),
+        permissionMode: bypass ? "bypassPermissions" : "default",
+        ...(bypass ? { allowDangerouslySkipPermissions: true, sandbox: { enabled: false } } : {}),
+        ...(restricted ? { strictMcpConfig: true, mcpServers: {} } : {}),
+        ...(restricted ? { extraArgs: { "disable-slash-commands": null } } : {}),
         settingSources: ["user", "project", "local"],
         settings: { env: { PONTIA_SESSION_ID: this.options.session_id } },
         disallowedTools: [
-          ...(policy?.yolo ? ["AskUserQuestion"] : []),
-          ...(policy?.disabled_tools ?? []),
-          ...(policy?.disable_mcp ? ["mcp__*"] : []),
+          ...(bypass ? ["AskUserQuestion"] : []),
+          ...(restricted ? restrictedTools : []),
         ],
         canUseTool: (tool, input, context) => {
           if (this.closed || this.closing || this.unavailable)
             return Promise.resolve({ behavior: "deny", message: "Tool approval is unavailable." });
-          if (policy?.yolo) return Promise.resolve({ behavior: "allow", updatedInput: input });
+          if (bypass) return Promise.resolve({ behavior: "allow", updatedInput: input });
           return this.interactions.request(tool, input, context);
         },
         onElicitation: (request, context) => {
-          if (policy?.yolo) return Promise.resolve({ action: "decline" });
+          if (bypass) return Promise.resolve({ action: "decline" });
           if (this.closed || this.closing || this.unavailable)
             return Promise.resolve({ action: "cancel" });
           return this.interactions.elicit(request, context);

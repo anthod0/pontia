@@ -10,6 +10,17 @@ use pontia_storage_sqlite::repositories::workspaces::SqliteWorkspaceRepository;
 
 use super::WorkspaceRecord;
 
+pub fn require_managed_launch_directory(pontia_home: &Path, directory: &Path) -> Result<()> {
+    let root = pontia_home.join("bot");
+    if !root.is_dir() || directory.canonicalize()?.parent() != Some(root.canonicalize()?.as_path())
+    {
+        return Err(Error::Domain(
+            "Restricted agent files require a Pontia-managed launch directory".into(),
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) async fn resolve_session_directory(
     pool: &SqlitePool,
     pontia_home: &Path,

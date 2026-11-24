@@ -469,7 +469,7 @@ async fn explicit_retry_after_rejected_initialization_reuses_the_only_runtime() 
             pontia_runtime::RuntimeStartRequest {
                 reasoning_effort: None,
                 launch_mode: Default::default(),
-                execution_policy: Default::default(),
+                mode: Default::default(),
                 model: None,
                 session_id: session.clone(),
                 runtime_id: Some("must-not-create-another-runtime".into()),
@@ -726,7 +726,7 @@ async fn reprovisioning_a_bound_session_cannot_replace_native_identity_or_add_ru
             pontia_runtime::RuntimeStartRequest {
                 reasoning_effort: None,
                 launch_mode: Default::default(),
-                execution_policy: Default::default(),
+                mode: Default::default(),
                 model: None,
                 session_id: session.clone(),
                 runtime_id: Some("another-runtime".into()),

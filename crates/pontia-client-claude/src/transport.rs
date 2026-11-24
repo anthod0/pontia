@@ -29,12 +29,15 @@ pub(crate) async fn launch(
     reasoning_effort: Option<&str>,
     events: &EventIngestService,
 ) -> Result<()> {
-    let mut bootstrap = json!({"session_id":peer.session,"runtime_id":peer.runtime,"cwd":peer.cwd,"pontia_home":root});
-    bootstrap["execution_policy"] = serde_json::to_value(
-        pontia_agent_control::ControlQueryService::new(events.db())
-            .session_execution_policy(&peer.session)
-            .await?,
-    )?;
+    let mode = pontia_agent_control::ControlQueryService::new(events.db())
+        .session_mode(&peer.session)
+        .await?;
+    let mut bootstrap = json!({
+        "session_id": peer.session,
+        "runtime_id": peer.runtime,
+        "pontia_home": root,
+        "launch": {"cwd": peer.cwd, "mode": mode},
+    });
     if let Some(binding) = pontia_agent_control::SessionInstructionsService::new(events.db())
         .session_instructions(&peer.session)
         .await?

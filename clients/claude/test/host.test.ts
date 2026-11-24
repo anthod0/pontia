@@ -84,122 +84,69 @@ test("passes the requested effort to the SDK and reports the applied effort on e
   );
 });
 
-for (const tools of [null, [], ["Read", "Bash", "Glob"]] as const) {
-  test(`YOLO applies the requested tool set and does not request approval (${tools})`, async (t) => {
-    const fixture = sdk();
-    const events: HostEvent[] = [];
-    const host = new Host(
-      {
-        session_id: "policy-session",
-        cwd: "/unused-fixture-workspace",
-        execution_policy: {
-          tools: tools === null ? null : [...tools],
-          disabled_tools: [],
-          disable_mcp: false,
-          disable_skills: false,
-          yolo: true,
-        },
-      },
-      (event) => events.push(event),
-      fixture.factory,
-    );
-    t.after(() => host.close());
-    host.submit(first, "task");
-    const options = fixture.options!;
-    assert.equal(options.permissionMode, "bypassPermissions");
-    assert.ok(options.disallowedTools?.includes("AskUserQuestion"));
-    assert.equal(
-      (
-        await options.onElicitation!(
-          { serverName: "test", message: "confirm" },
-          { signal: new AbortController().signal, requestId: "elicit" },
-        )
-      )?.action,
-      "decline",
-    );
-    assert.equal(options.allowDangerouslySkipPermissions, true);
-    assert.equal(options.sandbox?.enabled, false);
-    assert.deepEqual(options.tools, tools === null ? undefined : [...tools]);
-    assert.equal(options.strictMcpConfig, undefined);
-    assert.equal(options.mcpServers, undefined);
-    const context = {
-      signal: new AbortController().signal,
-      toolUseID: "call",
-      requestId: "permission",
-    };
-    const bash = await options.canUseTool!("Bash", { command: "pwd" }, context);
-    assert.equal(bash?.behavior, "allow");
-    assert.equal(
-      events.some((event) => event.kind === "interaction_requested"),
-      false,
-    );
-  });
-}
-
-for (const disableMcp of [false, true]) {
-  test(`native deny rules and MCP policy reach the SDK on resume (${disableMcp})`, async (t) => {
-    const fixture = sdk();
-    const host = new Host(
-      {
-        session_id: "policy-session",
-        cwd: "/unused-fixture-workspace",
-        resume: native,
-        execution_policy: {
-          tools: ["Read", "Write", "Bash"],
-          disabled_tools: ["Write", "Agent", "Bash(git push *)", "mcp__remote__*"],
-          disable_mcp: disableMcp,
-          disable_skills: false,
-          yolo: true,
-        },
-      },
-      () => {},
-      fixture.factory,
-    );
-    t.after(() => host.close());
-    host.submit(first, "task");
-    const options = fixture.options!;
-    assert.equal(options.resume, native);
-    assert.deepEqual(options.tools, ["Read", "Write", "Bash"]);
-    assert.deepEqual(options.disallowedTools, [
-      "AskUserQuestion",
-      "Write",
-      "Agent",
-      "Bash(git push *)",
-      "mcp__remote__*",
-      ...(disableMcp ? ["mcp__*"] : []),
-    ]);
-    assert.equal(options.strictMcpConfig, disableMcp ? true : undefined);
-    assert.deepEqual(options.mcpServers, disableMcp ? {} : undefined);
-  });
-}
-
-for (const disableSkills of [false, true]) {
+for (const mode of ["default", "yolo", "restricted"] as const) {
   for (const resume of [undefined, native]) {
-    test(`skill loading policy reaches the SDK (${disableSkills}, resume=${!!resume})`, (t) => {
+    test(`SDK options for ${mode} mode on ${resume ? "resume" : "start"}`, async (t) => {
       const fixture = sdk();
       const host = new Host(
-        {
-          session_id: "policy-session",
-          cwd: "/unused-fixture-workspace",
-          resume,
-          execution_policy: {
-            tools: null,
-            disabled_tools: [],
-            disable_mcp: false,
-            disable_skills: disableSkills,
-            yolo: false,
-          },
-        },
+        { session_id: "mode-session", cwd: "/unused-fixture-workspace", mode, resume },
         () => {},
         fixture.factory,
       );
       t.after(() => host.close());
       host.submit(first, "task");
+      const options = fixture.options!;
+      const restricted = mode === "restricted";
+      assert.equal(options.resume, resume);
+      assert.equal(options.permissionMode, mode === "default" ? "default" : "bypassPermissions");
+      assert.equal(options.allowDangerouslySkipPermissions, mode === "default" ? undefined : true);
+      assert.equal(options.sandbox?.enabled, mode === "default" ? undefined : false);
+      assert.equal(options.tools, undefined);
+      assert.deepEqual(options.mcpServers, restricted ? {} : undefined);
+      assert.equal(options.strictMcpConfig, restricted ? true : undefined);
       assert.deepEqual(
-        fixture.options!.extraArgs,
-        disableSkills ? { "disable-slash-commands": null } : undefined,
+        options.extraArgs,
+        restricted ? { "disable-slash-commands": null } : undefined,
       );
-      assert.deepEqual(fixture.options!.settingSources, ["user", "project", "local"]);
+      assert.deepEqual(options.settingSources, ["user", "project", "local"]);
+      assert.deepEqual(options.disallowedTools, [
+        ...(mode === "default" ? [] : ["AskUserQuestion"]),
+        ...(restricted
+          ? [
+              "Edit",
+              "Write",
+              "NotebookEdit",
+              "Agent",
+              "Task",
+              "SendMessage",
+              "TeamCreate",
+              "TeamDelete",
+              "Workflow",
+              "EnterWorktree",
+              "ExitWorktree",
+              "CronCreate",
+              "CronDelete",
+              "ScheduleWakeup",
+              "RemoteTrigger",
+              "Monitor",
+              "mcp__*",
+            ]
+          : []),
+      ]);
+      if (mode !== "default") {
+        const signal = new AbortController().signal;
+        const result = await options.canUseTool!(
+          "Bash",
+          { command: "pwd" },
+          { signal, toolUseID: "call", requestId: "permission" },
+        );
+        assert.equal(result?.behavior, "allow");
+        const answer = await options.onElicitation!(
+          { serverName: "server", message: "confirm" },
+          { signal, requestId: "confirm" },
+        );
+        assert.equal(answer?.action, "decline");
+      }
     });
   }
 }

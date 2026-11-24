@@ -28,14 +28,10 @@ impl Fixture {
     }
 
     async fn with_instructions(system_instructions: Option<&str>) -> Self {
-        Self::create(system_instructions, json!({}), None).await
+        Self::create(system_instructions, "default", None).await
     }
 
-    async fn create(
-        system_instructions: Option<&str>,
-        execution_policy: Value,
-        effort: Option<&str>,
-    ) -> Self {
+    async fn create(system_instructions: Option<&str>, mode: &str, effort: Option<&str>) -> Self {
         let root = tempfile::tempdir().unwrap();
         let socket = root.path().join("app-server.sock");
         let listener = UnixListener::bind(&socket).unwrap();
@@ -181,7 +177,7 @@ impl Fixture {
             .session_commands()
             .create_session(
                 serde_json::from_value::<CreateSessionRequest>(
-                    json!({"client_type":"codex","workspace":root.path(),"system_instructions":system_instructions,"include_standalone_session_instructions":true,"execution_policy":execution_policy,"reasoning_effort":effort}),
+                    json!({"client_type":"codex","workspace":root.path(),"system_instructions":system_instructions,"include_standalone_session_instructions":true,"mode":mode,"reasoning_effort":effort}),
                 )
                 .unwrap(),
             )
@@ -249,7 +245,7 @@ impl Fixture {
 #[tokio::test]
 async fn reasoning_effort_applies_only_at_launch_and_tracks_native_settings() {
     use pontia_core::domain::EventType;
-    let fixture = Fixture::create(None, json!({}), Some("high")).await;
+    let fixture = Fixture::create(None, "default", Some("high")).await;
     let observed = || async {
         fixture
             .app
@@ -306,55 +302,31 @@ async fn reasoning_effort_applies_only_at_launch_and_tracks_native_settings() {
 
 #[tokio::test]
 async fn restricted_session_starts_with_native_agents_disabled() {
-    use pontia_agent_control::client_contract::ClientConfiguration;
-    let config = crate::configuration::CodexConfiguration;
-    let base = config.restricted_execution_policy("default").unwrap();
-    assert_eq!(base.tools, None);
-    assert_eq!(base.disabled_tools, vec!["spawn_agent"]);
-    assert!(!base.disable_mcp);
-    assert!(!base.yolo);
-    for yolo in [false, true] {
-        let mut policy = base.clone();
-        policy.yolo = yolo;
-        config
-            .validate_execution_policy("default", &policy)
-            .unwrap();
-        let fixture = Fixture::create(None, json!(policy), None).await;
-        fixture.dispatch_first_input().await;
-        {
-            let requests = fixture.thread_requests.lock().await;
-            let config = &requests[0]["params"]["config"];
-            assert_eq!(config["agents.enabled"], false);
-            assert_eq!(config["features.multi_agent"], false);
-            assert_eq!(config["features.multi_agent_v2"], false);
-            assert_eq!(
-                config["sandbox_mode"],
-                if yolo {
-                    json!("danger-full-access")
-                } else {
-                    Value::Null
-                }
-            );
-            assert_eq!(
-                config["approval_policy"],
-                if yolo { json!("never") } else { Value::Null }
-            );
-            assert!(
-                config
-                    .as_object()
-                    .unwrap()
-                    .keys()
-                    .all(|key| !key.starts_with("hooks") && !key.starts_with("mcp_servers"))
-            );
-        }
-        fixture.shutdown().await;
+    let fixture = Fixture::create(None, "restricted", None).await;
+    fixture.dispatch_first_input().await;
+    {
+        let requests = fixture.thread_requests.lock().await;
+        let config = &requests[0]["params"]["config"];
+        assert_eq!(config["agents.enabled"], false);
+        assert_eq!(config["features.multi_agent"], false);
+        assert_eq!(config["features.multi_agent_v2"], false);
+        assert_eq!(config["approval_policy"], "never");
+        assert_eq!(config["sandbox_mode"], "danger-full-access");
+        assert!(
+            config
+                .as_object()
+                .unwrap()
+                .keys()
+                .all(|key| !key.starts_with("hooks") && !key.starts_with("mcp_servers"))
+        );
     }
+    fixture.shutdown().await;
 }
 
 #[tokio::test]
 async fn yolo_is_scoped_to_the_session_and_preserved_on_resume() {
     for yolo in [false, true] {
-        let fixture = Fixture::create(None, json!({"yolo":yolo}), None).await;
+        let fixture = Fixture::create(None, if yolo { "yolo" } else { "default" }, None).await;
         *fixture.configuration.lock().await =
             json!({"approval_policy":"on-request","sandbox_mode":"workspace-write"});
         fixture.dispatch_first_input().await;
@@ -400,7 +372,16 @@ async fn yolo_is_scoped_to_the_session_and_preserved_on_resume() {
 #[tokio::test]
 async fn skill_instructions_are_disabled_only_for_the_requested_session_across_resume() {
     for disable_skills in [false, true] {
-        let fixture = Fixture::create(None, json!({"disable_skills":disable_skills}), None).await;
+        let fixture = Fixture::create(
+            None,
+            if disable_skills {
+                "restricted"
+            } else {
+                "default"
+            },
+            None,
+        )
+        .await;
         *fixture.configuration.lock().await = json!({"skills":{"include_instructions":true}});
         fixture.dispatch_first_input().await;
         fixture

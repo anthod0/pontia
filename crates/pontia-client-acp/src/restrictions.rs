@@ -1,10 +1,8 @@
-use std::{fs, io::Write, path::Path};
-
 use agent_client_protocol::{
     UntypedMessage,
     v1::schema::{Meta, SessionId},
 };
-use pontia_core::{Error, Result, execution_policy::ExecutionPolicy};
+use pontia_core::{Error, Result, SessionMode};
 use serde_json::{Value, json};
 
 use crate::peer::{Peer, protocol_error};
@@ -23,9 +21,8 @@ pub struct AgentProfile {
     pub profile_description: (&'static str, &'static str),
     pub deny_key: &'static str,
     pub disabled_tools: &'static [&'static str],
-    pub deny_dependencies: &'static [(&'static str, &'static str)],
-    pub discover_skills_key: Option<&'static str>,
-    pub yolo_key: Option<&'static str>,
+    pub discover_skills_key: &'static str,
+    pub yolo_key: &'static str,
     pub startup_model_key: &'static str,
     pub list_method: &'static str,
     pub catalog_path: &'static str,
@@ -34,20 +31,6 @@ pub struct AgentProfile {
     pub allowed_types: &'static [&'static str],
     pub info_method: &'static str,
     pub profile_path: &'static str,
-}
-
-impl RestrictedExecution {
-    pub(crate) fn policy(&self) -> ExecutionPolicy {
-        let disabled_tools = match self {
-            Self::AgentProfile(profile) => profile.disabled_tools,
-            Self::Kiro => return crate::kiro::restricted::policy(),
-            Self::Antigravity => crate::antigravity::DISABLED_TOOLS,
-        };
-        ExecutionPolicy {
-            disabled_tools: disabled_tools.iter().map(|s| (*s).into()).collect(),
-            ..Default::default()
-        }
-    }
 }
 
 impl AgentProfile {
@@ -117,94 +100,40 @@ pub(crate) struct SessionPolicy {
 impl SessionPolicy {
     pub fn resolve(
         recipe: Option<&'static RestrictedExecution>,
-        policy: &ExecutionPolicy,
+        mode: SessionMode,
     ) -> Result<Self> {
-        let Some(recipe) = recipe else {
-            return if policy == &ExecutionPolicy::default() {
-                Ok(Self::default())
-            } else {
-                Err(Error::CapabilityUnavailable(
-                    "ACP Agent lacks the requested execution policy".into(),
-                ))
-            };
-        };
-        let recipe = match recipe {
-            RestrictedExecution::Kiro => return crate::kiro::restricted::resolve(policy),
-            RestrictedExecution::Antigravity => {
-                crate::antigravity::validate(policy)?;
-                return Ok(Self::default());
+        let mut policy = Self::default();
+        match (recipe, mode) {
+            (Some(RestrictedExecution::AgentProfile(recipe)), _) => {
+                policy
+                    .meta
+                    .insert(recipe.yolo_key.into(), json!(mode.bypasses_approvals()));
+                if mode == SessionMode::Restricted {
+                    policy.profile = Some(recipe);
+                    policy.meta.insert(
+                        recipe.profile_key.into(),
+                        json!({
+                            (recipe.profile_name.0): recipe.profile_name.1,
+                            (recipe.profile_description.0): recipe.profile_description.1,
+                            (recipe.deny_key): recipe.disabled_tools,
+                            (recipe.discover_skills_key): false,
+                        }),
+                    );
+                }
             }
-            RestrictedExecution::AgentProfile(profile) => profile,
-        };
-        if policy.tools.is_some()
-            || policy.disable_mcp
-            || (policy.disable_skills && recipe.discover_skills_key.is_none())
-            || (policy.yolo && recipe.yolo_key.is_none())
-        {
-            return Err(Error::CapabilityUnavailable(
-                "ACP Agent cannot enforce the requested execution policy".into(),
-            ));
-        }
-        if let Some(name) = policy
-            .disabled_tools
-            .iter()
-            .find(|name| !recipe.disabled_tools.contains(&name.as_str()))
-        {
-            return Err(Error::CapabilityUnavailable(format!(
-                "ACP Agent cannot disable tool {name}"
-            )));
-        }
-        let disabled = |name: &str| policy.disabled_tools.iter().any(|tool| tool == name);
-        if let Some((tool, required)) = recipe
-            .deny_dependencies
-            .iter()
-            .find(|(tool, required)| disabled(tool) && !disabled(required))
-        {
-            return Err(Error::CapabilityUnavailable(format!(
-                "Disabling {tool} also requires disabling {required}"
-            )));
-        }
-        let mut meta = Meta::new();
-        if let Some(key) = recipe.yolo_key {
-            meta.insert(key.into(), json!(policy.yolo));
-        }
-        let restricted = policy.disable_skills || !policy.disabled_tools.is_empty();
-        if restricted {
-            let mut profile = json!({(recipe.profile_name.0):recipe.profile_name.1, (recipe.profile_description.0):recipe.profile_description.1, (recipe.deny_key):policy.disabled_tools});
-            if policy.disable_skills
-                && let Some(key) = recipe.discover_skills_key
-            {
-                profile[key] = json!(false);
+            (Some(RestrictedExecution::Kiro), SessionMode::Restricted) => {
+                policy
+                    .meta
+                    .insert("kiro".into(), json!({"modeId":"pontia-restricted"}));
             }
-            meta.insert(recipe.profile_key.into(), profile);
+            (Some(RestrictedExecution::Antigravity), SessionMode::Restricted)
+            | (_, SessionMode::Default) => {}
+            _ => {
+                return Err(Error::CapabilityUnavailable(format!(
+                    "ACP Agent cannot start in {mode:?} mode"
+                )));
+            }
         }
-        Ok(Self {
-            profile: restricted.then_some(recipe),
-            meta,
-        })
+        Ok(policy)
     }
-}
-
-pub(crate) fn managed_agent_directory(home: &Path, cwd: &Path) -> Result<()> {
-    if cwd.canonicalize()?.parent() != Some(home.join("bot").canonicalize()?.as_path()) {
-        return Err(Error::Domain(
-            "Restricted ACP Sessions require a Pontia-managed Bot directory".into(),
-        ));
-    }
-    Ok(())
-}
-
-pub(crate) fn write_config(directory: &Path, name: &str, contents: &str) -> Result<()> {
-    fs::create_dir_all(directory)?;
-    let path = directory.join(name);
-    match fs::read(&path) {
-        Ok(current) if current == contents.as_bytes() => return Ok(()),
-        Ok(_) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => return Err(error.into()),
-    }
-    let mut file = tempfile::NamedTempFile::new_in(directory)?;
-    file.write_all(contents.as_bytes())?;
-    file.persist(path).map_err(|error| error.error)?;
-    Ok(())
 }

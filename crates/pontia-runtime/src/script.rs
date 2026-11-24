@@ -128,7 +128,7 @@ mod tests {
         let request = RuntimeStartRequest {
             reasoning_effort: None,
             launch_mode: Default::default(),
-            execution_policy: Default::default(),
+            mode: Default::default(),
             model: None,
             runtime_id: None,
             session_id: "sess_resume_1".to_string(),
@@ -191,7 +191,7 @@ mod tests {
         let request = RuntimeStartRequest {
             reasoning_effort: None,
             launch_mode: Default::default(),
-            execution_policy: Default::default(),
+            mode: Default::default(),
             model: None,
             runtime_id: None,
             session_id: "sess_explicit_start".to_string(),

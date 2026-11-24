@@ -74,6 +74,7 @@ async function setup(t: TestContext, rejectKind?: string, transient = false) {
     session_id: "session",
     runtime_id: "runtime",
     cwd: sandbox.path,
+    mode: "default" as const,
     pontia_home: sandbox.path,
   };
   const host = await serve(config, fixture.factory);
@@ -128,30 +129,18 @@ async function setup(t: TestContext, rejectKind?: string, transient = false) {
   };
 }
 
-test("bootstrap preserves native tool rules and rejects malformed execution policies", () => {
+test("bootstrap accepts the three session modes and rejects unknown modes", () => {
   const config = {
     session_id: "session",
     runtime_id: "runtime",
     pontia_home: "/unused",
     cwd: "/unused",
   };
-  const policy = {
-    tools: ["Read"],
-    disabled_tools: ["Write"],
-    disable_mcp: true,
-    disable_skills: false,
-    yolo: false,
-  };
-  assert.deepEqual(bootstrap({ ...config, execution_policy: policy }).execution_policy, policy);
-  for (const invalid of [
-    { tools: [1] },
-    { tools: [""] },
-    { disabled_tools: "Write" },
-    { disable_mcp: "true" },
-    { disable_skills: "true" },
-  ]) {
-    assert.throws(() => bootstrap({ ...config, execution_policy: { ...policy, ...invalid } }));
+  for (const mode of ["default", "yolo", "restricted"]) {
+    assert.equal(bootstrap({ ...config, launch: { cwd: "/unused", mode } }).mode, mode);
   }
+  assert.throws(() => bootstrap(config));
+  assert.throws(() => bootstrap({ ...config, launch: { cwd: "/unused", mode: "other" } }));
 });
 
 test(

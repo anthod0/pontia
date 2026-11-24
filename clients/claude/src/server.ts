@@ -6,7 +6,7 @@ import {
   CONTROL_VERSION,
   type RuntimeConnection,
 } from "../shared/control-socket.js";
-import { Host, ControlError, type QueryFactory, type ExecutionPolicy } from "./host.js";
+import { Host, ControlError, type QueryFactory, type SessionMode } from "./host.js";
 import { hostObservation, type HostEvent } from "./facts.js";
 
 export interface Bootstrap {
@@ -18,7 +18,7 @@ export interface Bootstrap {
   reasoning_effort?: string;
   resume?: string;
   system_prompt?: string;
-  execution_policy?: ExecutionPolicy;
+  mode: SessionMode;
 }
 
 type ObjectValue = Record<string, unknown>;
@@ -34,37 +34,20 @@ function string(value: unknown): string {
 
 export function bootstrap(value: unknown): Bootstrap {
   const data = object(value);
+  const launch = object(data.launch);
+  if (launch.mode !== "default" && launch.mode !== "yolo" && launch.mode !== "restricted")
+    throw new ControlError("rejected", "invalid_session_mode");
   const result: Bootstrap = {
     session_id: string(data.session_id),
     runtime_id: string(data.runtime_id),
     pontia_home: string(data.pontia_home),
-    cwd: string(data.cwd),
+    cwd: string(launch.cwd),
+    mode: launch.mode,
   };
   if (data.system_prompt !== undefined) result.system_prompt = string(data.system_prompt);
   if (data.model !== undefined) result.model = string(data.model);
   if (data.reasoning_effort !== undefined) result.reasoning_effort = string(data.reasoning_effort);
   if (data.resume !== undefined) result.resume = string(data.resume);
-  if (data.execution_policy !== undefined) {
-    const policy = object(data.execution_policy);
-    if (
-      typeof policy.yolo !== "boolean" ||
-      typeof policy.disable_mcp !== "boolean" ||
-      typeof policy.disable_skills !== "boolean" ||
-      !Array.isArray(policy.disabled_tools) ||
-      policy.disabled_tools.some((tool) => typeof tool !== "string" || !tool.trim()) ||
-      (policy.tools !== null &&
-        (!Array.isArray(policy.tools) ||
-          policy.tools.some((tool) => typeof tool !== "string" || !tool.trim())))
-    )
-      throw new ControlError("rejected", "invalid_execution_policy");
-    result.execution_policy = {
-      tools: policy.tools as ExecutionPolicy["tools"],
-      disabled_tools: policy.disabled_tools as string[],
-      disable_mcp: policy.disable_mcp,
-      disable_skills: policy.disable_skills,
-      yolo: policy.yolo,
-    };
-  }
   return result;
 }
 

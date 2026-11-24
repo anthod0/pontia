@@ -4,15 +4,11 @@ use pontia_core::Result;
 use serde_json::{Value, json};
 
 impl CodexService {
-    pub(super) async fn apply_execution_policy(
-        &self,
-        session: &str,
-        params: &mut Value,
-    ) -> Result<()> {
+    pub(super) async fn apply_session_mode(&self, session: &str, params: &mut Value) -> Result<()> {
         if pontia_agent_control::ControlQueryService::new(self.pool.clone())
-            .session_execution_policy(session)
+            .session_mode(session)
             .await?
-            .yolo
+            .bypasses_approvals()
         {
             params["approvalPolicy"] = json!("never");
             params["sandbox"] = json!("danger-full-access");
@@ -59,9 +55,9 @@ pub(crate) async fn prepare_proxy_request(
             .await?
         && state
             .queries()
-            .session_execution_policy(&binding.session_id)
+            .session_mode(&binding.session_id)
             .await?
-            .yolo
+            .bypasses_approvals()
     {
         params["approvalPolicy"] = json!("never");
         params["sandbox"] = json!("danger-full-access");

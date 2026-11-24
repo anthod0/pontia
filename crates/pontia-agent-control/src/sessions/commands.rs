@@ -58,18 +58,17 @@ impl SessionCommandService {
             .get(&request.client_type)
             .and_then(|entry| entry.configuration.as_ref());
         let client_key = match client_config {
-            Some(configuration) => {
-                let key = configuration.key(&request.metadata)?;
-                configuration.validate_execution_policy(&key, &request.execution_policy)?;
-                key
-            }
-            None if request.execution_policy != Default::default() => {
-                return Err(Error::CapabilityUnavailable(
-                    "Client cannot enforce the requested execution policy".into(),
-                ));
-            }
+            Some(config) => config.key(&request.metadata)?,
             None => "default".into(),
         };
+        if !client_config.map_or(request.mode == Default::default(), |config| {
+            config.supports_mode(&client_key, request.mode)
+        }) {
+            return Err(Error::CapabilityUnavailable(format!(
+                "Client {} cannot start in {:?} mode",
+                request.client_type, request.mode
+            )));
+        }
         if let Some(model) = &request.model {
             if model.trim().is_empty() {
                 return Err(Error::Domain("model must be non-empty".into()));
@@ -181,7 +180,7 @@ impl SessionCommandService {
                     "metadata": request.metadata,
                     "ownership": request.ownership,
                     "runtime_environment": request.runtime_environment,
-                    "execution_policy": request.execution_policy,
+                    "mode": request.mode,
                     "launch_mode": request.launch_mode,
                 }),
             ))
@@ -211,7 +210,7 @@ impl SessionCommandService {
                 RuntimeStartRequest {
                     reasoning_effort: request.reasoning_effort,
                     launch_mode: request.launch_mode,
-                    execution_policy: request.execution_policy,
+                    mode: request.mode,
                     model: request.model,
                     runtime_id: Some(runtime_id.clone()),
                     session_id: session_id.clone(),

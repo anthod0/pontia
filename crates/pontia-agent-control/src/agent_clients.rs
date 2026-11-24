@@ -47,6 +47,19 @@ impl AgentClientService {
         }
     }
 
+    pub fn initialize_private_directory(&self, directory: &std::path::Path) -> Result<()> {
+        std::fs::create_dir_all(directory)?;
+        for file in self
+            .clients
+            .registrations()
+            .filter_map(|entry| entry.configuration.as_ref())
+            .flat_map(|config| config.private_directory_files())
+        {
+            file.install(directory)?;
+        }
+        Ok(())
+    }
+
     fn configuration(&self, client: &str) -> Result<&dyn ClientConfiguration> {
         self.clients
             .get(client)

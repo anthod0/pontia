@@ -20,31 +20,17 @@ impl PiConfiguration {
 }
 
 impl ClientConfiguration for PiConfiguration {
-    fn restricted_execution_policy(
-        &self,
-        _key: &str,
-    ) -> Option<pontia_core::execution_policy::ExecutionPolicy> {
-        Some(pontia_core::execution_policy::ExecutionPolicy {
-            disabled_tools: ["edit", "write"].into_iter().map(str::to_owned).collect(),
-            disable_mcp: true,
-            yolo: false,
-            ..Default::default()
-        })
+    fn supports_mode(&self, _key: &str, _mode: pontia_core::SessionMode) -> bool {
+        true
     }
 
-    fn validate_execution_policy(
+    fn private_directory_files(
         &self,
-        _key: &str,
-        policy: &pontia_core::execution_policy::ExecutionPolicy,
-    ) -> Result<()> {
-        for tool in policy.tools.iter().flatten().chain(&policy.disabled_tools) {
-            if tool.trim().is_empty() || tool.contains(',') || tool.starts_with(['+', '-']) {
-                return Err(Error::Domain(
-                    "Pi tool entries must be nonempty native names or patterns without commas or +/- prefixes".into(),
-                ));
-            }
-        }
-        Ok(())
+    ) -> &'static [pontia_agent_control::client_contract::LaunchFile] {
+        &[pontia_agent_control::client_contract::LaunchFile {
+            path: ".pi/settings.json",
+            contents: r#"{"steeringMode":"all"}"#,
+        }]
     }
 
     fn supports_startup_reasoning_effort(&self) -> bool {

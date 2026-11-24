@@ -39,26 +39,10 @@ fn effective_config(agent: &AcpAgentDefinition) -> Value {
 }
 
 impl ClientConfiguration for AcpConfiguration {
-    fn restricted_execution_policy(
-        &self,
-        key: &str,
-    ) -> Option<pontia_core::execution_policy::ExecutionPolicy> {
-        self.agents
-            .get(key)?
-            .restricted_execution
-            .map(|recipe| recipe.policy())
-    }
-
-    fn validate_execution_policy(
-        &self,
-        key: &str,
-        policy: &pontia_core::execution_policy::ExecutionPolicy,
-    ) -> Result<()> {
-        let agent = self
-            .agents
-            .get(key)
-            .ok_or_else(|| Error::Domain(format!("Unknown ACP Agent: {key}")))?;
-        crate::restrictions::SessionPolicy::resolve(agent.restricted_execution, policy).map(|_| ())
+    fn supports_mode(&self, key: &str, mode: pontia_core::SessionMode) -> bool {
+        self.agents.get(key).is_some_and(|agent| {
+            crate::restrictions::SessionPolicy::resolve(agent.restricted_execution, mode).is_ok()
+        })
     }
 
     fn supports_startup_model(&self) -> bool {

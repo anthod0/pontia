@@ -41,7 +41,7 @@ impl CodexService {
             ));
         }
         let mut params = json!({"threadId":binding.client_session_key,"beforeTurnId":native,"excludeTurns":true});
-        self.apply_execution_policy(session, &mut params).await?;
+        self.apply_session_mode(session, &mut params).await?;
         let result = connection.call("thread/fork", params.clone()).await?;
         let native = string(&result["thread"], "id")
             .map_err(|error| Error::ControlUnknown(error.to_string()))?;
@@ -72,7 +72,7 @@ impl CodexService {
         let result = if snapshot["thread"]["status"]["type"] == "notLoaded" {
             // This is an explicit retry of a recorded fork, unlike a queued CLI receipt.
             let mut params = json!({"threadId":fork.client_session_key,"excludeTurns":true});
-            self.apply_execution_policy(session, &mut params).await?;
+            self.apply_session_mode(session, &mut params).await?;
             connection.resume_thread(params, true).await?.0
         } else {
             fork.receipt["result"].clone()

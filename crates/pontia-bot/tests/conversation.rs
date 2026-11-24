@@ -33,15 +33,6 @@ const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
     ..pontia_agent_control::client_contract::TEST_SPEC.capabilities
 };
 
-#[derive(Clone, Copy, Default)]
-enum PolicySupport {
-    #[default]
-    Restricted,
-    NoRestriction,
-    RejectYolo,
-    RejectDisableSkills,
-}
-
 #[derive(Default)]
 struct Client {
     inputs: Mutex<Vec<AgentInput>>,
@@ -53,66 +44,24 @@ struct Client {
         )>,
     >,
     tokens: Mutex<std::collections::HashMap<String, String>>,
-    policy_support: Mutex<PolicySupport>,
+    reject_restricted: Mutex<bool>,
     launch_directories: Mutex<std::collections::HashMap<String, String>>,
     fail_next_launch: Mutex<bool>,
     launch_modes: Mutex<std::collections::HashMap<String, LaunchMode>>,
     launched_efforts: Mutex<std::collections::HashMap<String, Option<String>>>,
     launched_models: Mutex<std::collections::HashMap<String, Option<String>>>,
-    launched_policies:
-        Mutex<std::collections::HashMap<String, pontia_core::execution_policy::ExecutionPolicy>>,
+    session_modes: Mutex<std::collections::HashMap<String, pontia_core::SessionMode>>,
     interaction_responses: Mutex<Vec<(String, String, String)>>,
     fail_interaction_response: Mutex<bool>,
 }
 
 impl ClientConfiguration for Client {
-    fn restricted_execution_policy(
-        &self,
-        key: &str,
-    ) -> Option<pontia_core::execution_policy::ExecutionPolicy> {
-        if key != "default" {
-            return None;
-        }
-        match *self.policy_support.lock().unwrap() {
-            PolicySupport::NoRestriction => None,
-            PolicySupport::Restricted
-            | PolicySupport::RejectYolo
-            | PolicySupport::RejectDisableSkills => {
-                Some(pontia_core::execution_policy::ExecutionPolicy {
-                    disabled_tools: ["edit", "write"].into_iter().map(str::to_owned).collect(),
-                    disable_mcp: true,
-                    yolo: false,
-                    ..Default::default()
-                })
-            }
-        }
+    fn supports_mode(&self, key: &str, mode: pontia_core::SessionMode) -> bool {
+        key == "default"
+            && (mode == pontia_core::SessionMode::Default
+                || !*self.reject_restricted.lock().unwrap())
     }
 
-    fn validate_execution_policy(
-        &self,
-        _key: &str,
-        policy: &pontia_core::execution_policy::ExecutionPolicy,
-    ) -> Result<()> {
-        if matches!(
-            *self.policy_support.lock().unwrap(),
-            PolicySupport::RejectYolo
-        ) && policy.yolo
-        {
-            return Err(Error::CapabilityUnavailable(
-                "Client cannot run approval-free".into(),
-            ));
-        }
-        if matches!(
-            *self.policy_support.lock().unwrap(),
-            PolicySupport::RejectDisableSkills
-        ) && policy.disable_skills
-        {
-            return Err(Error::CapabilityUnavailable(
-                "Client cannot disable skills".into(),
-            ));
-        }
-        Ok(())
-    }
     fn supports_startup_reasoning_effort(&self) -> bool {
         true
     }
@@ -178,10 +127,10 @@ impl ClientLauncher for Client {
             request.runtime.session_id.clone(),
             request.runtime.model.clone(),
         );
-        self.launched_policies.lock().unwrap().insert(
-            request.runtime.session_id.clone(),
-            request.runtime.execution_policy.clone(),
-        );
+        self.session_modes
+            .lock()
+            .unwrap()
+            .insert(request.runtime.session_id.clone(), request.runtime.mode);
         self.launch_directories.lock().unwrap().insert(
             request.runtime.session_id.clone(),
             request.runtime.workspace.clone().unwrap(),

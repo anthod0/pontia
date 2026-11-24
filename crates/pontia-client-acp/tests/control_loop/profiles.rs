@@ -288,23 +288,13 @@ async fn invalid_session_instructions_are_rejected() {
 
 #[tokio::test]
 async fn antigravity_prepares_its_workspace_agent_again_on_process_recovery() {
-    use pontia_agent_control::client_contract::ClientConfiguration;
-    use pontia_client_acp::configuration::AcpConfiguration;
-
     let h = Harness::new(&[("ACP_ANTIGRAVITY", "1")]).await;
-    let configuration = AcpConfiguration::new(h.config.clone());
-    let mut policy = configuration
-        .restricted_execution_policy("antigravity")
-        .unwrap();
-    policy.disable_skills = true;
-    policy.yolo = true;
     let cwd = h.root.path().join("bot/readonly");
     std::fs::create_dir_all(&cwd).unwrap();
     let session = create(
         &h,
         json!({
-            "metadata":{"acp_agent_id":"antigravity"}, "execution_policy":policy, "workspace":cwd,
-            "ownership":{"application_id":"bot","reference":"test-readonly"}
+            "metadata":{"acp_agent_id":"antigravity"}, "mode":"restricted", "workspace":cwd
         }),
     )
     .await
@@ -355,27 +345,27 @@ async fn ordinary_kiro_workspaces_keep_the_native_agent_and_their_configuration(
 
 #[tokio::test]
 async fn kiro_selects_its_workspace_agent_on_creation_and_recovery() {
-    use pontia_agent_control::client_contract::ClientConfiguration;
-    use pontia_client_acp::configuration::AcpConfiguration;
-
     let h = Harness::new(&[("ACP_KIRO", "1")]).await;
-    let config = AcpConfiguration::new(h.config.clone());
-    let policy = config.restricted_execution_policy("kiro").unwrap();
     let cwd = h.root.path().join("bot/readonly");
     std::fs::create_dir_all(&cwd).unwrap();
     let session = create(
         &h,
         json!({
-            "metadata":{"acp_agent_id":"kiro"}, "execution_policy":policy, "workspace":cwd,
-            "ownership":{"application_id":"bot","reference":"test-readonly"}
+            "metadata":{"acp_agent_id":"kiro"}, "mode":"restricted", "workspace":cwd
         }),
     )
     .await
     .unwrap();
     let agent = cwd.join(".kiro/agents/pontia-restricted.json");
-    std::fs::remove_file(&agent).unwrap();
+    std::fs::write(&agent, "old agent").unwrap();
+    let settings = cwd.join(".kiro/settings/cli.json");
+    std::fs::write(&settings, "{}").unwrap();
     h.crash_agent(&session);
     h.wait_ready(&session, 2).await;
+    assert_eq!(
+        std::fs::read_to_string(settings).unwrap(),
+        r#"{"chat.disableInheritingDefaultResources":true}"#
+    );
     let definition: Value = serde_json::from_slice(&std::fs::read(agent).unwrap()).unwrap();
     assert_eq!(definition["tools"], json!(["read", "shell", "web"]));
     assert_eq!(h.requests("session/new"), 1);

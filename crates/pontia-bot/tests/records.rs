@@ -15,6 +15,14 @@ use serde_json::{Value, json};
 
 struct Configuration;
 impl ClientConfiguration for Configuration {
+    fn private_directory_files(
+        &self,
+    ) -> &'static [pontia_agent_control::client_contract::LaunchFile] {
+        &[pontia_agent_control::client_contract::LaunchFile {
+            path: "client/settings",
+            contents: "initial",
+        }]
+    }
     fn keys(&self) -> Vec<String> {
         vec!["a".into(), "b".into()]
     }
@@ -178,10 +186,18 @@ async fn bots_have_independent_configuration_directories_and_current_sessions() 
     assert_eq!((&b.client_key, &b.model), (&"b".into(), &"model-b".into()));
     assert!(a.current_session_id.is_none());
     let directory = f.bots.directory(&a.bot_id).await.unwrap();
-    let settings: Value =
-        serde_json::from_slice(&std::fs::read(directory.join(".pi/settings.json")).unwrap())
-            .unwrap();
-    assert_eq!(settings["steeringMode"], "all");
+    assert_eq!(
+        std::fs::read_to_string(directory.join("client/settings")).unwrap(),
+        "initial"
+    );
+    assert!(
+        !f.bots
+            .read_only_directory()
+            .await
+            .unwrap()
+            .join("client/settings")
+            .exists()
+    );
     assert!(f.bots.directory(&b.bot_id).await.unwrap().is_dir());
     assert_ne!(directory, f.bots.directory(&b.bot_id).await.unwrap());
     std::fs::write(directory.join("notes.txt"), "keep me").unwrap();

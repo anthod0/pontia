@@ -27,7 +27,6 @@ fn builtin_launch_and_management_settings() {
 
 #[test]
 fn acp_validates_the_selected_definition() {
-    use pontia_core::execution_policy::ExecutionPolicy;
     let agents = AcpAgents::builtin();
     let mut other = agents.get("grok").unwrap().clone();
     other.restricted_execution = None;
@@ -35,63 +34,14 @@ fn acp_validates_the_selected_definition() {
         ("restricted".into(), agents.get("grok").unwrap().clone()),
         ("plain".into(), other),
     ]));
-    let mut restricted = configuration
-        .restricted_execution_policy("restricted")
-        .unwrap();
-    assert_eq!(restricted.disabled_tools.len(), 18);
-    restricted.disable_skills = true;
-    restricted.yolo = true;
-    configuration
-        .validate_execution_policy("restricted", &restricted)
-        .unwrap();
-    assert!(configuration.restricted_execution_policy("plain").is_none());
-    assert!(
-        configuration
-            .validate_execution_policy("plain", &restricted)
-            .is_err()
-    );
-    for policy in [
-        ExecutionPolicy {
-            disable_mcp: true,
-            ..Default::default()
-        },
-        ExecutionPolicy {
-            tools: Some(vec![]),
-            ..Default::default()
-        },
-        ExecutionPolicy {
-            disabled_tools: vec!["kill_task".into()],
-            ..Default::default()
-        },
-        ExecutionPolicy {
-            disabled_tools: vec!["unknown".into()],
-            ..Default::default()
-        },
-    ] {
-        assert!(
-            configuration
-                .validate_execution_policy("restricted", &policy)
-                .is_err()
-        );
+    use pontia_core::SessionMode::{Default, Restricted, Yolo};
+    for mode in [Default, Restricted, Yolo] {
+        assert!(configuration.supports_mode("restricted", mode));
+        assert_eq!(configuration.supports_mode("plain", mode), mode == Default);
     }
-}
-
-#[test]
-fn antigravity_accepts_its_fixed_policy_in_managed_directories() {
-    let configuration = AcpConfiguration::new(AcpAgents::builtin());
-    let mut policy = configuration
-        .restricted_execution_policy("antigravity")
-        .unwrap();
-    policy.disable_skills = true;
-    policy.yolo = true;
-    policy.disabled_tools.reverse();
-    configuration
-        .validate_execution_policy("antigravity", &policy)
-        .unwrap();
-    policy.disabled_tools.pop();
-    assert!(
-        configuration
-            .validate_execution_policy("antigravity", &policy)
-            .is_err()
-    );
+    let builtin = AcpConfiguration::new(AcpAgents::builtin());
+    for key in ["kiro", "antigravity"] {
+        assert!(builtin.supports_mode(key, Restricted));
+        assert!(!builtin.supports_mode(key, Yolo));
+    }
 }

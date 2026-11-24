@@ -167,8 +167,8 @@ impl AcpAdapter {
                 ).bind(&identity.session_id).fetch_one(&app.db()).await?,
             };
             let definition = self.config.agents.get(&agent_key);
-            let policy = app.queries().session_execution_policy(&identity.session_id).await?;
-            let policy = crate::restrictions::SessionPolicy::resolve(definition.and_then(|agent| agent.restricted_execution), &policy)?;
+            let mode = app.queries().session_mode(&identity.session_id).await?;
+            let policy = crate::restrictions::SessionPolicy::resolve(definition.and_then(|agent| agent.restricted_execution), mode)?;
             let peer = Peer::connect(
                 &app,
                 &identity,

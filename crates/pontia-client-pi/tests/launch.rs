@@ -61,26 +61,8 @@ time.sleep(8)
 }
 
 #[test]
-fn execution_policy_accepts_native_patterns_but_rejects_ambiguous_cli_entries() {
-    use pontia_agent_control::client_contract::ClientConfiguration;
-    use serde_json::json;
-    let config = pontia_client_pi::config::PiConfiguration::new(json!({}), json!({}));
-    config.validate_execution_policy("default", &serde_json::from_value(json!({"tools":["grep","custom_tool"],"disabled_tools":["mcp__remote__*"],"disable_mcp":true})).unwrap()).unwrap();
-    for tool in ["", "  ", "read,bash", "+read", "-write"] {
-        for field in ["tools", "disabled_tools"] {
-            let policy = serde_json::from_value(json!({field:[tool]})).unwrap();
-            assert!(
-                config
-                    .validate_execution_policy("default", &policy)
-                    .is_err()
-            );
-        }
-    }
-}
-
-#[test]
-fn execution_policy_is_applied_on_initial_launch_and_resume_without_accumulating_flags() {
-    use pontia_core::execution_policy::ExecutionPolicy;
+fn session_mode_is_applied_on_initial_launch_and_resume_without_accumulating_flags() {
+    use pontia_core::SessionMode;
     let _guard = path_env_lock().lock().unwrap();
     let root = tempfile::tempdir().unwrap();
     let log = root.path().join("tmux.log");
@@ -98,60 +80,19 @@ fn execution_policy_is_applied_on_initial_launch_and_resume_without_accumulating
     )
     .unwrap();
     std::fs::write(&native, "{\"type\":\"session\",\"id\":\"native-policy\"}\n").unwrap();
-    use pontia_agent_control::client_contract::ClientConfiguration;
-    let config = pontia_client_pi::config::PiConfiguration::new(
-        serde_json::json!({}),
-        serde_json::json!({}),
-    );
-    let restricted = config.restricted_execution_policy("default").unwrap();
-    assert_eq!(restricted.tools, None);
-    assert_eq!(restricted.disabled_tools, vec!["edit", "write"]);
-    assert!(restricted.disable_mcp);
-    assert!(!restricted.yolo);
-    config
-        .validate_execution_policy("default", &restricted)
-        .unwrap();
-    let mut approval_free = restricted.clone();
-    approval_free.yolo = true;
-    config
-        .validate_execution_policy("default", &approval_free)
-        .unwrap();
-    for (policy, expected) in [
+    for (mode, expected) in [
+        (SessionMode::Default, vec![]),
+        (SessionMode::Yolo, vec![]),
         (
-            serde_json::json!(restricted),
-            vec!["--exclude-tools", "edit,write", "--no-mcp"],
+            SessionMode::Restricted,
+            vec!["--exclude-tools", "edit,write", "--no-mcp", "--no-skills"],
         ),
-        (
-            serde_json::json!(approval_free),
-            vec!["--exclude-tools", "edit,write", "--no-mcp"],
-        ),
-        (
-            serde_json::json!({"tools":["read","grep","custom_tool"],"disabled_tools":["custom_tool","mcp__remote__*"],"disable_mcp":true,"yolo":true}),
-            vec![
-                "--tools",
-                "read,grep,custom_tool",
-                "--exclude-tools",
-                "custom_tool,mcp__remote__*",
-                "--no-mcp",
-            ],
-        ),
-        (serde_json::json!({"tools":[]}), vec!["--no-tools"]),
-        (
-            serde_json::json!({"disabled_tools":["edit","write"]}),
-            vec!["--exclude-tools", "edit,write"],
-        ),
-        (serde_json::json!({"disable_mcp":true}), vec!["--no-mcp"]),
-        (
-            serde_json::json!({"disable_skills":true}),
-            vec!["--no-skills"],
-        ),
-        (serde_json::json!({}), vec![]),
     ] {
         let mut runtime = launch_request(
             root.path(),
             Some(format!("sh '{}' --approve", capture.display())),
         );
-        runtime.execution_policy = serde_json::from_value::<ExecutionPolicy>(policy).unwrap();
+        runtime.mode = mode;
         for resume in [false, true] {
             let result = launcher
                 .launch(pontia_agent_control::clients::ClientLaunchRequest {
@@ -208,7 +149,7 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
         RuntimeStartRequest {
             reasoning_effort: None,
             launch_mode: Default::default(),
-            execution_policy: Default::default(),
+            mode: Default::default(),
             model: Some("provider/model".into()),
             runtime_id: None,
             session_id: "sess_configured".to_string(),
@@ -280,7 +221,7 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
         RuntimeStartRequest {
             reasoning_effort: None,
             launch_mode: Default::default(),
-            execution_policy: Default::default(),
+            mode: Default::default(),
             model: None,
             runtime_id: None,
             session_id: "sess_env_override".to_string(),
@@ -537,7 +478,7 @@ fn launch_request(root: &Path, start_command: Option<String>) -> RuntimeStartReq
     RuntimeStartRequest {
         reasoning_effort: None,
         launch_mode: Default::default(),
-        execution_policy: Default::default(),
+        mode: Default::default(),
         model: None,
         runtime_id: None,
         session_id: "sess_launch".into(),
@@ -611,4 +552,32 @@ fn start_session(
             native_session_key: None,
             native_session_file: None,
         })
+}
+
+#[test]
+fn persistent_launch_directory_reapplies_steering() {
+    use pontia_agent_control::client_contract::ClientConfiguration;
+
+    let root = tempfile::tempdir().unwrap();
+    let config = pontia_client_pi::config::PiConfiguration::new(
+        serde_json::json!({}),
+        serde_json::json!({}),
+    );
+    let initialize = || {
+        for file in config.private_directory_files() {
+            file.install(root.path()).unwrap();
+        }
+    };
+    initialize();
+    let settings = root.path().join(".pi/settings.json");
+    assert_eq!(
+        std::fs::read_to_string(&settings).unwrap(),
+        r#"{"steeringMode":"all"}"#
+    );
+    std::fs::write(&settings, r#"{"steeringMode":"one-at-a-time"}"#).unwrap();
+    initialize();
+    assert_eq!(
+        std::fs::read_to_string(&settings).unwrap(),
+        r#"{"steeringMode":"all"}"#
+    );
 }

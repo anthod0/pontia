@@ -1,26 +1,17 @@
 use pontia_core::{Error, Result};
-use serde_json::json;
 
 use super::BotService;
 
 impl BotService {
-    /// Retry a saved Bot's initialization without replacing user-managed resources.
+    /// Prepare the Bot's persistent launch directory and shared user file.
     pub async fn initialize(&self, bot_id: &str) -> Result<()> {
         let _guard = self.initialization_gate.lock().await;
         let bot = self.get(bot_id).await?;
         let root = self.home.join("bot");
         let directory = root.join(&bot.bot_id);
+        let clients = self.clients.clone();
         tokio::task::spawn_blocking(move || -> Result<()> {
-            let pi = directory.join(".pi");
-            std::fs::create_dir_all(&pi)?;
-            // Temporary until Pi exposes steeringMode as a CLI launch option.
-            let settings = tempfile::NamedTempFile::new_in(&pi)?;
-            serde_json::to_writer(settings.as_file(), &json!({"steeringMode": "all"}))?;
-            match settings.persist_noclobber(pi.join("settings.json")) {
-                Ok(_) => (),
-                Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => (),
-                Err(error) => return Err(error.error.into()),
-            }
+            clients.initialize_private_directory(&directory)?;
             match std::fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
