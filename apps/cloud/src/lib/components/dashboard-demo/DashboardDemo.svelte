@@ -224,16 +224,20 @@
 							<li>
 								<button
 									type="button"
-									class={cn(menuButton, 'h-auto min-h-12 max-md:min-h-14 gap-2.5 [&_svg]:size-7 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-primary', active && 'bg-accent font-medium text-accent-foreground')}
+									class={cn(menuButton, 'group/bot h-auto min-h-12 max-md:min-h-14 gap-2.5 [&_svg]:size-7 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-primary', active && 'bg-accent font-medium text-accent-foreground')}
 									aria-current={active ? 'page' : undefined}
 									onclick={() => selectBot(item.id)}
 								>
-									<span class="size-7 shrink-0"><BotAvatarMark shape={item.shape} color={item.color} /></span>
+									<span class="relative size-7 shrink-0">
+										<BotAvatarMark shape={item.shape} color={item.color} />
+										{#if todos}
+											<span role="img" aria-label={`${todos} open todos`} class={cn('pointer-events-none absolute -top-[3px] -right-[3px] size-2 rounded-full bg-primary ring-2 group-hover/bot:ring-accent max-md:size-2.5', active ? 'ring-accent' : 'ring-background')}></span>
+										{/if}
+									</span>
 									<span class="flex min-w-0 flex-1 flex-col">
 										<span class="truncate font-medium">{item.name}</span>
-										<span class={cn('truncate text-xs', item.working ? 'text-primary' : 'text-muted-foreground')}>{item.working ?? 'Idle'}</span>
+										{#if item.working}<span class="truncate text-xs text-primary">{item.working}</span>{/if}
 									</span>
-									{#if todos}<span class="rounded-full bg-primary-solid px-1.5 text-xs text-primary-foreground" aria-label={`${todos} open todos`}>{todos}</span>{/if}
 								</button>
 							</li>
 						{/each}

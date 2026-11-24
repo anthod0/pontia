@@ -15,7 +15,7 @@ npx @pontia/cli init
 
 **端到端加密与私有 Edge**：浏览器与目标设备是端到端加密的两端，代码、工作区与文件都留在你自己的机器上，Agent 工具按本机配置的权限运行。Pontia Cloud 负责账号登录与连接授权，Edge 作为零知识中继，仅转发密文、路由元数据、流量大小和时序。你可以直接使用官方 Edge，也可以自托管私有 Edge。[安全模型](https://pontia.dev/zh/docs/security) · [自托管 Edge](https://pontia.dev/zh/docs/self-hosted-edge)
 
-![Lead Bot Juniper 为徒步手册分派两名 Helper，收回地图核对报告并追踪两项待办决策](assets/screenshots/lead-desk.webp)
+![Lead Bot Juniper 为徒步手册分派两名 Helper，收回地图核对报告并追踪两项待办决策](https://files.pontia.dev/cloud/lead-desk-2640-f11325427ccd.webp)
 
 ## 核心能力
 
@@ -28,12 +28,12 @@ npx @pontia/cli init
 
 <table>
   <tr>
-    <td width="50%" valign="top"><a href="assets/screenshots/shared-memory.webp"><img src="assets/screenshots/shared-memory.webp" alt="在跨会话记忆图谱中检索过往决策"></a><br><strong>在跨会话记忆图谱中检索过往决策</strong></td>
-    <td width="50%" valign="top"><a href="assets/screenshots/role-profiles.webp"><img src="assets/screenshots/role-profiles.webp" alt="为角色配置 CLI、模型与推理强度"></a><br><strong>为角色配置 CLI、模型与推理强度</strong></td>
+    <td width="50%" valign="top"><a href="https://files.pontia.dev/cloud/shared-memory-2640-36fb6dde6684.webp"><img src="https://files.pontia.dev/cloud/shared-memory-2640-36fb6dde6684.webp" alt="在跨会话记忆图谱中检索过往决策"></a><br><strong>在跨会话记忆图谱中检索过往决策</strong></td>
+    <td width="50%" valign="top"><a href="https://files.pontia.dev/cloud/role-profiles-2640-7186bd2133d8.webp"><img src="https://files.pontia.dev/cloud/role-profiles-2640-7186bd2133d8.webp" alt="为角色配置 CLI、模型与推理强度"></a><br><strong>为角色配置 CLI、模型与推理强度</strong></td>
   </tr>
   <tr>
-    <td width="50%" valign="top"><a href="assets/screenshots/private-edge.webp"><img src="assets/screenshots/private-edge.webp" alt="查看自托管私有 Edge 的运行状态"></a><br><strong>查看自托管私有 Edge 的运行状态</strong></td>
-    <td width="50%" valign="top"><a href="assets/screenshots/helper-decisions.webp"><img src="assets/screenshots/helper-decisions.webp" alt="Helper 并行工作时，随时回复 Todo 决策"></a><br><strong>Helper 并行工作时，随时回复 Todo 决策</strong></td>
+    <td width="50%" valign="top"><a href="https://files.pontia.dev/cloud/private-edge-2640-69ad5bcacac0.webp"><img src="https://files.pontia.dev/cloud/private-edge-2640-69ad5bcacac0.webp" alt="查看自托管私有 Edge 的运行状态"></a><br><strong>查看自托管私有 Edge 的运行状态</strong></td>
+    <td width="50%" valign="top"><a href="https://files.pontia.dev/cloud/helper-decisions-2640-303231730ebb.webp"><img src="https://files.pontia.dev/cloud/helper-decisions-2640-303231730ebb.webp" alt="Helper 并行工作时，随时回复 Todo 决策"></a><br><strong>Helper 并行工作时，随时回复 Todo 决策</strong></td>
   </tr>
 </table>
 
@@ -46,9 +46,9 @@ npx @pontia/cli init
 **稍后，你在手机上收尾**：打开浏览器看完核对报告，在定名 Todo 里回复“用 Cedar Spur”，冬季绕行路线留到稍后再定。下次再维护这本手册时，Juniper 会从记忆图谱中调出这次定名决策，并按 `USER.md` 里的个人规则统一用公里标注里程。
 
 <p align="center">
-  <a href="assets/screenshots/phone-report.webp"><img src="assets/screenshots/phone-report.webp" width="30%" alt="在手机对话中收取核对报告"></a>
-  <a href="assets/screenshots/phone-decisions.webp"><img src="assets/screenshots/phone-decisions.webp" width="30%" alt="在 Todo 队列中逐项拍板"></a>
-  <a href="assets/screenshots/phone-devices.webp"><img src="assets/screenshots/phone-devices.webp" width="30%" alt="切换已注册设备、查看 Lead 进度"></a>
+  <a href="https://files.pontia.dev/cloud/phone-report-780-89961b4cba82.webp"><img src="https://files.pontia.dev/cloud/phone-report-780-89961b4cba82.webp" width="30%" alt="在手机对话中收取核对报告"></a>
+  <a href="https://files.pontia.dev/cloud/phone-decisions-780-0965988bfd21.webp"><img src="https://files.pontia.dev/cloud/phone-decisions-780-0965988bfd21.webp" width="30%" alt="在 Todo 队列中逐项拍板"></a>
+  <a href="https://files.pontia.dev/cloud/phone-devices-780-ed4abb0a446f.webp"><img src="https://files.pontia.dev/cloud/phone-devices-780-ed4abb0a446f.webp" width="30%" alt="切换已注册设备、查看 Lead 进度"></a>
 </p>
 
 ## 快速开始
