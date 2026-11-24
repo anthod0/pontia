@@ -1,6 +1,7 @@
 <script lang="ts">
   import { toast } from 'svelte-sonner'
   import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
+  import * as Tabs from '$lib/components/ui/tabs'
   import { t } from '$lib/i18n'
   import { navigate } from '$lib/navigation'
   import { useDeviceRuntime } from '../../../device/context'
@@ -58,63 +59,63 @@
   }
 </script>
 
-<MobileSessionFilterBar
-  {scope}
-  select={filter}
-  workspace={current ? workspaceTitle(current) : ''}
-  open={() => (workspaceOpen = true)}
-/>
-<div class="pb-16">
-  {#if sessions.query.error}<p role="alert">{sessions.query.error.message}</p>{/if}
-  {#each sessions.list as session, i (session.session_id)}
-    {#if scope !== 'pinned' && session.pinned_at && i === 0}<h2 class="py-2 text-sm text-muted-foreground">
-        {$t('common.pinned')}
-      </h2>
-    {:else if i > 0 && sessions.list[i - 1].pinned_at && !session.pinned_at}<h2
-        class="py-2 text-sm text-muted-foreground"
-      >
-        {$t('sessions.recent')}
-      </h2>{/if}
-    <MobileSessionRow
-      {session}
-      open={reveal === session.session_id}
-      reveal={(v) => (reveal = v ? session.session_id : null)}
-      menu={() => {
-        reveal = null
-        menu = session
-        menuOpen = true
-      }}
-      busy={sessions.busyId === session.session_id}
-      pin={() => run(() => sessions.pin(session))}
-      archive={() => run(() => sessions.archive(session))}
-    />
-  {:else}{#if !sessions.query.error}
-      <p role="status" class="py-8 text-center text-muted-foreground">
-        {$t(
-          sessions.query.isPending
-            ? 'common.loading'
-            : scope === 'archived'
-              ? 'sessions.noArchived'
-              : scope === 'active'
-                ? 'sessions.noActive'
-                : scope === 'pinned'
-                  ? 'sessions.noPinned'
-                  : 'sessions.empty',
-        )}
-      </p>{/if}
-  {/each}
-  {#if scope === 'all' && sessions.query.hasNextPage}<button
-      class="mobile-row"
-      disabled={sessions.query.isFetchingNextPage}
-      onclick={sessions.loadNextPage}>{$t('common.loadMore')}</button
-    >{/if}
-  {#if scope === 'active'}<button
-      class="min-h-11 w-full text-center text-sm text-primary"
-      onclick={() => filter('all')}>{$t('sessions.showClosed')}</button
-    >{/if}
-</div>
+<Tabs.Root value={scope} onValueChange={(value) => filter(value as SessionScope)} class="gap-1">
+  <MobileSessionFilterBar
+    workspace={current ? workspaceTitle(current) : ''}
+    open={() => (workspaceOpen = true)}
+  />
+  <Tabs.Content value={scope} class="pb-16 text-base">
+    {#if sessions.query.error}<p role="alert">{sessions.query.error.message}</p>{/if}
+    {#each sessions.list as session, i (session.session_id)}
+      {#if scope !== 'pinned' && session.pinned_at && i === 0}<h2 class="py-2 text-sm text-muted-foreground">
+          {$t('common.pinned')}
+        </h2>
+      {:else if i > 0 && sessions.list[i - 1].pinned_at && !session.pinned_at}<h2
+          class="py-2 text-sm text-muted-foreground"
+        >
+          {$t('sessions.recent')}
+        </h2>{/if}
+      <MobileSessionRow
+        {session}
+        open={reveal === session.session_id}
+        reveal={(v) => (reveal = v ? session.session_id : null)}
+        menu={() => {
+          reveal = null
+          menu = session
+          menuOpen = true
+        }}
+        busy={sessions.busyId === session.session_id}
+        pin={() => run(() => sessions.pin(session))}
+        archive={() => run(() => sessions.archive(session))}
+      />
+    {:else}{#if !sessions.query.error}
+        <p role="status" class="py-8 text-center text-muted-foreground">
+          {$t(
+            sessions.query.isPending
+              ? 'common.loading'
+              : scope === 'archived'
+                ? 'sessions.noArchived'
+                : scope === 'active'
+                  ? 'sessions.noActive'
+                  : scope === 'pinned'
+                    ? 'sessions.noPinned'
+                    : 'sessions.empty',
+          )}
+        </p>{/if}
+    {/each}
+    {#if scope === 'all' && sessions.query.hasNextPage}<button
+        class="mobile-row"
+        disabled={sessions.query.isFetchingNextPage}
+        onclick={sessions.loadNextPage}>{$t('common.loadMore')}</button
+      >{/if}
+    {#if scope === 'active'}<button
+        class="min-h-11 w-full text-center text-sm text-primary"
+        onclick={() => filter('all')}>{$t('sessions.showClosed')}</button
+      >{/if}
+  </Tabs.Content>
+</Tabs.Root>
 <button
-  class="absolute right-4 bottom-[calc(var(--mobile-tab-h)+var(--mobile-tab-gap)+14px)] flex h-13 items-center gap-2 rounded-2xl bg-primary px-5 text-primary-foreground shadow-md"
+  class="absolute right-4 bottom-[calc(var(--mobile-tab-h)+var(--mobile-tab-gap)+14px)] flex h-13 items-center gap-2 rounded-2xl bg-primary px-5 text-primary-foreground shadow-md dark:text-background"
   onclick={() => navigate('/new', { workspace: workspace || null })}><PlusIcon />{$t('nav.newChat')}</button
 >
 {#if workspaceOpen}<MobileWorkspaceSheet
