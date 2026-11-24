@@ -3,7 +3,7 @@ INSERT INTO users (id, display_name)
 VALUES ('{owner_id}', 'E2E edge operator')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO edges (id, user_id, access_scope, name, dns_label, tunnel_url, service_credential_hash)
+INSERT INTO edges (id, user_id, access_scope, name, dns_label, tunnel_url, service_credential_hash, preview_enabled)
 VALUES ('{edge_id}', '{owner_id}', 'public', '{name}', '{name}',
-        'wss://{hostname}/tunnel', '{credential_hash}')
+        'wss://{hostname}/tunnel', '{credential_hash}', 1)
 ON CONFLICT (id) DO NOTHING;

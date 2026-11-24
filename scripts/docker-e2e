@@ -253,7 +253,7 @@ class Lab:
         if self.resources("network"):
             run(["docker", "network", "rm", self.network], capture_output=True)
         for name in ("edge/config.json", "edge/credential", "edge/tls.pem", "cloud-bootstrap.sql",
-                     "browser-login.json", "network.json"):
+                     "edge/preview-tls.pem", "preview-cert.pem", "browser-login.json", "network.json"):
             (self.state / name).unlink(missing_ok=True)
         print(f"Instance {self.name} removed. Its login credentials are retained in {self.state / 'auth'}.")
 
@@ -354,6 +354,16 @@ def prepare_edge(state, config):
     write_private(state / "edge/tls.pem",
                   (config / "tls/fullchain.pem").read_bytes().rstrip() + b"\n"
                   + (config / "tls/privkey.pem").read_bytes())
+    # Give the disposable browser just the public leaf. Keep the key on the edge.
+    with tempfile.TemporaryDirectory() as temporary:
+        key = Path(temporary) / "preview.key"
+        cert = run(["openssl", "req", "-x509", "-newkey", "ec", "-pkeyopt",
+                    "ec_paramgen_curve:P-256", "-nodes", "-days", "2", "-keyout", str(key),
+                    "-subj", "/CN=Docker E2E Preview", "-addext", "basicConstraints=CA:FALSE",
+                    "-addext", "extendedKeyUsage=serverAuth", "-addext",
+                    "subjectAltName=DNS:*.docker-e2e.p.pontia.dev"], capture_output=True).stdout
+        write_private(state / "preview-cert.pem", cert)
+        write_private(state / "edge/preview-tls.pem", cert + key.read_bytes())
     return seed
 
 

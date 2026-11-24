@@ -153,6 +153,16 @@ If you have a complete validation script, use this command to manage startup and
 ./scripts/docker-e2e run bash /absolute/path/to/validation.sh
 ```
 
+## Localhost preview
+
+With the test OpenAI key configured, run the preview checks from a fresh instance:
+
+```bash
+./scripts/docker-e2e --name preview run python3 docker/e2e/test_localhost_preview.py
+```
+
+The container browser approves device registration, opens the result file from a real Claude Code Session, and follows its localhost links. The checks cover IPv4 and IPv6 HTTP, streaming events, WebSockets, redirects, preview cookie isolation, and error pages.
+
 ## Validation scope
 
 This environment validates the complete local application flow on Linux, using real providers for model calls. Finish each run within 24 hours.

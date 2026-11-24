@@ -34,7 +34,12 @@ caddy run --config /etc/caddy/Caddyfile --adapter caddyfile &
 pids+=("$!")
 # This disposable browser uses the container boundary, not Chromium's sandbox.
 # Never mount host HOME, a daily browser profile, or the Docker socket here.
-dbus-run-session -- chromium --no-sandbox --no-first-run \
+# Trust this instance's wildcard certificate only in its browser profile.
+nss_db="$HOME/.pki/nssdb"
+mkdir -p "$nss_db"
+if [[ ! -f "$nss_db/cert9.db" ]]; then certutil -N --empty-password -d "sql:$nss_db"; fi
+certutil -A -d "sql:$nss_db" -n pontia-preview -t 'P,,' -i /run/preview-cert.pem
+dbus-run-session -- chromium --host-resolver-rules="MAP *.docker-e2e.p.pontia.dev $E2E_EDGE_IP" --no-sandbox --no-first-run \
   --profile-directory=Default \
   --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 \
   --disable-background-networking --password-store=basic \
