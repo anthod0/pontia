@@ -38,13 +38,6 @@
   let todos = $state(false)
   let context = $state(false)
   let contextId = $state('')
-  const status = $derived(
-    timeline.status.kind === 'idle'
-      ? $t('state.idle')
-      : timeline.status.kind === 'working'
-        ? timeline.status.title
-        : $t('bots.processing'),
-  )
   function jump(id: string) {
     if (stack.layers.length) stack.back(() => jump(id))
     else void chat.jumpTo(id)
@@ -136,15 +129,12 @@
       class="pointer-events-none absolute inset-x-0 bottom-0 z-10 [&>div:not(:first-child)]:pointer-events-auto"
     >
       <div class="pointer-events-none flex items-center justify-between gap-1">
-        <p class="flex min-w-0 items-center gap-2 px-3 py-1 text-sm text-foreground" role="status">
-          <BotAvatar
-            class="size-5"
-            shape={timeline.bot.avatar_shape}
-            color={timeline.bot.avatar_color}
-            working={timeline.status.kind !== 'idle'}
-          />
-          <span class="truncate">{status}</span>
-        </p>
+        {#if timeline.status.kind !== 'idle'}
+          <p class="mobile-glass flex min-w-0 items-center gap-2 rounded-full px-3 py-1 text-sm leading-5 text-muted-foreground" role="status">
+            <BotAvatar class="size-5 shrink-0" shape={timeline.bot.avatar_shape} color={timeline.bot.avatar_color} working />
+            <span class="shimmer truncate">{timeline.status.kind === 'working' ? timeline.status.title : $t('bots.processing')}</span>
+          </p>
+        {/if}
         {#if timeline.openTodoCount}<button
             class="mobile-glass pointer-events-auto ml-auto min-h-11 shrink-0 rounded-full px-4"
             onclick={() => (todos = true)}>{$t('bots.todos')} · {timeline.openTodoCount}</button
