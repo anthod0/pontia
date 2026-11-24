@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createQuery } from '@tanstack/svelte-query'
+  import { writable } from 'svelte/store'
   import { t, number } from '$lib/i18n';
   import { downloads } from '$lib/downloads/manager'
   import { useDeviceRuntime } from '../../device/context';
@@ -19,7 +20,9 @@
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import RenameSessionDialog from '../chat/RenameSessionDialog.svelte'
   import BotSettingsDialog from '../bots/BotSettingsDialog.svelte'
-  import SettingsSectionNav from '../settings/SettingsSectionNav.svelte'
+  import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
+  import SettingsSectionSheet from '../settings/SettingsSectionSheet.svelte'
+  import { useSettingsDetail } from '../settings/settingsDetail'
   import { isSettingsPath, isSettingsSectionActive, settingsSections } from '../settings/sections'
   import { snapshotSessionOverview } from "../../queries/sessionOverview";
   const device = useDeviceRuntime();
@@ -73,6 +76,10 @@
   const chatPath = $derived(isChatPath(currentPath))
   const settingsPath = $derived(isSettingsPath(currentPath))
   const settingsTitle = $derived($t(settingsSections.find((section) => isSettingsSectionActive(section, currentPath))?.label ?? 'settings.title'))
+  const settingsDetail = useSettingsDetail() ?? writable(null)
+  // Public Dashboards name the device whose settings are shown.
+  const settingsEyebrow = $derived(device.name ? `${$t('settings.title')} · ${device.name}` : $t('settings.title'))
+  let sectionSheetOpen = $state(false)
   const pillClass = 'pointer-events-auto h-12 rounded-lg bg-popover px-0.5 ring-1 ring-foreground/10 md:h-8 md:px-1'
   const groupClass = $derived(['flex min-w-0 items-center gap-1', chatPath && pillClass, chatPath && !title && !botId && 'md:hidden'])
   // Phones get larger touch targets; wider screens keep the compact bar.
@@ -109,12 +116,36 @@
 <!-- Phones leave a gap above the tall touch targets; wider screens keep the compact bar. -->
 <header class={['flex h-14 items-center pt-2 md:pt-0', chatPath ? 'pointer-events-none px-3 md:h-12 md:px-4' : settingsPath ? 'bg-surface pr-3 md:h-12 md:pr-0' : 'bg-surface px-3 md:h-8 md:px-4']}>
   {#if settingsPath}
-    <!-- Phones switch sections here; wider screens list them in the sidebar and show the current one as the title. -->
-    <div class="flex min-w-0 items-center gap-2 px-3 md:hidden">
-      <Button variant="ghost" size="icon-sm" class={mobileIconClass} aria-label={$t('nav.backToChat')} onclick={backToChat}>
-        <CaretLeftIcon />
-      </Button>
-      <SettingsSectionNav />
+    <!-- Phones title the page here and switch sections from a bottom sheet; wider screens list them in the sidebar and show the current one as the title. -->
+    <div class="flex min-w-0 items-center gap-1 px-2 md:hidden">
+      {#if $settingsDetail}
+        {@const detail = $settingsDetail}
+        <Button variant="ghost" size="icon-sm" class={mobileIconClass} aria-label={settingsTitle} disabled={detail.disabled} onclick={detail.back}>
+          <CaretLeftIcon />
+        </Button>
+        <div class="flex min-w-0 flex-col py-1 pl-1 leading-tight">
+          <span class="truncate text-[0.6875rem] text-muted-foreground">{settingsTitle}</span>
+          <span class="truncate text-base font-semibold text-heading">{detail.title}</span>
+        </div>
+      {:else}
+        <Button variant="ghost" size="icon-sm" class={mobileIconClass} aria-label={$t('nav.backToChat')} onclick={backToChat}>
+          <CaretLeftIcon />
+        </Button>
+        <button
+          type="button"
+          class="flex h-11 min-w-0 items-center gap-1.5 rounded-md px-2.5 text-left text-heading outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring aria-expanded:bg-muted"
+          aria-haspopup="dialog"
+          aria-expanded={sectionSheetOpen}
+          title={$t('settings.switchSection')}
+          onclick={() => { sectionSheetOpen = true }}
+        >
+          <span class="flex min-w-0 flex-col leading-tight">
+            <span class="truncate text-[0.6875rem] text-muted-foreground">{settingsEyebrow}</span>
+            <span class="truncate text-base font-semibold">{settingsTitle}</span>
+          </span>
+          <CaretDownIcon aria-hidden="true" class={['size-4 shrink-0 text-muted-foreground transition-transform', sectionSheetOpen && 'rotate-180']} />
+        </button>
+      {/if}
     </div>
     <h1 class="hidden px-6 text-base font-semibold text-heading md:block">{settingsTitle}</h1>
   {:else}
@@ -179,6 +210,10 @@
   </TopBarMoreMenu>
   {/if}
 </header>
+
+{#if settingsPath}
+  <SettingsSectionSheet bind:open={sectionSheetOpen} {currentPath} deviceName={device.name} onBackToChat={backToChat} />
+{/if}
 
 {#if botSettingsOpen && botId && currentBot}
   <BotSettingsDialog bot={currentBot} onclose={() => { botSettingsOpen = false }} onsaved={() => {

@@ -13,6 +13,8 @@
   import CaretLeftIcon from 'phosphor-svelte/lib/CaretLeftIcon'
   import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
+  import { useTopBarAction } from '../components/layout/topBarAction'
+  import { useSettingsDetail } from '../components/settings/settingsDetail'
   import ProfileForm from './agentProfiles/ProfileForm.svelte'
   import DeleteProfileDialog from './agentProfiles/DeleteProfileDialog.svelte'
 
@@ -37,15 +39,32 @@
     if (selectedId === null && profiles.data?.length && matchMedia('(min-width: 64rem)').matches) selectedId = profiles.data[0].profile_id
   })
 
+  // Phones put the page action and the open profile in the top bar.
+  const topBarAction = useTopBarAction()
+  const settingsDetail = useSettingsDetail()
+  const creationDisabled = $derived(saving || loading || !profiles.data)
+  $effect(() => {
+    topBarAction?.set(editorOpen ? null : newProfileAction)
+    settingsDetail?.set(editorOpen ? { title: selected?.name ?? $t('profiles.new'), back: () => selectedId = null, disabled: saving } : null)
+  })
+  $effect(() => () => {
+    topBarAction?.set(null)
+    settingsDetail?.set(null)
+  })
+
   function clientName(profile: AgentProfileView) {
     return clients.data?.find((client) => client.client_type === profile.client_type && client.client_key === profile.client_key)?.name
       ?? `${profile.client_type} / ${profile.client_key}`
   }
 </script>
 
+{#snippet newProfileAction()}
+  <Button class="mr-3 h-10 shrink-0 px-3 max-md:mt-2 md:hidden" disabled={creationDisabled} onclick={() => selectedId = ''}><PlusIcon data-icon="inline-start" />{$t('profiles.newShort')}</Button>
+{/snippet}
+
 <section class="space-y-6">
-  <div class="flex flex-wrap justify-end gap-2 {editorOpen ? 'max-lg:hidden' : ''}">
-    <Button disabled={saving || loading || !profiles.data} onclick={() => selectedId = ''}><PlusIcon data-icon="inline-start" />{$t('profiles.new')}</Button>
+  <div class="flex flex-wrap justify-end gap-2 max-md:hidden {editorOpen ? 'max-lg:hidden' : ''}">
+    <Button disabled={creationDisabled} onclick={() => selectedId = ''}><PlusIcon data-icon="inline-start" />{$t('profiles.new')}</Button>
   </div>
 
   {#if profiles.isError}
@@ -81,9 +100,9 @@
 
       {#if editorOpen}
         <div class="min-w-0 space-y-5">
-          <Button variant="ghost" size="sm" class="-ml-2 lg:hidden" disabled={saving} onclick={() => selectedId = null}><CaretLeftIcon data-icon="inline-start" />{$t('profiles.title')}</Button>
+          <Button variant="ghost" size="sm" class="-ml-2 max-md:hidden lg:hidden" disabled={saving} onclick={() => selectedId = null}><CaretLeftIcon data-icon="inline-start" />{$t('profiles.title')}</Button>
           <div class="min-w-0 space-y-1">
-            <h3 class="text-lg font-semibold break-words text-heading">{selected?.name ?? $t('profiles.new')}</h3>
+            <h3 class="text-lg max-md:sr-only font-semibold break-words text-heading">{selected?.name ?? $t('profiles.new')}</h3>
             {#if selected?.client_type}
               <p class="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
                 <ClientIcon clientType={selected.client_type} acpAgentId={selected.client_key} class="size-3.5 shrink-0 text-foreground" />

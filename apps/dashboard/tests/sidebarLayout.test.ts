@@ -6,6 +6,7 @@ import TopBarHost from "./components/layout/TopBarHost.svelte";
 import SettingsShellHost from "./components/settings/SettingsShellHost.svelte";
 import { downloads } from "../src/lib/downloads/manager";
 import { testDevice } from "./deviceFixture";
+import { DeviceRuntime } from "../src/device/runtime";
 
 import type { BotMessagePage, BotWorkStatus } from "../src/api/types";
 import type { BotUpdate } from "../src/services/botChatStream";
@@ -163,8 +164,6 @@ vi.mock("../src/queries/sessionOverview", async (importOriginal) => {
   };
 });
 beforeEach(() => {
-  // jsdom has no scrollIntoView; the settings tab bar scrolls the current section into view.
-  Element.prototype.scrollIntoView = vi.fn();
   window.history.pushState({}, "", "/dashboard");
   mocks.sessions.set([]);
   mocks.sidebarPinnedSessions.set([]);
@@ -1053,24 +1052,59 @@ test("chat new shortcut on a session route preserves the current session workspa
   expect(mocks.navigate).toHaveBeenLastCalledWith("/", { workspace: "workspace-current" });
 });
 
-test("settings pages show section tabs in the top bar", () => {
+test("the settings top bar opens a section sheet that marks the current section", async () => {
   window.history.pushState({}, "", "/dashboard/settings/workspaces");
 
   render(TopBarHost);
 
-  const nav = within(screen.getByRole("banner")).getByRole("navigation", {
-    name: /settings sections/i,
-  });
-  expect(within(nav).getByRole("link", { name: /^common$/i })).toHaveAttribute(
-    "href",
+  const banner = within(screen.getByRole("banner"));
+  expect(banner.queryByRole("navigation", { name: /settings sections/i })).not.toBeInTheDocument();
+  const title = banner.getByRole("button", { name: /Settings\s*Workspaces/ });
+  expect(title).toHaveAttribute("aria-haspopup", "dialog");
+  await fireEvent.click(title);
+
+  const sheet = await screen.findByRole("dialog", { name: "Settings" });
+  const nav = within(sheet).getByRole("navigation", { name: /settings sections/i });
+  expect(
+    within(nav)
+      .getAllByRole("link")
+      .map((link) => link.getAttribute("href")),
+  ).toEqual([
     "/dashboard/settings/common",
-  );
-  const activeLink = within(nav).getByRole("link", { name: /^workspaces$/i });
-  expect(activeLink).toHaveAttribute("aria-current", "page");
-  expect(within(nav).getByRole("link", { name: /^memory$/i })).toHaveAttribute(
-    "href",
+    "/dashboard/settings/clients",
+    "/dashboard/settings/agent-profiles",
+    "/dashboard/settings/workspaces",
     "/dashboard/settings/memory",
+  ]);
+  expect(within(nav).getByRole("link", { name: "Workspaces" })).toHaveAttribute(
+    "aria-current",
+    "page",
   );
+  expect(within(nav).getByRole("link", { name: "Memory" })).not.toHaveAttribute("aria-current");
+});
+
+test("the settings section sheet navigates with the router and closes", async () => {
+  window.history.pushState({}, "", "/dashboard/settings/common");
+  render(TopBarHost);
+
+  await fireEvent.click(screen.getByRole("button", { name: /Settings\s*Common/ }));
+  const sheet = await screen.findByRole("dialog", { name: "Settings" });
+  await fireEvent.click(within(sheet).getByRole("link", { name: "Workspaces" }));
+
+  expect(mocks.navigate).toHaveBeenCalledWith("/settings/workspaces");
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+});
+
+test("the settings section sheet returns to chat", async () => {
+  window.history.pushState({}, "", "/dashboard/settings/memory");
+  render(TopBarHost);
+
+  await fireEvent.click(screen.getByRole("button", { name: /Settings\s*Memory/ }));
+  const sheet = await screen.findByRole("dialog", { name: "Settings" });
+  await fireEvent.click(within(sheet).getByRole("button", { name: "Back to chat" }));
+
+  expect(mocks.navigate).toHaveBeenCalledWith("/");
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 });
 
 test("the settings top bar back button returns to chat instead of opening the sidebar", async () => {
@@ -1084,21 +1118,6 @@ test("the settings top bar back button returns to chat instead of opening the si
 
   expect(mocks.navigate).toHaveBeenCalledWith("/");
   expect(onOpenChange).not.toHaveBeenCalled();
-});
-
-test("the settings tab bar scrolls the current section into view", async () => {
-  window.history.pushState({}, "", "/dashboard/settings/memory");
-
-  render(TopBarHost);
-
-  const nav = within(screen.getByRole("banner")).getByRole("navigation", {
-    name: /settings sections/i,
-  });
-  const memory = within(nav).getByRole("link", { name: /^memory$/i });
-  expect(memory).toHaveAttribute("aria-current", "page");
-  await waitFor(() =>
-    expect(vi.mocked(Element.prototype.scrollIntoView).mock.contexts).toContain(memory),
-  );
 });
 
 test("the sidebar lists settings sections instead of sessions on settings pages", async () => {
@@ -1142,15 +1161,6 @@ test("settings shell renders the current settings page content", () => {
   render(SettingsShellHost);
 
   expect(screen.getByText("Current settings page content")).toBeInTheDocument();
-});
-
-test("settings section tabs use router navigation instead of a document reload", async () => {
-  window.history.pushState({}, "", "/dashboard/settings/common");
-  render(TopBarHost);
-
-  await fireEvent.click(screen.getByRole("link", { name: /^workspaces$/i }));
-
-  expect(mocks.navigate).toHaveBeenCalledWith("/settings/workspaces");
 });
 
 test("shows a sidebar loading failure instead of claiming there are no sessions", async () => {
@@ -1323,4 +1333,15 @@ test("sidebar refreshes every Bot status from live updates without opening its c
   view.unmount();
   expect(botStreams.has("second")).toBe(false);
   vi.restoreAllMocks();
+});
+
+test("public settings name the device above the section title", async () => {
+  window.history.pushState({}, "", "/dashboard/settings/common");
+  const device = new DeviceRuntime("office", testDevice.access, "MacBook Pro");
+  render(TopBarHost, { props: { device } });
+
+  await fireEvent.click(screen.getByRole("button", { name: /Settings · MacBook Pro\s*Common/ }));
+  const sheet = await screen.findByRole("dialog", { name: "Settings" });
+  expect(within(sheet).getByText("MacBook Pro")).toBeInTheDocument();
+  device.dispose();
 });
