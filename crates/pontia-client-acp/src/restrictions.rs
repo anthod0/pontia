@@ -136,7 +136,16 @@ impl SessionPolicy {
                     .meta
                     .insert("kiro".into(), json!({"modeId":"pontia-restricted"}));
             }
-            (Some(RestrictedExecution::Antigravity), SessionMode::Restricted)
+            (Some(RestrictedExecution::Kiro), SessionMode::Yolo) => {
+                // Kiro keeps session presets in memory, so every new and load request carries it.
+                policy
+                    .meta
+                    .insert("kiro".into(), json!({"policyPreset":["allow-all"]}));
+            }
+            (
+                Some(RestrictedExecution::Antigravity),
+                SessionMode::Restricted | SessionMode::Yolo,
+            )
             | (_, SessionMode::Default) => {}
             _ => {
                 return Err(Error::CapabilityUnavailable(format!(

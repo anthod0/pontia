@@ -73,7 +73,7 @@ Choose a Session mode with the optional `mode` field on `POST /api/v1/sessions`.
 | Mode | Effect |
 | --- | --- |
 | `default` (or omit the field) | Use the Client’s usual settings, as when starting a Session from the Dashboard. |
-| `yolo` | Run Pi, Claude Code, Codex, or Grok Build without approval prompts. Pi already runs tools without approval. |
+| `yolo` | Run Pi, Claude Code, Codex, Grok Build, Antigravity, or Kiro without approval prompts. Pi already runs tools without approval. |
 | `restricted` | Use the Client’s built-in unattended configuration, including its tool restrictions. Bots, memory retrieval, and Dreaming use this mode. |
 
 For example, to start Pi with its editing tools, MCP, and skills disabled:

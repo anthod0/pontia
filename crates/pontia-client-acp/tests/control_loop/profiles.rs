@@ -333,6 +333,67 @@ async fn antigravity_prepares_its_workspace_agent_again_on_process_recovery() {
     h.stop().await;
 }
 
+/// Creates a yolo Session in an ordinary workspace, then crashes, terminates,
+/// reads exited history, and resumes it.
+async fn exercise_yolo_session(h: &Harness, agent: &str) {
+    let session = create(h, json!({"metadata":{"acp_agent_id":agent}, "mode":"yolo"}))
+        .await
+        .unwrap();
+    h.crash_agent(&session);
+    h.wait_ready(&session, 2).await;
+    h.app
+        .session_commands()
+        .terminate_session(&session)
+        .await
+        .unwrap();
+    h.history(&session).await.unwrap();
+    h.app
+        .session_commands()
+        .resume_session(&session, h.root.path())
+        .await
+        .unwrap();
+    h.wait_ready(&session, 3).await;
+}
+
+#[tokio::test]
+async fn antigravity_yolo_skips_permissions_with_the_user_configuration() {
+    let h = Harness::new(&[("ACP_ANTIGRAVITY", "1")]).await;
+    exercise_yolo_session(&h, "antigravity").await;
+    let wire = h.wire();
+    let launches: Vec<_> = wire.iter().filter_map(|item| item.get("startup")).collect();
+    assert_eq!(launches.len(), 4, "{launches:?}");
+    for launch in launches {
+        assert_eq!(
+            launch["argv"].as_array().unwrap()[1..],
+            [json!("--dangerously-skip-permissions")]
+        );
+    }
+    assert!(!h.root.path().join(".agents").exists());
+    assert!(!h.root.path().join("clients/antigravity").exists());
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn kiro_yolo_applies_the_allow_all_preset_to_every_native_session_request() {
+    let h = Harness::new(&[("ACP_KIRO", "1")]).await;
+    exercise_yolo_session(&h, "kiro").await;
+    assert_eq!(h.requests("session/new"), 1);
+    assert!(h.requests("session/load") >= 3);
+    for frame in h.wire() {
+        if matches!(
+            frame["method"].as_str(),
+            Some("session/new" | "session/load")
+        ) {
+            assert_eq!(
+                frame["params"]["_meta"]["kiro"],
+                json!({"policyPreset":["allow-all"]})
+            );
+        }
+    }
+    assert!(!h.root.path().join(".kiro").exists());
+    h.stop().await;
+}
+
 #[tokio::test]
 async fn ordinary_kiro_workspaces_keep_the_native_agent_and_their_configuration() {
     let h = Harness::new(&[("ACP_KIRO", "1")]).await;

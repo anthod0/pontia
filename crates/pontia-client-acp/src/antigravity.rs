@@ -1,5 +1,6 @@
 use crate::AcpLaunch;
 use pontia_agent_control::client_contract::LaunchFile;
+use pontia_core::SessionMode;
 use std::{fs, io, os::unix::fs::symlink, path::Path};
 
 pub(crate) const FILES: &[LaunchFile] = &[LaunchFile {
@@ -16,20 +17,28 @@ subagent: false
 ",
 }];
 
-pub(crate) fn configure_launch(home: &Path, launch: &mut AcpLaunch) -> io::Result<()> {
-    let data = home.join("clients/antigravity");
-    fs::create_dir_all(&data)?;
-    if let Some(user_home) = std::env::home_dir() {
-        link_default_token(&data, &user_home)?;
+pub(crate) fn configure_launch(
+    home: &Path,
+    mode: SessionMode,
+    launch: &mut AcpLaunch,
+) -> io::Result<()> {
+    if mode == SessionMode::Restricted {
+        let data = home.join("clients/antigravity");
+        fs::create_dir_all(&data)?;
+        if let Some(user_home) = std::env::home_dir() {
+            link_default_token(&data, &user_home)?;
+        }
+        launch.args.extend([
+            "--gemini-dir".into(),
+            data.to_string_lossy().into_owned(),
+            "--agent".into(),
+            "pontia-restricted".into(),
+            "--include-default-customizations=false".into(),
+        ]);
     }
-    launch.args.extend([
-        "--gemini-dir".into(),
-        data.to_string_lossy().into_owned(),
-        "--agent".into(),
-        "pontia-restricted".into(),
-        "--include-default-customizations=false".into(),
-        "--dangerously-skip-permissions".into(),
-    ]);
+    if mode.bypasses_approvals() {
+        launch.args.push("--dangerously-skip-permissions".into());
+    }
     Ok(())
 }
 

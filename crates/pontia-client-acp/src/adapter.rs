@@ -224,12 +224,12 @@ impl ClientSession for AcpAdapter {
                         file.install(&cwd)?;
                     }
                 }
-                if matches!(
-                    definition.restricted_execution,
-                    Some(crate::RestrictedExecution::Antigravity)
-                ) {
-                    crate::antigravity::configure_launch(&root, &mut launch)?;
-                }
+            }
+            if matches!(
+                definition.restricted_execution,
+                Some(crate::RestrictedExecution::Antigravity)
+            ) {
+                crate::antigravity::configure_launch(&root, request.mode, &mut launch)?;
             }
             peer::runtime_event(
                 &events,

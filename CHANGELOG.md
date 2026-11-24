@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Create Antigravity and Kiro Sessions with `mode: "yolo"` to run without approval prompts. They keep their usual tools, MCP servers, and skills.
+
 ## [0.8.13] - 2026-11-24
 
 ### Upgrade notes
