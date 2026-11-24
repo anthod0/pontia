@@ -83,7 +83,9 @@ sudo pontia-edge auto-update enable
 sudo pontia-edge auto-update disable
 ```
 
-自动更新每十分钟检查一次，附带最多十分钟的随机延迟。禁用后续检查时，已在进行中的更新会继续完成。
+启用自动更新后，在线的 Edge 收到 Cloud 的稳定版发布通知时也会检查更新。
+
+自动更新每十分钟检查一次。禁用后续检查时，已在进行中的更新会继续完成。
 
 ## 存储的文件
 

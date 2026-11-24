@@ -73,7 +73,7 @@ pub(crate) async fn relay(
         return StatusCode::BAD_REQUEST.into_response();
     }
     let Some(device_id) =
-        admission_token(request.headers()).and_then(|token| edge.access_tokens.authenticate(token))
+        bearer_token(request.headers()).and_then(|token| edge.access_tokens.authenticate(token))
     else {
         return error(StatusCode::UNAUTHORIZED, "invalid_admission_token");
     };
@@ -112,7 +112,7 @@ pub(crate) fn exact_origin(headers: &HeaderMap, expected: &str) -> bool {
     values.next().and_then(|value| value.to_str().ok()) == Some(expected) && values.next().is_none()
 }
 
-fn admission_token(headers: &HeaderMap) -> Option<&str> {
+pub(crate) fn bearer_token(headers: &HeaderMap) -> Option<&str> {
     let mut values = headers.get_all(header::AUTHORIZATION).iter();
     let token = values.next()?.to_str().ok()?.strip_prefix("Bearer ")?;
     if values.next().is_some()

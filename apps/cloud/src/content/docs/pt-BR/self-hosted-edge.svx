@@ -83,7 +83,9 @@ sudo pontia-edge auto-update enable
 sudo pontia-edge auto-update disable
 ```
 
-As atualizações automáticas são verificadas a cada dez minutos, com até dez minutos de atraso aleatório. Uma atualização já em andamento continua mesmo quando as verificações futuras são desativadas.
+Com as atualizações automáticas ativadas, um Edge online também procura atualizações quando a Cloud anuncia uma nova versão estável.
+
+As atualizações automáticas são verificadas a cada dez minutos. Uma atualização já em andamento continua mesmo quando as verificações futuras são desativadas.
 
 ## Arquivos armazenados
 

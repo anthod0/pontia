@@ -49,6 +49,20 @@ impl AccessTokenVerifier {
         (signed.header.typ.as_deref() == Some(typ)).then_some(signed.claims)
     }
 
+    pub(crate) fn update_nonce(&self, token: &str) -> Option<Uuid> {
+        #[derive(Deserialize)]
+        struct Update {
+            #[serde(rename = "aud")]
+            _audience: Uuid,
+            jti: Uuid,
+            iat: u64,
+            exp: u64,
+        }
+        let claims: Update = self.claims(token, "pontia-edge-update+jwt")?;
+        remaining_lifetime(claims.iat, claims.exp)?;
+        (claims.exp - claims.iat <= 60).then_some(claims.jti)
+    }
+
     pub(crate) fn authenticate(&self, token: &str) -> Option<Uuid> {
         let claims: Claims = self.claims(token, "JWT")?;
         remaining_lifetime(claims.iat, claims.exp)?;

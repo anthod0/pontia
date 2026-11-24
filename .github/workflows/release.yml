@@ -423,3 +423,29 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           bun run deploy
+
+  notify-edges:
+    name: Notify online Edges
+    needs: [detect, release, deploy-cloudflare]
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - name: Notify registered Edges in pages
+        env:
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          set -euo pipefail
+          endpoint=https://pontia.dev/api/internal/notify-update
+          cursor=''
+          while true; do
+            token=$(curl -fsS --max-time 20 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$endpoint" | jq -er .value)
+            echo "::add-mask::$token"
+            result=$(curl -fsS --retry 2 --max-time 30 -X POST -H "Authorization: Bearer $token" \
+              --url-query "version=$VERSION" --url-query "after=$cursor" "$endpoint")
+            echo "$result"
+            cursor=$(jq -r '.next // empty' <<< "$result")
+            [[ -n "$cursor" ]] || break
+          done

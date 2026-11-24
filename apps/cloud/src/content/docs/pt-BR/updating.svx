@@ -64,7 +64,9 @@ sudo pontia-edge auto-update enable
 sudo pontia-edge auto-update disable
 ```
 
-O timer verifica a cada dez minutos, com até dez minutos de atraso aleatório. Desativá-lo interrompe as verificações futuras; uma atualização já em execução continua até o fim.
+Com as atualizações automáticas ativadas, um Edge online também procura atualizações quando a Cloud anuncia uma nova versão estável.
+
+O timer verifica a cada dez minutos. Desativá-lo interrompe as verificações futuras; uma atualização já em execução continua até o fim. Em instalações existentes, execute `sudo pontia-edge auto-update enable` para aplicar o intervalo de dez minutos.
 
 ## Antes e depois de atualizar
 

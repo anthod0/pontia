@@ -10,6 +10,7 @@ pub mod credential;
 pub mod enrollment;
 mod files;
 pub mod network;
+mod notify_update;
 mod online;
 pub mod pending_init;
 pub mod port;
@@ -52,6 +53,7 @@ pub struct Edge {
     pub(crate) redeemer: TicketRedeemer,
     pub(crate) origins: BrowserOrigins,
     access_tokens: AccessTokenVerifier,
+    updates: notify_update::Notifications,
     online: OnlineDevices,
     pending: Arc<Semaphore>,
     limits: ConnectionLimits,
@@ -69,6 +71,7 @@ impl Edge {
             redeemer,
             origins,
             access_tokens,
+            updates: Default::default(),
             online: OnlineDevices::default(),
             pending: Arc::new(Semaphore::new(limits.max_pending)),
             limits,
@@ -82,10 +85,8 @@ impl Edge {
 
     pub fn router(&self, hostname: &str, port: u16, preview_base: Option<&str>) -> Router {
         let control = Router::new()
-            .route(
-                "/healthz",
-                get(|| async { ([("pontia-edge-version", pontia_version::version())], "ok") }),
-            )
+            .route("/healthz", get(notify_update::health))
+            .route("/__pontia/notify-update", post(notify_update::notify))
             .route("/tunnel", get(connection::upgrade))
             .merge(
                 Router::new()

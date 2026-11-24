@@ -64,7 +64,9 @@ sudo pontia-edge auto-update enable
 sudo pontia-edge auto-update disable
 ```
 
-定时器每十分钟检查一次，附带最多十分钟的随机延迟。禁用后将停止后续检查；已在运行的更新会继续完成。
+启用自动更新后，在线的 Edge 收到 Cloud 的稳定版发布通知时也会检查更新。
+
+定时器每十分钟检查一次。禁用后将停止后续检查；已在运行的更新会继续完成。 已有安装可运行 `sudo pontia-edge auto-update enable` 应用十分钟调度。
 
 ## 更新前后
 
