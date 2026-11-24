@@ -7,17 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.13] - 2026-11-24
+
+### Upgrade notes
+
+- **Claude Code:** On each machine that uses Claude Code and is upgrading from Pontia 0.8.12 or earlier, run `pontia update`, then manually run `pontia setup claude` once. On subsequent upgrades, `pontia update` automatically updates the managed Claude integration package to match Pontia.
+- Upgrading clears existing Workflow records. Sessions and Handoff files are preserved.
+
 ### Added
 
+- In the Git tab of a Session or Bot chat, open History to browse commits on any local or remote branch without checking it out. Select a commit to read its message, changed files, and diffs.
+- Edit `USER.md` in Dashboard Settings > Memory > About you. Saving notifies every running Bot. If the file changed while you were editing, Dashboard prevents your save from overwriting the newer version.
 - Choose a reasoning effort level for the default model in Grok Build, Antigravity, and Kiro. Session details show the level the client reports.
-- The Git tab in Sessions and Bot chats has a History view. Choose any local or remote branch to read its commits without checking it out, then open a commit to see its message, the files it changed, and each file's diff.
-- Edit `USER.md` yourself in the About you tab of Dashboard Settings > Memory. After you save, every running Bot is told to use the new version. If a Bot changed the file while you were editing, your save is refused so it cannot overwrite that change.
 
 ### Changed
 
-- Start Workflows from a Pontia Session. It receives reports for blocked nodes, idle turns, failures, and completion. Use `pontia workflow terminate` to report a blocker and `pontia workflow show ID` for retry instructions. Workflow patches, replanning, and revision history have been removed. The upgrade clears existing Workflow records and keeps Sessions and Handoff files.
+- Start a Workflow from a Pontia Session to receive reports there when a node is blocked, a turn goes idle, the Workflow fails, or it completes. Use `pontia workflow terminate` to report a blocker and `pontia workflow show ID` for retry instructions. Workflow patches, replanning, and revision history have been removed.
+- When creating a Session with `POST /api/v1/sessions`, replace `execution_policy` with `mode` (`default`, `yolo`, or `restricted`). Omit it to use the client’s normal settings. Workspace helpers now use those defaults.
+- Restricted Bot Sessions use tighter tool and skill settings on their next launch. Restricted Claude Code Sessions offer only Read and Bash, and restricted Codex Sessions disable configured MCP servers. Preparing a Bot directory resets its Pi steering settings.
+- Bots keep shared memories for lasting preferences, decisions, and facts that would be hard to recover. Routine task recaps stay in the chat history.
+- The Context tab in Bot chats shows complete messages with their original line breaks and wraps long paths and URLs.
+- On phones, the back button in Dashboard Settings returns to the last Bot or Session chat viewed on the device. Dashboard Settings uses consistent icons and shorter descriptions for Agent Clients and Bot deletion. Antigravity now has its own client icon.
 
-- `POST /api/v1/sessions` now takes `mode` (`default`, `yolo`, or `restricted`) in place of `execution_policy`. Omit it to use the Client’s normal settings. Existing restricted Bot Sessions use the current restricted configuration, including disabled skill discovery, on their next launch. Preparing a Bot directory now overwrites its Pi steering settings. When upgrading Pontia, update the Claude Code integration package with the [Claude Code update instructions](https://pontia.dev/docs/agent-clients/claude).
+### Fixed
+
+- You can read a supported ACP client’s native conversation history after its Session exits.
+- Antigravity Bots retain their instructions when a Session reloads. Restricted Antigravity Sessions can use the default OAuth token.
 
 ## [0.8.12] - 2026-11-24
 
@@ -1157,7 +1172,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.8.12...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.8.13...HEAD
+[0.8.13]: https://github.com/anthod0/pontia/compare/v0.8.12...v0.8.13
 [0.8.12]: https://github.com/anthod0/pontia/compare/v0.8.11...v0.8.12
 [0.6.9]: https://github.com/anthod0/pontia/compare/v0.6.8...v0.6.9
 [0.6.8]: https://github.com/anthod0/pontia/compare/v0.6.7...v0.6.8
