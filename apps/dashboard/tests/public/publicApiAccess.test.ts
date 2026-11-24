@@ -13,6 +13,7 @@ test("public API access uses browser credentials without forwarding bearer authe
       },
       "01234567-89ab-cdef-0123-456789abcdef",
     ),
+    undefined,
   );
   const headers = new Headers({ Authorization: "Bearer local-token" });
 

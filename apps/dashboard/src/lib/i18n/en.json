@@ -1,4 +1,9 @@
 {
+  "preview.loading": "Opening preview…",
+  "preview.popupBlocked": "Your browser blocked the preview tab.",
+  "preview.open": "Open preview",
+  "preview.unavailable": "Preview is unavailable on this Edge.",
+  "preview.failed": "Could not open the preview. Try again.",
   "common.searchOptions": "Search options",
   "common.noMatchingOptions": "No matching options",
   "bots.avatar": "Avatar",

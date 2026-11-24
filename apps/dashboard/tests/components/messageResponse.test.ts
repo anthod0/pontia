@@ -78,3 +78,12 @@ test("keeps an unclosed streaming fence as one code block until it closes", asyn
   expect(screen.getByText("Stable paragraph.")).toBe(stableParagraph);
   expect(container.querySelectorAll("[data-code-block]")).toHaveLength(1);
 });
+
+test("local Markdown keeps a loopback link as a direct new-tab link", () => {
+  const href = "http://localhost:5173/path";
+  render(MessageResponse, { props: { markdown: true, content: `[preview](${href})` } });
+  const link = screen.getByRole("link");
+  expect(link).toHaveAttribute("href", href);
+  expect(link).toHaveAttribute("target", "_blank");
+  expect(link.dispatchEvent(new MouseEvent("click", { cancelable: true }))).toBe(true);
+});

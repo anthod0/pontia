@@ -437,3 +437,28 @@ test.each(["dispose", "unauthorized"])(
     expect(list).toHaveBeenCalledTimes(attempts);
   },
 );
+
+test.each([401, 409, 503])(
+  "reports a preview request failure (%s) on its own device",
+  async (status) => {
+    const { toast } = await import("svelte-sonner");
+    const { translate } = await import("../../src/lib/i18n");
+    const showError = vi.spyOn(toast, "error");
+    vi.mocked(fixture.remote.launchLocalhostPreview).mockRejectedValueOnce(
+      new fixture.remote.CloudRequestError("failed", status),
+    );
+    await manager.refreshDevices();
+    await settle();
+    device().runtime!.access.openLocalhostPreview!({
+      rawHref: "http://localhost",
+      port: 80,
+      redirect: "/",
+    });
+    await settle();
+    if (status === 401) expect(get(manager.signInRequired)).toBe(true);
+    else
+      expect(showError).toHaveBeenCalledWith(
+        translate(status === 409 ? "preview.unavailable" : "preview.failed"),
+      );
+  },
+);
