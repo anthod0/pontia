@@ -14,7 +14,7 @@
 	type Device = { icon: typeof DesktopIcon; name: () => string; bots: string[]; sessions: { agent: Agent; title: () => string; state: SessionState }[] };
 	const devices: Device[] = [
 		{ icon: DesktopIcon, name: m.story_device_desk, bots: ['Tova'], sessions: [{ agent: codex, title: m.story_task_ui, state: 'running' }, { agent: pi, title: m.story_task_tests, state: 'done' }] },
-		{ icon: LaptopIcon, name: m.story_device_laptop, bots: ['Remy', 'Pip', 'Kai', 'Ivy'], sessions: [{ agent: claude, title: m.story_task_login, state: 'running' }] },
+		{ icon: LaptopIcon, name: m.story_device_laptop, bots: ['Remy', 'Juno', 'Kai', 'Ivy'], sessions: [{ agent: claude, title: m.story_task_login, state: 'running' }] },
 		{ icon: HardDrivesIcon, name: m.story_device_server, bots: ['Mika'], sessions: [{ agent: claude, title: m.story_task_api, state: 'done' }, { agent: codex, title: m.story_device_task_cache, state: 'running' }] }
 	];
 	const device = $derived(devices[step]);

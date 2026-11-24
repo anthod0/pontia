@@ -99,13 +99,6 @@ export const avatarMotions = {
     shape: dropMorph(),
   },
   blob: { period: 1500, rest: [[0, 0]], shape: blob.shape, eyes: blob.eyes },
-  onigiri: {
-    period: 1600,
-    rest: [
-      [0, 0.04],
-      [0.5, 0.54],
-    ],
-  },
   egg: { period: 2400, rest: [[0.34, 1]] },
   pudding: { period: 2000, rest: [[0.6, 1]] },
 } satisfies Record<Shape, AvatarMotion>;

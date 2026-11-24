@@ -4,14 +4,7 @@
 </script>
 
 <svg viewBox="9.9 12.4 83 83" aria-hidden="true">
-	<!-- onigiri is a small triangle drawn with a thick rounded stroke, as in Dashboard. -->
-	<path
-		d={shapes[shape]}
-		fill={color}
-		stroke={shape === 'onigiri' ? color : undefined}
-		stroke-width={shape === 'onigiri' ? 28 : undefined}
-		stroke-linejoin="round"
-	/>
+	<path d={shapes[shape]} fill={color} />
 	<g class="eyes" fill="#fff">
 		<rect x="33" y="45" width="10" height="18" rx="5" />
 		<rect x="57" y="45" width="10" height="18" rx="5" />

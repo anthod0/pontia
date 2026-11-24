@@ -2,7 +2,7 @@
 	import AgentBadge from './AgentBadge.svelte';
 	import BotAvatarMark from './BotAvatarMark.svelte';
 	import StoryState from './StoryState.svelte';
-	import { acp, claude, codex, pi, type SessionState, type Story } from '$lib/bot-stories';
+	import { grokBuild, claude, codex, pi, type SessionState, type Story } from '$lib/bot-stories';
 	import { m } from '$lib/paraglide/messages';
 
 	let { story, step }: { story: Story; step: number } = $props();
@@ -12,7 +12,7 @@
 		{ profile: m.story_profile_ui, agent: codex, task: m.story_task_ui, doneAt: 4 },
 		{ profile: m.story_profile_review, agent: claude, task: m.story_task_api, doneAt: 2 },
 		{ profile: m.story_profile_docs, agent: pi, task: m.story_task_docs, doneAt: 3 },
-		{ profile: m.story_profile_research, agent: acp, task: m.story_task_research, doneAt: 3 }
+		{ profile: m.story_profile_research, agent: grokBuild, task: m.story_task_research, doneAt: 3 }
 	];
 	const state = (doneAt: number): SessionState => (step >= doneAt ? 'done' : 'running');
 </script>

@@ -98,9 +98,7 @@
 <svg bind:this={svg} viewBox="9.9 12.4 83 83" aria-hidden="true"
   class={["bot", shape, phase]}>
   <g class="body">
-    <path class="shell" d={shapes[shape]} fill={color}
-      stroke={shape === 'onigiri' ? color : undefined}
-      stroke-width={shape === 'onigiri' ? 28 : undefined} stroke-linejoin="round">
+    <path class="shell" d={shapes[shape]} fill={color}>
       {#if motion.shape}
         <animate attributeName="d" begin="indefinite" repeatCount="indefinite" dur={motion.shape.dur}
           values={motion.shape.values} keyTimes={motion.shape.keyTimes} keySplines={motion.shape.keySplines}
@@ -249,30 +247,6 @@
   }
 
   /* blob: stirring is done entirely by the SMIL morphs. */
-
-  /* onigiri: a roly-poly that slows at both ends and pauses briefly when upright. */
-  .working.onigiri .body {
-    transform-origin: 51px 80px;
-    animation: onigiri-rock 1.6s infinite;
-  }
-
-  .working.onigiri .eyes {
-    animation: onigiri-slide 1.6s infinite;
-  }
-
-  @keyframes onigiri-rock {
-    0%, 4%, 50%, 54% { transform: none; animation-timing-function: cubic-bezier(0.33, 0.67, 0.67, 1); }
-    27% { transform: rotate(9deg); animation-timing-function: cubic-bezier(0.33, 0, 0.67, 0.33); }
-    77% { transform: rotate(-9deg); animation-timing-function: cubic-bezier(0.33, 0, 0.67, 0.33); }
-    100% { transform: none; }
-  }
-
-  @keyframes onigiri-slide {
-    0%, 4%, 50%, 54% { transform: none; animation-timing-function: cubic-bezier(0.33, 0.67, 0.67, 1); }
-    27% { transform: translateX(3px); animation-timing-function: cubic-bezier(0.33, 0, 0.67, 0.33); }
-    77% { transform: translateX(-3px); animation-timing-function: cubic-bezier(0.33, 0, 0.67, 0.33); }
-    100% { transform: none; }
-  }
 
   /* egg: about to hatch. */
   .working.egg .body {

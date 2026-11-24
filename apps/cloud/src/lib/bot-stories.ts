@@ -5,7 +5,6 @@ export const shapes = {
   mochi: "M51 30C72 30 84 44 88 62C91 74 92 84 80 84H22C10 84 11 74 14 62C18 44 30 30 51 30Z",
   drop: "M51 18C60 32 87 42 87 64C87 81 70 84 51 84C32 84 15 81 15 64C15 42 42 32 51 18Z",
   blob: "M24 34C34 22 52 30 62 26C76 20 92 34 86 52C82 64 92 76 78 82C64 88 50 78 36 84C20 90 10 76 14 62C17 52 15 44 24 34Z",
-  onigiri: "M51.0 32.0Q68.6 50.3 79.0 72.0Q51.0 76.0 23.0 72.0Q33.4 50.3 51.0 32.0Z",
   egg: "M51 18C70 18 84 44 84 62C84 78 70 86 51 86C32 86 18 78 18 62C18 44 32 18 51 18Z",
   pudding:
     "M30 28H72C78 28 80 31 81 36L88 76C89 82 86 84 80 84H22C16 84 13 82 14 76L21 36C22 31 24 28 30 28Z",
@@ -22,7 +21,7 @@ type Line = {
   todo?: boolean;
 };
 
-export type Agent = { client: string; logo?: string; darkLogo?: string };
+export type Agent = { client: string; logo: string; darkLogo?: string };
 
 export const codex: Agent = {
   client: "Codex",
@@ -31,7 +30,7 @@ export const codex: Agent = {
 };
 export const claude: Agent = { client: "Claude Code", logo: "/client-logos/claude-code.svg" };
 export const pi: Agent = { client: "Pi", logo: "/client-logos/pi.svg" };
-export const acp: Agent = { client: "ACP Agent" };
+export const grokBuild: Agent = { client: "Grok Build", logo: "/client-logos/grok-build.svg" };
 
 /** A scripted chat. Step i shows lines[0..i]; per-step arrays have one entry per line. */
 export type Chat = {
@@ -43,7 +42,7 @@ export type Chat = {
   todoClosedAt?: number;
 };
 
-export type Visual = "sessions" | "profiles" | "worktrees" | "memory" | "files" | "devices";
+export type Visual = "sessions" | "profiles" | "worktrees" | "memory" | "devices";
 
 /** One Bot tab. Its demo plays steps 0..steps-1 and the last step is the complete picture. */
 export type Story = {
@@ -97,12 +96,21 @@ export const stories: Story[] = [
     },
   }),
   {
-    name: "Juno",
+    name: "Ivy",
     shape: "drop",
-    color: "#458588",
-    label: m.story_work_label,
-    caption: m.story_work_caption,
-    visual: "sessions",
+    color: "#98971a",
+    label: m.story_worktrees_label,
+    caption: m.story_worktrees_caption,
+    visual: "worktrees",
+    steps: 5,
+  },
+  {
+    name: "Kai",
+    shape: "mochi",
+    color: "#689d6a",
+    label: m.story_profiles_label,
+    caption: m.story_profiles_caption,
+    visual: "profiles",
     steps: 5,
   },
   {
@@ -115,33 +123,6 @@ export const stories: Story[] = [
     steps: 4,
   },
   {
-    name: "Kai",
-    shape: "mochi",
-    color: "#689d6a",
-    label: m.story_profiles_label,
-    caption: m.story_profiles_caption,
-    visual: "profiles",
-    steps: 5,
-  },
-  {
-    name: "Ivy",
-    shape: "drop",
-    color: "#98971a",
-    label: m.story_worktrees_label,
-    caption: m.story_worktrees_caption,
-    visual: "worktrees",
-    steps: 5,
-  },
-  {
-    name: "Pip",
-    shape: "onigiri",
-    color: "#d65d0e",
-    label: m.story_files_label,
-    caption: m.story_files_caption,
-    visual: "files",
-    steps: 4,
-  },
-  {
     name: "Tova",
     shape: "pudding",
     color: "#9c6b3c",
@@ -149,6 +130,15 @@ export const stories: Story[] = [
     caption: m.story_devices_caption,
     visual: "devices",
     steps: 3,
+  },
+  {
+    name: "Juno",
+    shape: "drop",
+    color: "#458588",
+    label: m.story_work_label,
+    caption: m.story_work_caption,
+    visual: "sessions",
+    steps: 5,
   },
 ];
 

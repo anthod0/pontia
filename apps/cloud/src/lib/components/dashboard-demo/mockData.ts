@@ -1,3 +1,4 @@
+import type { Shape } from "$lib/bot-stories";
 // Static content for the homepage Dashboard demo. Nothing here talks to a device.
 
 export type DemoSessionState = "busy" | "idle" | "waiting_for_interaction" | "exited";
@@ -95,7 +96,7 @@ export type DemoBotEntry =
 export interface DemoBot {
   id: string;
   name: string;
-  shape: "mochi" | "drop" | "blob" | "onigiri" | "egg" | "pudding";
+  shape: Shape;
   color: string;
   entries: DemoBotEntry[];
   /** What the Bot is doing now, shown above the composer. */
