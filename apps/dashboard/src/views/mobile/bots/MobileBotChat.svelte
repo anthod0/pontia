@@ -130,9 +130,9 @@
     >
       <div class="pointer-events-none flex items-center justify-between gap-1">
         {#if timeline.status.kind !== 'idle'}
-          <p class="mobile-glass flex min-w-0 items-center gap-2 rounded-full px-3 py-1 text-sm leading-5 text-muted-foreground" role="status">
+          <p class="flex min-w-0 items-center gap-2 px-3 py-1 text-sm leading-5 text-muted-foreground" role="status">
             <BotAvatar class="size-5 shrink-0" shape={timeline.bot.avatar_shape} color={timeline.bot.avatar_color} working />
-            <span class="shimmer truncate">{timeline.status.kind === 'working' ? timeline.status.title : $t('bots.processing')}</span>
+            <span class="shimmer truncate" style:--_highlight="var(--foreground)">{timeline.status.kind === 'working' ? timeline.status.title : $t('bots.processing')}</span>
           </p>
         {/if}
         {#if timeline.openTodoCount}<button
