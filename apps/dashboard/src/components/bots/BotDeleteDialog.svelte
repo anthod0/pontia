@@ -46,7 +46,7 @@
       return
     }
     device.queryClient.setQueryData<Bot[]>(['bots'], (current) => current?.filter((item) => item.bot_id !== id))
-    device.queryClient.removeQueries({ queryKey: ['bot-status', id] })
+    device.queryClient.removeQueries({ queryKey: ['bot-summary', id] })
     forgetLastPage(device.id, { kind: 'bot', id })
     void device.queryClient.invalidateQueries({ queryKey: ['bots'] })
     done()

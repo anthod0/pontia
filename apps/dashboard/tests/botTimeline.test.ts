@@ -134,7 +134,7 @@ test("orders mixed timestamps by UTC millisecond and binary ID", () => {
   expect([b, a].sort(compareBotEntries).map((row) => row.id)).toEqual(["Z", "a"]);
 });
 
-test("refreshes the chat and shared sidebar status through processing, working, and idle", async () => {
+test("refreshes the chat and shared sidebar summary through processing, working, and idle", async () => {
   const fetch = vi.spyOn(testDevice.api, "getBotMessages");
   const timeline = new BotTimeline(testDevice, "bot");
   const statuses: BotMessagePage["status"][] = [
@@ -143,10 +143,13 @@ test("refreshes the chat and shared sidebar status through processing, working, 
     { kind: "idle" },
   ];
   for (const status of statuses) {
-    fetch.mockResolvedValue({ ...page([], null), status });
+    fetch.mockResolvedValue({ ...page([], null), status, open_todo_count: 3 });
     timeline.refresh();
     await waitFor(() => expect(timeline.status).toEqual(status));
-    expect(testDevice.queryClient.getQueryData(["bot-status", "bot"])).toEqual(status);
+    expect(testDevice.queryClient.getQueryData(["bot-summary", "bot"])).toEqual({
+      status,
+      open_todo_count: 3,
+    });
   }
   timeline.destroy();
 });

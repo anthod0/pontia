@@ -214,7 +214,7 @@ function chatSession(
   };
 }
 
-test("opens the all sessions page from the Recent Sessions header", async () => {
+test("opens the all sessions page from the Sessions header", async () => {
   render(AppSidebarHost);
 
   await fireEvent.click(screen.getByRole("button", { name: "Open all sessions" }));
@@ -239,7 +239,7 @@ test("workspace selection filters recent sessions but keeps global pins and does
   testDevice.sidebarSessionFilter.sessionScope.set("all");
   render(AppSidebarHost);
 
-  await fireEvent.click(screen.getByRole("button", { name: "Filter recent sessions" }));
+  await fireEvent.click(screen.getByRole("button", { name: "Filter sessions" }));
   await fireEvent.click(screen.getByRole("menuitemradio", { name: /First workspace/ }));
 
   expect(screen.getAllByText("first-active")).toHaveLength(1);
@@ -248,7 +248,7 @@ test("workspace selection filters recent sessions but keeps global pins and does
   expect(screen.getAllByText("second-pinned")).toHaveLength(1);
   expect(mocks.navigate).not.toHaveBeenCalled();
 
-  await fireEvent.click(screen.getByRole("button", { name: "Filter recent sessions" }));
+  await fireEvent.click(screen.getByRole("button", { name: "Filter sessions" }));
   expect(screen.getByRole("menuitemradio", { name: /First workspace/ })).toHaveAttribute(
     "aria-checked",
     "true",
@@ -289,7 +289,7 @@ test("sidebar shows only active sessions by default and switches to all sessions
   TestIntersectionObserver.instances[0].trigger(true);
   expect(mocks.loadMoreSidebarSessions).not.toHaveBeenCalled();
 
-  await fireEvent.click(screen.getByRole("button", { name: "Filter recent sessions" }));
+  await fireEvent.click(screen.getByRole("button", { name: "Filter sessions" }));
   expect(screen.getByRole("menuitemradio", { name: "Active sessions" })).toHaveAttribute(
     "aria-checked",
     "true",
@@ -308,7 +308,7 @@ test("sidebar shows only active sessions by default and switches to all sessions
   TestIntersectionObserver.instances[0].trigger(true);
   await waitFor(() => expect(mocks.loadMoreSidebarSessions).toHaveBeenCalledTimes(1));
 
-  await fireEvent.click(screen.getByRole("button", { name: "Filter recent sessions" }));
+  await fireEvent.click(screen.getByRole("button", { name: "Filter sessions" }));
   expect(screen.getByRole("menuitemradio", { name: "All sessions" })).toHaveAttribute(
     "aria-checked",
     "true",
@@ -357,27 +357,45 @@ test("sidebar renders active sessions before paged recent sessions without dupli
   ).toBeTruthy();
 });
 
-test.each([false, true])(
-  "sidebar hides the pinned sessions group when empty (loading: %s)",
-  (loading) => {
-    mocks.sidebarSessionsLoading.set(loading);
-    render(AppSidebarHost);
+test("sidebar lists pinned sessions first under one collapsible Sessions group", async () => {
+  const pinned = chatSession(
+    "session-pinned",
+    "idle",
+    "2026-05-14T01:00:00Z",
+    "2026-05-14T02:00:00Z",
+  );
+  const active = chatSession("session-active", "idle", "2026-05-14T04:00:00Z");
+  mocks.sidebarPinnedSessions.set([pinned]);
+  mocks.sessions.set([active]);
+  render(AppSidebarHost);
 
-    expect(screen.queryByRole("button", { name: /pinned sessions/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^recent sessions$/i })).toBeInTheDocument();
-  },
-);
+  expect(screen.queryByText(/pinned sessions/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/recent sessions/i)).not.toBeInTheDocument();
+  const pinnedButton = screen.getByText("session-pinned").closest("button")!;
+  const activeButton = screen.getByText("session-active").closest("button")!;
+  expect(within(pinnedButton).getByLabelText("Pinned session")).toBeInTheDocument();
+  expect(within(activeButton).queryByLabelText("Pinned session")).not.toBeInTheDocument();
+  expect(
+    pinnedButton.compareDocumentPosition(activeButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
 
-test("sidebar collapses the pinned sessions group", async () => {
+  const toggle = screen.getByRole("button", { name: /^sessions$/i });
+  expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await fireEvent.click(toggle);
+  expect(toggle).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByText("session-pinned")).not.toBeInTheDocument();
+  expect(screen.queryByText("session-active")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "New Chat" })).toBeInTheDocument();
+});
+
+test("sidebar keeps the no-active-sessions hint below pinned sessions", () => {
   mocks.sidebarPinnedSessions.set([
     chatSession("session-pinned", "idle", "2026-05-14T01:00:00Z", "2026-05-14T02:00:00Z"),
   ]);
   render(AppSidebarHost);
 
-  const toggle = screen.getByRole("button", { name: /pinned sessions/i });
   expect(screen.getByText("session-pinned")).toBeInTheDocument();
-  await fireEvent.click(toggle);
-  expect(screen.queryByText("session-pinned")).not.toBeInTheDocument();
+  expect(screen.getByText("No active sessions")).toBeInTheDocument();
 });
 
 class TestIntersectionObserver {
@@ -423,30 +441,64 @@ test("sidebar loads the next page when the end of its session list scrolls into 
   vi.unstubAllGlobals();
 });
 
-test("sidebar collapses the Bots group and keeps the create action", async () => {
-  vi.spyOn(testDevice.api, "listBots").mockResolvedValue([
-    {
-      bot_id: "bot-1",
-      name: "Release Captain",
-      description: null,
-      avatar_shape: "classic",
-      avatar_color: "blue",
-      client_type: "pi",
-      client_key: "default",
-      model: "provider/model",
-      reasoning_effort: null,
-    },
-  ]);
+test("sidebar shows each Bot's work status and open todos", async () => {
+  const bots = ["Release Captain", "Reviewer", "Ops"].map((name, index) => ({
+    bot_id: `bot-${index}`,
+    name,
+    description: null,
+    avatar_shape: "classic" as const,
+    avatar_color: "blue" as const,
+    client_type: "pi",
+    client_key: "default",
+    model: "provider/model",
+    reasoning_effort: null,
+  }));
+  const pages: Record<string, Pick<BotMessagePage, "status" | "open_todo_count">> = {
+    "bot-0": { status: { kind: "working", title: "Fix upload retry" }, open_todo_count: 2 },
+    "bot-1": { status: { kind: "processing" }, open_todo_count: 0 },
+    "bot-2": { status: { kind: "idle" }, open_todo_count: 0 },
+  };
+  vi.spyOn(testDevice.api, "listBots").mockResolvedValue(bots);
+  vi.spyOn(testDevice.api, "getBotMessages").mockImplementation(
+    async (id) =>
+      ({
+        bot: bots.find((bot) => bot.bot_id === id)!,
+        ...pages[id],
+        entries: [],
+        next_before: null,
+        generation_notice: null,
+        notice_session_id: null,
+        file_link_session: null,
+      }) satisfies BotMessagePage,
+  );
   render(AppSidebarHost);
 
-  expect(await screen.findByText("Release Captain")).toBeInTheDocument();
-  const toggle = screen.getByRole("button", { name: /^bots$/i });
-  expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await fireEvent.click(toggle);
-
-  expect(toggle).toHaveAttribute("aria-expanded", "false");
-  expect(screen.queryByText("Release Captain")).not.toBeInTheDocument();
+  const row = (name: string) => screen.getByText(name).closest("a")!;
+  expect(
+    await within(await waitFor(() => row("Release Captain"))).findByText(
+      "Working · Fix upload retry",
+    ),
+  ).toBeInTheDocument();
+  expect(within(row("Release Captain")).getByLabelText("2 open todos")).toHaveTextContent("2");
+  expect(await within(row("Reviewer")).findByText("Working on your message")).toHaveClass(
+    "text-primary",
+  );
+  expect(within(row("Ops")).getByText("Idle")).toHaveClass("text-muted-foreground");
+  expect(within(row("Reviewer")).queryByLabelText(/open todo/)).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /^bots$/i })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Create Bot" })).toBeInTheDocument();
+  vi.restoreAllMocks();
+});
+
+test("sidebar offers a setup card when the device has no Bot", async () => {
+  vi.spyOn(testDevice.api, "listBots").mockResolvedValue([]);
+  render(AppSidebarHost);
+
+  expect(await screen.findByText("Set up your first Bot")).toBeInTheDocument();
+  const buttons = screen.getAllByRole("button", { name: "Create Bot" });
+  expect(buttons).toHaveLength(2);
+  await fireEvent.click(buttons[1]);
+  expect(await screen.findByRole("dialog", { name: "Create Bot" })).toBeInTheDocument();
   vi.restoreAllMocks();
 });
 
@@ -501,7 +553,6 @@ test("sidebar shows semantic status dots except for terminal sessions, and opens
 
   render(AppSidebarHost);
 
-  expect(screen.getByText("Recent Sessions")).toBeInTheDocument();
   const activeSessionButton = screen.getByText("main · coder").closest("button");
   const closedSessionButton = screen.getByText("closed").closest("button");
   expect(activeSessionButton).not.toBeNull();
@@ -775,16 +826,33 @@ test("the sidebar Bot menu deletes only after the delete confirmation", async ()
   vi.restoreAllMocks();
 });
 
-test("sidebar only marks new chat active on the default route", () => {
-  window.history.pushState({}, "", "/dashboard");
-
+test("the Sessions header opens New Chat and shows its shortcut on hover", async () => {
   render(AppSidebarHost);
 
-  const chat = screen.getByText("New Chat").closest("button");
+  expect(screen.queryByText("New Chat")).not.toBeInTheDocument();
+  const button = screen.getByRole("button", { name: "New Chat" });
+  await fireEvent.pointerMove(button);
+  await fireEvent.focus(button);
+  const tooltip = await screen.findByText("New Chat", { selector: "[data-slot=tooltip-content]" });
+  expect(within(tooltip).getByText("Alt+N")).toBeInTheDocument();
+  await fireEvent.click(button);
 
-  expect(chat).not.toBeNull();
+  expect(mocks.navigate).toHaveBeenCalledWith("/");
+});
 
+test("the collapsed icon rail keeps New Chat and marks it active on the default route", async () => {
+  window.history.pushState({}, "", "/dashboard");
+  render(AppSidebarHost);
+  const header = document.querySelector<HTMLElement>('[data-slot="sidebar-header"]')!;
+  expect(document.querySelector('[data-sidebar="menu-button"][data-active]')).toBeNull();
+
+  await fireEvent.click(within(header).getByRole("button", { name: /toggle sidebar/i }));
+  const chat = screen
+    .getAllByRole("button", { name: "New Chat" })
+    .find((button) => button.dataset.sidebar === "menu-button")!;
   expect(chat).toHaveAttribute("data-active", "true");
+  await fireEvent.click(chat);
+  expect(mocks.navigate).toHaveBeenCalledWith("/");
 });
 
 test("sidebar highlights the matching recent session on chat routes", () => {
@@ -975,7 +1043,7 @@ test("chat numeric shortcuts open active sessions by sidebar order within the se
   await fireEvent.keyDown(window, { key: "2", code: "Digit2", altKey: true });
   expect(mocks.navigate).toHaveBeenLastCalledWith("/chat/session-other");
 
-  await fireEvent.click(screen.getByRole("button", { name: "Filter recent sessions" }));
+  await fireEvent.click(screen.getByRole("button", { name: "Filter sessions" }));
   await fireEvent.click(screen.getByRole("menuitemradio", { name: /First workspace/ }));
 
   await fireEvent.keyDown(window, { key: "2", code: "Digit2", altKey: true });
@@ -1136,7 +1204,7 @@ test("the sidebar lists settings sections instead of sessions on settings pages"
     "/dashboard/settings/workspaces",
   );
   expect(screen.queryByRole("button", { name: /New Chat/ })).not.toBeInTheDocument();
-  expect(screen.queryByText("Recent Sessions")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /^sessions$/i })).not.toBeInTheDocument();
 
   await fireEvent.click(within(nav).getByRole("link", { name: "Workspaces" }));
   expect(mocks.navigate).toHaveBeenLastCalledWith("/settings/workspaces");
@@ -1290,7 +1358,7 @@ test("Bot top bar shows a downloads button only while downloads exist", async ()
   vi.restoreAllMocks();
 });
 
-test("sidebar refreshes every Bot status from live updates without opening its chat", async () => {
+test("sidebar refreshes every Bot status and todo count from live updates without opening its chat", async () => {
   const bots = ["first", "second"].map((id) => ({
     bot_id: id,
     name: id,
@@ -1304,6 +1372,7 @@ test("sidebar refreshes every Bot status from live updates without opening its c
   }));
   vi.spyOn(testDevice.api, "listBots").mockResolvedValue(bots);
   let status: BotWorkStatus = { kind: "idle" };
+  let todos = 0;
   vi.spyOn(testDevice.api, "getBotMessages").mockImplementation(
     async (id) =>
       ({
@@ -1312,12 +1381,13 @@ test("sidebar refreshes every Bot status from live updates without opening its c
         entries: [],
         next_before: null,
         generation_notice: null,
-        open_todo_count: 0,
+        open_todo_count: todos,
         notice_session_id: null,
         file_link_session: null,
       }) satisfies BotMessagePage,
   );
   const view = render(AppSidebarHost);
+  const row = (await screen.findByText("second")).closest("a")!;
   await waitFor(() => expect(botStreams.has("second")).toBe(true));
   for (const next of [
     { kind: "processing" },
@@ -1325,11 +1395,21 @@ test("sidebar refreshes every Bot status from live updates without opening its c
     { kind: "idle" },
   ] satisfies BotWorkStatus[]) {
     status = next;
+    todos += 1;
     botStreams.get("second")!({ type: "changed" });
     await waitFor(() =>
-      expect(testDevice.queryClient.getQueryData(["bot-status", "second"])).toEqual(next),
+      expect(testDevice.queryClient.getQueryData(["bot-summary", "second"])).toEqual({
+        status: next,
+        open_todo_count: todos,
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        within(row).getByLabelText(todos === 1 ? "1 open todo" : `${todos} open todos`),
+      ).toBeInTheDocument(),
     );
   }
+  expect(within(row).getByText("Idle")).toBeInTheDocument();
   view.unmount();
   expect(botStreams.has("second")).toBe(false);
   vi.restoreAllMocks();

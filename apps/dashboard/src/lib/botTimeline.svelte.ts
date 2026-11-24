@@ -4,6 +4,7 @@ import type {
   BotMessage,
   BotMessagePage,
   BotNotice,
+  BotSummary,
   BotWorkStatus,
 } from "../api/types";
 import { ApiError } from "../api/errors";
@@ -249,7 +250,10 @@ export class BotTimeline {
     this.openTodoCount = latest.open_todo_count;
     this.fileLinkSession = latest.file_link_session;
     this.status = latest.status;
-    this.device.queryClient.setQueryData(["bot-status", this.id], latest.status);
+    this.device.queryClient.setQueryData<BotSummary>(["bot-summary", this.id], {
+      status: latest.status,
+      open_todo_count: latest.open_todo_count,
+    });
     this.generationNotice = latest.generation_notice;
     this.device.queryClient.setQueryData<Bot[]>(["bots"], (bots) =>
       bots?.map((bot) => (bot.bot_id === this.id ? latest.bot : bot)),

@@ -7,6 +7,7 @@
   import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
   import DotsThreeVerticalIcon from 'phosphor-svelte/lib/DotsThreeVerticalIcon'
   import FunnelIcon from 'phosphor-svelte/lib/FunnelIcon'
+  import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon'
   import SignOutIcon from 'phosphor-svelte/lib/SignOutIcon'
   import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
   import PushPinIcon from 'phosphor-svelte/lib/PushPinIcon'
@@ -15,6 +16,9 @@
   import { navigate } from '$lib/navigation'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
+  import * as Tooltip from '$lib/components/ui/tooltip/index.js'
+  import ShortcutKeys from '$lib/components/shortcuts/ShortcutKeys.svelte'
+  import { chatShortcuts } from '$lib/shortcuts/definitions'
   import { cn } from '$lib/utils.js'
   import { openContextMenu, type MenuAnchor } from '$lib/contextMenu'
   import { recentSessions, snapshotSessionOverview } from "../../queries/sessionOverview";
@@ -23,11 +27,12 @@
   import RenameSessionDialog from '../chat/RenameSessionDialog.svelte'
   import type { SessionView } from '../../api/types'
   const device = useDeviceRuntime();
+  const sidebar = Sidebar.useSidebar();
   const { archiveSession, pinSession, terminateSession, unpinSession, updateSessionTitle } = device.sessions;
   const { createSessionOverviewQuery } = device.sessionOverview;
   const { createWorkspacesQuery } = device.workspaceQueries;
 
-  let { handle }: { handle?: string } = $props()
+  let { handle, onNewChat }: { handle?: string; onNewChat: () => void } = $props()
 
   let currentPath = $state(window.location.pathname)
   let renamingSessionId = $state<string | null>(null)
@@ -38,8 +43,7 @@
   let sessionActionMenuOpenKey = $state<string | null>(null)
   // Set while a row's actions menu was opened by right-clicking the row rather than by its menu button.
   let sessionContextMenu = $state<{ actionKey: string; anchor: MenuAnchor } | null>(null)
-  let pinnedSessionsOpen = $state(true)
-  let recentSessionsOpen = $state(true)
+  let sessionsOpen = $state(true)
   const { selectedWorkspaceId, sessionScope } = device.sidebarSessionFilter
   const workspacesQuery = createWorkspacesQuery()
   const selectedWorkspace = $derived(workspacesQuery.data?.find((workspace) => workspace.workspace_id === $selectedWorkspaceId))
@@ -49,6 +53,7 @@
   const hasClosedSessions = $derived(
     $sessionScope === 'active' && (Boolean(overview.nextCursor) || recentSessions(overview, $selectedWorkspaceId, 'all').length > sidebarRecentSessions.length),
   )
+  const headerButtonClass = 'flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden max-md:size-9 [&>svg]:size-[15px] max-md:[&>svg]:size-[18px]'
   const filterApplied = $derived(Boolean($selectedWorkspaceId) || $sessionScope === 'all')
   const filterTitle = $derived([
     $sessionScope === 'active' ? $t('sessions.activeOnly') : $t('sessions.all'),
@@ -192,7 +197,7 @@
 
 {#snippet sessionMenuItem(session: SessionView, actionKey: string)}
   <Sidebar.MenuItem>
-    <Sidebar.MenuButton class="group-has-data-[sidebar=menu-action]/menu-item:pr-8" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session, $t)} · ${statusLabel(session.state, $t)}`} onclick={() => openSession(session.session_id)} oncontextmenu={(event) => openSessionContextMenu(event, actionKey)}>
+    <Sidebar.MenuButton class="group-has-data-[sidebar=menu-action]/menu-item:pr-8 max-md:h-11 max-md:px-2.5 max-md:text-[15px]" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session, $t)} · ${statusLabel(session.state, $t)}`} onclick={() => openSession(session.session_id)} oncontextmenu={(event) => openSessionContextMenu(event, actionKey)}>
       {#if session.pinned_at}
         <PushPinIcon class="size-3.5 shrink-0" aria-label={$t('sessions.pinnedSession')} />
       {/if}
@@ -200,7 +205,7 @@
     </Sidebar.MenuButton>
     {#if isSessionVisibleState(session.state)}
       <span
-        class={cn('pointer-events-none absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center transition-opacity group-has-[:focus-visible]/menu-item:opacity-0 group-hover/menu-item:opacity-0 group-data-[collapsible=icon]:hidden', sessionActionMenuOpenKey === actionKey ? 'opacity-0' : 'opacity-100')}
+        class={cn('pointer-events-none absolute top-1.5 right-1 max-md:top-3 flex aspect-square w-5 items-center justify-center transition-opacity group-has-[:focus-visible]/menu-item:opacity-0 group-hover/menu-item:opacity-0 group-data-[collapsible=icon]:hidden', sessionActionMenuOpenKey === actionKey ? 'opacity-0' : 'opacity-100')}
         aria-label={$t('sessions.state', { state: statusLabel(session.state, $t) })}
       >
         <span class={`size-2 rounded-full ${sessionStateDotClass(session.state)}`}></span>
@@ -209,6 +214,7 @@
     <DropdownMenu.Root bind:open={() => sessionActionMenuOpenKey === actionKey, (open) => setSessionActionMenuOpen(actionKey, open)}>
       <Sidebar.MenuAction
         showOnHover
+        class="max-md:peer-data-[size=default]/menu-button:top-3"
         aria-label={$t('sessions.actionsFor', { name: sessionChatTitle(session, $t) })}
         title={$t('sessions.actions')}
         disabled={renamingSessionId === session.session_id || sessionManagementBusyId === session.session_id}
@@ -246,63 +252,67 @@
   </Sidebar.MenuItem>
 {/snippet}
 
+<!-- The icon rail has no session list; New Chat follows the Bot avatars instead. -->
+{#if sidebar.state === 'collapsed' && !sidebar.isMobile}
+<Sidebar.Group class="pt-0">
+  <Sidebar.Separator class="mx-auto mb-2 w-5! data-[orientation=horizontal]:w-5" />
+  <Sidebar.Menu>
+    <Sidebar.MenuItem>
+      <Sidebar.MenuButton isActive={dashboardRelativePath(currentPath) === '/'} tooltipContent={$t('nav.newChat')} onclick={onNewChat}>
+        <NotePencilIcon />
+        <span>{$t('nav.newChat')}</span>
+      </Sidebar.MenuButton>
+    </Sidebar.MenuItem>
+  </Sidebar.Menu>
+</Sidebar.Group>
+{/if}
+
 <div class="group-data-[collapsible=icon]:hidden">
   {#if overviewQuery.error}
     <p role="alert" class="px-4 py-2 text-xs text-destructive">{$t('sessions.sidebarFailed')} {overviewQuery.error.message}</p>
   {/if}
-  {#if overview.pinned.length}
-    <Sidebar.Group>
-      <Sidebar.GroupLabel class="sticky top-0 z-10 flex h-8 items-center gap-1 bg-sidebar p-0 px-2">
-        <button
-          type="button"
-          class="flex min-w-0 items-center gap-1 rounded-sm text-left text-xs font-medium hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
-          aria-expanded={pinnedSessionsOpen}
-          onclick={() => (pinnedSessionsOpen = !pinnedSessionsOpen)}
-        >
-          <span>{$t('sessions.pinnedTitle')}</span>
-          <CaretRightIcon class={cn('size-3 transition-transform', pinnedSessionsOpen && 'rotate-90')} />
-        </button>
-      </Sidebar.GroupLabel>
-      {#if pinnedSessionsOpen}
-        <Sidebar.GroupContent class="pr-1">
-          <Sidebar.Menu>
-            {#each overview.pinned as session}
-              {@render sessionMenuItem(session, `pinned:${session.session_id}`)}
-            {/each}
-          </Sidebar.Menu>
-        </Sidebar.GroupContent>
-      {/if}
-    </Sidebar.Group>
-  {/if}
-  <Sidebar.Group>
-    <Sidebar.GroupLabel class="sticky top-0 z-10 flex h-8 items-center gap-1 bg-sidebar p-0 px-2">
+  <Sidebar.Group class="pt-3.5 max-md:pt-4">
+    <Sidebar.GroupLabel class="sticky top-0 z-10 flex h-8 items-center gap-1 bg-sidebar p-0 pr-0.5 pl-2 max-md:h-9 max-md:text-[13px]">
       <button
         type="button"
-        class="flex min-w-0 items-center gap-1 rounded-sm text-left text-xs font-medium hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
-        aria-expanded={recentSessionsOpen}
-        onclick={() => (recentSessionsOpen = !recentSessionsOpen)}
+        class="flex min-w-0 items-center gap-1 rounded-sm text-left font-medium hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+        aria-expanded={sessionsOpen}
+        onclick={() => (sessionsOpen = !sessionsOpen)}
       >
-        <span>{$t('sessions.recentTitle')}</span>
-        <CaretRightIcon class={cn('size-3 transition-transform', recentSessionsOpen && 'rotate-90')} />
+        <span>{$t('sessions.title')}</span>
+        <CaretRightIcon class={cn('size-3 transition-transform', sessionsOpen && 'rotate-90')} />
       </button>
       <span class="flex-1"></span>
-      <span class="flex items-center gap-2">
+      <span class="flex items-center gap-0.5">
+        <Tooltip.Root>
+          <Tooltip.Trigger>
+            {#snippet child({ props })}
+              <button {...props} type="button" class={headerButtonClass} aria-label={$t('nav.newChat')} onclick={onNewChat}>
+                <NotePencilIcon />
+              </button>
+            {/snippet}
+          </Tooltip.Trigger>
+          <Tooltip.Content side="bottom">
+            {$t('nav.newChat')}
+            <ShortcutKeys keys={chatShortcuts.newChat.keys} aria-hidden="true" />
+          </Tooltip.Content>
+        </Tooltip.Root>
         <button
           type="button"
-          class="rounded-sm hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+          class={headerButtonClass}
           aria-label={$t('sessions.openAll')}
           title={$t('sessions.all')}
           onclick={() => go('/sessions')}
         >
-          <ArrowUpRightIcon class="size-4" />
+          <ArrowUpRightIcon />
         </button>
         <DropdownMenu.Root>
           <DropdownMenu.Trigger
-            class={cn('rounded-sm hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden', filterApplied && 'text-primary')}
+            class={cn(headerButtonClass, filterApplied && 'text-primary')}
             aria-label={$t('sessions.filter')}
             title={filterTitle}
           >
-            <FunnelIcon class="size-4" weight={filterApplied ? 'fill' : 'regular'} />
+            <FunnelIcon weight={filterApplied ? 'fill' : 'regular'} />
           </DropdownMenu.Trigger>
           <DropdownMenu.Content side="right" align="start" class="max-h-96 w-72 overflow-y-auto">
             <DropdownMenu.Label>{$t('sessions.filterStatus')}</DropdownMenu.Label>
@@ -338,9 +348,12 @@
         </DropdownMenu.Root>
       </span>
     </Sidebar.GroupLabel>
-  {#if recentSessionsOpen}
+  {#if sessionsOpen}
     <Sidebar.GroupContent class="pr-1">
       <Sidebar.Menu>
+        {#each overview.pinned as session}
+          {@render sessionMenuItem(session, `pinned:${session.session_id}`)}
+        {/each}
         {#if overviewQuery.isPending && !sidebarRecentSessions.length}
           <Sidebar.MenuSkeleton />
           <Sidebar.MenuSkeleton />
@@ -359,7 +372,7 @@
           <Sidebar.MenuItem>
             <button
               type="button"
-              class="w-full rounded-md px-2 py-1 text-left text-xs text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+              class="w-full rounded-md px-2 py-1 text-left text-xs text-sidebar-foreground/60 max-md:px-2.5 max-md:py-1.5 max-md:text-[13px] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
               onclick={() => sessionScope.set('all')}
             >
               {$t('sessions.showClosed')}
