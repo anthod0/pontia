@@ -15,7 +15,7 @@
   import { adjacentValue } from '$lib/shortcuts/sessionNavigation'
   import { cn } from '$lib/utils.js'
   import ClientIcon from './ClientIcon.svelte'
-  import { targetSegmentClass } from './targetSegment'
+  import { targetLabelClass, targetSegmentClass } from './targetSegment'
   import { effortChipColumns, effortChoices, meterBars, pickerRows, type PickerRow } from './modelEffort'
   import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
   import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
@@ -161,15 +161,15 @@
 
   const tagClass = 'inline-flex h-[18px] shrink-0 items-center rounded-sm px-1.5 text-[10.5px] font-medium'
   const triggerClass = $derived(variant === 'toolbar'
-    ? cn(selectTriggerClass, targetSegmentClass, 'max-w-56')
+    ? cn(selectTriggerClass, targetSegmentClass, 'md:max-w-56')
     : cn(selectTriggerClass, 'w-full gap-2'))
 </script>
 
 {#snippet triggerContent()}
   {#if variant === 'toolbar'}
-    <span class="min-w-0 truncate">{triggerName}</span>
+    <span class={targetLabelClass}>{triggerName}</span>
     {#if selectedEfforts.length || savedUnavailable}
-      <span class="shrink-0 font-normal text-muted-foreground">· {#if effort}<span class="font-mono text-xs">{optionName(selected, effort)}</span>{:else}{$t('effort.default')}{/if}</span>
+      <span class="min-w-0 wrap-anywhere font-normal text-muted-foreground md:shrink-0">· {#if effort}<span class="font-mono text-xs">{optionName(selected, effort)}</span>{:else}{$t('effort.default')}{/if}</span>
     {/if}
   {:else}
     <span class="min-w-0 flex-1 truncate text-left">{triggerName}</span>

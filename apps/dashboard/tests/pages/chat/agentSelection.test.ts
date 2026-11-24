@@ -1,35 +1,44 @@
 import { mocks, session, turn, workspace } from "./fixtures";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
-import { expect, test, vi } from "vitest";
+import { expect, onTestFinished, test, vi } from "vitest";
 import { testDevice } from "../../deviceFixture";
 
 const NewChatPage = (await import("../../../src/pages/NewChatPage.svelte")).default;
 
-test("submits the selected configured agent's opaque metadata through ordinary Session creation", async () => {
-  const user = userEvent.setup();
-  const metadata = { acp_agent_id: "company:代理", custom: { preserved: true } };
-  mocks.listSessionCreationOptions.mockResolvedValue([
-    { id: "pi", name: "Pi", client_type: "pi", metadata: {} },
-    { id: "opaque-choice", name: "Company Agent", client_type: "acp", metadata },
-  ]);
-  mocks.createSession.mockResolvedValue({ session: session(), initial_turn: turn() });
-  render(NewChatPage);
-  await user.click(await screen.findByLabelText("Agent client"));
-  await user.click(await screen.findByText("Company Agent"));
-  document.body.style.pointerEvents = "";
-  await user.type(screen.getByRole("textbox"), "Review the changes");
-  await user.click(screen.getByRole("button", { name: "Start session" }));
-  await waitFor(() =>
-    expect(mocks.createSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        client_type: "acp",
-        metadata: { ...metadata, source: "dashboard_chat", title_source: "input" },
-        initial_task: { input: "Review the changes", metadata: { source: "dashboard_chat" } },
-      }),
-    ),
-  );
-});
+test.each(["desktop", "phone"])(
+  "submits the selected configured agent's metadata on %s",
+  async (viewport) => {
+    const matchMedia = window.matchMedia;
+    const media = vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
+      ...matchMedia(query),
+      matches: viewport === "phone" && query.includes("max-width: 767px"),
+    }));
+    onTestFinished(() => media.mockRestore());
+    const user = userEvent.setup();
+    const metadata = { acp_agent_id: "company:代理", custom: { preserved: true } };
+    mocks.listSessionCreationOptions.mockResolvedValue([
+      { id: "pi", name: "Pi", client_type: "pi", metadata: {} },
+      { id: "opaque-choice", name: "Company Agent", client_type: "acp", metadata },
+    ]);
+    mocks.createSession.mockResolvedValue({ session: session(), initial_turn: turn() });
+    render(NewChatPage);
+    await user.click(await screen.findByLabelText("Agent client"));
+    await user.click(await screen.findByText("Company Agent"));
+    document.body.style.pointerEvents = "";
+    await user.type(screen.getByRole("textbox"), "Review the changes");
+    await user.click(screen.getByRole("button", { name: "Start session" }));
+    await waitFor(() =>
+      expect(mocks.createSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          client_type: "acp",
+          metadata: { ...metadata, source: "dashboard_chat", title_source: "input" },
+          initial_task: { input: "Review the changes", metadata: { source: "dashboard_chat" } },
+        }),
+      ),
+    );
+  },
+);
 
 test("prevents creation while discovery is unavailable and recovers after an explicit retry", async () => {
   const user = userEvent.setup();
