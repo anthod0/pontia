@@ -1155,6 +1155,28 @@ test("scrolls to the document bottom after entering a selected chat", async () =
   scrollTo.mockRestore();
 });
 
+test("settles the selected session at the bottom of the mobile scroll container", async () => {
+  const selected = session({ session_id: "mobile-session", state: "idle" });
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [turn({ session_id: selected.session_id })],
+    inboxMessages: [],
+    events: [],
+  });
+  const scroller = document.createElement("main");
+  scroller.className = "mobile-body";
+  Object.defineProperty(scroller, "scrollHeight", { value: 2048 });
+  document.body.append(scroller);
+  try {
+    render(SessionChatPage, { target: scroller, props: { routeSessionId: selected.session_id } });
+    await waitFor(() => expect(scroller.scrollTop).toBe(2048));
+  } finally {
+    scroller.remove();
+  }
+});
+
 test("scrolls to the settled document bottom when switching chats through SPA navigation", async () => {
   const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
   const originalScrollHeight =

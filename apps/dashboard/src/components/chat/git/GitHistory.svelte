@@ -16,7 +16,7 @@
   import type { GitPanelState } from './gitPanelState.svelte'
 
   /** A branch picker over the commit history of the chosen branch. Choosing a branch only reads its history. */
-  let { device, workspaceId, git }: { device: DeviceRuntime; workspaceId: string; git: GitPanelState } = $props()
+  let { device, workspaceId, git, oncommit = (sha) => git.openCommit(sha) }: { device: DeviceRuntime; workspaceId: string; git: GitPanelState; oncommit?: (sha: string) => void } = $props()
 
   // The panel recreates this view for each device and Workspace.
   // svelte-ignore state_referenced_locally
@@ -118,7 +118,7 @@
       <ul bind:this={list} class="px-2 py-1" aria-label={$t('git.commits')} onkeydown={(event) => moveRowFocus(event, list!)}>
         {#each commits as commit (commit.sha)}
           <li>
-            <button type="button" data-git-row={commit.sha} onclick={() => git.openCommit(commit.sha)}
+            <button type="button" data-git-row={commit.sha} onclick={() => oncommit(commit.sha)}
               class="flex w-full min-w-0 flex-col gap-0.5 rounded-md px-2.5 py-1.5 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring max-lg:py-2.5">
               <span class="w-full truncate text-[13px] text-foreground">{commit.subject || $t('git.noSubject')}</span>
               <span class="flex w-full min-w-0 items-center gap-1.5 text-xs text-muted-foreground">

@@ -5,9 +5,6 @@
   import { provideMobileTitle } from './headerTitle'
   import { readable, writable } from 'svelte/store'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
-  import { provideSessionPanel } from '../../components/chat/sessionPanel/sessionPanelContext.svelte'
-  import { provideFilePreviewNavigator } from '../../components/chat/filePreviewContext'
-  import SessionSidePanel from '../../components/chat/sessionPanel/SessionSidePanel.svelte'
   import { t } from '$lib/i18n'
   import { dashboardRelativePath, navigate } from '$lib/navigation'
   import { keyboardOpen } from '$lib/visualViewport'
@@ -32,8 +29,6 @@
   const host = useDashboardHost()
   const directory = provideMobileDirectory(untrack(() => device ? createBotDirectory(device) : null))
   const stack = provideMobileStack()
-  const sessionPanel = provideSessionPanel()
-  provideFilePreviewNavigator({open: target => sessionPanel.openFile(target)})
   const sessionDetail = $derived(device?.sessions.sessionDetail ?? readable(null))
   const sessionTitle = $derived($sessionDetail && $sessionDetail.session.session_id === page.params.sessionId ? sessionChatTitle($sessionDetail.session,$t) : undefined)
   const heading = provideMobileTitle(writable(null))
@@ -69,7 +64,7 @@
 </script>
 
 <div class="mobile-shell" data-tabs={hasTabs} data-keyboard={$keyboardOpen}>
-  <div inert={stack.layers.some(layer => layer.content)} class="flex h-full flex-col" use:edgeSwipeBack={!tab && path !== '/new' && !stack.layers.length ? back : undefined}>
+  <div inert={stack.layers.some(layer => layer.content)} class="relative isolate flex h-full flex-col" use:edgeSwipeBack={!tab && path !== '/new' && !stack.layers.length ? back : undefined}>
     <div class="mobile-chrome" data-scrolled={scrolled} use:chromeMetrics={'--mobile-header-h'}>
       <MobileHeader customTitle={$heading} {title} device={tab ? host.activeDevice : null} back={tab || path === '/' ? undefined : back}
         modal={path === '/new'} disabled={$detail?.disabled} backLabel={$detail && section ? $t(section.label) : undefined}
@@ -82,9 +77,6 @@
         scrollTop={() => scroller.scrollTo({top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'})} />
     {/if}
   </div>
-  {#if sessionPanel.open && sessionPanel.source}
-    <SessionSidePanel panel={sessionPanel} source={sessionPanel.source} />
-  {/if}
   <MobileOverlayHost {stack} />
   {#if host.canSwitchDevice}<MobileDeviceSheet bind:open={switchOpen} />{/if}
 </div>

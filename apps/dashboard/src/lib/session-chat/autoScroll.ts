@@ -6,5 +6,10 @@ export function scrollToBottom(element: ScrollContainer | null): void {
 }
 
 export function scrollDocumentToBottom(): void {
+  const mobileBody = document.querySelector<HTMLElement>(".mobile-body");
+  if (mobileBody) {
+    scrollToBottom(mobileBody);
+    return;
+  }
   window.scrollTo({ top: document.documentElement.scrollHeight });
 }

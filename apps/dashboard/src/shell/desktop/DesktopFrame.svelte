@@ -9,7 +9,7 @@
   import { dashboardRelativePath } from '$lib/dashboardRoutes'
   import { provideFilePreviewNavigator } from '../../components/chat/filePreviewContext'
   import { filePreviewWidth } from '../../components/chat/filePreviewWidth'
-  import { provideSessionPanel } from '../../components/chat/sessionPanel/sessionPanelContext.svelte'
+  import { useSessionPanel } from '../../components/chat/sessionPanel/sessionPanelContext.svelte'
   import SessionSidePanel from '../../components/chat/sessionPanel/SessionSidePanel.svelte'
   import FileDropZone from '../../components/chat/FileDropZone.svelte'
 
@@ -21,7 +21,7 @@
   let currentPath = $state(dashboardRelativePath())
   const topBarAction = provideTopBarAction()
   provideSettingsDetail()
-  const sessionPanel = provideSessionPanel()
+  const sessionPanel = useSessionPanel()!
   // Local file links open in the session side panel. The Bot chat page opens them in its own panel.
   provideFilePreviewNavigator({ open: target => sessionPanel.openFile(target) })
   // The session page registers its Session; other pages show no session side panel.

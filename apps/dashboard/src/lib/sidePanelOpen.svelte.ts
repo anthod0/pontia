@@ -1,4 +1,3 @@
-import { useMobileStack } from "$lib/mobile/overlayStack.svelte";
 import { pushState } from "$app/navigation";
 import { page } from "$app/state";
 import { MediaQuery } from "svelte/reactivity";
@@ -11,12 +10,10 @@ const openSerializer = {
 
 /**
  * Whether a right-hand side panel is open. On wide screens it is saved per browser under `key`,
- * so the panel stays open or closed across pages and reloads; on phones the full-screen panel
+ * so the panel stays open or closed across pages and reloads; the tablet overlay
  * stays closed until it is opened.
  */
 export class SidePanelOpen {
-  #stack = useMobileStack();
-  #layer = $state<string>();
   #saved: PersistedState<boolean>;
   #key: string;
   #backPending = false;
@@ -29,21 +26,15 @@ export class SidePanelOpen {
 
   /** Whether the panel sits beside the page instead of covering it. */
   get wide(): boolean {
-    return !this.#stack && this.#wide.current;
+    return this.#wide.current;
   }
 
   get current(): boolean {
-    if (this.#stack) return this.#stack.layers.some((layer) => layer.id === this.#layer);
     return this.wide ? this.#saved.current : page.state.sidePanel === this.#key;
   }
 
   set current(open: boolean) {
-    if (this.#stack) {
-      if (open !== this.current) {
-        if (open) this.#layer = this.#stack.open({});
-        else this.#stack.back();
-      }
-    } else if (this.wide) this.#saved.current = open;
+    if (this.wide) this.#saved.current = open;
     else if (!this.#backPending && open !== this.current) {
       if (open) pushState("", { ...page.state, sidePanel: this.#key });
       else {

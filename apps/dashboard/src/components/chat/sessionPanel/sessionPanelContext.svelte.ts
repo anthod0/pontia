@@ -31,6 +31,7 @@ export class SessionPanel {
     parse: (saved) => panelTabs.find((tab) => tab === saved),
     stringify: (tab) => tab,
   });
+  mobileEntry?: { sessionId: string; tab: SessionPanelTab };
   source = $state.raw<SessionPanelSource | null>(null);
   /** The last Session shown, kept while the next session page loads. */
   #last: SessionPanelSource | null = null;

@@ -5,6 +5,7 @@ import { page } from "$app/state";
 type Layer = {
   id: string;
   title?: string;
+  subtitle?: string;
   modal?: boolean;
   content?: Snippet;
   dismiss?: () => void;

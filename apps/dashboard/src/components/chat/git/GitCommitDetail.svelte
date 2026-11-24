@@ -20,7 +20,7 @@
     device: DeviceRuntime
     workspaceId: string
     sha: string
-    onback: () => void
+    onback?: () => void
     onopen: (file: GitCommitFile) => void
   } = $props()
 
@@ -38,7 +38,7 @@
 </script>
 
 <header class="flex h-12 shrink-0 items-center gap-1 border-b px-2 max-lg:h-14">
-  <Button variant="ghost" size="icon-sm" class="max-lg:size-11" onclick={onback} aria-label={$t('git.backToHistory')} title={$t('git.backToHistory')}><ArrowLeftIcon class="size-4 max-lg:size-5" /></Button>
+  {#if onback}  <Button variant="ghost" size="icon-sm" class="max-lg:size-11" onclick={onback} aria-label={$t('git.backToHistory')} title={$t('git.backToHistory')}><ArrowLeftIcon class="size-4 max-lg:size-5" /></Button>{/if}
   <h2 class="min-w-0 flex-1 truncate px-1 text-sm font-medium text-heading">{$t('git.commitTitle', { sha: shortSha(sha) })}</h2>
   <Button variant="ghost" size="icon-sm" class="max-lg:size-11" onclick={copySha} aria-label={$t('git.copySha')} title={$t('git.copySha')}>
     {#if copied}<CheckIcon class="size-4 text-success max-lg:size-5" />{:else}<CopyIcon class="size-4 max-lg:size-5" />{/if}

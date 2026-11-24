@@ -6,6 +6,7 @@
   import { createComposer } from '../../../features/chat/composer.svelte'
   import type { ChatCommand } from '$lib/chatCommands'
   import UploadAttachments from '../../../components/chat/UploadAttachments.svelte'
+  import StopIcon from 'phosphor-svelte/lib/StopIcon'
   import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
   import PaperPlaneTiltIcon from 'phosphor-svelte/lib/PaperPlaneTiltIcon'
   import ArrowsOutIcon from 'phosphor-svelte/lib/ArrowsOutIcon'
@@ -17,6 +18,7 @@
     commands,
     busy,
     submitDisabled,
+    onInterrupt,
     onSubmit,
   }: {
     value: string
@@ -26,6 +28,7 @@
     commands: ChatCommand[]
     busy: boolean
     submitDisabled: boolean
+    onInterrupt?: () => void
     onSubmit: (text: string) => Promise<boolean>
   } = $props()
   const stack = useMobileStack()!
@@ -160,6 +163,9 @@
         })
       }}><ArrowsOutIcon /></button
     >{/if}
+  {#if onInterrupt && !value.trim() && !controller.attachments.items.length}
+    <button class="mobile-icon bg-destructive text-white" aria-label={$t('chat.interrupt')} disabled={busy} onmousedown={holdFocus} onclick={onInterrupt}><StopIcon weight="fill"/></button>
+  {:else}
   <button
     class="mobile-icon shrink-0 bg-primary text-primary-foreground disabled:opacity-40"
     disabled={controller.cannotSubmit}
@@ -167,4 +173,5 @@
     onmousedown={holdFocus}
     onclick={() => submit()}><PaperPlaneTiltIcon /></button
   >
+  {/if}
 </div>

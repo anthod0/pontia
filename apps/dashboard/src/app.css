@@ -377,13 +377,6 @@ body {
   touch-action: none;
 }
 
-.mobile-shell [data-chat-composer-dock] {
-  inset-inline: 0;
-  bottom: var(--visual-viewport-bottom, 0px);
-}
-.mobile-shell[data-keyboard="true"] [data-chat-composer-dock] {
-  padding-bottom: 8px;
-}
 @supports (backdrop-filter: blur(12px)) {
   @media (prefers-reduced-transparency: no-preference) {
     .mobile-tabs.mobile-glass {
@@ -442,4 +435,13 @@ body {
 
 body:has([data-mobile-bot-sheet]) [data-sonner-toast] button {
   pointer-events: auto;
+}
+
+.mobile-shell .chat-scroll-button {
+  bottom: calc(var(--chat-composer-height) + var(--visual-viewport-bottom, 0px) + 0.5rem);
+  inset-inline: 0;
+}
+.mobile-shell .chat-scroll-button button {
+  border-radius: 50%;
+  background: var(--glass-strong);
 }

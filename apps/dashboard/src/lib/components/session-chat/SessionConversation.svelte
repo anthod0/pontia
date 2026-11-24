@@ -2,7 +2,7 @@
   import { t } from '$lib/i18n';
   import { parseUploadMessage } from '$lib/uploads/message'
   import { parseQuestionReplies, questionRepliesText } from '$lib/session-chat/questionReply'
-  import { onDestroy, tick } from 'svelte'
+  import { onDestroy, tick, type Snippet } from 'svelte'
   import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
@@ -26,6 +26,7 @@
   import type { SessionChatMessage } from '../../session-chat/sessionChat'
 
   interface Props {
+    stepsCard?: Snippet<[NonNullable<SessionChatMessage['thoughtSteps']>, boolean, TurnView | undefined]>
     messages: SessionChatMessage[]
     timelineItems?: TimelineItem[]
     compactionBusy?: boolean
@@ -46,6 +47,7 @@
   }
 
   let {
+    stepsCard,
     messages,
     timelineItems = [],
     compactionBusy = false,
@@ -256,21 +258,18 @@
     return new Promise((resolve) => requestAnimationFrame(() => resolve()))
   }
 
-  function preserveDocumentScrollAnchor(previousScrollHeight: number, previousScrollY: number): void {
-    const scrollHeightDelta = document.documentElement.scrollHeight - previousScrollHeight
-    if (scrollHeightDelta <= 0) return
-    window.scrollTo({ top: previousScrollY + scrollHeightDelta })
-  }
-
   async function loadMoreHistoryFromTop(): Promise<void> {
     topHistoryLoadInFlight = true
-    const previousScrollHeight = document.documentElement.scrollHeight
-    const previousScrollY = window.scrollY
+    const mobileBody = scrollContainer?.closest<HTMLElement>('.mobile-body')
+    const scroller = mobileBody ?? document.documentElement
+    const previousScrollHeight = scroller.scrollHeight
+    const previousScrollY = mobileBody?.scrollTop ?? window.scrollY
     try {
       await onLoadMoreHistory?.()
       await tick()
       await nextAnimationFrame()
-      preserveDocumentScrollAnchor(previousScrollHeight, previousScrollY)
+      const delta = scroller.scrollHeight - previousScrollHeight
+      if (delta > 0) (mobileBody ?? window).scrollTo({top: previousScrollY + delta})
     } finally {
       topHistoryLoadInFlight = false
     }
@@ -326,7 +325,12 @@
       {/if}
       {#if chatMessage.role === 'assistant'}
         {#if chatMessage.thoughtSteps?.length}
-          <ThoughtSummary steps={chatMessage.thoughtSteps} active={liveSegment && busy && !chatMessage.content.trim()} />
+          {@const active = !!(liveSegment && busy && !chatMessage.content.trim())}
+          {#if stepsCard}
+            {@render stepsCard(chatMessage.thoughtSteps, active, turnsById.get(chatMessage.turnId))}
+          {:else}
+            <ThoughtSummary steps={chatMessage.thoughtSteps} {active} />
+          {/if}
         {/if}
         {#each splitAttachments(chatMessage.content, chatMessage.status === 'pending') as part, index (index)}
           {#if part.kind === 'text'}

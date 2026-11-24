@@ -7,7 +7,7 @@
 {#each stack.layers as layer, i (layer.id)}
   {#if layer.content}
     <div inert={i < stack.layers.length - 1}>
-      <MobileScreen modal={layer.modal} title={layer.title ?? ''} back={() => stack.back()}>{@render layer.content()}</MobileScreen>
+      <MobileScreen subtitle={layer.subtitle} modal={layer.modal} title={layer.title ?? ''} back={() => stack.back()}>{@render layer.content()}</MobileScreen>
     </div>
   {/if}
 {/each}

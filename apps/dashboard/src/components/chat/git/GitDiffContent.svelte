@@ -13,7 +13,8 @@
   import type { GitDiffContent } from './gitChanges'
 
   /** The body of one file's diff: hunks with line numbers, or why there are none. */
-  let { path, diff, error, onretry }: {
+  let { path, diff, error, onretry, compact = false }: {
+    compact?: boolean
     path: string
     diff: GitDiffContent | undefined
     /** Set when the diff could not be read. */
@@ -46,7 +47,7 @@
   const marks = { context: ' ', add: '+', delete: '−' }
 </script>
 
-<div class="min-h-0 flex-1 overflow-auto overscroll-contain" data-git-diff>
+<div class="min-h-0 flex-1 overflow-auto overscroll-contain" data-git-diff class:compact>
   {#if error}
     <Empty.Root role="alert" class="min-h-0 p-8">
       <Empty.Header>
@@ -82,12 +83,12 @@
     <div class="shiki min-w-max font-mono text-xs leading-5">
       {#each diff.hunks as hunk, hunkIndex (hunkIndex)}
         <div class="flex bg-muted/60 text-muted-foreground">
-          <span class="sticky left-0 w-[4.5rem] shrink-0 bg-muted"></span>
+          <span class="sticky left-0 line-numbers w-[4.5rem] shrink-0 bg-muted"></span>
           <span class="px-3 py-0.5 whitespace-pre">{hunk.header}</span>
         </div>
         {#each hunk.lines as line, lineIndex (lineIndex)}
           <div class={['flex', lineClass[line.kind]]}>
-            <span class="sticky left-0 flex w-[4.5rem] shrink-0 bg-surface text-right text-muted-foreground/70 tabular-nums select-none">
+            <span class="sticky left-0 flex line-numbers w-[4.5rem] shrink-0 bg-surface text-right text-muted-foreground/70 tabular-nums select-none">
               <span class={['w-9 pr-1.5', lineClass[line.kind]]}>{line.old ?? ''}</span>
               <span class={['w-9 pr-1.5', lineClass[line.kind]]}>{line.new ?? ''}</span>
             </span>
@@ -102,3 +103,8 @@
     {/if}
   {/if}
 </div>
+
+<style>
+.compact .line-numbers { width: 6.8ch; font-size: 11px; }
+.compact .line-numbers > span { width: 3.4ch; padding-right: .3ch; }
+</style>

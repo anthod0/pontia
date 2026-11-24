@@ -5,6 +5,7 @@
   import * as Select from '$lib/components/ui/select'
   import * as Sheet from '$lib/components/ui/sheet'
   import { Input } from '$lib/components/ui/input'
+  import { useMobileStack } from '$lib/mobile/overlayStack.svelte'
   import { IsMobile } from '$lib/hooks/is-mobile.svelte'
   import { cn } from '$lib/utils'
   import { t } from '$lib/i18n'
@@ -32,6 +33,7 @@
     option: Snippet<[T]>
   } = $props()
   const mobile = new IsMobile()
+  const mobileStack = useMobileStack()
   let open = $state(false)
   let search = $state('')
   const filtered = $derived(options.filter(item => labelOf(item).toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())))
@@ -45,7 +47,7 @@
   }
 </script>
 
-{#if mobile.current}
+{#if mobileStack || mobile.current}
   <Sheet.Root bind:open onOpenChange={() => search = ''}>
     <Sheet.Trigger {id} {disabled} {title} aria-label={label} data-size="default" class={cn(Select.selectTriggerClass, triggerClass, 'min-h-11')}>
       {@render trigger()}<CaretDownIcon class="size-4 text-muted-foreground" />
