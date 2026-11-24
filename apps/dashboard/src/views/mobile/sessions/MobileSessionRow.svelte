@@ -113,7 +113,7 @@
         >
         {#if session.state === 'busy' || session.state === 'waiting_for_interaction'}<small
             >{statusLabel(session.state, $t)}</small
-          >{:else}<span
+          >{:else if session.state !== 'exited'}<span
             class={'size-2 rounded-full ' + sessionStateDotClass(session.state)}
             aria-label={statusLabel(session.state, $t)}
           ></span>{/if}
