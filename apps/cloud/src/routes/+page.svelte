@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { author, siteOrigin } from '$lib/site';
-	import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon';
+	import WhereverSection from '$lib/components/WhereverSection.svelte';
 	import HeroSection from '$lib/components/HeroSection.svelte';
 	import RemoteSection from '$lib/components/RemoteSection.svelte';
 	import BotStorySection from '$lib/components/BotStorySection.svelte';
@@ -9,7 +9,6 @@
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import LocaleLinks from '$lib/components/LocaleLinks.svelte';
-	import { reveal } from '$lib/reveal';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocale, localizeHref } from '$lib/paraglide/runtime';
 
@@ -68,27 +67,7 @@
 	<OpenSourceSection />
 	<HomeFaq />
 
-	<section class="closing page-width" aria-labelledby="closing-title" {@attach reveal()}>
-		<h2 id="closing-title" class="reveal">{m.home_closing_title()}</h2>
-		<p class="reveal" style="--i: 1">{m.home_closing_text()}</p>
-		<div class="closing-actions reveal" style="--i: 2">
-			<a class="button" href="https://app.pontia.dev">{m.get_started()}<ArrowRightIcon size={18} /></a>
-			<a class="button button-secondary" href={localizeHref('/docs/getting-started')}>{m.setup_guide()}</a>
-		</div>
-	</section>
+	<WhereverSection />
 </main>
 
 <SiteFooter />
-
-<style>
-	/* Closing call to action above the footer, on a soft brand glow. */
-	.closing { display: flex; flex-direction: column; align-items: center; padding-block: 120px 128px; text-align: center; background: radial-gradient(ellipse 50% 60% at 50% 55%, rgb(69 133 136 / 10%), transparent 70%); }
-	.closing h2 { font-size: clamp(32px, 4.4vw, 52px); letter-spacing: -0.045em; }
-	.closing p { margin-top: 16px; font-size: 16px; color: var(--muted-foreground); }
-	.closing-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 32px; }
-	.closing-actions .button-secondary { background: var(--background); }
-	@media (max-width: 600px) {
-		.closing { padding-block: 72px 80px; }
-		.closing p { font-size: 14px; }
-	}
-</style>
