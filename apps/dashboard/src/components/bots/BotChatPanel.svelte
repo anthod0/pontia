@@ -215,7 +215,7 @@
       </span>
       <span class={['text-[13px] leading-5 [overflow-wrap:anywhere]', done ? 'line-clamp-2 text-muted-foreground' : 'line-clamp-3']}>{summary(message)}</span>
     </button>
-    <div class={['mt-2 flex items-center gap-1', done && 'text-muted-foreground']}>
+    <div class={['mt-2 flex items-center gap-1 touch-target:flex-wrap touch-target:gap-2 touch-target:[&>button]:min-h-11 touch-target:[&>button]:min-w-11', done && 'text-muted-foreground']}>
       <Button variant="ghost" size="xs" onclick={() => viewContext(message.id)}><TreeStructureIcon />{$t('bots.context')}</Button>
       {#if !done}
         <Button variant="ghost" size="xs" class="ml-auto" onclick={() => ontodochange(message.id, 'resolve')}><EyeSlashIcon />{$t('bots.ignore')}</Button>
@@ -251,7 +251,7 @@
           <Tabs.Trigger value="search" class="h-full px-2.5"><MagnifyingGlassIcon />{$t('bots.searchTab')}</Tabs.Trigger>
           <Tabs.Trigger value="git" class="h-full px-2.5"><GitBranchIcon />{$t('git.title')}</Tabs.Trigger>
         </Tabs.List>
-        <Button variant="ghost" size="icon-sm" class="shrink-0" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => { panel.current = false }}><XIcon /></Button>
+        <Button variant="ghost" size="icon-sm" class="shrink-0 max-lg:size-11 pointer-coarse:size-11" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => { panel.current = false }}><XIcon /></Button>
       </header>
       <Tabs.Content value="files" class="flex min-h-0 flex-col">
         {#if file}

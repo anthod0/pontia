@@ -303,7 +303,7 @@
   <div bind:this={editorElement}></div>
 
   {#if open}
-    <div bind:this={listbox} class="absolute bottom-full left-2 z-50 mb-2 max-h-64 w-[min(36rem,calc(100vw-3rem))] overflow-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-none" role="listbox" aria-label={$t('files.suggestions')}>
+    <div bind:this={listbox} class="absolute bottom-full left-2 z-50 mb-2 max-h-64 w-[min(36rem,calc(100vw-3rem))] overflow-auto overscroll-contain rounded-lg border bg-popover p-1 text-popover-foreground shadow-none" role="listbox" aria-label={$t('files.suggestions')}>
       {#if loading && files.length === 0}
         <div class="px-3 py-2 text-sm text-muted-foreground">{$t('files.searching')}</div>
       {:else if files.length === 0}

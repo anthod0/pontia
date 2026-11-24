@@ -19,5 +19,7 @@
 
 <svelte:window onlanguagechange={updateBrowserLanguage} />
 
-<Toaster richColors position="top-center" />
+<Toaster richColors position="top-center"
+  offset={{ top: 'var(--notification-top, 24px)' }}
+  mobileOffset={{ top: 'var(--notification-top)' }} />
 {@render children()}
