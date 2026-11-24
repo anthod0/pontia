@@ -4,7 +4,7 @@
 	import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon';
 	import ArrowCounterClockwiseIcon from 'phosphor-svelte/lib/ArrowCounterClockwiseIcon';
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
-	import LockSimpleIcon from 'phosphor-svelte/lib/LockSimpleIcon';
+	import EncryptedChannel from './remote/EncryptedChannel.svelte';
 	import SpinnerGapIcon from 'phosphor-svelte/lib/SpinnerGapIcon';
 	import { reveal } from '$lib/reveal';
 	import { approve, deny, finish, send, start, type RemoteDemo } from '$lib/remote-demo';
@@ -25,9 +25,6 @@
 		{ name: 'Google Antigravity', logo: '/client-logos/google-antigravity.svg' },
 		{ name: 'Kiro', logo: '/client-logos/kiro.svg' }
 	];
-	// Stage coordinates (viewBox 0 0 1080 420): the channel runs from the terminal's right edge
-	// to the phone's left edge at the terminal's vertical centre, and peaks under the lock.
-	const channel = 'M475 183 C 565 50, 720 50, 810 183';
 	const WORK_MS = 1400;
 
 	type Surface = 'terminal' | 'phone';
@@ -59,10 +56,6 @@
 		void demo.entries.length;
 		for (const feed of [terminalFeed, phoneFeed]) feed?.scrollTo({ top: feed.scrollHeight, behavior: 'smooth' });
 	});
-
-	function beginMotion(node: SVGAnimateMotionElement) {
-		node.beginElement();
-	}
 
 	async function update(next: RemoteDemo, from: Surface) {
 		clearTimeout(timer);
@@ -150,22 +143,9 @@
 			<a class="note note-below reveal" style="--i: 3" href={localizeHref('/docs/how-it-works')}><span class="note-index">02</span>{m.remote_terminal_title()}<ArrowUpRightIcon size={12} /></a>
 		</div>
 
-		<svg class="channel reveal" style="--i: 2" viewBox="0 0 1080 420" aria-hidden="true">
-			<path d={channel} />
-			<circle class="anchor" cx="475" cy="183" r="4" />
-			<circle class="anchor" cx="810" cy="183" r="4" />
-			<circle class="packet" r="3.5"><animateMotion dur="2.6s" repeatCount="indefinite" path={channel} keyPoints="0;1" keyTimes="0;1" calcMode="spline" keySplines="0.6 0 0.4 1" /></circle>
-			<circle class="packet back" r="3.5"><animateMotion dur="2.6s" begin="-1.3s" repeatCount="indefinite" path={channel} keyPoints="1;0" keyTimes="0;1" calcMode="spline" keySplines="0.6 0 0.4 1" /></circle>
-			{#if pulse}
-				{#key pulse.id}
-					<circle class="pulse" r="6"><animateMotion {@attach beginMotion} begin="indefinite" dur="0.7s" fill="freeze" path={channel} keyPoints={pulse.from === 'terminal' ? '0;1' : '1;0'} keyTimes="0;1" calcMode="spline" keySplines="0.5 0 0.3 1" /></circle>
-				{/key}
-			{/if}
-		</svg>
-		{#key pulse?.id}
-			<span class={['lock reveal', pulse && 'sealed']} style="--i: 2" aria-hidden="true"><LockSimpleIcon size={14} weight="bold" /></span>
-		{/key}
 		<a class="note note-encrypted reveal" style="--i: 4" href={localizeHref('/docs/security')}><span class="note-index">03</span>{m.remote_encrypted_title()}<ArrowUpRightIcon size={12} /></a>
+
+		<div class="connection reveal" style="--i: 2"><EncryptedChannel {pulse} /></div>
 
 		<div class="phone reveal" style="--i: 3" data-surface="phone">
 			<span class="notch" aria-hidden="true"></span>
@@ -275,14 +255,7 @@
 	.t-status { margin: 0 1.3em; padding: 0.7em 0 1em; border-top: 1px dashed #3c3836; color: #83a598; }
 	.cursor { display: inline-block; width: 0.5em; height: 1em; margin-left: 0.4em; vertical-align: -0.15em; background: #ebdbb2; animation: blink 1s steps(1) infinite; }
 
-	.channel { z-index: 1; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
-	.channel path { fill: none; stroke: var(--primary); stroke-width: 1.2; stroke-dasharray: 4 5; vector-effect: non-scaling-stroke; animation: flow 1.2s linear infinite; }
-	.anchor { fill: var(--background); stroke: var(--primary); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
-	.packet { fill: var(--primary); }
-	.packet.back { fill: var(--olive); }
-	.pulse { fill: var(--primary); stroke: var(--background); stroke-width: 2; vector-effect: non-scaling-stroke; animation: pulse-out 0.9s ease-in both; }
-	.lock { z-index: 2; top: 18.3%; left: 59.491%; display: grid; place-items: center; width: 2.1em; height: 2.1em; translate: -50% -50%; border: 1px solid var(--primary); border-radius: 50%; background: var(--background); color: var(--primary); box-shadow: 0 0 0 0.4em color-mix(in srgb, var(--primary) 10%, transparent); }
-	.lock.sealed { animation: seal 0.7s var(--ease-out) 0.15s; }
+	.connection { z-index: 1; left: 43.9815%; top: 0; width: 31.0185%; height: 43.5714%; pointer-events: none; }
 
 	/* The phone fills the stage height; its feed scrolls and the composer stays in reach. */
 	.phone { top: 0; right: 0; bottom: 0; display: flex; flex-direction: column; width: 25%; padding: 1.4em 0.9em 0; overflow: hidden; border: 1px solid var(--border-strong); border-bottom: 0; border-radius: 2.2em 2.2em 0 0; background: var(--surface); box-shadow: 0 -1em 3em -2em rgb(60 56 54 / 35%); font-size: min(16px, 1.48cqw); mask-image: linear-gradient(#000 88%, transparent); }
@@ -338,34 +311,31 @@
 	/* A vertical hairline joins a note to the part above or below it. */
 	.note-below { position: relative; margin: 2em 0 0 1.6em; }
 	.note-below::before { content: ''; position: absolute; bottom: calc(100% + 0.55em); left: 0.35em; width: 1px; height: 1.4em; background: var(--border-stronger); }
-	.note-encrypted { top: 0; left: 59.491%; translate: -50% 0; }
+	.note-encrypted { z-index: 2; top: 0; left: 59.491%; translate: -50% 0; }
 	.note-encrypted::after { content: ''; position: absolute; top: calc(100% + 0.5em); left: 50%; width: 1px; height: 1.6em; background: var(--border-stronger); }
 
 	@keyframes blink { 50% { opacity: 0; } }
-	@keyframes flow { to { stroke-dashoffset: -18; } }
 	@keyframes spin { to { rotate: 360deg; } }
 	@keyframes enter { from { opacity: 0; translate: 0 0.4em; } }
 	@keyframes type-in { from { clip-path: inset(0 100% 0 0); } }
-	@keyframes pulse-out { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
-	@keyframes seal { 40% { scale: 1.18; box-shadow: 0 0 0 0.7em color-mix(in srgb, var(--primary) 18%, transparent); } }
 	@keyframes busy { 0% { box-shadow: 0 0 0 0 rgb(215 153 33 / 50%); } 100% { box-shadow: 0 0 0 0.5em rgb(215 153 33 / 0%); } }
 	@keyframes attention { 0%, 100% { box-shadow: 0 0 0 0 rgb(177 98 134 / 0%); } 50% { box-shadow: 0 0 0 0.25em rgb(177 98 134 / 14%); } }
 
 	@media (prefers-reduced-motion: reduce) {
-		.cursor, .channel path, .approval, .enter, .lock.sealed, .dot-agent, .t-step.running::before, .p-step :global(.spin), .suggestion > span:first-child { animation: none; }
-		.packet, .pulse { display: none; }
+		.cursor, .approval, .enter, .dot-agent, .t-step.running::before, .p-step :global(.spin), .suggestion > span:first-child { animation: none; }
 	}
 
 	/* Narrow screens: the scene becomes a column, with each note above the part it describes. */
 	@media (max-width: 700px) {
-		.stage { display: flex; flex-direction: column; align-items: flex-start; gap: 28px; aspect-ratio: auto; margin-top: 36px; }
+		.stage { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: start; aspect-ratio: auto; margin-top: 36px; }
 		.stage > * { position: static; font-size: 13px; }
-		.channel, .lock, .rule-h, .note-encrypted::after { display: none; }
+		.rule-h, .note-encrypted::after { display: none; }
 		.group-clients { flex-direction: column-reverse; align-items: flex-start; gap: 12px; }
-		.group-terminal { width: 100%; flex-direction: column-reverse; gap: 12px; }
+		.group-terminal { width: 100%; margin-top: 28px; flex-direction: column-reverse; gap: 12px; }
 		.note-below { margin: 0; }
 		.note-below::before { display: none; }
-		.note-encrypted { translate: none; }
-		.phone { align-self: center; width: 250px; height: 400px; }
+		.note-encrypted { grid-area: 3 / 1; align-self: center; max-width: calc(50% - 18px); white-space: normal; translate: none; }
+		.connection { grid-area: 3 / 1; position: relative; inset: auto; justify-self: center; width: 160px; height: 80px; }
+		.phone { justify-self: center; width: 250px; height: 400px; }
 	}
 </style>

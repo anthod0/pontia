@@ -111,6 +111,7 @@
   "remote_subscriptions_title": "Bring your own subscriptions.",
   "remote_terminal_title": "Keep your terminal.",
   "remote_encrypted_title": "Encrypted end to end.",
+  "remote_lock_drag": "Drag the lock to pull the encrypted connection, or hold Space or Enter.",
   "remote_demo_title": "Fix the login test",
   "remote_demo_prompt_fix": "Fix the login test",
   "remote_demo_prompt_auth": "Run only the auth tests",

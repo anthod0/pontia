@@ -111,6 +111,7 @@
   "remote_subscriptions_title": "手持ちのサブスクリプションをそのまま利用。",
   "remote_terminal_title": "ターミナルはそのまま。",
   "remote_encrypted_title": "エンドツーエンドで暗号化。",
+  "remote_lock_drag": "鍵をドラッグするか、スペースキーまたは Enter キーを長押しして、暗号化された接続線を引っ張れます。",
   "remote_demo_title": "ログインテストを修正",
   "remote_demo_prompt_fix": "ログインテストを修正して",
   "remote_demo_prompt_auth": "auth のテストだけ実行して",

@@ -111,6 +111,7 @@
   "remote_subscriptions_title": "使用你自己的订阅。",
   "remote_terminal_title": "保留你的终端。",
   "remote_encrypted_title": "端到端加密。",
+  "remote_lock_drag": "拖动锁图标可拉动加密连线，也可按住空格键或回车键。",
   "remote_demo_title": "修复登录测试",
   "remote_demo_prompt_fix": "修复登录测试",
   "remote_demo_prompt_auth": "只运行 auth 测试",
