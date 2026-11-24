@@ -179,7 +179,8 @@ impl Cloud {
                                 "id": id,
                                 "device_handle": "test-device",
                                 "name": body["name"],
-                                "edge_id": body["edge_id"],
+                                "edge_id": if body["edge_id"] == "auto" { json!(FIRST_EDGE) } else { body["edge_id"].clone() },
+                                "edge_mode": if body["edge_id"] == "auto" { "auto" } else { "fixed" },
                                 "edge_name": "Selected edge",
                                 "e2e_public_key": body["e2e_public_key"],
                                 "e2e_key_version": body["e2e_key_version"],
@@ -292,6 +293,21 @@ async fn parameterized_registration_selects_the_requested_edge_and_persists_iden
     );
     assert_eq!(identity["device_id"], state.device.as_ref().unwrap()["id"]);
     assert_eq!(identity["key_version"], 1);
+}
+
+#[tokio::test]
+async fn automatic_registration_and_key_rotation_preserve_selection_mode() {
+    let cloud = Cloud::new();
+    cloud
+        .run(&["enable", "--edge", "auto", "--name", "Agent device"])
+        .await
+        .unwrap();
+    cloud.run(&["rotate-key"]).await.unwrap();
+    let state = cloud.state.lock().unwrap();
+    assert_eq!(state.registrations[0]["edge_id"], "auto");
+    assert_eq!(state.registrations[1]["edge_id"], "auto");
+    assert_eq!(state.registrations[1]["e2e_key_version"], 2);
+    assert_eq!(state.device.as_ref().unwrap()["edge_id"], FIRST_EDGE);
 }
 
 #[tokio::test]

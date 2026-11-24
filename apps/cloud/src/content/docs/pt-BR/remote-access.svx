@@ -27,9 +27,11 @@ Depois, registre o dispositivo atual:
 pontia remote enable
 ```
 
-Escolha um Edge disponível e confirme o nome do dispositivo quando solicitado. O Pontia gera a identidade do dispositivo usada para o acesso criptografado de ponta a ponta e atualiza o serviço em execução quando necessário.
+Com a opção padrão **Auto**, o dispositivo mede a latência dos Edges públicos e dos seus Edges privados a cada conexão e escolhe o Edge acessível de menor latência. Selecione um nome para fixar o Edge.
 
-Para registrar sem prompts no terminal, use `pontia remote edges` para obter o ID de um Edge e então execute `pontia remote enable --edge EDGE_ID --name "Device name"`. As duas opções são obrigatórias. Veja [inicialização não interativa](/docs/initialization#non-interactive-initialization) para a sequência completa e os requisitos de autorização no navegador.
+Confirme o nome do dispositivo quando solicitado. O Pontia gera a identidade do dispositivo usada para o acesso criptografado de ponta a ponta e atualiza o serviço em execução quando necessário.
+
+Para registrar sem interação, execute `pontia remote enable --edge auto --name "Device name"`. Para fixar um Edge, substitua `auto` por um ID de `pontia remote edges`. As duas opções são obrigatórias. Veja [inicialização não interativa](/docs/initialization#non-interactive-initialization) para a sequência completa e os requisitos de autorização no navegador.
 
 Abra [app.pontia.dev](https://app.pontia.dev) para acessar seu dispositivo registrado.
 

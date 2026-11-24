@@ -16,6 +16,7 @@ function deviceResponseBody(
     name: string;
     edgeId: string;
     edgeName: string;
+    edgeMode: "auto" | "fixed";
     e2ePublicKey: string;
     e2eKeyVersion: number;
   },
@@ -27,6 +28,7 @@ function deviceResponseBody(
     name: device.name,
     edge_id: device.edgeId,
     edge_name: device.edgeName,
+    edge_mode: device.edgeMode,
     e2e_public_key: device.e2ePublicKey,
     e2e_key_version: device.e2eKeyVersion,
     capability_verification_key: capabilityVerificationKey,

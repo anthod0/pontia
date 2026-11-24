@@ -54,6 +54,7 @@ CREATE TABLE `devices` (
 	`e2e_key_version` integer,
 	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	`updated_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
+	`edge_mode` text DEFAULT 'auto' NOT NULL,
 	CONSTRAINT `fk_devices_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
 	CONSTRAINT `fk_devices_edge_id_edges_id_fk` FOREIGN KEY (`edge_id`) REFERENCES `edges`(`id`) ON DELETE RESTRICT,
 	CONSTRAINT "devices_handle_format_check" CHECK(length("handle") BETWEEN 4 AND 48 AND substr("handle", 1, 1) GLOB '[a-z]' AND "handle" NOT GLOB '*[^a-z0-9_-]*')

@@ -143,6 +143,7 @@ test("remote HTTP API removes a device without revoking its CLI credential", asy
     name: "HTTP Device",
     edge_id: edgeId,
     edge_name: "HTTP Edge",
+    edge_mode: "fixed",
     e2e_public_key: base64url.encode(devicePublic),
     e2e_key_version: 1,
     capability_verification_key: capabilityVerificationKey,

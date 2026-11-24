@@ -136,7 +136,7 @@ async fn new_ready_connection_replaces_old_without_losing_new_online_record() {
 }
 
 #[tokio::test]
-async fn production_client_fetches_a_fresh_ticket_when_reconnecting() {
+async fn production_client_selects_the_lower_latency_edge_and_refreshes_its_ticket_on_reconnect() {
     let server = TestEdge::start().await;
     let device_id = Uuid::new_v4();
     let home = server.root.path().join("device");

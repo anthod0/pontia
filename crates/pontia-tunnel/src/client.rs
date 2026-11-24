@@ -9,6 +9,7 @@ use std::{
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 
+use futures_util::{StreamExt, stream};
 use reqwest::{Client, StatusCode};
 use rustls::{ClientConfig, RootCertStore};
 use serde::Deserialize;
@@ -25,7 +26,10 @@ use tracing::{info, warn};
 use url::Url;
 use uuid::Uuid;
 
-use crate::{DeviceRequestHandler, Error, Result, protocol, transport::serve_device};
+use crate::{
+    DeviceRequestHandler, Error, Result, protocol,
+    transport::{DeviceSocket, serve_device},
+};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -58,6 +62,19 @@ struct TicketResponse {
     expires_at: String,
 }
 
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum TicketReply {
+    Ticket(TicketResponse),
+    Candidates { candidates: Vec<Candidate> },
+}
+
+#[derive(Deserialize)]
+struct Candidate {
+    id: Uuid,
+    tunnel_url: String,
+}
+
 #[derive(Debug, Clone, Copy)]
 enum AttemptError {
     AuthenticationPaused(CredentialFingerprint),
@@ -76,6 +93,7 @@ impl RemoteClient {
         handler: DeviceRequestHandler,
     ) -> Result<Self> {
         let http = Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
             .timeout(REQUEST_TIMEOUT)
             .build()
             .map_err(|_| Error::Protocol("failed to create cloud client"))?;
@@ -172,23 +190,57 @@ impl RemoteClient {
     }
 
     async fn attempt(&self, mut shutdown: watch::Receiver<bool>) -> AttemptError {
-        let ticket = tokio::select! {
+        let socket = tokio::select! {
             biased;
             _ = shutdown.wait_for(|stop| *stop) => return AttemptError::ConnectionEnded,
-            ticket = self.issue_ticket() => ticket,
+            result = self.connect_selected() => match result {
+                Ok(socket) => socket,
+                Err(error) => return error,
+            },
         };
-        let (ticket, tunnel_url) = match ticket {
-            Ok(ticket) => ticket,
-            Err(error) => return error,
-        };
-        match self.connection(&tunnel_url, &ticket, shutdown).await {
-            Ok(()) => AttemptError::ConnectionEnded,
-            Err(error) => error,
-        }
+        info!(device_id = %self.device_id, "remote device connected");
+        let _ = serve_device(socket, self.handler.clone(), shutdown).await;
+        AttemptError::ConnectionEnded
     }
 
-    async fn issue_ticket(&self) -> std::result::Result<(String, Url), AttemptError> {
+    async fn connect_selected(&self) -> std::result::Result<DeviceSocket, AttemptError> {
         let (credential, fingerprint) = read_credential(&self.credential_path)?;
+        let candidates = match self
+            .ticket_request(&credential, fingerprint, "auto")
+            .await?
+        {
+            TicketReply::Ticket(ticket) => return self.connect_ticket(ticket).await,
+            TicketReply::Candidates { candidates } => candidates,
+        };
+        let mut reachable: Vec<_> = stream::iter(candidates)
+            .map(|candidate| probe_latency(&self.http, candidate))
+            .buffer_unordered(8)
+            .filter_map(std::future::ready)
+            .collect()
+            .await;
+        reachable.sort_unstable();
+        let mut failure = AttemptError::Temporary("no reachable edge");
+        for (_, id) in reachable {
+            let TicketReply::Ticket(ticket) = self
+                .ticket_request(&credential, fingerprint, &id.to_string())
+                .await?
+            else {
+                return Err(AttemptError::Temporary("invalid ticket response"));
+            };
+            match self.connect_ticket(ticket).await {
+                Err(error @ AttemptError::Temporary(_)) => failure = error,
+                outcome => return outcome,
+            }
+        }
+        Err(failure)
+    }
+
+    async fn ticket_request(
+        &self,
+        credential: &str,
+        fingerprint: CredentialFingerprint,
+        selection: &str,
+    ) -> std::result::Result<TicketReply, AttemptError> {
         let endpoint = self
             .cloud_origin
             .join(&format!(
@@ -199,6 +251,7 @@ impl RemoteClient {
         let response = self
             .http
             .post(endpoint)
+            .query(&[("edge_id", selection)])
             .bearer_auth(credential)
             .send()
             .await
@@ -210,10 +263,16 @@ impl RemoteClient {
             }
             _ => return Err(AttemptError::Temporary("ticket request rejected")),
         }
-        let response: TicketResponse = response
+        response
             .json()
             .await
-            .map_err(|_| AttemptError::Temporary("invalid ticket response"))?;
+            .map_err(|_| AttemptError::Temporary("invalid ticket response"))
+    }
+
+    async fn connect_ticket(
+        &self,
+        response: TicketResponse,
+    ) -> std::result::Result<DeviceSocket, AttemptError> {
         let expires_at = OffsetDateTime::parse(&response.expires_at, &Rfc3339)
             .map_err(|_| AttemptError::Temporary("invalid ticket response"))?;
         if !valid_ticket(&response.ticket) || expires_at <= OffsetDateTime::now_utc() {
@@ -221,15 +280,14 @@ impl RemoteClient {
         }
         let tunnel_url = validate_tunnel_url(&response.tunnel_url)
             .map_err(|_| AttemptError::Temporary("invalid ticket response"))?;
-        Ok((response.ticket, tunnel_url))
+        self.connection(&tunnel_url, &response.ticket).await
     }
 
     async fn connection(
         &self,
         tunnel_url: &Url,
         ticket: &str,
-        shutdown: watch::Receiver<bool>,
-    ) -> std::result::Result<(), AttemptError> {
+    ) -> std::result::Result<DeviceSocket, AttemptError> {
         let mut request = tunnel_url
             .as_str()
             .into_client_request()
@@ -269,11 +327,32 @@ impl RemoteClient {
                 "edge selected an invalid tunnel protocol",
             ));
         }
-        info!(device_id = %self.device_id, "remote device connected");
-        serve_device(socket, self.handler.clone(), shutdown)
-            .await
-            .map_err(|_| AttemptError::ConnectionEnded)
+        Ok(socket)
     }
+}
+
+async fn probe_latency(http: &Client, candidate: Candidate) -> Option<(Duration, Uuid)> {
+    let mut url = validate_tunnel_url(&candidate.tunnel_url).ok()?;
+    url.set_scheme("https").ok()?;
+    url.set_path("/healthz");
+    let started = Instant::now();
+    let mut response = http
+        .get(url)
+        .timeout(Duration::from_secs(5))
+        .send()
+        .await
+        .ok()?;
+    if response.status() != StatusCode::OK {
+        return None;
+    }
+    let mut received = 0;
+    while let Some(chunk) = response.chunk().await.ok()? {
+        if !b"ok"[received..].starts_with(&chunk) {
+            return None;
+        }
+        received += chunk.len();
+    }
+    (received == 2).then(|| (started.elapsed(), candidate.id))
 }
 
 fn read_credential(
