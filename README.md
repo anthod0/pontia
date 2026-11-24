@@ -8,12 +8,12 @@ Pontia gives you a Lead Bot that coordinates coding agents on your own machines 
 
 ## Features
 
-- **Parallel tasks.** Give the Lead Bot a project. It assigns work to helpers and collects their reports and files.
-- **Decisions.** Review open questions in Todo and answer them individually.
-- **Shared memory.** Bots on the same device can recall past decisions across sessions. Keep your standing instructions in `USER.md`.
-- **Agent Profiles.** Save a role’s instructions, client and model for other helpers to use.
-- **Remote access.** Switch between registered machines in the Dashboard. Each machine runs its own clients, with an end-to-end encrypted connection to your browser.
-- **Local files and ports.** Securely preview files, HTML prototypes, and localhost dev servers from your browser or phone.
+- **Hear from the Lead Bot when it needs you.** The Lead Bot brings decisions and approval requests to your Todo.
+- **Step into any native session.** Open any helper’s running CLI session to see what it’s doing or take over.
+- **Access your local machine.** Securely preview local files, HTML prototypes, and localhost dev servers in a desktop or mobile browser.
+- **Use the right model for each role.** Choose a model and one of six supported CLIs for each role in its Agent Profile.
+- **Carry your preferences across sessions.** Bots on the same device recall past decisions and follow the preferences you keep in `USER.md`.
+- **Connect securely to every device.** Reach any registered machine from anywhere over a direct, end-to-end encrypted connection from your browser.
 
 ## Supported clients
 
