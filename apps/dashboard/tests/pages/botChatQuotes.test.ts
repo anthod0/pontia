@@ -543,6 +543,25 @@ test("opens context from the message menu and reveals an earlier linked message"
   expect(pages.mock.calls.some(([, page]) => page.before === "older")).toBe(true);
 });
 
+test("shows whole messages with their line breaks in the context tab", async () => {
+  const ending = "This final sentence must stay visible.";
+  const first = { ...reply, content: `Checked:\n\n- ${"long ".repeat(500)}\n\n${ending}` };
+  const latest = message(5, "user_input", "Proceed");
+  serve([first, latest]);
+  vi.spyOn(testDevice.api, "getBotMessageContext").mockResolvedValue({
+    messages: [first, latest],
+    truncated: false,
+  });
+  render(BotChatPage, { botId: bot.bot_id });
+  await fireEvent.contextMenu(await screen.findByText("Proceed"), { clientX: 10, clientY: 10 });
+  await fireEvent.click(await screen.findByRole("menuitem", { name: "View context" }));
+  const panel = await screen.findByRole("complementary");
+  const text = (await within(panel).findByText(new RegExp(ending))).closest("span")!;
+  expect(text.textContent).toBe(`Checked:\n${"long ".repeat(500).trim()}\n${ending}`);
+  expect(text).toHaveClass("whitespace-pre-line");
+  expect(text).not.toHaveClass("line-clamp-3");
+});
+
 const todo = { ...reply, todo: { state: "open" as const } };
 const quotedTodo = (text: string) =>
   `<user_quote message_id="${reply.id}" speaker="Bot">${reply.content}</user_quote>\n${text}`;

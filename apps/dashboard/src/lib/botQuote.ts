@@ -39,10 +39,16 @@ export function quoteSummary(quote: BotQuote): string {
 
 /** Text as one plain line, without common Markdown markers. */
 export function plainLine(text: string): string {
+  return plainText(text).replace(/\s+/g, " ");
+}
+
+/** Text without common Markdown markers or blank lines, keeping its line breaks. */
+export function plainText(text: string): string {
   return text
     .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+[.)])\s+/gm, "")
     .replace(/\*\*|__|`/g, "")
-    .replace(/\s+/g, " ")
+    .replace(/[^\S\n]+/g, " ")
+    .replace(/ ?\n\s*/g, "\n")
     .trim();
 }
 
@@ -136,18 +142,22 @@ export function entryQuote(
     if (entry.kind !== "bot_reply" || !attachedPaths(entry.content).includes(path)) return null;
     return { kind: "file", messageId: entry.id, ...attachedFile(path) };
   }
-  const text =
-    excerpt ??
-    (messageText(entry) ||
-      (entry.kind === "bot_reply"
-        ? attachedPaths(entry.content).map((path) => attachedFile(path).name)
-        : parseUploadMessage(entry.content).files.map((file) => file.name)
-      ).join("\n"));
   return limitQuote({
     kind: "message",
     messageId: entry.id,
     speaker: entry.kind === "user_input" ? "User" : "Bot",
-    text,
+    text: excerpt ?? entryText(entry),
     excerpt: excerpt !== null,
   });
+}
+
+/** The full visible text of a message, or its file names when it has no text. */
+export function entryText(message: BotMessage): string {
+  return (
+    messageText(message) ||
+    (message.kind === "bot_reply"
+      ? attachedPaths(message.content).map((path) => attachedFile(path).name)
+      : parseUploadMessage(message.content).files.map((file) => file.name)
+    ).join("\n")
+  );
 }

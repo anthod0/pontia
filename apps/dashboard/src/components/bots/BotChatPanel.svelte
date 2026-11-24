@@ -22,7 +22,7 @@
   import * as Tabs from '$lib/components/ui/tabs/index.js'
   import { t } from '$lib/i18n'
   import MessageTime from '$lib/components/MessageTime.svelte'
-  import { entryQuote, parseQuotedMessage, quoteSummary, type BotQuote } from '$lib/botQuote'
+  import { entryQuote, entryText, parseQuotedMessage, plainText, quoteSummary, type BotQuote } from '$lib/botQuote'
   import type { Bot, BotMessage } from '../../api/types'
   import { useDeviceRuntime } from '../../device/context'
   import type { FilePreviewTarget } from '../chat/filePreviewContext'
@@ -98,11 +98,18 @@
     if (panel.current && tab.current === 'context' && selected) void context.refetch()
   }
 
+  function withoutLinks(message: BotMessage, text: string) {
+    return message.kind === 'bot_reply' ? text.replace(/!?\[([^\]]+)\]\([^)]+\)/g, '$1') : text
+  }
+
   function summary(message: BotMessage) {
     const quote = entryQuote(message)
-    if (!quote) return ''
-    const text = quoteSummary(quote)
-    return message.kind === 'bot_reply' ? text.replace(/!?\[([^\]]+)\]\([^)]+\)/g, '$1') : text
+    return quote ? withoutLinks(message, quoteSummary(quote)) : ''
+  }
+
+  /** The whole message as plain text, so the Context tab never cuts it short. */
+  function fullText(message: BotMessage) {
+    return withoutLinks(message, plainText(entryText(message)))
   }
 
   async function closeOnMobile() {
@@ -275,14 +282,14 @@
                       {:else}<BotAvatar shape={bot.avatar_shape} color={bot.avatar_color} class="size-5" />{/if}
                     </span>
                     <span class="min-w-0 flex-1">
-                      <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <span class="font-medium text-heading">{user ? $t('bots.you') : bot.name}</span>
-                        <MessageTime value={message.created_at} class="px-0" />
-                        {#if message.todo?.state === 'open'}<span class="ml-auto rounded bg-primary/10 px-1.5 text-[11px] font-medium text-primary">{$t('bots.todos')}</span>
-                        {:else if message.todo?.state === 'done'}<span class="ml-auto flex items-center gap-0.5"><CheckCircleIcon class="size-3" />{$t('bots.todoDone')}</span>{/if}
-                        {#if user && parseQuotedMessage(message.content).quote}<span class="flex items-center gap-0.5"><QuotesIcon class="size-3" />{$t('bots.quoted')}</span>{/if}
+                      <span class="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+                        <span class="font-medium text-heading [overflow-wrap:anywhere]">{user ? $t('bots.you') : bot.name}</span>
+                        <MessageTime value={message.created_at} class="px-0 whitespace-nowrap" />
+                        {#if message.todo?.state === 'open'}<span class="ml-auto rounded bg-primary/10 px-1.5 text-[11px] font-medium whitespace-nowrap text-primary">{$t('bots.todos')}</span>
+                        {:else if message.todo?.state === 'done'}<span class="ml-auto flex items-center gap-0.5 whitespace-nowrap"><CheckCircleIcon class="size-3" />{$t('bots.todoDone')}</span>{/if}
+                        {#if user && parseQuotedMessage(message.content).quote}<span class="flex items-center gap-0.5 whitespace-nowrap"><QuotesIcon class="size-3" />{$t('bots.quoted')}</span>{/if}
                       </span>
-                      <span class="line-clamp-3 text-[13px] leading-5 [overflow-wrap:anywhere]">{summary(message)}</span>
+                      <span class="block text-[13px] leading-5 whitespace-pre-line [overflow-wrap:anywhere]">{fullText(message)}</span>
                       {#if message.status === 'failed'}<span class="text-xs text-destructive">{$t('bots.sendFailed')}</span>{/if}
                     </span>
                   </button>
