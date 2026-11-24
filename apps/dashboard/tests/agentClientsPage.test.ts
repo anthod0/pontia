@@ -63,6 +63,17 @@ test("a client shows its settings without a configuration editor or internal rec
   expect(screen.queryByText("opaque-pi")).toBeNull();
 });
 
+test("a client shows its detected version only when one is recorded", async () => {
+  api.listAgentClients.mockResolvedValue([{ ...pi, name: "Pi", version: "0.70.2" }, peer("grok")]);
+  const user = userEvent.setup();
+  render(AgentClientsPage);
+  await user.click(await screen.findByRole("button", { name: /^Pi/ }));
+  expect(screen.getByText("Version 0.70.2")).toBeInTheDocument();
+  expect(screen.getByRole("navigation", { name: "Agent clients" })).not.toHaveTextContent("0.70.2");
+  await user.click(screen.getByRole("button", { name: /grok/ }));
+  expect(screen.queryByText(/^Version/)).toBeNull();
+});
+
 test("disable sends only the enabled setting and reset removes the entire selected record", async () => {
   const user = userEvent.setup();
   api.patchAgentClient.mockImplementation(async (target, patch) => ({ ...target, ...patch }));

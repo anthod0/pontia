@@ -34,7 +34,7 @@ pub async fn clients(State(state): State<HttpState>) -> Result<Json<ApiResponse<
     let clients: Vec<_> = service.list(&DetectionContext { vars: &vars, pontia_home: app.pontia_home() })
         .await?.into_iter()
         .filter(|client| client.enabled && state.bots().supports_bot_client(&client.client_type, &client.client_key))
-        .map(|client| json!({"id": client.id, "client_type": client.client_type, "client_key": client.client_key, "name": client.name}))
+        .map(|client| json!({"id": client.id, "client_type": client.client_type, "client_key": client.client_key, "name": client.name, "version": client.version}))
         .collect();
     Ok(ok(json!({"clients": clients})))
 }

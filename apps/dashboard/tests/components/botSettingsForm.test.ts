@@ -23,8 +23,14 @@ const models = [
 
 beforeEach(() => {
   vi.spyOn(testDevice.api, "listBotClients").mockResolvedValue([
-    { id: "pi", name: "Pi", client_type: "pi", client_key: "default" },
-    { id: "another", name: "Another client", client_type: "another", client_key: "custom" },
+    { id: "pi", name: "Pi", client_type: "pi", client_key: "default", version: "0.70.2" },
+    {
+      id: "another",
+      name: "Another client",
+      client_type: "another",
+      client_key: "custom",
+      version: null,
+    },
   ]);
   vi.spyOn(testDevice.api, "listAgentClientModels").mockResolvedValue({
     models,
@@ -96,6 +102,7 @@ test("switching clients clears the selection and loads that client catalog", asy
   const submit = screen.getByRole("button", { name: "Save" });
   await waitFor(() => expect(submit).toBeEnabled());
   const client = screen.getByLabelText("Agent client");
+  expect(client).toHaveTextContent(/^Pi$/);
   await fireEvent.keyDown(client, { key: "ArrowDown" });
   await screen.findByRole("option", { name: "Another client" });
   await fireEvent.keyDown(client, { key: "End" });

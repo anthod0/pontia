@@ -669,14 +669,15 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
     "GET",
     "/session-creation-options",
     ({ device }) => ({
-      options: device.data.creationOptions.filter((option) =>
-        device.data.agentClients.some(
-          (client) =>
-            client.enabled &&
-            client.client_type === option.client_type &&
-            (client.client_type !== "acp" || client.client_key === option.metadata.acp_agent_id),
-        ),
-      ),
+      options: device.data.creationOptions.flatMap((option) => {
+        const client = device.data.agentClients.find(
+          (entry) =>
+            entry.enabled &&
+            entry.client_type === option.client_type &&
+            (entry.client_type !== "acp" || entry.client_key === option.metadata.acp_agent_id),
+        );
+        return client ? [{ ...option, version: client.version }] : [];
+      }),
     }),
   ],
 

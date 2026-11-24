@@ -46,7 +46,10 @@ export type BotWorkStatus =
   | { kind: "working"; title: string }
   | { kind: "idle" };
 
-export type BotClient = Pick<AgentClientView, "id" | "name" | "client_type" | "client_key">;
+export type BotClient = Pick<
+  AgentClientView,
+  "id" | "name" | "client_type" | "client_key" | "version"
+>;
 
 export interface BotMessage {
   id: string;
@@ -298,6 +301,7 @@ export interface SessionCreationOption {
   name: string;
   client_type: string;
   metadata: JsonObject;
+  version: string | null;
 }
 
 export interface SessionView {
