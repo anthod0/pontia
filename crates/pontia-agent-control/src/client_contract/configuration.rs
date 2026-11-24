@@ -3,6 +3,15 @@ use serde_json::Value;
 
 /// Client-owned interpretation of management identities and effective configuration.
 pub trait ClientConfiguration: Send + Sync {
+    /// Apply any directory trust needed by this client beyond its normal launch behavior.
+    fn trust_directory<'a>(
+        &'a self,
+        _key: &'a str,
+        _directory: &'a std::path::Path,
+    ) -> super::ClientOperation<'a, ()> {
+        Box::pin(async { Ok(()) })
+    }
+
     fn supports_mode(&self, _key: &str, mode: pontia_core::SessionMode) -> bool {
         mode == pontia_core::SessionMode::Default
     }

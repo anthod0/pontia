@@ -1,7 +1,8 @@
 use crate::{AcpAgentDefinition, AcpAgents, AcpLaunch};
-use pontia_agent_control::client_contract::ClientConfiguration;
+use pontia_agent_control::client_contract::{ClientConfiguration, ClientOperation};
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
+use std::path::Path;
 
 pub struct AcpConfiguration {
     pub(crate) agents: AcpAgents,
@@ -39,6 +40,17 @@ fn effective_config(agent: &AcpAgentDefinition) -> Value {
 }
 
 impl ClientConfiguration for AcpConfiguration {
+    fn trust_directory<'a>(&'a self, key: &'a str, directory: &'a Path) -> ClientOperation<'a, ()> {
+        Box::pin(async move {
+            if key == "grok" {
+                let launch =
+                    crate::peer::resolve_command(&self.definition(key)?.launch, directory)?;
+                trust_grok_directory(&launch, directory).await?;
+            }
+            Ok(())
+        })
+    }
+
     fn supports_mode(&self, key: &str, mode: pontia_core::SessionMode) -> bool {
         self.agents.get(key).is_some_and(|agent| {
             crate::restrictions::SessionPolicy::resolve(agent.restricted_execution, mode).is_ok()
@@ -118,4 +130,41 @@ impl ClientConfiguration for AcpConfiguration {
     fn resolve(&self, key: &str) -> Result<Value> {
         self.definition(key).map(effective_config)
     }
+}
+
+async fn trust_grok_directory(launch: &AcpLaunch, directory: &Path) -> Result<()> {
+    let inspect = async |args: &[&str]| -> Result<Vec<u8>> {
+        let output = tokio::process::Command::new(&launch.command)
+            .args(args)
+            .current_dir(directory)
+            .envs(&launch.env)
+            .kill_on_drop(true)
+            .output()
+            .await?;
+        if !output.status.success() {
+            return Err(Error::Domain(format!(
+                "Grok {} failed ({}): {}",
+                args.join(" "),
+                output.status,
+                String::from_utf8_lossy(&output.stderr).trim()
+            )));
+        }
+        Ok(output.stdout)
+    };
+    let report: Value = serde_json::from_slice(&inspect(&["inspect", "--json"]).await?)?;
+    match report.get("projectRoot") {
+        Some(Value::String(root)) if Path::new(root) != directory => {
+            return Err(Error::Domain(format!(
+                "Grok trusts the entire Git repository. Pass its root directory: {root}"
+            )));
+        }
+        Some(Value::Null | Value::String(_)) => {}
+        _ => {
+            return Err(Error::Domain(
+                "Grok inspect did not report its project root".into(),
+            ));
+        }
+    }
+    inspect(&["--trust", "inspect", "--json"]).await?;
+    Ok(())
 }
