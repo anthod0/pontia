@@ -38,9 +38,10 @@
   // Svelte Query only notifies about result fields that were read, so read both flags
   // instead of short-circuiting past the client query.
   const loading = $derived([profiles.isPending, clients.isPending].includes(true))
+  const isSplitView = () => matchMedia('(min-width: 64rem)').matches
   // Wide screens show the editor beside the list, so start with the first profile open.
   $effect(() => {
-    if (selectedId === null && profiles.data?.length && matchMedia('(min-width: 64rem)').matches) selectedId = profiles.data[0].profile_id
+    if (selectedId === null && profiles.data?.length && isSplitView()) selectedId = profiles.data[0].profile_id
   })
 
   // Phones put the page action and the open profile in the top bar.
@@ -59,6 +60,11 @@
   function openNew(template?: ProfileTemplate) {
     startTemplate = template
     selectedId = ''
+  }
+
+  function profileSaved(profile: AgentProfileView) {
+    selectedId = isSplitView() ? profile.profile_id : null
+    toast.success($t('profiles.saved'))
   }
 
   function clientName(profile: AgentProfileView) {
@@ -136,7 +142,7 @@
           {#key selectedId}
             <ProfileForm profile={selected} clients={enabledClients} allClients={clients.data ?? []} template={selected ? undefined : startTemplate} bind:saving
               oncancel={selected ? undefined : () => selectedId = null}
-              onsaved={(saved) => { selectedId = saved.profile_id; toast.success($t('profiles.saved')) }}
+              onsaved={profileSaved}
               ondelete={(profile) => deleting = profile} />
           {/key}
         </div>
