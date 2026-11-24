@@ -2,30 +2,95 @@
   import { t, currentLocale } from '$lib/i18n'
   import { toast } from 'svelte-sonner'
   import { copyText } from '$lib/copyText'
+  import { ApiError } from '../../api/errors'
   import { useDeviceRuntime } from '../../device/context'
   import { Button } from '$lib/components/ui/button/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
+  import { Textarea } from '$lib/components/ui/textarea/index.js'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import * as ToggleGroup from '$lib/components/ui/toggle-group/index.js'
   import MessageResponse from '$lib/components/ai-elements/message/message-response.svelte'
   import UserCircleIcon from 'phosphor-svelte/lib/UserCircleIcon'
   import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
+  import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import { formatRelativeTime } from '$lib/format'
 
   const device = useDeviceRuntime()
   const user = device.memoryQueries.createUserFileQuery()
+  const replace = device.memoryQueries.createReplaceUserFileMutation()
   let mode = $state<'rendered' | 'source'>('rendered')
+  // While editing, `base` is the text the draft started from.
+  let editing = $state<{ base: string; draft: string } | null>(null)
+  let saveError = $state<{ message: string; conflict: boolean } | null>(null)
   const length = $derived(user.data ? [...user.data.text].length : 0)
+  const draftLength = $derived(editing ? [...editing.draft].length : 0)
+  const overLimit = $derived(!!user.data && draftLength > user.data.character_limit)
 
   async function copy(): Promise<void> {
     if (user.data && (await copyText(user.data.text))) toast.success($t('common.copied'))
   }
+
+  function edit(text: string): void {
+    editing = { base: text, draft: text }
+    saveError = null
+  }
+
+  async function save(): Promise<void> {
+    if (!editing) return
+    try {
+      await replace.mutateAsync({ text: editing.draft, previous_text: editing.base })
+      editing = null
+      saveError = null
+      toast.success($t('memory.userSaved'))
+    } catch (error) {
+      const conflict = error instanceof ApiError && error.code === 'state_conflict'
+      saveError = { message: conflict ? $t('memory.userConflict') : (error as Error).message, conflict }
+      if (conflict) void user.refetch()
+    }
+  }
+
+  function startOver(): void {
+    if (user.data) edit(user.data.text)
+  }
 </script>
 
 <div class="overflow-hidden rounded-lg border bg-background text-sm shadow-sm">
-  {#if user.isError}
+  {#if editing && user.data}
+    <form class="contents" onsubmit={(event) => { event.preventDefault(); void save() }}>
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-2">
+        <div class="flex min-w-0 flex-1 items-center gap-2">
+          <span class="font-mono text-sm font-medium text-heading">USER.md</span>
+          <span class={['text-xs', overLimit ? 'text-destructive' : 'text-muted-foreground']}>
+            {$t('memory.userCharacters', { count: draftLength.toLocaleString($currentLocale), limit: user.data.character_limit.toLocaleString($currentLocale) })}
+          </span>
+        </div>
+        <Button size="sm" variant="ghost" disabled={replace.isPending} onclick={() => { editing = null; saveError = null }}>{$t('common.cancel')}</Button>
+        <Button size="sm" type="submit" disabled={replace.isPending || overLimit || editing.draft === editing.base}>{replace.isPending ? $t('common.saving') : $t('common.save')}</Button>
+      </div>
+      {#if saveError}
+        <Alert.Root variant="destructive" class="mx-4 mt-4 w-auto">
+          <WarningCircleIcon class="size-4" />
+          <Alert.Description>
+            <p>{saveError.message}</p>
+            {#if saveError.conflict}<Button size="sm" variant="outline" class="mt-2" disabled={user.isFetching} onclick={startOver}>{$t('memory.userStartOver')}</Button>{/if}
+          </Alert.Description>
+        </Alert.Root>
+      {/if}
+      <div class="px-4 py-4">
+        <Textarea
+          bind:value={editing.draft}
+          aria-label={$t('memory.userEditor')}
+          aria-invalid={overLimit}
+          spellcheck={false}
+          disabled={replace.isPending}
+          class="max-h-[34rem] min-h-72 font-mono text-xs leading-relaxed md:text-xs"
+        />
+      </div>
+    </form>
+    <p class="border-t px-4 py-2 text-xs text-muted-foreground">{$t('memory.userEditHint')}</p>
+  {:else if user.isError}
     <Alert.Root variant="destructive" class="m-4 w-auto"><WarningCircleIcon class="size-4" /><Alert.Description>{user.error.message}</Alert.Description></Alert.Root>
   {:else if user.isPending}
     <div class="space-y-3 p-4" role="status" aria-label={$t('common.loading')}><Skeleton class="h-6 w-48" /><Skeleton class="h-48 w-full" /></div>
@@ -36,6 +101,9 @@
         <Empty.Title>{$t('memory.userEmptyTitle')}</Empty.Title>
         <Empty.Description>{$t('memory.userEmptyDescription')}</Empty.Description>
       </Empty.Header>
+      <Empty.Content>
+        <Button size="sm" variant="outline" onclick={() => edit(user.data.text)}><PencilSimpleIcon class="size-4" />{$t('memory.userWrite')}</Button>
+      </Empty.Content>
     </Empty.Root>
   {:else}
     <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-2">
@@ -51,6 +119,7 @@
         <ToggleGroup.Item value="source" class="px-2.5">{$t('memory.userSource')}</ToggleGroup.Item>
       </ToggleGroup.Root>
       <Button size="icon-sm" variant="ghost" aria-label={$t('common.copy')} title={$t('common.copy')} onclick={() => void copy()}><CopyIcon class="size-4" /></Button>
+      <Button size="sm" variant="outline" onclick={() => edit(user.data.text)}><PencilSimpleIcon class="size-4" />{$t('common.edit')}</Button>
     </div>
     <div class="max-h-[34rem] overflow-auto px-5 py-4">
       {#if mode === 'rendered'}

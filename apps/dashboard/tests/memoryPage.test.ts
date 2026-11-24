@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/svelte";
+import { render, screen, waitFor, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import MemoryPage from "../src/pages/MemoryPage.svelte";
@@ -70,4 +70,47 @@ test("explains where memories and USER.md come from on a new device", async () =
   expect(screen.queryByRole("textbox", { name: "Search memories" })).toBeNull();
   await user.click(screen.getByRole("tab", { name: "About you" }));
   expect(await screen.findByText("Bots fill this in as they learn about you")).toBeInTheDocument();
+});
+
+test("edits USER.md and keeps a stale draft from overwriting a Bot's change", async () => {
+  const user = userEvent.setup();
+  render(MemoryPage);
+  await user.click(screen.getByRole("tab", { name: "About you" }));
+  await user.click(await screen.findByRole("button", { name: "Edit" }));
+  const editor = screen.getByRole("textbox", { name: "USER.md contents" });
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  await user.clear(editor);
+  await user.type(editor, "称呼：小林");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  expect(await screen.findByText("称呼：小林")).toBeInTheDocument();
+  expect(device.data.memory.user.text).toBe("称呼：小林");
+
+  await user.click(screen.getByRole("button", { name: "Edit" }));
+  device.data.memory.user = { text: "称呼：林（Bot 改的）", updated_at: new Date().toISOString() };
+  await user.type(screen.getByRole("textbox", { name: "USER.md contents" }), "\n语言：中文");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  expect(await screen.findByText(/A Bot changed USER.md/)).toBeInTheDocument();
+  expect(device.data.memory.user.text).toBe("称呼：林（Bot 改的）");
+  const startOver = screen.getByRole("button", { name: "Edit the latest version" });
+  await waitFor(() => expect(startOver).toBeEnabled());
+  await user.click(startOver);
+  expect(screen.getByRole("textbox", { name: "USER.md contents" })).toHaveValue(
+    "称呼：林（Bot 改的）",
+  );
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.getByText("称呼：林（Bot 改的）")).toBeInTheDocument();
+});
+
+test("blocks saves over the character limit", async () => {
+  serve(createEmptyData());
+  const user = userEvent.setup();
+  render(MemoryPage);
+  await user.click(screen.getByRole("tab", { name: "About you" }));
+  await user.click(await screen.findByRole("button", { name: "Write it yourself" }));
+  const editor = screen.getByRole("textbox", { name: "USER.md contents" });
+  await user.click(editor);
+  await user.paste("字".repeat(2001));
+  expect(editor).toHaveAttribute("aria-invalid", "true");
+  expect(screen.getByText("2,001 / 2,000 characters")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
 });

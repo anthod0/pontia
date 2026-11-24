@@ -530,6 +530,22 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
     ({ device }) => ({ user: { ...device.data.memory.user, character_limit: 2000 } }),
   ],
   [
+    "PUT",
+    "/memory/user",
+    ({ device, body }) => {
+      const user = device.data.memory.user;
+      const text = String(body.text);
+      if (text !== user.text) {
+        if (body.previous_text !== user.text)
+          throw new HttpError(409, "state_conflict", "USER.md changed since it was read");
+        if ([...text].length > 2000)
+          throw new HttpError(400, "invalid_request", "USER.md exceeds 2000 characters");
+        device.data.memory.user = { text, updated_at: new Date().toISOString() };
+      }
+      return { user: { ...device.data.memory.user, character_limit: 2000 } };
+    },
+  ],
+  [
     "GET",
     "/memories",
     ({ device, query }) => {

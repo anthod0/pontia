@@ -17,6 +17,14 @@ pub struct UpdateUser {
     pub new_text: String,
 }
 
+/// A Dashboard edit that replaces USER.md if it still matches what the user saw.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReplaceUser {
+    pub text: String,
+    pub previous_text: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct UserFile {
     pub text: String,
@@ -39,6 +47,8 @@ pub enum Rejection {
     Ambiguous,
     #[error("USER.md exceeds {USER_CHARACTER_LIMIT} characters")]
     TooLong,
+    #[error("USER.md changed since it was read")]
+    Changed,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -74,20 +84,32 @@ impl UserService {
         let path = self.path.clone();
         tokio::task::spawn_blocking(move || {
             let path = path.lock().expect("USER.md lock poisoned");
-            let text = read_current(&path)?;
-            let updated_at = match std::fs::metadata(&*path) {
-                Ok(metadata) => Some(
-                    time::OffsetDateTime::from(metadata.modified()?)
-                        .format(&time::format_description::well_known::Rfc3339)
-                        .map_err(std::io::Error::other)?,
-                ),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-                Err(error) => return Err(error.into()),
+            snapshot(&path, read_current(&path)?)
+        })
+        .await?
+    }
+
+    /// Replaces the whole file; returns whether the text changed. Saving text
+    /// that is already current succeeds, so a retried request is harmless.
+    pub async fn replace(&self, input: ReplaceUser) -> Result<(UserFile, bool), Error> {
+        let path = self.path.clone();
+        tokio::task::spawn_blocking(move || {
+            let path = path.lock().expect("USER.md lock poisoned");
+            let current_text = read_current(&path)?;
+            if current_text == input.text {
+                return Ok((snapshot(&path, current_text)?, false));
+            }
+            let reason = if current_text != input.previous_text {
+                Rejection::Changed
+            } else if input.text.chars().count() > USER_CHARACTER_LIMIT {
+                Rejection::TooLong
+            } else {
+                write(&path, &input.text)?;
+                return Ok((snapshot(&path, input.text)?, true));
             };
-            Ok(UserFile {
-                text,
-                character_limit: USER_CHARACTER_LIMIT,
-                updated_at,
+            Err(Error::Rejected {
+                reason,
+                current_text,
             })
         })
         .await?
@@ -130,15 +152,36 @@ impl UserService {
                     current_text,
                 });
             }
-            let parent = path.parent().expect("USER.md has a parent directory");
-            std::fs::create_dir_all(parent)?;
-            let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
-            temporary.write_all(next.as_bytes())?;
-            temporary.persist(&*path).map_err(|error| error.error)?;
-            Ok(())
+            write(&path, &next)
         })
         .await?
     }
+}
+
+fn write(path: &Path, text: &str) -> Result<(), Error> {
+    let parent = path.parent().expect("USER.md has a parent directory");
+    std::fs::create_dir_all(parent)?;
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+    temporary.write_all(text.as_bytes())?;
+    temporary.persist(path).map_err(|error| error.error)?;
+    Ok(())
+}
+
+fn snapshot(path: &Path, text: String) -> Result<UserFile, Error> {
+    let updated_at = match std::fs::metadata(path) {
+        Ok(metadata) => Some(
+            time::OffsetDateTime::from(metadata.modified()?)
+                .format(&time::format_description::well_known::Rfc3339)
+                .map_err(std::io::Error::other)?,
+        ),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error.into()),
+    };
+    Ok(UserFile {
+        text,
+        character_limit: USER_CHARACTER_LIMIT,
+        updated_at,
+    })
 }
 
 fn read_current(path: &Path) -> Result<String, Error> {

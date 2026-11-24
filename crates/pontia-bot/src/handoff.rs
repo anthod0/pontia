@@ -12,6 +12,7 @@ use crate::{
 };
 
 pub use render::estimate_tokens;
+pub(crate) use render::user_edited_notice;
 
 #[derive(sqlx::FromRow)]
 struct HistoryMessage {

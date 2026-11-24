@@ -885,5 +885,11 @@
   "memory.userView": "USER.md view",
   "memory.userRendered": "Preview",
   "memory.userSource": "Source",
-  "memory.userHint": "To change this, tell any Bot in chat. Every Bot on this device reads the same USER.md."
+  "memory.userHint": "Edit it here or tell any Bot in chat. Every Bot on this device reads the same USER.md.",
+  "memory.userWrite": "Write it yourself",
+  "memory.userEditor": "USER.md contents",
+  "memory.userEditHint": "When you save, every Bot on this device is told to use the new USER.md.",
+  "memory.userSaved": "USER.md saved. Bots will use the new version.",
+  "memory.userConflict": "A Bot changed USER.md while you were editing, so your changes were not saved.",
+  "memory.userStartOver": "Edit the latest version"
 }

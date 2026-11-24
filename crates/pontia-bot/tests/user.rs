@@ -173,3 +173,49 @@ async fn read_reports_text_limit_and_file_update_time() {
     assert_eq!(user.text, "名字：林");
     assert!(user.updated_at.is_some());
 }
+
+#[tokio::test]
+async fn dashboard_replaces_the_text_it_read_and_rejects_stale_or_long_edits() {
+    let f = Fixture::new();
+    let replace = |text: &str, previous: &str| {
+        f.service.replace(ReplaceUser {
+            text: text.into(),
+            previous_text: previous.into(),
+        })
+    };
+    let (user, changed) = replace("名字：林\n", "").await.unwrap();
+    assert!(changed);
+    assert_eq!(user.text, "名字：林\n");
+    assert!(user.updated_at.is_some());
+    assert_eq!(f.text(), "名字：林\n");
+
+    // A retry after the write succeeded changes nothing.
+    assert!(!replace("名字：林\n", "").await.unwrap().1);
+
+    f.update("bot-a", "林", "陈").await.unwrap();
+    for (text, reason) in [
+        ("名字：小林\n", Rejection::Changed),
+        (&*"字".repeat(2_001), Rejection::Changed),
+    ] {
+        match replace(text, "名字：林\n").await.unwrap_err() {
+            Error::Rejected {
+                reason: actual,
+                current_text,
+            } => {
+                assert_eq!(actual, reason);
+                assert_eq!(current_text, "名字：陈\n");
+            }
+            other => panic!("unexpected {other}"),
+        }
+    }
+    match replace(&"字".repeat(2_001), "名字：陈\n")
+        .await
+        .unwrap_err()
+    {
+        Error::Rejected { reason, .. } => assert_eq!(reason, Rejection::TooLong),
+        other => panic!("unexpected {other}"),
+    }
+    assert_eq!(f.text(), "名字：陈\n");
+    assert!(replace("", "名字：陈\n").await.unwrap().1);
+    assert_eq!(f.service.read_for_handoff().await.unwrap(), "");
+}

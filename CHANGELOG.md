@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Choose a reasoning effort level for the default model in Grok Build, Antigravity, and Kiro. Session details show the level the client reports.
+- Edit `USER.md` yourself in the About you tab of Dashboard Settings > Memory. After you save, every running Bot is told to use the new version. If a Bot changed the file while you were editing, your save is refused so it cannot overwrite that change.
 
 ## [0.8.12] - 2026-11-24
 

@@ -763,3 +763,9 @@ export interface UserFileView {
   character_limit: number;
   updated_at: string | null;
 }
+
+export interface ReplaceUserFileInput {
+  text: string;
+  /** The text the edit started from; the save fails if USER.md has changed since. */
+  previous_text: string;
+}

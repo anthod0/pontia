@@ -11,7 +11,8 @@ const WINDOW: Duration = Duration::from_secs(3);
 
 #[derive(Clone)]
 pub(crate) struct BotNotice {
-    pub bot_id: String,
+    /// `None` addresses every Bot with a live Session.
+    pub bot_id: Option<String>,
     pub key: String,
     pub text: String,
 }
@@ -142,19 +143,19 @@ impl Deliveries {
 pub struct SystemNoticeService {
     conversation: ConversationService,
     changes: broadcast::Receiver<ControlChange>,
-    todos: broadcast::Receiver<BotNotice>,
+    notices: broadcast::Receiver<BotNotice>,
 }
 
 impl SystemNoticeService {
     pub(crate) fn new(
         conversation: ConversationService,
         control: AgentControl,
-        todos: broadcast::Receiver<BotNotice>,
+        notices: broadcast::Receiver<BotNotice>,
     ) -> Self {
         Self {
             conversation,
             changes: control.control_changes().subscribe(),
-            todos,
+            notices,
         }
     }
 
@@ -180,9 +181,10 @@ impl SystemNoticeService {
                     Err(RecvError::Lagged(skipped)) => tracing::warn!(skipped, "Missed control changes"),
                     Err(RecvError::Closed) => break,
                 },
-                notice = self.todos.recv() => match notice {
-                    Ok(notice) => Batch::add(windows.individual(&notice.bot_id), &notice.key, &notice.text, Instant::now()),
-                    Err(RecvError::Lagged(skipped)) => tracing::warn!(skipped, "Missed Bot todo notices"),
+                notice = self.notices.recv() => match notice {
+                    Ok(BotNotice { bot_id: Some(bot), key, text }) => Batch::add(windows.individual(&bot), &key, &text, Instant::now()),
+                    Ok(BotNotice { bot_id: None, key, text }) => windows.broadcast(&key, &text, None),
+                    Err(RecvError::Lagged(skipped)) => tracing::warn!(skipped, "Missed Bot notices"),
                     Err(RecvError::Closed) => break,
                 },
             }
