@@ -1,63 +1,56 @@
 <div align="center">
-  <img src="assets/brand/logo-idle.svg" width="120" alt="Pontia logo">
+  <img src="assets/brand/logo-idle.svg" width="80" alt="Pontia">
   <h1>Pontia</h1>
-  <p><strong>Your device. Your agent cloud.</strong></p>
-  <p>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
-    <a href="https://www.npmjs.com/package/@pontia/cli"><img src="https://img.shields.io/npm/v/@pontia/cli" alt="npm"></a>
-    <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey" alt="Platform: Linux | macOS">
-  </p>
-  <p><a href="https://pontia.dev">🌐 Website</a> · <a href="https://app.pontia.dev">🖥️ Dashboard</a></p>
-  <p>English · <a href="README.zh-CN.md">简体中文</a></p>
+  <p><strong>A Lead Bot for the projects on your machines.</strong></p>
+  <p><a href="https://pontia.dev">Website</a> · <a href="https://app.pontia.dev">Open Dashboard</a> · <a href="README.zh-CN.md">简体中文</a></p>
 </div>
 
-Leave your desk, not your agents. Pontia lets you run coding agents such as pi, Codex, Claude Code, Grok Build, Google Antigravity, and Kiro on your own device, then check in, approve, and steer every session from any browser, including your phone. Pontia is free and open source.
+Give your Lead Bot a project. It can send helpers to work in parallel, bring back their files, and keep the decisions that need you in Todo. Open the Dashboard in a phone or desktop browser to pick up the conversation or switch to another registered machine.
 
-<p align="center">
-  <img src="apps/cloud/static/client-logos/pi.svg" height="28" alt="pi">
-  &nbsp;&nbsp;
-  <picture><source media="(prefers-color-scheme: dark)" srcset="apps/cloud/static/client-logos/codex-dark.svg"><img src="apps/cloud/static/client-logos/codex.svg" height="28" alt="Codex"></picture>
-  &nbsp;&nbsp;
-  <img src="apps/cloud/static/client-logos/claude-code.svg" height="28" alt="Claude Code">
-  &nbsp;&nbsp;
-  <img src="apps/cloud/static/client-logos/grok-build.svg" height="28" alt="Grok Build">
-  &nbsp;&nbsp;
-  <img src="apps/cloud/static/client-logos/google-antigravity.svg" height="28" alt="Google Antigravity">
-  &nbsp;&nbsp;
-  <img src="apps/cloud/static/client-logos/kiro.svg" height="28" alt="Kiro">
-</p>
+```sh
+npx @pontia/cli init
+```
 
-![A release Bot reports back from two helpers, with a publishing decision in the todo panel.](assets/screenshots/bot-chat.webp)
+Run this on the machine with your signed-in coding CLI. Setup registers the device and opens the Dashboard. Sign in to the browser with your Pontia account and skip chat-bot token setup. [Setup requirements](#requirements)
 
-## Why Pontia
+**Who can read a remote session?** Your browser and the selected device are the endpoints for end-to-end encryption. Pontia Cloud handles sign-in and authorizes the connection. The Edge is a zero-knowledge relay for Dashboard content. It sees ciphertext, routing metadata, traffic size and timing. Choose an official Edge or host a private Edge yourself. Agent tools run with their configured permissions on your machine. [Security model](https://pontia.dev/docs/security) · [Self-host an Edge](https://pontia.dev/docs/self-hosted-edge)
 
-- 📱 **In your pocket** — add the Dashboard to your phone's home screen. Follow progress, answer approvals, and send the next instruction away from your desk.
-- 💳 **Bring your own subscriptions** — Pontia doesn't sell models or tokens. Your agents run on the accounts and plans you already pay for.
-- 💻 **Keep your terminal** — agents run on your device with your tools and files. Keep using the pi or Codex TUI; conversations sync to the Dashboard automatically, so you can switch between them without starting over.
-- 🤖 **Hand off work to a Bot** — chat with a Bot on your device the way you would with an assistant. It starts Sessions for each task, runs several at once, reports back, and remembers your projects across long conversations.
-- 🔒 **Encrypted end to end** — only your browser and your device can read a session. Use an official Edge or run your own; either way, the Edge only relays ciphertext.
+![Juniper assigns two helpers to a field guide, returns the map audit and tracks two decisions.](assets/screenshots/lead-desk.webp)
 
-On Linux and macOS, you can choose pi, Codex, Claude Code, Grok Build, Google Antigravity, or Kiro (the last three via ACP) for your Bots and helpers.
+## One field guide, two helpers
 
-## Inside the Dashboard
+**You, on Friday** — “Get the Luma field guide ready for Saturday. Who can check the trail maps and the pocket edition?”
+
+**Juniper, your Lead Bot** — “The map reviewer is checking junction names in Codex. The print editor is proofing page references in Claude Code.” Each helper has its own task and conversation. When the map reviewer finds two names for the same trail, Juniper puts the choice in Todo and delivers the audit while the editor finishes the index.
+
+**You, on your phone** — Open the report, reply “Use Cedar Spur” on the naming Todo, and leave the winter detour for later. Next time you ask about the guide, Juniper can recall the trail decision and read your standing rule in `USER.md` to give distances in kilometres.
+
+## What the team shares
+
+| Scope | What you can use |
+| --- | --- |
+| Lead Bot | A continuing conversation, its helpers, their reports and a queue of decisions you can answer individually. |
+| Device memory | Bots on the same device share a cross-session memory graph linking facts, decisions and lessons. Browse entries in Settings. Edit personal rules and preferences in `USER.md`. |
+| Agent Profiles | Save a role’s instructions, client, model and reasoning effort. Reuse that profile for helpers and workflow steps. Choose among your signed-in Claude Code, Codex, Pi, Google Antigravity, Kiro and Grok Build clients. |
+| Remote access | Switch between your registered machines in one browser. Each runs its own clients and keeps its workspaces and files locally. |
 
 <table>
   <tr>
-    <td width="50%"><strong>Follow a coding session</strong><br><a href="assets/screenshots/session-tools.webp"><img src="assets/screenshots/session-tools.webp" alt="Expanded Codex work steps show the files read and edited and the check command."></a></td>
-    <td width="50%"><strong>Review a Git diff alongside the conversation</strong><br><a href="assets/screenshots/git-review.webp"><img src="assets/screenshots/git-review.webp" alt="A staged change to a session row with added and removed lines."></a></td>
+    <td width="50%" valign="top"><a href="assets/screenshots/shared-memory.webp"><img src="assets/screenshots/shared-memory.webp" alt="Find a past trail decision in Memory"></a><br><strong>Find a past trail decision in Memory</strong></td>
+    <td width="50%" valign="top"><a href="assets/screenshots/role-profiles.webp"><img src="assets/screenshots/role-profiles.webp" alt="Set the field researcher’s model and reasoning effort"></a><br><strong>Set the field researcher’s model and reasoning effort</strong></td>
   </tr>
   <tr>
-    <td width="50%"><strong>Manage your agent clients</strong><br><a href="assets/screenshots/agent-clients.webp"><img src="assets/screenshots/agent-clients.webp" alt="The client list and Claude Code settings on one device."></a></td>
-    <td width="50%"><strong>Reuse a reviewer profile</strong><br><a href="assets/screenshots/agent-profiles.webp"><img src="assets/screenshots/agent-profiles.webp" alt="A review profile with its client, model and instructions."></a></td>
+    <td width="50%" valign="top"><a href="assets/screenshots/private-edge.webp"><img src="assets/screenshots/private-edge.webp" alt="Check the health of a private Edge"></a><br><strong>Check the health of a private Edge</strong></td>
+    <td width="50%" valign="top"><a href="assets/screenshots/helper-decisions.webp"><img src="assets/screenshots/helper-decisions.webp" alt="Reply to a Todo while the print editor works"></a><br><strong>Reply to a Todo while the print editor works</strong></td>
   </tr>
 </table>
 
 ### On your phone
 
 <p align="center">
-  <a href="assets/screenshots/mobile-chat.webp"><img src="assets/screenshots/mobile-chat.webp" width="30%" alt="Chat with the release Bot"></a>
-  <a href="assets/screenshots/mobile-todos.webp"><img src="assets/screenshots/mobile-todos.webp" width="30%" alt="Reply to a pending todo"></a>
-  <a href="assets/screenshots/mobile-model.webp"><img src="assets/screenshots/mobile-model.webp" width="30%" alt="Choose a model for a new session"></a>
+  <a href="assets/screenshots/phone-report.webp"><img src="assets/screenshots/phone-report.webp" width="30%" alt="Receive the map audit in chat"></a>
+  <a href="assets/screenshots/phone-decisions.webp"><img src="assets/screenshots/phone-decisions.webp" width="30%" alt="Answer decisions in the Todo queue"></a>
+  <a href="assets/screenshots/phone-devices.webp"><img src="assets/screenshots/phone-devices.webp" width="30%" alt="Switch devices and check on the lead"></a>
 </p>
 
 ## Quick start
@@ -79,18 +72,7 @@ Install the clients you plan to use before initialization:
 
 ### Initialize
 
-```bash
-npx @pontia/cli init
-```
-
-This one command completes the whole setup:
-
-1. Installs Pontia to `$HOME/.local/bin`. Add that directory to your `PATH`.
-2. Lets you select clients and installs their integrations.
-3. Starts the Pontia service.
-4. Signs you in to Pontia Cloud and registers the device for remote access.
-
-Pontia opens the [remote dashboard](https://app.pontia.dev) when setup succeeds. If Pontia is already installed, run `pontia init` directly. Rerunning it checks and repairs the installation while keeping your existing configuration.
+`pontia init` installs the selected client integrations, starts the local service and guides you through sign-in and device registration. Add `$HOME/.local/bin` to your `PATH` to run `pontia init` again to check or repair the installation.
 
 ### Common commands
 
@@ -119,7 +101,7 @@ pontia doctor
 
 ### Install with the shell script
 
-Without Node.js, use the signed release installer. It requires `curl`, an OpenSSL implementation with Ed25519 support, and standard platform command-line tools.
+You can also use the signed release installer. It requires `curl`, an OpenSSL implementation with Ed25519 support, and standard platform command-line tools.
 
 ```bash
 curl -fsSL https://get.pontia.dev/install.sh | sh
