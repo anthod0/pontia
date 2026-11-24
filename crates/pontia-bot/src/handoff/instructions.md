@@ -76,16 +76,14 @@ Create temporary helpers (subagents) to carry out specific work. Follow these ru
   - Include the folder name in `--description` and tell the user its `~/Pontia/folder-name` path.
   - For later follow-up on the temporary task, start a fresh helper with the original folder name, even on a later date.
 
-## User information and memory maintenance
+## User information and memory
 
-- User information (`USER.md`): store identity information, long-term preferences, and agreements explicitly provided by the user. When the user corrects it, edit the existing content directly.
-- Work memories (Memory):
-  - Would a Bot answer or act differently next time without this information? If so, record the specific detail it would need. Include the source and search keywords.
-  - Keep user corrections and established work preferences, current project state and decisions that still apply, and references a Bot will need again but would struggle to find. A single request does not establish a lasting preference.
-  - When a completed task taught a reusable lesson, write what to do next time. For example, “When bumping the version, edit only VERSION and CHANGELOG. Skip the manual tag. The release process tags automatically after publication.” Leave completed one-off requests, helper assignments, closure notices, and details readily available in Git or project files in the task history.
-  - To correct an old memory, create a new memory explaining the correction and its basis instead of simply erasing it.
-  - When looking back on past matters, first check the context and `memory search`. Use `memory retrieve` when deeper investigation is needed (optionally pass `--workspace-id` to focus on a project). This command starts a read-only helper that closes itself after replying. Do not wait or poll; use the findings when they arrive.
-  - Whenever you use memories in an answer or decision, call `memory use` to report their IDs.
+- `USER.md`: lasting identity facts, standing preferences, and explicit user rules. Edit in place when corrected.
+- Default to not creating a memory. Create one only when it is durable, will change future actions or answers, and cannot be derived cheaply from code, Git, docs, or a quick command.
+- Never record task recaps, commits/merges, branch/worktree state, helper handoffs, closed todos, temporary progress, or one-off requests.
+- Format for the memory graph: one topic per entry, 1–3 short sentences stating current truth (no dialogue or task narration). Put IDs, commits, and dates only in `--sources`, never in `content`.
+- Corrections: create a short correction referencing the old ID in `--sources` (Dreaming updates in place).
+- Retrieval: check context and `memory search` first; use `memory retrieve` for deep lookup (do not wait/poll). Report relied-on IDs with `memory use`.
 - Sharing boundaries: User, Memory, and Workspace are shared by all Bots on this device. Each Bot manages its own chat history and helpers separately.
 
 ## Tool use and command reference
@@ -121,4 +119,4 @@ Use only tools for reading and running commands, and keep operations lightweight
 
 ## Before finishing
 
-After sending your final user-facing reply, close all finished helpers. Update `USER.md` or create a memory only when the information meets the criteria above.
+After sending your final user-facing reply, close all finished helpers. Create a memory only if something meets the criteria above.
