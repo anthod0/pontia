@@ -22,12 +22,28 @@ test(
     const config = join(testRoot, "config");
     const temporary = join(testRoot, "tmp");
     await Promise.all([cwd, config, temporary].map((path) => mkdir(path)));
+    await mkdir(join(testRoot, "state"));
     await mkdir(join(cwd, ".claude"));
     const skillDirectory = join(config, "skills", "catalog-probe");
     await mkdir(skillDirectory, { recursive: true });
     await writeFile(
       join(skillDirectory, "SKILL.md"),
       "---\nname: catalog-probe\ndescription: PONTIA_SKILL_CATALOG_PROBE\n---\nReport the probe when asked.\n",
+    );
+    const mcpMarker = join(testRoot, "mcp-starts");
+    await writeFile(
+      join(config, ".claude.json"),
+      JSON.stringify({
+        mcpServers: {
+          probe: {
+            command: process.execPath,
+            args: [
+              "-e",
+              `require("node:fs").appendFileSync(${JSON.stringify(mcpMarker)}, "start\\n")`,
+            ],
+          },
+        },
+      }),
     );
     for (const path of [
       join(config, "settings.json"),
@@ -36,7 +52,10 @@ test(
     ]) {
       await writeFile(
         path,
-        JSON.stringify({ env: { PONTIA_SESSION_ID: "wrong-settings-session" } }),
+        JSON.stringify({
+          env: { PONTIA_SESSION_ID: "wrong-settings-session", ENABLE_TOOL_SEARCH: "true" },
+          permissions: { defaultMode: "default" },
+        }),
       );
     }
     await writeFile(join(cwd, "input.txt"), "isolated tool result marker\n");
@@ -93,6 +112,22 @@ test(
                         content: "approved write marker",
                       },
                     },
+                    ...([11, 13].includes(requests.length)
+                      ? [
+                          {
+                            type: "tool_use",
+                            id: `restricted-env-${requests.length}`,
+                            name: "Bash",
+                            input: { command: "printenv PONTIA_SESSION_ID" },
+                          },
+                          {
+                            type: "tool_use",
+                            id: `restricted-read-${requests.length}`,
+                            name: "Read",
+                            input: { file_path: join(cwd, "input.txt") },
+                          },
+                        ]
+                      : []),
                   ]
                 : [7, 9].includes(requests.length)
                   ? [
@@ -215,8 +250,6 @@ test(
         options: {
           ...args.options,
           env,
-          strictMcpConfig: true,
-          mcpServers: {},
           plugins: [],
           model: args.options?.model ?? "claude-sonnet-4-6",
           maxTurns: 4,
@@ -241,7 +274,7 @@ test(
     }
     const create = (resume?: string, mode?: SessionMode) => {
       const host = new Host(
-        { session_id: "pontia-session", cwd, resume, model: "haiku", mode },
+        { session_id: "pontia-session", cwd, resume, model: "haiku", mode, pontia_home: testRoot },
         (event) => events.push(event),
         factory,
       );
@@ -395,19 +428,32 @@ test(
       } finally {
         await writeFile(path, saved);
       }
+      const mcpStarts = await readFile(mcpMarker, "utf8");
+      assert.ok(mcpStarts.includes("start"));
       const restricted = create(undefined, "restricted");
       await finish(restricted, randomUUID(), "Denied tool under YOLO");
       const restrictedNative = restricted.status().native_session_id!;
       await restricted.close();
       const resumedRestricted = create(restrictedNative, "restricted");
       await finish(resumedRestricted, randomUUID(), "Denied tool after resume under YOLO");
+      assert.equal(await readFile(mcpMarker, "utf8"), mcpStarts);
+      for (const call of ["restricted-env-11", "restricted-env-13"]) {
+        const event = events.find(
+          (event) => event.kind === "tool_result" && event.call_id === call,
+        );
+        assert.ok(event?.kind === "tool_result" && !event.failed);
+        assert.equal(String(event.content).trim(), "pontia-session");
+      }
       assert.ok(JSON.stringify(requests[0]).includes("PONTIA_SKILL_CATALOG_PROBE"));
       for (const index of [10, 12]) {
         assert.ok(!JSON.stringify(requests[index]).includes("PONTIA_SKILL_CATALOG_PROBE"));
         const names = requests[index]!.tools.map((tool) => tool.name);
-        assert.ok(names.includes("Bash"), names.join(", "));
-        assert.ok(!names.includes("Write"));
-        assert.ok(!names.includes("Agent"));
+        assert.deepEqual(names.sort(), ["Bash", "Read"]);
+        const read = events.find(
+          (e) => e.kind === "tool_result" && e.call_id === `restricted-read-${index + 1}`,
+        );
+        assert.ok(read?.kind === "tool_result" && !read.failed);
+        assert.match(JSON.stringify(read.content), /isolated tool result marker/);
         await assert.rejects(access(join(cwd, `write-${index + 1}.txt`)));
       }
       const interactive = create();
