@@ -17,7 +17,9 @@ export type EdgeNetworkIdentity = {
   tunnelUrl: string;
 };
 
-export type EdgeHealth = { status: "healthy"; version: string | null } | { status: "unreachable" };
+export type EdgeHealth =
+  | { status: "healthy"; version: string | null; updateNonce?: string }
+  | { status: "unreachable" };
 
 export interface DnsProvider {
   ensureA(hostname: string, address: string): Promise<void>;
@@ -244,9 +246,14 @@ export async function probeEdgeHealth(
     ) {
       return { status: "unreachable" };
     }
+    const nonce = response.headers.get("Pontia-Update-Nonce");
     const version = response.headers.get("Pontia-Edge-Version");
     return {
       status: "healthy",
+      ...(nonce &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(nonce)
+        ? { updateNonce: nonce }
+        : {}),
       version: version && version.length <= 128 && RELEASE_VERSION.test(version) ? version : null,
     };
   } catch {

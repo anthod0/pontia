@@ -27,9 +27,7 @@ pub async fn run(command: Command) -> Result<()> {
             systemd
                 .enable_auto_update(Path::new(UNIT_DIRECTORY))
                 .await?;
-            println!(
-                "Automatic updates enabled: stable releases are checked every 10 minutes with up to 10 minutes of random delay."
-            );
+            println!("Automatic updates enabled: stable releases are checked every 10 minutes.");
         }
         Command::Disable => {
             ensure_root(rustix::process::geteuid().as_raw())?;

@@ -203,6 +203,24 @@ impl<R: CommandRunner> Systemd<R> {
             .await
     }
 
+    pub async fn request_auto_update(&self) -> Result<()> {
+        if self
+            .runner
+            .run(&["is-active", "--quiet", UPDATE_TIMER])
+            .await?
+            .success
+            && self
+                .update_process()
+                .await?
+                .is_some_and(|process| process.pid == std::process::id())
+        {
+            // systemd coalesces concurrent starts of this oneshot, including timer starts.
+            self.run_required(&["start", "--no-block", UPDATE_SERVICE])
+                .await?;
+        }
+        Ok(())
+    }
+
     pub async fn enable_auto_update(&self, unit_directory: &Path) -> Result<()> {
         atomic_write(
             &unit_directory.join(UPDATE_SERVICE),
@@ -333,6 +351,19 @@ mod tests {
                     state.active = false;
                     true
                 }
+                ["is-active", "--quiet", UPDATE_TIMER] => state.active,
+                [
+                    "show",
+                    "pontia-edge.service",
+                    "--property=ActiveState",
+                    "--property=MainPID",
+                ] => {
+                    return Ok(active_process(std::process::id()));
+                }
+                ["start", "--no-block", UPDATE_SERVICE] => {
+                    state.update_running = true;
+                    true
+                }
                 ["stop", UPDATE_SERVICE] => {
                     state.update_running = false;
                     true
@@ -344,6 +375,22 @@ mod tests {
                 stdout: String::new(),
             })
         }
+    }
+
+    #[tokio::test]
+    async fn notification_starts_the_updater_only_when_the_timer_is_active() {
+        let root = tempfile::tempdir().unwrap();
+        let systemd = Systemd {
+            runner: TimerRunner {
+                directory: root.path().to_owned(),
+                state: Mutex::default(),
+            },
+        };
+        systemd.request_auto_update().await.unwrap();
+        assert!(!systemd.runner.state.lock().unwrap().update_running);
+        systemd.enable_auto_update(root.path()).await.unwrap();
+        systemd.request_auto_update().await.unwrap();
+        assert!(systemd.runner.state.lock().unwrap().update_running);
     }
 
     #[tokio::test]
@@ -368,7 +415,7 @@ mod tests {
         assert!(service.contains("ExecStart=/usr/local/bin/pontia-edge update --automatic"));
         assert!(service.contains("ReadWritePaths=/usr/local/bin"));
         assert!(timer.contains("OnCalendar=*-*-* *:0/10:00"));
-        assert!(timer.contains("RandomizedDelaySec=10m"));
+        assert!(!timer.contains("RandomizedDelaySec="));
         assert!(timer.contains("Persistent=true"));
         systemd.disable_auto_update().await.unwrap();
         let state = systemd.runner.state.lock().unwrap();

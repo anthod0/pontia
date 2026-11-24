@@ -83,7 +83,9 @@ sudo pontia-edge auto-update enable
 sudo pontia-edge auto-update disable
 ```
 
-Automatic updates check every 10 minutes with up to ten minutes of random delay. An update already in progress continues when future checks are disabled.
+With automatic updates enabled, an online Edge also checks for updates when Cloud announces a new stable release.
+
+Automatic updates check every 10 minutes. An update already in progress continues when future checks are disabled.
 
 ## Stored files
 
