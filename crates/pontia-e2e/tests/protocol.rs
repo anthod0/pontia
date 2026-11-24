@@ -395,8 +395,8 @@ fn malformed_authenticated_http_does_not_refresh_idle_time_or_protect_pending_st
 fn continuously_authenticated_activity_has_no_absolute_expiry() {
     let clock = Arc::new(AtomicU64::new(0));
     let (browser, mut device) = established(&clock);
-    for hour in 1..=8 {
-        clock.store(hour * 3600, Ordering::Relaxed);
+    for day in 1..=8 {
+        clock.store(day * 24 * 3600, Ordering::Relaxed);
         drop(admission(&browser, &mut device));
     }
     assert_eq!(device.session_count(), 1);
@@ -408,14 +408,14 @@ fn active_streams_get_a_full_idle_interval_after_cancellation() {
     let clock = Arc::new(AtomicU64::new(0));
     let (browser, mut device) = established(&clock);
     let lease = admission(&browser, &mut device);
-    clock.store(24 * 3600, Ordering::Relaxed);
+    clock.store(4 * 24 * 3600, Ordering::Relaxed);
     device.reap();
     assert_eq!(device.session_count(), 1);
     drop(lease);
-    clock.store(24 * 3600 + IDLE_SECONDS - 1, Ordering::Relaxed);
+    clock.store(4 * 24 * 3600 + IDLE_SECONDS - 1, Ordering::Relaxed);
     device.reap();
     assert_eq!(device.session_count(), 1);
-    clock.store(24 * 3600 + IDLE_SECONDS, Ordering::Relaxed);
+    clock.store(4 * 24 * 3600 + IDLE_SECONDS, Ordering::Relaxed);
     device.reap();
     assert_eq!(device.session_count(), 0);
 }
