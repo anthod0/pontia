@@ -31,6 +31,7 @@
   "bots.create": "Create Bot",
   "bots.edit": "Edit Bot",
   "bots.delete": "Delete Bot",
+  "bots.actions": "Bot actions",
   "bots.deleting": "Deleting…",
   "bots.deleteSection": "Delete this Bot",
   "bots.deleteSectionDescription": "Permanently deletes this Bot and its chat history.",

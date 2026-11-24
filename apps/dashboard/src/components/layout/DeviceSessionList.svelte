@@ -16,6 +16,7 @@
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import { cn } from '$lib/utils.js'
+  import { openContextMenu, type MenuAnchor } from '$lib/contextMenu'
   import { recentSessions, snapshotSessionOverview } from "../../queries/sessionOverview";
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import { sessionStateDotClass } from '$lib/sessionState'
@@ -35,6 +36,8 @@
   let renameError = $state<string | null>(null)
   let sessionManagementBusyId = $state<string | null>(null)
   let sessionActionMenuOpenKey = $state<string | null>(null)
+  // Set while a row's actions menu was opened by right-clicking the row rather than by its menu button.
+  let sessionContextMenu = $state<{ actionKey: string; anchor: MenuAnchor } | null>(null)
   let pinnedSessionsOpen = $state(true)
   let recentSessionsOpen = $state(true)
   const { selectedWorkspaceId, sessionScope } = device.sidebarSessionFilter
@@ -83,7 +86,15 @@
   }
 
   function setSessionActionMenuOpen(actionKey: string, open: boolean): void {
+    if (open) sessionContextMenu = null
     sessionActionMenuOpenKey = open ? actionKey : null
+  }
+
+  function openSessionContextMenu(event: MouseEvent, actionKey: string): void {
+    const anchor = openContextMenu(event)
+    if (!anchor) return
+    sessionContextMenu = { actionKey, anchor }
+    sessionActionMenuOpenKey = actionKey
   }
 
   function startRenamingSession(session: SessionView) {
@@ -181,7 +192,7 @@
 
 {#snippet sessionMenuItem(session: SessionView, actionKey: string)}
   <Sidebar.MenuItem>
-    <Sidebar.MenuButton class="group-has-data-[sidebar=menu-action]/menu-item:pr-8" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session, $t)} · ${statusLabel(session.state, $t)}`} onclick={() => openSession(session.session_id)}>
+    <Sidebar.MenuButton class="group-has-data-[sidebar=menu-action]/menu-item:pr-8" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session, $t)} · ${statusLabel(session.state, $t)}`} onclick={() => openSession(session.session_id)} oncontextmenu={(event) => openSessionContextMenu(event, actionKey)}>
       {#if session.pinned_at}
         <PushPinIcon class="size-3.5 shrink-0" aria-label={$t('sessions.pinnedSession')} />
       {/if}
@@ -209,7 +220,8 @@
           </DropdownMenu.Trigger>
         {/snippet}
       </Sidebar.MenuAction>
-      <DropdownMenu.Content side="right" align="start" class="w-44">
+      {@const contextMenu = sessionContextMenu?.actionKey === actionKey ? sessionContextMenu : null}
+      <DropdownMenu.Content customAnchor={contextMenu?.anchor} side={contextMenu ? 'bottom' : 'right'} align="start" sideOffset={contextMenu ? 2 : 4} class="w-44">
         <DropdownMenu.Item onclick={() => startRenamingSession(session)}>
           <PencilSimpleIcon class="size-4" /> {$t('common.rename')}
         </DropdownMenu.Item>

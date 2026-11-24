@@ -110,6 +110,24 @@ test("deleting from a view that only shows listed Bots still opens the Bot entry
   expect(ondone).toHaveBeenCalled();
 });
 
+test("deleting a Bot other than the open one stays on the current page", async () => {
+  window.history.replaceState({}, "", "/dashboard/bots/kept");
+  vi.spyOn(testDevice.api, "listBots").mockResolvedValue([bot("doomed"), bot("kept")]);
+  vi.spyOn(testDevice.api, "getBotDeletionBlockers").mockResolvedValue({
+    running: false,
+    helpers: [],
+  });
+  const remove = vi.spyOn(testDevice.api, "deleteBot").mockResolvedValue();
+  const ondone = vi.fn();
+  render(BotDeleteDialog, { bot: bot("doomed"), onclose: vi.fn(), ondone });
+  const button = screen.getByRole("button", { name: "Delete Bot" });
+  await waitFor(() => expect(button).toBeEnabled());
+  await fireEvent.click(button);
+  await waitFor(() => expect(ondone).toHaveBeenCalled());
+  expect(remove).toHaveBeenCalledWith("doomed");
+  expect(goto).not.toHaveBeenCalled();
+});
+
 test("a rejected deletion keeps the dialog open with the reason", async () => {
   vi.spyOn(testDevice.api, "listBots").mockResolvedValue([bot("doomed")]);
   vi.spyOn(testDevice.api, "getBotDeletionBlockers").mockResolvedValue({
