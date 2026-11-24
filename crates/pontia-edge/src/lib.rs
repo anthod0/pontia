@@ -13,6 +13,7 @@ pub mod network;
 mod online;
 pub mod pending_init;
 pub mod port;
+mod preview;
 pub mod systemd;
 mod tickets;
 pub mod tls;
@@ -79,8 +80,8 @@ impl Edge {
         &self.online
     }
 
-    pub fn router(&self) -> Router {
-        Router::new()
+    pub fn router(&self, hostname: &str, port: u16, preview_base: Option<&str>) -> Router {
+        let control = Router::new()
             .route(
                 "/healthz",
                 get(|| async { ([("pontia-edge-version", pontia_version::version())], "ok") }),
@@ -102,7 +103,8 @@ impl Edge {
                     )),
             )
             .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
-            .with_state(self.clone())
+            .with_state(self.clone());
+        preview::router(self.clone(), control, hostname, port, preview_base)
     }
 
     pub fn shutdown(&self) {

@@ -107,7 +107,7 @@ pub(crate) async fn relay(
     }
 }
 
-fn exact_origin(headers: &HeaderMap, expected: &str) -> bool {
+pub(crate) fn exact_origin(headers: &HeaderMap, expected: &str) -> bool {
     let mut values = headers.get_all(header::ORIGIN).iter();
     values.next().and_then(|value| value.to_str().ok()) == Some(expected) && values.next().is_none()
 }

@@ -25,6 +25,8 @@ pub struct ServiceConfig {
     pub acme_challenge: AcmeChallenge,
     #[serde(default = "default_dashboard_origin")]
     pub browser_dashboard_origin: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_base_hostname: Option<String>,
 }
 
 impl ServiceConfig {
@@ -42,6 +44,16 @@ impl ServiceConfig {
         validate_edge_port(config.port).map_err(anyhow::Error::msg)?;
         hostname_from_tunnel_url(&format!("wss://{}/tunnel", config.hostname))?;
         validate_browser_origin(&config.browser_dashboard_origin)?;
+        if let Some(base) = &config.preview_base_hostname {
+            let label = config
+                .hostname
+                .strip_suffix(".edge.pontia.dev")
+                .context("invalid control hostname")?;
+            anyhow::ensure!(
+                base == &format!("{label}.p.pontia.dev"),
+                "invalid preview base hostname"
+            );
+        }
         Ok(config)
     }
 }
@@ -107,6 +119,7 @@ mod tests {
                     port,
                     acme_challenge,
                     browser_dashboard_origin: default_dashboard_origin(),
+                    preview_base_hostname: Some("brave-atlas.p.pontia.dev".into()),
                 };
                 config.save(&path).unwrap();
                 assert_eq!(ServiceConfig::read(&path).unwrap(), config);
