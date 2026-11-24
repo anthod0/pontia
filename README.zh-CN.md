@@ -27,7 +27,7 @@
   <img src="apps/cloud/static/client-logos/kiro.svg" height="28" alt="Kiro">
 </p>
 
-![Pontia Dashboard：最近会话、编程对话、工具调用和测试结果](https://files.pontia.dev/cloud/dashboard-1280-9a7dd255904a.webp)
+![发布 Bot 汇总两名助手的审查结果，右侧待办面板列出等待决定的发布事项。](assets/screenshots/bot-chat.webp)
 
 ## 为什么用 Pontia
 
@@ -38,6 +38,27 @@
 - 🔒 **端到端加密**：只有你的浏览器和你的设备能读到会话内容。用官方 Edge 或自己部署都行，Edge 只转发密文。
 
 在 Linux 和 macOS 上，你可以选择 pi、Codex、Claude Code、Grok Build、Google Antigravity 或 Kiro（后三者通过 ACP）运行 Bot 和助手。
+
+## 桌面端 Dashboard
+
+<table>
+  <tr>
+    <td width="50%"><strong>跟进编程会话</strong><br><a href="assets/screenshots/session-tools.webp"><img src="assets/screenshots/session-tools.webp" alt="展开 Codex 的工作步骤，查看读取和编辑的文件以及检查命令。"></a></td>
+    <td width="50%"><strong>对照会话审查 Git 差异</strong><br><a href="assets/screenshots/git-review.webp"><img src="assets/screenshots/git-review.webp" alt="查看已暂存的会话列表修改及其增删行。"></a></td>
+  </tr>
+  <tr>
+    <td width="50%"><strong>管理设备上的客户端</strong><br><a href="assets/screenshots/agent-clients.webp"><img src="assets/screenshots/agent-clients.webp" alt="客户端列表和 Claude Code 设置。"></a></td>
+    <td width="50%"><strong>复用代码审查配置</strong><br><a href="assets/screenshots/agent-profiles.webp"><img src="assets/screenshots/agent-profiles.webp" alt="审查助手的客户端、模型和指令配置。"></a></td>
+  </tr>
+</table>
+
+### 手机端 Dashboard
+
+<p align="center">
+  <a href="assets/screenshots/mobile-chat.webp"><img src="assets/screenshots/mobile-chat.webp" width="30%" alt="和发布 Bot 对话"></a>
+  <a href="assets/screenshots/mobile-todos.webp"><img src="assets/screenshots/mobile-todos.webp" width="30%" alt="回复待办事项"></a>
+  <a href="assets/screenshots/mobile-model.webp"><img src="assets/screenshots/mobile-model.webp" width="30%" alt="为新会话选择模型"></a>
+</p>
 
 ## 快速开始
 
