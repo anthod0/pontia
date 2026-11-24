@@ -228,8 +228,7 @@ impl ClientSession for AcpAdapter {
                     definition.restricted_execution,
                     Some(crate::RestrictedExecution::Antigravity)
                 ) {
-                    std::fs::create_dir_all(root.join("clients/antigravity"))?;
-                    crate::antigravity::configure_launch(&root, &mut launch);
+                    crate::antigravity::configure_launch(&root, &mut launch)?;
                 }
             }
             peer::runtime_event(
