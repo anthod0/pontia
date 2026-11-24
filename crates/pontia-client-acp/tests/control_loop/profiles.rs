@@ -121,8 +121,8 @@ async fn native_instructions_are_sent_only_on_creation_and_remain_bound_on_recov
 }
 
 #[tokio::test]
-async fn antigravity_declares_its_creation_only_nested_prompt() {
-    let h = Harness::new(&[("ACP_ANTIGRAVITY", "1")]).await;
+async fn antigravity_restores_its_nested_prompt_on_every_load() {
+    let mut h = Harness::new(&[("ACP_ANTIGRAVITY", "1")]).await;
     let session = create(
         &h,
         json!({
@@ -131,23 +131,33 @@ async fn antigravity_declares_its_creation_only_nested_prompt() {
     )
     .await
     .unwrap();
+    h.restart().await;
+    h.wait_ready(&session, 2).await;
     h.release("system-prompt");
     h.crash_agent(&session);
-    h.wait_ready(&session, 2).await;
+    h.wait_ready(&session, 3).await;
     assert!(injected(&h, &session).await);
     assert_eq!(h.requests("session/new"), 1);
+    h.app
+        .session_commands()
+        .terminate_session(&session)
+        .await
+        .unwrap();
+    h.wait_session_state(&session, "exited").await;
+    let loads = h.requests("session/load");
+    h.history(&session).await.unwrap();
+    assert!(h.requests("session/load") > loads);
     for request in h.wire() {
-        let params = &request["params"];
-        match request["method"].as_str() {
-            Some("session/new") => assert_eq!(
+        if matches!(
+            request["method"].as_str(),
+            Some("session/new" | "session/load")
+        ) {
+            let params = &request["params"];
+            assert_eq!(
                 params["_meta"],
                 json!({"antigravity":{"systemPrompt":{"append":"profile-marker"}}})
-            ),
-            Some("session/load") => {
-                assert!(params.get("systemPrompt").is_none());
-                assert!(params["_meta"].get("antigravity").is_none());
-            }
-            _ => {}
+            );
+            assert!(params.get("systemPrompt").is_none());
         }
     }
     h.stop().await;
