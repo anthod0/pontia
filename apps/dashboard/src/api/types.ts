@@ -141,8 +141,6 @@ export type WorkflowState =
   | "pending"
   | "running"
   | "paused"
-  | "replanning"
-  | "blocked"
   | "idle"
   | "completed"
   | "failed"
@@ -163,7 +161,7 @@ export interface WorkflowListItemView {
   workflow_id: string;
   title: string;
   state: WorkflowState;
-  current_revision: number;
+  initiator_session_id: string;
   failure_message: string | null;
   agent_submitted_count: number;
   agent_total_count: number;
@@ -176,29 +174,6 @@ export interface WorkflowListItemView {
   observation_error: string | null;
 }
 
-export interface WorkflowGraphRevisionView {
-  workflow_id: string;
-  revision: number;
-  current: boolean;
-  nodes: WorkflowGraphNodeView[];
-}
-
-export interface WorkflowGraphNodeView {
-  node_id: string;
-  parent_node_id: string | null;
-  node_type: string;
-  session_id: string | null;
-  turn_ids: string[];
-  phase: string;
-  title: string;
-  instructions: string;
-  inputs: string[];
-  output: string;
-  execution_profile_id: string | null;
-  introduced_revision: number;
-  retired_revision: number | null;
-}
-
 export interface WorkflowNodeView {
   node_id: string;
   phase: string;
@@ -209,39 +184,6 @@ export interface WorkflowNodeView {
   submitted_at: string | null;
 }
 
-export interface WorkflowActivePatchView {
-  patch_id: string;
-  state: string;
-  base_revision: number;
-  request_document_ref: string;
-  requesting_node_id: string;
-  requesting_session_id: string;
-  requesting_turn_id: string;
-  replanner_session_id: string | null;
-  replanner_turn_id: string | null;
-}
-
-export interface WorkflowPatchHistoryView extends WorkflowActivePatchView {
-  outcome: string | null;
-  result_revision: number | null;
-  requesting_runtime_instance_id: string;
-  replanner_runtime_instance_id: string | null;
-  added_node_ids: string[];
-  retired_node_ids: string[];
-  decision_document_ref: string | null;
-  reason_document_ref: string | null;
-  blocked_draft_ref: string | null;
-  requested_at: string;
-  planning_at: string | null;
-  resolved_at: string | null;
-}
-
-export interface WorkflowDocumentView {
-  workflow_id: string;
-  document_ref: string;
-  content: string;
-}
-
 export interface WorkflowDetailView {
   retry_failure_event_id: string | null;
   retry_unavailable_reason: string | null;
@@ -249,10 +191,10 @@ export interface WorkflowDetailView {
   workflow_id: string;
   title: string;
   state: WorkflowState;
-  current_revision: number;
+  initiator_session_id: string;
   failure_message: string | null;
   cwd: string;
-  active_patch: WorkflowActivePatchView | null;
+  termination_reason: string | null;
   agent_submitted_count: number;
   agent_total_count: number;
   current_node_id: string | null;

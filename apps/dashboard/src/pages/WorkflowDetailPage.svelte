@@ -4,9 +4,6 @@
   import { formatDateTime } from '$lib/format';
   import { useDeviceRuntime } from '../device/context';
   import { onMount } from 'svelte'
-  import WorkflowVersions from './workflows/WorkflowVersions.svelte'
-  import WorkflowReplanning from './workflows/WorkflowReplanning.svelte'
-  import { revisionSelection, workflowRevisions } from './workflows/revisions'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import PauseIcon from 'phosphor-svelte/lib/PauseIcon'
   import PlayIcon from 'phosphor-svelte/lib/PlayIcon'
@@ -27,7 +24,6 @@
   const {
     createPauseWorkflowMutation,
     createResumeWorkflowMutation,
-    createRetryWorkflowMutation,
     createWorkflowQuery,
   } = device.workflowQueries;
 
@@ -35,24 +31,19 @@
   const workflowQuery = createWorkflowQuery(() => routeWorkflowId, () => true, () => true)
   const pauseMutation = createPauseWorkflowMutation()
   const resumeMutation = createResumeWorkflowMutation()
-  const retryMutation = createRetryWorkflowMutation()
   let query = $state(new URLSearchParams(window.location.search))
   let requestedPhase = $derived(query.get('phase'))
 
   function updateQuery(changes: Record<string, string | null>): void {
-    void navigate(`/workflows/${routeWorkflowId}`, { revision: query.get('revision'), phase: requestedPhase, ...changes })
+    void navigate(`/workflows/${routeWorkflowId}`, { phase: requestedPhase, ...changes })
   }
 
-  function selectRevision(value: number): void {
-    updateQuery({ revision: value === snapshot?.current_revision ? null : String(value), phase: null })
-  }
   let snapshot = $derived(workflowQuery.data?.workflow_id === routeWorkflowId ? workflowQuery.data : null)
-  let revision = $derived(snapshot ? revisionSelection(query.get('revision'), snapshot.current_revision) : null)
   let phases = $derived(groupWorkflowPhases(snapshot?.nodes ?? [], snapshot?.current_node_id ?? null))
   let explicitOrdinal = $derived(selectedPhaseOrdinal(requestedPhase, phases))
   let selectedPhase = $derived(phases.find((phase) => phase.ordinal === explicitOrdinal) ?? phases.find((phase) => phase.current) ?? phases[0] ?? null)
-  let actionBusy = $derived(pauseMutation.isPending || resumeMutation.isPending || retryMutation.isPending)
-  let workflowError = $derived(workflowQuery.error ?? pauseMutation.error ?? resumeMutation.error ?? retryMutation.error)
+  let actionBusy = $derived(pauseMutation.isPending || resumeMutation.isPending)
+  let workflowError = $derived(workflowQuery.error ?? pauseMutation.error ?? resumeMutation.error)
 
   function readPhaseQuery(): void {
     query = new URLSearchParams(window.location.search)
@@ -79,14 +70,11 @@
     return hours ? $t('chat.hoursMinutesSeconds', { hours, minutes, seconds: rest }) : $t('chat.minutesSeconds', { minutes, seconds: rest })
   }
 
-  async function runControl(action: 'pause' | 'resume' | 'retry'): Promise<void> {
+  async function runControl(action: 'pause' | 'resume'): Promise<void> {
     if (actionBusy) return
     try {
       if (action === 'pause') await pauseMutation.mutateAsync(routeWorkflowId)
-      else if (action === 'resume') await resumeMutation.mutateAsync(routeWorkflowId)
-      else if (snapshot?.retry_failure_event_id) {
-        await retryMutation.mutateAsync({ workflowId: routeWorkflowId, failureEventId: snapshot.retry_failure_event_id })
-      }
+      else await resumeMutation.mutateAsync(routeWorkflowId)
     } catch {
       await workflowQuery.refetch()
     }
@@ -114,15 +102,13 @@
   <div class="flex items-start justify-between gap-4">
     <div class="min-w-0 space-y-2">
       <h2 class="flex items-center gap-2 text-3xl font-semibold tracking-tight"><TreeStructureIcon class="size-7 shrink-0" /> <span class="truncate">{snapshot?.title ?? $t('workflow.title')}</span></h2>
-      {#if snapshot}<div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><Badge variant={snapshot.state === 'failed' ? 'destructive' : 'secondary'}>{statusLabel(snapshot.state, $t)}</Badge><Badge variant="outline">{$t('workflow.currentVersionPrefix')}{snapshot.current_revision}</Badge><span>{snapshot.agent_submitted_count}/{snapshot.agent_total_count} {$t('workflow.agentsSuffix')}</span><span>·</span><span>{formatElapsed(snapshot.elapsed_ms)}</span><span>·</span><span class="font-mono text-xs">{snapshot.workflow_id}</span></div>{/if}
+      {#if snapshot}<div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><Badge variant={snapshot.state === 'failed' ? 'destructive' : 'secondary'}>{statusLabel(snapshot.state, $t)}</Badge><span>{snapshot.agent_submitted_count}/{snapshot.agent_total_count} {$t('workflow.agentsSuffix')}</span><span>·</span><span>{formatElapsed(snapshot.elapsed_ms)}</span><span>·</span><span class="font-mono text-xs">{snapshot.workflow_id}</span><Button variant="link" size="sm" onclick={() => navigate(`/chat/${encodeURIComponent(snapshot.initiator_session_id)}`)}>{$t('workflow.initiatingSession')} · {snapshot.initiator_session_id}</Button></div>{/if}
     </div>
     <div class="flex shrink-0 gap-2">
       {#if snapshot?.state === 'running'}
         <Button variant="outline" disabled={actionBusy} onclick={() => void runControl('pause')}><PauseIcon class="size-4" /> {$t('common.pause')}</Button>
       {:else if snapshot?.state === 'paused'}
         <Button variant="outline" disabled={actionBusy} onclick={() => void runControl('resume')}><PlayIcon class="size-4" /> {$t('common.resume')}</Button>
-      {:else if snapshot?.state === 'failed' && snapshot.retry_failure_event_id}
-        <Button variant="outline" disabled={actionBusy} onclick={() => void runControl('retry')}><PlayIcon class="size-4" /> {$t('common.retry')}</Button>
       {/if}
     </div>
   </div>
@@ -132,11 +118,6 @@
     <Button variant="outline" onclick={() => void workflowQuery.refetch()}>{$t('workflow.reload')}</Button>
   {/if}
 
-  {#if snapshot?.retry_unavailable_reason}
-    <p class="text-sm text-muted-foreground">{snapshot.retry_unavailable_reason}</p>
-  {:else if snapshot?.state === 'failed' && snapshot.retry_failure_event_id}
-    <p class="text-sm text-muted-foreground">{$t('workflow.retryDescription')}</p>
-  {/if}
   {#if snapshot && snapshot.recoveries.length > 0}
     <Card.Root class="p-4 space-y-3">
       <h3 class="font-semibold">{$t('workflow.recoveryHistory')}</h3>
@@ -154,18 +135,7 @@
   {/if}
 
   <div class="space-y-3">
-    {#if snapshot}
-      <div class="flex flex-wrap items-center gap-2" role="group" aria-label={$t('workflow.versions')}>
-        {#each workflowRevisions(snapshot.current_revision) as version}
-          <Button variant={revision === version ? 'secondary' : 'ghost'} aria-pressed={revision === version} onclick={() => selectRevision(version)}>
-            v{version} {#if version === snapshot.current_revision}<Badge variant="outline">{$t('common.current')}</Badge>{/if}
-          </Button>
-        {/each}
-      </div>
-    {/if}
-  {#if snapshot && revision !== snapshot.current_revision}
-    <WorkflowVersions workflowId={routeWorkflowId} {revision} requestedPhase={requestedPhase} onphase={(value) => updateQuery({ phase: String(value) })} />
-  {:else if workflowQuery.isPending && !snapshot}
+  {#if workflowQuery.isPending && !snapshot}
     <div class="space-y-3"><Skeleton class="h-24 w-full" /><Skeleton class="h-80 w-full" /></div>
   {:else if snapshot && selectedPhase}
     <Card.Root class="overflow-hidden">
@@ -216,8 +186,4 @@
     <Empty.Root><Empty.Header><Empty.Title>{$t('workflow.unavailable')}</Empty.Title><Empty.Description>{$t('workflow.noSnapshot')}</Empty.Description></Empty.Header></Empty.Root>
   {/if}
   </div>
-
-  {#if snapshot && revision !== null}
-    <WorkflowReplanning {snapshot} {revision} onrevision={selectRevision} />
-  {/if}
 </section>

@@ -12,7 +12,7 @@ use pontia_core::domain::{DomainEvent, EventSource, EventType};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use pontia_workflow::{
     AgentEventSubscriber, GracefulExitRequester, SessionCreator, SubmitWorkflowNodeRequest,
-    TurnInterruptionRequester, WorkflowCoordinator, WorkflowScheduler,
+    WorkflowCoordinator, WorkflowScheduler,
 };
 use serde_json::json;
 use tokio::sync::broadcast;
@@ -105,17 +105,6 @@ impl GracefulExitRequester for RecordingExitRequester {
                 .push((session_id, runtime_id));
             Ok(())
         }
-    }
-}
-
-impl TurnInterruptionRequester for RecordingExitRequester {
-    async fn request_turn_interruption(
-        &self,
-        _session_id: &str,
-        _turn_id: &str,
-        _runtime_id: &str,
-    ) -> pontia_workflow::Result<()> {
-        Ok(())
     }
 }
 
@@ -275,6 +264,7 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
     );
     repository
         .create_workflow(CreateWorkflowRecord {
+            initiator_session_id: "origin".into(),
             workflow_id: "wf_chain".to_string(),
             title: "Three node workflow".to_string(),
             cwd: "/workspace/shared-project".to_string(),
@@ -557,6 +547,7 @@ async fn paused_coordinator_ignores_expected_interrupt_and_defers_downstream_dis
     );
     repository
         .create_workflow(CreateWorkflowRecord {
+            initiator_session_id: "origin".into(),
             workflow_id: "wf_paused".to_string(),
             title: "Paused workflow".to_string(),
             cwd: "/workspace/shared-project".to_string(),
@@ -672,6 +663,7 @@ async fn lagged_notifications_reconcile_a_persisted_confirmed_session_exit() {
     );
     repository
         .create_workflow(CreateWorkflowRecord {
+            initiator_session_id: "origin".into(),
             workflow_id: "wf_lagged".to_string(),
             title: "Lag recovery workflow".to_string(),
             cwd: "/workspace/shared-project".to_string(),

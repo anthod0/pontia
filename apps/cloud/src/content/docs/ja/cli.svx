@@ -83,14 +83,11 @@ pontia completions powershell | Out-String | Invoke-Expression
 
 | コマンド | 実行場所 | 用途 |
 | --- | --- | --- |
-| `pontia workflow run FILE` | 任意のローカルシェル | TOML 定義を解析し、ローカル API 経由で Workflow を開始します |
-| `pontia workflow show [WORKFLOW_ID]` | 任意のローカルシェル。管理対象 Node 内では ID は省略可能 | Workflow、現在の Node、入力、出力、Patch のコンテキストを簡潔に表示します |
-| `pontia workflow submit` | 現在の管理対象 Agent Node のペイン | Node の出力の準備ができたことを宣言します |
-| `pontia workflow patch request` | 現在の管理対象 Agent Node のペイン | 進行を妨げる問題を報告し、再計画を開始します |
-| `pontia workflow patch apply` | 現在の Re-planner のペイン | 候補の定義を新しいリビジョンとして採用します |
-| `pontia workflow patch block` | 現在の Re-planner のペイン | 候補の定義を適用せずに Patch を終了します |
-
-ペインに限定されたコマンドは、現在の Agent Node または Re-planner の、Pontia が管理する `tmux` ペインで実行してください。
+| `pontia workflow run FILE` | Pontia Session | TOML 定義を解析し、ローカル API 経由で Workflow を開始します |
+| `pontia workflow show [WORKFLOW_ID]` | 任意のローカルシェル。管理対象 Node 内では ID は省略可能 | 進捗、開始元の Session、現在の Node とその入出力を表示します |
+| `pontia workflow submit` | 現在の Agent Node の Session | Node の出力の準備ができたことを宣言します |
+| `pontia workflow terminate` | 現在の Agent Node の Session | 開始元の Session に理由を送信します |
+| `pontia workflow retry ID FAILURE_EVENT_ID` | Pontia Session | 同じ Node の Session で指定の失敗を再試行します |
 
 ## クラウドへのログインとリモートアクセス
 

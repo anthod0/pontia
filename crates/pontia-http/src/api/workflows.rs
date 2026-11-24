@@ -1,9 +1,8 @@
 mod commands;
 
 pub use commands::{
-    WorkflowPatchApplyRequest, WorkflowPatchBlockRequest, WorkflowPatchRequest, WorkflowRunRequest,
-    WorkflowSubmissionRequest, apply_workflow_patch, block_workflow_patch, request_workflow_patch,
-    run_workflow, submit_workflow_output,
+    WorkflowRunRequest, WorkflowSubmissionRequest, WorkflowTerminationRequest, run_workflow,
+    submit_workflow_output, terminate_workflow_node,
 };
 
 use axum::{
@@ -28,11 +27,6 @@ pub struct ListWorkflowsQuery {
     limit: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct WorkflowDocumentQuery {
-    r#ref: String,
-}
-
 pub async fn list_workflows(
     State(state): State<AppState>,
     Query(query): Query<ListWorkflowsQuery>,
@@ -52,37 +46,11 @@ pub async fn get_workflow(
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let workflow = WorkflowQueryService::new(state.db(), state.control().queries())
         .with_clients(state.control().clients())
-        .get_workflow_snapshot(&workflow_id, state.pontia_home())
+        .get_workflow(&workflow_id)
         .await
         .map_err(map_workflow_error)?
         .ok_or_else(|| ApiError::not_found(format!("workflow {workflow_id} not found")))?;
     Ok(ok(json!({ "workflow": workflow })))
-}
-
-pub async fn get_workflow_revision(
-    State(state): State<AppState>,
-    Path((workflow_id, revision)): Path<(String, i64)>,
-) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let revision = WorkflowQueryService::new(state.db(), state.control().queries())
-        .with_clients(state.control().clients())
-        .get_workflow_revision(&workflow_id, revision)
-        .await
-        .map_err(map_workflow_error)?
-        .ok_or_else(|| ApiError::not_found(format!("workflow {workflow_id} not found")))?;
-    Ok(ok(json!({ "revision": revision })))
-}
-
-pub async fn list_workflow_patches(
-    State(state): State<AppState>,
-    Path(workflow_id): Path<String>,
-) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let patches = WorkflowQueryService::new(state.db(), state.control().queries())
-        .with_clients(state.control().clients())
-        .list_workflow_patches(&workflow_id)
-        .await
-        .map_err(map_workflow_error)?
-        .ok_or_else(|| ApiError::not_found(format!("workflow {workflow_id} not found")))?;
-    Ok(ok(json!({ "patches": patches })))
 }
 
 pub async fn get_workflow_timeline(
@@ -96,20 +64,6 @@ pub async fn get_workflow_timeline(
         .map_err(map_workflow_error)?
         .ok_or_else(|| ApiError::not_found(format!("workflow {workflow_id} not found")))?;
     Ok(ok(json!({ "timeline": timeline })))
-}
-
-pub async fn get_workflow_document(
-    State(state): State<AppState>,
-    Path(workflow_id): Path<String>,
-    Query(query): Query<WorkflowDocumentQuery>,
-) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let document = WorkflowQueryService::new(state.db(), state.control().queries())
-        .with_clients(state.control().clients())
-        .read_workflow_document(&workflow_id, &query.r#ref, state.pontia_home())
-        .await
-        .map_err(map_workflow_error)?
-        .ok_or_else(|| ApiError::not_found(format!("workflow {workflow_id} not found")))?;
-    Ok(ok(json!({ "document": document })))
 }
 
 pub async fn pause_workflow(

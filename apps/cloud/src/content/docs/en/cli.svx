@@ -89,14 +89,11 @@ pontia completions powershell | Out-String | Invoke-Expression
 
 | Command | Context | Purpose |
 | --- | --- | --- |
-| `pontia workflow run FILE` | Any local shell | Parse a TOML definition and start a Workflow through the local API |
-| `pontia workflow show [WORKFLOW_ID]` | Any local shell; ID optional inside a managed Node | Print compact Workflow, current Node, input, output, and Patch context |
-| `pontia workflow submit` | Current managed Agent Node pane | Declare the Node's output ready |
-| `pontia workflow patch request` | Current managed Agent Node pane | Report a blocking problem and start replanning |
-| `pontia workflow patch apply` | Current Re-planner pane | Accept the candidate definition as a new revision |
-| `pontia workflow patch block` | Current Re-planner pane | Finish the Patch without applying the candidate definition |
-
-Run pane-scoped commands in the current Agent Node or Re-planner's Pontia-managed `tmux` pane.
+| `pontia workflow run FILE` | Pontia Session | Parse a TOML definition and start a Workflow through the local API |
+| `pontia workflow show [WORKFLOW_ID]` | Any local shell; ID optional inside a managed Node | Show progress, the initiating Session, current Node, inputs, and output |
+| `pontia workflow submit` | Current Agent Node Session | Declare the Node's output ready |
+| `pontia workflow terminate` | Current Agent Node Session | Send the blocking reason to the initiating Session |
+| `pontia workflow retry ID FAILURE_EVENT_ID` | Pontia Session | Retry the indicated failure in the same Node Session |
 
 ## Cloud login and remote access
 

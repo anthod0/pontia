@@ -144,16 +144,26 @@ def check_workflow(request, marker):
     profile = "writer-" + marker
     request("agent-profiles", {**CLIENT, "profile_id": profile, "name": "Claude Workflow writer",
                                "system_prompt": "Follow the node instructions and submit the assigned output."})
-    workflow = "wf_" + marker
-    handoff = Path("/home/e2e/.pontia/workflows") / workflow / "handoff/result.md"
-    command = f"printf '%s\\n' {marker} > {handoff} && pontia workflow submit"
     workspace = request("workspaces", {"root_id": "e2e"})["workspace"]
-    launch = request("workflows", {
-        "workflow_id": workflow, "title": "Claude single node", "cwd": workspace["canonical_path"],
-        "nodes": [{"type": "agent", "phase": "Test", "title": "Write result", "output": "result.md",
-                   "execution_profile_id": profile, "instructions": bash_task(command)}],
-    })
-    session_id = launch["session_id"]
+    directory = Path(workspace["canonical_path"])
+    definition = directory / f"workflow-{marker}.toml"
+    result = directory / f"workflow-{marker}.id"
+    command = f'printf "%s" {marker} > "/home/e2e/.pontia/workflows/$PONTIA_WORKFLOW_ID/handoff/result.md" && pontia workflow submit'
+    definition.write_text(
+        f'title = "Claude single node"\ncwd = "."\n[[nodes]]\ntype = "agent"\n'
+        f'phase = "Test"\ntitle = "Write result"\noutput = "result.md"\n'
+        f'execution_profile_id = "{profile}"\ninstructions = {json.dumps(bash_task(command))}\n'
+    )
+    launch_command = f"pontia workflow run {shlex.quote(str(definition))} > {shlex.quote(str(result))}"
+    origin = request("sessions", {
+        "client_type": CLIENT["client_type"], "model": CLIENT["model"],
+        "workspace": str(directory), "mode": "yolo",
+        "initial_task": {"input": bash_task(launch_command)},
+    })["session"]["session_id"]
+    workflow = wait_for("initiating Session did not start the Workflow",
+                        lambda: result.read_text().strip() if result.exists() else None)
+    handoff = Path("/home/e2e/.pontia/workflows") / workflow / "handoff/result.md"
+    session_id = request("workflows/" + workflow)["workflow"]["nodes"][0]["session_id"]
     session = "sessions/" + session_id
 
     def completed():
@@ -168,12 +178,18 @@ def check_workflow(request, marker):
 
     detail = wait_for(f"{workflow} did not complete", completed)
     node, = detail["nodes"]
-    assert node["session_id"] == session_id and node["node_id"] == launch["node_id"] and node["submitted_at"]
+    assert node["session_id"] == session_id and detail["initiator_session_id"] == origin and node["submitted_at"]
     actual = request(session)["session"]
     assert actual["client_type"] == CLIENT["client_type"] and actual["model"] == CLIENT["model"]
     runtime, = actual["runtimes"]
     assert runtime["role"] == "claude_sdk_host"
     assert handoff.read_text().strip() == marker
+
+    def report():
+        messages = request(f"sessions/{origin}/inbox/messages")["inbox_messages"]
+        return next((m for m in messages if (m["metadata"] or {}).get("workflow_id") == workflow), None)
+
+    assert str(handoff) in wait_for("initiating Session did not receive output paths", report)["input"]["summary"]
     print(f'{workflow} completed, {session_id} submitted {marker} via {runtime["role"]} {runtime["runtime_id"]}',
           flush=True)
 

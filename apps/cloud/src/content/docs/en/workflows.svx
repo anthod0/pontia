@@ -44,7 +44,7 @@ Use `type = "agent"` for each Node. Nodes execute in definition order. Each inpu
 
 ## Run and inspect
 
-Start the Workflow while `pontiad` is healthy:
+Start the Workflow from a Pontia Session while `pontiad` is running.
 
 ```sh
 pontia workflow run ./workflow.toml
@@ -62,7 +62,7 @@ Inside a Workflow-managed Agent Session, `PONTIA_WORKFLOW_ID` supplies the curre
 
 ## Complete an Agent Node
 
-Write the complete result to the output-file path provided by Pontia, then submit it from the Agent Node's managed `tmux` pane:
+Write the complete result to the output-file path provided by Pontia, then submit it from the Agent Node’s Session:
 
 ```sh
 pontia workflow submit
@@ -74,21 +74,10 @@ A successful submission marks the Node's output ready. If the Turn completes bef
 
 Use the Workflow detail page to pause a running Workflow or resume a paused one. Pausing requests interruption of a busy current Turn when supported. Resuming an interrupted current Session sends a continuation before scheduling proceeds.
 
-When a failed Workflow is recoverable, **Retry** continues the same Agent Node conversation. Earlier submitted Nodes remain complete, existing Workspace changes remain in place, and unsubmitted output is archived. The recovering Node reviews the existing changes and submits a fresh complete output.
+When a failed Workflow is recoverable, `pontia workflow retry ID FAILURE_EVENT_ID` continues the same Agent Node conversation. Earlier submitted Nodes remain complete, existing Workspace changes remain in place, and unsubmitted output is archived. The recovering Node reviews the existing changes and submits a fresh complete output.
 
-## Request replanning
+## Report a blocking problem
 
-If an Agent Node is blocked by an unexpected problem, it writes the requested problem report and runs:
+Write the reason to the `termination.md` path in the Node instructions and run `pontia workflow terminate`. Stop work after the command succeeds. Pontia sends the reason to the initiating Session. The command leaves the Workflow state unchanged.
 
-```sh
-pontia workflow patch request
-```
-
-Pontia creates a dedicated Re-planner Session. The Re-planner inspects `pontia workflow show`, edits the provided candidate definition, records a decision, and finishes with one of:
-
-```sh
-pontia workflow patch apply
-pontia workflow patch block
-```
-
-An applied Workflow Patch creates a new graph revision while preserving existing Node identities and execution history. The Dashboard lets you compare revisions and inspect Patch requests, Re-planner Sessions, outcomes, and resulting revisions.
+The initiating Session also receives a report when the Workflow fails, becomes idle, or completes. Reports include the Workflow ID, Handoff directory, and submitted output paths. Use `pontia workflow show ID` to inspect the Workflow and find the Retry command for a recoverable failure.

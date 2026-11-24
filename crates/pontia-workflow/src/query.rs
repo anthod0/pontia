@@ -1,20 +1,15 @@
 mod context;
 mod graph;
 mod overview;
-mod patches;
 mod timeline;
 
 use crate::repository::SqliteWorkflowRepository;
 use sqlx::SqlitePool;
 
-pub use context::{
-    WorkflowContextView, WorkflowDocumentView, WorkflowInputView, WorkflowNodeContextView,
-};
-pub use graph::{WorkflowGraphNodeView, WorkflowGraphRevisionView};
+pub use context::{WorkflowContextView, WorkflowInputView, WorkflowNodeContextView};
 pub use overview::{
     WorkflowAgentStatus, WorkflowDetailView, WorkflowListItemView, WorkflowNodeView,
 };
-pub use patches::{WorkflowActivePatchView, WorkflowPatchHistoryView};
 pub use timeline::{WorkflowTimelineEntryView, WorkflowTimelineView};
 
 #[derive(Clone)]

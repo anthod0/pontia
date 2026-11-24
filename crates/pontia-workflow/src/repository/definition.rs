@@ -10,13 +10,14 @@ impl SqliteWorkflowRepository {
     ) -> Result<()> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         sqlx::query(
-            r#"INSERT INTO workflows (workflow_id, title, cwd, state)
-               VALUES (?, ?, ?, ?)"#,
+            r#"INSERT INTO workflows (workflow_id, title, cwd, state, initiator_session_id)
+               VALUES (?, ?, ?, ?, ?)"#,
         )
         .bind(workflow.workflow_id)
         .bind(workflow.title)
         .bind(workflow.cwd)
         .bind(workflow.state)
+        .bind(workflow.initiator_session_id)
         .execute(&mut *tx)
         .await?;
         for node in nodes {
@@ -44,13 +45,14 @@ impl SqliteWorkflowRepository {
 
     pub async fn create_workflow(&self, workflow: CreateWorkflowRecord) -> Result<()> {
         sqlx::query(
-            r#"INSERT INTO workflows (workflow_id, title, cwd, state)
-               VALUES (?, ?, ?, ?)"#,
+            r#"INSERT INTO workflows (workflow_id, title, cwd, state, initiator_session_id)
+               VALUES (?, ?, ?, ?, ?)"#,
         )
         .bind(workflow.workflow_id)
         .bind(workflow.title)
         .bind(workflow.cwd)
         .bind(workflow.state)
+        .bind(workflow.initiator_session_id)
         .execute(&self.pool)
         .await?;
         Ok(())

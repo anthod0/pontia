@@ -20,7 +20,7 @@ pub struct WorkflowRow {
     pub title: String,
     pub cwd: String,
     pub state: String,
-    pub current_revision: i64,
+    pub initiator_session_id: String,
     pub failure_message: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -40,44 +40,11 @@ pub struct WorkflowNodeRow {
     pub inputs: String,
     pub output: String,
     pub execution_profile_id: Option<String>,
-    pub introduced_revision: i64,
-    pub retired_revision: Option<i64>,
     pub session_id: Option<String>,
     pub submitted_at: Option<String>,
     pub submitted_runtime_id: Option<String>,
     pub exit_request_started_at: Option<String>,
     pub created_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
-pub struct WorkflowPatchRow {
-    pub patch_id: String,
-    pub workflow_id: String,
-    pub requesting_node_id: String,
-    pub requesting_session_id: String,
-    pub requesting_turn_id: String,
-    pub requesting_runtime_id: String,
-
-    pub replanner_session_id: Option<String>,
-    pub replanner_turn_id: Option<String>,
-    pub replanner_runtime_id: Option<String>,
-    pub base_revision: i64,
-    pub result_revision: Option<i64>,
-    pub state: String,
-    pub request_document_ref: String,
-    pub request_size_bytes: i64,
-    pub decision_document_ref: Option<String>,
-    pub reason_document_ref: Option<String>,
-    pub blocked_draft_ref: Option<String>,
-    pub interruption_attempted_at: Option<String>,
-    pub interruption_requested_at: Option<String>,
-    pub replanning_unlocked_at: Option<String>,
-    pub continuation_message_id: Option<String>,
-    pub continuation_queued_at: Option<String>,
-    pub replanner_exit_requested_at: Option<String>,
-    pub requested_at: String,
-    pub planning_at: Option<String>,
-    pub resolved_at: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, sqlx::FromRow)]

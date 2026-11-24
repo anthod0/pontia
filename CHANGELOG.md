@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Start Workflows from a Pontia Session. It receives reports for blocked nodes, idle turns, failures, and completion. Use `pontia workflow terminate` to report a blocker and `pontia workflow show ID` for retry instructions. Workflow patches, replanning, and revision history have been removed. The upgrade clears existing Workflow records and keeps Sessions and Handoff files.
+
 - `POST /api/v1/sessions` now takes `mode` (`default`, `yolo`, or `restricted`) in place of `execution_policy`. Omit it to use the Client’s normal settings. Existing restricted Bot Sessions use the current restricted configuration, including disabled skill discovery, on their next launch. Preparing a Bot directory now overwrites its Pi steering settings. When upgrading Pontia, update the Claude Code integration package with the [Claude Code update instructions](https://pontia.dev/docs/agent-clients/claude).
 
 ## [0.8.12] - 2026-11-24

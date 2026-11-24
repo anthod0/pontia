@@ -25,7 +25,7 @@ Pontia はデバイスをエージェントクラウドに変えます。コー�
 
 - [Agent Client](/docs/agent-clients) — Pi、Codex、Claude Code、Grok Build を設定し、機能の違いを理解します。
 - [Workspace](/docs/workspaces) — プロジェクトディレクトリとファイル検出を設定します。
-- [Workflow](/docs/workflows) — 明示的な Handoff と再計画を使って、永続的で段階的なエージェントの作業を実行します。
+- [Workflow](/docs/workflows) — 明示的な Handoffを使って、永続的で段階的なエージェントの作業を実行します。
 
 ## リファレンス
 

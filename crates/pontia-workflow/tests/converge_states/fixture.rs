@@ -14,6 +14,12 @@ pub(super) async fn test_pool(path: &Path) -> sqlx::SqlitePool {
     let database_url = format!("sqlite://{}", path.display());
     let pool = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&pool).await.expect("migrate");
+    sqlx::query(
+        "INSERT INTO sessions(session_id,client_type,state) VALUES ('origin','pi','exited')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
     pool
 }
 
@@ -25,6 +31,7 @@ pub(super) async fn seed_linear_workflow(
 ) {
     repository
         .create_workflow(CreateWorkflowRecord {
+            initiator_session_id: "origin".into(),
             workflow_id: workflow_id.to_string(),
             title: "Convergence workflow".to_string(),
             cwd: "/workspace/project".to_string(),
@@ -111,4 +118,20 @@ pub(super) async fn assert_transition(
         expected_event
     );
     workflow.failure_message
+}
+
+pub(super) async fn wait_for_report(
+    pool: &sqlx::SqlitePool,
+    workflow_id: &str,
+    event_type: &str,
+) -> String {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let report = sqlx::query_scalar("SELECT input_summary FROM inbox_messages WHERE session_id='origin'
+                AND json_extract(metadata,'$.workflow_id')=? AND json_extract(metadata,'$.event_type')=?")
+                .bind(workflow_id).bind(event_type).fetch_optional(pool).await.unwrap();
+            if let Some(input)=report { return input; }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }).await.expect("initiating Session receives Workflow report")
 }

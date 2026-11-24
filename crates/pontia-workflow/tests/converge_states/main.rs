@@ -5,7 +5,5 @@ mod failure_recovery;
 mod fixture;
 mod idle_convergence;
 mod lagged_event_reconciliation;
-mod patch_blocking;
-mod patch_interruption;
 mod restart_recovery;
 mod test_doubles;

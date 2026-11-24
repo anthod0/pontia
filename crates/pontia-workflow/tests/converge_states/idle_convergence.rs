@@ -43,6 +43,8 @@ async fn unsubmitted_completed_turn_enters_idle_and_keeps_the_current_session() 
         .await;
     wait_for_state(&repository, "wf_idle", "idle").await;
 
+    let report = crate::fixture::wait_for_report(&pool, "wf_idle", "workflow.idle").await;
+    assert!(report.contains("wf_idle_root") && report.contains("session_root"));
     assert_transition(&repository, "wf_idle", "idle", "workflow.idle").await;
     assert!(
         exits

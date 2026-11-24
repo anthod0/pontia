@@ -15,8 +15,6 @@ const labels: Record<string, MessageKey> = {
   failed: "state.failed",
   pending: "state.pending",
   paused: "state.paused",
-  replanning: "state.replanning",
-  blocked: "state.blocked",
   recovering: "state.recovering",
   exiting: "state.exiting",
   submitted: "state.submitted",

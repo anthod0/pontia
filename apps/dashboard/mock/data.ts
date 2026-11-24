@@ -13,8 +13,6 @@ import type {
   TurnTimelineItem,
   TurnView,
   WorkflowDetailView,
-  WorkflowGraphRevisionView,
-  WorkflowPatchHistoryView,
   WorkspaceRootView,
   WorkspaceView,
 } from "../src/api/types.ts";
@@ -31,9 +29,6 @@ export interface MockSession {
 
 export interface MockWorkflow {
   detail: WorkflowDetailView;
-  revisions: WorkflowGraphRevisionView[];
-  patches: WorkflowPatchHistoryView[];
-  documents: Record<string, string>;
 }
 
 export interface MockData {
@@ -370,6 +365,7 @@ function agentProfile(
 }
 
 function workflow(
+  initiatorSessionId: string,
   nextId: (prefix: string) => string,
   spec: {
     title: string;
@@ -381,7 +377,6 @@ function workflow(
   },
 ): MockWorkflow {
   const workflowId = nextId("wf");
-  const graphNodes: WorkflowGraphRevisionView["nodes"] = [];
   const nodes: WorkflowDetailView["nodes"] = [];
   for (const phase of spec.phases) {
     for (const node of phase.nodes) {
@@ -396,21 +391,6 @@ function workflow(
         session_state: submitted ? "exited" : node.status === "running" ? "busy" : null,
         submitted_at: submitted ? ago(spec.startedMinutesAgo - 10) : null,
       });
-      graphNodes.push({
-        node_id: nodeId,
-        parent_node_id: null,
-        node_type: "agent",
-        session_id: null,
-        turn_ids: [],
-        phase: phase.name,
-        title: node.title,
-        instructions: `Complete "${node.title}" and submit the result.`,
-        inputs: [],
-        output: "report.md",
-        execution_profile_id: "executor",
-        introduced_revision: 1,
-        retired_revision: null,
-      });
     }
   }
   const finished = spec.state === "completed" || spec.state === "failed";
@@ -423,10 +403,10 @@ function workflow(
       workflow_id: workflowId,
       title: spec.title,
       state: spec.state,
-      current_revision: 1,
+      initiator_session_id: initiatorSessionId,
       failure_message: spec.failure ?? null,
       cwd: spec.cwd,
-      active_patch: null,
+      termination_reason: null,
       agent_submitted_count: nodes.filter((node) => node.status === "submitted").length,
       agent_total_count: nodes.length,
       current_node_id:
@@ -439,9 +419,6 @@ function workflow(
       elapsed_ms: (finished ? 40 : spec.startedMinutesAgo) * 60_000,
       nodes,
     },
-    revisions: [{ workflow_id: workflowId, revision: 1, current: true, nodes: graphNodes }],
-    patches: [],
-    documents: {},
   };
 }
 
@@ -662,7 +639,7 @@ export function createSampleData(): MockData {
   ];
 
   const workflows = [
-    workflow(nextId, {
+    workflow(sessions[0].view.session_id, nextId, {
       title: "Add device labels end to end",
       state: "running",
       cwd: pontia.canonical_path,
@@ -683,7 +660,7 @@ export function createSampleData(): MockData {
         { name: "Review", nodes: [{ title: "Code review", status: "pending" }] },
       ],
     }),
-    workflow(nextId, {
+    workflow(sessions[0].view.session_id, nextId, {
       title: "Translate docs to Chinese",
       state: "completed",
       cwd: website.canonical_path,
@@ -698,7 +675,7 @@ export function createSampleData(): MockData {
         },
       ],
     }),
-    workflow(nextId, {
+    workflow(sessions[0].view.session_id, nextId, {
       title: "Upgrade Svelte dependencies",
       state: "failed",
       cwd: pontia.canonical_path,

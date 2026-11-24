@@ -200,6 +200,8 @@ output = "result.md"
 
     let output = pontia()
         .args(["workflow", "run", definition.to_str().expect("utf-8 path")])
+        .env("PONTIA_SESSION_ID", "origin")
+        .env("PONTIA_RUNTIME_INSTANCE_ID", "origin_runtime")
         .env("PONTIA_HOME", dir.path())
         .output()
         .expect("run workflow");
@@ -224,6 +226,8 @@ output = "result.md"
             .is_some_and(|id| id.starts_with("wf_"))
     );
     assert_eq!(body["title"], "Implement Workflow run");
+    assert_eq!(body["session_id"], "origin");
+    assert_eq!(body["runtime_id"], "origin_runtime");
     assert_eq!(
         body["cwd"],
         dir.path()
@@ -268,6 +272,8 @@ fn workflow_run_rejects_missing_phase_and_unknown_fields_in_toml() {
 
         let output = pontia()
             .args(["workflow", "run", definition.to_str().expect("utf-8 path")])
+            .env("PONTIA_SESSION_ID", "origin")
+            .env("PONTIA_RUNTIME_INSTANCE_ID", "origin_runtime")
             .env("PONTIA_HOME", dir.path())
             .output()
             .expect("run workflow");
@@ -289,7 +295,7 @@ fn workflow_show_prints_compact_agent_readable_context() {
     write_pontia_config(dir.path(), addr.port());
     let request = capture_one_request_with_response(
         listener,
-        r#"{"data":{"context":{"workflow":{"workflow_id":"wf_show","title":"Ship release","state":"running","failure_message":null,"agent_submitted_count":1,"agent_total_count":3,"current_node_id":"node_build","nodes":[{"node_id":"node_plan","phase":"Plan","title":"Plan release","status":"submitted"},{"node_id":"node_build","phase":"Build","title":"Build release","status":"running"},{"node_id":"node_review","phase":"Review","title":"Review release","status":"pending"}]},"current_node":{"instructions":"Build the release.","inputs":[{"name":"plan.md","content":"Use the compact plan.\n"}],"output":"result.md"}}},"meta":{},"error":null}"#,
+        r#"{"data":{"context":{"workflow":{"initiator_session_id":"origin","workflow_id":"wf_show","title":"Ship release","state":"running","failure_message":null,"agent_submitted_count":1,"agent_total_count":3,"current_node_id":"node_build","nodes":[{"node_id":"node_plan","phase":"Plan","title":"Plan release","status":"submitted"},{"node_id":"node_build","phase":"Build","title":"Build release","status":"running"},{"node_id":"node_review","phase":"Review","title":"Review release","status":"pending"}]},"current_node":{"instructions":"Build the release.","inputs":[{"name":"plan.md","content":"Use the compact plan.\n"}],"output":"result.md"}}},"meta":{},"error":null}"#,
     );
 
     let output = pontia()
@@ -326,7 +332,7 @@ fn workflow_show_uses_workflow_id_from_environment_when_argument_is_omitted() {
     write_pontia_config(dir.path(), addr.port());
     let request = capture_one_request_with_response(
         listener,
-        r#"{"data":{"context":{"workflow":{"workflow_id":"wf_environment","title":"Environment workflow","state":"running","failure_message":null,"agent_submitted_count":0,"agent_total_count":1,"current_node_id":"node_current","nodes":[{"node_id":"node_current","phase":"Build","title":"Build","status":"running"}]},"current_node":{"instructions":"Build.","inputs":[],"output":"result.md"}}},"meta":{},"error":null}"#,
+        r#"{"data":{"context":{"workflow":{"initiator_session_id":"origin","workflow_id":"wf_environment","title":"Environment workflow","state":"running","failure_message":null,"agent_submitted_count":0,"agent_total_count":1,"current_node_id":"node_current","nodes":[{"node_id":"node_current","phase":"Build","title":"Build","status":"running"}]},"current_node":{"instructions":"Build.","inputs":[],"output":"result.md"}}},"meta":{},"error":null}"#,
     );
 
     let output = pontia()
@@ -391,114 +397,10 @@ fn workflow_submit_posts_registered_session_identity_without_tmux() {
     assert!(request.starts_with("POST /api/v1/workflow/submissions HTTP/1.1"));
     assert!(request.contains(&format!("host: 127.0.0.1:{}", addr.port())));
     assert!(request.contains("authorization: Bearer cli-test-token"));
-    assert!(
-        request
-            .contains(r#"{"session_id":"sess_workflow_cli","runtime_id":"rtinst_workflow_cli"}"#)
-    );
-}
-
-#[test]
-fn workflow_patch_request_posts_identity_and_prints_patch_id() {
-    let dir = temp_dir("patch-request-success");
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
-    let addr = listener.local_addr().expect("test server address");
-    write_pontia_config(dir.path(), addr.port());
-    let request = capture_one_request_with_response(
-        listener,
-        r#"{"data":{"patch_id":"patch_cli_1","state":"requested"},"meta":{},"error":null}"#,
-    );
-
-    let output = pontia()
-        .args(["workflow", "patch", "request"])
-        .env_remove("TMUX")
-        .env_remove("TMUX_PANE")
-        .env("PONTIA_SESSION_ID", "sess_workflow_cli")
-        .env("PONTIA_RUNTIME_INSTANCE_ID", "rtinst_workflow_cli")
-        .env("PONTIA_HOME", dir.path())
-        .output()
-        .expect("run Workflow Patch request");
-
-    assert!(
-        output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    let (_, body) = request.split_once("\r\n\r\n").unwrap();
     assert_eq!(
-        String::from_utf8(output.stdout).expect("stdout"),
-        "patch_cli_1\n"
-    );
-    let request = request.join().expect("request capture thread");
-    assert!(request.starts_with("POST /api/v1/workflow/patches/request HTTP/1.1"));
-    assert!(
-        request
-            .contains(r#"{"session_id":"sess_workflow_cli","runtime_id":"rtinst_workflow_cli"}"#)
-    );
-}
-
-#[test]
-fn workflow_patch_apply_posts_identity_and_prints_outcome() {
-    let dir = temp_dir("patch-apply-success");
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let addr = listener.local_addr().unwrap();
-    write_pontia_config(dir.path(), addr.port());
-    let request = capture_one_request_with_response(
-        listener,
-        r#"{"data":{"patch_id":"patch_cli_1","workflow_id":"wf_cli","outcome":"applied","revision":2},"meta":{},"error":null}"#,
-    );
-    let output = pontia()
-        .args(["workflow", "patch", "apply"])
-        .env_remove("TMUX")
-        .env_remove("TMUX_PANE")
-        .env("PONTIA_SESSION_ID", "sess_workflow_cli")
-        .env("PONTIA_RUNTIME_INSTANCE_ID", "rtinst_workflow_cli")
-        .env("PONTIA_HOME", dir.path())
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert_eq!(String::from_utf8(output.stdout).unwrap(), "applied 2\n");
-    let request = request.join().unwrap();
-    assert!(request.starts_with("POST /api/v1/workflow/patches/apply HTTP/1.1"));
-    assert!(
-        request
-            .contains(r#"{"session_id":"sess_workflow_cli","runtime_id":"rtinst_workflow_cli"}"#)
-    );
-}
-
-#[test]
-fn workflow_patch_block_posts_managed_identity() {
-    let dir = temp_dir("patch-block-success");
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let addr = listener.local_addr().unwrap();
-    write_pontia_config(dir.path(), addr.port());
-    let request = capture_one_request_with_response(
-        listener,
-        r#"{"data":{"patch_id":"patch_cli_1","workflow_id":"wf_cli","state":"blocked"},"meta":{},"error":null}"#,
-    );
-
-    let output = pontia()
-        .args(["workflow", "patch", "block"])
-        .env_remove("TMUX")
-        .env_remove("TMUX_PANE")
-        .env("PONTIA_SESSION_ID", "sess_workflow_cli")
-        .env("PONTIA_RUNTIME_INSTANCE_ID", "rtinst_workflow_cli")
-        .env("PONTIA_HOME", dir.path())
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert_eq!(String::from_utf8(output.stdout).unwrap(), "blocked\n");
-    let request = request.join().unwrap();
-    assert!(request.starts_with("POST /api/v1/workflow/patches/block HTTP/1.1"));
-    assert!(
-        request
-            .contains(r#"{"session_id":"sess_workflow_cli","runtime_id":"rtinst_workflow_cli"}"#)
+        serde_json::from_str::<serde_json::Value>(body).unwrap(),
+        serde_json::json!({"session_id":"sess_workflow_cli","runtime_id":"rtinst_workflow_cli"})
     );
 }
 
@@ -583,18 +485,44 @@ fn remote_disable_requires_login_without_removing_the_device_id() {
 }
 
 #[test]
-fn workflow_submit_rejects_missing_session_identity() {
-    let dir = temp_dir("unmanaged-pane");
-    let output = pontia()
-        .args(["workflow", "submit"])
-        .env("PONTIA_HOME", dir.path())
-        .env_remove("PONTIA_SESSION_ID")
-        .env_remove("PONTIA_RUNTIME_INSTANCE_ID")
-        .output()
-        .expect("run workflow submit");
+fn workflow_session_commands_reject_missing_identity() {
+    let dir = temp_dir("unmanaged-session");
+    for args in [
+        &["workflow", "submit"][..],
+        &["workflow", "terminate"],
+        &["workflow", "run", "workflow.toml"],
+    ] {
+        let output = pontia()
+            .args(args)
+            .env("PONTIA_HOME", dir.path())
+            .env_remove("PONTIA_SESSION_ID")
+            .env_remove("PONTIA_RUNTIME_INSTANCE_ID")
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("Missing PONTIA_SESSION_ID"));
+    }
+}
 
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("Missing PONTIA_SESSION_ID"));
+#[test]
+fn workflow_retry_posts_the_selected_failure_identity() {
+    let dir = temp_dir("workflow-retry");
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    write_pontia_config(dir.path(), listener.local_addr().unwrap().port());
+    let request = capture_one_request_with_response(listener, r#"{"data":{},"error":null}"#);
+    let output = pontia()
+        .args(["workflow", "retry", "wf_retry", "failure"])
+        .env("PONTIA_HOME", dir.path())
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let request = request.join().unwrap();
+    assert!(request.starts_with("POST /api/v1/workflows/wf_retry/retry HTTP/1.1"));
+    let (_, body) = request.split_once("\r\n\r\n").unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(body).unwrap(),
+        serde_json::json!({"failure_event_id":"failure"})
+    );
 }
 
 #[test]

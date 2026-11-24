@@ -54,7 +54,6 @@ test("a session event invalidates its session snapshots and every overview varia
   const affectedTimelineKey = timelineKeys.snapshot("session-1");
   const otherDetailKey = sessionKeys.detail("session-2");
   const otherTimelineKey = timelineKeys.snapshot("session-2");
-  const workflowRevisionKey = workflowKeys.revision("workflow-1", 1);
 
   for (const key of [
     currentOverviewKey,
@@ -64,7 +63,6 @@ test("a session event invalidates its session snapshots and every overview varia
     affectedTimelineKey,
     otherDetailKey,
     otherTimelineKey,
-    workflowRevisionKey,
   ]) {
     queryClient.setQueryData(key, {});
   }
@@ -78,22 +76,13 @@ test("a session event invalidates its session snapshots and every overview varia
   expect(isInvalidated(affectedTimelineKey)).toBe(true);
   expect(isInvalidated(otherDetailKey)).toBe(false);
   expect(isInvalidated(otherTimelineKey)).toBe(false);
-  expect(isInvalidated(workflowRevisionKey)).toBe(false);
 });
 
 test("connection recovery invalidates mutable snapshots without expiring immutable or optimistic data", async () => {
   const sessionKey = sessionKeys.detail("session-1");
   const workflowDetailKey = workflowKeys.detail("workflow-1");
-  const workflowRevisionKey = workflowKeys.revision("workflow-1", 1);
-  const workflowDocumentKey = workflowKeys.document("workflow-1", "reason.md");
   const optimisticKey = sessionKeys.optimisticInbox();
-  for (const key of [
-    sessionKey,
-    workflowDetailKey,
-    workflowRevisionKey,
-    workflowDocumentKey,
-    optimisticKey,
-  ]) {
+  for (const key of [sessionKey, workflowDetailKey, optimisticKey]) {
     queryClient.setQueryData(key, {});
   }
 
@@ -101,14 +90,12 @@ test("connection recovery invalidates mutable snapshots without expiring immutab
 
   expect(isInvalidated(sessionKey)).toBe(true);
   expect(isInvalidated(workflowDetailKey)).toBe(true);
-  expect(isInvalidated(workflowRevisionKey)).toBe(false);
-  expect(isInvalidated(workflowDocumentKey)).toBe(false);
   expect(isInvalidated(optimisticKey)).toBe(false);
 });
 
 test("dashboard query cleanup removes all cached queries", () => {
   queryClient.setQueryData(sessionKeys.detail("session-1"), {});
-  queryClient.setQueryData(workflowKeys.revision("workflow-1", 1), {});
+  queryClient.setQueryData(workflowKeys.detail("workflow-1"), {});
 
   clearDashboardQueries();
 

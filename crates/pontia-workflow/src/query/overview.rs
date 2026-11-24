@@ -3,7 +3,7 @@ use pontia_core::time::utc_now;
 use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
-use super::{WorkflowActivePatchView, WorkflowQueryService, graph::ordered_nodes};
+use super::{WorkflowQueryService, graph::ordered_nodes};
 use crate::{Error, Result};
 
 #[derive(Debug, Clone, Serialize)]
@@ -11,7 +11,7 @@ pub struct WorkflowListItemView {
     pub workflow_id: String,
     pub title: String,
     pub state: String,
-    pub current_revision: i64,
+    pub initiator_session_id: String,
     pub failure_message: Option<String>,
     pub agent_submitted_count: usize,
     pub agent_total_count: usize,
@@ -29,11 +29,10 @@ pub struct WorkflowDetailView {
     pub workflow_id: String,
     pub title: String,
     pub state: String,
-    pub current_revision: i64,
-    pub definition_file: Option<String>,
-    pub active_patch: Option<WorkflowActivePatchView>,
+    pub initiator_session_id: String,
     pub failure_message: Option<String>,
     pub cwd: String,
+    pub termination_reason: Option<String>,
     pub agent_submitted_count: usize,
     pub agent_total_count: usize,
     pub current_node_id: Option<String>,
@@ -209,11 +208,10 @@ impl WorkflowQueryService {
             workflow_id: workflow.workflow_id.clone(),
             title: workflow.title.clone(),
             state: workflow.state.clone(),
-            current_revision: workflow.current_revision,
-            definition_file: None,
-            active_patch: None,
+            initiator_session_id: workflow.initiator_session_id.clone(),
             failure_message: workflow.failure_message.clone(),
             cwd: workflow.cwd.clone(),
+            termination_reason: self.workflows.termination_reason(workflow_id).await?,
             agent_submitted_count: submitted,
             agent_total_count: nodes.len(),
             current_node_id,
@@ -238,7 +236,7 @@ fn list_item(
         workflow_id: workflow.workflow_id.clone(),
         title: workflow.title.clone(),
         state: workflow.state.clone(),
-        current_revision: workflow.current_revision,
+        initiator_session_id: workflow.initiator_session_id.clone(),
         failure_message: workflow.failure_message.clone(),
         agent_submitted_count: submitted,
         agent_total_count: total,
@@ -272,13 +270,7 @@ fn derive_status(
     if failure_location {
         return WorkflowAgentStatus::Failed;
     }
-    // An unsubmitted requester is suspended during Patch planning and queued
-    // continuation. A submitted Node still exits unless the Workflow is paused.
-    if current
-        && session_state == Some("interrupted")
-        && (workflow.state == "paused"
-            || (workflow.state != "failed" && node.submitted_at.is_none()))
-    {
+    if current && session_state == Some("interrupted") && workflow.state == "paused" {
         return WorkflowAgentStatus::Paused;
     }
     if node.submitted_at.is_some() {

@@ -165,7 +165,7 @@ impl SqliteWorkflowRepository {
             state: "idle",
             event_type: "workflow.idle",
             failure_message: None,
-            payload: "{}",
+            payload: &serde_json::json!({"node_id":node_id}).to_string(),
             runtime_id,
         })
         .await
@@ -174,10 +174,12 @@ impl SqliteWorkflowRepository {
     pub async fn fail_workflow(
         &self,
         workflow_id: &str,
+        node_id: &str,
         event_id: &str,
         failure_message: &str,
     ) -> Result<()> {
-        let payload = serde_json::json!({ "failure_message": failure_message }).to_string();
+        let payload = serde_json::json!({ "failure_message": failure_message, "node_id": node_id })
+            .to_string();
         self.transition_running_workflow(RunningWorkflowTransition {
             workflow_id,
             unsubmitted_node_id: None,
@@ -238,9 +240,6 @@ impl SqliteWorkflowRepository {
                          WHERE workflow_nodes.workflow_id = workflows.workflow_id
                            AND workflow_nodes.node_id = ?
                            AND workflow_nodes.submitted_at IS NULL
-                           AND workflow_nodes.introduced_revision <= workflows.current_revision
-                           AND (workflow_nodes.retired_revision IS NULL
-                                OR workflow_nodes.retired_revision > workflows.current_revision)
                      )
                  )"#,
         )

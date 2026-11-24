@@ -11,8 +11,7 @@ use uuid::Uuid;
 
 const WORKFLOW_HELP: &str = "\
 Requires a running service.
-'submit' and 'patch' run inside the Pontia-managed tmux pane of the current
-Agent Node or Re-planner, and follow the steps in its instructions.
+Start a Workflow from a Pontia Session. Submit output or report a blocking problem from its Agent Node Session.
 
 For Workflows, see https://pontia.dev/docs/workflows.md";
 
@@ -37,11 +36,6 @@ Example definition:
 
 For the definition format, see https://pontia.dev/docs/workflows.md#create-a-definition";
 
-const PATCH_HELP: &str = "\
-Write the files named in the Agent Node or Re-planner instructions first.
-
-For replanning, see https://pontia.dev/docs/workflows.md#request-replanning";
-
 #[derive(Debug, Args)]
 #[command(after_help = WORKFLOW_HELP)]
 pub(crate) struct WorkflowCommand {
@@ -58,25 +52,13 @@ enum WorkflowCommandKind {
     Show(ShowArgs),
     /// Submit the current Agent Node's output
     Submit,
-    /// Request, apply, or block a Workflow Patch
-    Patch(PatchArgs),
-}
-
-#[derive(Debug, Args)]
-#[command(after_help = PATCH_HELP)]
-struct PatchArgs {
-    #[command(subcommand)]
-    command: PatchCommandKind,
-}
-
-#[derive(Debug, Subcommand)]
-enum PatchCommandKind {
-    /// Report a blocking problem from an Agent Node and request replanning
-    Request,
-    /// Apply the Re-planner's revised definition as a new revision
-    Apply,
-    /// Finish the Patch without changing the definition
-    Block,
+    /// Report a blocking problem to the initiating Session
+    Terminate,
+    /// Retry a failed Node in its original Session
+    Retry {
+        workflow_id: String,
+        failure_event_id: String,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -126,6 +108,8 @@ struct NodeDefinition {
 
 #[derive(Debug, Serialize)]
 struct RunWorkflowRequest {
+    session_id: String,
+    runtime_id: String,
     workflow_id: String,
     title: String,
     cwd: String,
@@ -149,42 +133,6 @@ struct RunWorkflowResponseData {
     workflow_id: String,
 }
 
-#[derive(Debug, Serialize)]
-struct WorkflowSubmissionRequest {
-    session_id: String,
-    runtime_id: String,
-}
-
-#[derive(Debug, Serialize)]
-struct WorkflowPatchRequest {
-    session_id: String,
-    runtime_id: String,
-}
-
-#[derive(Debug, Serialize)]
-struct WorkflowPatchApplyRequest {
-    session_id: String,
-    runtime_id: String,
-}
-
-#[derive(Debug, Serialize)]
-struct WorkflowPatchBlockRequest {
-    session_id: String,
-    runtime_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct WorkflowPatchResponse {
-    data: WorkflowPatchResponseData,
-}
-
-#[derive(Debug, Deserialize)]
-struct WorkflowPatchResponseData {
-    patch_id: String,
-    outcome: Option<String>,
-    revision: Option<i64>,
-}
-
 #[derive(Debug, Deserialize)]
 struct WorkflowContextResponse {
     data: WorkflowContextResponseData,
@@ -198,16 +146,7 @@ struct WorkflowContextResponseData {
 #[derive(Debug, Deserialize)]
 struct WorkflowContext {
     workflow: WorkflowContextSummary,
-    active_patch: Option<WorkflowActivePatch>,
     current_node: WorkflowNodeContext,
-}
-
-#[derive(Debug, Deserialize)]
-struct WorkflowActivePatch {
-    patch_id: String,
-    state: String,
-    base_revision: i64,
-    replanner_session_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -215,8 +154,9 @@ struct WorkflowContextSummary {
     workflow_id: String,
     title: String,
     state: String,
-    #[serde(default)]
-    current_revision: i64,
+    initiator_session_id: String,
+    termination_reason: Option<String>,
+    retry_failure_event_id: Option<String>,
     failure_message: Option<String>,
     agent_submitted_count: usize,
     agent_total_count: usize,
@@ -249,16 +189,24 @@ pub(crate) async fn run(workflow: WorkflowCommand, config: &AppConfig) -> Result
     match workflow.command {
         WorkflowCommandKind::Run(args) => run_workflow(args, config).await,
         WorkflowCommandKind::Show(args) => show_workflow(args, config).await,
-        WorkflowCommandKind::Submit => submit_workflow(config).await,
-        WorkflowCommandKind::Patch(args) => match args.command {
-            PatchCommandKind::Request => request_workflow_patch(config).await,
-            PatchCommandKind::Apply => apply_workflow_patch(config).await,
-            PatchCommandKind::Block => block_workflow_patch(config).await,
-        },
+        WorkflowCommandKind::Submit => node_command(config, "submissions").await,
+        WorkflowCommandKind::Terminate => node_command(config, "terminate").await,
+        WorkflowCommandKind::Retry {
+            workflow_id,
+            failure_event_id,
+        } => {
+            post_command(
+                config,
+                &format!("workflows/{workflow_id}/retry"),
+                serde_json::json!({ "failure_event_id":failure_event_id }),
+            )
+            .await
+        }
     }
 }
 
 async fn run_workflow(args: RunArgs, config: &AppConfig) -> Result<(), String> {
+    let (session_id, runtime_id) = current_session_identity()?;
     let definition_path = args.workflow_file.canonicalize().map_err(|error| {
         format!(
             "failed to resolve Workflow file {}: {error}",
@@ -302,6 +250,8 @@ async fn run_workflow(args: RunArgs, config: &AppConfig) -> Result<(), String> {
         })
         .collect::<Result<Vec<_>, String>>()?;
     let request = RunWorkflowRequest {
+        session_id,
+        runtime_id,
         workflow_id: format!("wf_{}", Uuid::now_v7()),
         title: definition.title,
         cwd: cwd.display().to_string(),
@@ -385,22 +335,22 @@ fn render_workflow_context(context: &WorkflowContext) -> String {
         .as_deref()
         .and_then(|id| workflow.nodes.iter().find(|node| node.node_id == id));
     let mut document = format!(
-        "# {}\nWorkflow: `{}` | State: {} | Progress: {}/{} | Revision: {}",
+        "# {}\nWorkflow: `{}` | State: {} | Progress: {}/{} | Initiating Session: {}",
         workflow.title,
         workflow.workflow_id,
         workflow.state,
         workflow.agent_submitted_count,
         workflow.agent_total_count,
-        workflow.current_revision,
+        workflow.initiator_session_id,
     );
-    if let Some(patch) = &context.active_patch {
+    if let Some(reason) = &workflow.termination_reason {
+        document.push_str(&format!("\nTermination reason: {reason}"));
+    }
+    if let Some(event_id) = &workflow.retry_failure_event_id {
         document.push_str(&format!(
-            "\nActive Patch: `{}` | State: {} | Base revision: {}",
-            patch.patch_id, patch.state, patch.base_revision
+            "\nRetry: pontia workflow retry {} {event_id}",
+            workflow.workflow_id
         ));
-        if let Some(session_id) = patch.replanner_session_id.as_deref() {
-            document.push_str(&format!(" | Re-planner: `{session_id}`"));
-        }
     }
     if let Some(message) = workflow.failure_message.as_deref() {
         document.push_str(&format!("\nFailure: {message}"));
@@ -455,142 +405,40 @@ fn resolve_existing_path(base: &Path, path: &Path, description: &str) -> Result<
     })
 }
 
-async fn submit_workflow(config: &AppConfig) -> Result<(), String> {
+async fn node_command(config: &AppConfig, command: &str) -> Result<(), String> {
     let (session_id, runtime_id) = current_session_identity()?;
-    let token = config
-        .external_api_token
-        .as_deref()
-        .ok_or_else(|| "Pontia local API token is not configured".to_string())?;
-    let url = format!(
-        "http://{}/api/v1/workflow/submissions",
-        local_api_addr(config.bind_addr)
-    );
-    let response = reqwest::Client::new()
-        .post(url)
-        .bearer_auth(token)
-        .json(&WorkflowSubmissionRequest {
-            session_id,
-            runtime_id,
-        })
-        .send()
-        .await
-        .map_err(|error| format!("failed to submit Workflow output: {error}"))?;
-    let status = response.status();
-    if !status.is_success() {
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!(
-            "Workflow submission failed with HTTP {status}: {body}"
-        ));
-    }
-    Ok(())
+    post_command(
+        config,
+        &format!("workflow/{command}"),
+        serde_json::json!({"session_id": session_id,"runtime_id":runtime_id}),
+    )
+    .await
 }
 
-async fn request_workflow_patch(config: &AppConfig) -> Result<(), String> {
-    let (session_id, runtime_id) = current_session_identity()?;
+async fn post_command(
+    config: &AppConfig,
+    path: &str,
+    body: serde_json::Value,
+) -> Result<(), String> {
     let token = config
         .external_api_token
         .as_deref()
-        .ok_or_else(|| "Pontia local API token is not configured".to_string())?;
-    let url = format!(
-        "http://{}/api/v1/workflow/patches/request",
-        local_api_addr(config.bind_addr)
-    );
+        .ok_or("Pontia local API token is not configured")?;
+    let url = format!("http://{}/api/v1/{path}", local_api_addr(config.bind_addr));
     let response = reqwest::Client::new()
         .post(url)
         .bearer_auth(token)
-        .json(&WorkflowPatchRequest {
-            session_id,
-            runtime_id,
-        })
+        .json(&body)
         .send()
         .await
-        .map_err(|error| format!("failed to request Workflow Patch: {error}"))?;
+        .map_err(|e| e.to_string())?;
     let status = response.status();
     if !status.is_success() {
-        let body = response.text().await.unwrap_or_default();
         return Err(format!(
-            "Workflow Patch request failed with HTTP {status}: {body}"
+            "Workflow command failed with HTTP {status}: {}",
+            response.text().await.unwrap_or_default()
         ));
     }
-    let response = response
-        .json::<WorkflowPatchResponse>()
-        .await
-        .map_err(|error| format!("failed to decode Workflow Patch response: {error}"))?;
-    println!("{}", response.data.patch_id);
-    Ok(())
-}
-
-async fn apply_workflow_patch(config: &AppConfig) -> Result<(), String> {
-    let (session_id, runtime_id) = current_session_identity()?;
-    let token = config
-        .external_api_token
-        .as_deref()
-        .ok_or_else(|| "Pontia local API token is not configured".to_string())?;
-    let url = format!(
-        "http://{}/api/v1/workflow/patches/apply",
-        local_api_addr(config.bind_addr)
-    );
-    let response = reqwest::Client::new()
-        .post(url)
-        .bearer_auth(token)
-        .json(&WorkflowPatchApplyRequest {
-            session_id,
-            runtime_id,
-        })
-        .send()
-        .await
-        .map_err(|error| format!("failed to apply Workflow Patch: {error}"))?;
-    let status = response.status();
-    if !status.is_success() {
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!(
-            "Workflow Patch apply failed with HTTP {status}: {body}"
-        ));
-    }
-    let response = response
-        .json::<WorkflowPatchResponse>()
-        .await
-        .map_err(|error| format!("failed to decode Workflow Patch response: {error}"))?;
-    let outcome = response
-        .data
-        .outcome
-        .ok_or_else(|| "Workflow Patch apply response did not include an outcome".to_string())?;
-    let revision = response
-        .data
-        .revision
-        .ok_or_else(|| "Workflow Patch apply response did not include a revision".to_string())?;
-    println!("{outcome} {revision}");
-    Ok(())
-}
-
-async fn block_workflow_patch(config: &AppConfig) -> Result<(), String> {
-    let (session_id, runtime_id) = current_session_identity()?;
-    let token = config
-        .external_api_token
-        .as_deref()
-        .ok_or_else(|| "Pontia local API token is not configured".to_string())?;
-    let url = format!(
-        "http://{}/api/v1/workflow/patches/block",
-        local_api_addr(config.bind_addr)
-    );
-    let response = reqwest::Client::new()
-        .post(url)
-        .bearer_auth(token)
-        .json(&WorkflowPatchBlockRequest {
-            session_id,
-            runtime_id,
-        })
-        .send()
-        .await
-        .map_err(|error| format!("failed to block Workflow Patch: {error}"))?;
-    let status = response.status();
-    if !status.is_success() {
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!(
-            "Workflow Patch block failed with HTTP {status}: {body}"
-        ));
-    }
-    println!("blocked");
     Ok(())
 }
 

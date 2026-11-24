@@ -395,7 +395,7 @@ function workflowListItem(detail: MockData["workflows"][number]["detail"]): Work
     workflow_id: detail.workflow_id,
     title: detail.title,
     state: detail.state,
-    current_revision: detail.current_revision,
+    initiator_session_id: detail.initiator_session_id,
     failure_message: detail.failure_message,
     agent_submitted_count: detail.agent_submitted_count,
     agent_total_count: detail.agent_total_count,
@@ -734,29 +734,6 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
     ({ device, params: [id] }) => ({ workflow: findWorkflow(device, id).detail }),
   ],
   [
-    "GET",
-    "/workflows/:id/revisions/:revision",
-    ({ device, params: [id, revision] }) => ({
-      revision:
-        findWorkflow(device, id).revisions.find((item) => item.revision === Number(revision)) ??
-        notFound("Workflow revision"),
-    }),
-  ],
-  [
-    "GET",
-    "/workflows/:id/patches",
-    ({ device, params: [id] }) => ({ patches: findWorkflow(device, id).patches }),
-  ],
-  [
-    "GET",
-    "/workflows/:id/documents",
-    ({ device, params: [id], query }) => {
-      const ref = query.get("ref") ?? "";
-      const content = findWorkflow(device, id).documents[ref] ?? notFound("Workflow document");
-      return { document: { workflow_id: id, document_ref: ref, content } };
-    },
-  ],
-  [
     "POST",
     "/workflows/:id/pause",
     ({ device, params: [id] }) => {
@@ -774,25 +751,6 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
       return { workflow: workflow.detail };
     },
   ],
-  [
-    "POST",
-    "/workflows/:id/retry",
-    ({ device, params: [id] }) => {
-      const workflow = findWorkflow(device, id);
-      for (const node of workflow.detail.nodes) {
-        if (node.status === "failed") node.status = "running";
-      }
-      Object.assign(workflow.detail, {
-        state: "running",
-        failure_message: null,
-        retry_failure_event_id: null,
-        completed_at: null,
-        updated_at: now(),
-      });
-      return { workflow: workflow.detail };
-    },
-  ],
-
   ["GET", "/workspaces", ({ device }) => ({ workspaces: device.data.workspaces })],
   [
     "POST",

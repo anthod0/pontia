@@ -4,8 +4,7 @@ use axum::{
 };
 use pontia_application::AppState;
 use pontia_workflow::{
-    ApplyWorkflowPatch, BlockWorkflowPatch, InitialHandoff, RequestWorkflowPatch,
-    RunWorkflowRequest, SubmitWorkflowNodeRequest, WorkflowNodeDefinition, WorkflowPatchService,
+    InitialHandoff, RunWorkflowRequest, SubmitWorkflowNodeRequest, WorkflowNodeDefinition,
     WorkflowScheduler,
 };
 use serde::Deserialize;
@@ -16,6 +15,8 @@ use super::super::response::{ApiError, ApiResponse, ok};
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkflowRunRequest {
+    session_id: String,
+    runtime_id: String,
     workflow_id: String,
     title: String,
     cwd: String,
@@ -54,21 +55,7 @@ pub struct WorkflowSubmissionRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct WorkflowPatchRequest {
-    session_id: String,
-    runtime_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct WorkflowPatchApplyRequest {
-    session_id: String,
-    runtime_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct WorkflowPatchBlockRequest {
+pub struct WorkflowTerminationRequest {
     session_id: String,
     runtime_id: String,
 }
@@ -88,6 +75,8 @@ pub async fn run_workflow(
     let outcome = scheduler
         .run(RunWorkflowRequest {
             workflow_id,
+            session_id: request.session_id,
+            runtime_id: request.runtime_id,
             title: request.title,
             cwd: request.cwd,
             handoffs: request
@@ -121,73 +110,21 @@ pub async fn run_workflow(
     })))
 }
 
-pub async fn request_workflow_patch(
+pub async fn terminate_workflow_node(
     State(state): State<AppState>,
-    request: Result<Json<WorkflowPatchRequest>, JsonRejection>,
+    request: Result<Json<WorkflowTerminationRequest>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
-    let outcome = WorkflowPatchService::new(
+    WorkflowScheduler::new(
         state.db(),
         state.control().queries(),
+        state.control().clone(),
         state.pontia_home().to_path_buf(),
     )
-    .request_patch(RequestWorkflowPatch {
-        session_id: request.session_id,
-        runtime_id: request.runtime_id,
-    })
+    .terminate(&request.session_id, &request.runtime_id)
     .await
     .map_err(map_command_error)?;
-    Ok(ok(json!({
-        "patch_id": outcome.patch_id,
-        "state": "requested",
-    })))
-}
-
-pub async fn apply_workflow_patch(
-    State(state): State<AppState>,
-    request: Result<Json<WorkflowPatchApplyRequest>, JsonRejection>,
-) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
-    let outcome = WorkflowPatchService::new(
-        state.db(),
-        state.control().queries(),
-        state.pontia_home().to_path_buf(),
-    )
-    .apply_patch(ApplyWorkflowPatch {
-        session_id: request.session_id,
-        runtime_id: request.runtime_id,
-    })
-    .await
-    .map_err(map_command_error)?;
-    Ok(ok(json!({
-        "patch_id": outcome.patch_id,
-        "workflow_id": outcome.workflow_id,
-        "outcome": outcome.outcome,
-        "revision": outcome.revision,
-    })))
-}
-
-pub async fn block_workflow_patch(
-    State(state): State<AppState>,
-    request: Result<Json<WorkflowPatchBlockRequest>, JsonRejection>,
-) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
-    let outcome = WorkflowPatchService::new(
-        state.db(),
-        state.control().queries(),
-        state.pontia_home().to_path_buf(),
-    )
-    .block_patch(BlockWorkflowPatch {
-        session_id: request.session_id,
-        runtime_id: request.runtime_id,
-    })
-    .await
-    .map_err(map_command_error)?;
-    Ok(ok(json!({
-        "patch_id": outcome.patch_id,
-        "workflow_id": outcome.workflow_id,
-        "state": "blocked",
-    })))
+    Ok(ok(json!({"reported":true})))
 }
 
 pub async fn submit_workflow_output(
@@ -238,6 +175,7 @@ fn map_command_error(error: pontia_workflow::Error) -> ApiError {
             ApiError::invalid_request(format!("invalid Handoff file name: {message}"))
         }
         WorkflowError::WorkflowNotRunning { .. }
+        | WorkflowError::RuntimeControlUnavailable { .. }
         | WorkflowError::RuntimeMismatch { .. }
         | WorkflowError::AgentFileUnavailable { .. } => {
             ApiError::custom(StatusCode::CONFLICT, "state_conflict", error.to_string())
@@ -245,10 +183,8 @@ fn map_command_error(error: pontia_workflow::Error) -> ApiError {
         WorkflowError::RootNodeNotFound(_)
         | WorkflowError::InvalidObservation(_)
         | WorkflowError::MissingCreatedSessionId
-        | WorkflowError::RuntimeControlUnavailable { .. }
         | WorkflowError::Io(_)
-        | WorkflowError::Json(_)
-        | WorkflowError::TomlSerialization(_) => ApiError::custom(
+        | WorkflowError::Json(_) => ApiError::custom(
             StatusCode::INTERNAL_SERVER_ERROR,
             "internal_error",
             error.to_string(),

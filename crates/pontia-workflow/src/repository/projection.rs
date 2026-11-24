@@ -12,8 +12,11 @@ impl SqliteWorkflowRepository {
                     .fetch_one(&self.pool)
                     .await?;
             let page = reader.read_after(after, None, 256).await?;
-            let ids: Vec<String> = sqlx::query_scalar("SELECT session_id FROM workflow_nodes WHERE session_id IS NOT NULL UNION SELECT replanner_session_id FROM workflow_patches WHERE replanner_session_id IS NOT NULL")
-                .fetch_all(&self.pool).await?;
+            let ids: Vec<String> = sqlx::query_scalar(
+                "SELECT session_id FROM workflow_nodes WHERE session_id IS NOT NULL",
+            )
+            .fetch_all(&self.pool)
+            .await?;
 
             let events: Vec<_> = page
                 .events
@@ -56,21 +59,6 @@ impl SqliteWorkflowRepository {
                 break;
             }
         }
-        Ok(())
-    }
-
-    pub(super) async fn verify_active_turn(
-        &self,
-        session_id: &str,
-        runtime_id: &str,
-    ) -> Result<()> {
-        let snapshot = self
-            .queries
-            .verify_active_turn(session_id, runtime_id)
-            .await?;
-        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        Self::save_snapshot_in_tx(&mut tx, &snapshot).await?;
-        tx.commit().await?;
         Ok(())
     }
 

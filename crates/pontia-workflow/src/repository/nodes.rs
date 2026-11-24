@@ -12,9 +12,6 @@ impl SqliteWorkflowRepository {
                  AND EXISTS (
                      SELECT 1 FROM workflows
                      WHERE workflows.workflow_id = workflow_nodes.workflow_id
-                       AND workflow_nodes.introduced_revision <= workflows.current_revision
-                       AND (workflow_nodes.retired_revision IS NULL
-                            OR workflow_nodes.retired_revision > workflows.current_revision)
                  )"#,
         )
         .bind(session_id)
@@ -47,9 +44,6 @@ impl SqliteWorkflowRepository {
                      WHERE workflow_nodes.workflow_id = workflows.workflow_id
                        AND workflow_nodes.node_id = ?
                        AND workflow_nodes.session_id IS NULL
-                       AND workflow_nodes.introduced_revision <= workflows.current_revision
-                       AND (workflow_nodes.retired_revision IS NULL
-                            OR workflow_nodes.retired_revision > workflows.current_revision)
                  )"#,
         )
         .bind(node_id)
@@ -95,9 +89,6 @@ impl SqliteWorkflowRepository {
                      WHERE workflows.workflow_id = workflow_nodes.workflow_id
                        AND workflows.state = 'running'
                        AND workflows.activating_node_id = workflow_nodes.node_id
-                       AND workflow_nodes.introduced_revision <= workflows.current_revision
-                       AND (workflow_nodes.retired_revision IS NULL
-                            OR workflow_nodes.retired_revision > workflows.current_revision)
                  )"#,
         )
         .bind(session_id)
@@ -189,9 +180,6 @@ impl SqliteWorkflowRepository {
                      SELECT 1 FROM workflows
                      WHERE workflows.workflow_id = workflow_nodes.workflow_id
                        AND workflows.state = 'running'
-                       AND workflow_nodes.introduced_revision <= workflows.current_revision
-                       AND (workflow_nodes.retired_revision IS NULL
-                            OR workflow_nodes.retired_revision > workflows.current_revision)
                  )"#,
         )
         .bind(runtime_id)
@@ -252,9 +240,6 @@ impl SqliteWorkflowRepository {
                      SELECT 1 FROM workflows
                      WHERE workflows.workflow_id = workflow_nodes.workflow_id
                        AND workflows.state = 'running'
-                       AND workflow_nodes.introduced_revision <= workflows.current_revision
-                       AND (workflow_nodes.retired_revision IS NULL
-                            OR workflow_nodes.retired_revision > workflows.current_revision)
                  )"#,
         )
         .bind(node_id)

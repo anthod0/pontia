@@ -88,9 +88,9 @@ async fn activate_claimed_node<S: SessionCreator>(
             ),
             error: error.into(),
         })?;
-    let problem_report_file = node_dir.join("problem-report.md");
+    let termination_file = node_dir.join("termination.md");
     let initial_task =
-        render_initial_task(node, handoff_dir, &output_file, &problem_report_file).await?;
+        render_initial_task(node, handoff_dir, &output_file, &termination_file).await?;
     let launch = async {
         match node.execution_profile_id.as_deref() {
             Some(id) => sessions.resolve_profile(id).await,
@@ -175,7 +175,7 @@ async fn render_initial_task(
     node: &WorkflowNodeRow,
     handoff_dir: &Path,
     output_file: &Path,
-    problem_report_file: &Path,
+    termination_file: &Path,
 ) -> std::result::Result<String, ActivationFailure> {
     let inputs: Vec<String> =
         serde_json::from_str(&node.inputs).map_err(|error| ActivationFailure {
@@ -221,15 +221,15 @@ async fn render_initial_task(
     })?;
 
     Ok(format!(
-        "You are an worker node in a workflow, managed by pontia\n\n\
+        "You are an Agent Node in a workflow, managed by pontia\n\n\
          ## Instructions\n\n{}\n\
          {}\n\
-         ## Problem report\n\n\
-         If blocked by an unexpected issue, write the problem, evidence, and proposed changes directly to:\n\n\
+         ## If blocked\n\n\
+         If blocked by an unexpected issue, write the reason you cannot continue to:\n\n\
          `{}`\n\n\
          Then run:\n\n\
-         pontia workflow patch request\n\n\
-         On success, stop work without submitting output; Pontia handles interruption and replanning.\n\n\
+         pontia workflow terminate\n\n\
+         After reporting, stop work and wait for the initiating Session.\n\n\
          ## Task completion\n\n\
          Expected output: {}\n\n\
          Write the full output directly to:\n\n\
@@ -239,7 +239,7 @@ async fn render_initial_task(
          After the command succeeds, stop work.\n",
         node.instructions,
         rendered_inputs,
-        problem_report_file.display(),
+        termination_file.display(),
         node.output,
         output_file.display()
     ))

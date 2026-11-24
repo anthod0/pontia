@@ -44,7 +44,7 @@ Use `type = "agent"` em cada Node. Os Nodes são executados na ordem da definiç
 
 ## Executar e inspecionar
 
-Inicie o Workflow enquanto o `pontiad` estiver saudável:
+Inicie o Workflow em uma Session do Pontia com o `pontiad` em execução.
 
 ```sh
 pontia workflow run ./workflow.toml
@@ -62,7 +62,7 @@ Dentro de uma Agent Session gerenciada por um Workflow, `PONTIA_WORKFLOW_ID` for
 
 ## Concluir um Agent Node
 
-Grave o resultado completo no caminho do arquivo de saída fornecido pelo Pontia e depois envie-o a partir do painel `tmux` gerenciado do Agent Node:
+Grave o resultado completo no caminho do arquivo de saída fornecido pelo Pontia e depois envie-o na Session do Agent Node:
 
 ```sh
 pontia workflow submit
@@ -74,21 +74,10 @@ Um envio bem-sucedido marca a saída do Node como pronta. Se o Turn terminar ant
 
 Use a página de detalhes do Workflow para pausar um Workflow em execução ou retomar um pausado. Pausar solicita a interrupção do Turn atual em andamento, quando suportado. Retomar uma Session atual interrompida envia uma continuação antes que o agendamento prossiga.
 
-Quando um Workflow com falha é recuperável, **Retry** continua a mesma conversa do Agent Node. Os Nodes enviados antes continuam concluídos, as alterações existentes na Workspace permanecem e a saída não enviada é arquivada. O Node em recuperação revisa as alterações existentes e envia uma nova saída completa.
+Quando um Workflow com falha é recuperável, `pontia workflow retry ID FAILURE_EVENT_ID` continua a mesma conversa do Agent Node. Os Nodes enviados antes continuam concluídos, as alterações existentes na Workspace permanecem e a saída não enviada é arquivada. O Node em recuperação revisa as alterações existentes e envia uma nova saída completa.
 
-## Solicitar um novo planejamento
+## Relatar um impedimento
 
-Se um Agent Node for bloqueado por um problema inesperado, ele grava o relatório de problema solicitado e executa:
+Escreva o motivo no arquivo `termination.md` indicado nas instruções do Node e execute `pontia workflow terminate`. Encerre o trabalho após o comando ser aceito. O Pontia envia o motivo à Session que iniciou o Workflow e mantém o estado do Workflow.
 
-```sh
-pontia workflow patch request
-```
-
-O Pontia cria uma Re-planner Session dedicada. O Re-planner inspeciona `pontia workflow show`, edita a definição candidata fornecida, registra uma decisão e termina com um destes comandos:
-
-```sh
-pontia workflow patch apply
-pontia workflow patch block
-```
-
-Um Workflow Patch aplicado cria uma nova revisão do grafo, preservando as identidades dos Nodes existentes e o histórico de execução. O Dashboard permite comparar revisões e inspecionar pedidos de Patch, Re-planner Sessions, resultados e as revisões resultantes.
+A Session de origem também recebe um aviso quando o Workflow falha, fica ocioso ou termina. O aviso inclui o ID do Workflow, o diretório de Handoff e os caminhos das saídas entregues. Use `pontia workflow show ID` para consultar o progresso e o comando de nova tentativa quando a falha permitir recuperação.

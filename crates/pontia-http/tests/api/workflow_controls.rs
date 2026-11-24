@@ -46,6 +46,7 @@ async fn seed_running_workflow(app: &TestApp) -> SqliteWorkflowRepository {
     repository
         .create_definition(
             CreateWorkflowRecord {
+                initiator_session_id: "origin".into(),
                 workflow_id: "wf_control".to_string(),
                 title: "Controlled workflow".to_string(),
                 cwd: app.workspace().path().display().to_string(),

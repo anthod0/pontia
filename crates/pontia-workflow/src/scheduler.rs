@@ -6,10 +6,9 @@ use sqlx::SqlitePool;
 use uuid::Uuid;
 
 use crate::{
-    AcceptedWorkflowNode, Error, GracefulExitRequester, Result, RunWorkflowOutcome,
-    RunWorkflowRequest, SessionCreator, StartWorkflowOutcome, SubmitWorkflowNodeRequest,
+    Error, GracefulExitRequester, Result, RunWorkflowOutcome, RunWorkflowRequest, SessionCreator,
+    StartWorkflowOutcome, SubmitWorkflowNodeRequest,
     activation::activate_node,
-    definition::{accepted_definition_from_initial_request, render_accepted_workflow_definition},
     validation::{
         is_runtime_control_unavailable, validate_handoff_file_name, validate_run_request,
     },
@@ -56,22 +55,18 @@ where
 
     pub async fn run(&self, mut request: RunWorkflowRequest) -> Result<RunWorkflowOutcome> {
         validate_run_request(&request)?;
+        self.exits
+            .ensure_current_runtime(&request.session_id, &request.runtime_id)
+            .await?;
         validate_pontia_home_boundary(&self.pontia_home)?;
         for node in &mut request.nodes {
             node.phase = node.phase.trim().to_string();
             node.inputs.sort();
         }
         let mut parent_node_id = None;
-        let mut accepted_nodes = Vec::with_capacity(request.nodes.len());
         let mut nodes = Vec::with_capacity(request.nodes.len());
         for definition in &request.nodes {
             let node_id = format!("node_{}", Uuid::now_v7());
-            accepted_nodes.push(AcceptedWorkflowNode {
-                node_id: node_id.clone(),
-                parent_node_id: parent_node_id.clone(),
-                definition: definition.clone(),
-                activated: false,
-            });
             nodes.push(CreateWorkflowNodeRecord {
                 node_id: node_id.clone(),
                 workflow_id: request.workflow_id.clone(),
@@ -85,10 +80,6 @@ where
             });
             parent_node_id = Some(node_id);
         }
-        let accepted_definition =
-            accepted_definition_from_initial_request(&request, accepted_nodes);
-        let workflow_file = render_accepted_workflow_definition(&accepted_definition)?;
-
         let workflow_dir = self
             .pontia_home
             .join("workflows")
@@ -117,23 +108,11 @@ where
                 return Err(error.into());
             }
         }
-        let workflow_file_path = workflow_dir.join("workflow.toml");
-        let pending_workflow_file_path = workflow_dir.join(".workflow.toml.tmp");
-        if let Err(error) = tokio::fs::write(&pending_workflow_file_path, workflow_file).await {
-            let _ = self.remove_workflow_tree(&workflow_dir).await;
-            return Err(error.into());
-        }
-        if let Err(error) =
-            tokio::fs::rename(&pending_workflow_file_path, &workflow_file_path).await
-        {
-            let _ = self.remove_workflow_tree(&workflow_dir).await;
-            return Err(error.into());
-        }
-
         if let Err(error) = self
             .repository
             .create_definition(
                 CreateWorkflowRecord {
+                    initiator_session_id: request.session_id,
                     workflow_id: request.workflow_id.clone(),
                     title: request.title,
                     cwd: request.cwd,
@@ -178,7 +157,12 @@ where
                 handoff_dir.display()
             );
             self.repository
-                .fail_workflow(workflow_id, &Uuid::now_v7().to_string(), &failure_message)
+                .fail_workflow(
+                    workflow_id,
+                    &root.node_id,
+                    &Uuid::now_v7().to_string(),
+                    &failure_message,
+                )
                 .await?;
             return Err(error.into());
         }
@@ -196,6 +180,7 @@ where
                 self.repository
                     .fail_workflow(
                         workflow_id,
+                        &root.node_id,
                         &Uuid::now_v7().to_string(),
                         &failure.failure_message,
                     )
@@ -208,6 +193,49 @@ where
             node_id: root.node_id,
             session_id,
         })
+    }
+
+    pub async fn terminate(&self, session_id: &str, runtime_id: &str) -> Result<()> {
+        self.exits
+            .ensure_current_runtime(session_id, runtime_id)
+            .await?;
+        let node = self
+            .repository
+            .get_node_by_session(session_id)
+            .await?
+            .ok_or_else(|| Error::NodeForSessionNotFound(session_id.to_owned()))?;
+        let directory = self
+            .pontia_home
+            .join("workflows")
+            .join(&node.workflow_id)
+            .join("nodes")
+            .join(&node.node_id);
+        let path = directory.join("termination.md");
+        let metadata = tokio::fs::symlink_metadata(&path).await.map_err(|error| {
+            Error::AgentFileUnavailable {
+                path: path.display().to_string(),
+                message: error.to_string(),
+            }
+        })?;
+        if !metadata.is_file()
+            || metadata.len() > 64 * 1024
+            || tokio::fs::canonicalize(&path).await? != path
+        {
+            return Err(Error::AgentFileUnavailable {
+                path: path.display().to_string(),
+                message: "expected a regular termination report of at most 64 KiB".into(),
+            });
+        }
+        let reason = tokio::fs::read_to_string(&path).await?;
+        if reason.trim().is_empty() {
+            return Err(Error::InvalidDefinition(
+                "termination reason must not be empty".into(),
+            ));
+        }
+        self.repository
+            .request_termination(&node.node_id, session_id, runtime_id, reason.trim())
+            .await?;
+        Ok(())
     }
 
     pub async fn submit(&self, request: SubmitWorkflowNodeRequest) -> Result<()> {
@@ -252,6 +280,7 @@ where
                 self.repository
                     .fail_workflow(
                         &workflow.workflow_id,
+                        &node.node_id,
                         &Uuid::now_v7().to_string(),
                         &failure_message,
                     )

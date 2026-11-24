@@ -325,6 +325,7 @@ async fn workflow_resume_sends_continue_through_the_interrupted_session_inbox() 
     repository
         .create_definition(
             CreateWorkflowRecord {
+                initiator_session_id: "origin".into(),
                 workflow_id: "wf_generic_resume".to_string(),
                 title: "Resume workflow".to_string(),
                 cwd: "/workspace/project".to_string(),

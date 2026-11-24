@@ -83,14 +83,11 @@ pontia completions powershell | Out-String | Invoke-Expression
 
 | Comando | Contexto | Finalidade |
 | --- | --- | --- |
-| `pontia workflow run FILE` | Qualquer shell local | Interpretar uma definição TOML e iniciar um Workflow pela API local |
-| `pontia workflow show [WORKFLOW_ID]` | Qualquer shell local; ID opcional dentro de um Node gerenciado | Exibir um contexto compacto do Workflow, do Node atual, da entrada, da saída e do Patch |
-| `pontia workflow submit` | Pane do Agent Node gerenciado atual | Declarar que a saída do Node está pronta |
-| `pontia workflow patch request` | Pane do Agent Node gerenciado atual | Relatar um problema bloqueante e iniciar o replanejamento |
-| `pontia workflow patch apply` | Pane do Re-planner atual | Aceitar a definição candidata como uma nova revisão |
-| `pontia workflow patch block` | Pane do Re-planner atual | Encerrar o Patch sem aplicar a definição candidata |
-
-Execute os comandos com escopo de pane no pane `tmux` gerenciado pelo Pontia do Agent Node ou Re-planner atual.
+| `pontia workflow run FILE` | Session do Pontia | Interpretar uma definição TOML e iniciar um Workflow pela API local |
+| `pontia workflow show [WORKFLOW_ID]` | Qualquer shell local; ID opcional dentro de um Node gerenciado | Mostrar o progresso, a Session de origem, o Node atual e suas entradas e saída |
+| `pontia workflow submit` | Session atual do Agent Node | Declarar que a saída do Node está pronta |
+| `pontia workflow terminate` | Session atual do Agent Node | Enviar o motivo à Session de origem |
+| `pontia workflow retry ID FAILURE_EVENT_ID` | Session do Pontia | Tentar novamente a falha indicada na mesma Session do Node |
 
 ## Login no Cloud e acesso remoto
 

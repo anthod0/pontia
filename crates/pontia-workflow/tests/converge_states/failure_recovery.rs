@@ -88,12 +88,7 @@ async fn ready(
 
 fn coordinator(
     app: &pontia_agent_control::AgentControl,
-) -> WorkflowCoordinator<
-    SequencedSessionCreator,
-    RecordingExitRequester,
-    RecordingExitRequester,
-    TestAgentEvents,
-> {
+) -> WorkflowCoordinator<SequencedSessionCreator, RecordingExitRequester, TestAgentEvents> {
     WorkflowCoordinator::with_services(
         app.db(),
         app,

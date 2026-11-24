@@ -1,4 +1,4 @@
-use pontia_storage_sqlite::{connect_sqlite, run_migrations};
+use pontia_storage_sqlite::connect_sqlite;
 use std::borrow::Cow;
 
 #[tokio::test]
@@ -27,7 +27,12 @@ async fn migrates_latest_unarchived_profiles_and_preserves_workflow_definitions(
     }
     sqlx::query("INSERT INTO workflows (workflow_id,title,cwd,state) VALUES ('wf_test','Test','/tmp','created')").execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO workflow_nodes (node_id,workflow_id,node_type,phase,title,instructions,inputs,output,execution_profile_id,execution_profile_version) VALUES ('node','wf_test','agent','Work','Test','Instructions','[]','out.md','keep','9')").execute(&pool).await.unwrap();
-    run_migrations(&pool).await.unwrap();
+    sqlx::raw_sql(include_str!(
+        "../migrations/0053_simplify_agent_profiles.sql"
+    ))
+    .execute(&pool)
+    .await
+    .unwrap();
     let rows: Vec<String> = sqlx::query_scalar("SELECT json_array(profile_id,name,description,client_type,client_key,model,system_prompt,created_at,updated_at) FROM agent_profiles")
         .fetch_all(&pool).await.unwrap();
     assert_eq!(rows.len(), 1);

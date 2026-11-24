@@ -24,7 +24,6 @@ pub struct WorkflowTimelineEntryView {
     pub session_id: Option<String>,
     pub turn_id: Option<String>,
     pub node_id: Option<String>,
-    pub patch_ids: Vec<String>,
     pub payload: serde_json::Value,
 }
 
@@ -36,8 +35,7 @@ impl WorkflowQueryService {
         if self.workflows.get_workflow(workflow_id).await?.is_none() {
             return Ok(None);
         }
-        let nodes = self.workflows.list_node_history(workflow_id).await?;
-        let patches = self.workflows.list_patches(workflow_id).await?;
+        let nodes = self.workflows.list_nodes(workflow_id).await?;
         let node_by_session: HashMap<&str, &str> = nodes
             .iter()
             .filter_map(|node| {
@@ -55,26 +53,16 @@ impl WorkflowQueryService {
 
         for event in workflow_events {
             let payload: serde_json::Value = serde_json::from_str(&event.payload)?;
-            let patch_ids = payload
-                .get("patch_id")
-                .and_then(serde_json::Value::as_str)
-                .map(|id| vec![id.to_string()])
-                .unwrap_or_default();
             let node_id = payload
                 .get("node_id")
-                .or_else(|| payload.get("requesting_node_id"))
                 .and_then(serde_json::Value::as_str)
                 .map(str::to_string);
             let session_id = payload
-                .get("requesting_session_id")
-                .or_else(|| payload.get("replanner_session_id"))
-                .or_else(|| payload.get("session_id"))
+                .get("session_id")
                 .and_then(serde_json::Value::as_str)
                 .map(str::to_string);
             let turn_id = payload
-                .get("requesting_turn_id")
-                .or_else(|| payload.get("replanner_turn_id"))
-                .or_else(|| payload.get("turn_id"))
+                .get("turn_id")
                 .and_then(serde_json::Value::as_str)
                 .map(str::to_string);
             entries.push(WorkflowTimelineEntryView {
@@ -89,26 +77,10 @@ impl WorkflowQueryService {
                 session_id,
                 turn_id,
                 node_id,
-                patch_ids,
                 payload,
             });
         }
         for event in agent_events {
-            let patch_ids = patches
-                .iter()
-                .filter(|patch| match event.turn_id.as_deref() {
-                    Some(turn_id) => {
-                        patch.requesting_turn_id == turn_id
-                            || patch.replanner_turn_id.as_deref() == Some(turn_id)
-                    }
-                    None => {
-                        patch.requesting_session_id == event.session_id
-                            || patch.replanner_session_id.as_deref()
-                                == Some(event.session_id.as_str())
-                    }
-                })
-                .map(|patch| patch.patch_id.clone())
-                .collect();
             let fact_kind = if matches!(
                 event.source.as_str(),
                 "agent_client" | "agent_adapter" | "runtime_manager"
@@ -131,7 +103,6 @@ impl WorkflowQueryService {
                     .map(|id| (*id).to_string()),
                 session_id: Some(event.session_id),
                 turn_id: event.turn_id,
-                patch_ids,
                 payload: serde_json::from_str(&event.payload)?,
             });
         }

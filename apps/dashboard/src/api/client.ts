@@ -49,9 +49,6 @@ import type {
   WorkspaceRootView,
   WorkspaceView,
   WorkflowDetailView,
-  WorkflowPatchHistoryView,
-  WorkflowDocumentView,
-  WorkflowGraphRevisionView,
   WorkflowListItemView,
   MemoryListQuery,
   MemoryPage,
@@ -547,45 +544,6 @@ export function createApi(device: DeviceRuntime) {
     ).workflow;
   }
 
-  async function getWorkflowRevision(
-    workflowId: string,
-    revision: number,
-    options: ReadRequestOptions = {},
-  ): Promise<WorkflowGraphRevisionView> {
-    return (
-      await request<{ revision: WorkflowGraphRevisionView }>(
-        `/workflows/${encodeURIComponent(workflowId)}/revisions/${revision}`,
-        options,
-      )
-    ).revision;
-  }
-
-  async function listWorkflowPatches(
-    workflowId: string,
-    options: ReadRequestOptions = {},
-  ): Promise<WorkflowPatchHistoryView[]> {
-    return (
-      await boundedReadRequest<{ patches: WorkflowPatchHistoryView[] }>(
-        `/workflows/${encodeURIComponent(workflowId)}/patches`,
-        options,
-      )
-    ).patches;
-  }
-
-  async function getWorkflowDocument(
-    workflowId: string,
-    ref: string,
-    options: ReadRequestOptions = {},
-  ): Promise<WorkflowDocumentView> {
-    const query = new URLSearchParams({ ref });
-    return (
-      await boundedReadRequest<{ document: WorkflowDocumentView }>(
-        `/workflows/${encodeURIComponent(workflowId)}/documents?${query}`,
-        options,
-      )
-    ).document;
-  }
-
   async function pauseWorkflow(workflowId: string): Promise<WorkflowDetailView> {
     return (
       await request<{ workflow: WorkflowDetailView }>(
@@ -600,22 +558,6 @@ export function createApi(device: DeviceRuntime) {
       await request<{ workflow: WorkflowDetailView }>(
         `/workflows/${encodeURIComponent(workflowId)}/resume`,
         { method: "POST", mutating: true },
-      )
-    ).workflow;
-  }
-
-  async function retryWorkflow(
-    workflowId: string,
-    failureEventId: string,
-  ): Promise<WorkflowDetailView> {
-    return (
-      await request<{ workflow: WorkflowDetailView }>(
-        `/workflows/${encodeURIComponent(workflowId)}/retry`,
-        {
-          method: "POST",
-          mutating: true,
-          body: { failure_event_id: failureEventId },
-        },
       )
     ).workflow;
   }
@@ -1091,12 +1033,8 @@ export function createApi(device: DeviceRuntime) {
     updateAgentProfile,
     listWorkflows,
     getWorkflow,
-    getWorkflowRevision,
-    listWorkflowPatches,
-    getWorkflowDocument,
     pauseWorkflow,
     resumeWorkflow,
-    retryWorkflow,
     getSessionOverview,
     listWorkspaces,
     registerWorkspace,

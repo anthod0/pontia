@@ -7,7 +7,7 @@ use super::SqliteWorkflowRepository;
 impl SqliteWorkflowRepository {
     pub async fn list_workflows(&self, limit: u32) -> Result<Vec<WorkflowRow>> {
         Ok(sqlx::query_as::<_, WorkflowRow>(
-            r#"SELECT workflow_id, title, cwd, state, current_revision, failure_message, created_at,
+            r#"SELECT workflow_id, title, cwd, state, initiator_session_id, failure_message, created_at,
                       updated_at, started_at, completed_at
                FROM workflows
                ORDER BY created_at DESC, workflow_id DESC
@@ -20,10 +20,10 @@ impl SqliteWorkflowRepository {
 
     pub async fn list_workflows_requiring_convergence(&self) -> Result<Vec<WorkflowRow>> {
         Ok(sqlx::query_as::<_, WorkflowRow>(
-            r#"SELECT workflow_id, title, cwd, state, current_revision, failure_message, created_at,
+            r#"SELECT workflow_id, title, cwd, state, initiator_session_id, failure_message, created_at,
                       updated_at, started_at, completed_at
                FROM workflows
-               WHERE state IN ('running', 'paused', 'replanning', 'blocked', 'recovering')
+               WHERE state IN ('running', 'recovering') OR EXISTS (SELECT 1 FROM workflow_events e WHERE e.workflow_id = workflows.workflow_id AND e.sequence > last_report_sequence AND e.event_type IN ('workflow.failed','workflow.idle','workflow.termination_requested','workflow.completed'))
                ORDER BY created_at, workflow_id"#,
         )
         .fetch_all(&self.pool)
@@ -32,7 +32,7 @@ impl SqliteWorkflowRepository {
 
     pub async fn get_workflow(&self, workflow_id: &str) -> Result<Option<WorkflowRow>> {
         Ok(sqlx::query_as::<_, WorkflowRow>(
-            r#"SELECT workflow_id, title, cwd, state, current_revision, failure_message, created_at,
+            r#"SELECT workflow_id, title, cwd, state, initiator_session_id, failure_message, created_at,
                       updated_at, started_at, completed_at
                FROM workflows WHERE workflow_id = ?"#,
         )
@@ -42,49 +42,10 @@ impl SqliteWorkflowRepository {
     }
 
     pub async fn list_nodes(&self, workflow_id: &str) -> Result<Vec<WorkflowNodeRow>> {
-        let Some(workflow) = self.get_workflow(workflow_id).await? else {
-            return Ok(Vec::new());
-        };
-        self.list_nodes_at_revision(workflow_id, workflow.current_revision)
-            .await
-    }
-
-    pub async fn list_nodes_at_revision(
-        &self,
-        workflow_id: &str,
-        revision: i64,
-    ) -> Result<Vec<WorkflowNodeRow>> {
-        let Some(workflow) = self.get_workflow(workflow_id).await? else {
-            return Ok(Vec::new());
-        };
-        if revision < 1 || revision > workflow.current_revision {
-            return Err(Error::StateConflict(format!(
-                "workflow {workflow_id} does not have revision {revision}"
-            )));
-        }
         Ok(sqlx::query_as::<_, WorkflowNodeRow>(
             r#"SELECT node_id, workflow_id, parent_node_id, node_type, phase, title, instructions,
                       inputs, output, execution_profile_id,
-                      introduced_revision, retired_revision, session_id, submitted_at,
-                      submitted_runtime_id, exit_request_started_at, created_at
-               FROM workflow_nodes
-               WHERE workflow_id = ?
-                 AND introduced_revision <= ?
-                 AND (retired_revision IS NULL OR retired_revision > ?)
-               ORDER BY created_at, node_id"#,
-        )
-        .bind(workflow_id)
-        .bind(revision)
-        .bind(revision)
-        .fetch_all(&self.pool)
-        .await?)
-    }
-
-    pub async fn list_node_history(&self, workflow_id: &str) -> Result<Vec<WorkflowNodeRow>> {
-        Ok(sqlx::query_as::<_, WorkflowNodeRow>(
-            r#"SELECT node_id, workflow_id, parent_node_id, node_type, phase, title, instructions,
-                      inputs, output, execution_profile_id,
-                      introduced_revision, retired_revision, session_id, submitted_at,
+                      session_id, submitted_at,
                       submitted_runtime_id, exit_request_started_at, created_at
                FROM workflow_nodes WHERE workflow_id = ? ORDER BY created_at, node_id"#,
         )
@@ -97,7 +58,7 @@ impl SqliteWorkflowRepository {
         Ok(sqlx::query_as::<_, WorkflowNodeRow>(
             r#"SELECT node_id, workflow_id, parent_node_id, node_type, phase, title, instructions,
                       inputs, output, execution_profile_id,
-                      introduced_revision, retired_revision, session_id, submitted_at,
+                      session_id, submitted_at,
                       submitted_runtime_id, exit_request_started_at, created_at
                FROM workflow_nodes WHERE node_id = ?"#,
         )
@@ -120,7 +81,7 @@ impl SqliteWorkflowRepository {
         let nodes = sqlx::query_as::<_, WorkflowNodeRow>(
             r#"SELECT node_id, workflow_id, parent_node_id, node_type, phase, title, instructions,
                       inputs, output, execution_profile_id,
-                      introduced_revision, retired_revision, session_id, submitted_at,
+                      session_id, submitted_at,
                       submitted_runtime_id, exit_request_started_at, created_at
                FROM workflow_nodes WHERE session_id = ?
                ORDER BY created_at, node_id
