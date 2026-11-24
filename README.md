@@ -27,7 +27,7 @@ Leave your desk, not your agents. Pontia lets you run coding agents such as pi, 
   <img src="apps/cloud/static/client-logos/kiro.svg" height="28" alt="Kiro">
 </p>
 
-![Pontia Dashboard showing recent sessions, a coding conversation, tool execution, and test results.](https://files.pontia.dev/cloud/dashboard-1280-9a7dd255904a.webp)
+![A release Bot reports back from two helpers, with a publishing decision in the todo panel.](assets/screenshots/bot-chat.webp)
 
 ## Why Pontia
 
@@ -38,6 +38,27 @@ Leave your desk, not your agents. Pontia lets you run coding agents such as pi, 
 - 🔒 **Encrypted end to end** — only your browser and your device can read a session. Use an official Edge or run your own; either way, the Edge only relays ciphertext.
 
 On Linux and macOS, you can choose pi, Codex, Claude Code, Grok Build, Google Antigravity, or Kiro (the last three via ACP) for your Bots and helpers.
+
+## Inside the Dashboard
+
+<table>
+  <tr>
+    <td width="50%"><strong>Follow a coding session</strong><br><a href="assets/screenshots/session-tools.webp"><img src="assets/screenshots/session-tools.webp" alt="Expanded Codex work steps show the files read and edited and the check command."></a></td>
+    <td width="50%"><strong>Review a Git diff alongside the conversation</strong><br><a href="assets/screenshots/git-review.webp"><img src="assets/screenshots/git-review.webp" alt="A staged change to a session row with added and removed lines."></a></td>
+  </tr>
+  <tr>
+    <td width="50%"><strong>Manage your agent clients</strong><br><a href="assets/screenshots/agent-clients.webp"><img src="assets/screenshots/agent-clients.webp" alt="The client list and Claude Code settings on one device."></a></td>
+    <td width="50%"><strong>Reuse a reviewer profile</strong><br><a href="assets/screenshots/agent-profiles.webp"><img src="assets/screenshots/agent-profiles.webp" alt="A review profile with its client, model and instructions."></a></td>
+  </tr>
+</table>
+
+### On your phone
+
+<p align="center">
+  <a href="assets/screenshots/mobile-chat.webp"><img src="assets/screenshots/mobile-chat.webp" width="30%" alt="Chat with the release Bot"></a>
+  <a href="assets/screenshots/mobile-todos.webp"><img src="assets/screenshots/mobile-todos.webp" width="30%" alt="Reply to a pending todo"></a>
+  <a href="assets/screenshots/mobile-model.webp"><img src="assets/screenshots/mobile-model.webp" width="30%" alt="Choose a model for a new session"></a>
+</p>
 
 ## Quick start
 
