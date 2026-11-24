@@ -71,7 +71,7 @@
               {/snippet}
               {#snippet option(item)}{@render workspaceLabel(item)}{/snippet}
             </ResponsiveSelect>
-            <Button variant="ghost" size="icon-sm" class="max-lg:size-11" disabled={fetching} onclick={refresh} aria-label={$t('common.refresh')} title={$t('common.refresh')}>
+            <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11" disabled={fetching} onclick={refresh} aria-label={$t('common.refresh')} title={$t('common.refresh')}>
               <ArrowClockwiseIcon class={['size-4 max-lg:size-5', fetching && 'animate-spin']} />
             </Button>
           </div>

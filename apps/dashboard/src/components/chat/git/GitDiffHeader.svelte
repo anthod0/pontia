@@ -23,12 +23,12 @@
 </script>
 
 <header class="flex h-12 shrink-0 items-center gap-1 border-b px-2 max-lg:h-14">
-  <Button variant="ghost" size="icon-sm" class="max-lg:size-11" onclick={onback} aria-label={backLabel} title={backLabel}><ArrowLeftIcon class="size-4 max-lg:size-5" /></Button>
+  <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11" onclick={onback} aria-label={backLabel} title={backLabel}><ArrowLeftIcon class="size-4 max-lg:size-5" /></Button>
   <div class="flex min-w-0 flex-1 items-baseline gap-2 px-1" title={origPath ? `${origPath} → ${path}` : path}>
     <h2 class="min-w-0 shrink truncate text-sm font-medium text-heading">{parts.name}</h2>
     {#if parts.dir}<span class="min-w-0 flex-1 truncate text-left font-mono text-xs text-muted-foreground" dir="rtl"><bdi>{parts.dir}</bdi></span>{/if}
   </div>
-  <Button variant="ghost" size="icon-sm" class="max-lg:size-11" disabled={fetching} onclick={onrefresh} aria-label={$t('common.refresh')} title={$t('common.refresh')}>
+  <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11" disabled={fetching} onclick={onrefresh} aria-label={$t('common.refresh')} title={$t('common.refresh')}>
     <ArrowClockwiseIcon class={['size-4 max-lg:size-5', fetching && 'animate-spin']} />
   </Button>
 </header>

@@ -59,7 +59,7 @@
         value={text} oninput={event => input(event.currentTarget.value)} maxlength={200}
         onkeydown={event => { if (event.key === 'Escape') clear() }} bind:ref={field} />
       {#if text}
-        <button type="button" class="absolute top-1/2 right-1.5 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={$t('common.clear')} onclick={clear}><XIcon class="size-3.5" /></button>
+        <button type="button" class="absolute top-1/2 right-1.5 inline-flex size-[18px] shrink-0 -translate-y-1/2 items-center justify-center rounded-full p-0 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={$t('common.clear')} onclick={clear}><XIcon class="size-3.5" /></button>
       {/if}
     </div>
   </div>

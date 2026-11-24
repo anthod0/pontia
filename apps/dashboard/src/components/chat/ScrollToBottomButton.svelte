@@ -54,7 +54,7 @@
         type="button"
         variant="outline"
         size="icon"
-        class="pointer-events-auto bg-background shadow-none"
+        class="pointer-events-auto rounded-full bg-background p-0 shadow-none"
         aria-label={$t('chat.scrollBottom')}
         title={$t('chat.scrollBottom')}
         onclick={() => { onclick(); setVisible(false) }}

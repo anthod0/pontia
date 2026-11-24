@@ -46,7 +46,7 @@
         <Tabs.Trigger value="files" class="h-full px-2.5"><FileTextIcon />{$t('files.title')}</Tabs.Trigger>
         <Tabs.Trigger value="git" class="h-full px-2.5"><GitBranchIcon />{$t('git.title')}</Tabs.Trigger>
       </Tabs.List>
-      <Button variant="ghost" size="icon-sm" class="max-lg:size-11" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => panel.close()}><XIcon class="size-4 max-lg:size-5" /></Button>
+      <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => panel.close()}><XIcon class="size-4 max-lg:size-5" /></Button>
     </header>
     <Tabs.Content value="files" class="flex min-h-0 flex-col">
       {#if panel.file}
@@ -74,7 +74,7 @@
                 <FolderIcon class="size-4 shrink-0 text-muted-foreground" />
                 <span class="min-w-0 flex-1 truncate text-sm font-medium text-heading" title={workspace?.canonical_path}>{workspace ? workspaceTitle(workspace) : ''}</span>
                 {#if changes?.repo_root}<span class="text-xs text-muted-foreground tabular-nums" title={$t('git.changeCount', { count: changes.total })}>{$number(changes.total)}</span>{/if}
-                <Button variant="ghost" size="icon-sm" class="max-lg:size-11" disabled={fetching} onclick={refresh} aria-label={$t('common.refresh')} title={$t('common.refresh')}>
+                <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11" disabled={fetching} onclick={refresh} aria-label={$t('common.refresh')} title={$t('common.refresh')}>
                   <ArrowClockwiseIcon class={['size-4 max-lg:size-5', fetching && 'animate-spin']} />
                 </Button>
               </div>

@@ -16,7 +16,7 @@
 </script>
 
 {#if state.receiving}
-  <button type="button" class={['relative grid shrink-0 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring', ring, overlay ? 'bg-black/55 text-white backdrop-blur-sm' : 'text-muted-foreground hover:bg-background hover:text-foreground']} onclick={() => state.cancel()} aria-label={$t('downloads.cancelNamed', { name })} title={$t('common.cancel')}>
+  <button type="button" class={['relative inline-flex shrink-0 items-center justify-center rounded-full p-0 outline-none focus-visible:ring-2 focus-visible:ring-ring', ring, overlay ? 'bg-black/55 text-white backdrop-blur-sm' : 'text-muted-foreground hover:bg-background hover:text-foreground']} onclick={() => state.cancel()} aria-label={$t('downloads.cancelNamed', { name })} title={$t('common.cancel')}>
     <svg viewBox="0 0 36 36" class={['absolute inset-0 -rotate-90', ring]} aria-hidden="true">
       <circle cx="18" cy="18" r="16" fill="none" stroke-width="2.5" class={overlay ? 'stroke-white/30' : 'stroke-border'} />
       {#if state.percent === null}

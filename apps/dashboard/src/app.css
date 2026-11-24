@@ -455,6 +455,5 @@ body:has([data-mobile-bot-sheet]) [data-sonner-toast] button {
   inset-inline: 0;
 }
 .mobile-shell .chat-scroll-button button {
-  border-radius: 50%;
   background: var(--glass-strong);
 }

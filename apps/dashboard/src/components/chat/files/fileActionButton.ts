@@ -6,7 +6,7 @@ export const fileActionButton = { variant: "ghost", size: "icon-sm" } as const;
 
 /** Plain icons in a row; dark glass circles over an image. */
 export const fileActionClass: Record<FileActionLook, string> = {
-  row: "size-8 rounded-full text-muted-foreground hover:bg-background hover:text-foreground aria-expanded:bg-background aria-expanded:text-foreground",
+  row: "size-8 rounded-full p-0 text-muted-foreground hover:bg-background hover:text-foreground aria-expanded:bg-background aria-expanded:text-foreground",
   overlay:
-    "rounded-full bg-black/55 text-white backdrop-blur-sm hover:bg-black/70 hover:text-white aria-expanded:bg-black/70 aria-expanded:text-white [&_svg:not([class*='size-'])]:size-3.5",
+    "rounded-full p-0 bg-black/55 text-white backdrop-blur-sm hover:bg-black/70 hover:text-white aria-expanded:bg-black/70 aria-expanded:text-white [&_svg:not([class*='size-'])]:size-3.5",
 };

@@ -51,7 +51,7 @@
   const overview = $derived(sessions.overview)
   const sidebarRecentSessions = $derived(sessions.recent)
   const hasClosedSessions = $derived(sessions.hasClosed)
-  const headerButtonClass = 'flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden [&>svg]:size-[15px]'
+  const headerButtonClass = 'inline-flex size-6 shrink-0 items-center justify-center rounded-full p-0 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden [&>svg]:size-[15px]'
   const filterApplied = $derived(Boolean($selectedWorkspaceId) || $sessionScope === 'all')
   const filterTitle = $derived([
     $sessionScope === 'active' ? $t('sessions.activeOnly') : $t('sessions.all'),

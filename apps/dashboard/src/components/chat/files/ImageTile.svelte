@@ -60,7 +60,7 @@
       {#if state.percent !== null}<span class="pointer-events-none absolute bottom-1.5 left-1.5 rounded-md bg-black/55 px-1.5 py-0.5 text-[11px] font-medium text-white tabular-nums">{Math.floor(state.percent)}%</span>{/if}
     {:else if failed}
       <div class={['pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1.5 px-2 text-center', state.imageUrl ? 'text-white' : 'text-destructive']}>
-        <button type="button" class="pointer-events-auto grid size-9 place-items-center rounded-full bg-black/55 text-white outline-none backdrop-blur-sm hover:bg-black/70 focus-visible:ring-2 focus-visible:ring-ring" onclick={() => state.download()} aria-label={$t('downloads.retryNamed', { name })} title={state.failure ?? undefined}><ArrowClockwiseIcon class="size-4" /></button>
+        <button type="button" class="pointer-events-auto inline-flex size-9 shrink-0 items-center justify-center rounded-full p-0 bg-black/55 text-white outline-none backdrop-blur-sm hover:bg-black/70 focus-visible:ring-2 focus-visible:ring-ring" onclick={() => state.download()} aria-label={$t('downloads.retryNamed', { name })} title={state.failure ?? undefined}><ArrowClockwiseIcon class="size-4" /></button>
         <span class="text-[11px] font-medium">{$t('downloads.failed')}</span>
       </div>
     {:else}

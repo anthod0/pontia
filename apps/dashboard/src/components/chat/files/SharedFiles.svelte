@@ -102,7 +102,7 @@
           {#each segments as segment, i (segment.text)}{#if i}{' · '}{/if}<span class={['whitespace-nowrap', segment.alert && 'text-destructive']}>{segment.text}</span>{/each}
         </p>
       </div>
-      <button type="button" class="grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground outline-none hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring" aria-label={showList ? $t('files.showAsImages') : $t('files.showAsList')} title={showList ? $t('files.showAsImages') : $t('files.showAsList')} aria-pressed={showList} onclick={() => { showList = !showList; expanded = false }}>
+      <button type="button" class="inline-flex size-8 shrink-0 items-center justify-center rounded-full p-0 text-muted-foreground outline-none hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring" aria-label={showList ? $t('files.showAsImages') : $t('files.showAsList')} title={showList ? $t('files.showAsImages') : $t('files.showAsList')} aria-pressed={showList} onclick={() => { showList = !showList; expanded = false }}>
         {#if showList}<SquaresFourIcon class="size-4" />{:else}<ListIcon class="size-4" />{/if}
       </button>
       <DownloadAllButton {states} />

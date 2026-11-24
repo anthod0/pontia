@@ -181,12 +181,10 @@
 {/snippet}
 
 {#snippet sidebarButton()}
-  <div class="pointer-events-auto mr-3 flex shrink-0 items-center rounded-full bg-popover px-0.5 ring-1 ring-foreground/10 h-8 px-1">
-    <Button variant="ghost" size="icon" class={['relative size-7', panel.current && 'bg-muted text-heading']}
-      aria-label={count > 0 ? $t('bots.sidebarWithTodos', { count }) : $t('nav.sidebar')} title={$t('nav.sidebar')} aria-pressed={panel.current} onclick={() => { panel.current = !panel.current }}>
-      <SidebarSimpleIcon class="size-4 -scale-x-100" />{@render badge(true)}
-    </Button>
-  </div>
+  <Button variant="ghost" size="icon" class={['pointer-events-auto mr-3 relative size-8 rounded-full p-0 ring-1 ring-foreground/10', panel.current ? 'bg-muted text-heading' : 'bg-popover']}
+    aria-label={count > 0 ? $t('bots.sidebarWithTodos', { count }) : $t('nav.sidebar')} title={$t('nav.sidebar')} aria-pressed={panel.current} onclick={() => { panel.current = !panel.current }}>
+    <SidebarSimpleIcon class="size-4 -scale-x-100" />{@render badge(true)}
+  </Button>
 {/snippet}
 
 {#snippet empty(files: boolean)}
@@ -247,7 +245,7 @@
         <Tabs.Trigger value="search" class="h-full px-2.5"><MagnifyingGlassIcon />{$t('bots.searchTab')}</Tabs.Trigger>
         <Tabs.Trigger value="git" class="h-full px-2.5"><GitBranchIcon />{$t('git.title')}</Tabs.Trigger>
       </Tabs.List>
-      <Button variant="ghost" size="icon-sm" class="shrink-0 max-lg:size-11 pointer-coarse:size-11" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => { panel.current = false }}><XIcon /></Button>
+      <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11 pointer-coarse:size-11" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => { panel.current = false }}><XIcon /></Button>
     </header>
     <Tabs.Content value="files" class="flex min-h-0 flex-col">
       {#if file}
