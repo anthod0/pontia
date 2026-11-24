@@ -1,12 +1,12 @@
 <script lang="ts">
-  import AppShell from '../../src/components/layout/AppShell.svelte'
+  import DesktopFrame from '../../src/shell/desktop/DesktopFrame.svelte'
   import BotChatPage from '../../src/pages/BotChatPage.svelte'
 
   let { botId }: { botId: string } = $props()
 </script>
 
-<AppShell>
+<DesktopFrame>
   {#snippet sidebar()}{/snippet}
   {#snippet topbar()}{/snippet}
   <BotChatPage {botId} />
-</AppShell>
+</DesktopFrame>

@@ -8,18 +8,6 @@ import type { RemoteAccess } from "./remoteAccessLoader.svelte";
 type PublicDevice = Awaited<ReturnType<RemoteAccess["listPublicDevices"]>>["devices"][number];
 
 export type DeviceConnectionState = "connecting" | "online" | "offline" | "sign-in-required";
-export const deviceStateLabel: Record<DeviceConnectionState, import("$lib/i18n").MessageKey> = {
-  connecting: "devices.connecting",
-  online: "devices.online",
-  offline: "devices.offline",
-  "sign-in-required": "auth.required",
-};
-export const deviceStateDotClass: Record<DeviceConnectionState, string> = {
-  connecting: "bg-busy",
-  online: "bg-idle",
-  offline: "bg-inactive",
-  "sign-in-required": "bg-inactive",
-};
 export type ConnectedDevice = PublicDevice & {
   state: DeviceConnectionState;
   runtime: DeviceRuntime | null;

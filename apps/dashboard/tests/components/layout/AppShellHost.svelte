@@ -1,5 +1,9 @@
 <script lang="ts">
-  import AppShell from '../../../src/components/layout/AppShell.svelte'
+  import AppShell from '../../../src/shell/AppShell.svelte'
+  import { provideDashboardHost } from '../../../src/device/hostContext'
+  import { createLocalHost } from '../../../src/modes/local/host.svelte'
+  import { testDevice } from '../../deviceFixture'
+  provideDashboardHost(createLocalHost(() => testDevice))
 </script>
 
 <AppShell>

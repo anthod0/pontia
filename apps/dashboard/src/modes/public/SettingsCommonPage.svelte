@@ -8,12 +8,12 @@
   import { Button } from '$lib/components/ui/button/index.js';
   import { Skeleton } from '$lib/components/ui/skeleton/index.js';
   import AppearanceSettings from '../../components/settings/AppearanceSettings.svelte';
-  import { deviceStateLabel } from './deviceConnections';
-  import { useDeviceList } from './deviceListContext';
+  import { deviceStateLabel } from '../../components/devices/deviceState';
+  import { useDashboardHost } from '../../device/hostContext';
   import { loadRemoteAccess, type RemoteAccess } from './remoteAccessLoader.svelte';
 
-  const deviceList = useDeviceList();
-  const devices = $derived(deviceList.devices());
+  const host = useDashboardHost();
+  const devices = $derived(host.devices);
   let profile = $state<Awaited<ReturnType<RemoteAccess['getCloudProfile']>> | null>(null);
   let accountUrl = $state<string | null>(null);
   let devicesUrl = $state<string | null>(null);
@@ -87,7 +87,7 @@
           </div>
           <span class="shrink-0 text-xs text-muted-foreground">{$t(deviceStateLabel[device.state])}</span>
           {#if device.state === 'offline'}
-            <Button variant="outline" size="sm" aria-label={$t('devices.retryNamed', { name: device.name })} onclick={() => deviceList.retry(device.handle)}>{$t('common.retry')}</Button>
+            <Button variant="outline" size="sm" aria-label={$t('devices.retryNamed', { name: device.name })} onclick={() => host.retryDevice(device.handle)}>{$t('common.retry')}</Button>
           {/if}
         </li>
       {:else}

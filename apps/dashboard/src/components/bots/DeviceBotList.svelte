@@ -1,8 +1,7 @@
 <script lang="ts">
   import ResponsiveMenu from '$lib/components/ui/overlay/ResponsiveMenu.svelte'
-  import { createQueries, createQuery } from '@tanstack/svelte-query'
+  import { createBotDirectory } from '../../features/bots/botDirectory.svelte'
   import { toast } from 'svelte-sonner'
-  import { openBotChatStream } from '../../services/botChatStream'
   import { page } from '$app/state'
   import { t } from '$lib/i18n'
   import { dashboardPath, navigate } from '$lib/navigation'
@@ -20,42 +19,15 @@
   import BotSettingsDialog from './BotSettingsDialog.svelte'
   import BotDeleteDialog from './BotDeleteDialog.svelte'
   import { ApiError } from '../../api/errors'
-  import type { Bot, BotSummary } from '../../api/types'
+  import type { Bot } from '../../api/types'
 
   let { handle }: { handle?: string } = $props()
-  const device = useDeviceRuntime()
+  const directory = createBotDirectory(useDeviceRuntime())
   const sidebar = Sidebar.useSidebar()
-  const bots = createQuery(
-    () => ({ queryKey: ['bots'], queryFn: ({ signal }) => device.api.listBots(signal) }),
-    () => device.queryClient,
-  )
-  const summaries = createQueries(
-    () => ({
-      queries: (bots.data ?? []).map((bot) => ({
-        queryKey: ['bot-summary', bot.bot_id],
-        queryFn: async ({ signal }: { signal: AbortSignal }): Promise<BotSummary> => {
-          const { status, open_todo_count } = await device.api.getBotMessages(bot.bot_id, { limit: 1 }, signal)
-          return { status, open_todo_count }
-        },
-      })),
-    }),
-    () => device.queryClient,
-  )
-  const botIds = $derived((bots.data ?? []).map(bot => bot.bot_id).join(","))
-  $effect(() => {
-    const close = botIds.split(',').filter(Boolean).map(id => openBotChatStream(device, id, update => {
-      if (update.type === 'typing') return
-      const query = { queryKey: ['bot-summary', id] }
-      // Invalidation alone can reuse an initial request that predates this update.
-      void device.queryClient.cancelQueries(query).then(() => device.queryClient.invalidateQueries(query))
-    }, () => {}))
-    return () => close.forEach(stop => stop())
-  })
   const scope = $derived(handle ? `/${handle}` : undefined)
   let creating = $state(false)
   let editing = $state<Bot | null>(null)
   let deleting = $state<Bot | null>(null)
-  let reloading = $state<string | null>(null)
   let menu = $state<{ bot: Bot; anchor: MenuAnchor; row: HTMLElement } | null>(null)
   let menuOpen = $state(false)
 
@@ -70,16 +42,13 @@
 
   // Like the /reload command in the Bot chat: the next message starts a new Bot Session generation.
   async function reload(bot: Bot) {
-    reloading = bot.bot_id
     try {
-      await device.api.reloadBot(bot.bot_id)
+      await directory.reload(bot.bot_id)
       toast.success($t('bots.reloadReady'))
     } catch (error) {
       toast.error(error instanceof ApiError && error.code === 'state_conflict'
         ? $t('bots.reloadBusy')
         : error instanceof Error ? error.message : String(error))
-    } finally {
-      reloading = null
     }
   }
 </script>
@@ -99,7 +68,7 @@
     </button>
   </Sidebar.GroupLabel>
   <Sidebar.GroupContent>
-    {#if bots.data?.length === 0}
+    {#if directory.bots?.length === 0}
       {#if rail}
         <Sidebar.Menu>
           <Sidebar.MenuItem>
@@ -117,8 +86,8 @@
       {/if}
     {/if}
     <Sidebar.Menu>
-      {#each bots.data ?? [] as bot, index (bot.bot_id)}
-        {@const summary = summaries[index]?.data}
+      {#each directory.bots ?? [] as bot, index (bot.bot_id)}
+        {@const summary = directory.summaries[index]}
         {@const status = summary?.status}
         {@const working = status?.kind === 'working' || status?.kind === 'processing'}
         {@const todos = summary?.open_todo_count ?? 0}
@@ -167,7 +136,7 @@
   {#if menu}
     {@const bot = menu.bot}
     <DropdownMenu.Item onSelect={() => { editing = bot }}><PencilSimpleIcon />{$t('bots.edit')}</DropdownMenu.Item>
-    <DropdownMenu.Item disabled={reloading === bot.bot_id} onSelect={() => void reload(bot)}><ArrowClockwiseIcon />{$t('bots.reload')}</DropdownMenu.Item>
+    <DropdownMenu.Item disabled={directory.reloading === bot.bot_id} onSelect={() => void reload(bot)}><ArrowClockwiseIcon />{$t('bots.reload')}</DropdownMenu.Item>
     <DropdownMenu.Separator />
     <DropdownMenu.Item variant="destructive" onSelect={() => { deleting = bot }}><TrashIcon />{$t('bots.delete')}</DropdownMenu.Item>
   {/if}

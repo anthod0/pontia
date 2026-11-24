@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { expect, test, vi } from "vitest";
 import ComposerDeviceSelect from "../../src/modes/public/ComposerDeviceSelect.svelte";
-import type { ConnectedDevice } from "../../src/modes/public/deviceConnections";
+import type { HostDevice } from "../../src/device/hostContext";
 
 test("searches a long phone picker and selects the matching device", async () => {
   const matchMedia = window.matchMedia;
@@ -10,11 +10,10 @@ test("searches a long phone picker and selects the matching device", async () =>
     matches: query.includes("max-width: 767px"),
   }));
   try {
-    const devices: ConnectedDevice[] = Array.from({ length: 10 }, (_, i) => ({
+    const devices: HostDevice[] = Array.from({ length: 10 }, (_, i) => ({
       handle: `device-${i}`,
       name: `Device ${i}`,
-      deviceId: String(i),
-      edgeId: "edge",
+      id: String(i),
       runtime: null,
       state: "online",
     }));

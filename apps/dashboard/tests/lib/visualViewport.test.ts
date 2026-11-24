@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
-import { installVisualViewportCssVars } from "../../src/lib/visualViewport";
+import { get } from "svelte/store";
+import { installVisualViewportCssVars, keyboardOpen } from "../../src/lib/visualViewport";
 
 function createVisualViewport(offsetTop: number, height: number, windowHeight: number) {
   const listeners = new Map<string, Set<() => void>>();
@@ -36,11 +37,13 @@ describe("installVisualViewportCssVars", () => {
     expect(style.getPropertyValue("--visual-viewport-top")).toBe("80px");
     expect(style.getPropertyValue("--visual-viewport-bottom")).toBe("220px");
 
+    expect(get(keyboardOpen)).toBe(true);
     win.visualViewport.offsetTop = 0;
     win.visualViewport.height = 667;
     win.visualViewport.dispatch("resize");
     expect(style.getPropertyValue("--visual-viewport-top")).toBe("0px");
     expect(style.getPropertyValue("--visual-viewport-bottom")).toBe("0px");
+    expect(get(keyboardOpen)).toBe(false);
     uninstall();
   });
 

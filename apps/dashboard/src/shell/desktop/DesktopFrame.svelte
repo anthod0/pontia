@@ -2,28 +2,23 @@
   import { onDestroy, onMount } from 'svelte'
   import type { Snippet } from 'svelte'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
-  import AppSidebar from './AppSidebar.svelte'
-  import TopBar from './TopBar.svelte'
-  import { provideTopBarAction } from './topBarAction'
-  import DownloadCenter from './DownloadCenter.svelte'
-  import ChatShortcuts from '../chat/ChatShortcuts.svelte'
-  import ConnectionNotice from './ConnectionNotice.svelte'
-  import SettingsShell from '../settings/SettingsShell.svelte'
-  import { isSettingsPath } from '../settings/sections'
-  import { provideSettingsDetail } from '../settings/settingsDetail'
+  import { provideTopBarAction } from '../../components/layout/topBarAction'
+  import DownloadCenter from '../../components/layout/DownloadCenter.svelte'
+  import SettingsShell from '../../components/settings/SettingsShell.svelte'
+  import { isSettingsPath } from '../../components/settings/sections'
+  import { provideSettingsDetail } from '../../components/settings/settingsDetail'
   import { dashboardRelativePath } from '$lib/dashboardRoutes'
   import { installVisualViewportCssVars } from '$lib/visualViewport'
-  import { provideFilePreviewNavigator } from '../chat/filePreviewContext'
-  import { filePreviewWidth } from '../chat/filePreviewWidth'
-  import { provideSessionPanel } from '../chat/sessionPanel/sessionPanelContext.svelte'
-  import SessionSidePanel from '../chat/sessionPanel/SessionSidePanel.svelte'
-  import FileDropZone from '../chat/FileDropZone.svelte'
+  import { provideFilePreviewNavigator } from '../../components/chat/filePreviewContext'
+  import { filePreviewWidth } from '../../components/chat/filePreviewWidth'
+  import { provideSessionPanel } from '../../components/chat/sessionPanel/sessionPanelContext.svelte'
+  import SessionSidePanel from '../../components/chat/sessionPanel/SessionSidePanel.svelte'
+  import FileDropZone from '../../components/chat/FileDropZone.svelte'
 
-  let { children, sidebar, topbar, settingsEnabled = true }: {
+  let { children, sidebar, topbar }: {
     children: Snippet
-    sidebar?: Snippet
-    topbar?: Snippet
-    settingsEnabled?: boolean
+    sidebar: Snippet
+    topbar: Snippet
   } = $props()
   let currentPath = $state(dashboardRelativePath())
   const topBarAction = provideTopBarAction()
@@ -65,30 +60,20 @@
 <svelte:window onpopstate={updatePath} onclick={updatePathAfterNavigation} />
 
 <Sidebar.Provider class="file-preview-layout" style={$filePreviewWidth === null ? undefined : `--file-preview-saved-width: ${$filePreviewWidth}px`}>
-  {#if sidebar}
-    {@render sidebar()}
-  {:else}
-    <ChatShortcuts />
-    <ConnectionNotice />
-    <AppSidebar />
-  {/if}
+  {@render sidebar()}
   <Sidebar.Inset class="bg-surface lg:mr-[var(--file-preview-width)]">
     <FileDropZone>
       <!-- On chat pages only the top bar buttons take pointer input, so the feed beneath still scrolls. -->
       <div class={['sticky z-10 flex items-center', chatPath ? 'pointer-events-none' : 'bg-surface']} style="top: var(--visual-viewport-top, 0px)">
         <div class="min-w-0 flex-1">
-          {#if topbar}
-            {@render topbar()}
-          {:else}
-            <TopBar />
-          {/if}
+          {@render topbar()}
         </div>
         {@render $topBarAction?.()}
         <div class="shrink-0 md:pr-4"><DownloadCenter /></div>
       </div>
       <main class={mainClass}>
         <div class={contentClass}>
-          {#if settingsPath && settingsEnabled}
+          {#if settingsPath}
             <SettingsShell>
               {@render children()}
             </SettingsShell>

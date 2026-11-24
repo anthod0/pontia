@@ -2,33 +2,16 @@
   import { t } from '$lib/i18n';
   import { onMount, type Snippet } from 'svelte';
   import { writable } from 'svelte/store';
-  import DeviceSessionList from '../../components/layout/DeviceSessionList.svelte';
-  import SidebarDeviceSwitcher from './SidebarDeviceSwitcher.svelte';
-  import ComposerDeviceSelect from './ComposerDeviceSelect.svelte';
-  import SpinnerGapIcon from 'phosphor-svelte/lib/SpinnerGapIcon';
-  import { Button } from '$lib/components/ui/button/index.js';
   import { dashboardRelativePath, navigate } from '$lib/navigation';
   import { returnToLastPage } from '$lib/lastPage';
   import { PersistedState, textSerializer } from '$lib/storage';
   import { matchChatShortcut } from '$lib/shortcuts/definitions';
-  import DeviceStatus, { type DeviceStatusView } from '../../components/devices/DeviceStatus.svelte';
-  import AppShell from '../../components/layout/AppShell.svelte';
-  import AppSidebar from '../../components/layout/AppSidebar.svelte';
-  import DeviceBotList from '../../components/bots/DeviceBotList.svelte';
-  import TopBarMoreMenu from '../../components/layout/TopBarMoreMenu.svelte'
-  import TopBar from '../../components/layout/TopBar.svelte';
-  import ChatShortcuts from '../../components/chat/ChatShortcuts.svelte';
-  import ConnectionNotice from '../../components/layout/ConnectionNotice.svelte';
-  import DashboardEntryPage from '../../pages/DashboardEntryPage.svelte';
-  import BotEntryPage from '../../pages/BotEntryPage.svelte';
-  import NewChatLayout from '../../components/chat/NewChatLayout.svelte';
-  import NewChatComposerPlaceholder from '../../components/chat/NewChatComposerPlaceholder.svelte';
-  import * as Sidebar from '$lib/components/ui/sidebar/index.js';
-  import DeviceProvider from '../../device/DeviceProvider.svelte';
+  import type { DeviceStatusView } from "../../components/devices/DeviceStatus.svelte";
+  import DashboardContent from "./DashboardContent.svelte";
+  import AppShell from '../../shell/AppShell.svelte';
   import { createDeviceConnections, type ConnectedDevice } from './deviceConnections';
-  import { provideDeviceList } from './deviceListContext';
+  import { provideDashboardHost, type HostDevice } from '../../device/hostContext';
   import { loadedRemoteAccess, loadRemoteAccess } from './remoteAccessLoader.svelte';
-  import DeviceOnboarding from './DeviceOnboarding.svelte';
   import { redirectToSignIn } from './signInRedirect';
 
   let { handle, children }: { handle?: string; children: Snippet } = $props();
@@ -49,16 +32,18 @@
   const previousHandle = new PersistedState('pontia.previousDeviceHandle', null, textSerializer);
   // The device shown before the active one changed; starts from the last device of the previous visit.
   let shownHandle = lastHandle.current;
-  let currentLocation = $state(window.location.pathname);
-  const currentPath = $derived(dashboardRelativePath(currentLocation));
+  const hostDevices = $derived($devices.map((target): HostDevice => ({
+    id: target.deviceId, handle: target.handle, name: target.name, runtime: target.runtime,
+    state: target.state === 'sign-in-required' ? 'sign_in_required' : target.state,
+  })));
   // The routed device is active; the root uses the last routed device, then the first listed one.
   const activeHandle = $derived(handle ||
-    ($devices.some(target => target.handle === lastHandle.current) ? lastHandle.current! : $devices[0]?.handle));
-  const active = $derived($devices.find(target => target.handle === activeHandle));
+    (hostDevices.some(target => target.handle === lastHandle.current) ? lastHandle.current! : hostDevices[0]?.handle));
+  const active = $derived(hostDevices.find(target => target.handle === activeHandle));
   // The device shown before the active one, while it is still listed.
   const previous = $derived(previousHandle.current === activeHandle ? undefined
-    : $devices.find(target => target.handle === previousHandle.current));
-  const device = $derived(active?.state === 'online' ? active.runtime : null);
+    : hostDevices.find(target => target.handle === previousHandle.current));
+  const loadError = $derived($error ?? moduleError);
   const signInUrl = $derived($signInRequired ? remote?.dashboardSignInUrl(
     `${window.location.pathname}${window.location.search}${window.location.hash}`,
   ) : undefined);
@@ -82,13 +67,27 @@
     return {
       mood: 'offline',
       title: $t('devices.unavailableNamed', { name: active?.name ?? activeHandle }),
-      description: $error ?? moduleError ?? $t('devices.connectionFailed'),
+      description: loadError ?? $t('devices.connectionFailed'),
     };
   });
 
-  provideDeviceList({
-    devices: () => $devices,
-    retry: (target) => connections?.retry(target),
+  provideDashboardHost({
+    mode: 'public',
+    get devices() { return hostDevices; },
+    get activeDevice() { return active ?? null; },
+    get previousDevice() { return previous ?? null; },
+    get canSwitchDevice() { return hostDevices.length > 1; },
+    get routeScope() { return activeHandle ? `/${activeHandle}` : undefined; },
+    get statusView() { return deviceStatus; },
+    get signInUrl() { return signInUrl; },
+    get loadError() { return loadError; },
+    get onboarding() { return dashboardState !== 'available' && !signInUrl && !deviceStatus && !loadError; },
+    get checkingDevices() { return checkingDevices; },
+    get loadingDevices() { return $loading; },
+    get connecting() { return dashboardState === 'connecting'; },
+    selectDevice, retryActiveOrRefresh: retry, retryDevice: target => connections?.retry(target),
+    checkDevices, openNewChat,
+    openSettings() { if (activeHandle) void navigate('/settings/common', undefined, { scope: `/${activeHandle}` }); },
   });
 
   // A signed-out browser goes straight to Pontia sign-in, which returns to this page.
@@ -97,13 +96,13 @@
   });
 
   $effect(() => {
-    if (handle && $devices.some(target => target.handle === handle)) rememberDevice(handle);
+    if (handle && hostDevices.some(target => target.handle === handle)) rememberDevice(handle);
   });
 
   $effect(() => {
     const current = active?.handle;
     if (!current || current === shownHandle) return;
-    if ($devices.some(target => target.handle === shownHandle)) rememberPreviousDevice(shownHandle!);
+    if (hostDevices.some(target => target.handle === shownHandle)) rememberPreviousDevice(shownHandle!);
     shownHandle = current;
   });
 
@@ -176,106 +175,11 @@
   });
 </script>
 
-<svelte:window onkeydown={handleDeviceShortcut} onpopstate={() => currentLocation = window.location.pathname} onfocus={() => connections?.focus()} ononline={() => connections?.focus()} />
+<svelte:window onkeydown={handleDeviceShortcut} onfocus={() => connections?.focus()} ononline={() => connections?.focus()} />
 <svelte:document onvisibilitychange={() => {
   if (document.visibilityState === 'visible') connections?.focus();
 }} />
 
-{#snippet statusAction()}
-  {#if deviceStatus?.mood === 'offline'}<Button variant="outline" onclick={retry}>{$t('common.tryAgain')}</Button>{/if}
-{/snippet}
-
-{#snippet deviceSelector(disabled: boolean)}
-  {#if $devices.length > 1}
-    <ComposerDeviceSelect devices={$devices} selected={active} onSelect={selectDevice} {disabled} />
-  {/if}
-{/snippet}
-
 <AppShell>
-  {#snippet sidebar()}
-    <AppSidebar onNewChat={openNewChat}
-      settingsDisabled={!activeHandle}
-      onSettings={() => { if (activeHandle) void navigate('/settings/common', undefined, { scope: `/${activeHandle}` }) }}>
-      {#snippet deviceSwitcher()}
-        {#if $devices.length > 1}
-          <SidebarDeviceSwitcher devices={$devices} selected={active} {previous} onSelect={selectDevice} />
-        {/if}
-      {/snippet}
-      {#snippet groups()}
-        {#if active?.state === 'online' && active.runtime}
-          {#key active.runtime}
-            <DeviceProvider device={active.runtime}>
-              <DeviceBotList handle={active.handle} />
-              <DeviceSessionList handle={active.handle} onNewChat={openNewChat} />
-            </DeviceProvider>
-          {/key}
-        {:else if active?.state === 'offline'}
-          <div class="flex items-center justify-between gap-2 px-4 py-2 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">
-            <span>{active.name} {$t('devices.offlineSuffix')}</span>
-            <Button variant="outline" size="xs" onclick={() => connections?.retry(active.handle)}>{$t('common.retry')}</Button>
-          </div>
-        {:else if dashboardState === 'connecting'}
-          <Sidebar.Group class="group-data-[collapsible=icon]:hidden">
-            {#if !$loading}<Sidebar.GroupLabel role="status">{$t('connection.connecting')}</Sidebar.GroupLabel>{/if}
-            <Sidebar.GroupContent>
-              <Sidebar.MenuSkeleton />
-              <Sidebar.MenuSkeleton />
-              <Sidebar.MenuSkeleton />
-            </Sidebar.GroupContent>
-          </Sidebar.Group>
-        {/if}
-      {/snippet}
-    </AppSidebar>
-    {#if device}
-      {#key device}<DeviceProvider {device}><ChatShortcuts newChatHandle={activeHandle} /><ConnectionNotice /></DeviceProvider>{/key}
-    {/if}
-  {/snippet}
-  {#snippet topbar()}
-    {#if device}
-      {#key device}<DeviceProvider {device}><TopBar onNewChat={openNewChat} /></DeviceProvider>{/key}
-    {:else}
-      <header class="flex h-14 items-center px-3 pt-2 md:h-12 md:pt-0"><Sidebar.Trigger class="pointer-events-auto size-11 md:hidden [&_svg:not([class*=size-])]:size-5" /><TopBarMoreMenu /></header>
-    {/if}
-  {/snippet}
-  {#snippet children()}
-    {#if device}
-      {#key device}
-        <DeviceProvider {device}>
-          {#if handle}
-            {@render children()}
-          {:else if currentPath === '/bot'}
-            <BotEntryPage routeScope={`/${activeHandle}`} />
-          {:else}
-            <DashboardEntryPage routeScope={`/${activeHandle}`} {deviceSelector} />
-          {/if}
-        </DeviceProvider>
-      {/key}
-    {:else if signInUrl}
-      <div class="flex min-h-96 flex-col items-center justify-center gap-3 bg-surface p-4" role="status">
-        <SpinnerGapIcon class="size-6 animate-spin text-primary" aria-hidden="true" />
-        <p class="text-sm text-muted-foreground">{$t('auth.redirecting')}</p>
-        <Button size="sm" variant="outline" href={signInUrl}>{$t('auth.signIn')}</Button>
-      </div>
-    {:else if deviceStatus}
-      {#if currentPath === '/'}
-        <NewChatLayout status={deviceStatus}>
-          {#snippet action()}{@render statusAction()}{/snippet}
-          <NewChatComposerPlaceholder {deviceSelector} />
-        </NewChatLayout>
-      {:else}
-        <div class="flex min-h-[calc(100svh-5rem)] items-center justify-center py-12">
-          <DeviceStatus status={deviceStatus}>
-            {#snippet action()}{@render statusAction()}{/snippet}
-          </DeviceStatus>
-        </div>
-      {/if}
-    {:else if $error ?? moduleError}
-      <div role="alert" class="flex items-center gap-3 py-4 text-sm">
-        <span>{$error ?? moduleError}</span>
-        <Button variant="outline" onclick={retry}>{$t('common.tryAgain')}</Button>
-      </div>
-    {:else}
-      <DeviceOnboarding checking={checkingDevices} onCheck={checkDevices} />
-    {/if}
-  {/snippet}
+  <DashboardContent {handle}>{@render children()}</DashboardContent>
 </AppShell>

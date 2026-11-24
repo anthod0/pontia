@@ -1,10 +1,14 @@
 <script lang="ts">
   import SettingsCommonPage from '../../src/modes/public/SettingsCommonPage.svelte'
-  import { provideDeviceList, type DeviceList } from '../../src/modes/public/deviceListContext'
+  import { provideDashboardHost, type HostDevice } from '../../src/device/hostContext'
+  import { createLocalHost } from '../../src/modes/local/host.svelte'
+  import { testDevice } from '../deviceFixture'
 
-  let { list }: { list: DeviceList } = $props()
-  // svelte-ignore state_referenced_locally -- the harness fixes the list for its lifetime
-  provideDeviceList(list)
+  let { devices, retryDevice }: { devices: HostDevice[]; retryDevice: (handle: string) => void } = $props()
+  provideDashboardHost({
+    ...createLocalHost(() => testDevice), mode: 'public',
+    get devices() { return devices }, retryDevice: handle => retryDevice(handle),
+  })
 </script>
 
 <SettingsCommonPage />

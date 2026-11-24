@@ -8,12 +8,13 @@
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import { chatShortcuts } from '$lib/shortcuts/definitions'
   import { formatShortcutKeys } from '$lib/shortcuts/format'
-  import { deviceStateDotClass, deviceStateLabel, type ConnectedDevice } from './deviceConnections'
+  import type { HostDevice } from '../../device/hostContext'
+  import { deviceStateDotClass, deviceStateLabel } from '../../components/devices/deviceState'
 
   let { devices, selected, previous, onSelect }: {
-    devices: ConnectedDevice[]
-    selected: ConnectedDevice | undefined
-    previous: ConnectedDevice | undefined
+    devices: HostDevice[]
+    selected: HostDevice | null
+    previous: HostDevice | null
     onSelect: (handle: string) => void
   } = $props()
 </script>

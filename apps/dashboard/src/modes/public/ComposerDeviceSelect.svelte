@@ -2,12 +2,13 @@
   import ResponsiveSelect from '$lib/components/ui/overlay/ResponsiveSelect.svelte'
   import { t } from '$lib/i18n';
   import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon'
-  import { deviceStateLabel, type ConnectedDevice } from './deviceConnections'
+  import { deviceStateLabel } from '../../components/devices/deviceState'
+  import type { HostDevice } from '../../device/hostContext'
   import { targetLabelClass, targetSegmentClass } from '../../components/chat/targetSegment'
 
   let { devices, selected, onSelect, disabled = false }: {
-    devices: ConnectedDevice[]
-    selected: ConnectedDevice | undefined
+    devices: HostDevice[]
+    selected: HostDevice | null
     onSelect: (handle: string) => void
     disabled?: boolean
   } = $props()

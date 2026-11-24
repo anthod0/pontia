@@ -2,7 +2,9 @@
   import { onDestroy, onMount, type Snippet } from 'svelte';
   import { get } from 'svelte/store';
   import AuthGate from '../../components/auth/AuthGate.svelte';
-  import AppShell from '../../components/layout/AppShell.svelte';
+  import AppShell from '../../shell/AppShell.svelte';
+  import { provideDashboardHost } from "../../device/hostContext";
+  import { createLocalHost } from "./host.svelte";
   import DeviceProvider from '../../device/DeviceProvider.svelte';
   import { DeviceRuntime } from '../../device/runtime';
   import { createApiAccess } from './apiAccess';
@@ -13,6 +15,8 @@
   loadTokenFromStorage();
   consumeTokenFromUrl();
   let device = $state.raw(new DeviceRuntime('local', createApiAccess()));
+
+  provideDashboardHost(createLocalHost(() => device));
 
   onMount(() => {
     let previous = get(token).trim();
