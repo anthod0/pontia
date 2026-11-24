@@ -46,7 +46,7 @@ impl Fixture {
         let turns = Arc::new(Mutex::new(Vec::new()));
         let server_turns = turns.clone();
         let codex_home = root.path().canonicalize().unwrap();
-        let configuration = Arc::new(Mutex::new(json!({})));
+        let configuration = Arc::new(Mutex::new(json!({"mcp_servers":{}})));
         let server_configuration = configuration.clone();
         let thread_requests = Arc::new(Mutex::new(Vec::new()));
         let server_thread_requests = thread_requests.clone();
@@ -301,8 +301,12 @@ async fn reasoning_effort_applies_only_at_launch_and_tracks_native_settings() {
 }
 
 #[tokio::test]
-async fn restricted_session_starts_with_native_agents_disabled() {
+async fn restricted_session_disables_native_agents_and_all_configured_mcp_servers() {
     let fixture = Fixture::create(None, "restricted", None).await;
+    *fixture.configuration.lock().await = json!({"mcp_servers":{
+        "alpha":{"command":"alpha"},
+        "team.beta":{"url":"https://example.test/mcp"}
+    }});
     fixture.dispatch_first_input().await;
     {
         let requests = fixture.thread_requests.lock().await;
@@ -312,23 +316,54 @@ async fn restricted_session_starts_with_native_agents_disabled() {
         assert_eq!(config["features.multi_agent_v2"], false);
         assert_eq!(config["approval_policy"], "never");
         assert_eq!(config["sandbox_mode"], "danger-full-access");
+        assert_eq!(
+            config["mcp_servers"],
+            json!({"alpha":{"enabled":false},"team.beta":{"enabled":false}})
+        );
         assert!(
             config
                 .as_object()
                 .unwrap()
                 .keys()
-                .all(|key| !key.starts_with("hooks") && !key.starts_with("mcp_servers"))
+                .all(|key| !key.starts_with("hooks"))
         );
     }
     fixture.shutdown().await;
 }
 
 #[tokio::test]
+async fn restricted_session_fails_before_start_if_mcp_servers_cannot_be_enumerated() {
+    for configuration in [None, Some(json!({})), Some(json!({"mcp_servers":[]}))] {
+        let fixture = Fixture::create(None, "restricted", None).await;
+        if let Some(configuration) = configuration {
+            *fixture.configuration.lock().await = configuration;
+        } else {
+            fixture.rpc_errors.lock().await.insert(
+                "config/read".into(),
+                json!({"code":-32603,"message":"config read failed"}),
+            );
+        }
+        let error = fixture
+            .app
+            .turn_commands()
+            .create_and_dispatch_turn(&fixture.session, "hello".into(), json!({}))
+            .await
+            .unwrap_err();
+        assert!(error.to_string().to_lowercase().contains("mcp"), "{error}");
+        assert!(fixture.thread_requests.lock().await.is_empty());
+        fixture.shutdown().await;
+    }
+}
+
+#[tokio::test]
 async fn yolo_is_scoped_to_the_session_and_preserved_on_resume() {
     for yolo in [false, true] {
         let fixture = Fixture::create(None, if yolo { "yolo" } else { "default" }, None).await;
-        *fixture.configuration.lock().await =
-            json!({"approval_policy":"on-request","sandbox_mode":"workspace-write"});
+        *fixture.configuration.lock().await = json!({
+            "approval_policy":"on-request",
+            "sandbox_mode":"workspace-write",
+            "mcp_servers":{"alpha":{"command":"alpha"}}
+        });
         fixture.dispatch_first_input().await;
         fixture
             .app
@@ -347,6 +382,7 @@ async fn yolo_is_scoped_to_the_session_and_preserved_on_resume() {
             assert_eq!(requests.len(), 2);
             for request in requests.iter() {
                 let config = &request["params"]["config"];
+                assert!(config.get("mcp_servers").is_none());
                 assert_eq!(
                     config["approval_policy"],
                     if yolo { json!("never") } else { Value::Null }
@@ -382,7 +418,8 @@ async fn skill_instructions_are_disabled_only_for_the_requested_session_across_r
             None,
         )
         .await;
-        *fixture.configuration.lock().await = json!({"skills":{"include_instructions":true}});
+        *fixture.configuration.lock().await =
+            json!({"skills":{"include_instructions":true},"mcp_servers":{}});
         fixture.dispatch_first_input().await;
         fixture
             .app

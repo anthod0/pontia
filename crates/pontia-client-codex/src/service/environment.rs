@@ -1,6 +1,6 @@
 use super::CodexService;
 use crate::runtime::protocol::Connection;
-use pontia_core::Result;
+use pontia_core::{Error, Result, SessionMode};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -32,9 +32,20 @@ impl CodexService {
         connection: &Connection,
         cwd: &str,
     ) -> Result<Value> {
-        let response = connection
-            .call("config/read", json!({"cwd":cwd,"includeLayers":false}))
+        let mode = pontia_agent_control::ControlQueryService::new(self.pool.clone())
+            .session_mode(session)
             .await?;
+        let response = match connection
+            .call("config/read", json!({"cwd":cwd,"includeLayers":false}))
+            .await
+        {
+            Err(error) if mode == SessionMode::Restricted => {
+                return Err(Error::StateConflict(format!(
+                    "Cannot enumerate Codex MCP servers for the restricted session: {error}"
+                )));
+            }
+            result => result?,
+        };
         let stored: Option<String> = sqlx::query_scalar(
             "SELECT json_extract(metadata,'$.codex_environment') FROM sessions WHERE session_id=?",
         )
@@ -46,10 +57,17 @@ impl CodexService {
             .transpose()?
             .unwrap_or_default();
         let mut config = environment_config(session, &response["config"], environment)?;
-        let mode = pontia_agent_control::ControlQueryService::new(self.pool.clone())
-            .session_mode(session)
-            .await?;
-        if mode == pontia_core::SessionMode::Restricted {
+        if mode == SessionMode::Restricted {
+            let servers = response["config"]["mcp_servers"]
+                .as_object()
+                .ok_or_else(|| {
+                    Error::StateConflict(
+                        "Codex config/read expected an object at config.mcp_servers".into(),
+                    )
+                })?;
+            for name in servers.keys() {
+                config["mcp_servers"][name]["enabled"] = json!(false);
+            }
             config["agents.enabled"] = json!(false);
             config["features.multi_agent"] = json!(false);
             config["features.multi_agent_v2"] = json!(false);
