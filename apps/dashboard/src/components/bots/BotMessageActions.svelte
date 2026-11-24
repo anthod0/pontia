@@ -1,4 +1,5 @@
 <script lang="ts">
+  import {useMobileStack} from '$lib/mobile/overlayStack.svelte'
   import BottomSheet from '$lib/components/ui/overlay/BottomSheet.svelte'
   import { toast } from 'svelte-sonner'
   import { t } from '$lib/i18n'
@@ -33,6 +34,7 @@
 
   /** A message, or one file attached to it when `file` is set. */
   type Target = { entry: BotEntry; element: HTMLElement; excerpt: string | null; file: AttachedFile | null }
+  const stack = useMobileStack()
   const device = useDeviceRuntime()
 
   let target = $state<Target | null>(null)
@@ -117,7 +119,7 @@
     // A button outside every quotable element acts on the whole message, even when only its files are quotable.
     const row = own ? found : { ...found, file: null }
     const rect = button.getBoundingClientRect()
-    const touch = (event instanceof PointerEvent && event.pointerType === 'touch') || matchMedia('(pointer: coarse)').matches
+    const touch = !!stack || (event instanceof PointerEvent && event.pointerType === 'touch') || matchMedia('(pointer: coarse)').matches
     open({ ...row, excerpt: null }, touch, { x: rect.left, y: rect.bottom }, button)
   }
 
@@ -182,6 +184,7 @@
   }
 
   function viewContext(next: Target) {
+    if(sheetOpen && stack){stack.back(()=>oncontext(next.entry.id));return}
     menuOpen = sheetOpen = false
     oncontext(next.entry.id)
   }
@@ -227,11 +230,12 @@
   // A whole message is quoted as a reply; a file keeps its quote label.
   const quoteLabel = $derived(target?.file ? (isImagePath(target.file.path) ? $t('bots.quoteImage') : $t('bots.quoteFile')) : $t('bots.reply'))
   const QuoteIcon = $derived(target?.file ? QuotesIcon : ArrowBendUpLeftIcon)
-  // Touch: below the selection, clear of the system selection menu. Mouse: above it.
+  // Mobile keeps the quote action above the composer. Desktop positions it beside the selection.
   // Both stay inside the viewport when the selection runs past an edge.
   const selectionStyle = $derived.by(() => {
     if (!selection) return ''
     const { rect, touch } = selection
+    if (stack) return 'left:50%; bottom:calc(var(--mobile-footer-h, 60px) + var(--visual-viewport-bottom, 0px) + 20px)'
     const viewport = window.visualViewport
     const x = viewport?.offsetLeft ?? 0
     const y = viewport?.offsetTop ?? 0
@@ -294,11 +298,11 @@
 {#if selection && !menuOpen && !sheetOpen}
   {@const current = selection.target}
   <div bind:clientWidth={toolbarWidth} bind:clientHeight={toolbarHeight} role="toolbar" tabindex="-1" aria-label={$t('bots.messageActions')}
-    class={['fixed z-(--layer-toolbar) flex -translate-x-1/2 gap-0.5 rounded-lg bg-popover p-0.5 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10', !selection.touch && '-translate-y-full']}
+    class={['fixed z-(--layer-toolbar) flex -translate-x-1/2 gap-0.5 rounded-lg bg-popover p-0.5 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10', !stack && !selection.touch && '-translate-y-full']}
     style={selectionStyle}
     onpointerdown={event => event.preventDefault()}>
-    <button type="button" class="flex pointer-coarse:min-h-11 items-center gap-1.5 rounded-md px-2.5 py-1 outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => quote(current)}><QuotesIcon class="size-4" />{$t('bots.quote')}</button>
-    {#if !selection.touch}
+    <button type="button" class="flex pointer-coarse:min-h-11 items-center gap-1.5 rounded-md px-2.5 py-1 outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => quote(current)}><QuotesIcon class="size-4" />{$t(stack ? 'bots.quoteSelection' : 'bots.quote')}</button>
+    {#if !stack && !selection.touch}
       <button type="button" class="flex pointer-coarse:min-h-11 items-center gap-1.5 rounded-md px-2.5 py-1 outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => void copy(current)}><CopyIcon class="size-4" />{$t('common.copy')}</button>
     {/if}
   </div>

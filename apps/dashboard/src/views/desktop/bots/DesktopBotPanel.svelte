@@ -10,7 +10,7 @@
   import * as Collapsible from '$lib/components/ui/collapsible/index.js'
   import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon'
   import { Badge } from '$lib/components/ui/badge/index.js'
-  import { useTopBarAction } from '../layout/topBarAction'
+  import { useTopBarAction } from '../../../components/layout/topBarAction'
   import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon'
   import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon'
   import QuotesIcon from 'phosphor-svelte/lib/QuotesIcon'
@@ -24,15 +24,15 @@
   import { t } from '$lib/i18n'
   import MessageTime from '$lib/components/MessageTime.svelte'
   import { entryQuote, entryText, parseQuotedMessage, plainText, quoteSummary, type BotQuote } from '$lib/botQuote'
-  import type { Bot, BotMessage } from '../../api/types'
-  import { useDeviceRuntime } from '../../device/context'
-  import type { FilePreviewTarget } from '../chat/filePreviewContext'
-  import FilePreviewPanel from '../chat/FilePreviewPanel.svelte'
-  import FilePreviewResizer from '../chat/FilePreviewResizer.svelte'
-  import BotAvatar from './BotAvatar.svelte'
-  import BotMessageSearch from './BotMessageSearch.svelte'
-  import BotGitTab from './BotGitTab.svelte'
-  import RecentFileList from '../chat/files/RecentFileList.svelte'
+  import type { Bot, BotMessage } from '../../../api/types'
+  import { useDeviceRuntime } from '../../../device/context'
+  import type { FilePreviewTarget } from '../../../components/chat/filePreviewContext'
+  import FilePreviewPanel from '../../../components/chat/FilePreviewPanel.svelte'
+  import FilePreviewResizer from '../../../components/chat/FilePreviewResizer.svelte'
+  import BotAvatar from '../../../components/bots/BotAvatar.svelte'
+  import BotMessageSearch from '../../../components/bots/BotMessageSearch.svelte'
+  import BotGitTab from '../../../components/bots/BotGitTab.svelte'
+  import RecentFileList from '../../../components/chat/files/RecentFileList.svelte'
   import { createRecentFiles, withRecentFile } from '$lib/botRecentFiles'
   import { createPanelTab, type PanelTab } from '$lib/botPanelTab'
   import { SidePanelOpen } from '$lib/sidePanelOpen.svelte'
@@ -94,11 +94,6 @@
     panel.current = true
   }
 
-  export function refresh() {
-    if (panel.current && tab.current === 'todo') void todos.refetch()
-    if (panel.current && tab.current === 'context' && selected) void context.refetch()
-  }
-
   function withoutLinks(message: BotMessage, text: string) {
     return message.kind === 'bot_reply' ? text.replace(/!?\[([^\]]+)\]\([^)]+\)/g, '$1') : text
   }
@@ -113,7 +108,7 @@
     return withoutLinks(message, plainText(entryText(message)))
   }
 
-  async function closeOnMobile() {
+  async function closeOverlay() {
     if (!panel.wide && panel.current) {
       const closed = new Promise<void>(resolve => window.addEventListener('popstate', () => resolve(), { once: true }))
       panel.current = false
@@ -123,7 +118,7 @@
   }
 
   async function jump(id: string) {
-    await closeOnMobile()
+    await closeOverlay()
     await onjump(id)
   }
 
@@ -133,7 +128,7 @@
   }
 
   async function quoteTodo(message: BotMessage) {
-    await closeOnMobile()
+    await closeOverlay()
     await onquote(entryQuote(message)!)
   }
 
@@ -182,14 +177,14 @@
 </script>
 
 {#snippet badge(corner = false)}
-  {#if count > 0}<Badge class={['h-4 min-w-4 rounded-full px-1 text-[0.625rem] tabular-nums', corner && 'pointer-events-none absolute top-0.5 right-0.5 md:-top-1 md:-right-1']}>{count > 99 ? '99+' : count}</Badge>{/if}
+  {#if count > 0}<Badge class={['h-4 min-w-4 rounded-full px-1 text-[0.625rem] tabular-nums', corner && 'pointer-events-none absolute -top-1 -right-1']}>{count > 99 ? '99+' : count}</Badge>{/if}
 {/snippet}
 
 {#snippet sidebarButton()}
-  <div class="pointer-events-auto mr-3 flex h-12 shrink-0 items-center rounded-lg bg-popover px-0.5 ring-1 ring-foreground/10 max-md:mt-2 md:h-8 md:px-1">
-    <Button variant="ghost" size="icon" class={['relative size-11 md:size-7', panel.current && 'bg-muted text-heading']}
+  <div class="pointer-events-auto mr-3 flex shrink-0 items-center rounded-lg bg-popover px-0.5 ring-1 ring-foreground/10 h-8 px-1">
+    <Button variant="ghost" size="icon" class={['relative size-7', panel.current && 'bg-muted text-heading']}
       aria-label={count > 0 ? $t('bots.sidebarWithTodos', { count }) : $t('nav.sidebar')} title={$t('nav.sidebar')} aria-pressed={panel.current} onclick={() => { panel.current = !panel.current }}>
-      <SidebarSimpleIcon class="size-5 -scale-x-100 md:size-4" />{@render badge(true)}
+      <SidebarSimpleIcon class="size-4 -scale-x-100" />{@render badge(true)}
     </Button>
   </div>
 {/snippet}
@@ -231,7 +226,7 @@
     {#if reply?.message.id === message.id}
       {@const current = reply}
       <PromptInput.Root id="bot-todo-reply-box-{message.id}" class="mt-2" aria-label={$t('bots.reply')} onSubmit={() => submitReply(current)}>
-        <PromptInput.Textarea {@attach node => node.focus()} bind:value={current.text} placeholder={$t('bots.message')} aria-label={$t('bots.message')} readonly={current.sending} onkeydown={(event: KeyboardEvent) => replyKeydown(event, current)} class="text-base sm:text-[13px]" />
+        <PromptInput.Textarea {@attach node => node.focus()} bind:value={current.text} placeholder={$t('bots.message')} aria-label={$t('bots.message')} readonly={current.sending} onkeydown={(event: KeyboardEvent) => replyKeydown(event, current)} class="text-[13px]" />
         <PromptInput.Toolbar class="justify-end gap-1 px-1 pt-0 pb-1">
           <Button variant="ghost" size="xs" disabled={current.sending} onclick={closeReply}>{$t('common.cancel')}</Button>
           <PromptInput.Submit class="h-6 touch-target:min-h-11 gap-1 px-2.5 text-xs" busy={current.sending} disabled={!current.text.trim()} />
@@ -246,8 +241,7 @@
     <FilePreviewResizer />
     <Tabs.Root bind:value={() => tab.current, next => { tab.current = next as PanelTab }} class="min-h-0 flex-1 gap-0">
       <header class="flex h-12 shrink-0 items-center justify-between gap-1 border-b px-2">
-        <!-- Phones show the tab labels without icons, so all tabs and the close button fit. -->
-        <Tabs.List variant="line" aria-label={$t('nav.sidebar')} class="h-full min-w-0 gap-0 max-sm:[&_svg]:hidden">
+        <Tabs.List variant="line" aria-label={$t('nav.sidebar')} class="h-full min-w-0 gap-0">
           <Tabs.Trigger value="files" class="h-full px-2.5"><FileTextIcon />{$t('files.title')}</Tabs.Trigger>
           <Tabs.Trigger value="context" class="h-full px-2.5"><TreeStructureIcon />{$t('bots.context')}</Tabs.Trigger>
           <Tabs.Trigger value="todo" class="h-full px-2.5"><ListChecksIcon />{$t('bots.todos')}{@render badge()}</Tabs.Trigger>

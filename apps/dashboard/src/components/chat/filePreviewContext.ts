@@ -9,7 +9,11 @@ export type FilePreviewTarget = {
 };
 
 /** Opens local file links. The preview panel provides its own navigator for links inside the previewed file. */
-export type FilePreviewNavigator = { open(target: FilePreviewTarget): void };
+export type FilePreviewNavigator = {
+  open(target: FilePreviewTarget): void;
+  /** The Bot files screen also opens images and downloadable binary files. */
+  allSharedFiles?: boolean;
+};
 
 const key = Symbol("file-preview");
 

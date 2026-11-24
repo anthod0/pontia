@@ -1,14 +1,17 @@
 <script lang="ts">
+  import { useFilePreview } from '../filePreviewContext'
   import { t, number } from '$lib/i18n'
   import { formatFileSize, type SharedFileState } from './sharedFileState.svelte'
 
   let { state }: { state: SharedFileState } = $props()
+  const preview = useFilePreview()
   const size = (value: number) => formatFileSize(value, $number)
 </script>
 
 <p class={['flex min-w-0 text-sm font-medium text-heading', state.missing && 'text-muted-foreground line-through decoration-muted-foreground/50']} title={state.file.name}>
   <span class="truncate">{state.stem}</span>{#if state.extension}<span class="shrink-0">.{state.extension}</span>{/if}
 </p>
+{#if preview?.allSharedFiles}<p class="truncate font-mono text-xs text-muted-foreground" title={state.file.path}>{state.file.path}</p>{/if}
 {#if state.progress}
   <p class="truncate text-xs text-muted-foreground tabular-nums" role="status">
     {$t('files.receiving')} {state.progress.total === null ? size(state.progress.received) : `${size(state.progress.received)} / ${size(state.progress.total)}`}

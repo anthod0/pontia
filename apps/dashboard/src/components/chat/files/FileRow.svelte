@@ -44,7 +44,7 @@
       {/if}
       <div class="min-w-0 flex-1"><FileDetails {state} /></div>
     </div>
-  {:else if state.missing || state.image || !kind.text}
+  {:else if state.missing || (!preview?.allSharedFiles && (state.image || !kind.text))}
     <div class="flex min-w-0 flex-1 items-center gap-3">
       {@render icon()}
       <div class="min-w-0 flex-1"><FileDetails {state} /></div>

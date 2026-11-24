@@ -9,6 +9,7 @@
   import FilesIcon from 'phosphor-svelte/lib/FilesIcon'
   import ListIcon from 'phosphor-svelte/lib/ListIcon'
   import SquaresFourIcon from 'phosphor-svelte/lib/SquaresFourIcon'
+  import {useFilePreview} from '../filePreviewContext'
   import FileBubble from './FileBubble.svelte'
   import FileList from './FileList.svelte'
   import ImageMosaic from './ImageMosaic.svelte'
@@ -32,6 +33,7 @@
     /** Attributes for the element that stands for each file, such as quote targets. */
     itemProps?: (file: AttachedFile) => HTMLAttributes<HTMLDivElement>
   } = $props()
+  const preview = useFilePreview()
   const device = useDeviceRuntime()
   // Refreshed file lists keep each file's state, such as its loaded preview.
   const cache = new Map<string, SharedFileState>()
@@ -63,6 +65,10 @@
   let viewerIndex = $state(0)
   let viewerOpen = $state(false)
   function enlarge(state: SharedFileState) {
+    if(preview?.allSharedFiles){
+      preview.open({device,sessionId,path:state.file.path})
+      return
+    }
     const images = states.filter(other => other.image && (!other.missing || other === state))
     viewerFiles = images.map(other => other.file)
     viewerIndex = images.indexOf(state)

@@ -2,7 +2,8 @@
   import { untrack, type Snippet } from 'svelte'
   import { page } from '$app/state'
   import { afterNavigate } from '$app/navigation'
-  import { readable } from 'svelte/store'
+  import { provideMobileTitle } from './headerTitle'
+  import { readable, writable } from 'svelte/store'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import { provideSessionPanel } from '../../components/chat/sessionPanel/sessionPanelContext.svelte'
   import { provideFilePreviewNavigator } from '../../components/chat/filePreviewContext'
@@ -35,6 +36,7 @@
   provideFilePreviewNavigator({open: target => sessionPanel.openFile(target)})
   const sessionDetail = $derived(device?.sessions.sessionDetail ?? readable(null))
   const sessionTitle = $derived($sessionDetail && $sessionDetail.session.session_id === page.params.sessionId ? sessionChatTitle($sessionDetail.session,$t) : undefined)
+  const heading = provideMobileTitle(writable(null))
   const action = provideTopBarAction()
   const detail = provideSettingsDetail()
   let scroller: HTMLElement
@@ -69,7 +71,7 @@
 <div class="mobile-shell" data-tabs={hasTabs} data-keyboard={$keyboardOpen}>
   <div inert={stack.layers.some(layer => layer.content)} class="flex h-full flex-col" use:edgeSwipeBack={!tab && path !== '/new' && !stack.layers.length ? back : undefined}>
     <div class="mobile-chrome" data-scrolled={scrolled} use:chromeMetrics={'--mobile-header-h'}>
-      <MobileHeader {title} device={tab ? host.activeDevice : null} back={tab || path === '/' ? undefined : back}
+      <MobileHeader customTitle={$heading} {title} device={tab ? host.activeDevice : null} back={tab || path === '/' ? undefined : back}
         modal={path === '/new'} disabled={$detail?.disabled} backLabel={$detail && section ? $t(section.label) : undefined}
         switchDevice={tab && host.canSwitchDevice ? () => switchOpen = true : undefined} action={$action} />
       <MobileConnectionBanner />

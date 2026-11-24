@@ -8,9 +8,10 @@
   import { compareBotEntries, type BotTimeline } from '$lib/botTimeline.svelte'
   import type { BotEntry } from '../../api/types'
 
-  let { timeline, typing, highlighted = null, root = $bindable(), row }: {
+  let { timeline, typing, bottomInset=0, highlighted = null, root = $bindable(), row }: {
     timeline: BotTimeline
     root?: HTMLElement
+    bottomInset?:number
     typing: boolean
     highlighted?: string | null
     row: Snippet<[BotEntry]>
@@ -54,6 +55,7 @@
     const element = feed
     const rows = entries
     const paddingStart = 20 + (timeline.before ? headerHeight + 12 : 0)
+    const paddingEnd = 20 + bottomInset
     const length = count
     if (!element) return
     const previousFirst = firstId
@@ -71,6 +73,7 @@
     untrack(() => get(virtualizer).setOptions({
       count: length,
       paddingStart,
+      paddingEnd,
       scrollMargin: topInset,
       getItemKey: index => rows[index]?.id ?? 'typing',
     }))
@@ -187,5 +190,5 @@
       <div aria-hidden="true" class="pointer-events-none absolute bottom-0 h-16 w-px" bind:this={bottom}></div>
     </div>
   </div>
-  <ScrollToBottomButton sentinel={bottom} root={feed} onclick={followSend} class="absolute inset-x-0 bottom-2 z-10 px-1" />
+  <ScrollToBottomButton sentinel={bottom} root={feed} onclick={followSend} class="absolute inset-x-0 bottom-2 z-10 px-1 [.mobile-bot-chat_&]:bottom-[var(--mobile-footer-h)]" />
 </div>

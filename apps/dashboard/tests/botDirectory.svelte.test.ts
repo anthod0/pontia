@@ -56,3 +56,26 @@ test("loads todos concurrently for just the Bots with open items", async () => {
     getTodos.mockRestore();
   }
 });
+
+test("keeps recently resolved items available after the last open todo is handled", async () => {
+  const cache = testDevice.queryClient;
+  cache.setQueryData(["bots"], [{ bot_id: "last" }]);
+  cache.setQueryData(["bot-summary", "last"], { open_todo_count: 1 });
+  const request = vi
+    .spyOn(testDevice.api, "getBotTodos")
+    .mockResolvedValue({ open: [], recently_resolved: [] });
+  let todos!: ReturnType<typeof createBotTodos>;
+  const stop = $effect.root(() => {
+    todos = createBotTodos(testDevice, createBotDirectory(testDevice), true);
+  });
+  try {
+    await waitFor(() => expect(todos.groups[0]?.result.data).toBeDefined());
+    const done = { id: "handled", todo: { state: "done", by: "user" } };
+    cache.setQueryData(["bot-todos", "last"], { open: [], recently_resolved: [done] });
+    cache.setQueryData(["bot-summary", "last"], { open_todo_count: 0 });
+    await waitFor(() => expect(todos.groups[0]?.result.data?.recently_resolved).toEqual([done]));
+  } finally {
+    stop();
+    request.mockRestore();
+  }
+});

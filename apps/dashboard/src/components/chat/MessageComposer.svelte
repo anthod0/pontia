@@ -1,10 +1,9 @@
 <script lang="ts">
+  import { createComposer } from "../../features/chat/composer.svelte"
   import ResponsiveDialog from '$lib/components/ui/overlay/ResponsiveDialog.svelte'
   import ResponsiveMenu from '$lib/components/ui/overlay/ResponsiveMenu.svelte'
   import { t } from '$lib/i18n';
-  import { toast } from 'svelte-sonner'
-  import { useDeviceRuntime } from '../../device/context';
-  import { onDestroy, tick, type Snippet } from 'svelte'
+  import { tick, type Snippet } from 'svelte'
   import ArrowsOutIcon from 'phosphor-svelte/lib/ArrowsOutIcon'
   import ArrowsInIcon from 'phosphor-svelte/lib/ArrowsInIcon'
   import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
@@ -23,17 +22,14 @@
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
   import UploadAttachments from './UploadAttachments.svelte'
   import { useFileDrop } from './fileDrop.svelte'
-  import { uploadMessage } from '$lib/uploads/message'
-  import { type UploadDraftState } from "$lib/uploads/draft";
   import ChatCommandInput from './ChatCommandInput.svelte'
-  import { findChatCommand, type ChatCommand } from '$lib/chatCommands'
+  import { type ChatCommand } from '$lib/chatCommands'
   import { Button } from '$lib/components/ui/button/index.js'
   import { cn } from '$lib/utils.js'
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import { promptValueAfterEnter } from '$lib/promptEnterBehavior'
   import type { FilePickerFileView, InboxDeliveryPolicy } from '../../api/types'
-  const device = useDeviceRuntime();
-  const { createUploadDraft } = device.uploadDrafts;
+
 
   interface Props {
     value: string
@@ -81,24 +77,20 @@
     onFocus,
   }: Props = $props()
 
-  let attachments = $state<UploadDraftState>({ ready: false, items: [], warning: null })
-  let uploads = $state<ReturnType<typeof createUploadDraft> | null>(null)
-  $effect(() => {
-    if (!draftId) return
-    const retained = retainDraft
-    const draft = retained ? device.uploadDrafts.getRetainedUploadDraft(draftId) : createUploadDraft(draftId)
-    uploads = draft
-    const unsubscribe = draft.subscribe(state => { attachments = state })
-    return () => { unsubscribe(); if (!retained) draft.destroy() }
-  })
-  let sentAwaitingCleanup = $state(false)
-  let sending = $state(false)
-  const submissionToastId = 'composer-submit-error'
-  onDestroy(() => toast.dismiss(submissionToastId))
-  const uploadBlocked = $derived(Boolean(draftId) && (!attachments.ready || attachments.items.some(item => item.status !== 'complete')))
-  const completedFiles = $derived(attachments.items.flatMap(item => item.status === 'complete' && item.upload?.path ? [{ name: item.name, path: item.upload.path }] : []))
-  const uploadUnavailable = $derived(disabled || busy || sending || !attachments.ready)
   let fullscreenOpen = $state(false)
+  const controller = createComposer({
+    get value() { return value },
+    set value(next) { value = next },
+    get draftId() { return draftId },
+    get retainDraft() { return retainDraft },
+    get disabled() { return disabled },
+    get busy() { return busy },
+    get submitDisabled() { return submitDisabled },
+    get commands() { return commands },
+    get onSubmit() { return onSubmit },
+    closeExpanded: () => { fullscreenOpen = false },
+  })
+  const command = $derived(controller.command)
   let inlineInput = $state<HTMLDivElement | null>(null)
   // Sticky until the draft is cleared, so a line that only wraps in the narrow compact row cannot flip layouts back and forth.
   let multiline = $state(false)
@@ -133,11 +125,7 @@
       commands: group.names.flatMap(name => availableCommands.filter(item => item.name === name)),
     }))
     .filter(group => group.commands.length > 0))
-  const command = $derived(findChatCommand(value, commands))
   const commandAction = $derived(command ? commandActionFor(command) : undefined)
-  const commandArgument = $derived(command ? value.trim().slice(command.name.length).trim() : '')
-  const cannotSubmit = $derived(disabled || busy || sending || (command ? Boolean(command.disabledReason) || (command.name === '/rename' && !commandArgument) : submitDisabled || uploadBlocked || (!value.trim() && completedFiles.length === 0)))
-
   $effect(() => {
     if (!value) multiline = false
   })
@@ -166,50 +154,7 @@
     fullscreenEditor?.focusEnd()
   }
 
-  /** Returns false when the composer cannot submit right now. */
-  export function submit(deliveryPolicy: InboxDeliveryPolicy = 'steer'): boolean {
-    if (cannotSubmit) return false
-    if (command) executeCommand(command)
-    else void submitMessage(deliveryPolicy)
-    return true
-  }
-
-  async function submitMessage(deliveryPolicy: InboxDeliveryPolicy): Promise<void> {
-    const draft = uploads
-    sending = true
-    toast.dismiss(submissionToastId)
-    try {
-      if (!sentAwaitingCleanup) sentAwaitingCleanup = (await onSubmit(uploadMessage(value, completedFiles), deliveryPolicy)) === true
-      if (sentAwaitingCleanup) {
-        await draft?.clear()
-        sentAwaitingCleanup = false
-      }
-    } catch (error) {
-      // Sent messages keep their attachments until cleanup succeeds, so the error stays until the user retries.
-      toast.error(error instanceof Error ? error.message : String(error), {
-        id: submissionToastId,
-        duration: Number.POSITIVE_INFINITY,
-        important: true,
-        action: { label: $t('common.retry'), onClick: event => { if (!submit(deliveryPolicy)) event.preventDefault() } },
-      })
-    } finally {
-      sending = false
-    }
-  }
-
-  function executeCommand(command: ChatCommand): void {
-    if (disabled || busy || command.disabledReason) return
-    if (command.name === '/rename') {
-      if (!commandArgument) return
-      fullscreenOpen = false
-      command.run(commandArgument)
-      return
-    }
-    value = command.name
-    fullscreenOpen = false
-    command.run()
-  }
-
+  export function submit(policy:InboxDeliveryPolicy='steer') {return controller.submit(policy)}
   function chooseMenuCommand(selected: ChatCommand): void {
     if (disabled || busy || selected.disabledReason) return
     if (selected.name === '/rename') {
@@ -217,7 +162,7 @@
       focusCommandInput = true
       return
     }
-    executeCommand(selected)
+    controller.executeCommand(selected)
   }
 
   function restoreCommandFocus(event: Event): void {
@@ -228,7 +173,7 @@
   }
 
   function submitAndCloseFullscreen(): void {
-    if (cannotSubmit) return
+    if (controller.cannotSubmit) return
     fullscreenOpen = false
     submit()
   }
@@ -242,18 +187,18 @@
   // Office apps put a rendered image next to copied rich text; keep pasting that as text.
   function pasteFiles(event: ClipboardEvent): void {
     const data = event.clipboardData
-    if (!uploads || uploadUnavailable || !data?.files.length || data.types.includes('text/rtf')) return
+    if (!controller.uploads || controller.uploadUnavailable || !data?.files.length || data.types.includes('text/rtf')) return
     event.preventDefault()
     event.stopPropagation()
-    void uploads.add(Array.from(data.files))
+    void controller.uploads.add(Array.from(data.files))
   }
 
   const fileDrop = useFileDrop()
   $effect(() => {
-    const draft = uploads
+    const draft = controller.uploads
     if (!fileDrop || !draft) return
     return fileDrop.register({
-      get unavailable() { return uploadUnavailable },
+      get unavailable() { return controller.uploadUnavailable },
       add: files => void draft.add(files),
     })
   })
@@ -263,7 +208,7 @@
     const queueInput = !event.shiftKey && !event.ctrlKey && !event.metaKey
       && ((event.key === 'Tab' && !event.altKey) || (event.key === 'Enter' && event.altKey))
     if (queueInput) {
-      if (cannotSubmit || command || (event.key === 'Tab' && value.trim() && commands.some(item => item.name.startsWith(value.trim())))) return
+      if (controller.cannotSubmit || command || (event.key === 'Tab' && value.trim() && commands.some(item => item.name.startsWith(value.trim())))) return
       event.preventDefault()
       submit('after_idle')
       return
@@ -284,8 +229,8 @@
 </script>
 
 {#snippet uploadButton(picker: { choose: () => void } | null)}
-  {#if uploads}
-    <Button type="button" variant="ghost" size="icon-sm" aria-label={$t('files.upload')} title={$t('files.upload')} disabled={uploadUnavailable} onclick={() => picker?.choose()}>
+  {#if controller.uploads}
+    <Button type="button" variant="ghost" size="icon-sm" aria-label={$t('files.upload')} title={$t('files.upload')} disabled={controller.uploadUnavailable} onclick={() => picker?.choose()}>
       <PlusIcon class="size-4" />
     </Button>
   {/if}
@@ -330,14 +275,14 @@
 {/if}
 
 <PromptInput.Root class={compact ? 'grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center' : 'w-full'} onSubmit={() => submit()}>
-  {#if uploads}
+  {#if controller.uploads}
     <div class={compact ? 'col-span-3 row-start-1' : 'contents'}>
-      <UploadAttachments bind:this={uploadPicker} draft={uploads} disabled={disabled || busy || sending} />
+      <UploadAttachments bind:this={uploadPicker} draft={controller.uploads} disabled={disabled || busy || controller.sending} />
     </div>
   {/if}
   <PromptInput.Body class={compact ? 'col-start-2 row-start-2' : undefined} onpastecapture={pasteFiles}>
     <div bind:this={inlineInput} class="relative">
-      <ChatCommandInput bind:this={editor} id={inputId} bind:value {commands} onCommand={executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? `min-h-0 py-2 text-base sm:text-[13.5px] ${compact ? 'px-0' : 'pl-3 pr-10 sm:pr-3'}` : 'min-h-[52px] px-4 py-3 text-base sm:text-[13.5px]'} />
+      <ChatCommandInput bind:this={editor} id={inputId} bind:value {commands} onCommand={controller.executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? `min-h-0 py-2 text-base sm:text-[13.5px] ${compact ? 'px-0' : 'pl-3 pr-10 sm:pr-3'}` : 'min-h-[52px] px-4 py-3 text-base sm:text-[13.5px]'} />
       {#if fullscreen && !compact}
         <Button type="button" variant="ghost" size="icon-sm" class="absolute right-1 top-1 sm:hidden" aria-label={$t('chat.expandComposer')} onclick={() => void openFullscreen()}>
           <ArrowsOutIcon class="size-4" />
@@ -348,17 +293,17 @@
   <div class={compact ? 'col-span-3' : 'contents'}>
     {#if command?.disabledReason}<p role="status" class="px-4 pb-2 text-xs text-muted-foreground">{command.disabledReason}</p>{/if}
   </div>
-  <PromptInput.Toolbar class={compact ? 'contents' : cn(fullscreen && 'px-1 pb-1', uploads ? 'pt-0' : 'justify-end pt-0')}>
+  <PromptInput.Toolbar class={compact ? 'contents' : cn(fullscreen && 'px-1 pb-1', controller.uploads ? 'pt-0' : 'justify-end pt-0')}>
     <div class={compact ? 'col-start-1 row-start-2 py-1 pl-1' : 'contents'}>
       {@render uploadButton(uploadPicker)}
     </div>
     <div class={compact ? 'col-start-3 row-start-2 p-1' : 'contents'}>
-      {#if interruptMode && attachments.items.length === 0}
+      {#if interruptMode && controller.attachments.items.length === 0}
         <Button type="button" size={fullscreen ? 'icon-sm' : 'icon'} disabled={interruptBusy} aria-label={$t('chat.interrupt')} title={$t('chat.interrupt')} onclick={() => interrupt()}>
           <StopIcon class="size-4" />
         </Button>
       {:else}
-        <PromptInput.Submit disabled={cannotSubmit} {busy} label={sentAwaitingCleanup ? $t('files.dismissSent') : commandAction?.label ?? submitLabel} icon={commandAction?.icon} startSession={startSession && !command} class={fullscreen ? cn('h-7 gap-1.5 px-3 text-xs font-semibold', compact && 'max-sm:w-7 max-sm:px-0') : undefined} labelClass={compact ? 'max-sm:sr-only' : undefined} />
+        <PromptInput.Submit disabled={controller.cannotSubmit} {busy} label={controller.sentAwaitingCleanup ? $t('files.dismissSent') : commandAction?.label ?? submitLabel} icon={commandAction?.icon} startSession={startSession && !command} class={fullscreen ? cn('h-7 gap-1.5 px-3 text-xs font-semibold', compact && 'max-sm:w-7 max-sm:px-0') : undefined} labelClass={compact ? 'max-sm:sr-only' : undefined} />
       {/if}
     </div>
   </PromptInput.Toolbar>
@@ -381,19 +326,19 @@
       </Dialog.Header>
 
       <PromptInput.Root class="mt-2 flex min-h-0 w-full flex-1 flex-col shadow-none" onSubmit={submitAndCloseFullscreen}>
-        {#if uploads}<UploadAttachments bind:this={fullscreenUploadPicker} draft={uploads} disabled={disabled || busy || sending} />{/if}
+        {#if controller.uploads}<UploadAttachments bind:this={fullscreenUploadPicker} draft={controller.uploads} disabled={disabled || busy || controller.sending} />{/if}
         <PromptInput.Body class="min-h-0 flex-1" onpastecapture={pasteFiles}>
-          <ChatCommandInput bind:this={fullscreenEditor} bind:value {commands} commandSide="bottom" onCommand={executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget autofocus onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-[52px] overscroll-contain pr-2" />
+          <ChatCommandInput bind:this={fullscreenEditor} bind:value {commands} commandSide="bottom" onCommand={controller.executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget autofocus onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-[52px] overscroll-contain pr-2" />
         </PromptInput.Body>
         {#if command?.disabledReason}<p role="status" class="pb-2 text-xs text-muted-foreground">{command.disabledReason}</p>{/if}
-        <PromptInput.Toolbar class={uploads ? 'shrink-0 pt-0' : 'shrink-0 justify-end pt-0'}>
+        <PromptInput.Toolbar class={controller.uploads ? 'shrink-0 pt-0' : 'shrink-0 justify-end pt-0'}>
           {@render uploadButton(fullscreenUploadPicker)}
-          {#if interruptMode && attachments.items.length === 0}
+          {#if interruptMode && controller.attachments.items.length === 0}
             <Button type="button" size="icon" disabled={interruptBusy} aria-label={$t('chat.interrupt')} title={$t('chat.interrupt')} onclick={() => interrupt(true)}>
               <StopIcon class="size-4" />
             </Button>
           {:else}
-            <PromptInput.Submit disabled={cannotSubmit} {busy} label={sentAwaitingCleanup ? $t('files.dismissSent') : commandAction?.label ?? submitLabel} icon={commandAction?.icon} startSession={startSession && !command} />
+            <PromptInput.Submit disabled={controller.cannotSubmit} {busy} label={controller.sentAwaitingCleanup ? $t('files.dismissSent') : commandAction?.label ?? submitLabel} icon={commandAction?.icon} startSession={startSession && !command} />
           {/if}
         </PromptInput.Toolbar>
       </PromptInput.Root>

@@ -26,7 +26,7 @@
   <div class="mb-1.5 flex h-8 items-center gap-2 rounded-lg bg-muted pr-1 pl-2.5 text-[13px] text-muted-foreground" title={`${speaker}: ${text}`} data-bot-pending-quote>
     {#if image}<QuoteThumbnail sessionId={image.sessionId} path={image.path} class="size-5" />{:else if quote.kind === 'file'}<FileIcon class="size-3.5 shrink-0" />{:else}<QuotesIcon class="size-3.5 shrink-0 opacity-70" />{/if}
     <span class="min-w-0 flex-1 truncate">{summary}</span>
-    <button type="button" class="grid size-6 shrink-0 place-items-center rounded-md outline-none hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring" aria-label={$t('bots.removeQuote', { text })} title={$t('common.remove')} onclick={onremove}>
+    <button type="button" class="grid size-6 shrink-0 place-items-center rounded-md outline-none hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring" aria-label={$t('bots.removeQuote', { text })} title={$t('common.remove')} onmousedown={event=>event.preventDefault()} onclick={onremove}>
       <XIcon class="size-3" />
     </button>
   </div>

@@ -406,3 +406,40 @@ body {
     }
   }
 }
+
+.mobile-body:has(.mobile-bot-chat) {
+  padding-top: 0;
+}
+.mobile-bot-chat [role="alert"]:first-child {
+  margin-top: var(--mobile-header-h);
+}
+.mobile-bot-chat [role="log"] > [aria-hidden="true"]:first-child {
+  height: var(--mobile-header-h);
+}
+.mobile-bot-chat :is([data-shared-file], [data-shared-files]) {
+  max-width: min(100%, 260px);
+}
+.mobile-bot-chat [data-bot-pending-quote] {
+  min-height: 44px;
+  background: var(--glass-strong);
+}
+.mobile-bot-chat button,
+.mobile-bot-screen button,
+[data-mobile-bot-sheet] button {
+  min-width: 44px;
+  min-height: 44px;
+}
+.mobile-bot-chat table {
+  display: block;
+  overflow-x: auto;
+}
+.mobile-chrome:has(+ main .mobile-bot-chat) {
+  pointer-events: none;
+}
+.mobile-chrome:has(+ main .mobile-bot-chat) button {
+  pointer-events: auto;
+}
+
+body:has([data-mobile-bot-sheet]) [data-sonner-toast] button {
+  pointer-events: auto;
+}
