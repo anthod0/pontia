@@ -11,9 +11,6 @@ pub enum Error {
     #[error(transparent)]
     Json(#[from] serde_json::Error),
 
-    #[error(transparent)]
-    TomlSerialization(#[from] toml::ser::Error),
-
     #[error("invalid Workflow definition: {0}")]
     InvalidDefinition(String),
 

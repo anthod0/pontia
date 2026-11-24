@@ -48,6 +48,8 @@ async fn unsubmitted_failure_facts_fail_once_cleanup_once_and_never_start_a_chil
         events.publish("session_root", event_type).await;
         wait_for_state(&repository, "wf_failure", "failed").await;
 
+        let report = crate::fixture::wait_for_report(&pool, "wf_failure", "workflow.failed").await;
+        assert!(report.contains(expected_message) && report.contains("wf_failure_root"));
         let failure_message =
             assert_transition(&repository, "wf_failure", "failed", "workflow.failed")
                 .await

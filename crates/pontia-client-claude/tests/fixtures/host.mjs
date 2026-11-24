@@ -256,14 +256,10 @@ if (process.argv[2] === "history") {
           }),
         });
       }
-      if (active.text === "read-workflow-environment") {
+      if (active.text === "read-context") {
         record({
-          method: "workflow_environment",
-          value: execFileSync(
-            "sh",
-            ["-c", 'printf "%s\\n%s" "$PONTIA_WORKFLOW_ID" "$PONTIA_WORKFLOW_PATCH_ID"'],
-            { encoding: "utf8" },
-          ).split("\n"),
+          method: "context",
+          value: execFileSync("sh", ["-c", 'printf "%s" "$TEST_CONTEXT"'], { encoding: "utf8" }),
         });
       }
       active.reply = randomUUID();

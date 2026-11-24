@@ -45,7 +45,7 @@ async fn workflow_run_rejects_unsupported_node_types_before_creation() {
     let (status, body) = post_run(
         &app,
         json!({
-            "workflow_id": "wf_unsupported_type",
+            "session_id":"sess_http_submit", "runtime_id":"rtinst_http_submit", "workflow_id": "wf_unsupported_type",
             "title": "Unsupported node",
             "cwd": app.workspace().path().display().to_string(),
             "nodes": [{
@@ -86,7 +86,7 @@ async fn workflow_run_rejects_duplicate_output_owners_with_an_actionable_error()
     let (status, body) = post_run(
         &app,
         json!({
-            "workflow_id": "wf_duplicate_outputs",
+            "session_id":"sess_http_submit", "runtime_id":"rtinst_http_submit", "workflow_id": "wf_duplicate_outputs",
             "title": "Duplicate outputs",
             "cwd": app.workspace().path().display().to_string(),
             "nodes": [
@@ -124,12 +124,13 @@ async fn workflow_run_rejects_duplicate_output_owners_with_an_actionable_error()
 #[tokio::test]
 async fn workflow_run_creates_and_starts_a_linear_agent_workflow() {
     let app = TestApp::builder().pi_runtime_stub(true).build().await;
+    let _peer = super::workflow_submission::seed_running_workflow(&app).await;
     let cwd = app.workspace().path().display().to_string();
 
     let (status, body) = post_run(
         &app,
         json!({
-            "workflow_id": "wf_http_run",
+            "session_id":"sess_http_submit", "runtime_id":"rtinst_http_submit", "workflow_id": "wf_http_run",
             "title": "HTTP Workflow run",
             "cwd": cwd,
             "handoffs": [{"name": "requirements.md", "content": "Build it.\n"}],
@@ -210,23 +211,7 @@ async fn workflow_run_creates_and_starts_a_linear_agent_workflow() {
             .expect("read initial handoff"),
         "Build it.\n"
     );
-    let definition = fs::read_to_string(workflow_dir.join("workflow.toml"))
-        .expect("read durable Workflow definition");
-    assert!(definition.contains("workflow_id = \"wf_http_run\""));
-    assert!(definition.contains("revision = 1"));
-    assert!(definition.contains("title = \"HTTP Workflow run\""));
-    assert!(definition.contains(&format!("cwd = {cwd:?}")));
-    assert!(definition.contains("source = \"handoff/requirements.md\""));
-    assert!(definition.contains("type = \"agent\""));
-    assert!(definition.contains("phase = \"Discovery\""));
-    for node in &nodes {
-        assert!(
-            definition.contains(&format!("id = {:?}", node.node_id)),
-            "durable definition must contain accepted Node identity {}",
-            node.node_id
-        );
-    }
-    assert!(!workflow_dir.join(".workflow.toml.tmp").exists());
+    assert_eq!(workflow.initiator_session_id, "sess_http_submit");
 }
 
 #[tokio::test]
@@ -248,7 +233,7 @@ async fn workflow_run_requires_a_valid_phase() {
         let (status, body) = post_run(
             &app,
             json!({
-                "workflow_id": workflow_id,
+                "session_id":"sess_http_submit", "runtime_id":"rtinst_http_submit", "workflow_id": workflow_id,
                 "title": "Invalid phase",
                 "cwd": app.workspace().path().display().to_string(),
                 "nodes": [{
@@ -279,7 +264,7 @@ async fn workflow_run_rejects_a_missing_phase_during_json_decoding() {
     let (status, body) = post_run(
         &app,
         json!({
-            "workflow_id": "wf_missing_phase",
+            "session_id":"sess_http_submit", "runtime_id":"rtinst_http_submit", "workflow_id": "wf_missing_phase",
             "title": "Missing phase",
             "cwd": app.workspace().path().display().to_string(),
             "nodes": [{
@@ -329,8 +314,9 @@ async fn workflow_resolves_profile_launch_settings_and_pins_instructions() {
     assert_eq!(launch.client_type, "codex");
     assert_eq!(launch.model.as_deref(), Some("review-model"));
     assert_eq!(launch.metadata, json!({}));
+    let _origin = super::workflow_submission::seed_running_workflow(&app).await;
     let (status, body) = post_run(&app, json!({
-        "workflow_id":"wf_profile", "title":"Review", "cwd":app.workspace().path(),
+        "session_id":"sess_http_submit", "runtime_id":"rtinst_http_submit", "workflow_id":"wf_profile", "title":"Review", "cwd":app.workspace().path(),
         "nodes":[{"type":"agent", "phase":"Review", "title":"Reviewer", "instructions":"Review the files",
             "inputs":[], "output":"review.md", "execution_profile_id":"reviewer"}]
     })).await;
@@ -412,8 +398,9 @@ async fn workflow_profiles_without_launch_defaults_use_the_default_client() {
 #[tokio::test]
 async fn workflow_missing_profile_fails_node_activation_with_configuration_error() {
     let app = TestApp::new().await;
+    let _origin = super::workflow_submission::seed_running_workflow(&app).await;
     let (status, body) = post_run(&app, json!({
-        "workflow_id":"wf_missing_profile", "title":"Missing Profile", "cwd":app.workspace().path(),
+        "session_id":"sess_http_submit", "runtime_id":"rtinst_http_submit", "workflow_id":"wf_missing_profile", "title":"Missing Profile", "cwd":app.workspace().path(),
         "nodes":[{"type":"agent", "phase":"Review", "title":"Reviewer", "instructions":"Review the files",
             "inputs":[], "output":"review.md", "execution_profile_id":"missing"}]
     })).await;
@@ -459,4 +446,25 @@ async fn workflow_rejects_removed_profile_version_field() {
             "inputs":[], "output":"review.md", "execution_profile_id":"reviewer", "execution_profile_version":"1"}]
     })).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn workflow_run_requires_the_current_session_runtime() {
+    let app = TestApp::new().await;
+    let _origin = super::workflow_submission::seed_running_workflow(&app).await;
+    let mut request = json!({"workflow_id":"wf_denied","title":"Denied","cwd":app.workspace().path(),
+        "nodes":[{"type":"agent","phase":"Build","title":"Build","instructions":"Work","output":"out.md"}]});
+    assert_eq!(
+        post_run(&app, request.clone()).await.0,
+        StatusCode::BAD_REQUEST
+    );
+    request["session_id"] = json!("sess_http_submit");
+    request["runtime_id"] = json!("stale");
+    assert!(post_run(&app, request).await.0.is_client_error());
+    assert!(
+        !app.pontia_home()
+            .path()
+            .join("workflows/wf_denied")
+            .exists()
+    );
 }

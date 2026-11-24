@@ -16,7 +16,7 @@ use pontia_storage_sqlite::{
 };
 use pontia_workflow::{
     AgentEventSubscriber, GracefulExitRequester, SessionCreator, SubmitWorkflowNodeRequest,
-    TurnInterruptionRequester, WorkflowCoordinator, WorkflowScheduler,
+    WorkflowCoordinator, WorkflowScheduler,
 };
 use serde_json::json;
 use tokio::sync::broadcast;
@@ -142,17 +142,6 @@ impl GracefulExitRequester for SharedBackendExitRequester {
     }
 }
 
-impl TurnInterruptionRequester for RecordingExitRequester {
-    async fn request_turn_interruption(
-        &self,
-        _session_id: &str,
-        _turn_id: &str,
-        _runtime_id: &str,
-    ) -> pontia_workflow::Result<()> {
-        Ok(())
-    }
-}
-
 #[derive(Clone)]
 struct TestAgentEvents {
     pool: sqlx::SqlitePool,
@@ -245,6 +234,7 @@ async fn seed_running_single_node(
 ) {
     repository
         .create_workflow(CreateWorkflowRecord {
+            initiator_session_id: "origin".into(),
             workflow_id: workflow_id.to_string(),
             title: "Single node workflow".to_string(),
             cwd: "/workspace/project".to_string(),

@@ -3,15 +3,13 @@ use uuid::Uuid;
 
 use super::{AgentTerminal, WorkflowCoordinator};
 use crate::{
-    AgentEventSubscriber, GracefulExitRequester, Result, SessionCreator, TurnInterruptionRequester,
-    activation::activate_node,
+    AgentEventSubscriber, GracefulExitRequester, Result, SessionCreator, activation::activate_node,
 };
 
-impl<S, X, I, B> WorkflowCoordinator<S, X, I, B>
+impl<S, X, B> WorkflowCoordinator<S, X, B>
 where
     S: SessionCreator + Send + Sync + 'static,
     X: GracefulExitRequester + Send + Sync + 'static,
-    I: TurnInterruptionRequester + Send + Sync + 'static,
     B: AgentEventSubscriber + Send + Sync + 'static,
 {
     async fn reconcile_unsubmitted(
@@ -93,14 +91,10 @@ where
         };
         let runtime_id = event.runtime_id.clone();
         if terminal == AgentTerminal::TurnInterrupted
-            && (self
+            && self
                 .repository
                 .terminal_event_precedes_latest_resume(workflow_id, &event.event_id)
                 .await?
-                || self
-                    .repository
-                    .terminal_event_is_resolved_patch_interruption(workflow_id, &event.event_id)
-                    .await?)
         {
             return Ok(());
         }
@@ -136,7 +130,12 @@ where
                     "graceful exit request failed for Workflow Session {session_id}: {error}"
                 );
                 self.repository
-                    .fail_workflow(workflow_id, &Uuid::now_v7().to_string(), &failure_message)
+                    .fail_workflow(
+                        workflow_id,
+                        &node.node_id,
+                        &Uuid::now_v7().to_string(),
+                        &failure_message,
+                    )
                     .await?;
             }
             return Ok(());
@@ -173,6 +172,7 @@ where
             self.repository
                 .fail_workflow(
                     workflow_id,
+                    &downstream.node_id,
                     &Uuid::now_v7().to_string(),
                     &failure.failure_message,
                 )

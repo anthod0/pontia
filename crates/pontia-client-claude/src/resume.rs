@@ -76,37 +76,10 @@ impl Adapter {
             state: Default::default(),
             connection: Default::default(),
         });
-        // Restore the existing Workflow context without persisting secrets or an
-        // arbitrary environment snapshot in the binding.
-        let workflow: Option<String> =
-            sqlx::query_scalar("SELECT workflow_id FROM workflow_nodes WHERE session_id=?")
-                .bind(&target.session_id)
-                .fetch_optional(&events.db())
-                .await?;
-        let mut environment = workflow
-            .map(|id| BTreeMap::from([("PONTIA_WORKFLOW_ID".into(), id)]))
-            .unwrap_or_default();
-        let replanner: Option<(String, String)> = sqlx::query_as(
-            "SELECT json_extract(metadata, '$.workflow_id'),
-                    json_extract(metadata, '$.workflow_patch_id')
-             FROM sessions WHERE session_id = ?
-               AND json_extract(metadata, '$.role') = 'workflow_replanner'",
-        )
-        .bind(&target.session_id)
-        .fetch_optional(&events.db())
-        .await?;
-        if let Some((workflow_id, patch_id)) = replanner {
-            environment.extend([
-                ("PONTIA_WORKFLOW_ID".into(), workflow_id),
-                ("PONTIA_WORKFLOW_PATCH_ID".into(), patch_id),
-            ]);
-        }
-        let effort: Option<String> = sqlx::query_scalar(
-            "SELECT json_extract(metadata, '$.reasoning_effort') FROM sessions WHERE session_id=?",
-        )
-        .bind(&target.session_id)
-        .fetch_one(&events.db())
-        .await?;
+        let (environment, effort): (String, Option<String>) = sqlx::query_as(
+            "SELECT runtime_environment, json_extract(metadata, '$.reasoning_effort') FROM sessions WHERE session_id=?"
+        ).bind(&target.session_id).fetch_one(&events.db()).await?;
+        let environment: BTreeMap<String, String> = serde_json::from_str(&environment)?;
         peers.insert(peer.session.clone(), peer.clone());
         drop(peers);
         peer.start(&events, root, &script, &environment, effort.as_deref())

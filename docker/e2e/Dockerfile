@@ -64,10 +64,13 @@ COPY Cargo.toml Cargo.lock VERSION ./
 COPY crates ./crates
 COPY scripts/build-dashboard-wasm ./scripts/build-dashboard-wasm
 RUN rustup target add wasm32-unknown-unknown
+# The target cache spans checkouts. Refresh migration timestamps so Cargo
+# re-embeds the current schema even when the cached artifact is newer.
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/src/target \
-    cargo build --locked --release -p pontia -p pontiad -p pontia-edge \
+    touch crates/pontia-storage-sqlite/migrations/*.sql \
+    && cargo build --locked --release -p pontia -p pontiad -p pontia-edge \
     && mkdir -p /out \
     && cp target/release/pontia target/release/pontiad target/release/pontia-edge /out/ \
     && bash scripts/build-dashboard-wasm --install-bindgen

@@ -1,7 +1,7 @@
 use std::future::Future;
 
 use pontia_agent_control::{
-    AgentControl, AgentEventBroker, CreateSessionRequest, SessionCommandService, TurnCommandService,
+    AgentControl, AgentEventBroker, CreateSessionRequest, SessionCommandService,
 };
 use pontia_core::domain::DomainEvent;
 
@@ -22,13 +22,6 @@ pub trait SessionCreator {
     ) -> impl Future<Output = Result<ProfileSessionConfig>> + Send;
 
     fn default_client_type(&self) -> Result<String>;
-    fn find_session_by_ownership(
-        &self,
-        _ownership: &pontia_agent_control::SessionOwnership,
-    ) -> impl Future<Output = Result<Option<String>>> + Send {
-        async { Ok(None) }
-    }
-
     fn create_session(
         &self,
         request: CreateSessionRequest,
@@ -62,13 +55,6 @@ impl SessionCreator for AgentControl {
     fn default_client_type(&self) -> Result<String> {
         Ok(self.session_commands().default_client_type()?.to_string())
     }
-    async fn find_session_by_ownership(
-        &self,
-        ownership: &pontia_agent_control::SessionOwnership,
-    ) -> Result<Option<String>> {
-        Ok(self.queries().find_session_by_ownership(ownership).await?)
-    }
-
     async fn create_session(&self, request: CreateSessionRequest) -> Result<String> {
         let outcome = self.session_commands().create_session(request).await?;
         outcome
@@ -117,28 +103,6 @@ pub trait GracefulExitRequester: Sync {
             })?;
             self.request_graceful_exit(session_id, runtime_id).await
         }
-    }
-}
-
-pub trait TurnInterruptionRequester {
-    fn request_turn_interruption(
-        &self,
-        session_id: &str,
-        turn_id: &str,
-        runtime_id: &str,
-    ) -> impl Future<Output = Result<()>> + Send;
-}
-
-impl TurnInterruptionRequester for TurnCommandService {
-    async fn request_turn_interruption(
-        &self,
-        session_id: &str,
-        turn_id: &str,
-        runtime_id: &str,
-    ) -> Result<()> {
-        self.interrupt_turn_for_runtime(session_id, turn_id, runtime_id)
-            .await?;
-        Ok(())
     }
 }
 

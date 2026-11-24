@@ -195,46 +195,38 @@ async fn replayed_terminal_report_compares_only_persisted_claude_evidence() {
 }
 
 #[tokio::test]
-async fn replanner_commands_keep_the_original_workflow_and_patch_after_resume() {
+async fn commands_keep_their_session_environment_after_resume() {
     let h = Harness::new().await;
     let mut sessions = Vec::new();
-    for patch in ["patch_original", "patch_later"] {
+    for context in ["first", "second"] {
         let mut request: CreateSessionRequest = serde_json::from_value(json!({
             "client_type": "claude-agent", "workspace": h.root.path(),
-            "role": "workflow_replanner",
-            "metadata": {
-                "role": "workflow_replanner", "workflow_id": "wf_replan",
-                "workflow_patch_id": patch,
-                "workflow_replanner_creation_token": patch
-            },
-            "initial_task": {"input": "read-workflow-environment"}
+            "initial_task": {"input": "read-context"}
         }))
         .unwrap();
-        request.runtime_environment = [
-            ("PONTIA_WORKFLOW_ID".into(), "wf_replan".into()),
-            ("PONTIA_WORKFLOW_PATCH_ID".into(), patch.into()),
-        ]
-        .into();
+        request
+            .runtime_environment
+            .insert("TEST_CONTEXT".into(), context.into());
         let created = h
             .app
             .session_commands()
             .create_session(request)
             .await
             .unwrap();
-        sessions.push((created.session_id().unwrap().to_owned(), patch));
+        sessions.push((created.session_id().unwrap().to_owned(), context));
     }
     for number in 1..=2 {
-        for (session, patch) in &sessions {
+        for (session, context) in &sessions {
             h.gate(session, number, "start");
             h.gate(session, number, "finish");
             h.wait_states(session, &vec!["completed"; number]).await;
             let values: Vec<_> = h
                 .wire(session)
                 .into_iter()
-                .filter(|frame| frame["method"] == "workflow_environment")
+                .filter(|frame| frame["method"] == "context")
                 .map(|frame| frame["value"].clone())
                 .collect();
-            assert_eq!(values, vec![json!(["wf_replan", patch]); number]);
+            assert_eq!(values, vec![json!(context); number]);
             h.app
                 .session_commands()
                 .terminate_session(session)
@@ -243,7 +235,7 @@ async fn replanner_commands_keep_the_original_workflow_and_patch_after_resume() 
         }
         if number == 1 {
             for (session, _) in &sessions {
-                h.resume_input(session, "read-workflow-environment").await;
+                h.resume_input(session, "read-context").await;
             }
         }
     }

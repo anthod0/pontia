@@ -89,14 +89,11 @@ pontia completions powershell | Out-String | Invoke-Expression
 
 | 命令 | 上下文 | 用途 |
 | --- | --- | --- |
-| `pontia workflow run FILE` | 任意本地 shell | 解析 TOML 定义，并通过本地 API 启动 Workflow |
-| `pontia workflow show [WORKFLOW_ID]` | 任意本地 shell；在受管理的 Node 内 ID 可省略 | 打印精简的 Workflow、当前 Node、输入、输出和 Patch 上下文 |
-| `pontia workflow submit` | 当前受管理的 Agent Node 窗格 | 声明该 Node 的输出已就绪 |
-| `pontia workflow patch request` | 当前受管理的 Agent Node 窗格 | 报告阻塞性问题并开始重新规划 |
-| `pontia workflow patch apply` | 当前 Re-planner 窗格 | 接受候选定义作为新修订版本 |
-| `pontia workflow patch block` | 当前 Re-planner 窗格 | 结束该 Patch，不应用候选定义 |
-
-窗格范围的命令需在当前 Agent Node 或 Re-planner 的、由 Pontia 管理的 `tmux` 窗格中运行。
+| `pontia workflow run FILE` | Pontia 会话 | 解析 TOML 定义，并通过本地 API 启动 Workflow |
+| `pontia workflow show [WORKFLOW_ID]` | 任意本地 shell；在受管理的 Node 内 ID 可省略 | 查看进度、发起会话、当前节点及其输入与输出 |
+| `pontia workflow submit` | 当前 Agent Node 会话 | 声明该 Node 的输出已就绪 |
+| `pontia workflow terminate` | 当前 Agent Node 会话 | 将阻塞原因发送给发起会话 |
+| `pontia workflow retry ID FAILURE_EVENT_ID` | Pontia 会话 | 在同一节点会话中重试指定的失败 |
 
 ## Cloud 登录与远程访问
 

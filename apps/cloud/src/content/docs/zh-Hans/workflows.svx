@@ -44,7 +44,7 @@ output = "result.md"
 
 ## 运行和查看
 
-在 `pontiad` 正常运行时启动 Workflow：
+在 `pontiad` 运行时，从 Pontia 会话中启动 Workflow。
 
 ```sh
 pontia workflow run ./workflow.toml
@@ -62,7 +62,7 @@ pontia workflow show wf_...
 
 ## 完成 Agent Node
 
-将完整结果写入 Pontia 提供的输出文件路径，然后在该 Agent Node 的托管 `tmux` 窗格中提交：
+将完整结果写入 Pontia 提供的输出文件路径，然后在该 Agent Node 的会话中提交：
 
 ```sh
 pontia workflow submit
@@ -74,21 +74,10 @@ pontia workflow submit
 
 在 Workflow 详情页中暂停运行中的 Workflow，或恢复已暂停的 Workflow。暂停时，如果支持，会请求中断正在进行的当前 Turn。恢复已中断的当前 Session 时，会先发送一条继续消息，然后再继续调度。
 
-当失败的 Workflow 可恢复时，**Retry** 会继续同一个 Agent Node 的对话。之前已提交的 Node 保持完成状态，现有的 Workspace 更改保持不变，未提交的输出会被归档。恢复中的 Node 会审查现有更改，并提交一份新的完整输出。
+当失败的 Workflow 可恢复时，`pontia workflow retry ID FAILURE_EVENT_ID` 会继续同一个 Agent Node 的对话。之前已提交的 Node 保持完成状态，现有的 Workspace 更改保持不变，未提交的输出会被归档。恢复中的 Node 会审查现有更改，并提交一份新的完整输出。
 
-## 请求重新规划
+## 报告阻塞原因
 
-如果 Agent Node 被意外问题阻塞，它会写入所要求的问题报告并运行：
+将原因写入节点指令指定的 `termination.md`，运行 `pontia workflow terminate`，成功后停止工作。Pontia 会把原因投递给发起会话，命令本身不改变 Workflow 状态。
 
-```sh
-pontia workflow patch request
-```
-
-Pontia 会创建一个专用的 Re-planner Session。Re-planner 查看 `pontia workflow show`，编辑提供的候选定义，记录决定，并以以下命令之一结束：
-
-```sh
-pontia workflow patch apply
-pontia workflow patch block
-```
-
-应用的 Workflow Patch 会创建新的图修订版本，同时保留现有 Node 的身份和执行历史。你可以在 Dashboard 中比较修订版本，并查看 Patch 请求、Re-planner Session、结果以及生成的修订版本。
+Workflow 失败、空闲或正常完成时，发起会话也会收到消息，其中包含 Workflow ID、Handoff 目录和已提交的输出路径。使用 `pontia workflow show ID` 查看进展，以及可恢复失败对应的重试命令。

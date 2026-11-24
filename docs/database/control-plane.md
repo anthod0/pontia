@@ -334,8 +334,7 @@ CREATE TABLE workflows (
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     started_at TEXT,
     completed_at TEXT
-, activating_node_id TEXT REFERENCES workflow_nodes(node_id), current_revision INTEGER NOT NULL DEFAULT 1
-    CHECK (current_revision >= 1), active_patch_id TEXT REFERENCES workflow_patches(patch_id), active_replanner_session_id TEXT);
+, activating_node_id TEXT REFERENCES workflow_nodes(node_id), initiator_session_id TEXT NOT NULL, last_report_sequence INTEGER NOT NULL DEFAULT 0);
 
 CREATE TABLE workflow_nodes (
   node_id TEXT PRIMARY KEY NOT NULL,
@@ -353,11 +352,6 @@ CREATE TABLE workflow_nodes (
   phase TEXT NOT NULL DEFAULT '',
   submitted_runtime_id TEXT,
   exit_request_started_at TEXT,
-  introduced_revision INTEGER NOT NULL DEFAULT 1 CHECK (introduced_revision >= 1),
-  retired_revision INTEGER CHECK (
-    retired_revision IS NULL
-    OR retired_revision > introduced_revision
-  ),
   FOREIGN KEY (workflow_id) REFERENCES workflows (workflow_id),
   FOREIGN KEY (parent_node_id) REFERENCES workflow_nodes (node_id)
 );
@@ -372,36 +366,6 @@ CREATE TABLE workflow_events (
   FOREIGN KEY (workflow_id) REFERENCES workflows (workflow_id),
   UNIQUE (workflow_id, sequence)
 );
-
-CREATE TABLE workflow_patches (
-    patch_id TEXT PRIMARY KEY NOT NULL,
-    workflow_id TEXT NOT NULL REFERENCES workflows(workflow_id),
-    requesting_node_id TEXT NOT NULL REFERENCES workflow_nodes(node_id),
-    requesting_session_id TEXT NOT NULL,
-    requesting_turn_id TEXT NOT NULL,
-    requesting_runtime_id TEXT NOT NULL,
-    replanner_session_id TEXT,
-    replanner_turn_id TEXT,
-    replanner_runtime_id TEXT,
-    base_revision INTEGER NOT NULL CHECK (base_revision >= 1),
-    result_revision INTEGER CHECK (result_revision IS NULL OR result_revision >= base_revision),
-    state TEXT NOT NULL CHECK (state IN ('requested', 'planning', 'applied', 'rejected', 'blocked')),
-    request_document_ref TEXT NOT NULL,
-    request_size_bytes INTEGER NOT NULL CHECK (request_size_bytes >= 0),
-    decision_document_ref TEXT,
-    reason_document_ref TEXT,
-    blocked_draft_ref TEXT,
-    interruption_attempted_at TEXT,
-    interruption_requested_at TEXT,
-    replanning_unlocked_at TEXT,
-    continuation_message_id TEXT,
-    continuation_queued_at TEXT,
-    requested_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    planning_at TEXT,
-    resolved_at TEXT,
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-, replanner_exit_requested_at TEXT);
 
 CREATE TABLE native_turn_bindings (
   session_id TEXT NOT NULL REFERENCES sessions (session_id) ON DELETE CASCADE,
@@ -533,22 +497,6 @@ WHERE
 
 CREATE INDEX idx_workflow_events_workflow_sequence ON workflow_events (workflow_id, sequence);
 
-CREATE INDEX idx_workflow_nodes_workflow_revision ON workflow_nodes (
-  workflow_id,
-  introduced_revision,
-  retired_revision
-);
-
-CREATE UNIQUE INDEX idx_workflow_patches_one_active ON workflow_patches (workflow_id)
-WHERE
-  state IN ('requested', 'planning');
-
-CREATE UNIQUE INDEX idx_workflow_patches_replanner_session ON workflow_patches (replanner_session_id)
-WHERE
-  replanner_session_id IS NOT NULL;
-
-CREATE INDEX idx_workflow_patches_workflow_requested ON workflow_patches (workflow_id, requested_at, patch_id);
-
 CREATE UNIQUE INDEX idx_inbox_messages_retry_of ON inbox_messages (retry_of_message_id)
 WHERE
   retry_of_message_id IS NOT NULL;
@@ -593,7 +541,6 @@ WHEN OLD.workflow_id IS NOT NEW.workflow_id
   OR OLD.inputs IS NOT NEW.inputs
   OR OLD.output IS NOT NEW.output
   OR OLD.execution_profile_id IS NOT NEW.execution_profile_id
-  OR OLD.introduced_revision IS NOT NEW.introduced_revision
 BEGIN
     SELECT RAISE(ABORT, 'accepted workflow node definitions are immutable');
 END;

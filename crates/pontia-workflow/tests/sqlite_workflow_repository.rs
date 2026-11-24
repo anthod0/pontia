@@ -28,6 +28,7 @@ async fn repository_persists_workflow_nodes_bindings_submissions_and_ordered_eve
     .expect("create associated session");
     repository
         .create_workflow(CreateWorkflowRecord {
+            initiator_session_id: "origin".into(),
             workflow_id: "wf_1".to_string(),
             title: "Draft release notes".to_string(),
             cwd: "/work/project".to_string(),
@@ -93,14 +94,12 @@ async fn repository_persists_workflow_nodes_bindings_submissions_and_ordered_eve
     assert_eq!(workflow.title, "Draft release notes");
     assert_eq!(workflow.cwd, "/work/project");
     assert_eq!(workflow.state, "running");
-    assert_eq!(workflow.current_revision, 1);
+    assert_eq!(workflow.initiator_session_id, "origin");
 
     let nodes = repository.list_nodes("wf_1").await.expect("list nodes");
     assert_eq!(nodes.len(), 2);
     assert_eq!(nodes[0].node_id, "node_1");
     assert_eq!(nodes[0].phase, "Drafting");
-    assert_eq!(nodes[0].introduced_revision, 1);
-    assert_eq!(nodes[0].retired_revision, None);
     assert_eq!(nodes[0].inputs, r#"["brief.md","changes.md"]"#);
     assert_eq!(nodes[0].session_id.as_deref(), Some("session_1"));
     assert!(nodes[0].submitted_at.is_some());
@@ -153,6 +152,7 @@ async fn starting_a_pending_workflow_atomically_updates_state_and_appends_starte
     );
     repository
         .create_workflow(CreateWorkflowRecord {
+            initiator_session_id: "origin".into(),
             workflow_id: "wf_start".to_string(),
             title: "Start me".to_string(),
             cwd: "/work/project".to_string(),
@@ -198,6 +198,7 @@ async fn starting_a_pending_workflow_atomically_updates_state_and_appends_starte
 
     repository
         .create_workflow(CreateWorkflowRecord {
+            initiator_session_id: "origin".into(),
             workflow_id: "wf_rollback".to_string(),
             title: "Rollback me".to_string(),
             cwd: "/work/project".to_string(),
@@ -228,6 +229,7 @@ async fn completing_a_running_workflow_atomically_updates_state_and_appends_comp
     );
     repository
         .create_workflow(CreateWorkflowRecord {
+            initiator_session_id: "origin".into(),
             workflow_id: "wf_complete".to_string(),
             title: "Complete me".to_string(),
             cwd: "/work/project".to_string(),
@@ -262,6 +264,7 @@ async fn completing_a_running_workflow_atomically_updates_state_and_appends_comp
 
     repository
         .create_workflow(CreateWorkflowRecord {
+            initiator_session_id: "origin".into(),
             workflow_id: "wf_complete_rollback".to_string(),
             title: "Rollback completion".to_string(),
             cwd: "/work/project".to_string(),
@@ -296,6 +299,7 @@ async fn node_activation_claim_blocks_pause_until_the_session_is_bound() {
     );
     repository
         .create_workflow(CreateWorkflowRecord {
+            initiator_session_id: "origin".into(),
             workflow_id: "wf_activation_gate".to_string(),
             title: "Activation gate".to_string(),
             cwd: "/work/project".to_string(),

@@ -9,7 +9,7 @@ use pontia_core::error::{Error, Result};
 
 use super::RuntimeStartRequest;
 
-pub(super) const SESSION_ENVIRONMENT: &str = "PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG PONTIA_WORKFLOW_ID PONTIA_WORKFLOW_PATCH_ID";
+pub(super) const SESSION_ENVIRONMENT: &str = "PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG PONTIA_WORKFLOW_ID";
 
 pub(super) struct RuntimePaths<'a> {
     pub(super) log_path: &'a Path,
@@ -138,15 +138,9 @@ mod tests {
             handle: None,
             role: None,
             start_command: Some("test-agent --approve --session-id sess_resume_1".into()),
-            environment: [
-                ("PONTIA_WORKFLOW_ID".to_string(), "wf_123".to_string()),
-                (
-                    "PONTIA_WORKFLOW_PATCH_ID".to_string(),
-                    "patch_123".to_string(),
-                ),
-            ]
-            .into_iter()
-            .collect(),
+            environment: [("PONTIA_WORKFLOW_ID".to_string(), "wf_123".to_string())]
+                .into_iter()
+                .collect(),
         };
 
         write_launch_script(&script_path, tempdir.path(), &paths, &request, "launch_1")
@@ -160,9 +154,8 @@ mod tests {
         assert!(script.contains("sess_resume_1"), "script was:\n{script}");
         assert!(script.contains("export PONTIA_HOME="));
         assert!(script.contains("export PONTIA_WORKFLOW_ID='wf_123'"));
-        assert!(script.contains("export PONTIA_WORKFLOW_PATCH_ID='patch_123'"));
         assert!(script.contains(
-            "unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG PONTIA_WORKFLOW_ID PONTIA_WORKFLOW_PATCH_ID"
+            "unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG PONTIA_WORKFLOW_ID"
         ));
         for name in [
             "PONTIA_SESSION_ID",

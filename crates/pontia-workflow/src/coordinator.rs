@@ -1,20 +1,13 @@
-mod definition_file;
 mod node_execution;
-mod patch_request;
-mod patch_resolution;
 
 use std::{path::PathBuf, time::Duration};
 
 use crate::repository::SqliteWorkflowRepository;
-use pontia_agent_control::{
-    AgentEventBroker, InboxCommandService, SessionCommandService, TurnCommandService,
-};
+use pontia_agent_control::{AgentEventBroker, InboxCommandService, SessionCommandService};
 use pontia_core::domain::EventType;
 use tokio::sync::watch;
 
-use crate::{
-    AgentEventSubscriber, GracefulExitRequester, Result, SessionCreator, TurnInterruptionRequester,
-};
+use crate::{AgentEventSubscriber, GracefulExitRequester, Result, SessionCreator};
 
 const RECONCILIATION_INTERVAL: Duration = Duration::from_millis(250);
 
@@ -52,18 +45,17 @@ impl AgentTerminal {
 /// Realtime events only wake the coordinator. SQLite is reloaded before every
 /// transition so startup recovery, missed notifications, and repeated passes
 /// all follow the same path.
-pub struct WorkflowCoordinator<S, X, I, B> {
+pub struct WorkflowCoordinator<S, X, B> {
     repository: SqliteWorkflowRepository,
     sessions: S,
     exits: X,
-    interruptions: I,
     agent_events: B,
     inbox: std::sync::Arc<InboxCommandService>,
     pontia_home: PathBuf,
     recovery: crate::WorkflowRecoveryService,
 }
 
-impl<S> WorkflowCoordinator<S, SessionCommandService, TurnCommandService, AgentEventBroker>
+impl<S> WorkflowCoordinator<S, SessionCommandService, AgentEventBroker>
 where
     S: SessionCreator + Send + Sync + 'static,
 {
@@ -75,23 +67,14 @@ where
         pontia_home: PathBuf,
     ) -> Self {
         let exits = app.session_commands();
-        let interruptions = app.turn_commands();
-        Self::with_services_and_interruptions(
-            pool,
-            app,
-            sessions,
-            exits,
-            interruptions,
-            agent_events,
-            pontia_home,
-        )
+        Self::with_services(pool, app, sessions, exits, agent_events, pontia_home)
     }
 }
 
-impl<S, X, B> WorkflowCoordinator<S, X, X, B>
+impl<S, X, B> WorkflowCoordinator<S, X, B>
 where
     S: SessionCreator + Send + Sync + 'static,
-    X: GracefulExitRequester + TurnInterruptionRequester + Clone + Send + Sync + 'static,
+    X: GracefulExitRequester + Send + Sync + 'static,
     B: AgentEventSubscriber + Send + Sync + 'static,
 {
     pub fn with_services(
@@ -102,40 +85,11 @@ where
         agent_events: B,
         pontia_home: PathBuf,
     ) -> Self {
-        Self::with_services_and_interruptions(
-            pool,
-            app,
-            sessions,
-            exits.clone(),
-            exits,
-            agent_events,
-            pontia_home,
-        )
-    }
-}
-
-impl<S, X, I, B> WorkflowCoordinator<S, X, I, B>
-where
-    S: SessionCreator + Send + Sync + 'static,
-    X: GracefulExitRequester + Send + Sync + 'static,
-    I: TurnInterruptionRequester + Send + Sync + 'static,
-    B: AgentEventSubscriber + Send + Sync + 'static,
-{
-    pub fn with_services_and_interruptions(
-        pool: sqlx::SqlitePool,
-        app: &pontia_agent_control::AgentControl,
-        sessions: S,
-        exits: X,
-        interruptions: I,
-        agent_events: B,
-        pontia_home: PathBuf,
-    ) -> Self {
         Self {
             repository: SqliteWorkflowRepository::new(pool.clone(), app.queries()),
             inbox: app.inbox_commands(),
             sessions,
             exits,
-            interruptions,
             agent_events,
             pontia_home,
             recovery: crate::WorkflowRecoveryService::new(pool, app),
@@ -198,7 +152,52 @@ where
             if let Err(error) = self.reconcile(&workflow.workflow_id).await {
                 tracing::error!(workflow_id = %workflow.workflow_id, %error, "failed to reconcile Workflow");
             }
+            if let Err(error) = self.report_events(&workflow).await {
+                tracing::error!(workflow_id = %workflow.workflow_id, %error, "failed to queue Workflow report");
+            }
         }
+    }
+
+    async fn report_events(&self, workflow: &crate::models::WorkflowRow) -> Result<()> {
+        let id = &workflow.workflow_id;
+        let handoff = self.pontia_home.join("workflows").join(id).join("handoff");
+        for event in self.repository.pending_reports(id).await? {
+            let payload: serde_json::Value = serde_json::from_str(&event.payload)?;
+            let nodes = self.repository.list_nodes(id).await?;
+            let mut input = format!("Workflow {} ({id}): {}", workflow.title, event.event_type);
+            if let Some(node) = nodes
+                .iter()
+                .find(|node| Some(node.node_id.as_str()) == payload["node_id"].as_str())
+            {
+                input.push_str(&format!("\nNode: {} ({})", node.title, node.node_id));
+                if let Some(session) = &node.session_id {
+                    input.push_str(&format!("\nNode Session: {session}"));
+                }
+            }
+            if let Some(reason) = payload["reason"]
+                .as_str()
+                .or_else(|| payload["failure_message"].as_str())
+            {
+                input.push_str(&format!("\n{reason}"));
+            }
+            input.push_str(&format!("\nHandoff directory: {}", handoff.display()));
+            for node in nodes.iter().filter(|node| node.submitted_at.is_some()) {
+                input.push_str(&format!(
+                    "\nSubmitted output: {}",
+                    handoff.join(&node.output).display()
+                ));
+            }
+            input.push_str(&format!("\nInspect: pontia workflow show {id}"));
+            self.inbox.submit_message_once(&format!("workflow-report:{}",event.event_id), &workflow.initiator_session_id,
+                pontia_agent_control::SubmitInboxMessageRequest {
+                    input, delivery_policy:"after_idle".into(), branch_target_turn_id:None,
+                    metadata: serde_json::json!({"source":"workflow_report","workflow_id":id,"event_type":event.event_type,"event_id":event.event_id}),
+                }).await?;
+            self.repository
+                .mark_report_queued(id, event.sequence)
+                .await?;
+        }
+        Ok(())
     }
 
     pub async fn reconcile(&self, workflow_id: &str) -> Result<()> {
@@ -209,22 +208,9 @@ where
         let Some(workflow) = self.repository.get_workflow(workflow_id).await? else {
             return Ok(());
         };
-        if workflow.state == "replanning" {
-            return self.reconcile_patch_request(workflow_id).await;
-        }
-        if workflow.state == "blocked" {
-            self.reconcile_resolved_replanner(workflow_id).await?;
-            self.reconcile_definition_file(workflow_id).await?;
-            return Ok(());
-        }
         if workflow.state != "running" {
             return Ok(());
         }
-        if self.reconcile_patch_continuation(workflow_id).await? {
-            return Ok(());
-        }
-        self.reconcile_resolved_replanner(workflow_id).await?;
-        self.reconcile_definition_file(workflow_id).await?;
         self.reconcile_node_execution(workflow_id, &workflow).await
     }
 }

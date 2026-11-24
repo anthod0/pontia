@@ -5,7 +5,6 @@ use pontia_core::Result;
 // Follow-up Turn facts identify a canonical Turn, not a Runtime. Correlate them
 // only through its preceding client-confirmed start; never through today's
 // runtime binding or a terminal payload supplied outside that contract.
-// Keep this read model shared by selection and atomic Patch predicates.
 pub(crate) const WORKFLOW_TERMINAL_EVENTS: &str = r#"
 WITH workflow_terminal_events AS (
     SELECT e.event_id, e.session_id, e.turn_id, e.event_type, e.position AS event_order,

@@ -94,15 +94,9 @@ impl SqliteWorkflowRepository {
                WHERE EXISTS (
                    SELECT 1 FROM workflow_nodes AS n
                    WHERE n.workflow_id = ? AND n.session_id = e.session_id
-               ) OR EXISTS (
-                   SELECT 1 FROM workflow_patches AS p
-                   WHERE p.workflow_id = ?
-                     AND (p.requesting_session_id = e.session_id
-                          OR p.replanner_session_id = e.session_id)
                )
                ORDER BY e.position"#,
         )
-        .bind(workflow_id)
         .bind(workflow_id)
         .fetch_all(&self.pool)
         .await?)

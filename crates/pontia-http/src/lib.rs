@@ -176,16 +176,8 @@ fn external_api_router(state: HttpState) -> Router {
             post(api::submit_workflow_output),
         )
         .route(
-            "/api/v1/workflow/patches/request",
-            post(api::request_workflow_patch),
-        )
-        .route(
-            "/api/v1/workflow/patches/apply",
-            post(api::apply_workflow_patch),
-        )
-        .route(
-            "/api/v1/workflow/patches/block",
-            post(api::block_workflow_patch),
+            "/api/v1/workflow/terminate",
+            post(api::terminate_workflow_node),
         )
         .route(
             "/api/v1/agent-client-setup",
@@ -233,20 +225,8 @@ fn external_api_router(state: HttpState) -> Router {
             get(api::get_workflow_context),
         )
         .route(
-            "/api/v1/workflows/{workflow_id}/revisions/{revision}",
-            get(api::get_workflow_revision),
-        )
-        .route(
-            "/api/v1/workflows/{workflow_id}/patches",
-            get(api::list_workflow_patches),
-        )
-        .route(
             "/api/v1/workflows/{workflow_id}/timeline",
             get(api::get_workflow_timeline),
-        )
-        .route(
-            "/api/v1/workflows/{workflow_id}/documents",
-            get(api::get_workflow_document),
         )
         .route(
             "/api/v1/workflows/{workflow_id}/pause",

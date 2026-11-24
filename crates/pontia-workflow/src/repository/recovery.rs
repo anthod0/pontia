@@ -18,7 +18,6 @@ FROM workflows w
 JOIN workflow_events f ON f.workflow_id=w.workflow_id AND f.event_type='workflow.failed'
     AND f.sequence=(SELECT MAX(sequence) FROM workflow_events WHERE workflow_id=w.workflow_id AND event_type='workflow.failed')
 JOIN workflow_nodes n ON n.workflow_id=w.workflow_id AND n.submitted_at IS NULL AND n.session_id IS NOT NULL
-    AND n.introduced_revision<=w.current_revision AND (n.retired_revision IS NULL OR n.retired_revision>w.current_revision)
 JOIN workflow_session_snapshots s ON s.session_id=n.session_id
 LEFT JOIN workflow_recoveries previous ON previous.recovery_id=json_extract(f.payload,'$.recovery_id')
 JOIN workflow_agent_events e ON e.session_id=s.session_id AND e.event_type='session.exited'
@@ -35,10 +34,8 @@ WHERE s.has_agent_binding=1 AND w.workflow_id=? AND s.client_type IN (SELECT val
     AND (json_extract(f.payload,'$.node_id') IS NULL OR json_extract(f.payload,'$.node_id')=n.node_id)
     AND json_extract(e.payload,'$.runtime_id') IS NOT NULL
     AND NOT EXISTS (SELECT 1 FROM workflow_nodes child WHERE child.workflow_id=w.workflow_id
-        AND child.parent_node_id=n.node_id AND child.session_id IS NOT NULL
-        AND child.introduced_revision<=w.current_revision AND (child.retired_revision IS NULL OR child.retired_revision>w.current_revision))
+        AND child.parent_node_id=n.node_id AND child.session_id IS NOT NULL)
     AND NOT EXISTS (SELECT 1 FROM workflow_recoveries WHERE workflow_id=w.workflow_id AND state IN ('requested','preparing','dispatching'))
-    AND NOT EXISTS (SELECT 1 FROM workflow_patches WHERE workflow_id=w.workflow_id AND state IN ('requested','planning'))
     AND NOT EXISTS (SELECT 1 FROM workflow_inbox_snapshots i WHERE i.session_id=s.session_id AND
         (i.state IN ('pending','resuming','dispatching','unknown') OR (i.state='dispatched' AND i.turn_id IS NULL)))
 "#;

@@ -27,7 +27,6 @@ mod test_app_support;
 mod turn_submit;
 mod workflow_authentication;
 mod workflow_controls;
-mod workflow_patch_request;
 mod workflow_queries;
 mod workflow_run;
 mod workflow_submission;

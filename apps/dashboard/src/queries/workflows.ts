@@ -10,11 +10,6 @@ export function createWorkflowQueries(device: DeviceRuntime) {
     list: (limit: number) => [...workflowKeys.lists(), { limit }] as const,
     details: () => [...workflowKeys.all, "detail"] as const,
     detail: (workflowId: string) => [...workflowKeys.details(), workflowId] as const,
-    revision: (workflowId: string, revision: number | null) =>
-      [...workflowKeys.detail(workflowId), "revisions", revision] as const,
-    patches: (workflowId: string) => [...workflowKeys.detail(workflowId), "patches"] as const,
-    document: (workflowId: string, ref: string | null) =>
-      [...workflowKeys.detail(workflowId), "documents", { ref }] as const,
   };
 
   function workflowsOptions(limit: number) {
@@ -35,43 +30,6 @@ export function createWorkflowQueries(device: DeviceRuntime) {
     });
   }
 
-  function workflowRevisionOptions(workflowId: string, revision: number | null) {
-    return queryOptions({
-      queryKey: workflowKeys.revision(workflowId, revision),
-      enabled: revision !== null,
-      queryFn: ({ signal }) => {
-        if (revision === null) throw new Error("A workflow revision is required");
-        return device.api.getWorkflowRevision(workflowId, revision, { signal });
-      },
-      staleTime: Number.POSITIVE_INFINITY,
-    });
-  }
-
-  function workflowPatchesOptions(workflowId: string, enabled: boolean) {
-    return queryOptions({
-      queryKey: workflowKeys.patches(workflowId),
-      enabled,
-      queryFn: ({ signal }) => device.api.listWorkflowPatches(workflowId, { signal }),
-      select: (patches) =>
-        [...patches].sort(
-          (a, b) =>
-            Date.parse(b.requested_at) - Date.parse(a.requested_at) ||
-            b.patch_id.localeCompare(a.patch_id),
-        ),
-    });
-  }
-
-  function workflowDocumentOptions(workflowId: string, ref: string | null, enabled: boolean) {
-    return queryOptions({
-      queryKey: workflowKeys.document(workflowId, ref),
-      enabled: enabled && ref !== null,
-      queryFn: ({ signal }) => {
-        if (ref === null) throw new Error("A workflow document reference is required");
-        return device.api.getWorkflowDocument(workflowId, ref, { signal });
-      },
-    });
-  }
-
   function createWorkflowsQuery(limit: () => number = () => 50) {
     return createQuery(
       () => workflowsOptions(limit()),
@@ -86,34 +44,6 @@ export function createWorkflowQueries(device: DeviceRuntime) {
   ) {
     return createQuery(
       () => workflowOptions(workflowId(), enabled(), poll()),
-      () => device.queryClient,
-    );
-  }
-
-  function createWorkflowRevisionQuery(workflowId: () => string, revision: () => number | null) {
-    return createQuery(
-      () => workflowRevisionOptions(workflowId(), revision()),
-      () => device.queryClient,
-    );
-  }
-
-  function createWorkflowPatchesQuery(
-    workflowId: () => string,
-    enabled: () => boolean = () => true,
-  ) {
-    return createQuery(
-      () => workflowPatchesOptions(workflowId(), enabled()),
-      () => device.queryClient,
-    );
-  }
-
-  function createWorkflowDocumentQuery(
-    workflowId: () => string,
-    ref: () => string | null,
-    enabled: () => boolean,
-  ) {
-    return createQuery(
-      () => workflowDocumentOptions(workflowId(), ref(), enabled()),
       () => device.queryClient,
     );
   }
@@ -142,7 +72,6 @@ export function createWorkflowQueries(device: DeviceRuntime) {
       ...current,
       title: detail.title,
       state: detail.state,
-      current_revision: detail.current_revision,
       failure_message: detail.failure_message,
       agent_submitted_count: detail.agent_submitted_count,
       agent_total_count: detail.agent_total_count,
@@ -184,34 +113,15 @@ export function createWorkflowQueries(device: DeviceRuntime) {
     );
   }
 
-  function createRetryWorkflowMutation() {
-    return createMutation(
-      () => ({
-        mutationFn: ({
-          workflowId,
-          failureEventId,
-        }: {
-          workflowId: string;
-          failureEventId: string;
-        }) => device.api.retryWorkflow(workflowId, failureEventId),
-        onSuccess: applyWorkflowDetail,
-      }),
-      () => device.queryClient,
-    );
-  }
   return {
     workflowKeys,
     createWorkflowsQuery,
     createWorkflowQuery,
-    createWorkflowRevisionQuery,
-    createWorkflowPatchesQuery,
-    createWorkflowDocumentQuery,
     fetchWorkflows,
     fetchWorkflow,
     invalidateWorkflowLists,
     invalidateWorkflow,
     createPauseWorkflowMutation,
     createResumeWorkflowMutation,
-    createRetryWorkflowMutation,
   };
 }

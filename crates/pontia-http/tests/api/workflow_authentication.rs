@@ -9,12 +9,10 @@ use tower::ServiceExt;
 use super::support::http::json_response;
 use crate::common::test_app::TestApp;
 
-const COMMAND_PATHS: [&str; 5] = [
+const COMMAND_PATHS: [&str; 3] = [
     "/api/v1/workflows",
     "/api/v1/workflow/submissions",
-    "/api/v1/workflow/patches/request",
-    "/api/v1/workflow/patches/apply",
-    "/api/v1/workflow/patches/block",
+    "/api/v1/workflow/terminate",
 ];
 
 async fn post(state: AppState, path: &str, authorization: Option<&str>) -> (StatusCode, Value) {

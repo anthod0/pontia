@@ -44,7 +44,7 @@ output = "result.md"
 
 ## 実行して確認する
 
-`pontiad` が正常な状態で Workflow を開始します。
+`pontiad` の実行中に、Pontia Session から Workflow を開始します。
 
 ```sh
 pontia workflow run ./workflow.toml
@@ -62,7 +62,7 @@ Workflow が管理する Agent の Session 内では、`PONTIA_WORKFLOW_ID` が�
 
 ## Agent Node を完了する
 
-Pontia が指定した出力ファイルのパスに完全な結果を書き込み、Agent Node の管理対象の `tmux` ペインから提出します。
+Pontia が指定した出力ファイルのパスに完全な結果を書き込み、Agent Node の Session から提出します。
 
 ```sh
 pontia workflow submit
@@ -74,21 +74,10 @@ pontia workflow submit
 
 Workflow の詳細ページで、実行中の Workflow を一時停止したり、一時停止中の Workflow を再開したりできます。一時停止すると、対応している場合は処理中の現在の Turn の中断を要求します。中断された現在の Session を再開すると、スケジューリングが進む前に続行の指示が送信されます。
 
-失敗した Workflow が回復可能な場合、**Retry** は同じ Agent Node の会話を続けます。提出済みの以前の Node は完了したままで、既存の Workspace の変更もそのまま残り、未提出の出力はアーカイブされます。回復する Node は既存の変更を確認し、新しい完全な出力を提出します。
+失敗した Workflow が回復可能な場合、`pontia workflow retry ID FAILURE_EVENT_ID` は同じ Agent Node の会話を続けます。提出済みの以前の Node は完了したままで、既存の Workspace の変更もそのまま残り、未提出の出力はアーカイブされます。回復する Node は既存の変更を確認し、新しい完全な出力を提出します。
 
-## 再計画を要求する
+## 進行を妨げる問題を報告する
 
-Agent Node が予期しない問題で進められなくなった場合、要求された問題レポートを書き込み、次を実行します。
+Node の指示で指定された `termination.md` に理由を書き、`pontia workflow terminate` を実行します。成功したら作業を止めてください。理由は Workflow を開始した Session に届きます。この操作で Workflow の状態は変わりません。
 
-```sh
-pontia workflow patch request
-```
-
-Pontia は専用の Re-planner の Session を作成します。Re-planner は `pontia workflow show` で状況を確認し、提供された候補の定義を編集し、判断を記録して、次のいずれかで終了します。
-
-```sh
-pontia workflow patch apply
-pontia workflow patch block
-```
-
-Workflow の Patch を適用すると、既存の Node の識別情報と実行履歴を保ったまま、グラフの新しいリビジョンが作成されます。Dashboard では、リビジョンを比較し、Patch のリクエスト、Re-planner の Session、結果、生成されたリビジョンを確認できます。
+Workflow の失敗、アイドルへの移行、完了も開始元の Session に通知されます。通知には Workflow ID、Handoff ディレクトリ、提出済みの出力パスが含まれます。`pontia workflow show ID` で状況を確認できます。復旧可能な場合は再試行コマンドも表示されます。

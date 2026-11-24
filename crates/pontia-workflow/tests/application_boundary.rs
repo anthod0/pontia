@@ -127,10 +127,38 @@ async fn upgrade_preserves_owned_sessions_history_and_runtime_environment() {
         .unwrap(),
         "t"
     );
-    sqlx::query("DELETE FROM turns WHERE turn_id='t'")
-        .execute(&pool)
-        .await
-        .unwrap();
+    for migration in sqlx::migrate!("../pontia-storage-sqlite/migrations")
+        .iter()
+        .filter(|m| m.version > 39)
+    {
+        let mut tx = pool.begin().await.unwrap();
+        sqlx::raw_sql(&migration.sql)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+    }
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM workflows")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("SELECT session_id FROM sessions")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        "s"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("SELECT event_id FROM events WHERE event_id='event'")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        "event"
+    );
     assert!(
         sqlx::query("PRAGMA foreign_key_check")
             .fetch_all(&pool)
