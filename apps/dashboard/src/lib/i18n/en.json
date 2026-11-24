@@ -33,7 +33,7 @@
   "bots.delete": "Delete Bot",
   "bots.deleting": "Deleting…",
   "bots.deleteSection": "Delete this Bot",
-  "bots.deleteSectionDescription": "Permanently deletes this Bot and its chat history. Shared memories, USER.md, and Workspaces are kept.",
+  "bots.deleteSectionDescription": "Permanently deletes this Bot and its chat history.",
   "bots.deleteTitle": "Delete {name}?",
   "bots.deleteDescription": "This permanently deletes the Bot, its chat history, and its links to helpers, notifications, and Workspaces. It cannot be undone.",
   "bots.deleteKeeps": "Shared memories, USER.md, and Workspaces are kept. Helper Session history stays available.",
