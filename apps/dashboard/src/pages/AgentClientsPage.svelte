@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t, currentLocale } from '$lib/i18n';
+  import { t } from '$lib/i18n';
   import { useDeviceRuntime } from '../device/context';
   import { onMount } from 'svelte'
   import { toast } from 'svelte-sonner'
@@ -13,7 +13,6 @@
   import ClientIcon from '../components/chat/ClientIcon.svelte'
   import { isTransientNetworkError } from '../api/client'
   import type { AgentClientView, AgentClientSetupOperation } from '../api/types'
-  import { formatDateTime } from '../lib/format'
   import { Button } from '$lib/components/ui/button/index.js'
   import { Label } from '$lib/components/ui/label/index.js'
   import { Switch } from '$lib/components/ui/switch/index.js'
@@ -159,10 +158,6 @@
           <div class="flex items-start justify-between gap-4">
             <div class="min-w-0 space-y-1">
               <h3 class="truncate text-lg font-semibold text-heading">{selected.name}</h3>
-              <p class="text-xs text-muted-foreground">
-                {selected.client_type} / {selected.short_id} · {selected.has_record ? $t('clients.databaseUpdated', { date: formatDateTime(selected.updated_at, $currentLocale) }) : $t('clients.default')}
-              </p>
-              <p class="break-all font-mono text-xs text-muted-foreground" title={$t('clients.uniqueId')}>{selected.id}</p>
               <div role="status" class="space-y-1 pt-2 text-sm">
                 <p class="flex items-center gap-1.5">
                   {#if selected.detection.status === 'detected'}<CheckCircleIcon class="size-4 text-success" />
