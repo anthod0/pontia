@@ -52,7 +52,7 @@ impl ClientLauncher for PiLauncher {
         // Pi runs tools without approval or sandboxing. --approve trusts project resources.
         let tool_flags = match runtime.mode {
             pontia_core::SessionMode::Restricted => {
-                " --exclude-tools 'edit,write' --no-mcp --no-skills"
+                " --tools 'read,bash,grep,find,ls' --no-mcp --no-skills"
             }
             pontia_core::SessionMode::Default | pontia_core::SessionMode::Yolo => "",
         };
