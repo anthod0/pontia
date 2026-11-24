@@ -1,7 +1,7 @@
 import type { MessageKey } from "$lib/i18n";
 import type { Component } from "svelte";
+import BooksIcon from "phosphor-svelte/lib/BooksIcon";
 import FolderIcon from "phosphor-svelte/lib/FolderIcon";
-import NoteIcon from "phosphor-svelte/lib/NoteIcon";
 import ScrollIcon from "phosphor-svelte/lib/ScrollIcon";
 import SlidersHorizontalIcon from "phosphor-svelte/lib/SlidersHorizontalIcon";
 import TerminalIcon from "phosphor-svelte/lib/TerminalIcon";
@@ -41,7 +41,7 @@ export const settingsSections: SettingsSection[] = [
   {
     label: "settings.memory",
     path: "/settings/memory",
-    icon: NoteIcon,
+    icon: BooksIcon,
     match: ["/settings/memory"],
   },
 ];
