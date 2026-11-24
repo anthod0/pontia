@@ -11,6 +11,7 @@ export interface Env {
   DB: D1Database;
   CLOUDFLARE_DNS_TOKEN: string;
   CLOUDFLARE_DNS_ZONE_ID: string;
+  CLOUDFLARE_PREVIEW_DNS_ZONE_ID?: string;
 }
 
 type ScheduledDependencies = {
@@ -28,7 +29,12 @@ const consoleLogger: CleanupLogger = {
 const defaultDependencies: ScheduledDependencies = {
   now: () => new Date(),
   repository: (env) => new D1TicketRepository(env.DB),
-  dns: (env) => new CloudflareDnsProvider(env.CLOUDFLARE_DNS_TOKEN, env.CLOUDFLARE_DNS_ZONE_ID),
+  dns: (env) =>
+    new CloudflareDnsProvider(
+      env.CLOUDFLARE_DNS_TOKEN,
+      env.CLOUDFLARE_DNS_ZONE_ID,
+      env.CLOUDFLARE_PREVIEW_DNS_ZONE_ID,
+    ),
   logger: consoleLogger,
 };
 

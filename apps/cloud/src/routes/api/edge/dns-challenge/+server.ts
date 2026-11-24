@@ -3,7 +3,13 @@ import { eq } from "drizzle-orm";
 import { environment } from "$lib/server/auth/http";
 import { edges } from "$lib/server/db/schema";
 import { authorizeEdgeDeployment } from "$lib/server/edge-deployment";
-import { CloudflareDnsProvider, edgeHostname, validDnsChallenge } from "$lib/server/edge-network";
+import {
+  CloudflareDnsProvider,
+  edgeHostname,
+  previewBase,
+  previewDns,
+  validDnsChallenge,
+} from "$lib/server/edge-network";
 import { remoteDatabase } from "$lib/server/remote-access/http";
 import { authenticateEdgeCredential } from "$lib/server/remote-access/resources";
 import type { RequestHandler } from "./$types";
@@ -19,8 +25,9 @@ export const POST: RequestHandler = async (event) => {
       return json({ error: "invalid_dns_challenge" }, { status: 400 });
     const body = input as Record<string, unknown>;
     if (
-      Object.keys(body).some((key) => !["operation", "value", "ticket"].includes(key)) ||
+      Object.keys(body).some((key) => !["operation", "value", "ticket", "scope"].includes(key)) ||
       (body.operation !== "publish" && body.operation !== "cleanup") ||
+      (body.scope !== undefined && body.scope !== "control" && body.scope !== "preview") ||
       !validDnsChallenge(body.value) ||
       (body.ticket !== undefined && typeof body.ticket !== "string")
     ) {
@@ -41,7 +48,11 @@ export const POST: RequestHandler = async (event) => {
         edgeId = principal.edgeId;
         hostname = edgeHostname(edge.tunnelUrl);
       }
-    } else if (typeof body.ticket === "string" && operation === "cleanup") {
+    } else if (
+      body.scope !== "preview" &&
+      typeof body.ticket === "string" &&
+      operation === "cleanup"
+    ) {
       // Initial publication only occurs after the network API has verified IP:port.
       const identity = await authorizeEdgeDeployment(db, body.ticket, credential);
       if (identity) {
@@ -53,7 +64,14 @@ export const POST: RequestHandler = async (event) => {
     const env = environment(event);
     if (!(await env.EDGE_DNS_RATE_LIMIT.limit({ key: edgeId })).success)
       return json({ error: "rate_limited" }, { status: 429 });
-    const dns = new CloudflareDnsProvider(env.CLOUDFLARE_DNS_TOKEN, env.CLOUDFLARE_DNS_ZONE_ID);
+    if (body.scope === "preview") {
+      if (!env.PREVIEW_ZONE) return json({ error: "edge_preview_unavailable" }, { status: 409 });
+      hostname = previewBase(hostname, env.PREVIEW_ZONE);
+    }
+    const dns =
+      body.scope === "preview"
+        ? previewDns(env)
+        : new CloudflareDnsProvider(env.CLOUDFLARE_DNS_TOKEN, env.CLOUDFLARE_DNS_ZONE_ID);
     if (operation === "publish") await dns.publishTxt(hostname, body.value);
     else await dns.cleanupTxt(hostname, body.value);
     console.info({

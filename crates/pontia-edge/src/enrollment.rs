@@ -82,14 +82,52 @@ impl HttpCloudClient {
         })
     }
 
+    pub async fn provision_preview(&self, credential: &str, expected_base: &str) -> Result<bool> {
+        #[derive(serde::Deserialize)]
+        struct Provision {
+            preview_base_hostname: String,
+            manage_certificate: bool,
+        }
+        let response = self
+            .client
+            .post(self.endpoint("api/edge/preview/provision")?)
+            .bearer_auth(credential)
+            .send()
+            .await?;
+        let provision: Provision = Self::require_ok(response, "preview DNS provisioning failed")
+            .await?
+            .json()
+            .await?;
+        anyhow::ensure!(
+            provision.preview_base_hostname == expected_base,
+            "unexpected preview hostname"
+        );
+        Ok(provision.manage_certificate)
+    }
+
+    pub async fn confirm_preview(&self, credential: &str) -> Result<()> {
+        let response = self
+            .client
+            .post(self.endpoint("api/edge/preview/confirm")?)
+            .bearer_auth(credential)
+            .send()
+            .await?;
+        Self::require_ok(response, "preview health confirmation failed").await?;
+        Ok(())
+    }
+
     pub async fn dns_challenge(
         &self,
         credential: &str,
         ticket: Option<&str>,
         operation: DnsOperation,
+        preview: bool,
         value: &str,
     ) -> Result<()> {
         let mut body = serde_json::json!({ "operation": operation, "value": value });
+        if preview {
+            body["scope"] = "preview".into();
+        }
         if let Some(ticket) = ticket {
             body["ticket"] = ticket.into();
         }

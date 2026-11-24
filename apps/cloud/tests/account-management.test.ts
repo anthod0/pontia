@@ -43,7 +43,7 @@ async function signedInEvent(fields: Record<string, string> = {}) {
   const body = new FormData();
   for (const [name, value] of Object.entries(fields)) body.set(name, value);
   return {
-    cookies: { get: (name: string) => (name === "_at" ? login.token : undefined) },
+    cookies: { get: (name: string) => (name === "__Host-_at" ? login.token : undefined) },
     platform: { env: { DB: database.binding, JWT_SECRET: secret } },
     request: new Request("https://pontia.example/settings/account", { method: "POST", body }),
     url: new URL("https://pontia.example/settings/account"),

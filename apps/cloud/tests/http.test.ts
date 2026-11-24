@@ -4,6 +4,7 @@ import { isRedirect, type RequestEvent } from "@sveltejs/kit";
 import {
   callback,
   createIndependentAccount,
+  currentLogin,
   endLogin,
   pendingAccountSummary,
   startBinding,
@@ -128,38 +129,38 @@ async function signedIn(client: ReturnType<typeof browser>) {
   });
   const path = `/api/auth/google/callback?code=code&state=${authUrl.searchParams.get("state")}`;
   expect(await location(callback(client.event(path, "GET")))).toBe("/settings/account");
-  return await verifyLogin(client.cookies.get("_at")!, config.JWT_SECRET);
+  return await verifyLogin(client.cookies.get("__Host-_at")!, config.JWT_SECRET);
 }
 
 test("HTTP login, linking and logout persist identity and set and clear protected cookies", async () => {
   providerResponses();
   const client = browser();
   const claims = await signedIn(client);
-  expect(client.options.get("_at")).toMatchObject({
+  expect(client.options.get("__Host-_at")).toMatchObject({
     httpOnly: true,
     secure: true,
     sameSite: "lax",
     path: "/",
   });
-  expect((client.options.get("_at")!.expires as Date).getTime() - Date.now()).toBeLessThanOrEqual(
-    15 * 60_000,
-  );
-  expect(client.cookies.get("_rt")).toMatch(/^ptb_[A-Za-z0-9_-]{43}$/);
-  expect(client.options.get("_rt")).toMatchObject({
+  expect(
+    (client.options.get("__Host-_at")!.expires as Date).getTime() - Date.now(),
+  ).toBeLessThanOrEqual(15 * 60_000);
+  expect(client.cookies.get("__Host-_rt")).toMatch(/^ptb_[A-Za-z0-9_-]{43}$/);
+  expect(client.options.get("__Host-_rt")).toMatchObject({
     httpOnly: true,
     secure: true,
     sameSite: "lax",
     path: "/",
   });
-  expect((client.options.get("_rt")!.expires as Date).getTime() - Date.now()).toBeGreaterThan(
-    29 * 86_400_000,
-  );
+  expect(
+    (client.options.get("__Host-_rt")!.expires as Date).getTime() - Date.now(),
+  ).toBeGreaterThan(29 * 86_400_000);
   const storedSession = (await database.db.select().from(authSessions)).find(
     (session) => session.id === claims.sub,
   );
   expect(storedSession).toMatchObject(sessionRequest);
   expect(storedSession?.tokenHash).toMatch(/^[A-Za-z0-9_-]{43}$/);
-  expect(storedSession?.tokenHash).not.toBe(client.cookies.get("_rt"));
+  expect(storedSession?.tokenHash).not.toBe(client.cookies.get("__Host-_rt"));
   expect(claims).not.toHaveProperty("ip");
   expect(claims).not.toHaveProperty("userAgent");
   expect(claims).not.toHaveProperty("country");
@@ -177,7 +178,7 @@ test("HTTP login, linking and logout persist identity and set and clear protecte
   ).toBe("/settings/account");
   expect(await database.db.select().from(accounts)).toHaveLength(2);
   expect(await database.db.select().from(users)).toHaveLength(1);
-  const oldToken = client.cookies.get("_at")!;
+  const oldToken = client.cookies.get("__Host-_at")!;
   await location(startBinding(client.event("/api/auth/github/bind")));
   expect(await location(endLogin(client.event("/api/auth/logout")))).toBe("/login");
   expect(client.cookies.size).toBe(0);
@@ -291,7 +292,7 @@ test("verified email conflict verifies the existing subject, links, logs in, and
       ),
     ),
   ).toBe(returnTo);
-  const claims = await verifyLogin(client.cookies.get("_at")!, config.JWT_SECRET);
+  const claims = await verifyLogin(client.cookies.get("__Host-_at")!, config.JWT_SECRET);
   expect(claims.user_id).toBe(original.userId);
   expect(client.cookies.has("_pending_account")).toBe(false);
   expect(await database.db.select().from(users)).toHaveLength(1);
@@ -322,7 +323,7 @@ test("verified email conflict can create an independent user", async () => {
   );
   expect(await database.db.select().from(users)).toHaveLength(2);
   expect(await database.db.select().from(accounts)).toHaveLength(2);
-  expect(client.cookies.has("_at")).toBe(true);
+  expect(client.cookies.has("__Host-_at")).toBe(true);
 });
 
 test("pending binding rejects a different existing provider subject and clears pending state", async () => {
@@ -395,7 +396,10 @@ test("binding callback rejects logout in another request and a browser switched 
         displayName: null,
         avatarUrl: null,
       });
-      client.cookies.set("_at", (await issueLogin(database.db, id, config.JWT_SECRET)).token);
+      client.cookies.set(
+        "__Host-_at",
+        (await issueLogin(database.db, id, config.JWT_SECRET)).token,
+      );
     } else await logout(database.db, claims.sub, claims.user_id);
     expect(
       await location(
@@ -423,7 +427,7 @@ test("an expired access JWT is refreshed during the OAuth round trip", async () 
     .set({ expiresAt: new Date(Date.now() + 86_400_000).toISOString() });
   const past = new Date(Date.now() - 2 * 3_600_000);
   const expired = (await issueLogin(database.db, claims.sub, config.JWT_SECRET, past)).token;
-  client.cookies.set("_at", expired);
+  client.cookies.set("__Host-_at", expired);
   expect(
     await location(
       callback(
@@ -434,10 +438,10 @@ test("an expired access JWT is refreshed during the OAuth round trip", async () 
       ),
     ),
   ).toBe("/settings/account");
-  expect(client.cookies.get("_at")).not.toBe(expired);
-  expect((client.options.get("_rt")!.expires as Date).getTime() - Date.now()).toBeGreaterThan(
-    29 * 86_400_000,
-  );
+  expect(client.cookies.get("__Host-_at")).not.toBe(expired);
+  expect(
+    (client.options.get("__Host-_rt")!.expires as Date).getTime() - Date.now(),
+  ).toBeGreaterThan(29 * 86_400_000);
   expect(
     Date.parse((await activeLogin(database.db, claims.sub, claims.user_id))!.expiresAt!) -
       Date.now(),
@@ -460,10 +464,13 @@ test("expired JWT can still log out and remove its D1 login record", async () =>
     },
     past,
   );
-  client.cookies.set("_at", (await issueLogin(database.db, id, config.JWT_SECRET, past)).token);
+  client.cookies.set(
+    "__Host-_at",
+    (await issueLogin(database.db, id, config.JWT_SECRET, past)).token,
+  );
   expect(await location(endLogin(client.event("/api/auth/logout")))).toBe("/login");
   expect(await activeLogin(database.db, id)).toBeUndefined();
-  expect(client.cookies.has("_at")).toBe(false);
+  expect(client.cookies.has("__Host-_at")).toBe(false);
 });
 
 test.each([
@@ -591,7 +598,7 @@ test.each(["bind", "create"])(
       );
     }
     expect(destination).toBe(returnTo);
-    expect(client.cookies.has("_at")).toBe(true);
+    expect(client.cookies.has("__Host-_at")).toBe(true);
   },
 );
 
@@ -639,4 +646,15 @@ test("login rejects unknown languages and invalid localized destinations", async
       ),
     ).rejects.toMatchObject({ status: 400 });
   }
+});
+
+test("legacy login cookies cannot authenticate or refresh a browser session", async () => {
+  providerResponses();
+  const client = browser();
+  await signedIn(client);
+  for (const name of ["_at", "_rt"]) {
+    client.cookies.set(name, client.cookies.get("__Host-" + name)!);
+    client.cookies.delete("__Host-" + name);
+  }
+  expect(await currentLogin(client.event("/settings/account"))).toBeNull();
 });

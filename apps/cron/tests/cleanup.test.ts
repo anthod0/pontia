@@ -187,12 +187,17 @@ test("ordinary purposes are deleted first and the expiration boundary is inclusi
 
 test("a failed deployment deletes its known DNS record before its ticket", async () => {
   const repository = new MemoryRepository([ticket({ id: 1 })]);
-  const dns = new MemoryDns(new Map([["brave-silver-atlas.edge.pontia.dev", { id: "dns-old" }]]));
+  const dns = new MemoryDns(
+    new Map([
+      ["brave-silver-atlas.edge.pontia.dev", { id: "dns-old" }],
+      ["*.brave-silver-atlas.p.pontia.dev", { id: "preview" }],
+    ]),
+  );
   const logs = logger();
   const events: string[] = [];
   const originalDeleteA = dns.deleteA.bind(dns);
   dns.deleteA = async (record) => {
-    events.push("dns");
+    events.push(record.id);
     await originalDeleteA(record);
   };
   const originalDeleteTicket = repository.deleteExpiredTicket.bind(repository);
@@ -203,9 +208,9 @@ test("a failed deployment deletes its known DNS record before its ticket", async
 
   expect(await cleanupExpiredEdgeTickets(now, repository, dns, logs.value)).toMatchObject({
     ticketsDeleted: 1,
-    dnsRecordsDeleted: 1,
+    dnsRecordsDeleted: 2,
   });
-  expect(events).toEqual(["dns", "ticket"]);
+  expect(events).toEqual(["dns-old", "preview", "ticket"]);
 });
 
 test("consumed deployments and deployments with a registered edge only lose the ticket", async () => {

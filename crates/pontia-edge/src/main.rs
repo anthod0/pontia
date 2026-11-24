@@ -22,7 +22,7 @@ use pontia_edge::{
     pending_init::{self, PENDING_INIT_PATH, PendingInit},
     port::{parse_edge_port, tunnel_url},
     systemd::{Systemd, UNIT_DIRECTORY, UNIT_PATH},
-    tls::AcmeAcceptor,
+    tls::{AcmeAcceptor, EdgeCertResolver},
 };
 use rustls::{
     RootCertStore,
@@ -182,7 +182,10 @@ async fn init_with_output<W: Write + ?Sized>(args: PendingInit, output: &mut W) 
         port: args.port.unwrap_or(443),
         acme_challenge: args.acme_challenge,
         browser_dashboard_origin: "https://app.pontia.dev".to_owned(),
-        preview_base_hostname: None,
+        preview_base_hostname: Some(format!(
+            "{}.p.pontia.dev",
+            hostname.split('.').next().unwrap()
+        )),
     };
     let credential = read_edge_credential(CREDENTIAL_PATH.as_ref())?;
     let systemd = Systemd::default();
@@ -288,6 +291,7 @@ async fn init_with_output<W: Write + ?Sized>(args: PendingInit, output: &mut W) 
                 client: &client,
                 credential: &credential.value,
                 ticket: Some(&args.ticket),
+                preview: false,
             };
             complete_dns_and_save(order, &hostname, Path::new(TLS_PATH), &dns, output).await?;
         } else {
@@ -511,6 +515,24 @@ async fn serve() -> Result<()> {
     let access_tokens = AccessTokenVerifier::embedded(credential.edge_id)?;
     let service_credential = credential.value;
     let tls = RustlsConfig::from_pem_file(TLS_PATH, TLS_PATH).await?;
+    let base = config
+        .preview_base_hostname
+        .clone()
+        .context("missing preview hostname")?;
+    let resolver = EdgeCertResolver::new(&base, tls.clone());
+    let preview_path = Path::new("/etc/pontia/edge/preview-tls.pem");
+    if preview_path.exists()
+        && let Err(error) = resolver.load_preview(preview_path).await
+    {
+        tracing::warn!(%error,"could not load preview certificate");
+    }
+    let server_tls = resolver.server();
+    let preview = tokio::spawn(maintain_preview(
+        base,
+        service_credential.clone(),
+        resolver,
+        preview_path,
+    ));
     let origins = BrowserOrigins {
         dashboard: config.browser_dashboard_origin.clone(),
     };
@@ -545,12 +567,12 @@ async fn serve() -> Result<()> {
     tracing::info!(%address, "starting edge");
     let result = if let Some(responses) = shared_acme {
         axum_server::bind(address)
-            .acceptor(AcmeAcceptor::new(tls, responses))
+            .acceptor(AcmeAcceptor::new(server_tls, responses))
             .handle(handle)
             .serve(router.into_make_service())
             .await
     } else {
-        axum_server::bind_rustls(address, tls)
+        axum_server::bind_rustls(address, server_tls)
             .handle(handle)
             .serve(router.into_make_service())
             .await
@@ -558,8 +580,55 @@ async fn serve() -> Result<()> {
     edge.shutdown();
     signal.abort();
     renewal.abort();
+    preview.abort();
     result?;
     Ok(())
+}
+
+async fn maintain_preview(
+    base: String,
+    credential: String,
+    resolver: std::sync::Arc<EdgeCertResolver>,
+    path: &'static Path,
+) {
+    loop {
+        let result: Result<()> = async {
+            let client = HttpCloudClient::new(CLOUD_ORIGIN)?;
+            let managed = client.provision_preview(&credential, &base).await?;
+            if managed
+                && (certificate_needs_renewal(path)
+                    || !saved_certificate_is_usable(path, &format!("__probe.{base}")).await)
+            {
+                let dns = CloudDnsChallenges {
+                    client: &client,
+                    credential: &credential,
+                    ticket: None,
+                    preview: true,
+                };
+                issue_dns_and_save(
+                    &InstantAcmeIssuer::production(ACCOUNT_PATH),
+                    &format!("*.{base}"),
+                    path,
+                    &dns,
+                    &mut std::io::stdout(),
+                )
+                .await?;
+            }
+            if path.exists() {
+                resolver.load_preview(path).await?;
+            }
+            client.confirm_preview(&credential).await
+        }
+        .await;
+        let delay = match result {
+            Ok(()) => Duration::from_secs(24 * 60 * 60),
+            Err(error) => {
+                tracing::warn!(%error,"preview certificate provisioning or confirmation failed");
+                Duration::from_secs(300)
+            }
+        };
+        tokio::time::sleep(delay).await;
+    }
 }
 
 async fn renew_certificates(
@@ -581,6 +650,7 @@ async fn renew_certificates(
                     client: &client,
                     credential: &credential,
                     ticket: None,
+                    preview: false,
                 };
                 issue_dns_and_save(
                     &issuer,

@@ -12,7 +12,7 @@ export const load: PageServerLoad = async (event) => {
   if (await currentLogin(event)) redirect(303, returnTo);
   return {
     error: event.url.searchParams.get("error"),
-    hasCredential: !!event.cookies.get("_at"),
+    hasCredential: !!event.cookies.get("__Host-_at"),
     returnTo,
   };
 };

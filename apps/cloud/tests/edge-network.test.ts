@@ -102,6 +102,7 @@ test("verifies address control before creating an idempotent A record", async ()
       return socketResponse(httpResponse(challenge), (request) => calls.push(request));
     },
     dns,
+    preview: { zone: "p.pontia.dev", dns },
   });
   expect(result).toEqual({ status: "configured", hostname: "brave-atlas.edge.pontia.dev" });
   expect(calls[0]).toBe("8.8.8.8:80");
@@ -109,7 +110,10 @@ test("verifies address control before creating an idempotent A record", async ()
     "GET /.well-known/pontia-edge-address/BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc HTTP/1.1\r\n",
   );
   expect(calls[1]).toContain("\r\nHost: 8.8.8.8\r\n");
-  expect(calls[2]).toBe("brave-atlas.edge.pontia.dev=8.8.8.8");
+  expect(calls.slice(2)).toEqual([
+    "brave-atlas.edge.pontia.dev=8.8.8.8",
+    "*.brave-atlas.p.pontia.dev=8.8.8.8",
+  ]);
 });
 
 test("does not touch DNS when the TCP probe has a bad status, mismatches, or is too large", async () => {
