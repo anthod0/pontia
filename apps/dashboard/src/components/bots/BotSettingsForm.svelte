@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ResponsiveSelect from '$lib/components/ui/overlay/ResponsiveSelect.svelte'
   import { createQuery } from '@tanstack/svelte-query'
   import { currentLocale, t } from '$lib/i18n'
   import { useDeviceRuntime } from '../../device/context'
@@ -8,7 +9,6 @@
   import ClientIcon from '../chat/ClientIcon.svelte'
   import ModelEffortPicker from '../chat/ModelEffortPicker.svelte'
   import ModelSelectPlaceholder from '../chat/ModelSelectPlaceholder.svelte'
-  import * as Select from '$lib/components/ui/select/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import { Input } from '$lib/components/ui/input/index.js'
   import { Label } from '$lib/components/ui/label/index.js'
@@ -96,28 +96,26 @@
   {/if}
   <div class="grid gap-2">
     <Label for={`${id}-client`}>{$t('clients.agentClient')}</Label>
-    <Select.Root type="single" value={clientId} onValueChange={(value) => {
+    <ResponsiveSelect value={clientId} onValueChange={(value) => {
       clientId = value
       model = ''
       reasoningEffort = ''
       effortUnavailable = false
       modelAvailable = false
-    }} disabled={saving || !clients.data?.length}>
-      <Select.Trigger id={`${id}-client`} class="w-full">
+    }} disabled={saving || !clients.data?.length}
+      label={$t('clients.agentClient')} triggerClass="w-full" id={`${id}-client`}
+      options={clients.data ?? []} keyOf={client => client.id} labelOf={client => client.name}>
+      {#snippet trigger()}
         <span class="flex min-w-0 items-center gap-2">
           {#if selected}<ClientIcon clientType={selected.client_type} acpAgentId={selected.client_key} class="size-4 text-foreground" />{/if}
           <span class="truncate">{selected?.name ?? $t(clients.isPending ? 'common.loading' : 'clients.choose')}</span>
         </span>
-      </Select.Trigger>
-      <Select.Content>
-        {#each clients.data ?? [] as client (client.id)}
-          <Select.Item value={client.id} label={client.name}>
-            <ClientIcon clientType={client.client_type} acpAgentId={client.client_key} class="size-4 text-foreground" />
-            {client.name}
-          </Select.Item>
-        {/each}
-      </Select.Content>
-    </Select.Root>
+      {/snippet}
+      {#snippet option(client)}
+        <ClientIcon clientType={client.client_type} acpAgentId={client.client_key} class="size-4 text-foreground" />
+        {client.name}
+      {/snippet}
+    </ResponsiveSelect>
     {#if clients.isError}<p class="text-sm text-destructive" role="alert">{clients.error.message}</p>
     {:else if clients.data?.length === 0}<p class="text-sm text-muted-foreground">{$t('bots.noClients')}</p>{/if}
   </div>
@@ -133,7 +131,7 @@
     {/if}
   </div>
   {#if error}<p class="text-sm text-destructive" role="alert">{error}</p>{/if}
-  <div class="flex justify-end gap-2">
+  <div class={['flex justify-end gap-2 touch-target:[&_button]:min-h-11', !onboarding && 'max-md:sticky max-md:bottom-0 max-md:bg-popover max-md:py-1']}>
     {#if oncancel}<Button variant="outline" type="button" disabled={saving} onclick={oncancel}>{$t('common.cancel')}</Button>{/if}
     <Button type="submit" disabled={saving || !selected || !name.trim() || !modelAvailable || effortUnavailable}>
       {$t(bot ? 'common.save' : onboarding ? 'bots.startChat' : 'bots.create')}

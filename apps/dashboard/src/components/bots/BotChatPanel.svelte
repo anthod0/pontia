@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SidePanel from '$lib/components/ui/overlay/SidePanel.svelte'
   import { createQuery } from '@tanstack/svelte-query'
   import { onMount, tick } from 'svelte'
   import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon'
@@ -113,8 +114,10 @@
   }
 
   async function closeOnMobile() {
-    if (!panel.wide) {
+    if (!panel.wide && panel.current) {
+      const closed = new Promise<void>(resolve => window.addEventListener('popstate', () => resolve(), { once: true }))
       panel.current = false
+      await closed
       await tick()
     }
   }
@@ -231,7 +234,7 @@
         <PromptInput.Textarea {@attach node => node.focus()} bind:value={current.text} placeholder={$t('bots.message')} aria-label={$t('bots.message')} readonly={current.sending} onkeydown={(event: KeyboardEvent) => replyKeydown(event, current)} class="text-base sm:text-[13px]" />
         <PromptInput.Toolbar class="justify-end gap-1 px-1 pt-0 pb-1">
           <Button variant="ghost" size="xs" disabled={current.sending} onclick={closeReply}>{$t('common.cancel')}</Button>
-          <PromptInput.Submit class="h-6 gap-1 px-2.5 text-xs" busy={current.sending} disabled={!current.text.trim()} />
+          <PromptInput.Submit class="h-6 touch-target:min-h-11 gap-1 px-2.5 text-xs" busy={current.sending} disabled={!current.text.trim()} />
         </PromptInput.Toolbar>
       </PromptInput.Root>
     {/if}
@@ -239,7 +242,7 @@
 {/snippet}
 
 {#if panel.current}
-  <aside data-bot-chat-panel aria-label={$t('nav.sidebar')} class="fixed inset-y-0 right-0 z-50 flex w-full min-w-0 flex-col border-l bg-surface pt-[env(safe-area-inset-top)] lg:w-[var(--file-preview-width)]">
+  <SidePanel close={() => panel.current = false} data-bot-chat-panel aria-label={$t('nav.sidebar')}>
     <FilePreviewResizer />
     <Tabs.Root bind:value={() => tab.current, next => { tab.current = next as PanelTab }} class="min-h-0 flex-1 gap-0">
       <header class="flex h-12 shrink-0 items-center justify-between gap-1 border-b px-2">
@@ -343,5 +346,5 @@
         </div>
       </Tabs.Content>
     </Tabs.Root>
-  </aside>
+  </SidePanel>
 {/if}

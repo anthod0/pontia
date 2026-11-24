@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ResponsiveMenu from '$lib/components/ui/overlay/ResponsiveMenu.svelte'
   import { createQueries, createQuery } from '@tanstack/svelte-query'
   import { toast } from 'svelte-sonner'
   import { openBotChatStream } from '../../services/botChatStream'
@@ -11,6 +12,7 @@
   import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
   import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
   import TrashIcon from 'phosphor-svelte/lib/TrashIcon'
+  import DotsThreeVerticalIcon from 'phosphor-svelte/lib/DotsThreeVerticalIcon'
   import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
   import { Button } from '$lib/components/ui/button/index.js'
   import BotAvatar from './BotAvatar.svelte'
@@ -129,7 +131,7 @@
         {@const active = page.params.botId === bot.bot_id && (handle === undefined || handle === page.params.handle)}
         <Sidebar.MenuItem>
           <Sidebar.MenuButton isActive={active} tooltipContent={bot.name}
-            class="relative h-auto min-h-12 gap-2.5 px-2 py-1.5 max-md:min-h-15 max-md:gap-3 max-md:px-2.5 max-md:py-2 [&_svg]:size-7 max-md:[&_svg]:size-9 group-data-[collapsible=icon]:min-h-0 group-data-[collapsible=icon]:p-1! group-data-[collapsible=icon]:[&_svg]:size-6">
+            class="relative touch-target:pr-12! h-auto min-h-12 gap-2.5 px-2 py-1.5 max-md:min-h-15 max-md:gap-3 max-md:px-2.5 max-md:py-2 [&_svg]:size-7 max-md:[&_svg]:size-9 group-data-[collapsible=icon]:min-h-0 group-data-[collapsible=icon]:p-1! group-data-[collapsible=icon]:[&_svg]:size-6">
             {#snippet child({ props })}
               <a {...props} href={scope ? scope + path : dashboardPath(path)} aria-current={active ? 'page' : undefined}
                 onclick={(event) => { event.preventDefault(); void navigate(path, undefined, { scope }) }}
@@ -147,24 +149,31 @@
               </a>
             {/snippet}
           </Sidebar.MenuButton>
+          <Sidebar.MenuAction class="hidden touch-target:flex touch-target:size-11 touch-target:right-0 touch-target:after:hidden"
+            aria-label={`${bot.name} · ${$t('bots.actions')}`} aria-haspopup="menu" aria-expanded={menuOpen && menu?.bot.bot_id === bot.bot_id}
+            onclick={event => {
+              const row = event.currentTarget as HTMLElement
+              menu = { bot, row, anchor: row }
+              menuOpen = true
+            }}>
+            <DotsThreeVerticalIcon />
+          </Sidebar.MenuAction>
         </Sidebar.MenuItem>
       {/each}
     </Sidebar.Menu>
   </Sidebar.GroupContent>
 </Sidebar.Group>
 
-<DropdownMenu.Root bind:open={menuOpen}>
-  <DropdownMenu.Content customAnchor={menu?.anchor} side="bottom" align="start" sideOffset={2} class="w-auto min-w-44" aria-label={$t('bots.actions')}
+<ResponsiveMenu bind:open={menuOpen} label={menu?.bot.name ?? $t('bots.actions')} aria-label={$t('bots.actions')} customAnchor={menu?.anchor} side="bottom" align="start" sideOffset={2} class="w-auto min-w-44"
     onCloseAutoFocus={(event) => { event.preventDefault(); if (!editing && !deleting && menu?.row.isConnected) menu.row.focus() }}>
-    {#if menu}
-      {@const bot = menu.bot}
-      <DropdownMenu.Item onSelect={() => { editing = bot }}><PencilSimpleIcon />{$t('bots.edit')}</DropdownMenu.Item>
-      <DropdownMenu.Item disabled={reloading === bot.bot_id} onSelect={() => void reload(bot)}><ArrowClockwiseIcon />{$t('bots.reload')}</DropdownMenu.Item>
-      <DropdownMenu.Separator />
-      <DropdownMenu.Item variant="destructive" onSelect={() => { deleting = bot }}><TrashIcon />{$t('bots.delete')}</DropdownMenu.Item>
-    {/if}
-  </DropdownMenu.Content>
-</DropdownMenu.Root>
+  {#if menu}
+    {@const bot = menu.bot}
+    <DropdownMenu.Item onSelect={() => { editing = bot }}><PencilSimpleIcon />{$t('bots.edit')}</DropdownMenu.Item>
+    <DropdownMenu.Item disabled={reloading === bot.bot_id} onSelect={() => void reload(bot)}><ArrowClockwiseIcon />{$t('bots.reload')}</DropdownMenu.Item>
+    <DropdownMenu.Separator />
+    <DropdownMenu.Item variant="destructive" onSelect={() => { deleting = bot }}><TrashIcon />{$t('bots.delete')}</DropdownMenu.Item>
+  {/if}
+</ResponsiveMenu>
 
 {#if editing}
   <BotSettingsDialog bot={editing} onclose={() => { editing = null }} onsaved={() => { editing = null }} />

@@ -1,8 +1,8 @@
 <script lang="ts">
+  import ResponsiveSelect from '$lib/components/ui/overlay/ResponsiveSelect.svelte'
   import { t } from '$lib/i18n';
   import type { Snippet } from 'svelte'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
-  import * as Select from '$lib/components/ui/select/index.js'
   import type { SessionCreationOption, WorkspaceView } from '../../api/types'
   import { workspaceTitle } from './sessionMetadata'
   import ClientIcon from './ClientIcon.svelte'
@@ -62,54 +62,48 @@
       <span class="min-w-0 truncate">{selectedWorkspace ? workspaceTitle(selectedWorkspace) : $t('workspace.title')}</span>
     </span>
     <span>{$t('chat.useClientPrefix')}</span>
-    <Select.Root type="single" bind:value={creationOptionId}>
-      <Select.Trigger class="h-7 max-w-44 border-0 bg-transparent px-1.5 font-medium text-foreground hover:bg-muted" aria-label={$t('clients.client')}>
+    <ResponsiveSelect bind:value={creationOptionId}
+      label={$t('clients.client')} triggerClass="h-7 max-w-44 border-0 bg-transparent px-1.5 font-medium text-foreground hover:bg-muted" side="top" align="start"
+      options={creationOptions} keyOf={option => option.id} labelOf={option => option.name}>
+      {#snippet trigger()}
         <ClientIcon clientType={selectedOption?.client_type} acpAgentId={selectedOption?.metadata.acp_agent_id} class="size-4 text-foreground" />
         <span class="min-w-0 truncate">{selectedOption?.name ?? $t('clients.choose')}</span>
-      </Select.Trigger>
-      <Select.Content side="top" align="start">
-        {#each creationOptions as option (option.id)}
-          <Select.Item value={option.id} label={option.name}>
-            <ClientIcon clientType={option.client_type} acpAgentId={option.metadata.acp_agent_id} class="size-3.5 text-foreground" />
-            {option.name}
-          </Select.Item>
-        {/each}
-      </Select.Content>
-    </Select.Root>
+      {/snippet}
+      {#snippet option(option)}
+        <ClientIcon clientType={option.client_type} acpAgentId={option.metadata.acp_agent_id} class="size-3.5 text-foreground" />
+        {option.name}
+      {/snippet}
+    </ResponsiveSelect>
   </div>
 {:else}
   <div class={targetToolbarClass}>
     {@render deviceSelector?.(disabled)}
-    <Select.Root type="single" bind:value={creationOptionId} disabled={clientSelectDisabled}>
-      <Select.Trigger class={targetSegmentClass} aria-label={$t('clients.agentClient')}>
+    <ResponsiveSelect bind:value={creationOptionId} disabled={clientSelectDisabled}
+      label={$t('clients.agentClient')} triggerClass={targetSegmentClass} side="top" align="start"
+      options={creationOptions} keyOf={option => option.id} labelOf={option => option.name}>
+      {#snippet trigger()}
         <ClientIcon clientType={selectedOption?.client_type} acpAgentId={selectedOption?.metadata.acp_agent_id} class="size-3.5 text-foreground" />
         <span class="min-w-0 truncate">{selectedOption?.name ?? $t('clients.agentClient')}</span>
-      </Select.Trigger>
-      <Select.Content side="top" align="start">
-        {#each creationOptions as option (option.id)}
-          <Select.Item value={option.id} label={option.name}>
-            <ClientIcon clientType={option.client_type} acpAgentId={option.metadata.acp_agent_id} class="size-3.5 text-foreground" />
-            {option.name}
-          </Select.Item>
-        {/each}
-      </Select.Content>
-    </Select.Root>
-    <Select.Root type="single" bind:value={workspaceId} disabled={workspaceSelectDisabled}>
-      <Select.Trigger class={targetSegmentClass} aria-label={$t('workspace.title')} title={selectedWorkspace?.canonical_path}>
+      {/snippet}
+      {#snippet option(option)}
+        <ClientIcon clientType={option.client_type} acpAgentId={option.metadata.acp_agent_id} class="size-3.5 text-foreground" />
+        {option.name}
+      {/snippet}
+    </ResponsiveSelect>
+    <ResponsiveSelect bind:value={workspaceId} disabled={workspaceSelectDisabled}
+      label={$t('workspace.title')} triggerClass={targetSegmentClass} title={selectedWorkspace?.canonical_path} align="start" contentClass="w-72" itemClass="py-2"
+      options={workspaces} keyOf={workspace => workspace.workspace_id} labelOf={workspace => workspaceTitle(workspace)}>
+      {#snippet trigger()}
         <FolderIcon class="size-3.5 text-muted-foreground" aria-hidden="true" />
         <span class="min-w-0 truncate">{selectedWorkspace ? workspaceTitle(selectedWorkspace) : workspacesLoading ? $t('common.loading') : $t('workspace.title')}</span>
-      </Select.Trigger>
-      <Select.Content align="start" class="w-72">
-        {#each workspaces as workspace (workspace.workspace_id)}
-          <Select.Item value={workspace.workspace_id} label={workspaceTitle(workspace)} class="py-2">
-            <div class="flex min-w-0 flex-col">
-              <span class="truncate">{workspaceTitle(workspace)}</span>
-              <span class="truncate font-mono text-[11px] text-muted-foreground">{workspace.display_path}</span>
-            </div>
-          </Select.Item>
-        {/each}
-      </Select.Content>
-    </Select.Root>
+      {/snippet}
+      {#snippet option(workspace)}
+        <div class="flex min-w-0 flex-col">
+          <span class="truncate">{workspaceTitle(workspace)}</span>
+          <span class="truncate font-mono text-[11px] text-muted-foreground">{workspace.display_path}</span>
+        </div>
+      {/snippet}
+    </ResponsiveSelect>
     {@render children?.()}
   </div>
 {/if}

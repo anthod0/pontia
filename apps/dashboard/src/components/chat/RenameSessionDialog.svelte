@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ResponsiveDialog from '$lib/components/ui/overlay/ResponsiveDialog.svelte'
   import { t } from '$lib/i18n';
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -40,7 +41,7 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="sm:max-w-md">
+  <ResponsiveDialog mode="sheet" dismiss={cancel} class="sm:max-w-md">
     <form onsubmit={(event) => { event.preventDefault(); submit() }}>
       <Dialog.Header>
         <Dialog.Title>{$t('chat.rename')}</Dialog.Title>
@@ -62,5 +63,5 @@
         <Button type="submit" disabled={busy || !session}>{busy ? $t('common.saving') : $t('chat.rename')}</Button>
       </Dialog.Footer>
     </form>
-  </Dialog.Content>
+  </ResponsiveDialog>
 </Dialog.Root>

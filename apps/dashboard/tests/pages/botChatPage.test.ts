@@ -1,3 +1,4 @@
+import "../shallowRouting";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { testDevice } from "../deviceFixture";
@@ -486,7 +487,7 @@ test("the sidebar button shows the open todo count and reopens the tab last used
   await fireEvent.click(screen.getByRole("tab", { name: /Todo/ }));
   await screen.findByText("No todos");
   await fireEvent.click(button);
-  expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByRole("complementary")).not.toBeInTheDocument());
 
   first.unmount();
   render(BotChatPreviewHarness, { botId: bot.bot_id });

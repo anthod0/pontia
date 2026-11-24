@@ -26,6 +26,8 @@
     <Dialog.Title class="sr-only">{active.name}</Dialog.Title>
     <Lightbox
       inline
+      dismiss={{ drag: true, pinch: false }}
+      onclose={() => open = false}
       bind:index
       {slides}
       zoom={{ max: 8 }}

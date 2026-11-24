@@ -1,3 +1,4 @@
+import "../shallowRouting";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { testDevice } from "../deviceFixture";
@@ -129,7 +130,7 @@ beforeEach(() => {
   localStorage.clear();
   wide = true;
   vi.stubGlobal("matchMedia", (query: string) => ({
-    matches: wide && query === "(min-width: 1024px)",
+    matches: query === (wide ? "(min-width: 1024px)" : "(max-width: 1023px)"),
     addEventListener() {},
     removeEventListener() {},
   }));
@@ -302,13 +303,24 @@ test("on wide screens the panel stays open on the tab last used", async () => {
   );
 });
 
-test("on phones the panel starts closed and does not save whether it is open", async () => {
+test("phone history traverses the panel without leaving the session or changing desktop preferences", async () => {
   localStorage.setItem("pontia.gitPanelOpen", "true");
   wide = false;
   render(SessionPanelHarness);
-  expect(screen.queryByRole("complementary")).toBeNull();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  sidebarButton().focus();
   await fireEvent.click(sidebarButton());
-  await fireEvent.click(within(sidePanel()).getByRole("button", { name: "Close" }));
+  const dialog = await screen.findByRole("dialog", { name: "Sidebar" });
+  const url = location.href;
+  history.back();
+  await waitFor(() => expect(dialog).not.toBeInTheDocument());
+  expect(location.href).toBe(url);
+  await waitFor(() => expect(sidebarButton()).toHaveFocus());
+  history.forward();
+  const restored = await screen.findByRole("dialog", { name: "Sidebar" });
+  await fireEvent.click(within(restored).getByRole("button", { name: "Close" }));
+  await waitFor(() => expect(restored).not.toBeInTheDocument());
+  expect(location.href).toBe(url);
   expect(localStorage.getItem("pontia.gitPanelOpen")).toBe("true");
 });
 

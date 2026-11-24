@@ -1,3 +1,4 @@
+import "../shallowRouting";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import userEventBase from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import BottomSheet from '$lib/components/ui/overlay/BottomSheet.svelte'
   import { tick } from 'svelte'
   import { createQuery } from '@tanstack/svelte-query'
   import { modelCatalogQuery } from '../../queries/modelCatalog'
@@ -65,8 +66,6 @@
   let highlight = $state<string | null>(null)
   let column = $state<'models' | 'efforts'>('models')
   let effortHighlight = $state('')
-  let dragStart = $state<number | null>(null)
-  let dragOffset = $state(0)
 
   const models = $derived(catalog.data?.models ?? [])
   const defaultModel = $derived(models.find((entry) => entry.id === catalog.data?.default_model))
@@ -106,7 +105,6 @@
     highlight = selectedRow?.key ?? allRows[0]?.key ?? null
     column = 'models'
     effortHighlight = effort
-    dragOffset = 0
     void catalog.refetch({ cancelRefetch: false })
   }
 
@@ -159,23 +157,6 @@
       return
     }
     event.preventDefault()
-  }
-
-  function dragDown(event: PointerEvent) {
-    if ((event.target as Element).closest('button')) return
-    dragStart = event.clientY
-    ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
-  }
-
-  function dragMove(event: PointerEvent) {
-    if (dragStart !== null) dragOffset = Math.max(0, event.clientY - dragStart)
-  }
-
-  function dragEnd() {
-    if (dragStart === null) return
-    if (dragOffset > 80) open = false
-    else dragOffset = 0
-    dragStart = null
   }
 
   const tagClass = 'inline-flex h-[18px] shrink-0 items-center rounded-sm px-1.5 text-[10.5px] font-medium'
@@ -328,8 +309,7 @@
 {/snippet}
 
 {#snippet mobileSheet()}
-  <div class="shrink-0 touch-none" onpointerdown={dragDown} onpointermove={dragMove} onpointerup={dragEnd} onpointercancel={dragEnd} role="presentation">
-    <div aria-hidden="true" class="flex justify-center pt-2 pb-1"><span class="h-1 w-9 rounded-full bg-border"></span></div>
+  <div class="shrink-0">
     <div class="flex items-center gap-2 pr-2 pb-2 pl-4">
       <ClientIcon clientType={client.client_type} acpAgentId={client.client_key} class="size-4 text-foreground" />
       <Sheet.Title class="min-w-0 flex-1 truncate text-base font-semibold text-heading">{$t('model.pickerTitle')}</Sheet.Title>
@@ -372,7 +352,7 @@
       {/each}
     {/if}
   </div>
-  <div class="shrink-0 border-t bg-surface px-4 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+  <div class="shrink-0 border-t bg-surface px-4 pt-3">
     <div class="mb-2 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
       <GaugeIcon class="size-3.5 shrink-0" aria-hidden="true" />
       <span class="shrink-0">{$t('effort.title')} ·</span>
@@ -383,7 +363,7 @@
         {#each sheetChoices as choice (choice)}
           {@const option = sheetModel?.reasoning_efforts?.find((entry) => entry.id === choice)}
           <button type="button" role="radio" aria-checked={effort === choice}
-            class={cn('grid h-10 min-w-0 place-items-center truncate rounded-md px-2.5 text-[13px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring', option && 'font-mono',
+            class={cn('grid h-11 min-w-0 place-items-center truncate rounded-md px-2.5 text-[13px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring', option && 'font-mono',
               effort === choice ? 'bg-primary-solid text-primary-foreground' : 'bg-muted text-heading')}
             onclick={() => effort = choice}>{option?.name ?? $t('effort.default')}</button>
         {/each}
@@ -404,7 +384,7 @@
     {/if}
     <Sheet.Close>
       {#snippet child({ props })}
-        <Button {...props} size="lg" class="mt-3 h-10 w-full">{$t('common.done')}</Button>
+        <Button {...props} size="lg" class="mt-3 h-11 w-full">{$t('common.done')}</Button>
       {/snippet}
     </Sheet.Close>
   </div>
@@ -415,10 +395,9 @@
     <Sheet.Trigger {id} type="button" data-size="default" data-placeholder={selected || current ? undefined : ''} aria-invalid={savedUnavailable || undefined} class={triggerClass} {disabled}>
       {@render triggerContent()}
     </Sheet.Trigger>
-    <Sheet.Content side="bottom" showCloseButton={false} style={dragOffset ? `transform: translateY(${dragOffset}px)` : undefined}
-      class={cn('top-[calc(env(safe-area-inset-top)+3.5rem)] gap-0 overflow-hidden rounded-t-[14px] p-0', dragStart !== null && 'transition-none')}>
+    <BottomSheet dismiss={() => open = false} showCloseButton={false} class="data-[side=bottom]:h-(--visual-viewport-height) px-0">
       {@render mobileSheet()}
-    </Sheet.Content>
+    </BottomSheet>
   </Sheet.Root>
 {:else}
   <Popover.Root bind:open onOpenChange={openChange}>

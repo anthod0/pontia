@@ -1,4 +1,5 @@
 <script lang="ts">
+  import BottomSheet from '$lib/components/ui/overlay/BottomSheet.svelte'
   import { t } from '$lib/i18n';
   import AtIcon from 'phosphor-svelte/lib/AtIcon'
   import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
@@ -7,6 +8,8 @@
   import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon'
   import PackageIcon from 'phosphor-svelte/lib/PackageIcon'
   import * as Popover from '$lib/components/ui/popover/index.js'
+  import * as Sheet from '$lib/components/ui/sheet'
+  import { IsMobile } from '$lib/hooks/is-mobile.svelte'
   import type { SessionView, WorkspaceGitStatusView } from '../../api/types'
   import ClientIcon from './ClientIcon.svelte'
   import GitStatusInline from './GitStatusInline.svelte'
@@ -24,6 +27,9 @@
   const acpAgentId = $derived((session.acp as { agent_id?: string } | undefined)?.agent_id)
   const systemPromptInjected = $derived((session.acp as { system_prompt_injected?: boolean } | undefined)?.system_prompt_injected)
   let sessionDetailsOpen = $state(false)
+  const mobile = new IsMobile()
+  const Root = $derived(mobile.current ? Sheet.Root : Popover.Root)
+  const Trigger = $derived(mobile.current ? Sheet.Trigger : Popover.Trigger)
   const fields = [
     { key: 'client', icon: null },
     { key: 'workspace', icon: FolderIcon },
@@ -40,8 +46,8 @@
 </script>
 
 <div data-testid="session-metadata" class="relative min-w-0 flex-1">
-  <Popover.Root bind:open={sessionDetailsOpen}>
-    <Popover.Trigger onclick={onRefreshGitStatus} class="flex h-7 w-fit max-w-full min-w-0 items-center rounded-md px-1.5 text-left font-mono text-[11px] outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring" aria-label={$t('chat.detailsSummary', { summary: metadataSummary })}>
+  <Root bind:open={sessionDetailsOpen}>
+    <Trigger onclick={onRefreshGitStatus} class="flex touch-target:min-h-11 h-7 w-fit max-w-full min-w-0 items-center rounded-md px-1.5 text-left font-mono text-[11px] outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring" aria-label={$t('chat.detailsSummary', { summary: metadataSummary })}>
       <span data-chat-session-details-summary class="block min-w-0 flex-1 truncate">
         {#each visibleFields as field, index (field.key)}
           {#if index > 0}<span class="mx-1.5 inline-block h-2.5 border-l align-middle" aria-hidden="true"></span>{/if}
@@ -55,35 +61,46 @@
           </span>
         {/each}
       </span>
-    </Popover.Trigger>
-    <Popover.Content side="top" align="start" role="dialog" aria-label={$t('chat.details')} class="w-[min(24rem,calc(100vw-2rem))] p-3">
-      <dl class="space-y-3 text-sm">
-        {#each visibleFields as field (field.key)}
-          <div class="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-2">
-            <dt class="flex items-start justify-center text-muted-foreground">
-              {#if field.key === 'client'}
-                <ClientIcon clientType={session.client_type} {acpAgentId} class="size-4" />
-                <span class="sr-only">{field.item.label}</span>
-              {:else if field.icon}
-                <field.icon class="size-4" aria-label={field.item.label} />
-              {/if}
-            </dt>
-            <dd class="min-w-0 break-words font-mono text-xs" title={field.item.title} aria-label={`${field.item.label}: ${field.item.title}`}>
-              {#if field.key === 'git' && gitStatus}
-                <span class="flex flex-wrap gap-1"><GitStatusInline {gitStatus} /></span>
-                {#if gitStatus.state === 'error' && !isOutsideGitRepository(gitStatus)}<span class="text-destructive">{field.item.title}</span>{/if}
-              {:else}
-                {field.key === 'workspace' ? field.item.title : field.item.value}
-              {/if}
-            </dd>
-          </div>
-        {/each}
-      </dl>
-      {#if systemPromptInjected !== undefined && systemPromptInjected !== null}
-        <p class="mt-3 text-xs text-muted-foreground">
-          {$t(systemPromptInjected ? 'chat.instructionsInjected' : 'chat.instructionsNotInjected')}
-        </p>
-      {/if}
-    </Popover.Content>
-  </Popover.Root>
+    </Trigger>
+    {#if mobile.current}
+      <BottomSheet dismiss={() => sessionDetailsOpen = false}>
+        <Sheet.Title class="flex min-h-11 items-center">{$t('chat.details')}</Sheet.Title>
+        {@render details()}
+      </BottomSheet>
+    {:else}
+      <Popover.Content side="top" align="start" role="dialog" aria-label={$t('chat.details')} class="w-[min(24rem,calc(100vw-2rem))] p-3">
+        {@render details()}
+      </Popover.Content>
+    {/if}
+  </Root>
 </div>
+
+{#snippet details()}
+  <dl class="space-y-3 text-sm">
+    {#each visibleFields as field (field.key)}
+      <div class="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-2">
+        <dt class="flex items-start justify-center text-muted-foreground">
+          {#if field.key === 'client'}
+            <ClientIcon clientType={session.client_type} {acpAgentId} class="size-4" />
+            <span class="sr-only">{field.item.label}</span>
+          {:else if field.icon}
+            <field.icon class="size-4" aria-label={field.item.label} />
+          {/if}
+        </dt>
+        <dd class="min-w-0 break-words font-mono text-xs" title={field.item.title} aria-label={`${field.item.label}: ${field.item.title}`}>
+          {#if field.key === 'git' && gitStatus}
+            <span class="flex flex-wrap gap-1"><GitStatusInline {gitStatus} /></span>
+            {#if gitStatus.state === 'error' && !isOutsideGitRepository(gitStatus)}<span class="text-destructive">{field.item.title}</span>{/if}
+          {:else}
+            {field.key === 'workspace' ? field.item.title : field.item.value}
+          {/if}
+        </dd>
+      </div>
+    {/each}
+  </dl>
+  {#if systemPromptInjected !== undefined && systemPromptInjected !== null}
+    <p class="mt-3 text-xs text-muted-foreground">
+      {$t(systemPromptInjected ? 'chat.instructionsInjected' : 'chat.instructionsNotInjected')}
+    </p>
+  {/if}
+{/snippet}

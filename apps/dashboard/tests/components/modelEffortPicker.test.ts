@@ -128,6 +128,27 @@ test("navigates models and efforts from the keyboard", async () => {
   expect(trigger).toHaveTextContent("Max · high");
 });
 
+test("a cancelled sheet drag keeps the picker open and a downward release dismisses it", async () => {
+  const matchMedia = window.matchMedia;
+  vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
+    ...matchMedia(query),
+    matches: query.includes("max-width: 767px"),
+  }));
+  render(Harness, { onchange: vi.fn() });
+  await fireEvent.click(document.getElementById("picker")!);
+  const sheet = await screen.findByRole("dialog");
+  const handle = within(sheet).getByRole("presentation");
+  Object.defineProperty(handle, "setPointerCapture", { value: vi.fn() });
+  const pointer = { pointerId: 1, isPrimary: true, pointerType: "touch" };
+  await fireEvent.pointerDown(handle, { ...pointer, clientY: 100 });
+  await fireEvent.pointerMove(handle, { ...pointer, clientY: 210 });
+  await fireEvent.pointerCancel(handle, { ...pointer, clientY: 210 });
+  expect(sheet).toBeVisible();
+  await fireEvent.pointerDown(handle, { ...pointer, clientY: 100 });
+  await fireEvent.pointerUp(handle, { ...pointer, clientY: 210 });
+  await waitFor(() => expect(sheet).not.toBeInTheDocument());
+});
+
 test("on mobile switches models in place and commits efforts until done", async () => {
   const matchMedia = window.matchMedia;
   window.matchMedia = ((query: string) => ({
