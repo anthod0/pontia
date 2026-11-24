@@ -152,13 +152,8 @@ async fn delayed_model_options_support_discovery_and_startup_selection() {
 }
 
 #[tokio::test]
-async fn deferred_catalog_exposes_effort_only_for_the_current_model() {
-    let h = Harness::new(&[
-        ("ACP_MODELS", "deferred"),
-        ("ACP_DELETE", "1"),
-        ("ACP_EFFORT", "1"),
-    ])
-    .await;
+async fn unknown_agent_exposes_effort_only_for_the_current_model() {
+    let h = Harness::new(&[("ACP_MODELS", "flat"), ("ACP_EFFORT", "1")]).await;
     let models = list(&h).await.unwrap().models;
     assert_eq!(
         models[0].default_reasoning_effort.as_deref(),
@@ -176,7 +171,95 @@ async fn deferred_catalog_exposes_effort_only_for_the_current_model() {
     assert_eq!(models[0].reasoning_efforts[1].description, "More thinking");
     assert!(models[1].reasoning_efforts.is_empty());
     assert!(models[1].default_reasoning_effort.is_none());
+    assert_eq!(h.requests("session/set_config_option"), 0);
     h.stop().await;
+}
+
+#[tokio::test]
+async fn grok_catalog_reads_each_models_metadata_without_switching() {
+    for options in [false, true] {
+        let mut flags = vec![
+            ("ACP_MODELS", "flat"),
+            ("ACP_EFFORT", "1"),
+            ("ACP_GROK_MODELS", "1"),
+        ];
+        if options {
+            flags.push(("ACP_OPTIONS", "1"));
+        }
+        let h = Harness::new(&flags).await;
+        let models = list(&h).await.unwrap();
+        assert_eq!(models.default_model.as_deref(), Some("fast"));
+        assert!(models.models[0].reasoning_efforts.is_empty());
+        assert_eq!(models.models[0].default_reasoning_effort, None);
+        let deep = &models.models[1];
+        assert_eq!(deep.default_reasoning_effort.as_deref(), Some("max"));
+        assert_eq!(deep.reasoning_efforts.len(), 2);
+        assert_eq!(deep.reasoning_efforts[1].name, "Maximum");
+        assert_eq!(deep.reasoning_efforts[1].description, "Thinks longer");
+        assert_eq!(h.requests("session/set_config_option"), 0);
+        h.stop().await;
+    }
+}
+
+#[tokio::test]
+async fn kiro_and_antigravity_collect_model_specific_efforts_and_restore_original() {
+    for (key, mut flags) in [
+        (
+            "kiro",
+            vec![
+                ("ACP_KIRO", "1"),
+                ("ACP_MODELS", "deferred"),
+                ("ACP_DELETE", "1"),
+            ],
+        ),
+        (
+            "antigravity",
+            vec![
+                ("ACP_MODELS", "flat"),
+                ("ACP_ANTIGRAVITY", "1"),
+                ("ACP_PROBE_FAILURES", "1"),
+            ],
+        ),
+    ] {
+        flags.extend([("ACP_EFFORT", "1"), ("ACP_MODEL_EFFORT", "1")]);
+        let h = Harness::new(&flags).await;
+        let models = pontia_agent_control::agent_clients::AgentClientService::new(
+            h.app.db(),
+            h.app.clients(),
+        )
+        .list_models("acp", key, h.root.path())
+        .await
+        .unwrap();
+        assert_eq!(models.default_model.as_deref(), Some("fast"));
+        for model in &models.models {
+            let levels: Vec<_> = model
+                .reasoning_efforts
+                .iter()
+                .map(|level| level.id.as_str())
+                .collect();
+            let (expected, default): (&[&str], _) = match model.id.as_str() {
+                "fast" => (&["medium", "high", "low"], Some("medium")),
+                "deep" => (&["max"], Some("max")),
+                _ => (&[], None),
+            };
+            assert_eq!(levels, expected);
+            assert_eq!(model.default_reasoning_effort.as_deref(), default);
+        }
+        let selected: Vec<_> = h
+            .wire()
+            .into_iter()
+            .filter(|frame| frame["method"] == "session/set_config_option")
+            .map(|frame| frame["params"]["value"].as_str().unwrap().to_owned())
+            .collect();
+        if flags.contains(&("ACP_PROBE_FAILURES", "1")) {
+            assert_eq!(selected, ["stalled", "rejected", "ignored", "deep", "fast"]);
+        } else {
+            assert_eq!(selected, ["deep", "fast"]);
+            assert_eq!(h.requests("session/delete"), 1);
+        }
+        assert_eq!(h.requests("session/close"), 1);
+        h.stop().await;
+    }
 }
 
 #[tokio::test]
