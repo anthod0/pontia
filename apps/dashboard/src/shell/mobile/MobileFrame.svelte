@@ -1,9 +1,9 @@
 <script lang="ts">
+  import { provideMobileHeader } from './header'
   import { untrack, type Snippet } from 'svelte'
   import { page } from '$app/state'
   import { afterNavigate } from '$app/navigation'
-  import { provideMobileTitle } from './headerTitle'
-  import { readable, writable } from 'svelte/store'
+  import { readable } from 'svelte/store'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import { t } from '$lib/i18n'
   import { dashboardRelativePath, navigate } from '$lib/navigation'
@@ -13,8 +13,6 @@
   import { provideMobileStack } from '$lib/mobile/overlayStack.svelte'
   import { createBotDirectory } from '../../features/bots/botDirectory.svelte'
   import { provideMobileDirectory } from '../../features/bots/mobileDirectory'
-  import { provideTopBarAction } from '../../components/layout/topBarAction'
-  import { provideSettingsDetail } from '../../components/settings/settingsDetail'
   import { settingsSections } from '../../components/settings/sections'
   import type { DeviceRuntime } from '../../device/runtime'
   import { useDashboardHost } from '../../device/hostContext'
@@ -31,9 +29,7 @@
   const stack = provideMobileStack()
   const sessionDetail = $derived(device?.sessions.sessionDetail ?? readable(null))
   const sessionTitle = $derived($sessionDetail && $sessionDetail.session.session_id === page.params.sessionId ? sessionChatTitle($sessionDetail.session,$t) : undefined)
-  const heading = provideMobileTitle(writable(null))
-  const action = provideTopBarAction()
-  const detail = provideSettingsDetail()
+  const { title: heading, action } = provideMobileHeader(() => switchOpen = true)
   let scroller: HTMLElement
   let scrolled = $state(false)
   let switchOpen = $state(false)
@@ -42,7 +38,7 @@
   const hasTabs = $derived(!!tab && !$keyboardOpen && !stack.layers.length)
   const section = $derived(settingsSections.find(section => section.path === path))
   const bot = $derived(directory?.bots?.find(bot => bot.bot_id === page.params.botId))
-  const title = $derived($detail?.title ?? bot?.name ?? sessionTitle ?? $t(tab?.label ?? section?.label ?? (path === '/new' ? 'nav.newChat' : path.startsWith('/chat/') ? 'sessions.title' : 'mobile.chats')))
+  const title = $derived(bot?.name ?? sessionTitle ?? $t(tab?.label ?? section?.label ?? (path === '/new' ? 'nav.newChat' : path.startsWith('/chat/') ? 'sessions.title' : 'mobile.chats')))
   afterNavigate(() => {
     scroller?.scrollTo({top: 0})
   })
@@ -55,19 +51,13 @@
     const id = page.state.mobileLayer
     untrack(() => stack.reconcile(id))
   })
-  const showingDetail = $derived(!!$detail)
-  $effect(() => {
-    if (!showingDetail) return
-    const id = untrack(() => stack.open({dismiss: () => $detail?.back()}))
-    return () => stack.release(id)
-  })
 </script>
 
 <div class="mobile-shell" data-tabs={hasTabs} data-keyboard={$keyboardOpen}>
   <div inert={stack.layers.some(layer => layer.content)} class="relative isolate flex h-full flex-col" use:edgeSwipeBack={!tab && path !== '/new' && !stack.layers.length ? back : undefined}>
     <div class="mobile-chrome" data-scrolled={scrolled} use:chromeMetrics={'--mobile-header-h'}>
       <MobileHeader customTitle={$heading} {title} device={tab ? host.activeDevice : null} back={tab || path === '/' ? undefined : back}
-        modal={path === '/new'} disabled={$detail?.disabled} backLabel={$detail && section ? $t(section.label) : undefined}
+        modal={path === '/new'}
         switchDevice={tab && host.canSwitchDevice ? () => switchOpen = true : undefined} action={$action} />
       <MobileConnectionBanner />
     </div>

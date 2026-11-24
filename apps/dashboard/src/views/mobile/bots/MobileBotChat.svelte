@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { useMobileHeader } from '../../../shell/mobile/header'
   import { page } from '$app/state'
   import { onMount, untrack } from 'svelte'
   import { t } from '$lib/i18n'
@@ -6,8 +7,6 @@
   import { chromeMetrics } from '$lib/mobile/chromeMetrics'
   import { createRecentFiles, withRecentFile } from '$lib/botRecentFiles'
   import { useDeviceRuntime } from '../../../device/context'
-  import { useMobileTitle } from '../../../shell/mobile/headerTitle'
-  import { useTopBarAction } from '../../../components/layout/topBarAction'
   import { provideFilePreviewNavigator, type FilePreviewTarget } from '../../../components/chat/filePreviewContext'
   import { isImagePath } from '$lib/downloads/localFilePath'
   import FilePreviewPanel from '../../../components/chat/FilePreviewPanel.svelte'
@@ -27,8 +26,7 @@
   const timeline = $derived(chat.timeline)
   const device = useDeviceRuntime()
   const stack = useMobileStack()!
-  const heading = useMobileTitle()
-  const action = useTopBarAction()
+  const { title: heading, action } = useMobileHeader()
   const recent = createRecentFiles(
     device.id,
     untrack(() => chat.botId),
@@ -75,10 +73,10 @@
   }
   onMount(() => {
     heading.set(title)
-    action?.set(menuButton)
+    action.set(menuButton)
     return () => {
       heading.set(null)
-      action?.set(null)
+      action.set(null)
     }
   })
   let target = untrack(() => page.url.searchParams.get('message'))

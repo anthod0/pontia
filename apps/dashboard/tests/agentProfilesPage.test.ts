@@ -8,6 +8,7 @@ import { token } from "../src/stores/auth";
 import { createSampleData } from "../mock/data";
 import { createMockDevice, handleDeviceRequest, type MockDevice } from "../mock/server";
 import { testDevice } from "./deviceFixture";
+import MobileProfilesSettings from "../src/views/mobile/settings/MobileProfilesSettings.svelte";
 import MobileSettingsHost from "./components/layout/MobileSettingsHost.svelte";
 
 const sampleTemplate = (id: string, name: string, client_type: string, model: string) => ({
@@ -261,19 +262,15 @@ test("reads an individual profile and cannot read it after deletion", async () =
 test("phones create profiles from the top bar and return from a profile with its back button", async () => {
   window.history.pushState({}, "", "/dashboard/settings/agent-profiles");
   const user = userEvent.setup();
-  render(MobileSettingsHost, { props: { page: AgentProfilesPage } });
-  const bar = () => within(screen.getByRole("banner"));
-
+  render(MobileSettingsHost, { props: { page: MobileProfilesSettings } });
   await open("Executor");
-  expect(await bar().findByText("Executor")).toBeInTheDocument();
-  expect(bar().queryByRole("button", { name: "New" })).toBeNull();
-  expect(bar().queryByRole("button", { name: /Switch settings section/ })).toBeNull();
-
-  await user.click(bar().getByRole("button", { name: "Agent Profiles" }));
-  expect(await screen.findByText("Select a profile to edit it.")).toBeInTheDocument();
-  expect(bar().getByRole("button", { name: "Back" })).toBeInTheDocument();
-  await user.click(bar().getByRole("button", { name: "New" }));
-  expect(bar().getByText("New profile")).toBeInTheDocument();
+  expect(await screen.findByLabelText("Name")).toHaveValue("Executor");
+  await user.click(
+    within(screen.getAllByRole("banner").at(-1)!).getByRole("button", { name: "Back" }),
+  );
+  await waitFor(() => expect(screen.queryByLabelText("Name")).toBeNull());
+  await user.click(screen.getByRole("button", { name: "New" }));
+  expect(await screen.findByLabelText("Name")).toHaveValue("");
 });
 
 const card = (name: string) => screen.findByRole("button", { name: new RegExp(`^${name}`) });

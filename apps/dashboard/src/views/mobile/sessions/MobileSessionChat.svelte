@@ -1,12 +1,11 @@
 <script lang="ts">
+  import { useMobileHeader } from '../../../shell/mobile/header'
   import { onMount } from 'svelte'
   import { t } from '$lib/i18n'
   import { statusLabel } from '$lib/i18n/status'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import { isExecutingSessionState } from '$lib/sessionState'
   import { chromeMetrics } from '$lib/mobile/chromeMetrics'
-  import { useTopBarAction } from '../../../components/layout/topBarAction'
-  import { useMobileTitle } from '../../../shell/mobile/headerTitle'
   import { provideFilePreviewNavigator } from '../../../components/chat/filePreviewContext'
   import DotsThreeIcon from 'phosphor-svelte/lib/DotsThreeIcon'
   import type { SessionChatController } from '../../../features/sessions/sessionChat.svelte'
@@ -20,8 +19,7 @@
   import MobileSessionMetaStrip from './MobileSessionMetaStrip.svelte'
   import MobileSessionInteractions from './MobileSessionInteractions.svelte'
   let { chat }: { chat: SessionChatController } = $props()
-  const heading = useMobileTitle(),
-    action = useTopBarAction()
+  const { title: heading, action } = useMobileHeader()
   const session = $derived(chat.selectedSession),
     draft = $derived(chat.chatDraft)
   let menu = $state<MobileSessionActionSheet>(),
@@ -31,10 +29,10 @@
   provideFilePreviewNavigator({ open: (file) => menu?.openFile(file) })
   onMount(() => {
     heading.set(title)
-    action?.set(more)
+    action.set(more)
     return () => {
       heading.set(null)
-      action?.set(null)
+      action.set(null)
     }
   })
 </script>

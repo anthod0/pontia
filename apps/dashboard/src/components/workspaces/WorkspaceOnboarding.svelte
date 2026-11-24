@@ -2,7 +2,7 @@
   import { t } from '$lib/i18n';
   import { Button } from '$lib/components/ui/button/index.js'
   import PontiaMascot from '../chat/PontiaMascot.svelte'
-  import WorkspaceBrowser from './WorkspaceBrowser.svelte'
+  import WorkspacesPage from '../../pages/WorkspacesPage.svelte'
   import { navigate } from '$lib/navigation'
   import { dashboardPath } from '$lib/dashboardRoutes'
 
@@ -29,7 +29,7 @@
     </a>
   </p>
 
-  <WorkspaceBrowser />
+  <WorkspacesPage />
 
   <div class="flex justify-end px-1 max-md:mt-auto max-md:[&>button]:w-full">
     <Button disabled={!canContinue} onclick={onContinue}>{$t('workspaces.continueToChat')}</Button>

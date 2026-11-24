@@ -5,7 +5,6 @@
   import DownloadCenter from '../../components/layout/DownloadCenter.svelte'
   import SettingsShell from '../../components/settings/SettingsShell.svelte'
   import { isSettingsPath } from '../../components/settings/sections'
-  import { provideSettingsDetail } from '../../components/settings/settingsDetail'
   import { dashboardRelativePath } from '$lib/dashboardRoutes'
   import { provideFilePreviewNavigator } from '../../components/chat/filePreviewContext'
   import { filePreviewWidth } from '../../components/chat/filePreviewWidth'
@@ -20,7 +19,6 @@
   } = $props()
   let currentPath = $state(dashboardRelativePath())
   const topBarAction = provideTopBarAction()
-  provideSettingsDetail()
   const sessionPanel = useSessionPanel()!
   // Local file links open in the session side panel. The Bot chat page opens them in its own panel.
   provideFilePreviewNavigator({ open: target => sessionPanel.openFile(target) })

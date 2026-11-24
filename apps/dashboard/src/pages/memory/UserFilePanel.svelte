@@ -17,6 +17,8 @@
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import { formatRelativeTime } from '$lib/format'
 
+  import type {Snippet} from 'svelte'
+  let { openEditor, closeEditor }: { openEditor?: (editor: Snippet) => void; closeEditor?: () => void } = $props()
   const device = useDeviceRuntime()
   const user = device.memoryQueries.createUserFileQuery()
   const replace = device.memoryQueries.createReplaceUserFileMutation()
@@ -41,6 +43,7 @@
     if (!editing) return
     try {
       await replace.mutateAsync({ text: editing.draft, previous_text: editing.base })
+      closeEditor?.()
       editing = null
       saveError = null
       toast.success($t('memory.userSaved'))
@@ -51,14 +54,21 @@
     }
   }
 
+  function beginEdit(text: string) {
+    edit(text)
+    openEditor?.(editor)
+  }
   function startOver(): void {
     if (user.data) edit(user.data.text)
   }
 </script>
 
-<div class="overflow-hidden rounded-lg border bg-background text-sm shadow-sm">
+{#snippet actions()}        <Button size="sm" variant="ghost" disabled={replace.isPending} onclick={() => { closeEditor?.(); editing = null; saveError = null }}>{$t('common.cancel')}</Button>
+        <Button size="sm" type="submit" disabled={replace.isPending || overLimit || !editing || editing.draft === editing.base}>{replace.isPending ? $t('common.saving') : $t('common.save')}</Button>
+{/snippet}
+{#snippet editor()}
   {#if editing && user.data}
-    <form class="contents" onsubmit={(event) => { event.preventDefault(); void save() }}>
+    <form class={openEditor ? 'flex min-h-full flex-col' : 'contents'} onsubmit={(event) => { event.preventDefault(); void save() }}>
       <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-2">
         <div class="flex min-w-0 flex-1 items-center gap-2">
           <span class="font-mono text-sm font-medium text-heading">USER.md</span>
@@ -66,8 +76,7 @@
             {$t('memory.userCharacters', { count: draftLength.toLocaleString($currentLocale), limit: user.data.character_limit.toLocaleString($currentLocale) })}
           </span>
         </div>
-        <Button size="sm" variant="ghost" disabled={replace.isPending} onclick={() => { editing = null; saveError = null }}>{$t('common.cancel')}</Button>
-        <Button size="sm" type="submit" disabled={replace.isPending || overLimit || editing.draft === editing.base}>{replace.isPending ? $t('common.saving') : $t('common.save')}</Button>
+        {#if !openEditor}{@render actions()}{/if}
       </div>
       {#if saveError}
         <Alert.Root variant="destructive" class="mx-4 mt-4 w-auto">
@@ -88,8 +97,13 @@
           class="max-h-[34rem] min-h-72 font-mono text-xs leading-relaxed md:text-xs"
         />
       </div>
+      {#if openEditor}<p class="px-4 py-2 text-xs text-muted-foreground">{$t('memory.userEditHint')}</p><div class="sticky bottom-0 mt-auto flex justify-end gap-2 border-t bg-surface py-3">{@render actions()}</div>{/if}
     </form>
-    <p class="border-t px-4 py-2 text-xs text-muted-foreground">{$t('memory.userEditHint')}</p>
+    {#if !openEditor}<p class="border-t px-4 py-2 text-xs text-muted-foreground">{$t('memory.userEditHint')}</p>{/if}
+  {/if}
+{/snippet}
+<div class="overflow-hidden rounded-lg border bg-background text-sm shadow-sm">
+  {#if editing && !openEditor}{@render editor()}
   {:else if user.isError}
     <Alert.Root variant="destructive" class="m-4 w-auto"><WarningCircleIcon class="size-4" /><Alert.Description>{user.error.message}</Alert.Description></Alert.Root>
   {:else if user.isPending}
@@ -102,7 +116,7 @@
         <Empty.Description>{$t('memory.userEmptyDescription')}</Empty.Description>
       </Empty.Header>
       <Empty.Content>
-        <Button size="sm" variant="outline" onclick={() => edit(user.data.text)}><PencilSimpleIcon data-icon="inline-start" />{$t('memory.userWrite')}</Button>
+        <Button size="sm" variant="outline" onclick={() => beginEdit(user.data.text)}><PencilSimpleIcon data-icon="inline-start" />{$t('memory.userWrite')}</Button>
       </Empty.Content>
     </Empty.Root>
   {:else}
@@ -119,7 +133,7 @@
         <ToggleGroup.Item value="source" class="px-2.5">{$t('memory.userSource')}</ToggleGroup.Item>
       </ToggleGroup.Root>
       <Button size="icon-sm" variant="ghost" aria-label={$t('common.copy')} title={$t('common.copy')} onclick={() => void copy()}><CopyIcon class="size-4" /></Button>
-      <Button size="sm" variant="outline" onclick={() => edit(user.data.text)}><PencilSimpleIcon data-icon="inline-start" />{$t('common.edit')}</Button>
+      <Button size="sm" variant="outline" onclick={() => beginEdit(user.data.text)}><PencilSimpleIcon data-icon="inline-start" />{$t('common.edit')}</Button>
     </div>
     <div class="max-h-[34rem] overflow-auto px-5 py-4">
       {#if mode === 'rendered'}

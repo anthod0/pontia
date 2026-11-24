@@ -11,6 +11,7 @@
   import { Button } from '$lib/components/ui/button/index.js'
   import { Kbd } from '$lib/components/ui/kbd/index.js'
   import { selectTriggerClass } from '$lib/components/ui/select/index.js'
+  import { useMobileStack } from '$lib/mobile/overlayStack.svelte'
   import { IsMobile } from '$lib/hooks/is-mobile.svelte.js'
   import { adjacentValue } from '$lib/shortcuts/sessionNavigation'
   import { cn } from '$lib/utils.js'
@@ -55,6 +56,7 @@
 
   const uid = $props.id()
   const device = useDeviceRuntime()
+  const mobileStack = useMobileStack()
   const isMobile = new IsMobile()
   const catalog = createQuery(
     () => modelCatalogQuery(device, client, workspaceId),
@@ -390,7 +392,7 @@
   </div>
 {/snippet}
 
-{#if variant === 'form' && isMobile.current}
+{#if variant === 'form' && (mobileStack || isMobile.current)}
   <Sheet.Root bind:open onOpenChange={openChange}>
     <Sheet.Trigger {id} type="button" data-size="default" data-placeholder={selected || current ? undefined : ''} aria-invalid={savedUnavailable || undefined} class={triggerClass} {disabled}>
       {@render triggerContent()}

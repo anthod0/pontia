@@ -1,7 +1,7 @@
 <script lang="ts">
-  import WorkspaceBrowser from '../components/workspaces/WorkspaceBrowser.svelte'
+  import { isMobileShell } from '$lib/hooks/shellMode.svelte'
+  import MobileWorkspacesSettings from '../views/mobile/settings/MobileWorkspacesSettings.svelte'
+  import DesktopWorkspacesSettings from '../views/desktop/settings/DesktopWorkspacesSettings.svelte'
 </script>
 
-<section class="space-y-6">
-  <WorkspaceBrowser />
-</section>
+{#if isMobileShell()}<MobileWorkspacesSettings />{:else}<DesktopWorkspacesSettings />{/if}

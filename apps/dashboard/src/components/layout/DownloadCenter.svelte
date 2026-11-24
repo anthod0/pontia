@@ -20,7 +20,7 @@
   {#if $downloads.length}
   <Dialog.Trigger>
     {#snippet child({ props })}
-      <Button {...props} variant="ghost" size="sm" class="pointer-events-auto relative hidden md:inline-flex h-10 gap-1.5 bg-popover px-2.5 ring-1 ring-foreground/10 md:h-8 md:px-2 [&_svg:not([class*=size-])]:size-5 md:[&_svg:not([class*=size-])]:size-3.5" aria-label={$t('downloads.title')} title={$t('downloads.title')}>
+      <Button {...props} variant="ghost" size="sm" class="pointer-events-auto relative inline-flex h-8 gap-1.5 bg-popover ring-1 ring-foreground/10 px-2 [&_svg:not([class*=size-])]:size-3.5" aria-label={$t('downloads.title')} title={$t('downloads.title')}>
         <DownloadSimpleIcon class={activeCount ? 'text-primary' : ''} />
         <Badge data-testid="downloads-count" class="absolute -top-1.5 -right-1.5 h-4 min-w-4 rounded-full px-1 text-[0.625rem] tabular-nums">{$number($downloads.length)}</Badge>
         <span class="sr-only" role="status">{activeCount ? $t('downloads.activeCount', { count: activeCount }) : ''}</span>

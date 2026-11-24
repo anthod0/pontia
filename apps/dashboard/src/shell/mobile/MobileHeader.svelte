@@ -5,13 +5,13 @@
   import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
   import { t } from '$lib/i18n'
   import type { HostDevice } from '../../device/hostContext'
-  let { customTitle, title, subtitle, device, back, backLabel, modal = false, disabled = false, switchDevice, action }: {
-    customTitle?: Snippet | null; title: string; subtitle?: string; device?: HostDevice | null; back?: () => void; backLabel?: string; modal?: boolean; disabled?: boolean; switchDevice?: () => void; action?: Snippet | null
+  let { customTitle, title, subtitle, device, back, modal = false, switchDevice, action }: {
+    customTitle?: Snippet | null; title: string; subtitle?: string; device?: HostDevice | null; back?: () => void; modal?: boolean; switchDevice?: () => void; action?: Snippet | null
   } = $props()
 </script>
 
 <header class="flex items-center gap-2 px-4 py-2">
-  {#if back}<button class="mobile-icon mobile-glass" {disabled} aria-label={backLabel ?? $t(modal ? 'common.close' : 'mobile.back')} onclick={back}>{#if modal}<XIcon />{:else}<CaretLeftIcon />{/if}</button>{/if}
+  {#if back}<button class="mobile-icon mobile-glass" aria-label={$t(modal ? 'common.close' : 'mobile.back')} onclick={back}>{#if modal}<XIcon />{:else}<CaretLeftIcon />{/if}</button>{/if}
   {#snippet heading()}
     {#if device}<span class="flex items-center gap-1 text-xs text-muted-foreground"><span class={['size-2 rounded-full',device.state === 'online' ? 'bg-green-600' : 'bg-muted-foreground']}></span>{device.name}{#if switchDevice}<CaretDownIcon />{/if}</span>{/if}
     <span class={['block truncate font-semibold text-heading', device ? 'text-[22px]' : 'text-lg']}>{title}</span>

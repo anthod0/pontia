@@ -284,7 +284,7 @@
   </div>
 
   {#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
-  <div class="flex flex-wrap justify-end gap-2">
+  <div class="profile-actions flex flex-wrap justify-end gap-2">
     {#if profile && ondelete}
       <Button type="button" variant="ghost" class="text-destructive hover:text-destructive" disabled={saving} aria-label={$t('profiles.deleteNamed', { name: profile.name })} onclick={() => profile && ondelete?.(profile)}><TrashIcon data-icon="inline-start" />{$t('common.delete')}</Button>
     {/if}
@@ -305,3 +305,15 @@
     </AlertDialog.Footer>
   </AlertDialog.Content>
 </AlertDialog.Root>
+
+<style>
+  :global(.mobile-screen) form { padding-bottom: calc(4rem + env(safe-area-inset-bottom)) }
+  :global(.mobile-screen) .profile-actions {
+    position: absolute;
+    inset: auto 0 0;
+    z-index: 1;
+    padding: .75rem 1rem max(.75rem, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+</style>

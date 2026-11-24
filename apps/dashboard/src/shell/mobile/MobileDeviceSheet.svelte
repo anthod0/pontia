@@ -4,6 +4,9 @@
   import { t } from '$lib/i18n'
   import { useMobileStack } from '$lib/mobile/overlayStack.svelte'
   import { useDashboardHost } from '../../device/hostContext'
+  import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon'
+  import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
+  import { deviceStateLabel, deviceStateDotClass } from '../../components/devices/deviceState'
   let { open = $bindable(false) }: { open: boolean } = $props()
   const host = useDashboardHost()
   const stack = useMobileStack()!
@@ -15,7 +18,10 @@
     {#each host.devices as device (device.id)}
       <button class="mobile-row" aria-pressed={device.handle === host.activeDevice?.handle}
         onclick={() => stack.back(() => host.selectDevice(device.handle, {keepMobileTab: true}))}>
-        {device.name}<span class="ml-auto text-muted-foreground">{$t(device.state === 'online' ? 'devices.online' : device.state === 'connecting' ? 'devices.connecting' : 'devices.offline')}</span>
+        <DesktopIcon /><span class="min-w-0 flex-1 truncate text-left">{device.name}</span>
+        <span class={['size-2 rounded-full',deviceStateDotClass[device.state]]}></span>
+        <small>{$t(deviceStateLabel[device.state])}</small>
+        {#if device.handle === host.activeDevice?.handle}<CheckIcon class="text-primary" />{/if}
       </button>
     {/each}
   </BottomSheet>

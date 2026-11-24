@@ -19,12 +19,12 @@
   } = $props()
 </script>
 
-<Sidebar.Group class="shrink-0 pb-0 max-md:px-3 group-data-[collapsible=icon]:hidden">
+<Sidebar.Group class="shrink-0 pb-0 group-data-[collapsible=icon]:hidden">
   <Sidebar.Menu>
     <Sidebar.MenuItem>
       <ResponsiveMenu label={$t('devices.title')} align="start" class="w-(--bits-dropdown-menu-anchor-width) min-w-56">
         {#snippet trigger()}
-          <Sidebar.MenuButton class="text-[13px] max-md:h-11 max-md:px-3 max-md:text-[15px]" aria-label={$t('devices.sidebarDevice')} title={selected ? $t(deviceStateLabel[selected.state]) : undefined}>
+          <Sidebar.MenuButton class="text-[13px]" aria-label={$t('devices.sidebarDevice')} title={selected ? $t(deviceStateLabel[selected.state]) : undefined}>
             {#snippet child({ props })}
               <DropdownMenu.Trigger {...props}>
                 <DesktopIcon class="text-sidebar-foreground/60" />
@@ -50,7 +50,6 @@
       </ResponsiveMenu>
       {#if previous}
         <Sidebar.MenuAction
-          class="max-md:peer-data-[size=default]/menu-button:top-3"
           aria-label={$t('devices.switchBack', { name: previous.name })}
           title={$t('devices.switchBackTitle', { name: previous.name, state: $t(deviceStateLabel[previous.state]), keys: formatShortcutKeys(chatShortcuts.previousDevice.keys) })}
           onclick={() => onSelect(previous.handle)}

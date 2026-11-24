@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { useMobileHeader } from '../../shell/mobile/header'
   import { onMount, onDestroy } from 'svelte'
-  import { useTopBarAction } from '../../components/layout/topBarAction'
   import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
   import { t } from '$lib/i18n'
   import { navigate } from '$lib/navigation'
@@ -39,10 +39,10 @@
   onDestroy(cancel)
   const directory = useMobileDirectory()!
   const device = useDeviceRuntime()
-  const action = useTopBarAction()
+  const { action } = useMobileHeader()
   onMount(() => {
-    action?.set(createAction)
-    return () => action?.set(null)
+    action.set(createAction)
+    return () => action.set(null)
   })
   const stack = useMobileStack()!
 </script>

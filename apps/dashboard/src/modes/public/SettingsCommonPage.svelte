@@ -7,11 +7,13 @@
   import * as Avatar from '$lib/components/ui/avatar/index.js';
   import { Button } from '$lib/components/ui/button/index.js';
   import { Skeleton } from '$lib/components/ui/skeleton/index.js';
+  import type { Snippet } from 'svelte'
   import AppearanceSettings from '../../components/settings/AppearanceSettings.svelte';
   import { deviceStateLabel } from '../../components/devices/deviceState';
   import { useDashboardHost } from '../../device/hostContext';
   import { loadRemoteAccess, type RemoteAccess } from './remoteAccessLoader.svelte';
 
+  let {appearance}: {appearance?: Snippet} = $props()
   const host = useDashboardHost();
   const devices = $derived(host.devices);
   let profile = $state<Awaited<ReturnType<RemoteAccess['getCloudProfile']>> | null>(null);
@@ -35,7 +37,7 @@
 </script>
 
 <div class="space-y-10">
-  <AppearanceSettings />
+  {#if appearance}{@render appearance()}{:else}<AppearanceSettings />{/if}
 
   <section class="space-y-4" aria-labelledby="settings-account-title">
     <div class="flex items-center justify-between gap-4">

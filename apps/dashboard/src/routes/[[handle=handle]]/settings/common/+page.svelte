@@ -1,5 +1,5 @@
 <script lang="ts">
-  import SettingsCommonPage from '$dashboard-mode/SettingsCommonPage.svelte';
+  import SettingsCommonPage from '../../../../pages/SettingsCommonPage.svelte';
 </script>
 
 <SettingsCommonPage />

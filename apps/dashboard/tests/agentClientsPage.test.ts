@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 import AgentClientsPage from "../src/pages/AgentClientsPage.svelte";
+import MobileClientsSettings from "../src/views/mobile/settings/MobileClientsSettings.svelte";
 import MobileSettingsHost from "./components/layout/MobileSettingsHost.svelte";
 import type { AgentClientView } from "../src/api/types";
 
@@ -182,20 +183,14 @@ test("a reopened page recovers a running setup across a temporary disconnect and
 test("phones refresh from the top bar and return from a client with its back button", async () => {
   window.history.pushState({}, "", "/dashboard/settings/clients");
   const user = userEvent.setup();
-  render(MobileSettingsHost, { props: { page: AgentClientsPage } });
-  const bar = () => within(screen.getByRole("banner"));
-
-  await user.click(await bar().findByRole("button", { name: "Refresh" }));
+  render(MobileSettingsHost, { props: { page: MobileClientsSettings } });
+  await user.click(await screen.findByRole("button", { name: "Refresh" }));
   await waitFor(() => expect(api.listAgentClients).toHaveBeenCalledTimes(2));
-
   await user.click(await screen.findByRole("button", { name: /^grok/ }));
-  expect(bar().getByText("grok")).toBeInTheDocument();
-  expect(bar().queryByRole("button", { name: "Refresh" })).toBeNull();
-  expect(screen.getAllByRole("button", { name: "Agent Clients" })).toHaveLength(1);
-
-  await user.click(bar().getByRole("button", { name: "Agent Clients" }));
-  expect(
-    await screen.findByText("Select an agent client to view its settings."),
-  ).toBeInTheDocument();
-  expect(bar().getByRole("button", { name: "Back" })).toBeInTheDocument();
+  expect(screen.getByRole("switch", { name: "Enabled" })).toBeChecked();
+  await user.click(
+    within(screen.getAllByRole("banner").at(-1)!).getByRole("button", { name: "Back" }),
+  );
+  await waitFor(() => expect(screen.queryByRole("switch")).toBeNull());
+  expect(screen.getByRole("button", { name: /^grok/ })).toBeEnabled();
 });
