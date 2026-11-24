@@ -1,5 +1,12 @@
 import { expect, test } from "vitest";
-import { entryQuote, messageText, parseQuotedMessage, quotedMessage } from "../../src/lib/botQuote";
+import {
+  entryQuote,
+  entryText,
+  messageText,
+  parseQuotedMessage,
+  plainText,
+  quotedMessage,
+} from "../../src/lib/botQuote";
 import type { BotMessage } from "../../src/api/types";
 
 const messageId = "bmsg_0193a000-0000-7000-8000-000000000002";
@@ -189,4 +196,12 @@ test("reading a historical quote does not shorten it", () => {
       `<user_quote message_id="${messageId}" speaker="Bot">${text}</user_quote>\nreply`,
     ).quote,
   ).toMatchObject({ text, excerpt: false });
+});
+
+test("plain text keeps line breaks and the whole message", () => {
+  const long = "word ".repeat(2100).trim();
+  expect(entryText(message("bot_reply", long))).toBe(long);
+  expect(plainText("## Files\n\n- `a.ts`   changed\n- **b.ts**  \n\nDone.")).toBe(
+    "Files\na.ts changed\nb.ts\nDone.",
+  );
 });
