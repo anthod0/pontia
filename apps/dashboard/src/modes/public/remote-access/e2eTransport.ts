@@ -7,12 +7,22 @@ import wasmUrl from "../../../e2e-wasm/pontia_e2e_bg.wasm?url";
 import {
   CloudRequestError,
   requestPublicDeviceConnection,
+  renewDeviceAccess,
   type PublicDeviceTarget,
   type PublicDevice,
 } from "./remoteAccess";
 import { connectionCache } from "./sessionCache";
 const CONTENT_TYPE = "application/pontia-e2e";
 let initialized: Promise<unknown> | null = null;
+
+// Edge strips JSON content types from device responses, so only its own rejection permits write replay.
+async function invalidAdmission(response: Response): Promise<boolean> {
+  return (
+    response.status === 401 &&
+    response.headers.get("Content-Type") === "application/json" &&
+    (await response.json().catch(() => null))?.error === "invalid_admission_token"
+  );
+}
 
 export function createRemoteConnection(
   device: Pick<PublicDevice, "handle" | "deviceId" | "edgeId">,
@@ -34,6 +44,64 @@ export function createRemoteConnection(
   let generation = 0;
   const cache = connectionCache(userId, device);
   let saved: string | null = null;
+
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  let refreshing: Promise<void> | null = null;
+
+  function scheduleRefresh(at: number) {
+    clearTimeout(refreshTimer);
+    const signal = sessionLifetime.signal;
+    refreshTimer = setTimeout(
+      () => {
+        void refreshAccess().catch(() => {
+          if (!signal.aborted) scheduleRefresh(Date.now() + 60_000);
+        });
+      },
+      Math.max(0, at - Date.now()),
+    );
+  }
+
+  async function renewForTarget(target: PublicDeviceTarget, signal: AbortSignal) {
+    const access = await renewDeviceAccess(handle, signal);
+    signal.throwIfAborted();
+    if (access.userId !== userId) throw new CloudRequestError("Signed-in user changed", 401);
+    if (
+      access.target.deviceId !== target.deviceId ||
+      access.target.edgeApiOrigin !== target.edgeApiOrigin
+    )
+      throw new CloudRequestError("Device changed during connection", 409);
+    return access;
+  }
+
+  function refreshAccess(): Promise<void> {
+    if (refreshing) return refreshing;
+    if (!session || !sessionTarget) throw new Error("Device connection is unavailable");
+    const active = session;
+    const target = sessionTarget;
+    const signal = sessionLifetime.signal;
+    refreshing = renewForTarget(target, signal)
+      .then((access) => {
+        signal.throwIfAborted();
+        admissionToken = access.admissionToken;
+        saved = cache.refresh(target, admissionToken, encode(active.export()), access.refreshAt);
+        scheduleRefresh(access.refreshAt);
+      })
+      .catch((error: unknown) => {
+        if (
+          !signal.aborted &&
+          error instanceof CloudRequestError &&
+          [401, 403, 404, 409].includes(error.status ?? 0)
+        ) {
+          invalidateE2eSession();
+          onConnectionFailure?.(error);
+        }
+        throw error;
+      })
+      .finally(() => {
+        if (!signal.aborted) refreshing = null;
+      });
+    return refreshing;
+  }
 
   function bodyBytes(value: Uint8Array): ArrayBuffer {
     return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
@@ -107,6 +175,7 @@ export function createRemoteConnection(
           saved = cached.serialized;
           sessionTarget = cached.target;
           admissionToken = cached.token;
+          scheduleRefresh(cached.refreshAt);
           storageScope = JSON.stringify([userId, cached.target.deviceId]);
           return cached.target;
         }
@@ -126,45 +195,34 @@ export function createRemoteConnection(
         if (target.deviceId !== device.deviceId) {
           throw new CloudRequestError("Device changed during connection", 409);
         }
-        const admission = await fetch(`${target.edgeApiOrigin}/browser-admissions`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ticket: connection.admissionTicket }),
-          signal: connectionSignal,
-        });
-        if (!admission.ok) throw new Error(`Browser admission failed (${admission.status})`);
-        const admitted: unknown = await admission.json();
-        if (
-          !admitted ||
-          typeof admitted !== "object" ||
-          Array.isArray(admitted) ||
-          Object.keys(admitted).length !== 1 ||
-          !("token" in admitted) ||
-          typeof admitted.token !== "string" ||
-          !admitted.token
-        )
-          throw new Error("Edge returned an invalid admission token");
-        const token = admitted.token;
-        checkActive();
+        let access = { admissionToken: connection.admissionToken, refreshAt: connection.refreshAt };
         const handshake = identity.start(
           decode(connection.devicePublicKey),
           decode(connection.capability),
         );
         try {
-          const confirmation = await fetch(`${target.edgeApiOrigin}/e2e/v1/sessions`, {
-            method: "POST",
-            headers: { "Content-Type": CONTENT_TYPE, Authorization: `Bearer ${token}` },
-            body: bodyBytes(handshake.bytes()),
-            signal: connectionSignal,
-          });
+          const handshakeBody = bodyBytes(handshake.bytes());
+          const sendHandshake = (token: string) =>
+            fetch(`${target.edgeApiOrigin}/e2e/v1/sessions`, {
+              method: "POST",
+              headers: { "Content-Type": CONTENT_TYPE, Authorization: `Bearer ${token}` },
+              body: handshakeBody,
+              signal: connectionSignal,
+            });
+          let confirmation = await sendHandshake(access.admissionToken);
+          if (await invalidAdmission(confirmation)) {
+            access = await renewForTarget(target, connectionSignal);
+            confirmation = await sendHandshake(access.admissionToken);
+          }
           if (!confirmation.ok) throw new Error(`E2E handshake failed (${confirmation.status})`);
           const bytes = new Uint8Array(await confirmation.arrayBuffer());
           checkActive();
           session = handshake.confirm(bytes);
           sessionTarget = target;
-          admissionToken = token;
+          admissionToken = access.admissionToken;
           storageScope = JSON.stringify([connection.userId, target.deviceId]);
-          saved = cache.save(target, token, encode(session.export()));
+          saved = cache.save(target, admissionToken, encode(session.export()), access.refreshAt);
+          scheduleRefresh(access.refreshAt);
           return target;
         } finally {
           handshake.free();
@@ -295,7 +353,8 @@ export function createRemoteConnection(
   async function e2eFetch(
     path: string,
     init: RequestInit = {},
-    reauthorized = false,
+    renewedSession = false,
+    renewedToken = false,
   ): Promise<Response> {
     const signal = init.signal ? AbortSignal.any([lifetime.signal, init.signal]) : lifetime.signal;
     init = { ...init, signal };
@@ -325,26 +384,37 @@ export function createRemoteConnection(
       request.free();
       throw error;
     }
-    if (response.status === 401 && !reauthorized) {
-      request.free();
+    if (response.status === 401) {
       const method = (init.method ?? "GET").toUpperCase();
-      // Edge emits JSON for an admission rejection and strips JSON content types from relayed responses.
-      const replay =
-        method === "GET" ||
-        method === "HEAD" ||
-        (response.headers.get("Content-Type") === "application/json" &&
-          (await response.json().catch(() => null))?.error === "invalid_admission_token");
-      // A delayed rejection must not invalidate a replacement session/handshake.
-      if (session === active) invalidateE2eSession();
-      if (replay) return e2eFetch(path, init, true);
-      await connectPublicDevice(signal);
-      throw new Error("Device connection renewed; the request was not replayed");
+      const rejectedToken = await invalidAdmission(response);
+      if (rejectedToken && !renewedToken) {
+        request.free();
+        signal.throwIfAborted();
+        if (session === active && admissionToken === token) {
+          try {
+            await refreshAccess();
+          } catch (error) {
+            if (session === active) onConnectionFailure?.(error);
+            throw error;
+          }
+        }
+        return e2eFetch(path, init, renewedSession, true);
+      }
+      if (!rejectedToken && !renewedSession) {
+        request.free();
+        const replay = method === "GET" || method === "HEAD";
+        // A delayed rejection must not invalidate a replacement session/handshake.
+        if (session === active) invalidateE2eSession();
+        if (replay) return e2eFetch(path, init, true, renewedToken);
+        await connectPublicDevice(signal);
+        throw new Error("Device connection renewed; the request was not replayed");
+      }
     }
-    if (response.status === 409 && !reauthorized) {
+    if (response.status === 409 && !renewedSession) {
       request.free();
       // A delayed rejection must not invalidate a replacement session/handshake.
       if (session === active) invalidateE2eSession();
-      return e2eFetch(path, init, true);
+      return e2eFetch(path, init, true, renewedToken);
     }
     if (!response.ok) {
       request.free();
@@ -365,6 +435,8 @@ export function createRemoteConnection(
   }
 
   function clearE2eSession(): void {
+    clearTimeout(refreshTimer);
+    refreshing = null;
     generation += 1;
     establishing?.controller.abort();
     sessionLifetime.abort();

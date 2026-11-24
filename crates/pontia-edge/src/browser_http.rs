@@ -7,9 +7,8 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use pontia_tunnel::TunnelError;
-use serde::Deserialize;
 
-use crate::{Edge, tickets::RedeemError};
+use crate::Edge;
 
 pub const SESSIONS_PATH: &str = "/e2e/v1/sessions";
 pub const REQUESTS_PATH: &str = "/e2e/v1/requests";
@@ -35,41 +34,6 @@ pub(crate) async fn cors(State(edge): State<Edge>, request: Request<Body>, next:
     let mut response = next.run(request).await;
     add_cors(response.headers_mut(), &edge.origins.dashboard);
     response
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct AdmissionRequest {
-    ticket: String,
-}
-
-pub(crate) async fn admit(
-    State(edge): State<Edge>,
-    body: Result<Json<AdmissionRequest>, axum::extract::rejection::JsonRejection>,
-) -> Response {
-    let Ok(Json(body)) = body else {
-        return error(StatusCode::BAD_REQUEST, "invalid_request");
-    };
-    let device_id = match tokio::time::timeout(
-        edge.limits.ticket_redeem_timeout,
-        edge.redeemer.redeem_admission(&body.ticket),
-    )
-    .await
-    {
-        Ok(Ok(device_id)) => device_id,
-        Ok(Err(RedeemError::Rejected)) => {
-            return error(StatusCode::UNAUTHORIZED, "invalid_admission_ticket");
-        }
-        _ => return error(StatusCode::SERVICE_UNAVAILABLE, "service_unavailable"),
-    };
-    let Ok(token) = edge.admissions.issue(device_id) else {
-        return error(StatusCode::SERVICE_UNAVAILABLE, "service_unavailable");
-    };
-    (
-        [(header::CACHE_CONTROL, "no-store")],
-        Json(serde_json::json!({ "token": token })),
-    )
-        .into_response()
 }
 
 pub(crate) async fn preflight(headers: HeaderMap) -> Response {
@@ -109,7 +73,7 @@ pub(crate) async fn relay(
         return StatusCode::BAD_REQUEST.into_response();
     }
     let Some(device_id) =
-        admission_token(request.headers()).and_then(|token| edge.admissions.authenticate(token))
+        admission_token(request.headers()).and_then(|token| edge.access_tokens.authenticate(token))
     else {
         return error(StatusCode::UNAUTHORIZED, "invalid_admission_token");
     };

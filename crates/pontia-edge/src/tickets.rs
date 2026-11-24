@@ -11,7 +11,6 @@ const REDEEM_TIMEOUT: Duration = Duration::from_secs(10);
 #[derive(Clone)]
 pub struct TicketRedeemer {
     tunnel_endpoint: Url,
-    admission_endpoint: Url,
     service_credential: String,
     client: Client,
 }
@@ -55,68 +54,33 @@ impl TicketRedeemer {
         );
         origin.set_path("/");
         let tunnel_endpoint = origin.join("api/edge/tunnel-tickets/redeem")?;
-        let admission_endpoint = origin.join("api/edge/browser-admission-tickets/redeem")?;
         Ok(Self {
             tunnel_endpoint,
-            admission_endpoint,
             service_credential,
             client,
         })
     }
 
     pub(crate) async fn redeem(&self, ticket: &str) -> Result<Uuid, RedeemError> {
-        let response = self.request(self.tunnel_endpoint.clone(), ticket).await?;
-        match response.status() {
-            StatusCode::OK => decode_response(response)
-                .await
-                .map(|response: RedeemResponse| response.device_id),
-            StatusCode::UNAUTHORIZED => Err(RedeemError::Rejected),
-            _ => Err(RedeemError::Unavailable),
-        }
-    }
-
-    pub(crate) async fn redeem_admission(&self, ticket: &str) -> Result<Uuid, RedeemError> {
         let response = self
-            .request(self.admission_endpoint.clone(), ticket)
-            .await?;
-        match response.status() {
-            StatusCode::OK => {
-                let response: RedeemResponse = decode_response(response).await?;
-                if response.device_id.get_version_num() != 7 {
-                    return Err(RedeemError::Unavailable);
-                }
-                Ok(response.device_id)
-            }
-            StatusCode::UNAUTHORIZED => {
-                #[derive(Deserialize)]
-                struct Rejection {
-                    error: String,
-                }
-                let rejection: Rejection = decode_response(response).await?;
-                if rejection.error == "invalid_admission_ticket" {
-                    Err(RedeemError::Rejected)
-                } else {
-                    Err(RedeemError::Unavailable)
-                }
-            }
-            _ => Err(RedeemError::Unavailable),
-        }
-    }
-
-    async fn request(&self, endpoint: Url, ticket: &str) -> Result<reqwest::Response, RedeemError> {
-        self.client
-            .post(endpoint)
+            .client
+            .post(self.tunnel_endpoint.clone())
             .bearer_auth(&self.service_credential)
             .json(&serde_json::json!({ "ticket": ticket }))
             .send()
             .await
-            .map_err(|_| RedeemError::Unavailable)
+            .map_err(|_| RedeemError::Unavailable)?;
+        match response.status() {
+            StatusCode::OK => decode_response(response)
+                .await
+                .map(|response| response.device_id),
+            StatusCode::UNAUTHORIZED => Err(RedeemError::Rejected),
+            _ => Err(RedeemError::Unavailable),
+        }
     }
 }
 
-async fn decode_response<T: for<'de> Deserialize<'de>>(
-    response: reqwest::Response,
-) -> Result<T, RedeemError> {
+async fn decode_response(response: reqwest::Response) -> Result<RedeemResponse, RedeemError> {
     let content_type = response
         .headers()
         .get(reqwest::header::CONTENT_TYPE)

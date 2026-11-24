@@ -51,7 +51,7 @@ async fn edge_relays_only_fixed_ciphertext_transports() {
         })
         .await;
 
-    let token = server.admit(device_id).await;
+    let token = server.token(device_id);
     let response = server
         .http
         .post(format!("{}/e2e/v1/requests", server.edge_origin))
@@ -116,12 +116,34 @@ async fn both_e2e_routes_reject_invalid_tokens_before_forwarding() {
             }
         })
         .await;
-    let token = server.admit(device_id).await;
+    let token = server.token(device_id);
     for route in ["sessions", "requests"] {
         let url = format!("{}/e2e/v1/{route}", server.edge_origin);
         for authorization in [
             None,
             Some("Bearer unknown".to_owned()),
+            Some(format!(
+                "Bearer {}",
+                server.signed_token(device_id, support::EDGE_ID, 0, &[5; 32])
+            )),
+            Some(format!(
+                "Bearer {}",
+                server.signed_token(
+                    device_id,
+                    &Uuid::now_v7().to_string(),
+                    jsonwebtoken::get_current_timestamp(),
+                    &[5; 32]
+                )
+            )),
+            Some(format!(
+                "Bearer {}",
+                server.signed_token(
+                    device_id,
+                    support::EDGE_ID,
+                    jsonwebtoken::get_current_timestamp(),
+                    &[6; 32]
+                )
+            )),
             Some(format!("Basic {token}")),
             Some(format!("Bearer {token} extra")),
         ] {
@@ -178,7 +200,7 @@ async fn admission_tokens_route_both_transports_to_their_bound_devices() {
                 })
                 .await,
         );
-        tokens.push((server.admit(device_id).await, marker));
+        tokens.push((server.token(device_id), marker));
     }
     for route in ["sessions", "requests"] {
         let url = format!("{}/e2e/v1/{route}", server.edge_origin);
@@ -199,7 +221,7 @@ async fn admission_tokens_route_both_transports_to_their_bound_devices() {
                 format!("{marker}:/e2e/v1/{route}")
             );
         }
-        let offline_token = server.admit(Uuid::now_v7()).await;
+        let offline_token = server.token(Uuid::now_v7());
         let response = server
             .http
             .post(&url)
@@ -215,87 +237,9 @@ async fn admission_tokens_route_both_transports_to_their_bound_devices() {
 }
 
 #[tokio::test]
-async fn admission_exchange_enforces_one_time_tickets_and_service_error_contract() {
+async fn browser_routes_support_authenticated_cors() {
     let server = TestEdge::start().await;
-    let ticket = server.issue_admission_ticket(Uuid::now_v7());
-    let url = format!("{}/browser-admissions", server.edge_origin);
-    let response = server
-        .http
-        .post(&url)
-        .header(header::ORIGIN, ORIGIN)
-        .json(&serde_json::json!({"ticket": ticket}))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
-    assert_eq!(
-        response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN],
-        ORIGIN
-    );
-    assert_eq!(
-        response.json::<serde_json::Value>().await.unwrap()["token"]
-            .as_str()
-            .unwrap()
-            .len(),
-        43
-    );
-    for (ticket, status, error) in [
-        (ticket, StatusCode::UNAUTHORIZED, "invalid_admission_ticket"),
-        (
-            server.issue_ticket(Uuid::now_v7()),
-            StatusCode::UNAUTHORIZED,
-            "invalid_admission_ticket",
-        ),
-        (
-            "invalid-credentials".into(),
-            StatusCode::SERVICE_UNAVAILABLE,
-            "service_unavailable",
-        ),
-        (
-            "uncertain".into(),
-            StatusCode::SERVICE_UNAVAILABLE,
-            "service_unavailable",
-        ),
-    ] {
-        let response = server
-            .http
-            .post(&url)
-            .header(header::ORIGIN, ORIGIN)
-            .json(&serde_json::json!({"ticket": ticket}))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(response.status(), status);
-        assert_eq!(
-            response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN],
-            ORIGIN
-        );
-        assert_eq!(
-            response.json::<serde_json::Value>().await.unwrap(),
-            serde_json::json!({"error": error})
-        );
-    }
-    server.stop_cloud();
-    let response = server
-        .http
-        .post(&url)
-        .header(header::ORIGIN, ORIGIN)
-        .json(&serde_json::json!({"ticket": "unused"}))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
-}
-
-#[tokio::test]
-async fn browser_routes_support_authenticated_cors_and_strict_admission_json() {
-    let server = TestEdge::start().await;
-    for path in [
-        "/browser-admissions".to_owned(),
-        "/e2e/v1/sessions".to_owned(),
-        "/e2e/v1/requests".to_owned(),
-    ] {
+    for path in ["/e2e/v1/sessions".to_owned(), "/e2e/v1/requests".to_owned()] {
         let response = server
             .http
             .request(
@@ -317,47 +261,4 @@ async fn browser_routes_support_authenticated_cors_and_strict_admission_json() {
             "content-type, authorization"
         );
     }
-    let url = format!("{}/browser-admissions", server.edge_origin);
-    for (content_type, body) in [
-        ("text/plain", "{}"),
-        ("application/json", "{"),
-        ("application/json", "{\"ticket\":3}"),
-        (
-            "application/json",
-            "{\"ticket\":\"ticket\",\"device_id\":\"override\"}",
-        ),
-    ] {
-        let response = server
-            .http
-            .post(&url)
-            .header(header::ORIGIN, ORIGIN)
-            .header(header::CONTENT_TYPE, content_type)
-            .body(body)
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        assert_eq!(
-            response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN],
-            ORIGIN
-        );
-        assert_eq!(
-            response.json::<serde_json::Value>().await.unwrap(),
-            serde_json::json!({"error": "invalid_request"})
-        );
-    }
-    let response = server
-        .http
-        .post(&url)
-        .header(header::ORIGIN, "https://attacker.example")
-        .json(&serde_json::json!({"ticket": server.issue_admission_ticket(Uuid::now_v7())}))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    assert!(
-        !response
-            .headers()
-            .contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN)
-    );
 }

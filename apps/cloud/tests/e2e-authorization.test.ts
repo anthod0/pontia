@@ -56,8 +56,8 @@ test("capability is signed for the owned device and browser key with a 60 second
     keys.privateKey,
     new Date("2026-01-01T00:00:00.000Z"),
   );
-  expect(result).not.toBeNull();
-  const capability = base64url.decode(result!.capability);
+  if (!result || !("capability" in result)) throw new Error("missing handshake capability");
+  const capability = base64url.decode(result.capability);
   expect(capability).toHaveLength(169);
   expect(Array.from(capability.slice(25, 57))).toEqual(Array.from(base64url.decode(browserPublic)));
   const view = new DataView(capability.buffer, capability.byteOffset, capability.byteLength);

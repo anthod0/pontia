@@ -177,12 +177,16 @@ export function cloudDevicesUrl(): string {
   return `${CLOUD_ORIGIN}/settings/devices`;
 }
 
-export type PublicDeviceConnection = {
+type DeviceAccess = {
   userId: string;
   target: PublicDeviceTarget;
+  admissionToken: string;
+  refreshAt: number;
+};
+
+export type PublicDeviceConnection = DeviceAccess & {
   devicePublicKey: string;
   capability: string;
-  admissionTicket: string;
 };
 
 function isEncodedBytes(value: unknown, length: number): value is string {
@@ -198,11 +202,11 @@ function isEncodedBytes(value: unknown, length: number): value is string {
   }
 }
 
-export async function requestPublicDeviceConnection(
+async function requestDeviceAccess(
   handle: string,
-  browserPublicKey: string,
+  browserPublicKey: string | null,
   signal?: AbortSignal,
-): Promise<PublicDeviceConnection> {
+) {
   if (!isValidDeviceHandle(handle)) {
     throw new CloudRequestError("Invalid device handle.");
   }
@@ -212,7 +216,9 @@ export async function requestPublicDeviceConnection(
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ browser_public_key: browserPublicKey }),
+      body: JSON.stringify(
+        browserPublicKey === null ? {} : { browser_public_key: browserPublicKey },
+      ),
       signal,
     },
   );
@@ -230,36 +236,58 @@ export async function requestPublicDeviceConnection(
       "device_handle",
       "device_id",
       "edge_api_origin",
-      "device_public_key",
-      "device_key_version",
-      "capability",
-      "admission_ticket",
+      "admission_token",
+      "refresh_at",
+      ...(browserPublicKey === null
+        ? []
+        : ["device_public_key", "device_key_version", "capability"]),
     ]) ||
     typeof value.user_id !== "string" ||
     !UUID.test(value.user_id) ||
-    !isEncodedBytes(value.device_public_key, 32) ||
-    !isEncodedBytes(value.capability, 169) ||
-    typeof value.admission_ticket !== "string" ||
-    !value.admission_ticket ||
-    !Number.isSafeInteger(value.device_key_version) ||
-    (value.device_key_version as number) <= 0 ||
+    typeof value.admission_token !== "string" ||
+    !value.admission_token ||
+    typeof value.refresh_at !== "number" ||
+    !Number.isSafeInteger(value.refresh_at) ||
     value.device_handle !== handle ||
     typeof value.device_id !== "string" ||
     !UUID.test(value.device_id)
   ) {
     throw new CloudRequestError("Cloud returned an invalid device target.");
   }
-  return {
+  const access: DeviceAccess = {
     userId: value.user_id,
     target: {
       handle,
       deviceId: value.device_id,
       edgeApiOrigin: parseEdgeOrigin(value.edge_api_origin),
     },
-    devicePublicKey: value.device_public_key,
-    capability: value.capability,
-    admissionTicket: value.admission_ticket,
+    admissionToken: value.admission_token,
+    refreshAt: value.refresh_at,
   };
+  return { access, value };
+}
+
+export async function renewDeviceAccess(
+  handle: string,
+  signal: AbortSignal,
+): Promise<DeviceAccess> {
+  return (await requestDeviceAccess(handle, null, signal)).access;
+}
+
+export async function requestPublicDeviceConnection(
+  handle: string,
+  browserPublicKey: string,
+  signal?: AbortSignal,
+): Promise<PublicDeviceConnection> {
+  const { access, value } = await requestDeviceAccess(handle, browserPublicKey, signal);
+  if (
+    !isEncodedBytes(value.device_public_key, 32) ||
+    !isEncodedBytes(value.capability, 169) ||
+    !Number.isSafeInteger(value.device_key_version) ||
+    (value.device_key_version as number) <= 0
+  )
+    throw new CloudRequestError("Cloud returned an invalid device target.");
+  return { ...access, devicePublicKey: value.device_public_key, capability: value.capability };
 }
 
 export function dashboardSignInUrl(returnPath: string): string {

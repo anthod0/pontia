@@ -25,7 +25,8 @@ const connection = {
   edge_api_origin: edgeApiOrigin,
   device_public_key: browserPublicKey,
   device_key_version: 1,
-  admission_ticket: "admission-ticket",
+  admission_token: "admission-token",
+  refresh_at: Date.now() + 2 * 3600_000,
   capability: btoa(String.fromCharCode(...new Uint8Array(169).fill(7))).replace(/=+$/, ""),
 };
 
@@ -102,7 +103,8 @@ test("gets routing and authorization together using the browser key and login", 
     target: { handle, deviceId, edgeApiOrigin },
     devicePublicKey: browserPublicKey,
     capability: connection.capability,
-    admissionTicket: connection.admission_ticket,
+    admissionToken: connection.admission_token,
+    refreshAt: connection.refresh_at,
   });
   expect(fetchMock).toHaveBeenCalledWith(
     `https://pontia.dev/api/dashboard/devices/${handle}/connect`,
@@ -135,8 +137,8 @@ test.each([
   { redirect: "https://attacker.example" },
   { device_public_key: "invalid" },
   { capability: "invalid" },
-  { admission_ticket: "" },
-  { admission_ticket: undefined },
+  { admission_token: "" },
+  { admission_token: undefined },
   { device_key_version: 0 },
   { device_key_version: 1.5 },
 ])("rejects invalid connection metadata %j", async (override) => {

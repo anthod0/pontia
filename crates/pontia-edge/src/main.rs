@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use axum_server::tls_rustls::RustlsConfig;
 use clap::{Args, Parser, Subcommand};
 use pontia_edge::{
-    BrowserOrigins, ConnectionLimits, Edge, TicketRedeemer,
+    AccessTokenVerifier, BrowserOrigins, ConnectionLimits, Edge, TicketRedeemer,
     acme::{
         ACCOUNT_PATH, AcmeChallenge, CloudDnsChallenges, InstantAcmeIssuer, TLS_PATH,
         complete_dns_and_save, issue_dns_and_save, issue_http_and_save,
@@ -506,13 +506,18 @@ async fn serve() -> Result<()> {
         )
         .init();
     let config = ServiceConfig::read(Path::new(CONFIG_PATH))?;
-    let service_credential = read_edge_credential(CREDENTIAL_PATH.as_ref())?.value;
+    let credential = read_edge_credential(CREDENTIAL_PATH.as_ref())?;
+    let public_key = std::fs::read_to_string("/etc/pontia/edge/access-public-key")
+        .context("failed to read /etc/pontia/edge/access-public-key")?;
+    let access_tokens = AccessTokenVerifier::new(credential.edge_id, public_key.trim())?;
+    let service_credential = credential.value;
     let tls = RustlsConfig::from_pem_file(TLS_PATH, TLS_PATH).await?;
     let origins = BrowserOrigins {
         dashboard: config.browser_dashboard_origin.clone(),
     };
     let edge = Edge::new(
         TicketRedeemer::new(CLOUD_ORIGIN, service_credential.clone())?,
+        access_tokens,
         origins,
         ConnectionLimits::default(),
     );
