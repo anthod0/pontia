@@ -32,7 +32,12 @@ export function createFilePreview(
   const language = $derived(textFileLanguage(path));
   const htmlPreview = $derived(language === "html" && name.includes("."));
   const delimiter = $derived(/\.csv$/i.test(name) ? "," : /\.tsv$/i.test(name) ? "\t" : null);
-  const hasPreview = $derived(language === "markdown" || htmlPreview || delimiter !== null);
+  const treeFormat = $derived(
+    name.includes(".") && (language === "json" || language === "yaml") ? language : null,
+  );
+  const hasPreview = $derived(
+    language === "markdown" || htmlPreview || delimiter !== null || treeFormat !== null,
+  );
   const key = $derived(downloadKey(target.device.id, target.sessionId, { path }));
   const task = $derived(tasks.current.find((task) => task.key === key));
   const receiving = $derived(task?.status === "receiving");
@@ -176,6 +181,9 @@ export function createFilePreview(
     },
     get path() {
       return path;
+    },
+    get treeFormat() {
+      return treeFormat;
     },
     get htmlPreview() {
       return htmlPreview;

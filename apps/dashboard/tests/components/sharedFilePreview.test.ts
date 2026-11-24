@@ -128,3 +128,43 @@ test.each([
     expect(await screen.findByRole("table")).toBeVisible();
   },
 );
+
+test.each([
+  ["nested.JSON", '{"settings":{"ports":[8080]},"active":true}'],
+  ["nested.yaml", "settings:\n  ports: [8080]\nactive: true"],
+  ["nested.yml", "settings: {ports: [8080]}\nactive: true"],
+])("browses %s as a tree and switches to its original source", async (name, source) => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(source)));
+  render(SharedFilePreviewHarness, { paths: [`/tmp/${name}`] });
+  await fireEvent.click(screen.getByRole("button", { name: `Preview ${name}` }));
+  const panel = within(screen.getByRole("complementary"));
+  const settings = await panel.findByRole("button", { name: /settings.*\{1\}/ });
+  expect(settings).toHaveAttribute("aria-expanded", "false");
+  await fireEvent.click(settings);
+  expect(panel.getByRole("button", { name: /ports.*\[1\]/ })).toBeVisible();
+  await fireEvent.click(settings);
+  expect(panel.queryByRole("button", { name: /ports/ })).toBeNull();
+  await fireEvent.click(panel.getByRole("button", { name: "Expand all" }));
+  expect(panel.getByText("8080")).toBeVisible();
+  await fireEvent.click(panel.getByRole("button", { name: "Collapse all" }));
+  expect(panel.queryByText("8080")).toBeNull();
+  expect(panel.queryByRole("button", { name: /settings/ })).toBeNull();
+  await fireEvent.click(panel.getByRole("tab", { name: "Source" }));
+  expect(panel.getByRole("tabpanel", { name: "Source" }).textContent).toBe(source);
+  await fireEvent.click(panel.getByRole("tab", { name: "Preview" }));
+  expect(panel.getByRole("button", { name: "Expand all" })).toBeVisible();
+});
+
+test.each([
+  ["empty.json", ""],
+  ["bad.json", "{missing: true}"],
+  ["bad.yml", "broken: ["],
+])("keeps the source accessible when %s cannot be parsed", async (name, source) => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(source)));
+  render(SharedFilePreviewHarness, { paths: [`/tmp/${name}`] });
+  await fireEvent.click(screen.getByRole("button", { name: `Preview ${name}` }));
+  const panel = within(screen.getByRole("complementary"));
+  expect(await panel.findByRole("alert")).toBeVisible();
+  await fireEvent.click(panel.getByRole("tab", { name: "Source" }));
+  expect(panel.getByRole("tabpanel", { name: "Source" }).textContent).toBe(source);
+});

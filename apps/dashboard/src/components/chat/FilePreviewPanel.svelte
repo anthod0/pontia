@@ -7,6 +7,7 @@
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import DelimitedTablePreview from './DelimitedTablePreview.svelte'
+  import StructuredFilePreview from './StructuredFilePreview.svelte'
   import DeviceProvider from '../../device/DeviceProvider.svelte'
   import { type FilePreviewTarget } from './filePreviewContext'
   import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon'
@@ -57,7 +58,7 @@ const preview = untrack(() => createFilePreview(target, openFile))
         <Button variant="ghost" size="icon-sm" onclick={preview.back} aria-label={$t('files.previewBack')} title={$t('files.previewBack')}><ArrowLeftIcon class="size-4" /></Button>
       {/if}
       <h2 class="min-w-0 flex-1 truncate text-sm font-medium" title={preview.name}>{preview.name}</h2>
-      {#if preview.hasPreview && preview.text}
+      {#if preview.hasPreview && preview.text !== null && (preview.text || preview.treeFormat)}
         <Tabs.List aria-label={$t('files.previewMode')} class="shrink-0">
           <Tabs.Trigger value="preview" aria-label={$t('files.preview')} title={$t('files.preview')}><EyeIcon class="size-4" /></Tabs.Trigger>
           <Tabs.Trigger value="source" aria-label={$t('files.source')} title={$t('files.source')}><CodeIcon class="size-4" /></Tabs.Trigger>
@@ -98,7 +99,7 @@ const preview = untrack(() => createFilePreview(target, openFile))
           <Skeleton class="h-3 rounded-sm" style="width: {width}%" />
         {/each}
       </div>
-    {:else if preview.text === ''}
+    {:else if preview.text === '' && !preview.treeFormat}
       <Empty.Root class="min-h-0 p-8">
         <Empty.Header>
           <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><FileDashedIcon class="size-6" /></Empty.Media>
@@ -113,6 +114,8 @@ const preview = untrack(() => createFilePreview(target, openFile))
           {/if}
         {:else if preview.delimiter}
           <DelimitedTablePreview text={preview.text} delimiter={preview.delimiter} />
+        {:else if preview.treeFormat}
+          <StructuredFilePreview source={preview.text} format={preview.treeFormat} />
         {:else}
           {#key target.device}
             <DeviceProvider device={target.device}>

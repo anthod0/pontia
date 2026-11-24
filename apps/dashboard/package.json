@@ -44,7 +44,8 @@
     "shiki": "^4.4.3",
     "svelte-i18n": "^4.0.1",
     "svelte-sonner": "^1.1.1",
-    "tailwind-merge": "^3.6.0"
+    "tailwind-merge": "^3.6.0",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@internationalized/date": "^3.12.1",
