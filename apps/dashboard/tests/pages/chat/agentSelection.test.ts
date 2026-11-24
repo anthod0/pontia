@@ -53,8 +53,8 @@ test("prevents creation while discovery is unavailable and recovers after an exp
 
 test("Alt+C and Alt+W switch the agent client and workspace, with Shift going back", async () => {
   mocks.listSessionCreationOptions.mockResolvedValue([
-    { id: "pi", name: "Pi", client_type: "pi", metadata: {} },
-    { id: "company", name: "Company Agent", client_type: "acp", metadata: {} },
+    { id: "pi", name: "Pi", client_type: "pi", metadata: {}, version: "0.70.2" },
+    { id: "company", name: "Company Agent", client_type: "acp", metadata: {}, version: "1.2.3" },
   ]);
   mocks.workspaces.set([
     workspace({ workspace_id: "ws-1", name: "first" }),
@@ -63,11 +63,13 @@ test("Alt+C and Alt+W switch the agent client and workspace, with Shift going ba
   render(NewChatPage);
   const clientSelect = await screen.findByLabelText("Agent client");
   await waitFor(() => expect(clientSelect).toHaveTextContent("Pi"));
+  expect(clientSelect).not.toHaveTextContent("0.70.2");
 
   await fireEvent.keyDown(window, { key: "a", code: "KeyA", altKey: true });
   expect(clientSelect).toHaveTextContent("Pi");
   await fireEvent.keyDown(window, { key: "c", code: "KeyC", altKey: true });
   expect(clientSelect).toHaveTextContent("Company Agent");
+  expect(clientSelect).not.toHaveTextContent("1.2.3");
   await fireEvent.keyDown(window, { key: "C", code: "KeyC", altKey: true, shiftKey: true });
   expect(clientSelect).toHaveTextContent("Pi");
 

@@ -107,7 +107,9 @@ test("switches a profile to another enabled client and model", async () => {
   device.data.agentClients.find((c) => c.client_type === "claude-agent")!.enabled = false;
   render(AgentProfilesPage);
   await open("Executor");
-  expect(await chooseClient("Codex")).not.toContain("Claude Code");
+  const names = await chooseClient("Codex");
+  expect(names).not.toContain("Claude Code");
+  expect(names).toEqual(["Pi", "Codex", "Google Antigravity", "Grok Build"]);
   await chooseModel(2);
   await fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() =>

@@ -4,10 +4,7 @@ use crate::client_contract::{
 };
 use pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository;
 use sqlx::SqlitePool;
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 #[derive(Clone)]
 pub struct ClientRegistration {
@@ -156,8 +153,8 @@ impl ClientRegistry {
             .await?
             .into_iter()
             .filter(|row| row.enabled)
-            .map(|row| (row.client_type, row.client_key))
-            .collect::<HashSet<_>>();
+            .map(|row| ((row.client_type, row.client_key), row.version))
+            .collect::<HashMap<_, _>>();
         let mut options = Vec::new();
         for registration in self.registrations() {
             let client = registration.spec.client_type;
@@ -169,7 +166,7 @@ impl ClientRegistry {
                         Some(configuration) => configuration.key(&option.metadata)?,
                         None => "default".into(),
                     };
-                    if enabled.contains(&(client.into(), key)) {
+                    if enabled.contains_key(&(client.into(), key)) {
                         options.push(option);
                     }
                 }
@@ -179,9 +176,9 @@ impl ClientRegistry {
                 Some(configuration) => configuration.key(&serde_json::json!({}))?,
                 None => "default".into(),
             };
-            if !enabled.contains(&(client.into(), key.clone())) {
+            let Some(version) = enabled.get(&(client.into(), key.clone())) else {
                 continue;
-            }
+            };
             let name = registration
                 .configuration
                 .as_ref()
@@ -201,6 +198,7 @@ impl ClientRegistry {
                 name,
                 client_type: client.into(),
                 metadata: serde_json::json!({}),
+                version: version.clone(),
             });
         }
         Ok(options)

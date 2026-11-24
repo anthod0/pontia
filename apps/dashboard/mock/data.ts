@@ -40,7 +40,7 @@ export interface MockData {
   agentProfiles: AgentProfileView[];
   agentClients: AgentClientView[];
   clientSetup: AgentClientSetupOperation | null;
-  creationOptions: SessionCreationOption[];
+  creationOptions: Omit<SessionCreationOption, "version">[];
   models: SessionModel[];
   files: string[];
   memory: MockMemoryData;
@@ -74,7 +74,7 @@ const models: SessionModel[] = [
   { id: "openai/gpt-5-codex", name: "GPT-5 Codex", description: "openai" },
 ];
 
-const creationOptions: SessionCreationOption[] = [
+const creationOptions: Omit<SessionCreationOption, "version">[] = [
   { id: "pi", name: "Pi", client_type: "pi", model_catalog_key: "default", metadata: {} },
   { id: "codex", name: "Codex", client_type: "codex", model_catalog_key: "default", metadata: {} },
   {
@@ -324,7 +324,12 @@ export function sessionEvent(
   };
 }
 
-function agentClient(clientType: string, clientKey: string, name: string): AgentClientView {
+function agentClient(
+  clientType: string,
+  clientKey: string,
+  name: string,
+  version: string | null = null,
+): AgentClientView {
   return {
     id: btoa(JSON.stringify([clientType, clientKey])).replace(/=+$/, ""),
     client_type: clientType,
@@ -337,8 +342,8 @@ function agentClient(clientType: string, clientKey: string, name: string): Agent
         ? null
         : `pontia setup ${clientType === "claude-agent" ? "claude" : clientType}`,
     enabled: true,
-    version: null,
-    version_checked_at: null,
+    version,
+    version_checked_at: version ? new Date().toISOString() : null,
     has_record: false,
     created_at: null,
     updated_at: null,
@@ -727,11 +732,11 @@ export function createSampleData(): MockData {
     ],
     clientSetup: null,
     agentClients: [
-      agentClient("pi", "pi", "Pi"),
-      agentClient("codex", "codex", "Codex"),
-      agentClient("claude-agent", "claude-agent", "Claude Code"),
+      agentClient("pi", "pi", "Pi", "0.70.2"),
+      agentClient("codex", "codex", "Codex", "0.171.0"),
+      agentClient("claude-agent", "claude-agent", "Claude Code", "2.1.318"),
       agentClient("acp", "antigravity", "Google Antigravity"),
-      agentClient("acp", "grok", "Grok Build"),
+      agentClient("acp", "grok", "Grok Build", "1.0.92"),
     ],
     creationOptions,
     models,

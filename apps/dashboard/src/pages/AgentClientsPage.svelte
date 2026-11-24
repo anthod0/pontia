@@ -158,6 +158,7 @@
           <div class="flex items-start justify-between gap-4">
             <div class="min-w-0 space-y-1">
               <h3 class="truncate text-lg font-semibold text-heading">{selected.name}</h3>
+              {#if selected.version}<p class="text-sm text-muted-foreground">{$t('clients.version', { version: selected.version })}</p>{/if}
               <div role="status" class="space-y-1 pt-2 text-sm">
                 <p class="flex items-center gap-1.5">
                   {#if selected.detection.status === 'detected'}<CheckCircleIcon class="size-4 text-success" />

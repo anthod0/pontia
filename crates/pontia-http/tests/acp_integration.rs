@@ -495,3 +495,92 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
         .unwrap()
         .unwrap();
 }
+
+#[tokio::test]
+async fn client_choices_carry_recorded_versions() {
+    let root = tempfile::tempdir().unwrap();
+    let pool = connect_sqlite("sqlite::memory:").await.unwrap();
+    run_migrations(&pool).await.unwrap();
+    let records =
+        pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
+            pool.clone(),
+        );
+    for (client, key, version) in [
+        ("pi", "default", Some("2.3.4")),
+        ("acp", "grok", Some("1.0.92")),
+        ("acp", "kiro", None),
+    ] {
+        records.save(client, key, true).await.unwrap();
+        if let Some(version) = version {
+            let started = "2026-11-24T00:00:00Z";
+            assert!(
+                records
+                    .begin_version_check(client, key, started, true)
+                    .await
+                    .unwrap()
+            );
+            records
+                .record_version(client, key, started, version)
+                .await
+                .unwrap();
+        }
+    }
+    let mut clients = ClientRegistry::default();
+    clients.register(pontia_client_pi::registration(None));
+    let acp = pontia_client_acp::registration();
+    let service = acp.service.clone().unwrap();
+    clients.register(acp);
+    let app = AppState::builder(
+        pontia_agent_control::AgentControl::builder(pool, root.path().into())
+            .clients(clients)
+            .build(),
+    )
+    .external_api_token(Some("integration-token".into()))
+    .build();
+    let task = service.start(app.control().clone()).await.unwrap().unwrap();
+
+    let options = get(&app, "/api/v1/session-creation-options").await;
+    let versions: BTreeMap<_, _> = options["options"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|option| {
+            (
+                option["id"].as_str().unwrap().to_owned(),
+                option["version"].clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        versions,
+        BTreeMap::from([
+            ("pi".to_owned(), json!("2.3.4")),
+            (r#"["acp","grok"]"#.to_owned(), json!("1.0.92")),
+            (r#"["acp","kiro"]"#.to_owned(), Value::Null),
+        ])
+    );
+    let bots = get(&app, "/api/v1/bots/clients").await;
+    let versions: BTreeMap<_, _> = bots["clients"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| {
+            (
+                format!(
+                    "{}/{}",
+                    item["client_type"].as_str().unwrap(),
+                    item["client_key"].as_str().unwrap()
+                ),
+                item["version"].clone(),
+            )
+        })
+        .collect();
+    assert_eq!(versions.get("pi/default"), Some(&json!("2.3.4")), "{bots}");
+
+    app.control().shutdown().notify();
+    tokio::time::timeout(Duration::from_secs(5), task)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+}

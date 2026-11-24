@@ -29,6 +29,7 @@ pub struct SessionCreationOption {
     pub name: String,
     pub client_type: String,
     pub metadata: Value,
+    pub version: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

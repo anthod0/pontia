@@ -96,6 +96,7 @@
   "clients.detection.detected": "已检测到",
   "clients.detection.not_detected": "未检测到",
   "clients.detection.unknown": "无法判断",
+  "clients.version": "版本 {version}",
   "common.refresh": "刷新",
   "clients.loading": "正在加载客户端",
   "clients.setup": "客户端初始化",

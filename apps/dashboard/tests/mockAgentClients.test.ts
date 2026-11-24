@@ -55,6 +55,22 @@ test.each([
   );
 });
 
+test("mock creation options carry the client version", async () => {
+  const device = createMockDevice(createSampleData());
+  const { options } = await request(device, "GET", "/session-creation-options");
+  expect(
+    Object.fromEntries(
+      (options as SessionCreationOption[]).map((option) => [option.id, option.version]),
+    ),
+  ).toEqual({
+    pi: "0.70.2",
+    codex: "0.171.0",
+    "claude-agent": "2.1.318",
+    '["acp","antigravity"]': null,
+    '["acp","grok"]': "1.0.92",
+  });
+});
+
 test("mock creation options are empty when every client is disabled", async () => {
   const device = createMockDevice(createSampleData());
   for (const path of [
