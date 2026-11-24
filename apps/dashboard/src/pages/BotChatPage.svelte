@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { chromeMetrics } from '$lib/mobile/chromeMetrics'
   import { onDestroy, onMount, tick, untrack } from 'svelte'
   import { toast } from 'svelte-sonner'
   import { BotTimeline } from '$lib/botTimeline.svelte'
@@ -319,7 +320,7 @@
         {/if}
       {/snippet}
     </BotMessageFeed>
-    <div class="shrink-0 px-1 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
+    <div use:chromeMetrics={'--mobile-footer-h'} class="shrink-0 px-1 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
       {#if timeline.status.kind === 'processing'}
         {#if !typing}
           <p class="mb-2 flex items-start gap-2 px-2 text-sm leading-5 text-muted-foreground" role="status">

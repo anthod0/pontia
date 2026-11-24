@@ -5,12 +5,17 @@
   import SessionConversationSkeleton from '$lib/components/session-chat/SessionConversationSkeleton.svelte'
   import BotChatSkeleton from '../components/bots/BotChatSkeleton.svelte'
   import { useDeviceRuntime } from '../device/context'
+  import { isMobileShell } from '$lib/hooks/shellMode.svelte'
   import NewChatPage from './NewChatPage.svelte'
 
   // A newly opened Dashboard and "Back to chat" reopen the last Session chat or Bot chat; otherwise this is New Chat.
   let { routeScope, deviceSelector }: { routeScope?: string; deviceSelector?: Snippet<[boolean]> } = $props()
   const device = useDeviceRuntime()
   let restoring = $state(takeLastPage(device.id))
+
+  $effect(() => {
+    if (!restoring && isMobileShell()) void navigate('/bots', undefined, { scope: routeScope, replaceState: true })
+  })
 
   onMount(() => {
     if (!restoring) return
@@ -29,6 +34,6 @@
   <div class="mx-auto w-full max-w-[760px]"><SessionConversationSkeleton class="min-h-80" /></div>
 {:else if restoring?.kind === 'bot'}
   <BotChatSkeleton />
-{:else}
+{:else if !isMobileShell()}
   <NewChatPage {routeScope} {deviceSelector} />
 {/if}

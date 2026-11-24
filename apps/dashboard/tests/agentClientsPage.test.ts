@@ -1,8 +1,9 @@
+import "./shallowRouting";
 import { render, screen, waitFor, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 import AgentClientsPage from "../src/pages/AgentClientsPage.svelte";
-import TopBarHost from "./components/layout/TopBarHost.svelte";
+import MobileSettingsHost from "./components/layout/MobileSettingsHost.svelte";
 import type { AgentClientView } from "../src/api/types";
 
 const api = vi.hoisted(() => ({
@@ -181,8 +182,8 @@ test("a reopened page recovers a running setup across a temporary disconnect and
 test("phones refresh from the top bar and return from a client with its back button", async () => {
   window.history.pushState({}, "", "/dashboard/settings/clients");
   const user = userEvent.setup();
-  render(TopBarHost, { props: { page: AgentClientsPage } });
-  const bar = () => within(screen.getByTestId("top-bar-row"));
+  render(MobileSettingsHost, { props: { page: AgentClientsPage } });
+  const bar = () => within(screen.getByRole("banner"));
 
   await user.click(await bar().findByRole("button", { name: "Refresh" }));
   await waitFor(() => expect(api.listAgentClients).toHaveBeenCalledTimes(2));
@@ -193,6 +194,8 @@ test("phones refresh from the top bar and return from a client with its back but
   expect(screen.getAllByRole("button", { name: "Agent Clients" })).toHaveLength(1);
 
   await user.click(bar().getByRole("button", { name: "Agent Clients" }));
-  expect(screen.getByText("Select an agent client to view its settings.")).toBeInTheDocument();
-  expect(bar().getByRole("button", { name: "Back to chat" })).toBeInTheDocument();
+  expect(
+    await screen.findByText("Select an agent client to view its settings."),
+  ).toBeInTheDocument();
+  expect(bar().getByRole("button", { name: "Back" })).toBeInTheDocument();
 });

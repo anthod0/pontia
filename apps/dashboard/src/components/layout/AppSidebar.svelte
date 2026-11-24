@@ -22,7 +22,6 @@
     onSettings?: () => void
     settingsDisabled?: boolean
   } = $props()
-  const sidebar = Sidebar.useSidebar()
   let currentPath = $state(dashboardRelativePath())
   const settingsPath = $derived(isSettingsPath(currentPath))
 
@@ -38,8 +37,7 @@
   }
 </script>
 
-<!-- The phone sidebar covers the whole screen, so close it once a choice navigates away. -->
-<svelte:window onpopstate={() => { currentPath = dashboardRelativePath(); sidebar.setOpenMobile(false) }} />
+<svelte:window onpopstate={() => { currentPath = dashboardRelativePath() }} />
 
 <Sidebar.Root collapsible="icon">
   <Sidebar.Header class="group/brand relative h-20 shrink-0 flex-row items-center gap-2 px-4 py-0 md:h-14 md:gap-1 md:px-2">

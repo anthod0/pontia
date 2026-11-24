@@ -31,7 +31,7 @@
   let menu = $state<{ bot: Bot; anchor: MenuAnchor; row: HTMLElement } | null>(null)
   let menuOpen = $state(false)
 
-  const rail = $derived(sidebar.state === 'collapsed' && !sidebar.isMobile)
+  const rail = $derived(sidebar.state === 'collapsed')
 
   function showMenu(event: MouseEvent, bot: Bot) {
     const anchor = openContextMenu(event)
@@ -153,7 +153,6 @@
 {#if creating}
   <BotSettingsDialog onclose={() => { creating = false }} onsaved={(bot) => {
     creating = false
-    sidebar.setOpenMobile(false)
     void navigate(`/bots/${encodeURIComponent(bot.bot_id)}`, undefined, { scope })
   }} />
 {/if}

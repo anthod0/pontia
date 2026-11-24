@@ -250,3 +250,159 @@ body {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
 }
+
+.mobile-shell {
+  --mobile-tab-h: 60px;
+  --mobile-tab-gap: max(10px, calc(env(safe-area-inset-bottom) - 10px));
+  position: fixed;
+  inset: var(--visual-viewport-top, 0px) 0 var(--visual-viewport-bottom, 0px);
+  background: var(--surface);
+  overflow: hidden;
+}
+:root:has(.mobile-shell) {
+  --mobile-toast-bottom: calc(
+    var(--visual-viewport-bottom, 0px) + var(--mobile-footer-h, 0px) +
+      max(8px, env(safe-area-inset-bottom))
+  );
+}
+:root:has(.mobile-shell[data-tabs="true"]) {
+  --mobile-toast-bottom: calc(
+    var(--mobile-footer-h, 60px) + 12px + max(10px, calc(env(safe-area-inset-bottom) - 10px))
+  );
+}
+.mobile-shell {
+  --glass: color-mix(in srgb, var(--card) 76%, transparent);
+  --glass-strong: color-mix(in srgb, var(--card) 86%, transparent);
+  --glass-line: rgb(0 0 0 / 7%);
+  --glass-shadow: 0 1px 1px rgb(0 0 0 / 4%), 0 6px 18px rgb(0 0 0 / 8%);
+}
+.dark .mobile-shell {
+  --glass: color-mix(in srgb, #3c3836 74%, transparent);
+  --glass-strong: color-mix(in srgb, #3c3836 84%, transparent);
+  --glass-line: rgb(255 255 255 / 9%);
+  --glass-shadow: 0 1px 1px rgb(0 0 0 / 20%), 0 8px 22px rgb(0 0 0 / 35%);
+}
+.mobile-glass {
+  background: var(--popover);
+  border: 1px solid var(--glass-line);
+  box-shadow: var(--glass-shadow);
+}
+@supports (backdrop-filter: blur(12px)) {
+  @media (prefers-reduced-transparency: no-preference) {
+    .mobile-glass {
+      background: var(--glass);
+      backdrop-filter: saturate(1.7) blur(18px);
+    }
+  }
+}
+.mobile-chrome,
+.mobile-screen {
+  padding-top: env(safe-area-inset-top);
+}
+.mobile-chrome {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 2;
+}
+.mobile-chrome[data-scrolled="true"] {
+  background: linear-gradient(var(--surface) 70%, transparent);
+}
+.mobile-body {
+  overflow: auto;
+  min-height: 0;
+  flex: 1;
+  padding: var(--mobile-header-h, 64px) 16px max(12px, env(safe-area-inset-bottom));
+}
+.mobile-root {
+  padding-bottom: calc(var(--mobile-footer-h, var(--mobile-tab-h)) + var(--mobile-tab-gap) + 20px);
+}
+.mobile-tabs {
+  position: absolute;
+  bottom: var(--mobile-tab-gap);
+  inset-inline: 14px;
+  height: var(--mobile-tab-h);
+  display: flex;
+  border-radius: 32px;
+  padding-inline: 5px;
+}
+.mobile-tabs button {
+  flex: 1;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.mobile-tabs button[aria-current] {
+  color: var(--primary);
+  font-weight: 600;
+}
+.mobile-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+.mobile-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  width: 100%;
+  text-align: start;
+  border-bottom: 1px solid var(--border);
+}
+@media (max-height: 499px) and (pointer: coarse) {
+  .mobile-shell {
+    --mobile-tab-h: 48px;
+  }
+  :root:has(.mobile-shell[data-tabs="true"]) {
+    --mobile-toast-bottom: calc(60px + max(10px, calc(env(safe-area-inset-bottom) - 10px)));
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mobile-screen {
+    animation: mobile-enter 180ms ease-out;
+  }
+  @keyframes mobile-enter {
+    from {
+      transform: translateX(12%);
+      opacity: 0.6;
+    }
+  }
+}
+.bottom-sheet :is([data-slot$="-title"], [data-slot$="-header"]) {
+  touch-action: none;
+}
+
+.mobile-shell [data-chat-composer-dock] {
+  inset-inline: 0;
+  bottom: var(--visual-viewport-bottom, 0px);
+}
+.mobile-shell[data-keyboard="true"] [data-chat-composer-dock] {
+  padding-bottom: 8px;
+}
+@supports (backdrop-filter: blur(12px)) {
+  @media (prefers-reduced-transparency: no-preference) {
+    .mobile-tabs.mobile-glass {
+      background: var(--glass-strong);
+    }
+  }
+}
+.mobile-body,
+.mobile-screen {
+  touch-action: pan-y pinch-zoom;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mobile-screen[data-modal="true"] {
+    animation-name: mobile-modal-enter;
+  }
+  @keyframes mobile-modal-enter {
+    from {
+      transform: translateY(12%);
+      opacity: 0.6;
+    }
+  }
+}

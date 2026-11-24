@@ -4,6 +4,7 @@
   import { cleanupDownloads } from '$lib/downloads/save';
   import { openDashboardTab } from '$lib/lastPage';
 
+  import { isMobileShell } from '$lib/hooks/shellMode.svelte'
   openDashboardTab();
 
   onMount(() => { void cleanupDownloads().catch(console.error); });
@@ -19,7 +20,7 @@
 
 <svelte:window onlanguagechange={updateBrowserLanguage} />
 
-<Toaster richColors position="top-center"
-  offset={{ top: 'var(--notification-top, 24px)' }}
-  mobileOffset={{ top: 'var(--notification-top)' }} />
+<Toaster richColors position={isMobileShell() ? 'bottom-center' : 'top-center'}
+  offset={{ top: 'var(--notification-top, 24px)', bottom: 'var(--mobile-toast-bottom)' }}
+  mobileOffset={{ top: 'var(--notification-top)', bottom: 'var(--mobile-toast-bottom)' }} />
 {@render children()}

@@ -9,7 +9,6 @@
   import SidebarDeviceSwitcher from './SidebarDeviceSwitcher.svelte';
   import AppSidebar from '../../components/layout/AppSidebar.svelte';
   import DeviceBotList from '../../components/bots/DeviceBotList.svelte';
-  import TopBarMoreMenu from '../../components/layout/TopBarMoreMenu.svelte'
   import TopBar from '../../components/layout/TopBar.svelte';
   import ChatShortcuts from '../../components/chat/ChatShortcuts.svelte';
   import ConnectionNotice from '../../components/layout/ConnectionNotice.svelte';
@@ -67,11 +66,11 @@
   {/snippet}
   {#snippet topbar()}
     {#if host.mode === 'local'}
-      <TopBar onNewChat={host.openNewChat} />
+      <TopBar />
     {:else if device}
-      {#key device}<DeviceProvider {device}><TopBar onNewChat={host.openNewChat} /></DeviceProvider>{/key}
+      {#key device}<DeviceProvider {device}><TopBar /></DeviceProvider>{/key}
     {:else}
-      <header class="flex h-14 items-center px-3 pt-2 md:h-12 md:pt-0"><Sidebar.Trigger class="pointer-events-auto size-11 md:hidden [&_svg:not([class*=size-])]:size-5" /><TopBarMoreMenu /></header>
+      <header class="h-12"></header>
     {/if}
   {/snippet}
   {#snippet children()}{@render children()}{/snippet}

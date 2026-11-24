@@ -21,7 +21,7 @@ import { stubWrappedComposer } from "../../components/wrappedComposer";
 
 const NewChatPage = (await import("../../../src/pages/NewChatPage.svelte")).default;
 const SessionChatPage = (await import("../../../src/pages/SessionChatPage.svelte")).default;
-const TopBarHost = (await import("../../components/layout/TopBarHost.svelte")).default;
+const TopBar = (await import("../../../src/components/layout/TopBar.svelte")).default;
 
 class TestIntersectionObserver implements IntersectionObserver {
   static instances: TestIntersectionObserver[] = [];
@@ -2028,7 +2028,7 @@ test("renders an existing session title in the top bar and metadata above the pr
     }),
   ]);
 
-  render(TopBarHost);
+  render(TopBar);
   render(SessionChatPage);
 
   await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith("session-2"));

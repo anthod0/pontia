@@ -148,3 +148,13 @@ test("central login expiry redirects to sign-in and prevents UI or focus retries
   expect(fixture.connect).toHaveBeenCalledTimes(2);
   expect([...fixture.signals.values()].flat().every((signal) => signal.aborted)).toBe(true);
 });
+
+test.each(["bots", "todos"])("preserves the public device entry for handle %s", (handle) => {
+  expect(load({ params: {}, route: { id: "/[[handle=handle]]/" + handle } })).toEqual({
+    handle,
+    deviceEntry: true,
+  });
+  expect(load({ params: { handle }, route: { id: "/[[handle=handle]]/todos" } })).toEqual({
+    handle,
+  });
+});

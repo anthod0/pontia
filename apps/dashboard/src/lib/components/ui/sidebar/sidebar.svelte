@@ -1,9 +1,6 @@
 <script lang="ts">
-  import { t } from '$lib/i18n';
-	import * as Sheet from "$lib/components/ui/sheet/index.js";
 	import { cn, type WithElementRef } from "$lib/utils.js";
 	import type { HTMLAttributes } from "svelte/elements";
-	import { SIDEBAR_WIDTH_MOBILE } from "./constants.js";
 	import { useSidebar } from "./context.svelte.js";
 
 	let {
@@ -21,30 +18,6 @@
 	} = $props();
 
 	const sidebar = useSidebar();
-	let swipeStart: { x: number; y: number } | null = null;
-
-	function startSwipe(event: TouchEvent): void {
-		swipeStart = event.touches.length === 1
-			? { x: event.touches[0].clientX, y: event.touches[0].clientY }
-			: null;
-	}
-
-	function moveSwipe(event: TouchEvent): void {
-		if (!swipeStart) return;
-		const dx = event.touches[0].clientX - swipeStart.x;
-		const dy = Math.abs(event.touches[0].clientY - swipeStart.y);
-		if (event.touches.length !== 1 || (dy > 10 && dy > Math.abs(dx))) {
-			swipeStart = null;
-		}
-	}
-
-	function endSwipe(event: TouchEvent): void {
-		if (!swipeStart) return;
-		const leftwardDistance = swipeStart.x - event.changedTouches[0].clientX;
-		const dy = Math.abs(event.changedTouches[0].clientY - swipeStart.y);
-		swipeStart = null;
-		if (leftwardDistance >= 64 && leftwardDistance > dy * 2) sidebar.setOpenMobile(false);
-	}
 </script>
 
 {#if collapsible === "none"}
@@ -58,37 +31,6 @@
 	>
 		{@render children?.()}
 	</div>
-{:else if sidebar.isMobile}
-	<Sheet.Root
-		bind:open={() => sidebar.openMobile, (v) => sidebar.setOpenMobile(v)}
-		{...restProps}
-	>
-		<Sheet.Content
-			bind:ref
-			data-sidebar="sidebar"
-			data-slot="sidebar"
-			data-mobile="true"
-			showCloseButton={false}
-			ontouchstart={startSwipe}
-			ontouchmove={moveSwipe}
-			ontouchend={endSwipe}
-			ontouchcancel={() => { swipeStart = null }}
-			class={cn(
-				"bg-sidebar text-sidebar-foreground touch-pan-y touch-pinch-zoom border-none p-0 data-[side=left]:w-(--sidebar-width) data-[side=right]:w-(--sidebar-width) data-[side=left]:sm:max-w-none data-[side=right]:sm:max-w-none",
-				className
-			)}
-			style="--sidebar-width: {SIDEBAR_WIDTH_MOBILE};"
-			{side}
-		>
-			<Sheet.Header class="sr-only">
-				<Sheet.Title>{$t('nav.sidebar')}</Sheet.Title>
-				<Sheet.Description>{$t('nav.sidebarDescription')}</Sheet.Description>
-			</Sheet.Header>
-			<div class="flex h-full w-full flex-col">
-				{@render children?.()}
-			</div>
-		</Sheet.Content>
-	</Sheet.Root>
 {:else}
 	<div
 		bind:this={ref}

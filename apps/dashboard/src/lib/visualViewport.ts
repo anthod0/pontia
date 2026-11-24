@@ -13,6 +13,7 @@ export function installVisualViewportCssVars(win: Window = window): () => void {
       ? Math.max(0, win.innerHeight - viewport.height - viewport.offsetTop)
       : 0;
     keyboard.set(bottom > 100);
+    root.style.setProperty("--keyboard-inset", bottom > 100 ? Math.round(bottom) + "px" : "0px");
     root.style.setProperty("--visual-viewport-top", `${Math.round(top)}px`);
     root.style.setProperty("--visual-viewport-bottom", `${Math.round(bottom)}px`);
   }
@@ -31,6 +32,7 @@ export function installVisualViewportCssVars(win: Window = window): () => void {
 
   return () => {
     keyboard.set(false);
+    root.style.removeProperty("--keyboard-inset");
     viewport.removeEventListener("resize", update);
     viewport.removeEventListener("scroll", update);
     root.style.setProperty("--visual-viewport-top", "0px");

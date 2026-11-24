@@ -255,7 +255,7 @@
 {/snippet}
 
 <!-- The icon rail has no session list; New Chat follows the Bot avatars instead. -->
-{#if sidebar.state === 'collapsed' && !sidebar.isMobile}
+{#if sidebar.state === 'collapsed'}
 <Sidebar.Group class="pt-0">
   <Sidebar.Separator class="mx-auto mb-2 w-5! data-[orientation=horizontal]:w-5" />
   <Sidebar.Menu>

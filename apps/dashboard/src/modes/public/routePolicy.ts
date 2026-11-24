@@ -8,8 +8,12 @@ export function validateDashboardRoute({
 }: {
   handle?: string;
   routeId: string | null;
-}): void {
+}): string | undefined {
+  // These bare paths already identify devices with these handles in public mode.
+  if (!handle && routeId === rootRouteId + "/bots") return "bots";
+  if (!handle && routeId === rootRouteId + "/todos") return "todos";
   if (!handle && routeId !== rootRouteId && routeId !== `${rootRouteId}/bot`) {
     error(404, "Not found");
   }
+  return handle;
 }

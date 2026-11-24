@@ -7,7 +7,6 @@ export function load({
   params: Record<string, string | undefined>;
   route: { id: string | null };
 }) {
-  const handle = params.handle;
-  validateDashboardRoute({ handle, routeId: route.id });
-  return { handle };
+  const handle = validateDashboardRoute({ handle: params.handle, routeId: route.id });
+  return { handle, ...(handle && !params.handle ? { deviceEntry: true } : {}) };
 }

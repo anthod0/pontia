@@ -35,6 +35,7 @@ export function createBotDirectory(device: DeviceRuntime) {
           id,
           (update) => {
             if (update.type === "typing") return;
+            void device.queryClient.invalidateQueries({ queryKey: ["bot-todos", id] });
             const query = { queryKey: ["bot-summary", id] };
             // Invalidation alone can reuse an initial request that predates this update.
             void device.queryClient
@@ -57,6 +58,12 @@ export function createBotDirectory(device: DeviceRuntime) {
   }
   const data = $derived(summaries.map((query) => query.data));
   return {
+    get error() {
+      return bots.error ?? summaries.find((query) => query.error)?.error;
+    },
+    get pending() {
+      return bots.isPending || summaries.some((query) => query.isPending);
+    },
     get bots() {
       return bots.data;
     },

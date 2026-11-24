@@ -3,6 +3,8 @@
   import { onMount, type Snippet } from 'svelte';
   import { writable } from 'svelte/store';
   import { dashboardRelativePath, navigate } from '$lib/navigation';
+  import { toast } from 'svelte-sonner'
+  import { tabs } from '../../shell/mobile/tabs'
   import { returnToLastPage } from '$lib/lastPage';
   import { PersistedState, textSerializer } from '$lib/storage';
   import { matchChatShortcut } from '$lib/shortcuts/definitions';
@@ -115,8 +117,12 @@
   }
 
   // Settings keep their section; elsewhere the target device reopens its last chat.
-  function selectDevice(target: string): void {
+  function selectDevice(target: string, options?: { keepMobileTab?: boolean }): void {
     const path = dashboardRelativePath();
+    if (options?.keepMobileTab && tabs.some(tab => tab.path === path)) {
+      void navigate(path, undefined, { scope: `/${target}` }).then(() => toast.success($t('mobile.switched', {name: hostDevices.find(device => device.handle === target)?.name ?? target})))
+      return
+    }
     if (handle && path.startsWith('/settings/')) {
       void navigate(path, undefined, { scope: `/${target}` });
       return;

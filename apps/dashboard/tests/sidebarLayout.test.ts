@@ -2,11 +2,10 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/sve
 import { beforeEach, expect, test, vi } from "vitest";
 import AppSidebarHost from "./components/layout/AppSidebarHost.svelte";
 import AppShellHost from "./components/layout/AppShellHost.svelte";
-import TopBarHost from "./components/layout/TopBarHost.svelte";
+import TopBar from "../src/components/layout/TopBar.svelte";
 import SettingsShellHost from "./components/settings/SettingsShellHost.svelte";
 import { downloads } from "../src/lib/downloads/manager";
 import { testDevice } from "./deviceFixture";
-import { DeviceRuntime } from "../src/device/runtime";
 
 import type { BotMessagePage, BotWorkStatus } from "../src/api/types";
 import type { BotUpdate } from "../src/services/botChatStream";
@@ -894,29 +893,6 @@ test("sidebar highlights the matching recent session on chat routes", () => {
   expect(screen.getByText("other").closest("button")).not.toHaveAttribute("data-active");
 });
 
-test("top bar trigger closes and reopens the sidebar", async () => {
-  const onOpenChange = vi.fn();
-  render(TopBarHost, { props: { onOpenChange } });
-
-  const trigger = within(screen.getByRole("banner")).getByRole("button", {
-    name: /toggle sidebar/i,
-  });
-  await fireEvent.click(trigger);
-  await fireEvent.click(trigger);
-
-  expect(onOpenChange.mock.calls).toEqual([[false], [true]]);
-});
-
-test("top bar new chat button opens a new chat", async () => {
-  window.history.pushState({}, "", "/dashboard/chat/session-active");
-  render(TopBarHost);
-
-  await fireEvent.click(within(screen.getByRole("banner")).getByRole("button", { name: "More" }));
-  await fireEvent.click(screen.getByRole("menuitem", { name: "New Chat" }));
-
-  expect(mocks.navigate).toHaveBeenCalledWith("/");
-});
-
 test("top bar session title opens the rename dialog", async () => {
   mocks.sessions.set([
     {
@@ -937,7 +913,7 @@ test("top bar session title opens the rename dialog", async () => {
     },
   ]);
   window.history.pushState({}, "", "/dashboard/chat/session-active");
-  render(TopBarHost);
+  render(TopBar);
 
   await fireEvent.click(
     within(screen.getByRole("banner")).getByRole("button", { name: "Original title" }),
@@ -1118,74 +1094,6 @@ test("chat new shortcut on a session route preserves the current session workspa
   expect(mocks.navigate).toHaveBeenLastCalledWith("/", { workspace: "workspace-current" });
 });
 
-test("the settings top bar opens a section sheet that marks the current section", async () => {
-  window.history.pushState({}, "", "/dashboard/settings/workspaces");
-
-  render(TopBarHost);
-
-  const banner = within(screen.getByRole("banner"));
-  expect(banner.queryByRole("navigation", { name: /settings sections/i })).not.toBeInTheDocument();
-  const title = banner.getByRole("button", { name: /Settings\s*Workspaces/ });
-  expect(title).toHaveAttribute("aria-haspopup", "dialog");
-  await fireEvent.click(title);
-
-  const sheet = await screen.findByRole("dialog", { name: "Settings" });
-  const nav = within(sheet).getByRole("navigation", { name: /settings sections/i });
-  expect(
-    within(nav)
-      .getAllByRole("link")
-      .map((link) => link.getAttribute("href")),
-  ).toEqual([
-    "/dashboard/settings/common",
-    "/dashboard/settings/clients",
-    "/dashboard/settings/agent-profiles",
-    "/dashboard/settings/workspaces",
-    "/dashboard/settings/memory",
-  ]);
-  expect(within(nav).getByRole("link", { name: "Workspaces" })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
-  expect(within(nav).getByRole("link", { name: "Memory" })).not.toHaveAttribute("aria-current");
-});
-
-test("the settings section sheet navigates with the router and closes", async () => {
-  window.history.pushState({}, "", "/dashboard/settings/common");
-  render(TopBarHost);
-
-  await fireEvent.click(screen.getByRole("button", { name: /Settings\s*Common/ }));
-  const sheet = await screen.findByRole("dialog", { name: "Settings" });
-  await fireEvent.click(within(sheet).getByRole("link", { name: "Workspaces" }));
-
-  expect(mocks.navigate).toHaveBeenCalledWith("/settings/workspaces");
-  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-});
-
-test("the settings section sheet returns to chat", async () => {
-  window.history.pushState({}, "", "/dashboard/settings/memory");
-  render(TopBarHost);
-
-  await fireEvent.click(screen.getByRole("button", { name: /Settings\s*Memory/ }));
-  const sheet = await screen.findByRole("dialog", { name: "Settings" });
-  await fireEvent.click(within(sheet).getByRole("button", { name: "Back to chat" }));
-
-  expect(mocks.navigate).toHaveBeenCalledWith("/");
-  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-});
-
-test("the settings top bar back button returns to chat instead of opening the sidebar", async () => {
-  window.history.pushState({}, "", "/dashboard/settings/clients");
-  const onOpenChange = vi.fn();
-  render(TopBarHost, { props: { onOpenChange } });
-
-  const banner = within(screen.getByRole("banner"));
-  expect(banner.queryByRole("button", { name: /toggle sidebar/i })).not.toBeInTheDocument();
-  await fireEvent.click(banner.getByRole("button", { name: "Back to chat" }));
-
-  expect(mocks.navigate).toHaveBeenCalledWith("/");
-  expect(onOpenChange).not.toHaveBeenCalled();
-});
-
 test("the sidebar lists settings sections instead of sessions on settings pages", async () => {
   mocks.sessions.set([chatSession("session-recent", "idle", "2026-05-14T04:00:00Z")]);
   window.history.pushState({}, "", "/dashboard/settings/clients");
@@ -1214,7 +1122,7 @@ test("the sidebar lists settings sections instead of sessions on settings pages"
 test("the top bar titles the current settings section", () => {
   window.history.pushState({}, "", "/dashboard/settings/clients");
 
-  render(TopBarHost);
+  render(TopBar);
 
   expect(
     within(screen.getByRole("banner")).getByRole("heading", { name: "Agent Clients" }),
@@ -1236,86 +1144,6 @@ test("shows a sidebar loading failure instead of claiming there are no sessions"
   expect(screen.queryByText("No active sessions")).not.toBeInTheDocument();
 });
 
-async function openMobileSidebar() {
-  vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
-    matches: query.includes("max-width: 767px"),
-    media: query,
-    onchange: null,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  }));
-  render(AppSidebarHost);
-  await fireEvent.click(screen.getByRole("button", { name: "Open sidebar" }));
-  return screen.getByRole("dialog", { name: "Sidebar" });
-}
-
-test("a phone user can edit the Bot from its row action button", async () => {
-  mockSidebarBot();
-  const sidebar = await openMobileSidebar();
-  const button = await within(sidebar).findByRole("button", {
-    name: "Release Captain · Bot actions",
-  });
-  await fireEvent.click(button);
-  const menu = await screen.findByRole("menu", { name: "Release Captain" });
-  await fireEvent.click(within(menu).getByRole("menuitem", { name: "Edit Bot" }));
-  expect(await screen.findByRole("dialog", { name: "Edit Bot" })).toBeVisible();
-});
-
-test("mobile sidebar closes with its close button", async () => {
-  const sidebar = await openMobileSidebar();
-  await fireEvent.click(within(sidebar).getByRole("button", { name: "Close", exact: true }));
-  await waitFor(() =>
-    expect(screen.queryByRole("dialog", { name: "Sidebar" })).not.toBeInTheDocument(),
-  );
-});
-
-test("mobile sidebar closes on a left swipe", async () => {
-  const sidebar = await openMobileSidebar();
-  await fireEvent.touchStart(sidebar, { touches: [{ clientX: 180, clientY: 200 }] });
-  await fireEvent.touchMove(sidebar, { touches: [{ clientX: 70, clientY: 210 }] });
-  await fireEvent.touchEnd(sidebar, { changedTouches: [{ clientX: 40, clientY: 215 }] });
-  await waitFor(() =>
-    expect(screen.queryByRole("dialog", { name: "Sidebar" })).not.toBeInTheDocument(),
-  );
-});
-
-test.each([
-  { name: "a right swipe", x: 320, y: 205, cancel: false },
-  { name: "a short drag", x: 155, y: 205, cancel: false },
-  { name: "a vertical scroll", x: 70, y: 400, cancel: false },
-  { name: "a cancelled gesture", x: 40, y: 210, cancel: true },
-])("mobile sidebar stays open after $name", async ({ x, y, cancel }) => {
-  const sidebar = await openMobileSidebar();
-  await fireEvent.touchStart(sidebar, { touches: [{ clientX: 180, clientY: 200 }] });
-  await fireEvent.touchMove(sidebar, { touches: [{ clientX: x, clientY: y }] });
-  if (cancel) await fireEvent.touchCancel(sidebar);
-  await fireEvent.touchEnd(sidebar, { changedTouches: [{ clientX: x, clientY: y }] });
-  expect(screen.getByRole("dialog", { name: "Sidebar" })).toHaveAttribute("data-state", "open");
-});
-
-test("mobile more menu hides downloads until a download starts, then opens the download center", async () => {
-  render(AppShellHost);
-  await fireEvent.click(within(screen.getByRole("banner")).getByRole("button", { name: "More" }));
-  expect(screen.queryByRole("menuitem", { name: "Downloads" })).not.toBeInTheDocument();
-  await fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
-
-  const task = downloads.start(
-    "missing-device",
-    "session",
-    { path: "/tmp/report.txt" },
-    "report.txt",
-  );
-  await fireEvent.click(within(screen.getByRole("banner")).getByRole("button", { name: "More" }));
-  const item = await screen.findByRole("menuitem", { name: /Downloads/ });
-  expect(within(item).getByTestId("downloads-count")).toHaveTextContent("1");
-  await fireEvent.click(item);
-  expect(screen.getByRole("dialog", { name: "Downloads" })).toBeInTheDocument();
-  downloads.cancel(task.id);
-});
-
 function mockCurrentBot() {
   vi.spyOn(testDevice.api, "listBots").mockResolvedValue([
     {
@@ -1335,7 +1163,7 @@ function mockCurrentBot() {
 
 test("Bot top bar opens the Bot edit dialog from its name and has no more menu", async () => {
   mockCurrentBot();
-  render(TopBarHost);
+  render(TopBar);
 
   const banner = screen.getByRole("banner");
   await fireEvent.click(await within(banner).findByRole("button", { name: "Release Captain" }));
@@ -1346,13 +1174,13 @@ test("Bot top bar opens the Bot edit dialog from its name and has no more menu",
   vi.restoreAllMocks();
 });
 
-test("Bot top bar shows a downloads button only while downloads exist", async () => {
+test("Desktop download center shows a button only while downloads exist", async () => {
   mockCurrentBot();
   render(AppShellHost);
 
   const banner = screen.getByRole("banner");
   await within(banner).findByRole("button", { name: "Release Captain" });
-  expect(within(banner).queryByRole("button", { name: "Downloads" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Downloads" })).not.toBeInTheDocument();
 
   const task = downloads.start(
     "missing-device",
@@ -1360,7 +1188,7 @@ test("Bot top bar shows a downloads button only while downloads exist", async ()
     { path: "/tmp/report.txt" },
     "report.txt",
   );
-  const button = await within(banner).findByRole("button", { name: "Downloads" });
+  const button = await screen.findByRole("button", { name: "Downloads" });
   expect(within(button).getByTestId("downloads-count")).toHaveTextContent("1");
   await fireEvent.click(button);
   expect(screen.getByRole("dialog", { name: "Downloads" })).toBeInTheDocument();
@@ -1423,15 +1251,4 @@ test("sidebar refreshes every Bot status and todo count from live updates withou
   view.unmount();
   expect(botStreams.has("second")).toBe(false);
   vi.restoreAllMocks();
-});
-
-test("public settings name the device above the section title", async () => {
-  window.history.pushState({}, "", "/dashboard/settings/common");
-  const device = new DeviceRuntime("office", testDevice.access, "MacBook Pro");
-  render(TopBarHost, { props: { device } });
-
-  await fireEvent.click(screen.getByRole("button", { name: /Settings · MacBook Pro\s*Common/ }));
-  const sheet = await screen.findByRole("dialog", { name: "Settings" });
-  expect(within(sheet).getByText("MacBook Pro")).toBeInTheDocument();
-  device.dispose();
 });

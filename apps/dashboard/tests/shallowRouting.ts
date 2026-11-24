@@ -10,7 +10,10 @@ vi.mock("$app/state", async (importOriginal) => {
   const original = await importOriginal<typeof import("$app/state")>();
   return {
     ...original,
-    page: Object.create(original.page, { state: { get: () => pageState.current } }),
+    page: Object.create(original.page, {
+      state: { get: () => pageState.current },
+      url: { get: () => new URL(location.href) },
+    }),
   };
 });
 vi.mock("$app/navigation", async (importOriginal) => ({

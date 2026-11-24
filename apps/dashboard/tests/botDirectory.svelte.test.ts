@@ -1,3 +1,4 @@
+import { createBotTodos } from "../src/features/bots/botTodos.svelte";
 import { flushSync } from "svelte";
 import { expect, test, vi } from "vitest";
 import { waitFor } from "@testing-library/svelte";
@@ -29,5 +30,29 @@ test("removing the only Bot with open todos clears the directory indicator", asy
     stop();
     pending.mockRestore();
     summaries.mockRestore();
+  }
+});
+
+test("loads todos concurrently for just the Bots with open items", async () => {
+  const ids = ["first", "empty", "last"];
+  testDevice.queryClient.setQueryData(
+    ["bots"],
+    ids.map((bot_id) => ({ bot_id })),
+  );
+  for (const id of ids)
+    testDevice.queryClient.setQueryData(["bot-summary", id], {
+      open_todo_count: id === "empty" ? 0 : 2,
+    });
+  const getTodos = vi
+    .spyOn(testDevice.api, "getBotTodos")
+    .mockImplementation(() => new Promise(() => {}));
+  const stop = $effect.root(() => {
+    createBotTodos(testDevice, createBotDirectory(testDevice));
+  });
+  try {
+    await waitFor(() => expect(getTodos.mock.calls.map(([id]) => id)).toEqual(["first", "last"]));
+  } finally {
+    stop();
+    getTodos.mockRestore();
   }
 });

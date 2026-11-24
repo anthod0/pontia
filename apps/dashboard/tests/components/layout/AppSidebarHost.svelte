@@ -4,6 +4,5 @@
 </script>
 
 <Sidebar.Provider>
-  <Sidebar.Trigger aria-label="Open sidebar" />
   <AppSidebar />
 </Sidebar.Provider>

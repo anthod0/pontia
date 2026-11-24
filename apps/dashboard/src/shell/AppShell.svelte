@@ -1,8 +1,16 @@
 <script lang="ts">
-  import type { Snippet } from 'svelte'
+  import { onMount, type Snippet } from 'svelte'
   import DesktopShell from './desktop/DesktopShell.svelte'
 
+  import MobileShell from './mobile/MobileShell.svelte'
+  import { isMobileShell } from '$lib/hooks/shellMode.svelte'
+  import { installVisualViewportCssVars } from '$lib/visualViewport'
+  onMount(() => installVisualViewportCssVars())
   let { children }: { children: Snippet } = $props()
 </script>
 
-<DesktopShell>{@render children()}</DesktopShell>
+{#if isMobileShell()}
+  <MobileShell>{@render children()}</MobileShell>
+{:else}
+  <DesktopShell>{@render children()}</DesktopShell>
+{/if}

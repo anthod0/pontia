@@ -7,6 +7,8 @@
   import SpinnerGapIcon from 'phosphor-svelte/lib/SpinnerGapIcon';
   import { Button } from '$lib/components/ui/button/index.js';
   import DeviceStatus from '../../components/devices/DeviceStatus.svelte';
+  import { isMobileShell } from '$lib/hooks/shellMode.svelte'
+  import NewChatPage from '../../pages/NewChatPage.svelte'
   import DashboardEntryPage from '../../pages/DashboardEntryPage.svelte';
   import BotEntryPage from '../../pages/BotEntryPage.svelte';
   import NewChatLayout from '../../components/chat/NewChatLayout.svelte';
@@ -35,7 +37,9 @@
 {#if device}
   {#key device}
     <DeviceProvider {device}>
-      {#if handle}
+      {#if handle && currentPath === '/new' && !isMobileShell()}
+        <NewChatPage routeScope={host.routeScope} {deviceSelector} />
+      {:else if handle}
         {@render children()}
       {:else if currentPath === '/bot'}
         <BotEntryPage routeScope={host.routeScope} />
