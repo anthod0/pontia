@@ -123,7 +123,7 @@
   const menuGroups: { names: ChatCommand['name'][] }[] = [
     { names: ['/new'] },
     { names: ['/rename', '/pin', '/archive'] },
-    { names: ['/compact', '/reload'] },
+    { names: ['/compact'] },
     { names: ['/exit'] },
   ]
   const visibleMenuGroups = $derived(menuGroups
@@ -203,7 +203,7 @@
       command.run(commandArgument)
       return
     }
-    if (command.name !== '/reload') value = command.name
+    value = command.name
     fullscreenOpen = false
     command.run()
   }

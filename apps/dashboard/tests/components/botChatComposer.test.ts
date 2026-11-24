@@ -218,6 +218,7 @@ test("reloads the Bot from the composer and keeps the command available after a 
     .mockResolvedValueOnce();
   const { botId, send, scope, draft } = await openChat();
   const editor = screen.getByRole("textbox");
+  expect(screen.queryByRole("button", { name: "Chat actions" })).not.toBeInTheDocument();
   await userEvent.type(editor, "/reload");
   await userEvent.keyboard("{Enter}");
   await waitFor(() => expect(toast.error).toHaveBeenCalledOnce());
@@ -228,16 +229,4 @@ test("reloads the Bot from the composer and keeps the command available after a 
   expect(editor.textContent).toBe("");
   expect(send).not.toHaveBeenCalled();
   expect(await loadUploadRecords(scope, draft)).toHaveLength(1);
-});
-
-test("reloading from Chat actions preserves the pending Bot message", async () => {
-  const reload = vi.spyOn(testDevice.api, "reloadBot").mockResolvedValue();
-  const { botId, send } = await openChat();
-  const editor = screen.getByRole("textbox");
-  await userEvent.type(editor, "Keep this draft");
-  await userEvent.click(screen.getByRole("button", { name: "Chat actions" }));
-  await userEvent.click(await screen.findByText("/reload"));
-  await waitFor(() => expect(reload).toHaveBeenCalledExactlyOnceWith(botId));
-  expect(editor).toHaveTextContent("Keep this draft");
-  expect(send).not.toHaveBeenCalled();
 });
