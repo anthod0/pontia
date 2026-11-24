@@ -302,6 +302,42 @@ const mockGitChanges = [
   { path: "notes.md", group: "untracked", status: "?", additions: 5, deletions: 0, binary: false },
 ];
 
+const mockGitBranches = [
+  { name: "main", ref: "refs/heads/main", remote: false, current: true },
+  { name: "feature/history", ref: "refs/heads/feature/history", remote: false, current: false },
+  { name: "origin/main", ref: "refs/remotes/origin/main", remote: true, current: false },
+];
+
+const mockGitSubjects = [
+  "Show commit history in the Git tab",
+  "Read branches without checking them out",
+  "Merge branch 'feature/history'",
+  "Fix line numbers in long diffs",
+  "Group change list by status",
+  "Add Git status to the composer",
+  "Initial commit",
+];
+
+/** A short history per branch; every commit changes the same few files. */
+function mockGitCommits(ref: string) {
+  const offset = ref.includes("feature") ? 1 : 0;
+  return mockGitSubjects.slice(offset).map((subject, index) => {
+    const sha = (index + offset + 1).toString(16).padStart(2, "0").repeat(20);
+    const parent = (index + offset + 2).toString(16).padStart(2, "0").repeat(20);
+    return {
+      sha,
+      parents: subject.startsWith("Merge")
+        ? [parent, "ff".repeat(20)]
+        : subject === "Initial commit"
+          ? []
+          : [parent],
+      author_name: index % 2 ? "Grace Hopper" : "Ada Lovelace",
+      authored_at: new Date(Date.now() - (index + 1) * 5 * 3_600_000).toISOString(),
+      subject,
+    };
+  });
+}
+
 function limitParam(query: URLSearchParams, fallback: number): number {
   const limit = Number(query.get("limit") ?? fallback);
   return Number.isInteger(limit) && limit > 0 ? limit : fallback;
@@ -803,6 +839,81 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
       diff: {
         path: query.get("path"),
         group: query.get("group"),
+        binary: false,
+        truncated: false,
+        hunks: [
+          {
+            header: "@@ -1,3 +1,4 @@",
+            lines: [
+              { kind: "context", old: 1, new: 1, text: "import { writable } from 'svelte/store'" },
+              { kind: "delete", old: 2, new: null, text: "const open = writable(false)" },
+              { kind: "add", old: null, new: 2, text: "const open = writable(true)" },
+              { kind: "add", old: null, new: 3, text: "export { open }" },
+              { kind: "context", old: 3, new: 4, text: "" },
+            ],
+          },
+        ],
+      },
+    }),
+  ],
+  [
+    "GET",
+    "/workspaces/:id/git/branches",
+    () => ({
+      branches: {
+        head: "refs/heads/main",
+        branches: mockGitBranches,
+      },
+    }),
+  ],
+  [
+    "GET",
+    "/workspaces/:id/git/commits",
+    ({ query }) => {
+      const commits = mockGitCommits(query.get("ref") ?? "HEAD");
+      const skip = Number(query.get("skip") ?? 0);
+      return { commits: { commits: commits.slice(skip, skip + 50), has_more: false } };
+    },
+  ],
+  [
+    "GET",
+    "/workspaces/:id/git/commits/:sha",
+    ({ params: [, sha] }) => {
+      const summary = [
+        ...mockGitCommits("refs/heads/main"),
+        ...mockGitCommits("refs/heads/feature"),
+      ].find((commit) => commit.sha === sha);
+      if (!summary) notFound(`commit ${sha}`);
+      const files = mockGitChanges
+        .filter((file) => file.group !== "untracked")
+        .map(({ path, status, additions, deletions, binary }) => ({
+          path,
+          status,
+          additions,
+          deletions,
+          binary,
+        }));
+      return {
+        commit: {
+          ...summary,
+          author_email: "dev@example.com",
+          committer_name: summary.author_name,
+          committed_at: summary.authored_at,
+          body: "Lists commits of any branch and opens each commit's file changes.\nNothing is checked out.",
+          files,
+          total: files.length,
+          truncated: false,
+        },
+      };
+    },
+  ],
+  [
+    "GET",
+    "/workspaces/:id/git/commits/:sha/diff",
+    ({ params: [, sha], query }) => ({
+      diff: {
+        sha,
+        path: query.get("path"),
         binary: false,
         truncated: false,
         hunks: [

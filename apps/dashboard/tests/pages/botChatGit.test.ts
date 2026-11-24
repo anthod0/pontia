@@ -150,6 +150,72 @@ test("picks a Workspace, shows its changes and diff, and remembers it for the Bo
   ).toHaveTextContent("docs");
 });
 
+test("shows the chosen Workspace's commit history and forgets the commit for another Workspace", async () => {
+  vi.spyOn(testDevice.api, "getWorkspaceGitBranches").mockResolvedValue({
+    head: "refs/heads/main",
+    branches: [{ name: "main", ref: "refs/heads/main", remote: false, current: true }],
+  });
+  vi.spyOn(testDevice.api, "getWorkspaceGitCommits").mockResolvedValue({
+    commits: [
+      {
+        sha: "a".repeat(40),
+        parents: [],
+        author_name: "Ada",
+        authored_at: "2026-11-20T00:00:00Z",
+        subject: "initial commit",
+      },
+    ],
+    has_more: false,
+  });
+  vi.spyOn(testDevice.api, "getWorkspaceGitCommit").mockResolvedValue({
+    sha: "a".repeat(40),
+    parents: [],
+    author_name: "Ada",
+    author_email: "ada@example.com",
+    authored_at: "2026-11-20T00:00:00Z",
+    committer_name: "Ada",
+    committed_at: "2026-11-20T00:00:00Z",
+    subject: "initial commit",
+    body: "",
+    files: [{ path: "README.md", status: "A", additions: 1, deletions: 0, binary: false }],
+    total: 1,
+    truncated: false,
+  });
+  localStorage.setItem('pontia.botGitWorkspace:["local","a"]', "workspace-1");
+  render(BotChatPreviewHarness, { botId: bot.bot_id });
+  const panel = await openGitTab();
+
+  await fireEvent.click(await within(panel).findByRole("tab", { name: "History" }));
+  await fireEvent.click(await within(panel).findByRole("button", { name: /initial commit/ }));
+  expect(await within(panel).findByRole("button", { name: "README.md" })).toBeVisible();
+  expect(testDevice.api.getWorkspaceGitCommits).toHaveBeenCalledWith(
+    "workspace-1",
+    "refs/heads/main",
+    0,
+    expect.anything(),
+  );
+
+  await fireEvent.keyDown(panel.querySelector("[data-git-row]")!, { key: "Escape" });
+  const picker = await within(panel).findByRole("combobox", { name: "Workspace: pontia" });
+  await fireEvent.keyDown(picker, { key: "ArrowDown" });
+  await screen.findByRole("option", { name: /docs/ });
+  await fireEvent.keyDown(picker, { key: "ArrowDown" });
+  await fireEvent.keyDown(picker, { key: "Enter" });
+  await within(panel).findByRole("combobox", { name: "Workspace: docs" });
+  // The history list stays chosen; the commit from the other Workspace is gone.
+  await within(panel).findByRole("button", { name: /initial commit/ });
+  expect(within(panel).getByRole("tab", { name: "History" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  expect(testDevice.api.getWorkspaceGitCommits).toHaveBeenLastCalledWith(
+    "workspace-2",
+    "refs/heads/main",
+    0,
+    expect.anything(),
+  );
+});
+
 test("points to Workspace settings when none is registered", async () => {
   vi.mocked(testDevice.api.listWorkspaces).mockResolvedValue([]);
   render(BotChatPreviewHarness, { botId: bot.bot_id });
