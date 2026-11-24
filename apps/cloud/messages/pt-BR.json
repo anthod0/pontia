@@ -103,6 +103,7 @@
   "remote_subscriptions_title": "Use suas próprias assinaturas.",
   "remote_terminal_title": "Mantenha seu terminal.",
   "remote_encrypted_title": "Criptografia de ponta a ponta.",
+  "remote_lock_drag": "Arraste o cadeado para puxar a conexão criptografada ou mantenha pressionada a tecla Espaço ou Enter.",
   "remote_demo_title": "Corrigir o teste de login",
   "remote_demo_prompt_fix": "Corrija o teste de login",
   "remote_demo_prompt_auth": "Rode só os testes de auth",
