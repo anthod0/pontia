@@ -103,7 +103,7 @@
 		<div
 			data-slot="sidebar-gap"
 			class={cn(
-				"transition-[width] duration-200 ease-linear relative w-(--sidebar-width) bg-transparent",
+				"transition-[width] duration-200 ease-linear motion-reduce:transition-none relative w-(--sidebar-width) bg-transparent",
 				"group-data-[collapsible=offcanvas]:w-0",
 				"group-data-[side=right]:rotate-180",
 				variant === "floating" || variant === "inset"
@@ -114,7 +114,7 @@
 		<div
 			data-slot="sidebar-container"
 			class={cn(
-				"fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex",
+				"fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear motion-reduce:transition-none md:flex",
 				side === "left"
 					? "start-0 group-data-[collapsible=offcanvas]:start-[calc(var(--sidebar-width)*-1)]"
 					: "end-0 group-data-[collapsible=offcanvas]:end-[calc(var(--sidebar-width)*-1)]",
@@ -129,9 +129,21 @@
 			<div
 				data-sidebar="sidebar"
 				data-slot="sidebar-inner"
-				class="bg-sidebar group-data-[variant=floating]:ring-sidebar-border group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-none group-data-[variant=floating]:ring-1 flex size-full flex-col"
+				class="bg-sidebar group-data-[variant=floating]:ring-sidebar-border group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-none group-data-[variant=floating]:ring-1 flex size-full overflow-hidden"
 			>
-				{@render children?.()}
+				<!-- Content keeps its target width while the container animates, so text is clipped instead of rewrapped.
+				     This wrapper is not positioned, so the absolutely positioned rail is not clipped. -->
+				<div
+					data-slot="sidebar-content-frame"
+					class={cn(
+						"flex h-full shrink-0 flex-col group-data-[collapsible=icon]:w-full",
+						variant === "floating" || variant === "inset"
+							? "w-[calc(var(--sidebar-width)-(--spacing(4)))]"
+							: "w-[calc(var(--sidebar-width)-1px)]"
+					)}
+				>
+					{@render children?.()}
+				</div>
 			</div>
 		</div>
 	</div>
