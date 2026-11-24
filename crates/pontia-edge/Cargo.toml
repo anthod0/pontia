@@ -13,6 +13,7 @@ clap = { version = "4", features = ["derive"] }
 getrandom = "0.3"
 hickory-resolver = { version = "0.25", default-features = false, features = ["system-config", "tokio"] }
 instant-acme = { version = "=0.8.5", default-features = false, features = ["hyper-rustls", "ring", "rcgen"] }
+jsonwebtoken = { version = "9", default-features = false }
 pontia-tunnel.workspace = true
 pontia-update = { path = "../pontia-update" }
 pontia-version.workspace = true
@@ -30,6 +31,7 @@ uuid = { features = ["v4", "v7"], version = "1.23.1" }
 webpki-roots = "1"
 
 [dev-dependencies]
+ed25519-dalek = "2"
 futures-util = { version = "0.3", features = ["sink"] }
 http-body-util = "0.1"
 rcgen = "0.14"

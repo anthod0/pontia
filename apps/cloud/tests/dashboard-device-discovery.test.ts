@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import type { RequestEvent } from "@sveltejs/kit";
+import { jwtVerify } from "jose";
 import { eq } from "drizzle-orm";
 import { issueLogin } from "../src/lib/server/auth/jwt";
 import { authSessions, devices, edges, users } from "../src/lib/server/db/schema";
@@ -226,8 +227,27 @@ test("connect returns trusted routing and browser-bound signed authorization wit
     device_public_key: browserPublicKey,
     device_key_version: 1,
     capability: expect.any(String),
-    admission_ticket: expect.stringMatching(/^pet_v1_[A-Za-z0-9_-]{43}$/),
+    admission_token: expect.any(String),
+    refresh_at: expect.any(Number),
   });
+  const renewal = await callConnect(
+    event("/api/dashboard/devices/office-mac/connect", {
+      origin: dashboardOrigin,
+      token,
+      body: {},
+    }),
+  );
+  const renewed = (await renewal.json()) as Record<string, unknown>;
+  expect(renewed).not.toHaveProperty("capability");
+  for (const access of [body, renewed]) {
+    const { payload } = await jwtVerify(access.admission_token as string, signingKeys.publicKey, {
+      algorithms: ["EdDSA"],
+      audience: "0195e7e1-1b22-7c33-9d44-123456789abc",
+    });
+    expect(payload).toMatchObject({ user_id: ownerId, device_id: ownerDeviceId });
+    expect(payload.exp! - payload.iat!).toBe(4 * 3600);
+    expect(access.refresh_at).toBe((payload.iat! + 2 * 3600) * 1000);
+  }
   const capability = Buffer.from(body.capability as string, "base64url");
   const signed = Buffer.concat([
     Buffer.from("pontia-e2e-capability-v1\0"),
@@ -325,7 +345,6 @@ test("connect rejects invalid tunnel URLs", async () => {
 test("connect rejects malformed browser keys and extra request fields", async () => {
   const token = await seedDashboardFixtureAndLogin();
   for (const [body, status] of [
-    [{}, 400],
     [{ browser_public_key: 12 }, 400],
     [{ browser_public_key: "invalid" }, 400],
     [{ browser_public_key: `${browserPublicKey}=` }, 400],
@@ -375,19 +394,24 @@ test("device listing and connect enforce authenticated credentialed Dashboard CO
   }
 });
 
-test("connect returns unavailable without partial credentials if ticket storage fails", async () => {
+test("connect and renewal do not require writable ticket storage", async () => {
   const token = await seedDashboardFixtureAndLogin();
   await database.binding.exec(
-    "CREATE TRIGGER reject_admission BEFORE INSERT ON edge_tickets BEGIN SELECT RAISE(ABORT, 'unavailable'); END",
+    "CREATE TRIGGER reject_ticket BEFORE INSERT ON edge_tickets BEGIN SELECT RAISE(ABORT, 'unavailable'); END",
   );
   try {
-    const response = await callConnect(
-      event("/api/dashboard/devices/office-mac/connect", { origin: dashboardOrigin, token }),
-    );
-    expect(response.status).toBe(503);
-    expect((await response.json()) as unknown).toEqual({ error: "unavailable" });
-    expectCredentialedCors(response);
+    for (const body of [{ browser_public_key: browserPublicKey }, {}]) {
+      const response = await callConnect(
+        event("/api/dashboard/devices/office-mac/connect", {
+          origin: dashboardOrigin,
+          token,
+          body,
+        }),
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toHaveProperty("admission_token");
+    }
   } finally {
-    await database.binding.exec("DROP TRIGGER reject_admission");
+    await database.binding.exec("DROP TRIGGER reject_ticket");
   }
 });

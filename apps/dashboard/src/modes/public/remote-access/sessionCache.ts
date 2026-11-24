@@ -82,40 +82,64 @@ export function connectionCache(userId: string, device: Device) {
     }, undefined);
   }
 
+  function read() {
+    const serialized = accessStorage((storage) => storage.getItem(name), null);
+    if (serialized === null) return null;
+    try {
+      const value = JSON.parse(serialized);
+      if (
+        !value ||
+        value.version !== 2 ||
+        typeof value.token !== "string" ||
+        !value.token ||
+        !Number.isSafeInteger(value.refreshAt) ||
+        typeof value.session !== "string" ||
+        !/^[A-Za-z0-9_-]+$/.test(value.session)
+      )
+        throw new Error("Invalid saved connection");
+      const target = parseDeviceTarget(value.target);
+      if (target.handle !== device.handle || target.deviceId !== device.deviceId)
+        throw new Error("Saved device does not match");
+      return {
+        serialized,
+        target,
+        token: value.token as string,
+        refreshAt: value.refreshAt as number,
+        session: value.session as string,
+      };
+    } catch {
+      remove(serialized);
+      return null;
+    }
+  }
+
+  function save(
+    target: PublicDeviceTarget,
+    token: string,
+    session: string,
+    refreshAt: number,
+  ): string {
+    const serialized = JSON.stringify({ version: 2, target, token, session, refreshAt });
+    accessStorage((storage) => {
+      storage.setItem(name, serialized);
+    }, undefined);
+    return serialized;
+  }
+
   return {
-    read() {
-      const serialized = accessStorage((storage) => storage.getItem(name), null);
-      if (serialized === null) return null;
-      try {
-        const value = JSON.parse(serialized);
-        if (
-          !value ||
-          value.version !== 1 ||
-          typeof value.token !== "string" ||
-          !value.token ||
-          typeof value.session !== "string" ||
-          !/^[A-Za-z0-9_-]+$/.test(value.session)
-        )
-          throw new Error("Invalid saved connection");
-        const target = parseDeviceTarget(value.target);
-        if (target.handle !== device.handle || target.deviceId !== device.deviceId)
-          throw new Error("Saved device does not match");
-        return {
-          serialized,
-          target,
-          token: value.token as string,
-          session: value.session as string,
-        };
-      } catch {
-        remove(serialized);
-        return null;
-      }
-    },
-    save(target: PublicDeviceTarget, token: string, session: string): string {
-      const serialized = JSON.stringify({ version: 1, target, token, session });
-      accessStorage((storage) => storage.setItem(name, serialized), undefined);
-      return serialized;
-    },
+    read,
+    save,
     remove,
+    refresh(target: PublicDeviceTarget, token: string, session: string, refreshAt: number) {
+      const current = read();
+      if (
+        !current ||
+        current.session !== session ||
+        current.target.edgeApiOrigin !== target.edgeApiOrigin
+      )
+        return null;
+      if (current.refreshAt > refreshAt) return current.serialized;
+      return save(target, token, session, refreshAt);
+    },
   };
 }

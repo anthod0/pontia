@@ -1,6 +1,7 @@
+mod access_token;
 pub mod acme;
 mod acme_dns;
-mod admissions;
+pub use access_token::AccessTokenVerifier;
 mod browser_http;
 pub mod challenge;
 pub mod config;
@@ -49,7 +50,7 @@ impl Default for ConnectionLimits {
 pub struct Edge {
     pub(crate) redeemer: TicketRedeemer,
     pub(crate) origins: BrowserOrigins,
-    admissions: admissions::Admissions,
+    access_tokens: AccessTokenVerifier,
     online: OnlineDevices,
     pending: Arc<Semaphore>,
     limits: ConnectionLimits,
@@ -59,13 +60,14 @@ pub struct Edge {
 impl Edge {
     pub fn new(
         redeemer: TicketRedeemer,
+        access_tokens: AccessTokenVerifier,
         origins: BrowserOrigins,
         limits: ConnectionLimits,
     ) -> Self {
         Self {
             redeemer,
             origins,
-            admissions: admissions::Admissions::default(),
+            access_tokens,
             online: OnlineDevices::default(),
             pending: Arc::new(Semaphore::new(limits.max_pending)),
             limits,
@@ -86,10 +88,6 @@ impl Edge {
             .route("/tunnel", get(connection::upgrade))
             .merge(
                 Router::new()
-                    .route(
-                        "/browser-admissions",
-                        post(browser_http::admit).options(browser_http::preflight),
-                    )
                     .route(
                         browser_http::SESSIONS_PATH,
                         post(browser_http::relay).options(browser_http::preflight),

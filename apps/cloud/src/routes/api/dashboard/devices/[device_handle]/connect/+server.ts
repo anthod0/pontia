@@ -25,7 +25,7 @@ export const POST: RequestHandler = async (event) => {
     !body ||
     typeof body !== "object" ||
     Array.isArray(body) ||
-    typeof (body as Record<string, unknown>).browser_public_key !== "string" ||
+    ("browser_public_key" in body && typeof body.browser_public_key !== "string") ||
     Object.keys(body).some((key) => key !== "browser_public_key")
   ) {
     return json({ error: "invalid_request" }, { status: 400, headers: authentication.headers });
@@ -39,7 +39,7 @@ export const POST: RequestHandler = async (event) => {
       remoteDatabase(event),
       authentication.userId,
       event.params.device_handle,
-      (body as { browser_public_key: string }).browser_public_key,
+      (body as { browser_public_key?: string }).browser_public_key ?? null,
       signingKey,
     );
     return connection

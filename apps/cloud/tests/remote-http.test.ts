@@ -328,13 +328,8 @@ test("device profile updates hide and preserve another user's device", async () 
 });
 
 test("editing the Edge preserves identity and URL and moves ticket authorization", async () => {
-  const {
-    issueTunnelTicket,
-    redeemTunnelTicket,
-    redeemBrowserAdmissionTicket,
-    decodeDeviceTunnelPayload,
-  } = await import("../src/lib/server/remote-access/tickets");
-  const { issueEdgeTicket } = await import("../src/lib/server/edge-tickets");
+  const { issueTunnelTicket, redeemTunnelTicket } =
+    await import("../src/lib/server/remote-access/tickets");
   await authenticatedRecords();
   const targetId = "0195e7d8-1b22-7c33-9d44-123456789abc";
   await database.db.insert(users).values({ id: "public-owner" });
@@ -359,14 +354,6 @@ test("editing the Edge preserves identity and URL and moves ticket authorization
   await database.db.insert(devices).values(original);
   const oldTicket = await issueTunnelTicket(database.db, "user-http", deviceId);
   if (oldTicket.status !== "issued") throw new Error("ticket not issued");
-  const admission = await issueEdgeTicket(database.db, {
-    purpose: "browser_admission",
-    userId: "user-http",
-    expectedEdgeId: edgeId,
-    payload: { device_id: deviceId },
-    expiresAt: new Date(Date.now() + 60_000),
-    decodePayload: decodeDeviceTunnelPayload,
-  });
   const response = await callPatchDevice(
     event(`/api/remote/devices/${deviceId}`, {
       method: "PATCH",
@@ -384,7 +371,6 @@ test("editing the Edge preserves identity and URL and moves ticket authorization
     e2e_key_version: 2,
   });
   expect(await redeemTunnelTicket(database.db, edgeId, oldTicket.value.ticket)).toBeNull();
-  expect(await redeemBrowserAdmissionTicket(database.db, edgeId, admission)).toBeNull();
   const ticket = await issueTunnelTicket(database.db, "user-http", deviceId);
   if (ticket.status !== "issued") throw new Error("ticket not issued");
   expect(ticket.value.tunnelUrl).toBe("wss://new-edge.example/tunnel");
