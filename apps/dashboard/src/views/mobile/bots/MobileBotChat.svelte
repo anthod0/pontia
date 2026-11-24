@@ -22,7 +22,6 @@
   import MobileBotFilesGitScreen from './MobileBotFilesGitScreen.svelte'
   import MobileBotSearchScreen from './MobileBotSearchScreen.svelte'
   import DotsThreeIcon from 'phosphor-svelte/lib/DotsThreeIcon'
-  import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
   let { chat }: { chat: BotChatController } = $props()
   const timeline = $derived(chat.timeline)
   const device = useDeviceRuntime()
@@ -95,7 +94,7 @@
       class="mobile-glass flex min-h-11 min-w-0 items-center gap-2 rounded-full px-3"
       onclick={() => (menu = true)}
     >
-      <RobotIcon class="size-6 shrink-0" aria-hidden="true" />
+      <BotAvatar class="size-6" shape={timeline.bot.avatar_shape} color={timeline.bot.avatar_color} />
       <strong class="truncate">{timeline.bot.name}</strong>
     </button>{/if}
 {/snippet}
