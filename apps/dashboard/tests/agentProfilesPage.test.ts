@@ -6,6 +6,7 @@ import { token } from "../src/stores/auth";
 import { createSampleData } from "../mock/data";
 import { createMockDevice, handleDeviceRequest, type MockDevice } from "../mock/server";
 import { testDevice } from "./deviceFixture";
+import TopBarHost from "./components/layout/TopBarHost.svelte";
 
 let device: MockDevice;
 beforeEach(() => {
@@ -222,4 +223,22 @@ test("reads an individual profile and cannot read it after deletion", async () =
   expect(profile).toMatchObject({ profile_id: "executor", name: "Executor" });
   await testDevice.api.deleteAgentProfile("executor");
   await expect(testDevice.api.getAgentProfile("executor")).rejects.toMatchObject({ status: 404 });
+});
+
+test("phones create profiles from the top bar and return from a profile with its back button", async () => {
+  window.history.pushState({}, "", "/dashboard/settings/agent-profiles");
+  const user = userEvent.setup();
+  render(TopBarHost, { props: { page: AgentProfilesPage } });
+  const bar = () => within(screen.getByTestId("top-bar-row"));
+
+  await open("Executor");
+  expect(bar().getByText("Executor")).toBeInTheDocument();
+  expect(bar().queryByRole("button", { name: "New" })).toBeNull();
+  expect(bar().queryByRole("button", { name: /Switch settings section/ })).toBeNull();
+
+  await user.click(bar().getByRole("button", { name: "Agent Profiles" }));
+  expect(await screen.findByText("Select a profile to edit it.")).toBeInTheDocument();
+  expect(bar().getByRole("button", { name: "Back to chat" })).toBeInTheDocument();
+  await user.click(bar().getByRole("button", { name: "New" }));
+  expect(bar().getByText("New profile")).toBeInTheDocument();
 });

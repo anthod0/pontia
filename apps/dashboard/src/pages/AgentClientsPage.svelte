@@ -19,6 +19,8 @@
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js'
+  import { useTopBarAction } from '../components/layout/topBarAction'
+  import { useSettingsDetail } from '../components/settings/settingsDetail'
   const device = useDeviceRuntime();
   const { listAgentClients, patchAgentClient, resetAgentClient, setupAgentClient, getAgentClientSetup } = device.api;
 
@@ -34,6 +36,18 @@
   let selectedSetup = $derived(setupOperation?.client_type === selected?.client_type && setupOperation?.client_key === selected?.client_key ? setupOperation : null)
   let loading = $state(true)
   let resetOpen = $state(false)
+
+  // Phones put the page action and the open client in the top bar.
+  const topBarAction = useTopBarAction()
+  const settingsDetail = useSettingsDetail()
+  $effect(() => {
+    topBarAction?.set(selected ? null : refreshAction)
+    settingsDetail?.set(selected ? { title: selected.name, back: () => selected = null, disabled: saving || startingSetup } : null)
+  })
+  $effect(() => () => {
+    topBarAction?.set(null)
+    settingsDetail?.set(null)
+  })
 
   function select(client: AgentClientView) {
     selected = client
@@ -116,8 +130,12 @@
   <Button type="button" variant="ghost" disabled={busy} onclick={() => resetOpen = true}><ArrowCounterClockwiseIcon data-icon="inline-start" />{$t('clients.restoreDefault')}</Button>
 {/snippet}
 
+{#snippet refreshAction()}
+  <Button variant="ghost" size="icon" class="mr-2 size-11 shrink-0 max-md:mt-2 md:hidden [&_svg:not([class*=size-])]:size-5" aria-label={$t('common.refresh')} title={$t('common.refresh')} disabled={busy || loading} onclick={() => perform(refresh)}><ArrowClockwiseIcon /></Button>
+{/snippet}
+
 <section class="space-y-6">
-  <div class="flex flex-wrap justify-end gap-2">
+  <div class="flex flex-wrap justify-end gap-2 max-md:hidden">
     <Button variant="outline" disabled={busy || loading} onclick={() => perform(refresh)}><ArrowClockwiseIcon data-icon="inline-start" />{$t('common.refresh')}</Button>
   </div>
 
@@ -132,7 +150,7 @@
     <div role="status" aria-label={$t('clients.loading')} class="grid gap-4 lg:grid-cols-[11rem_minmax(0,1fr)]"><Skeleton class="h-64 w-full" /><Skeleton class="h-96 w-full" /></div>
   {:else}
     <div class="grid items-start gap-4 lg:grid-cols-[11rem_minmax(0,1fr)]">
-      <nav aria-label={$t('clients.title')} class="space-y-0.5">
+      <nav aria-label={$t('clients.title')} class="space-y-0.5 {selected ? 'max-md:hidden' : ''}">
         {#each clients as client (client.id)}
           <button
             type="button"
@@ -157,7 +175,7 @@
         <div class="min-w-0 space-y-6">
           <div class="flex items-start justify-between gap-4">
             <div class="min-w-0 space-y-1">
-              <h3 class="truncate text-lg font-semibold text-heading">{selected.name}</h3>
+              <h3 class="truncate text-lg max-md:sr-only font-semibold text-heading">{selected.name}</h3>
               {#if selected.version}<p class="text-sm text-muted-foreground">{$t('clients.version', { version: selected.version })}</p>{/if}
               <div role="status" class="space-y-1 pt-2 text-sm">
                 <p class="flex items-center gap-1.5">

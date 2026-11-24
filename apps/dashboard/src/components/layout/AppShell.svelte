@@ -10,6 +10,7 @@
   import ConnectionNotice from './ConnectionNotice.svelte'
   import SettingsShell from '../settings/SettingsShell.svelte'
   import { isSettingsPath } from '../settings/sections'
+  import { provideSettingsDetail } from '../settings/settingsDetail'
   import { dashboardRelativePath } from '$lib/dashboardRoutes'
   import { installVisualViewportCssVars } from '$lib/visualViewport'
   import { provideFilePreviewNavigator } from '../chat/filePreviewContext'
@@ -26,6 +27,7 @@
   } = $props()
   let currentPath = $state(dashboardRelativePath())
   const topBarAction = provideTopBarAction()
+  provideSettingsDetail()
   const sessionPanel = provideSessionPanel()
   // Local file links open in the session side panel. The Bot chat page opens them in its own panel.
   provideFilePreviewNavigator({ open: target => sessionPanel.openFile(target) })
