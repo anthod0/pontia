@@ -22,9 +22,9 @@ async function optionIds(device: MockDevice) {
 }
 
 test.each([
-  ["pi", "pi", "pi"],
-  ["codex", "codex", "codex"],
-  ["claude-agent", "claude-agent", "claude-agent"],
+  ["pi", "default", "pi"],
+  ["codex", "default", "codex"],
+  ["claude-agent", "default", "claude-agent"],
   ["acp", "antigravity", '["acp","antigravity"]'],
   ["acp", "grok", '["acp","grok"]'],
 ])("mock creation options follow enabled settings for %s", async (type, key, id) => {
@@ -74,9 +74,9 @@ test("mock creation options carry the client version", async () => {
 test("mock creation options are empty when every client is disabled", async () => {
   const device = createMockDevice(createSampleData());
   for (const path of [
-    "pi/pi",
-    "codex/codex",
-    "claude-agent/claude-agent",
+    "pi/default",
+    "codex/default",
+    "claude-agent/default",
     "acp/antigravity",
     "acp/grok",
   ]) {

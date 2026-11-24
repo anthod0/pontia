@@ -4,22 +4,35 @@ import { createAgentProfileDraft } from "../src/pages/agentProfiles/form";
 import {
   applyProfileTemplate,
   draftChanged,
-  builtInProfileTemplates,
-  templateClientNames,
+  type ProfileTemplate,
   templateClientStatus,
   templateModel,
 } from "../src/pages/agentProfiles/templates";
 
-const template = (id: string) => builtInProfileTemplates.find((entry) => entry.id === id)!;
+const template: ProfileTemplate = {
+  id: "sample",
+  icon: "code",
+  client_type: "codex",
+  model: "sample-model",
+  reasoning_effort: "medium",
+  use_yolo: true,
+  text: {
+    en: { name: "Sample", description: "Sample description", system_prompt: "Sample prompt" },
+  },
+};
 
 function client(
   client_type: string,
-  { enabled = true, detected = true }: { enabled?: boolean; detected?: boolean } = {},
+  {
+    enabled = true,
+    detected = true,
+    key = "default",
+  }: { enabled?: boolean; detected?: boolean; key?: string } = {},
 ): AgentClientView {
   return {
     id: client_type,
     client_type,
-    client_key: client_type,
+    client_key: key,
     name: client_type,
     short_id: client_type,
     enabled,
@@ -47,39 +60,28 @@ function catalog(models: { id: string; efforts?: string[] }[], default_model: st
   } satisfies AgentClientModels;
 }
 
-test("every template has a valid profile ID, a known client, and text in both languages", () => {
-  for (const entry of builtInProfileTemplates) {
-    expect(entry.id).toMatch(/^[a-z0-9][a-z0-9._-]*$/);
-    expect(templateClientNames[entry.client_type]).toBeTruthy();
-    for (const text of Object.values(entry.text)) {
-      expect(text.name && text.description && text.system_prompt).toBeTruthy();
-      expect(text.system_prompt).not.toMatch(/\{\{|\}\}/);
-    }
-    expect(entry.text["zh-CN"].name).not.toBe(entry.text.en.name);
-  }
-  expect(new Set(builtInProfileTemplates.map((entry) => entry.id)).size).toBe(
-    builtInProfileTemplates.length,
-  );
-  expect(
-    builtInProfileTemplates.filter((entry) => entry.use_yolo).map((entry) => entry.id),
-  ).toEqual(["implementer"]);
-});
-
-test("fills every field in the interface language when the template's client is enabled", () => {
-  const draft = { ...createAgentProfileDraft(), client_type: "codex", client_key: "codex" };
-  expect(applyProfileTemplate(draft, template("implementer"), "zh-CN", [client("pi")])).toEqual({
-    profile_id: "implementer",
-    name: "实现者",
-    description: template("implementer").text["zh-CN"].description,
-    client_type: "pi",
-    client_key: "pi",
-    model: "anthropic/claude-sonnet-5-5",
+test("fills a draft with the model and client key of the selected ACP agent", () => {
+  const clients = [client("acp", { key: "grok" }), client("acp", { key: "antigravity" })];
+  const acp = { ...template, client_type: "acp", client_key: "antigravity" };
+  expect(applyProfileTemplate(createAgentProfileDraft(), acp, clients)).toEqual({
+    profile_id: "sample",
+    name: "Sample",
+    description: "Sample description",
+    client_type: "acp",
+    client_key: "antigravity",
+    model: "sample-model",
     reasoning_effort: "medium",
     use_yolo: true,
-    system_prompt: template("implementer").text["zh-CN"].system_prompt,
+    system_prompt: "Sample prompt",
   });
-  expect(applyProfileTemplate(draft, template("implementer"), "en", [client("pi")]).name).toBe(
-    "Implementer",
+});
+
+test("reports availability for the specific ACP agent", () => {
+  const acp = { ...template, client_type: "acp", client_key: "grok" };
+  const other = client("acp", { key: "antigravity" });
+  expect(templateClientStatus(acp, [other])).toBe("missing");
+  expect(templateClientStatus(acp, [other, client("acp", { key: "grok", enabled: false })])).toBe(
+    "disabled",
   );
 });
 
@@ -87,50 +89,46 @@ test("keeps the client and model when the template's client is not enabled", () 
   const draft = {
     ...createAgentProfileDraft(),
     client_type: "pi",
-    client_key: "pi",
+    client_key: "default",
     model: "provider/model",
     reasoning_effort: "high",
   };
-  const clients = [client("pi"), client("claude-agent", { enabled: false })];
-  expect(applyProfileTemplate(draft, template("researcher"), "en", clients)).toMatchObject({
-    profile_id: "researcher",
-    name: "Researcher",
+  const clients = [client("pi"), client("codex", { enabled: false })];
+  expect(applyProfileTemplate(draft, template, clients)).toMatchObject({
+    profile_id: "sample",
+    name: "Sample",
     client_type: "pi",
-    client_key: "pi",
+    client_key: "default",
     model: "provider/model",
     reasoning_effort: "high",
   });
 });
 
 test("tells an enabled client from a disabled or missing one", () => {
-  const researcher = template("researcher");
-  expect(templateClientStatus(researcher, [client("claude-agent")])).toBe("available");
-  expect(templateClientStatus(researcher, [client("claude-agent", { enabled: false })])).toBe(
-    "disabled",
-  );
+  expect(templateClientStatus(template, [client("codex")])).toBe("available");
+  expect(templateClientStatus(template, [client("codex", { enabled: false })])).toBe("disabled");
   expect(
-    templateClientStatus(researcher, [client("claude-agent", { enabled: false, detected: false })]),
+    templateClientStatus(template, [client("codex", { enabled: false, detected: false })]),
   ).toBe("missing");
-  expect(templateClientStatus(researcher, [client("pi")])).toBe("missing");
+  expect(templateClientStatus(template, [client("pi")])).toBe("missing");
 });
 
 test("uses the template's model and effort only when the catalog offers them", () => {
-  const implementer = template("implementer");
   expect(
     templateModel(
-      implementer,
-      catalog([{ id: "other" }, { id: implementer.model, efforts: ["low", "medium"] }], "other"),
+      template,
+      catalog([{ id: "other" }, { id: template.model, efforts: ["low", "medium"] }], "other"),
     ),
-  ).toEqual({ model: implementer.model, reasoning_effort: "medium", fallback: false });
-  expect(templateModel(implementer, catalog([{ id: implementer.model }], null))).toEqual({
-    model: implementer.model,
+  ).toEqual({ model: template.model, reasoning_effort: "medium", fallback: false });
+  expect(templateModel(template, catalog([{ id: template.model }], null))).toEqual({
+    model: template.model,
     reasoning_effort: "",
     fallback: false,
   });
-  expect(
-    templateModel(implementer, catalog([{ id: "first" }, { id: "default" }], "default")),
-  ).toEqual({ model: "default", reasoning_effort: "", fallback: true });
-  expect(templateModel(implementer, catalog([{ id: "first" }], null))).toEqual({
+  expect(templateModel(template, catalog([{ id: "first" }, { id: "default" }], "default"))).toEqual(
+    { model: "default", reasoning_effort: "", fallback: true },
+  );
+  expect(templateModel(template, catalog([{ id: "first" }], null))).toEqual({
     model: "first",
     reasoning_effort: "",
     fallback: true,

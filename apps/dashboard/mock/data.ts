@@ -352,7 +352,7 @@ function agentClient(
     client_type: clientType,
     client_key: clientKey,
     name,
-    short_id: clientKey,
+    short_id: clientType === "acp" ? clientKey : clientType,
     detection: { status: "detected", detail: null },
     setup_command:
       clientType === "acp"
@@ -379,7 +379,7 @@ function agentProfile(
     name,
     description,
     client_type: client,
-    client_key: client,
+    client_key: "default",
     model,
     reasoning_effort: null,
     use_yolo: false,
@@ -749,9 +749,9 @@ export function createSampleData(): MockData {
     ],
     clientSetup: null,
     agentClients: [
-      agentClient("pi", "pi", "Pi", "0.70.2"),
-      agentClient("codex", "codex", "Codex", "0.171.0"),
-      agentClient("claude-agent", "claude-agent", "Claude Code", "2.1.318"),
+      agentClient("pi", "default", "Pi", "0.70.2"),
+      agentClient("codex", "default", "Codex", "0.171.0"),
+      agentClient("claude-agent", "default", "Claude Code", "2.1.318"),
       agentClient("acp", "antigravity", "Google Antigravity"),
       agentClient("acp", "grok", "Grok Build", "1.0.92"),
     ],
