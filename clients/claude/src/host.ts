@@ -6,32 +6,13 @@ import {
   type SDKAssistantMessage,
   type SDKPartialAssistantMessage,
 } from "@anthropic-ai/claude-agent-sdk";
+import { restrictedOptions } from "./restricted.js";
 import { Compaction } from "./compaction.js";
 import { Input } from "./input.js";
 import { Interactions } from "./interactions.js";
 import { FactError, InputFacts, type Emit, type ResultDiagnostic } from "./facts.js";
 
 export type SessionMode = "default" | "yolo" | "restricted";
-
-const restrictedTools = [
-  "Edit",
-  "Write",
-  "NotebookEdit",
-  "Agent",
-  "Task",
-  "SendMessage",
-  "TeamCreate",
-  "TeamDelete",
-  "Workflow",
-  "EnterWorktree",
-  "ExitWorktree",
-  "CronCreate",
-  "CronDelete",
-  "ScheduleWakeup",
-  "RemoteTrigger",
-  "Monitor",
-  "mcp__*",
-];
 
 export type QueryFactory = (args: Parameters<typeof query>[0]) => Pick<
   Query,
@@ -77,8 +58,7 @@ export class Host {
       reasoning_effort?: string;
       resume?: string;
       system_prompt?: string;
-      mode?: SessionMode;
-    },
+    } & ({ mode: "restricted"; pontia_home: string } | { mode?: "default" | "yolo" }),
     private readonly emit: Emit,
     private readonly createQuery: QueryFactory = query,
   ) {
@@ -136,16 +116,7 @@ export class Host {
             }
           : {}),
         includePartialMessages: true,
-        permissionMode: bypass ? "bypassPermissions" : "default",
-        ...(bypass ? { allowDangerouslySkipPermissions: true, sandbox: { enabled: false } } : {}),
-        ...(restricted ? { strictMcpConfig: true, mcpServers: {} } : {}),
-        ...(restricted ? { extraArgs: { "disable-slash-commands": null } } : {}),
         settingSources: ["user", "project", "local"],
-        settings: { env: { PONTIA_SESSION_ID: this.options.session_id } },
-        disallowedTools: [
-          ...(bypass ? ["AskUserQuestion"] : []),
-          ...(restricted ? restrictedTools : []),
-        ],
         canUseTool: (tool, input, context) => {
           if (this.closed || this.closing || this.unavailable)
             return Promise.resolve({ behavior: "deny", message: "Tool approval is unavailable." });
@@ -162,7 +133,20 @@ export class Host {
         stderr: () => {},
       };
       try {
-        this.execution = this.createQuery({ prompt: this.input, options });
+        const launch: Options = restricted
+          ? restrictedOptions(this.options.pontia_home, this.options.cwd, this.options.session_id)
+          : {
+              settings: { env: { PONTIA_SESSION_ID: this.options.session_id } },
+              permissionMode: bypass ? "bypassPermissions" : "default",
+              ...(bypass
+                ? { allowDangerouslySkipPermissions: true, sandbox: { enabled: false } }
+                : {}),
+              disallowedTools: bypass ? ["AskUserQuestion"] : [],
+            };
+        this.execution = this.createQuery({
+          prompt: this.input,
+          options: { ...options, ...launch },
+        });
         this.reader = this.consume(this.execution);
       } catch {
         this.fail("sdk_start_failed");

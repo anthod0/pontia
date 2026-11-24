@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { link, mkdir, mkdtempDisposable, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { Host, ControlError } from "../src/host.js";
 import { modelOptions } from "../src/models.js";
@@ -88,8 +91,11 @@ for (const mode of ["default", "yolo", "restricted"] as const) {
   for (const resume of [undefined, native]) {
     test(`SDK options for ${mode} mode on ${resume ? "resume" : "start"}`, async (t) => {
       const fixture = sdk();
+      await using home = await mkdtempDisposable(join(tmpdir(), "pontia-claude-mode-"));
+      const cwd = join(home.path, "bot", "readonly");
+      await mkdir(cwd, { recursive: true });
       const host = new Host(
-        { session_id: "mode-session", cwd: "/unused-fixture-workspace", mode, resume },
+        { session_id: "mode-session", cwd, mode, resume, pontia_home: home.path },
         () => {},
         fixture.factory,
       );
@@ -100,8 +106,8 @@ for (const mode of ["default", "yolo", "restricted"] as const) {
       assert.equal(options.resume, resume);
       assert.equal(options.permissionMode, mode === "default" ? "default" : "bypassPermissions");
       assert.equal(options.allowDangerouslySkipPermissions, mode === "default" ? undefined : true);
-      assert.equal(options.sandbox?.enabled, mode === "default" ? undefined : false);
-      assert.equal(options.tools, undefined);
+      assert.equal(options.sandbox?.enabled, mode === "yolo" ? false : undefined);
+      assert.deepEqual(options.tools, restricted ? ["Read", "Bash"] : undefined);
       assert.deepEqual(options.mcpServers, restricted ? {} : undefined);
       assert.equal(options.strictMcpConfig, restricted ? true : undefined);
       assert.deepEqual(
@@ -109,30 +115,22 @@ for (const mode of ["default", "yolo", "restricted"] as const) {
         restricted ? { "disable-slash-commands": null } : undefined,
       );
       assert.deepEqual(options.settingSources, ["user", "project", "local"]);
-      assert.deepEqual(options.disallowedTools, [
-        ...(mode === "default" ? [] : ["AskUserQuestion"]),
-        ...(restricted
-          ? [
-              "Edit",
-              "Write",
-              "NotebookEdit",
-              "Agent",
-              "Task",
-              "SendMessage",
-              "TeamCreate",
-              "TeamDelete",
-              "Workflow",
-              "EnterWorktree",
-              "ExitWorktree",
-              "CronCreate",
-              "CronDelete",
-              "ScheduleWakeup",
-              "RemoteTrigger",
-              "Monitor",
-              "mcp__*",
-            ]
-          : []),
-      ]);
+      assert.deepEqual(
+        options.disallowedTools,
+        restricted ? ["Skill", "mcp__*"] : mode === "yolo" ? ["AskUserQuestion"] : [],
+      );
+      if (restricted) {
+        const path = options.settings;
+        assert.ok(typeof path === "string");
+        assert.equal(dirname(path), cwd);
+        const settings = JSON.parse(await readFile(path, "utf8"));
+        assert.deepEqual(settings.permissions, {
+          defaultMode: "bypassPermissions",
+          deny: options.disallowedTools,
+        });
+        assert.deepEqual(settings.sandbox, { enabled: false });
+        assert.equal(settings.env.PONTIA_SESSION_ID, "mode-session");
+      }
       if (mode !== "default") {
         const signal = new AbortController().signal;
         const result = await options.canUseTool!(
@@ -150,6 +148,34 @@ for (const mode of ["default", "yolo", "restricted"] as const) {
     });
   }
 }
+
+test("shared restricted directory preserves concurrent Session settings and repairs them on resume", async () => {
+  await using home = await mkdtempDisposable(join(tmpdir(), "pontia-claude-shared-"));
+  const cwd = join(home.path, "bot", "readonly");
+  await mkdir(cwd, { recursive: true });
+  async function launch(session_id: string, resume?: string) {
+    const fixture = sdk();
+    const host = new Host(
+      { session_id, cwd, mode: "restricted", pontia_home: home.path, resume },
+      () => {},
+      fixture.factory,
+    );
+    host.submit(first, "read");
+    const path = fixture.options!.settings;
+    assert.ok(typeof path === "string");
+    await host.close();
+    return path;
+  }
+  const [a, b] = await Promise.all([launch("first"), launch("second")]);
+  assert.equal(JSON.parse(await readFile(a, "utf8")).env.PONTIA_SESSION_ID, "first");
+  assert.equal(JSON.parse(await readFile(b, "utf8")).env.PONTIA_SESSION_ID, "second");
+  await writeFile(a, "{}");
+  const previous = join(home.path, "previous.json");
+  await link(a, previous);
+  assert.equal(await launch("first", native), a);
+  assert.equal(await readFile(previous, "utf8"), "{}");
+  assert.equal(JSON.parse(await readFile(a, "utf8")).permissions.defaultMode, "bypassPermissions");
+});
 
 test("authentication retries are visible without fabricating a Turn and clear when SDK execution recovers", async (t) => {
   const { fixture, events, host } = setup();
