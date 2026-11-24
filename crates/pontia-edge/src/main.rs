@@ -597,7 +597,7 @@ async fn maintain_preview(
             let managed = client.provision_preview(&credential, &base).await?;
             if managed
                 && (certificate_needs_renewal(path)
-                    || !saved_certificate_is_usable(path, &format!("__probe.{base}")).await)
+                    || !saved_certificate_is_usable(path, &format!("probe.{base}")).await)
             {
                 let dns = CloudDnsChallenges {
                     client: &client,

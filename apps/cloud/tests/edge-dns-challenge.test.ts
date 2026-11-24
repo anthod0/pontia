@@ -146,7 +146,7 @@ test("upgraded private edge provisions wildcard DNS, confirms TLS and cleans up 
   let healthy = false;
   mockProvider(async (input, init) => {
     const url = new URL(String(input));
-    if (url.hostname === `__probe.${base}`) {
+    if (url.hostname === `probe.${base}`) {
       expect(url.port).toBe("8443");
       expect(url.pathname).toBe("/__pontia_preview_health");
       expect(init?.redirect).toBe("manual");

@@ -87,7 +87,7 @@ async fn isolates_hosts_and_reserves_the_probe() {
         format!("65536-{did}"),
         format!("80-{}", Uuid::new_v4().simple()),
         format!("nested.80-{did}"),
-        "__probe".into(),
+        "probe".into(),
     ] {
         let r = p
             .server
@@ -103,7 +103,7 @@ async fn isolates_hosts_and_reserves_the_probe() {
         .server
         .http
         .get(format!("{}/__pontia_preview_health", p.server.edge_origin))
-        .header(header::HOST, "__probe.test.p.pontia.dev")
+        .header(header::HOST, "probe.test.p.pontia.dev")
         .send()
         .await
         .unwrap();
