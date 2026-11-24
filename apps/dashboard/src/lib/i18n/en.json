@@ -64,8 +64,6 @@
   "bots.executionFailed": "Bot execution failed",
   "bots.sessionExited": "Bot Session exited",
   "bots.processing": "Working on your message",
-  "bots.idle": "Idle",
-  "bots.workingOn": "Working · {title}",
   "bots.openTodos": "{count, plural, one {# open todo} other {# open todos}}",
   "bots.sidebarSetupDescription": "A Bot starts and manages sessions for you and remembers your preferences.",
   "bots.reply": "Reply",

@@ -475,15 +475,13 @@ test("sidebar shows each Bot's work status and open todos", async () => {
 
   const row = (name: string) => screen.getByText(name).closest("a")!;
   expect(
-    await within(await waitFor(() => row("Release Captain"))).findByText(
-      "Working · Fix upload retry",
-    ),
+    await within(await waitFor(() => row("Release Captain"))).findByText("Fix upload retry"),
   ).toBeInTheDocument();
-  expect(within(row("Release Captain")).getByLabelText("2 open todos")).toHaveTextContent("2");
-  expect(await within(row("Reviewer")).findByText("Working on your message")).toHaveClass(
-    "text-primary",
-  );
-  expect(within(row("Ops")).getByText("Idle")).toHaveClass("text-muted-foreground");
+  expect(
+    within(row("Release Captain")).getByRole("img", { name: "2 open todos" }),
+  ).toBeInTheDocument();
+  expect(await within(row("Reviewer")).findByText("Working on your message")).toBeInTheDocument();
+  expect(row("Ops")).toHaveAccessibleName("Ops");
   expect(within(row("Reviewer")).queryByLabelText(/open todo/)).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /^bots$/i })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Create Bot" })).toBeInTheDocument();
@@ -1421,7 +1419,7 @@ test("sidebar refreshes every Bot status and todo count from live updates withou
       ).toBeInTheDocument(),
     );
   }
-  expect(within(row).getByText("Idle")).toBeInTheDocument();
+  expect(row).toHaveAccessibleName("3 open todos second");
   view.unmount();
   expect(botStreams.has("second")).toBe(false);
   vi.restoreAllMocks();
