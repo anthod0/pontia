@@ -65,6 +65,7 @@ const kinds: [string[], FileKind][] = [
       "toml",
       "xml",
       "html",
+      "htm",
       "css",
       "js",
       "ts",

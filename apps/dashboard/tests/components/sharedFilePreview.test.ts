@@ -30,6 +30,27 @@ test("an attached text file opens in the file preview panel", async () => {
   expect(request.searchParams.get("path")).toBe("/tmp/out/notes.md");
 });
 
+test.each(["demo.html", "demo.HTM"])(
+  "opens %s in a sandbox and switches to source",
+  async (name) => {
+    const html = "<button onclick='this.textContent = 42'>Click</button>";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(html)));
+    render(SharedFilePreviewHarness, { paths: [`/tmp/${name}`] });
+    await fireEvent.click(screen.getByRole("button", { name: `Preview ${name}` }));
+    const panel = within(screen.getByRole("complementary"));
+    const frame = await panel.findByTitle(`Preview ${name}`);
+    expect(frame).toBeInstanceOf(HTMLIFrameElement);
+    expect(frame).toHaveAttribute("sandbox", "allow-scripts allow-forms allow-modals");
+    expect(frame).toHaveAttribute("srcdoc", html);
+
+    await fireEvent.click(panel.getByRole("tab", { name: "Source" }));
+    expect(frame).not.toBeInTheDocument();
+    expect(panel.getByRole("tabpanel", { name: "Source" }).textContent).toBe(html);
+    await fireEvent.click(panel.getByRole("tab", { name: "Preview" }));
+    expect(await panel.findByTitle(`Preview ${name}`)).toHaveAttribute("srcdoc", html);
+  },
+);
+
 test("a card reads each file's details with a HEAD request on the path route", async () => {
   vi.stubGlobal("IntersectionObserver", VisibleObserver);
   const fetch = vi.fn().mockResolvedValue(
