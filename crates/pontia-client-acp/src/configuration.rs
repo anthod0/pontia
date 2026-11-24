@@ -1,5 +1,7 @@
 use crate::{AcpAgentDefinition, AcpAgents, AcpLaunch};
-use pontia_agent_control::client_contract::{ClientConfiguration, ClientOperation};
+use pontia_agent_control::client_contract::{
+    ClientConfiguration, ClientOperation, DetectionContext,
+};
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 use std::path::Path;
@@ -78,6 +80,32 @@ impl ClientConfiguration for AcpConfiguration {
             let cwd = std::path::absolute(directory)?;
             let config = crate::peer::resolve_command(&launch, &cwd)?;
             crate::models::probe::list(&config, &cwd).await
+        })
+    }
+
+    fn probe_version<'a>(
+        &'a self,
+        key: &'a str,
+        context: &'a DetectionContext<'_>,
+    ) -> ClientOperation<'a, Option<String>> {
+        Box::pin(async move {
+            let prefix = match key {
+                "grok" => "grok ",
+                "kiro" => "kiro-cli ",
+                "antigravity" => "",
+                _ => return Ok(None),
+            };
+            let launch = &self.definition(key)?.launch;
+            let mut vars = context.vars.clone();
+            vars.extend(launch.env.clone());
+            let context = DetectionContext {
+                vars: &vars,
+                pontia_home: context.pontia_home,
+            };
+            let Ok(Some(path)) = context.executable(&launch.command) else {
+                return Ok(None);
+            };
+            Ok(context.cli_version(&path, prefix).await)
         })
     }
 

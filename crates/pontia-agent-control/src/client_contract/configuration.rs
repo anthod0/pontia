@@ -41,6 +41,14 @@ pub trait ClientConfiguration: Send + Sync {
         })
     }
 
+    fn probe_version<'a>(
+        &'a self,
+        _key: &'a str,
+        _context: &'a super::DetectionContext<'_>,
+    ) -> super::ClientOperation<'a, Option<String>> {
+        Box::pin(async { Ok(None) })
+    }
+
     fn detect(
         &self,
         _effective: &Value,

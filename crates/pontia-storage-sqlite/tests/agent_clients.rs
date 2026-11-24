@@ -114,6 +114,10 @@ async fn dropping_configuration_overrides_preserves_client_entries() {
             .collect::<Vec<_>>(),
         [("codex", true), ("pi", false)]
     );
+    assert!(
+        rows.iter()
+            .all(|row| row.version.is_none() && row.version_checked_at.is_none())
+    );
     let columns: Vec<String> =
         sqlx::query_scalar("SELECT name FROM pragma_table_info('agent_clients')")
             .fetch_all(&pool)
@@ -121,4 +125,52 @@ async fn dropping_configuration_overrides_preserves_client_entries() {
             .unwrap();
     assert!(!columns.iter().any(|column| column == "config_overrides"));
     pool.close().await;
+}
+
+#[tokio::test]
+async fn version_checks_coalesce_and_only_the_current_attempt_can_record_a_version() {
+    let pool = connect_sqlite("sqlite::memory:").await.unwrap();
+    run_migrations(&pool).await.unwrap();
+    let repo = SqliteAgentClientRepository::new(pool);
+    let client = "pi";
+    let key = "default";
+    repo.save(client, key, true).await.unwrap();
+    let old = "2000-01-01T00:00:00Z";
+    let recent = "2999-01-01T00:00:00Z";
+    assert!(
+        repo.begin_version_check(client, key, old, false)
+            .await
+            .unwrap()
+    );
+    assert!(
+        repo.begin_version_check(client, key, recent, false)
+            .await
+            .unwrap()
+    );
+    assert!(
+        !repo
+            .begin_version_check(client, key, recent, false)
+            .await
+            .unwrap()
+    );
+    repo.record_version(client, key, recent, "1.2.3")
+        .await
+        .unwrap();
+    repo.record_version(client, key, old, "1.0.0")
+        .await
+        .unwrap();
+    assert_eq!(
+        repo.get(client, key)
+            .await
+            .unwrap()
+            .unwrap()
+            .version
+            .as_deref(),
+        Some("1.2.3")
+    );
+    repo.delete(client, key).await.unwrap();
+    repo.record_version(client, key, recent, "2.0.0")
+        .await
+        .unwrap();
+    assert!(repo.get(client, key).await.unwrap().is_none());
 }

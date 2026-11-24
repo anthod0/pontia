@@ -337,6 +337,8 @@ function agentClient(clientType: string, clientKey: string, name: string): Agent
         ? null
         : `pontia setup ${clientType === "claude-agent" ? "claude" : clientType}`,
     enabled: true,
+    version: null,
+    version_checked_at: null,
     has_record: false,
     created_at: null,
     updated_at: null,

@@ -101,6 +101,8 @@ export interface AgentClientView {
     detail: string | null;
   };
   setup_command: string | null;
+  version: string | null;
+  version_checked_at: string | null;
   has_record: boolean;
   created_at: string | null;
   updated_at: string | null;

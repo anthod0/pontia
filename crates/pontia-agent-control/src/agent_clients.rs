@@ -22,6 +22,8 @@ pub struct AgentClientDetails {
     pub detection: ClientDetection,
     pub setup_command: Option<String>,
     pub has_record: bool,
+    pub version: Option<String>,
+    pub version_checked_at: Option<String>,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
 }
@@ -136,9 +138,62 @@ impl AgentClientService {
             enabled: record.as_ref().is_some_and(|row| row.enabled),
             has_record: record.is_some(),
             detection: configuration.detect(&effective, context),
+            version: record.as_ref().and_then(|row| row.version.clone()),
+            version_checked_at: record
+                .as_ref()
+                .and_then(|row| row.version_checked_at.clone()),
             created_at: record.as_ref().map(|row| row.created_at.clone()),
             updated_at: record.map(|row| row.updated_at),
         })
+    }
+
+    pub async fn probe_version(
+        &self,
+        client: &str,
+        key: &str,
+        context: &DetectionContext<'_>,
+        force: bool,
+    ) -> Result<()> {
+        let configuration = self.configuration(client)?;
+        let started = time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .expect("current UTC timestamp");
+        if self
+            .repository
+            .begin_version_check(client, key, &started, force)
+            .await?
+            && let Some(version) = configuration.probe_version(key, context).await?
+        {
+            self.repository
+                .record_version(client, key, &started, &version)
+                .await?;
+        }
+        Ok(())
+    }
+
+    pub fn probe_enabled_in_background(self, home: std::path::PathBuf, force: bool) {
+        tokio::spawn(async move {
+            let entries = match self.repository.list().await {
+                Ok(entries) => entries,
+                Err(error) => {
+                    tracing::warn!(%error, "Cannot list clients for version detection");
+                    return;
+                }
+            };
+            let vars = std::env::vars().collect();
+            let context = DetectionContext {
+                vars: &vars,
+                pontia_home: &home,
+            };
+            for entry in entries.into_iter().filter(|entry| entry.enabled) {
+                if let Err(error) = self
+                    .probe_version(&entry.client_type, &entry.client_key, &context, force)
+                    .await
+                {
+                    tracing::warn!(%error, client = %entry.client_type, key = %entry.client_key, "Cannot check client version");
+                }
+            }
+        });
     }
 
     pub async fn resolve(&self, client: &str, key: &str) -> Result<Value> {

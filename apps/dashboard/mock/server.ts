@@ -641,6 +641,8 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
       const client = findAgentClient(device, type, key);
       Object.assign(client, {
         enabled: false,
+        version: null,
+        version_checked_at: null,
         has_record: false,
         created_at: null,
         updated_at: null,
