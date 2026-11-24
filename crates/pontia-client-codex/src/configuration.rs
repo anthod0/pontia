@@ -1,10 +1,46 @@
-use pontia_agent_control::client_contract::ClientConfiguration;
+use crate::runtime::{CodexRuntime, CodexServerTarget};
+use pontia_agent_control::client_contract::{ClientConfiguration, ClientOperation};
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
+use std::path::Path;
 
 pub struct CodexConfiguration;
 
 impl ClientConfiguration for CodexConfiguration {
+    fn trust_directory<'a>(&'a self, _: &'a str, directory: &'a Path) -> ClientOperation<'a, ()> {
+        Box::pin(async move {
+            let directory = directory.to_str().ok_or_else(|| {
+                Error::Domain("Codex directory trust requires a UTF-8 path".into())
+            })?;
+            let home = pontia_config::pontia_home(&std::env::vars().collect())?;
+            let runtime = CodexRuntime::ensure(&home, CodexServerTarget::Background).await?;
+            let connection = runtime.connection().await?;
+            let key = directory.replace('\\', "\\\\").replace('"', "\\\"");
+            // Codex preserves unrelated settings and comments on an individual write.
+            // Concurrent config.toml writes by separate Codex processes can lose edits,
+            // even with expectedVersion.
+            let response = connection
+                .call(
+                    "config/value/write",
+                    json!({
+                        "keyPath": format!("projects.\"{key}\".trust_level"),
+                        "value": "trusted",
+                        "mergeStrategy": "replace",
+                    }),
+                )
+                .await?;
+            match response["status"].as_str() {
+                Some("ok") => Ok(()),
+                Some("okOverridden") => Err(Error::Domain(format!(
+                    "Codex directory trust is overridden for {directory}"
+                ))),
+                _ => Err(Error::Domain(
+                    "Codex did not confirm directory trust".into(),
+                )),
+            }
+        })
+    }
+
     fn supports_mode(&self, _key: &str, _mode: pontia_core::SessionMode) -> bool {
         true
     }
