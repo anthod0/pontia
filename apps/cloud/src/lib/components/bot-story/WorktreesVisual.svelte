@@ -1,5 +1,4 @@
 <script lang="ts">
-	import FolderSimpleIcon from 'phosphor-svelte/lib/FolderSimpleIcon';
 	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
 	import GitMergeIcon from 'phosphor-svelte/lib/GitMergeIcon';
 	import AgentBadge from './AgentBadge.svelte';
@@ -10,10 +9,10 @@
 
 	let { story, step }: { story: Story; step: number } = $props();
 
-	// Two branches fork from main, each worked on in its own worktree, then merge back.
+	// Two branches fork from main, then merge back.
 	const branches = [
-		{ y: 20, branch: 'agent/settings-ui', path: '~/worktrees/settings-ui', agent: codex, task: m.story_task_ui, from: 1, doneAt: 4 },
-		{ y: 80, branch: 'agent/login-redirect', path: '~/worktrees/login-redirect', agent: claude, task: m.story_task_login, from: 2, doneAt: 3 }
+		{ y: 20, branch: 'agent/settings-ui', agent: codex, task: m.story_task_ui, from: 1, doneAt: 4 },
+		{ y: 80, branch: 'agent/login-redirect', agent: claude, task: m.story_task_login, from: 2, doneAt: 3 }
 	];
 	const merged = $derived(step >= 4);
 	// Desktop and narrow layouts place the forks at different x positions.
@@ -48,7 +47,6 @@
 			{#if step >= b.from}
 				<div class="card enter">
 					<span class="branch mono"><GitBranchIcon size={12} />{b.branch}</span>
-					<span class="path mono"><FolderSimpleIcon size={12} />{b.path}</span>
 					<span class="task">{b.task()}</span>
 					<span class="foot"><AgentBadge agent={b.agent} /><StoryState state={step >= b.doneAt ? 'done' : 'running'} /></span>
 				</div>
@@ -88,7 +86,6 @@
 		/* The forks sit at the edges here, so both labels move to the gap between the cards. */
 		.main-label { left: 50%; translate: -50% calc(-100% - 6px); }
 		.merged { right: auto; left: 50%; translate: -50% 8px; }
-		.path { display: none; }
 		.card { padding: 9px 12px; }
 	}
 </style>
