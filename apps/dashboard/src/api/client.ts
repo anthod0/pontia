@@ -189,6 +189,10 @@ export function createApi(device: DeviceRuntime) {
     await request(botPath(id), { method: "DELETE", idempotency: false, retryNetworkErrors: false });
   }
 
+  async function reloadBot(id: string): Promise<void> {
+    await request(`${botPath(id)}/reload`, { method: "POST", retryNetworkErrors: false });
+  }
+
   type SentBotMessage = BotMessage & { delivery?: "accepted" | "queued" };
 
   async function sendBotMessage(id: string, content: string): Promise<SentBotMessage> {
@@ -1011,6 +1015,7 @@ export function createApi(device: DeviceRuntime) {
     saveBot,
     getBotDeletionBlockers,
     deleteBot,
+    reloadBot,
     sendBotMessage,
     retryBotMessage,
     listAgentClients,

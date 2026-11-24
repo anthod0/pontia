@@ -114,6 +114,14 @@ fn validate_client(state: &HttpState, request: &BotConfiguration) -> Result<(), 
     Ok(())
 }
 
+pub async fn reload(
+    State(state): State<HttpState>,
+    Path(bot_id): Path<String>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    state.bots().reload(&bot_id).await?;
+    Ok(ok(json!({"bot_id": bot_id})))
+}
+
 pub async fn chat(
     State(state): State<HttpState>,
     Path(bot_id): Path<String>,

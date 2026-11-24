@@ -859,3 +859,44 @@ async fn idle_timer_persists_across_restart_and_resets_after_fast_turn() {
         .unwrap();
     assert_eq!(current(&restarted, &id).await, None);
 }
+
+#[tokio::test]
+async fn reload_waits_for_idle_then_defers_the_next_generation_until_input() {
+    let (_root, _pool, _client, control, conversation) = fixture().await;
+    let _exits = report_exits(&control);
+    let (id, old) = bot(&conversation).await;
+    assert!(matches!(
+        conversation.reload(&id).await,
+        Err(Error::StateConflict(_))
+    ));
+    assert_eq!(
+        current(&conversation, &id).await.as_deref(),
+        Some(old.as_str())
+    );
+    finish(&control, &old, EventType::TurnCompleted).await;
+    let history = conversation.chat(&id).await.unwrap().messages;
+    let mut updates = conversation.subscribe(&id);
+    conversation.reload(&id).await.unwrap();
+    assert!(matches!(updates.try_recv(), Ok(ConversationUpdate::Reset)));
+    assert_eq!(
+        control
+            .queries()
+            .get_session(&old)
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "exited"
+    );
+    conversation.reload(&id).await.unwrap();
+    assert_eq!(current(&conversation, &id).await, None);
+    assert_eq!(conversation.chat(&id).await.unwrap().messages, history);
+    conversation.send(&id, "continue").await.unwrap();
+    let next = current(&conversation, &id).await.unwrap();
+    assert_ne!(next, old);
+    assert!(
+        instructions(&control, &next)
+            .await
+            .contains(&history.last().unwrap().id)
+    );
+}

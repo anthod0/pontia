@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 import { testDevice } from "../deviceFixture";
 import type { BotEntry } from "../../src/api/types";
+import { ApiError } from "../../src/api/errors";
 import BotChatPage from "../../src/pages/BotChatPage.svelte";
 import { loadUploadRecords, saveUploadRecord } from "../../src/lib/uploads/records";
 
@@ -208,4 +209,35 @@ test("keeps a refresh failure in one persistent toast with a Retry action", asyn
   (refreshToast[1] as { action: ToastAction }).action.onClick(event);
   expect(event.defaultPrevented).toBe(true);
   await waitFor(() => expect(toast.dismiss).toHaveBeenCalledWith("bot-refresh-error"));
+});
+
+test("reloads the Bot from the composer and keeps the command available after a busy response", async () => {
+  const reload = vi
+    .spyOn(testDevice.api, "reloadBot")
+    .mockRejectedValueOnce(new ApiError("busy", "state_conflict", 409))
+    .mockResolvedValueOnce();
+  const { botId, send, scope, draft } = await openChat();
+  const editor = screen.getByRole("textbox");
+  await userEvent.type(editor, "/reload");
+  await userEvent.keyboard("{Enter}");
+  await waitFor(() => expect(toast.error).toHaveBeenCalledOnce());
+  expect(editor).toHaveTextContent("/reload");
+  await userEvent.keyboard("{Enter}");
+  await waitFor(() => expect(toast.success).toHaveBeenCalledOnce());
+  expect(reload).toHaveBeenNthCalledWith(2, botId);
+  expect(editor.textContent).toBe("");
+  expect(send).not.toHaveBeenCalled();
+  expect(await loadUploadRecords(scope, draft)).toHaveLength(1);
+});
+
+test("reloading from Chat actions preserves the pending Bot message", async () => {
+  const reload = vi.spyOn(testDevice.api, "reloadBot").mockResolvedValue();
+  const { botId, send } = await openChat();
+  const editor = screen.getByRole("textbox");
+  await userEvent.type(editor, "Keep this draft");
+  await userEvent.click(screen.getByRole("button", { name: "Chat actions" }));
+  await userEvent.click(await screen.findByText("/reload"));
+  await waitFor(() => expect(reload).toHaveBeenCalledExactlyOnceWith(botId));
+  expect(editor).toHaveTextContent("Keep this draft");
+  expect(send).not.toHaveBeenCalled();
 });
