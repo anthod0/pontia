@@ -29,9 +29,13 @@
     </a>
   </p>
 
-  <WorkspacesPage />
+  <WorkspacesPage openFirstAvailableRoot={!canContinue} />
 
-  <div class="flex justify-end px-1 max-md:mt-auto max-md:[&>button]:w-full">
-    <Button disabled={!canContinue} onclick={onContinue}>{$t('workspaces.continueToChat')}</Button>
-  </div>
+  {#if canContinue}
+    <div class="flex justify-end px-1 max-md:mt-auto">
+      <Button class="h-11 rounded-full px-6 max-md:w-full" onclick={onContinue}>
+        {$t('workspaces.continueToChat')}
+      </Button>
+    </div>
+  {/if}
 </section>

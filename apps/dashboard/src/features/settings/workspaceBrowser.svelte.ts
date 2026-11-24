@@ -6,7 +6,10 @@ import type {
   WorkspaceView,
 } from "../../api/types";
 
-export function createWorkspaceBrowser(initialView: "active" | "directory") {
+export function createWorkspaceBrowser(
+  initialView: "active" | "directory",
+  openFirstAvailableRoot = false,
+) {
   const device = useDeviceRuntime();
   const {
     createDeleteWorkspaceMutation,
@@ -43,7 +46,7 @@ export function createWorkspaceBrowser(initialView: "active" | "directory") {
   let renameWorkspaceDialogOpen = $state(false);
   let savingRename = $state(false);
   let showHiddenDirectories = $state(false);
-  let view = $state<BrowserLocation["view"]>(initialView);
+  let view = $state<BrowserLocation["view"]>(openFirstAvailableRoot ? "directory" : initialView);
   let workspaces = $derived(workspacesQuery.data ?? []);
   let activeWorkspaces = $derived(workspaces.filter((workspace) => workspace.state === "active"));
   let unavailableWorkspaces = $derived(
@@ -75,7 +78,11 @@ export function createWorkspaceBrowser(initialView: "active" | "directory") {
     workspacesLoading || registeringPath !== null || deletingWorkspaceId !== null,
   );
   $effect(() => {
-    if (!rootId && workspaceRoots.length) rootId = workspaceRoots[0].root_id;
+    if (!rootId && workspaceRoots.length) {
+      const available =
+        openFirstAvailableRoot && workspaceRoots.find((root) => root.state === "available");
+      rootId = (available || workspaceRoots[0]).root_id;
+    }
   });
   $effect(() => {
     if (initialView === "directory" && view === "unavailable" && !unavailableWorkspaces.length)

@@ -39,10 +39,10 @@ test("keeps first-time users in workspace setup until they continue explicitly",
   });
 
   render(NewChatPage);
-  const continueButton = await screen.findByRole("button", { name: "Continue to New Chat" });
-  expect(continueButton).toBeDisabled();
+  const activate = await screen.findByRole("button", { name: "Activate pontia" });
+  expect(screen.queryByRole("button", { name: "Continue to New Chat" })).not.toBeInTheDocument();
 
-  await user.click(await screen.findByRole("button", { name: "Activate pontia" }));
+  await user.click(activate);
 
   await waitFor(() =>
     expect(mocks.registerWorkspace).toHaveBeenCalledWith({
@@ -53,7 +53,7 @@ test("keeps first-time users in workspace setup until they continue explicitly",
   );
   expect(screen.getByRole("heading", { name: "Set up your first workspace" })).toBeInTheDocument();
   expect(screen.queryByPlaceholderText("Describe a task…")).not.toBeInTheDocument();
-  expect(continueButton).toBeEnabled();
+  const continueButton = await screen.findByRole("button", { name: "Continue to New Chat" });
 
   await user.click(continueButton);
 
@@ -88,7 +88,9 @@ test.each([true, false])(
         screen.queryByRole("button", { name: "Continue to New Chat" }),
       ).not.toBeInTheDocument();
     } else {
-      expect(await screen.findByRole("button", { name: "Continue to New Chat" })).toBeDisabled();
+      expect(
+        await screen.findByRole("heading", { name: "Set up your first workspace" }),
+      ).toBeInTheDocument();
     }
   },
 );

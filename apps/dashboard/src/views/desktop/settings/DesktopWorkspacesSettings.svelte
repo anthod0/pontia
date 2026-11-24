@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import { t } from '$lib/i18n'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon'
@@ -20,7 +21,8 @@
   import type { Component } from 'svelte'
   import RenameWorkspaceDialog from '../../../components/workspaces/RenameWorkspaceDialog.svelte'
   import { createWorkspaceBrowser } from '../../../features/settings/workspaceBrowser.svelte'
-  const browser = createWorkspaceBrowser('directory')
+  let { openFirstAvailableRoot = false }: { openFirstAvailableRoot?: boolean } = $props()
+  const browser = createWorkspaceBrowser('directory', untrack(() => openFirstAvailableRoot))
   interface ToolbarButton {
     label: string
     tooltip?: string

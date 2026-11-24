@@ -1,6 +1,6 @@
 <script lang="ts">
   import { useMobileHeader } from '../../../shell/mobile/header'
-  import { onDestroy } from 'svelte'
+  import { onDestroy, untrack } from 'svelte'
   import { t } from '$lib/i18n'
   import * as Sheet from '$lib/components/ui/sheet'
   import BottomSheet from '$lib/components/ui/overlay/BottomSheet.svelte'
@@ -13,7 +13,8 @@
   import type { WorkspaceView } from '../../../api/types'
   import { useMobileStack } from '$lib/mobile/overlayStack.svelte'
 
-  const browser = createWorkspaceBrowser('active')
+  let { openFirstAvailableRoot = false }: { openFirstAvailableRoot?: boolean } = $props()
+  const browser = createWorkspaceBrowser('active', untrack(() => openFirstAvailableRoot))
   const { action } = useMobileHeader()
   const stack = useMobileStack()!
   let revealed = $state<string | null>(null)
