@@ -1,12 +1,32 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { publishedTemplatesUrl } from "../src/pages/agentProfiles/publishedTemplates";
 import AgentProfilesPage from "../src/pages/AgentProfilesPage.svelte";
 import { token } from "../src/stores/auth";
 import { createSampleData } from "../mock/data";
 import { createMockDevice, handleDeviceRequest, type MockDevice } from "../mock/server";
 import { testDevice } from "./deviceFixture";
 import TopBarHost from "./components/layout/TopBarHost.svelte";
+
+const sampleTemplate = (id: string, name: string, client_type: string, model: string) => ({
+  id,
+  icon: "code",
+  client_type,
+  model,
+  reasoning_effort: "medium",
+  use_yolo: true,
+  text: { en: { name, description: "Test description", system_prompt: "Test prompt." } },
+});
+
+const templateDocument = {
+  schema_version: 1,
+  templates: [
+    sampleTemplate("sample", "Sample", "pi", "anthropic/claude-sonnet-5-5"),
+    sampleTemplate("review", "Review sample", "codex", "unlisted"),
+    sampleTemplate("notes", "Notes sample", "claude-agent", "sonnet"),
+  ],
+};
 
 let device: MockDevice;
 beforeEach(() => {
@@ -17,6 +37,7 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(new URL(String(input), "http://localhost"), init);
+      if (request.url === publishedTemplatesUrl) return Response.json(templateDocument);
       return handleDeviceRequest(
         device,
         request,
@@ -80,7 +101,7 @@ test("creates the first profile with an ID suggested from its name", async () =>
       profile_id: "release-writer",
       name: "Release Writer",
       client_type: "pi",
-      client_key: "pi",
+      client_key: "default",
       model: "anthropic/claude-sonnet-4-5",
       use_yolo: true,
       system_prompt: "Write clearly.",
@@ -120,7 +141,7 @@ test("switches a profile to another enabled client and model", async () => {
     expect(device.data.agentProfiles[0]).toMatchObject({
       profile_id: "executor",
       client_type: "codex",
-      client_key: "codex",
+      client_key: "default",
       model: "openai/gpt-5-codex",
     }),
   );
@@ -206,7 +227,7 @@ test("does not save a profile whose saved client is no longer available", async 
   await waitFor(() =>
     expect(device.data.agentProfiles[0]).toMatchObject({
       client_type: "pi",
-      client_key: "pi",
+      client_key: "default",
       model: "anthropic/claude-sonnet-4-5",
     }),
   );
@@ -252,22 +273,22 @@ test("creates a profile from a template whose client and model are available", a
   const user = userEvent.setup();
   render(AgentProfilesPage);
   await user.click(await screen.findByRole("button", { name: "New profile" }));
-  await user.click(await card("Implementer"));
+  await user.click(await card("Sample"));
   await screen.findByText("Applied template");
-  expect(screen.queryByRole("button", { name: /^Code reviewer/ })).not.toBeInTheDocument();
-  expect(screen.getByLabelText("Profile ID")).toHaveValue("implementer");
-  expect(screen.getByLabelText("Name", { exact: true })).toHaveValue("Implementer");
+  expect(screen.queryByRole("button", { name: /^Review sample/ })).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Profile ID")).toHaveValue("sample");
+  expect(screen.getByLabelText("Name", { exact: true })).toHaveValue("Sample");
   expect(screen.getByRole("switch", { name: "Use YOLO mode" })).toBeChecked();
   expect((screen.getByLabelText("System prompt") as HTMLTextAreaElement).value).toContain(
-    "engineer responsible for implementation",
+    "Test prompt.",
   );
   await screen.findByRole("button", { name: "Model" });
   expect(screen.getByRole("button", { name: "Model" })).toHaveTextContent("Claude Sonnet 5.5");
   expect(screen.queryByText(/template recommends/)).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Create profile" }));
   await waitFor(() =>
-    expect(device.data.agentProfiles.find((p) => p.profile_id === "implementer")).toMatchObject({
-      name: "Implementer",
+    expect(device.data.agentProfiles.find((p) => p.profile_id === "sample")).toMatchObject({
+      name: "Sample",
       client_type: "pi",
       model: "anthropic/claude-sonnet-5-5",
       reasoning_effort: "medium",
@@ -283,17 +304,17 @@ test("leaves the client and model alone when the template's client is not instal
   );
   render(AgentProfilesPage);
   await user.click(await screen.findByRole("button", { name: "New profile" }));
-  const researcher = await card("Researcher");
-  expect(researcher).toHaveTextContent("Not installed");
+  const notesCard = await card("Notes sample");
+  expect(notesCard).toHaveTextContent("Not installed");
   await screen.findByRole("button", { name: "Model" });
-  await user.click(researcher);
+  await user.click(notesCard);
   const note = await screen.findByText(/which is not installed on this device/);
-  expect(note.closest("[role=status]")).toHaveTextContent("Claude Code (opus)");
+  expect(note.closest("[role=status]")).toHaveTextContent("Claude Code (sonnet)");
   expect(within(note.closest("[role=status]") as HTMLElement).getByRole("link")).toHaveTextContent(
     "Agent Clients",
   );
   expect(screen.getByRole("combobox", { name: "Agent client" })).toHaveTextContent("Pi");
-  expect(screen.getByLabelText("Profile ID")).toHaveValue("researcher");
+  expect(screen.getByLabelText("Profile ID")).toHaveValue("notes");
   await chooseClient("Codex");
   await waitFor(() => expect(screen.queryByText(/not installed on this device/)).toBeNull());
 });
@@ -303,10 +324,10 @@ test("falls back to the client's default model when the template's model is not 
   device.data.clientModels.codex = [];
   render(AgentProfilesPage);
   await user.click(await screen.findByRole("button", { name: "New profile" }));
-  await user.click(await card("Code reviewer"));
+  await user.click(await card("Review sample"));
   await waitFor(() =>
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Codex does not offer the template's model gpt-6.2-astra",
+      "Codex does not offer the template's model unlisted",
     ),
   );
   expect(screen.getByRole("combobox", { name: "Agent client" })).toHaveTextContent("Codex");
@@ -321,37 +342,35 @@ test("asks before a template replaces a changed draft", async () => {
   await user.click(await screen.findByRole("button", { name: "New profile" }));
   await screen.findByRole("button", { name: "Model" });
   await user.type(screen.getByLabelText("Name", { exact: true }), "Mine");
-  await fireEvent.click(await card("Debugger"));
+  await fireEvent.click(await card("Review sample"));
   const dialog = await screen.findByRole("alertdialog");
-  expect(dialog).toHaveTextContent("Applying “Debugger” replaces");
+  expect(dialog).toHaveTextContent("Applying “Review sample” replaces");
   await fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
   expect(screen.getByLabelText("Name", { exact: true })).toHaveValue("Mine");
-  await fireEvent.click(await card("Debugger"));
+  await fireEvent.click(await card("Review sample"));
   await fireEvent.click(
     within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Replace" }),
   );
   await waitFor(() =>
-    expect(screen.getByLabelText("Name", { exact: true })).toHaveValue("Debugger"),
+    expect(screen.getByLabelText("Name", { exact: true })).toHaveValue("Review sample"),
   );
 
   // An unchanged draft switches templates directly, and the applied template only closes the picker.
   await fireEvent.click(screen.getByRole("button", { name: "Change template" }));
-  expect(await card("Debugger")).toHaveAttribute("aria-pressed", "true");
-  await fireEvent.click(await card("Debugger"));
+  expect(await card("Review sample")).toHaveAttribute("aria-pressed", "true");
+  await fireEvent.click(await card("Review sample"));
   await screen.findByRole("button", { name: "Change template" });
   await fireEvent.click(screen.getByRole("button", { name: "Change template" }));
-  await fireEvent.click(await card("Test engineer"));
-  await waitFor(() =>
-    expect(screen.getByLabelText("Name", { exact: true })).toHaveValue("Test engineer"),
-  );
+  await fireEvent.click(await card("Sample"));
+  await waitFor(() => expect(screen.getByLabelText("Name", { exact: true })).toHaveValue("Sample"));
   await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
 });
 
 test("starts a profile from a template on the empty state and hides templates while editing", async () => {
   device.data.agentProfiles = [];
   render(AgentProfilesPage);
-  await fireEvent.click(await card("Doc writer"));
-  await waitFor(() => expect(screen.getByLabelText("Profile ID")).toHaveValue("doc-writer"));
+  await fireEvent.click(await card("Notes sample"));
+  await waitFor(() => expect(screen.getByLabelText("Profile ID")).toHaveValue("notes"));
   expect(screen.getByRole("combobox", { name: "Agent client" })).toHaveTextContent("Claude Code");
   await waitFor(() =>
     expect(screen.getByRole("button", { name: "Model" })).toHaveTextContent("Sonnet"),

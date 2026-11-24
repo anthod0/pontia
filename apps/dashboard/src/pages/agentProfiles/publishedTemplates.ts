@@ -29,33 +29,34 @@ function isText(value: unknown): value is ProfileTemplateText {
 
 function parseTemplate(value: unknown): ProfileTemplate | undefined {
   if (typeof value !== "object" || value === null) return undefined;
-  const { id, icon, client_type, model, reasoning_effort, use_yolo, text } = value as Record<
-    string,
-    unknown
-  >;
+  const { id, icon, client_type, client_key, model, reasoning_effort, use_yolo, text } =
+    value as Record<string, unknown>;
   const texts = text as Partial<Record<string, unknown>> | null | undefined;
   if (typeof texts !== "object" || texts === null) return undefined;
-  const { en, "zh-CN": zhCN } = texts;
+  const { en } = texts;
   const valid =
     typeof id === "string" &&
     profileIdPattern.test(id) &&
     typeof icon === "string" &&
     typeof client_type === "string" &&
+    (client_key === undefined
+      ? client_type !== "acp"
+      : typeof client_key === "string" && client_key.trim() !== "") &&
     typeof model === "string" &&
     model !== "" &&
     (reasoning_effort === undefined || typeof reasoning_effort === "string") &&
     typeof use_yolo === "boolean" &&
-    isText(en) &&
-    isText(zhCN);
+    isText(en);
   if (!valid) return undefined;
   return {
     id,
     icon,
     client_type,
+    ...(typeof client_key === "string" ? { client_key } : {}),
     model,
     ...(reasoning_effort === undefined ? {} : { reasoning_effort }),
     use_yolo,
-    text: { en, "zh-CN": zhCN },
+    text: { en },
   };
 }
 
@@ -70,7 +71,9 @@ export function parseTemplatesDocument(document: unknown): ProfileTemplate[] | u
   const parsed = templates.map(parseTemplate);
   if (!parsed.every((template) => template !== undefined)) return undefined;
   if (new Set(parsed.map((template) => template.id)).size !== parsed.length) return undefined;
-  const known = parsed.filter((template) => template.client_type in templateClientNames);
+  const known = parsed.filter((template) =>
+    Object.hasOwn(templateClientNames, template.client_type),
+  );
   return known.length > 0 ? known : undefined;
 }
 

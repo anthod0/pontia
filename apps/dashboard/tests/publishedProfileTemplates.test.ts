@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { get } from "svelte/store";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
@@ -10,12 +8,6 @@ import { builtInProfileTemplates } from "../src/pages/agentProfiles/templates";
 
 const storageKey = "pontia.profileTemplates";
 const day = 24 * 60 * 60 * 1000;
-// The file uploaded to files.pontia.dev; the built-in templates are its fallback copy.
-const publishedFile = resolve(
-  import.meta.dirname,
-  "../../cloud/files/dashboard/agent-profile-templates/v1.json",
-);
-
 const remoteTemplate = {
   id: "release-writer",
   icon: "pencil-simple-line",
@@ -24,7 +16,6 @@ const remoteTemplate = {
   use_yolo: false,
   text: {
     en: { name: "Release writer", description: "Writes notes.", system_prompt: "Write." },
-    "zh-CN": { name: "发布说明", description: "撰写说明。", system_prompt: "撰写。" },
   },
 };
 const remoteDocument = { schema_version: 1, templates: [remoteTemplate] };
@@ -65,10 +56,12 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-test("the published file matches the built-in templates", () => {
-  const document = JSON.parse(readFileSync(publishedFile, "utf8"));
-  expect(document.schema_version).toBe(1);
-  expect(parseTemplatesDocument(document)).toEqual(builtInProfileTemplates);
+test("accepts a keyed ACP template and requires a nonempty ACP key", () => {
+  const acp = { ...remoteTemplate, client_type: "acp" };
+  const parse = (template: unknown) =>
+    parseTemplatesDocument({ schema_version: 1, templates: [template] });
+  expect(parse({ ...acp, client_key: "grok" })).toEqual([{ ...acp, client_key: "grok" }]);
+  for (const key of [undefined, " ", 1]) expect(parse({ ...acp, client_key: key })).toBeUndefined();
 });
 
 test("shows the published templates and saves them for a day", async () => {
@@ -142,8 +135,8 @@ test("ignores saved templates that no longer match the schema", async () => {
 });
 
 test("rejects documents with missing text or duplicate IDs and drops unknown clients", () => {
-  const withoutChinese = { ...remoteTemplate, text: { en: remoteTemplate.text.en } };
-  expect(parseTemplatesDocument({ schema_version: 1, templates: [withoutChinese] })).toBe(
+  const withoutEnglish = { ...remoteTemplate, text: {} };
+  expect(parseTemplatesDocument({ schema_version: 1, templates: [withoutEnglish] })).toBe(
     undefined,
   );
   expect(

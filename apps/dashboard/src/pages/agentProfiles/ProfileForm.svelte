@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte'
-  import { t, currentLocale, type MessageKey } from '$lib/i18n'
+  import { t, type MessageKey } from '$lib/i18n'
   import { useDeviceRuntime } from '../../device/context'
   import type { AgentClientView, AgentProfileView } from '../../api/types'
   import ClientIcon from '../../components/chat/ClientIcon.svelte'
@@ -20,7 +20,7 @@
   import SwapIcon from 'phosphor-svelte/lib/SwapIcon'
   import { modelCatalogQuery } from '../../queries/modelCatalog'
   import TemplateCards from './TemplateCards.svelte'
-  import { applyProfileTemplate, draftChanged, templateClient, templateClientNames, templateClientStatus, templateIcon, templateModel, type ProfileTemplate } from './templates'
+  import { applyProfileTemplate, draftChanged, templateClient, templateClientName, templateClientStatus, templateIcon, templateModel, type ProfileTemplate } from './templates'
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
   import TrashIcon from 'phosphor-svelte/lib/TrashIcon'
@@ -105,7 +105,7 @@
       }
     }
     if (attempt !== applying) return
-    const filled = applyProfileTemplate(draft, next, $currentLocale, clients)
+    const filled = applyProfileTemplate(draft, next, clients)
     if (client) Object.assign(filled, { model: resolved.model, reasoning_effort: resolved.reasoning_effort })
     if (filled.client_type !== draft.client_type || filled.client_key !== draft.client_key) {
       effortUnavailable = false
@@ -176,7 +176,7 @@
       <span class="flex size-7 shrink-0 items-center justify-center rounded-md bg-background text-foreground"><AppliedIcon class="size-4" /></span>
       <p class="min-w-0 flex-1 text-sm">
         <span class="text-muted-foreground">{$t('profiles.templateApplied')}</span>
-        <span class="font-medium text-heading">{applied.text[$currentLocale].name}</span><span class="text-muted-foreground max-sm:hidden">{$t('profiles.templateAppliedHint')}</span>
+        <span class="font-medium text-heading">{applied.text.en.name}</span><span class="text-muted-foreground max-sm:hidden">{$t('profiles.templateAppliedHint')}</span>
       </p>
       <Button type="button" variant="ghost" size="sm" class="shrink-0" disabled={saving} onclick={() => pickerOpen = true}><SwapIcon data-icon="inline-start" />{$t('profiles.changeTemplate')}</Button>
     </div>
@@ -258,7 +258,7 @@
   </div>
   {#if draft.client_type && !selectedClient}<p role="status" class="-mt-2 text-sm text-muted-foreground">{$t('profiles.clientModelUnavailable')}</p>{/if}
   {#if fillNote}
-    {@const clientName = templateClientNames[fillNote.template.client_type]}
+    {@const clientName = templateClientName(fillNote.template, allClients)}
     <p role="status" class="-mt-2 flex items-start gap-1.5 text-sm text-muted-foreground">
       <InfoIcon class="mt-0.5 size-4 shrink-0" />
       <span>
@@ -299,7 +299,7 @@
   <AlertDialog.Content>
     <AlertDialog.Header>
       <AlertDialog.Title>{$t('profiles.replaceTemplateTitle')}</AlertDialog.Title>
-      <AlertDialog.Description>{$t('profiles.replaceTemplateDescription', { name: replacing?.text[$currentLocale].name ?? '' })}</AlertDialog.Description>
+      <AlertDialog.Description>{$t('profiles.replaceTemplateDescription', { name: replacing?.text.en.name ?? '' })}</AlertDialog.Description>
     </AlertDialog.Header>
     <AlertDialog.Footer>
       <AlertDialog.Cancel>{$t('common.cancel')}</AlertDialog.Cancel>
