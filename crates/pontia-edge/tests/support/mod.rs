@@ -173,6 +173,11 @@ impl TestEdge {
                 ticket_redeem_timeout: Duration::from_millis(500),
             },
         );
+        let router = edge.router(
+            "127.0.0.1",
+            edge_listener.local_addr().unwrap().port(),
+            Some("test.p.pontia.dev"),
+        );
         let edge_handle = Handle::new();
         let edge_task = tokio::spawn(
             axum_server::from_tcp_rustls(
@@ -181,7 +186,7 @@ impl TestEdge {
             )
             .unwrap()
             .handle(edge_handle.clone())
-            .serve(edge.router().into_make_service()),
+            .serve(router.into_make_service()),
         );
         Self {
             root,
@@ -238,13 +243,13 @@ impl TestEdge {
         issued: u64,
         seed: &[u8; 32],
     ) -> String {
-        let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"EdDSA","typ":"JWT"}"#);
-        let payload = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&serde_json::json!({
-            "device_id": device_id, "user_id": Uuid::now_v7(), "aud": audience, "iat": issued, "exp": issued + 14400,
-        })).unwrap());
-        let input = format!("{header}.{payload}");
-        let signature = SigningKey::from_bytes(seed).sign(input.as_bytes());
-        format!("{input}.{}", URL_SAFE_NO_PAD.encode(signature.to_bytes()))
+        signed_jwt(
+            "JWT",
+            &serde_json::json!({
+                "device_id": device_id, "user_id": Uuid::now_v7(), "aud": audience, "iat": issued, "exp": issued + 14400,
+            }),
+            seed,
+        )
     }
 
     pub async fn connect(
@@ -421,4 +426,13 @@ pub async fn wait_for(mut condition: impl FnMut() -> bool) {
     })
     .await
     .expect("condition should become true");
+}
+
+pub fn signed_jwt(typ: &str, claims: &serde_json::Value, seed: &[u8; 32]) -> String {
+    let header = URL_SAFE_NO_PAD
+        .encode(serde_json::to_vec(&serde_json::json!({"alg":"EdDSA","typ":typ})).unwrap());
+    let payload = URL_SAFE_NO_PAD.encode(serde_json::to_vec(claims).unwrap());
+    let input = format!("{header}.{payload}");
+    let signature = SigningKey::from_bytes(seed).sign(input.as_bytes());
+    format!("{input}.{}", URL_SAFE_NO_PAD.encode(signature.to_bytes()))
 }

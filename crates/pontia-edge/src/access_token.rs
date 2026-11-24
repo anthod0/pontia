@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, get_current_timestamp};
-use serde::Deserialize;
+use serde::{Deserialize, de::DeserializeOwned};
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -44,17 +44,52 @@ impl AccessTokenVerifier {
         })
     }
 
+    fn claims<T: DeserializeOwned>(&self, token: &str, typ: &str) -> Option<T> {
+        let signed = decode::<T>(token, &self.key, &self.validation).ok()?;
+        (signed.header.typ.as_deref() == Some(typ)).then_some(signed.claims)
+    }
+
     pub(crate) fn authenticate(&self, token: &str) -> Option<Uuid> {
-        let claims = decode::<Claims>(token, &self.key, &self.validation)
-            .ok()?
-            .claims;
-        let now = get_current_timestamp();
-        (claims.iat <= now
-            && now < claims.exp
-            && claims.exp - claims.iat <= 4 * 3600
-            && claims.device_id.get_version_num() == 7
-            && !claims.user_id.is_nil())
-        .then_some(claims.device_id)
+        let claims: Claims = self.claims(token, "JWT")?;
+        remaining_lifetime(claims.iat, claims.exp)?;
+        (claims.device_id.get_version_num() == 7 && !claims.user_id.is_nil())
+            .then_some(claims.device_id)
+    }
+}
+
+fn remaining_lifetime(iat: u64, exp: u64) -> Option<u64> {
+    let now = get_current_timestamp();
+    (iat <= now && now < exp && exp - iat <= 4 * 3600).then(|| exp - now)
+}
+
+pub(crate) struct PreviewTokenVerifier<'a>(pub &'a AccessTokenVerifier);
+
+#[derive(Deserialize)]
+struct PreviewClaims {
+    // Require a single audience. Validation compares it to this edge ID.
+    #[serde(rename = "aud")]
+    _audience: Uuid,
+    did: Uuid,
+    sub: Uuid,
+    port: u16,
+    purpose: String,
+    iat: u64,
+    exp: u64,
+}
+
+impl PreviewTokenVerifier<'_> {
+    pub fn verify(&self, token: &str, device: Uuid, port: u16) -> Option<u64> {
+        let claims: PreviewClaims = self.0.claims(token, "pontia-preview+jwt")?;
+        if claims.purpose != "localhost_preview"
+            || claims.did != device
+            || device.get_version_num() != 7
+            || claims.port != port
+            || port == 0
+            || claims.sub.is_nil()
+        {
+            return None;
+        }
+        remaining_lifetime(claims.iat, claims.exp)
     }
 }
 

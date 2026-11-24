@@ -182,6 +182,7 @@ async fn init_with_output<W: Write + ?Sized>(args: PendingInit, output: &mut W) 
         port: args.port.unwrap_or(443),
         acme_challenge: args.acme_challenge,
         browser_dashboard_origin: "https://app.pontia.dev".to_owned(),
+        preview_base_hostname: None,
     };
     let credential = read_edge_credential(CREDENTIAL_PATH.as_ref())?;
     let systemd = Systemd::default();
@@ -530,6 +531,11 @@ async fn serve() -> Result<()> {
     let address = SocketAddr::from(([0, 0, 0, 0], config.port));
     let shared_acme = (config.port == 80 && config.acme_challenge == AcmeChallenge::Http01)
         .then(pontia_edge::challenge::ChallengeResponses::default);
+    let router = edge.router(
+        &config.hostname,
+        config.port,
+        config.preview_base_hostname.as_deref(),
+    );
     let renewal = tokio::spawn(renew_certificates(
         config,
         service_credential,
@@ -541,12 +547,12 @@ async fn serve() -> Result<()> {
         axum_server::bind(address)
             .acceptor(AcmeAcceptor::new(tls, responses))
             .handle(handle)
-            .serve(edge.router().into_make_service())
+            .serve(router.into_make_service())
             .await
     } else {
         axum_server::bind_rustls(address, tls)
             .handle(handle)
-            .serve(edge.router().into_make_service())
+            .serve(router.into_make_service())
             .await
     };
     edge.shutdown();
