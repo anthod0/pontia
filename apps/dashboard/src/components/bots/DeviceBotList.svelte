@@ -59,7 +59,7 @@
     <span class="flex-1"></span>
     <button
       type="button"
-      class="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden max-md:size-9 [&>svg]:size-[15px] max-md:[&>svg]:size-[18px]"
+      class="flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden max-md:size-9 [&>svg]:size-[15px] max-md:[&>svg]:size-[18px]"
       aria-label={$t('bots.create')}
       title={$t('bots.create')}
       onclick={() => { creating = true }}

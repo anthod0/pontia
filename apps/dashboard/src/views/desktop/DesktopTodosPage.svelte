@@ -20,7 +20,7 @@
       {:else if result.isPending}
         <p role="status">{$t('common.loading')}</p>
       {:else}
-        <ul class="divide-y rounded-lg border bg-card">
+        <ul class="divide-y rounded-xl border bg-card">
           {#each result.data?.open ?? [] as item (item.id)}
             <li class="whitespace-pre-wrap break-words px-4 py-3">{item.content}</li>
           {/each}

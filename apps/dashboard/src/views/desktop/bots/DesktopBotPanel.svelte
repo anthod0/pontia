@@ -181,7 +181,7 @@
 {/snippet}
 
 {#snippet sidebarButton()}
-  <div class="pointer-events-auto mr-3 flex shrink-0 items-center rounded-lg bg-popover px-0.5 ring-1 ring-foreground/10 h-8 px-1">
+  <div class="pointer-events-auto mr-3 flex shrink-0 items-center rounded-full bg-popover px-0.5 ring-1 ring-foreground/10 h-8 px-1">
     <Button variant="ghost" size="icon" class={['relative size-7', panel.current && 'bg-muted text-heading']}
       aria-label={count > 0 ? $t('bots.sidebarWithTodos', { count }) : $t('nav.sidebar')} title={$t('nav.sidebar')} aria-pressed={panel.current} onclick={() => { panel.current = !panel.current }}>
       <SidebarSimpleIcon class="size-4 -scale-x-100" />{@render badge(true)}

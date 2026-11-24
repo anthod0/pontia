@@ -46,7 +46,7 @@
 
 <svelte:window onpopstate={updatePath} onclick={updatePathAfterNavigation} />
 
-<Sidebar.Provider class="file-preview-layout" style={$filePreviewWidth === null ? undefined : `--file-preview-saved-width: ${$filePreviewWidth}px`}>
+<Sidebar.Provider class="desktop-shell file-preview-layout" style={$filePreviewWidth === null ? undefined : `--file-preview-saved-width: ${$filePreviewWidth}px`}>
   {@render sidebar()}
   <Sidebar.Inset class="bg-surface lg:mr-[var(--file-preview-width)]">
     <FileDropZone>

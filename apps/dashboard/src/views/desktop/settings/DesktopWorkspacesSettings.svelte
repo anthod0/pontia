@@ -75,7 +75,7 @@
 {/snippet}
 
 <div
-  class="mx-auto flex w-full max-w-5xl flex-col overflow-hidden rounded-lg border bg-background text-sm shadow-sm"
+  class="mx-auto flex w-full max-w-5xl flex-col overflow-hidden rounded-2xl border bg-background text-sm shadow-sm"
 >
   {#if browser.browserLoadError}
     <div class="flex min-h-56 flex-col">

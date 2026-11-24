@@ -82,6 +82,10 @@
   );
   color-scheme: light;
   --radius: 6px;
+  --radius-action: var(--radius-md);
+  --radius-field: var(--radius-md);
+  --radius-panel: var(--radius-lg);
+  --radius-composer: var(--radius-lg);
   --background: #fffefc;
   --surface: #fafaf8;
   --card: #fffefc;
@@ -105,6 +109,14 @@
   --overlay: rgb(0 0 0 / 10%);
   --scrollbar-thumb: color-mix(in srgb, var(--border) 75%, transparent);
   --scrollbar-thumb-hover: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
+}
+
+/* Portaled menus and dialogs inherit the active shell's radii from the root. */
+:root:has(.desktop-shell) {
+  --radius-action: 9999px;
+  --radius-field: var(--radius-xl);
+  --radius-panel: var(--radius-2xl);
+  --radius-composer: var(--radius-3xl);
 }
 
 .dark {

@@ -39,7 +39,7 @@
 {#snippet sessionList(items: SessionView[], testId: string)}
   <div class="divide-y" data-testid={testId}>
     {#each items as session (session.session_id)}
-      <button type="button" class="w-full px-1 py-3 text-left transition hover:bg-muted/50 sm:px-2" onclick={() => openSession(session.session_id)}>
+      <button type="button" class="w-full rounded-xl px-1 py-3 text-left transition hover:bg-muted/50 sm:px-2" onclick={() => openSession(session.session_id)}>
         <div class="flex min-w-0 items-start justify-between gap-3">
           <div class="min-w-0 space-y-1">
             <div class="truncate font-medium">{sessionChatTitle(session, $t)}</div>
