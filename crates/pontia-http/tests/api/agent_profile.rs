@@ -126,6 +126,7 @@ async fn profile_crud_and_idempotent_mutations() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED, "{created}");
+    assert_eq!(created["data"]["agent_profile"]["use_yolo"], false);
     let (status, replay) = post_json(
         state.clone(),
         "/api/v1/agent-profiles",

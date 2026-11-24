@@ -135,6 +135,8 @@
   "common.active": "Active",
   "common.updated": "Updated",
   "common.versions": "Versions",
+  "profiles.useYolo": "Use YOLO mode",
+  "profiles.yoloMode": "YOLO mode",
   "profiles.systemPrompt": "System prompt",
   "common.field": "Field",
   "common.value": "Value",

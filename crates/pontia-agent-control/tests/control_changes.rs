@@ -87,6 +87,7 @@ async fn profiles_publish_only_successful_creation_deletion_and_description_chan
     let mut events = control.control_changes().subscribe();
     let service = control.agent_profiles();
     let mut request = UpsertAgentProfileRequest {
+        use_yolo: false,
         profile_id: "review".into(),
         name: "Review".into(),
         description: None,

@@ -7,6 +7,7 @@ pub struct AgentProfileRow {
     pub client_key: Option<String>,
     pub model: Option<String>,
     pub reasoning_effort: Option<String>,
+    pub use_yolo: bool,
     pub system_prompt: Option<String>,
     pub created_at: String,
     pub updated_at: String,

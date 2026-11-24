@@ -60,6 +60,8 @@ enum ProfileCommand {
         client: ProfileClient,
         model: String,
         reasoning_effort: Option<String>,
+        #[serde(default)]
+        use_yolo: bool,
         system_prompt: Option<String>,
     },
     Update(ProfileUpdate),
@@ -71,6 +73,7 @@ enum ProfileCommand {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ProfileUpdate {
+    use_yolo: Option<bool>,
     profile_id: String,
     name: Option<String>,
     description: Option<String>,
@@ -99,7 +102,8 @@ impl ProfileUpdate {
         if self.client.is_some() && self.model.is_none() {
             return Err(Error::Domain("Changing client requires a model".into()));
         }
-        if self.name.is_none()
+        if self.use_yolo.is_none()
+            && self.name.is_none()
             && self.description.is_none()
             && !self.clear_description
             && self.system_prompt.is_none()
@@ -126,6 +130,7 @@ impl ProfileUpdate {
         };
         Ok(UpsertAgentProfileRequest {
             profile_id: self.profile_id,
+            use_yolo: self.use_yolo.unwrap_or(current.use_yolo),
             name: self.name.unwrap_or(current.name),
             client_type,
             client_key,
@@ -182,6 +187,7 @@ impl ConversationService {
                 client,
                 model,
                 reasoning_effort,
+                use_yolo,
                 system_prompt,
             } => {
                 if description.trim().is_empty() {
@@ -206,6 +212,7 @@ impl ConversationService {
                     client_key: Some(client.client_key),
                     model: Some(model),
                     reasoning_effort,
+                    use_yolo,
                     system_prompt,
                 };
                 Ok(json!({"profile": profiles.create(input, source).await?}))
@@ -234,7 +241,7 @@ impl ConversationService {
                 .zip(profile.client_key.as_ref());
             let reason = match client {
                 Some((client, key)) => match profiles
-                    .launch_client_unavailable_reason(client, key)
+                    .launch_client_unavailable_reason(client, key, profile.use_yolo)
                     .await?
                 {
                     Some(reason) => Some(reason),
@@ -248,7 +255,7 @@ impl ConversationService {
             items.push(json!({
                 "profile_id": profile.profile_id, "name": profile.name, "description": profile.description,
                 "client": client.map(|(client, key)| format!("{client}/{key}")), "model": profile.model, "reasoning_effort": profile.reasoning_effort,
-                "has_system_prompt": profile.system_prompt.is_some(), "available": reason.is_none(),
+                "use_yolo": profile.use_yolo, "has_system_prompt": profile.system_prompt.is_some(), "available": reason.is_none(),
                 "unavailable_reason": reason, "updated_at": profile.updated_at,
             }));
         }

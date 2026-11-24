@@ -9,6 +9,7 @@ export interface AgentProfileDraft {
   client_key: string;
   model: string;
   reasoning_effort: string;
+  use_yolo: boolean;
   system_prompt: string;
 }
 
@@ -23,6 +24,7 @@ export function createAgentProfileDraft(): AgentProfileDraft {
     client_key: "",
     model: "",
     reasoning_effort: "",
+    use_yolo: false,
     system_prompt: "",
   };
 }
@@ -36,6 +38,7 @@ export function createAgentProfileDraftFromProfile(profile: AgentProfileView): A
     client_key: profile.client_key ?? "",
     model: profile.model ?? "",
     reasoning_effort: profile.reasoning_effort ?? "",
+    use_yolo: profile.use_yolo,
     system_prompt: profile.system_prompt ?? "",
   };
 }
@@ -77,6 +80,7 @@ export function buildAgentProfileInput(
       client_key: launch[1],
       model: launch[2],
       reasoning_effort: draft.reasoning_effort || null,
+      use_yolo: draft.use_yolo,
       system_prompt: draft.system_prompt.trim() || null,
     },
   };

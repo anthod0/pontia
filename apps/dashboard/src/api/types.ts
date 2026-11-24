@@ -262,6 +262,7 @@ export interface AgentProfileView {
   client_key: string | null;
   model: string | null;
   reasoning_effort: string | null;
+  use_yolo: boolean;
   system_prompt: string | null;
   created_at: string;
   updated_at: string;
@@ -275,6 +276,7 @@ export interface UpsertAgentProfileInput {
   client_key?: string | null;
   model?: string | null;
   reasoning_effort?: string | null;
+  use_yolo?: boolean;
   system_prompt?: string | null;
 }
 

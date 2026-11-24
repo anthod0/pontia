@@ -33,11 +33,13 @@ pub(super) enum ProfileCommand {
         model: String,
         #[arg(long)]
         reasoning_effort: Option<String>,
+        #[arg(long)]
+        use_yolo: bool,
         #[arg(long, allow_hyphen_values = true)]
         system_prompt: Option<String>,
     },
     /// Change selected fields of a Profile
-    #[command(group(ArgGroup::new("changes").args(["name", "description", "clear_description", "system_prompt", "clear_system_prompt", "model", "reasoning_effort", "clear_reasoning_effort"]).required(true).multiple(true)))]
+    #[command(group(ArgGroup::new("changes").args(["name", "description", "clear_description", "system_prompt", "clear_system_prompt", "model", "reasoning_effort", "clear_reasoning_effort", "use_yolo"]).required(true).multiple(true)))]
     Update {
         #[arg(long)]
         profile_id: String,
@@ -63,6 +65,8 @@ pub(super) enum ProfileCommand {
         reasoning_effort: Option<String>,
         #[arg(long)]
         clear_reasoning_effort: bool,
+        #[arg(long, action = clap::ArgAction::Set)]
+        use_yolo: Option<bool>,
     },
     /// Delete a shared Profile
     Delete {

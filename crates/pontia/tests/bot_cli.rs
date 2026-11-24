@@ -582,8 +582,9 @@ async fn profile_commands_send_grouped_actions_and_reject_incomplete_updates() {
                 "high",
                 "--system-prompt",
                 "- Review changes",
+                "--use-yolo",
             ],
-            json!({"action":"create","input":{"profile_id":"review","name":"Review","description":"Check code","client":client,"model":"m","reasoning_effort":"high","system_prompt":"- Review changes"}}),
+            json!({"action":"create","input":{"profile_id":"review","name":"Review","description":"Check code","client":client,"model":"m","reasoning_effort":"high","system_prompt":"- Review changes","use_yolo":true}}),
         ),
         (
             vec![
@@ -593,8 +594,10 @@ async fn profile_commands_send_grouped_actions_and_reject_incomplete_updates() {
                 "--clear-description",
                 "--clear-system-prompt",
                 "--clear-reasoning-effort",
+                "--use-yolo",
+                "false",
             ],
-            json!({"action":"update","input":{"profile_id":"review","name":null,"description":null,"system_prompt":null,"client":null,"model":null,"clear_description":true,"clear_system_prompt":true,"reasoning_effort":null,"clear_reasoning_effort":true}}),
+            json!({"action":"update","input":{"profile_id":"review","name":null,"description":null,"system_prompt":null,"client":null,"model":null,"clear_description":true,"clear_system_prompt":true,"reasoning_effort":null,"clear_reasoning_effort":true,"use_yolo":false}}),
         ),
     ] {
         let args = [&["profile"][..], &args[..]].concat();

@@ -66,6 +66,7 @@ test("creates the first profile with an ID suggested from its name", async () =>
   await user.click(await screen.findByRole("button", { name: "New profile" }));
   await user.type(screen.getByLabelText("Name", { exact: true }), "Release Writer");
   expect(screen.getByLabelText("Profile ID")).toHaveValue("release-writer");
+  await user.click(screen.getByRole("switch", { name: "Use YOLO mode" }));
   await user.type(screen.getByLabelText("System prompt"), "Write clearly.");
   await screen.findByRole("button", { name: "Model" });
   await user.click(screen.getByRole("button", { name: "Create profile" }));
@@ -77,6 +78,7 @@ test("creates the first profile with an ID suggested from its name", async () =>
       client_type: "pi",
       client_key: "pi",
       model: "anthropic/claude-sonnet-4-5",
+      use_yolo: true,
       system_prompt: "Write clearly.",
     }),
   ]);

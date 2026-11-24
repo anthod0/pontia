@@ -135,6 +135,8 @@
   "common.active": "活跃",
   "common.updated": "更新时间",
   "common.versions": "版本",
+  "profiles.useYolo": "使用 YOLO 模式",
+  "profiles.yoloMode": "YOLO 模式",
   "profiles.systemPrompt": "系统提示词",
   "common.field": "字段",
   "common.value": "值",

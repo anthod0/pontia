@@ -1201,6 +1201,7 @@ mod system_notices;
 
 fn profile(id: &str, model: &str, system_prompt: Option<&str>) -> UpsertAgentProfileRequest {
     UpsertAgentProfileRequest {
+        use_yolo: false,
         profile_id: id.into(),
         name: id.into(),
         description: None,
@@ -1393,6 +1394,42 @@ async fn bot_and_profile_efforts_must_be_offered_by_the_selected_model() {
 }
 
 #[tokio::test]
+async fn profile_commands_preserve_yolo_until_explicitly_disabled() {
+    let (_root, _pool, _client, _control, service) = fixture().await;
+    let (_, session) = bot(&service).await;
+    let command =
+        |command| serde_json::from_value(json!({"session_id":session,"command":command})).unwrap();
+    let create = json!({"action":"create","input":{"profile_id":"writer","name":"Writer","description":"Write notes","client":{"client_type":"generic","client_key":"default"},"model":MODEL,"use_yolo":true}});
+    assert_eq!(
+        service.profile_command(command(create)).await.unwrap()["profile"]["use_yolo"],
+        true
+    );
+    for (fields, expected) in [
+        (json!({"name":"Editor"}), true),
+        (json!({"use_yolo":false}), false),
+    ] {
+        let mut input = fields;
+        input["profile_id"] = json!("writer");
+        service
+            .profile_command(command(json!({"action":"update","input":input})))
+            .await
+            .unwrap();
+        let show = service
+            .profile_command(command(
+                json!({"action":"show","input":{"profile_id":"writer"}}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(show["profile"]["use_yolo"], expected);
+        let list = service
+            .profile_command(command(json!({"action":"list"})))
+            .await
+            .unwrap();
+        assert_eq!(list["profiles"][0]["use_yolo"], expected);
+    }
+}
+
+#[tokio::test]
 async fn profile_helper_uses_the_profile_launch_config_and_keeps_its_instruction_snapshot() {
     let (_root, _pool, client, control, conversation) = fixture().await;
     let (id, session) = bot(&conversation).await;
@@ -1402,6 +1439,7 @@ async fn profile_helper_uses_the_profile_launch_config_and_keeps_its_instruction
         .create(
             UpsertAgentProfileRequest {
                 reasoning_effort: Some("high".into()),
+                use_yolo: true,
                 ..profile("specialist", MODEL, Some("Review only"))
             },
             None,
@@ -1415,6 +1453,10 @@ async fn profile_helper_uses_the_profile_launch_config_and_keeps_its_instruction
         .await
         .unwrap();
     let target = response["session_id"].as_str().unwrap();
+    assert_eq!(
+        client.session_modes.lock().unwrap()[target],
+        pontia_core::SessionMode::Yolo
+    );
     assert_eq!(launched_model(&client, target), Some(MODEL.into()));
     assert_eq!(
         client.launched_efforts.lock().unwrap()[target].as_deref(),

@@ -70,7 +70,10 @@
             <ClientIcon clientType={profile.client_type ?? undefined} acpAgentId={profile.client_key} class="mt-0.5 size-4 shrink-0 text-foreground" />
             <span class="min-w-0 flex-1">
               <span class="block truncate {selectedId === profile.profile_id ? 'font-medium text-heading' : ''}">{profile.name}</span>
-              <span class="block truncate text-xs text-muted-foreground">{profile.model ?? $t('profiles.noLaunch')}</span>
+              <span class="flex gap-1 text-xs text-muted-foreground">
+                <span class="truncate">{profile.model ?? $t('profiles.noLaunch')}</span>
+                {#if profile.use_yolo}<span class="shrink-0">· {$t('profiles.yoloMode')}</span>{/if}
+              </span>
             </span>
           </button>
         {/each}

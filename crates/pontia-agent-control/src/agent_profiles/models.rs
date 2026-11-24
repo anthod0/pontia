@@ -9,6 +9,7 @@ pub struct AgentProfileView {
     pub client_key: Option<String>,
     pub model: Option<String>,
     pub reasoning_effort: Option<String>,
+    pub use_yolo: bool,
     pub system_prompt: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -24,11 +25,14 @@ pub struct UpsertAgentProfileRequest {
     pub client_key: Option<String>,
     pub model: Option<String>,
     pub reasoning_effort: Option<String>,
+    #[serde(default)]
+    pub use_yolo: bool,
     pub system_prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProfileLaunchConfig {
+    pub mode: pontia_core::SessionMode,
     pub client_type: Option<String>,
     pub client_key: Option<String>,
     pub model: Option<String>,

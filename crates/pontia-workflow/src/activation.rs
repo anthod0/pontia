@@ -95,6 +95,7 @@ async fn activate_claimed_node<S: SessionCreator>(
         match node.execution_profile_id.as_deref() {
             Some(id) => sessions.resolve_profile(id).await,
             None => Ok(crate::ProfileSessionConfig {
+                mode: Default::default(),
                 client_type: sessions.default_client_type()?,
                 model: None,
                 reasoning_effort: None,
@@ -147,7 +148,7 @@ fn session_request(
     CreateSessionRequest {
         reasoning_effort: launch.reasoning_effort,
         launch_mode: Default::default(),
-        mode: Default::default(),
+        mode: launch.mode,
         model: launch.model,
         ownership: Some(pontia_agent_control::SessionOwnership {
             application_id: "workflow".into(),

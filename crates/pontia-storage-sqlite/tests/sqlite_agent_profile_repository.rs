@@ -6,6 +6,7 @@ use pontia_storage_sqlite::{
 
 fn record(name: &str) -> AgentProfileWriteRecord {
     AgentProfileWriteRecord {
+        use_yolo: false,
         profile_id: "reviewer".into(),
         name: name.into(),
         description: None,
@@ -72,6 +73,7 @@ async fn removing_builtin_profiles_preserves_user_profiles() {
         custom_after.system_prompt.as_deref(),
         Some("custom instructions")
     );
+    assert!(!custom_after.use_yolo);
     assert_eq!(custom_after.updated_at, custom_updated_at);
     assert_eq!(custom_after.client_type, None);
     assert_eq!(custom_after.client_key, None);

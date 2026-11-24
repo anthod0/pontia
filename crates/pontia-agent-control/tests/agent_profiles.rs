@@ -99,6 +99,7 @@ async fn updating_only_the_model_does_not_publish_a_profile_notice() {
 
 fn request() -> UpsertAgentProfileRequest {
     UpsertAgentProfileRequest {
+        use_yolo: false,
         profile_id: "reviewer".into(),
         name: "Reviewer".into(),
         description: None,
@@ -116,6 +117,22 @@ fn configured() -> UpsertAgentProfileRequest {
         model: Some("model".into()),
         ..request()
     }
+}
+
+#[tokio::test]
+async fn rejects_yolo_for_a_client_without_mode_support() {
+    let (service, _, _) = fixture().await;
+    service.create(configured(), None).await.unwrap();
+    let mut edited = configured();
+    edited.use_yolo = true;
+    assert!(matches!(
+        service.update("reviewer", edited, None).await,
+        Err(Error::CapabilityUnavailable(_))
+    ));
+    assert_eq!(
+        service.resolve_launch("reviewer").await.unwrap().mode,
+        pontia_core::SessionMode::Default
+    );
 }
 
 #[tokio::test]

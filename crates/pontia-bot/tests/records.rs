@@ -267,6 +267,7 @@ async fn initialization_leaves_a_deleted_legacy_helper_profile_deleted() {
     f.profiles
         .create(
             UpsertAgentProfileRequest {
+                use_yolo: false,
                 profile_id: legacy.clone(),
                 name: "A helper".into(),
                 description: None,

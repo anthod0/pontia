@@ -31,6 +31,11 @@ pub(super) fn validate_request(
         }
     }
     match (&request.client_type, &request.client_key, &request.model) {
+        (None, None, None) if request.use_yolo => {
+            return Err(Error::Domain(
+                "YOLO mode requires a client selection".into(),
+            ));
+        }
         (None, None, None) => {}
         (Some(client), Some(key), Some(model)) => {
             validate_non_empty("client_type", client)?;

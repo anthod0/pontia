@@ -23,6 +23,7 @@ impl SessionCreator for RecordingSessionCreator {
     ) -> pontia_workflow::Result<pontia_workflow::ProfileSessionConfig> {
         assert_eq!(id, "writer");
         Ok(pontia_workflow::ProfileSessionConfig {
+            mode: pontia_core::SessionMode::Yolo,
             client_type: "generic".into(),
             model: Some("writer-model".into()),
             reasoning_effort: Some("high".into()),
@@ -112,6 +113,7 @@ async fn start_launches_first_node_with_required_task_completion_instructions() 
         assert_eq!(requests.len(), 1);
         requests[0].clone()
     };
+    assert_eq!(request.mode, pontia_core::SessionMode::Yolo);
     assert_eq!(request.client_type, "generic");
     assert_eq!(request.title.as_deref(), Some("Release writer"));
     assert_eq!(request.workspace.as_deref(), Some("/workspace/project"));

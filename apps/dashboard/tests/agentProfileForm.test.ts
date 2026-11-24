@@ -22,6 +22,7 @@ test("creates a profile with its client and model and optional fields unset", ()
       description: null,
       ...launch,
       reasoning_effort: null,
+      use_yolo: false,
       system_prompt: null,
     },
   });
@@ -34,6 +35,7 @@ test("preserves an existing profile's ID and launch settings while editing instr
     description: null,
     ...launch,
     reasoning_effort: "high",
+    use_yolo: true,
     system_prompt: "original",
     created_at: "2026-11-20",
     updated_at: "2026-11-20",
@@ -47,6 +49,7 @@ test("preserves an existing profile's ID and launch settings while editing instr
       description: null,
       ...launch,
       reasoning_effort: "high",
+      use_yolo: true,
       system_prompt: "Updated instructions",
     },
   });
