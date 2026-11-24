@@ -31,6 +31,7 @@
     timer: ReturnType<typeof setTimeout>,
     suppress = false
   let drag = $state<number | null>(null)
+  const acpAgentId = $derived((session.acp as { agent_id?: string } | undefined)?.agent_id)
   const width = 152
   function cancel() {
     clearTimeout(timer)
@@ -105,7 +106,7 @@
       else void navigate('/chat/' + encodeURIComponent(session.session_id))
     }}
   >
-    <ClientIcon clientType={session.client_type} class="size-8 shrink-0" />
+    <ClientIcon clientType={session.client_type} {acpAgentId} class="size-8 shrink-0" />
     <span class="min-w-0 flex-1">
       <span class="flex items-center gap-1.5"
         >{#if session.pinned_at}<PushPinIcon class="size-4" />{/if}<strong class="flex-1 truncate"
