@@ -54,10 +54,13 @@ async function chooseClient(name: string) {
   return names;
 }
 
+/** Picks a model; models that offer efforts keep the picker open until an effort is chosen. */
 async function chooseModel(index: number) {
   await fireEvent.click(screen.getByRole("button", { name: "Model" }));
-  const models = within(await screen.findByRole("list", { name: "Available models" }));
-  await fireEvent.click(models.getAllByRole("button")[index]);
+  const models = within(await screen.findByLabelText("Available models"));
+  await fireEvent.click((await models.findAllByRole("option", { hidden: true }))[index]);
+  const efforts = screen.queryByLabelText("Reasoning effort");
+  if (efforts) await fireEvent.click(within(efforts).getByLabelText("Default"));
 }
 
 test("creates the first profile with an ID suggested from its name", async () => {

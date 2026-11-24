@@ -222,7 +222,7 @@ test("switching clients clears the selected startup model", async () => {
   try {
     render(NewChatPage);
     await user.click(await screen.findByRole("button", { name: "Client default model" }));
-    await user.click(await screen.findByRole("button", { name: "Pi model" }));
+    await user.click(await screen.findByLabelText("Pi model"));
     await fireEvent.keyDown(window, { code: "KeyC", altKey: true });
     await waitFor(() => expect(screen.getByLabelText("Agent client")).toHaveTextContent("codex"));
     await fireEvent.keyDown(window, { code: "KeyC", altKey: true, shiftKey: true });
@@ -253,18 +253,20 @@ test("selects the client default model without sending it on creation", async ()
       expect(document.getElementById("session-model")).toHaveTextContent("Default model"),
     );
     await user.click(document.getElementById("session-model")!);
-    const list = await screen.findByRole("list", { name: "Available models" });
-    expect(within(list).getByRole("button", { name: "Default model" })).toContainElement(
-      within(list).getByLabelText("Current model"),
+    const list = await screen.findByLabelText("Available models");
+    expect(within(list).getByLabelText("Client default model")).toHaveAttribute(
+      "aria-selected",
+      "true",
     );
-    expect(screen.queryByRole("button", { name: "Client default model" })).not.toBeInTheDocument();
-    await user.click(within(list).getByRole("button", { name: "Other model" }));
+    expect(within(list).getByLabelText("Default model")).toHaveAttribute("aria-selected", "false");
+    expect(within(list).getByText("Currently Default model")).toBeInTheDocument();
+    await user.click(within(list).getByLabelText("Other model"));
     await waitFor(() =>
       expect(document.getElementById("session-model")).toHaveTextContent("Other model"),
     );
     document.body.style.pointerEvents = "";
     await user.click(document.getElementById("session-model")!);
-    await user.click(await screen.findByRole("button", { name: "Default model" }));
+    await user.click(await screen.findByLabelText("Client default model"));
     document.body.style.pointerEvents = "";
     await user.type(screen.getByPlaceholderText("Describe a task…"), "Use the default");
     await user.click(screen.getByRole("button", { name: /start session/i }));
@@ -275,7 +277,7 @@ test("selects the client default model without sending it on creation", async ()
   }
 });
 
-test("keeps a supported effort across model changes and clears it for a model without that level", async () => {
+test("resets the effort when the model changes and closes on an effort or an effortless model", async () => {
   const user = userEvent.setup();
   const high = { id: "high", name: "high", description: "" };
   const catalog = vi.spyOn(testDevice.api, "listAgentClientModels").mockResolvedValue({
@@ -290,22 +292,33 @@ test("keeps a supported effort across model changes and clears it for a model wi
   });
   try {
     render(NewChatPage);
-    await user.click(await screen.findByLabelText("Reasoning effort"));
-    await user.click(await screen.findByText("high", { exact: true }));
-    const chooseModel = async (name: string) => {
-      document.body.style.pointerEvents = "";
-      await user.click(document.getElementById("session-model")!);
-      await user.click(await screen.findByRole("button", { name, exact: true }));
-    };
-    await chooseModel("Second");
-    expect(screen.getByLabelText("Reasoning effort")).toHaveTextContent("high");
-    await chooseModel("Third");
-    expect(screen.queryByLabelText("Reasoning effort")).toBeNull();
-    await chooseModel("First");
+    const trigger = () => document.getElementById("session-model")!;
+    await waitFor(() => expect(trigger()).toHaveTextContent("First · Default"));
+    const efforts = async () => screen.findByLabelText("Reasoning effort");
+    await user.click(trigger());
+    await user.click(within(await efforts()).getByLabelText("high"));
+    await waitFor(() => expect(trigger()).toHaveTextContent("First · high"));
+
+    document.body.style.pointerEvents = "";
+    await user.click(trigger());
+    await user.click(await screen.findByLabelText("Second"));
+    expect(within(await efforts()).getByLabelText("Default")).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+    await user.click(within(await efforts()).getByLabelText("Default"));
+    await waitFor(() => expect(trigger()).toHaveTextContent("Second · Default"));
+
+    document.body.style.pointerEvents = "";
+    await user.click(trigger());
+    await user.click(await screen.findByLabelText("Third"));
+    await waitFor(() => expect(screen.queryByRole("listbox", { hidden: true })).toBeNull());
+    expect(trigger()).toHaveTextContent(/^Third$/);
     document.body.style.pointerEvents = "";
     await user.type(screen.getByPlaceholderText("Describe a task…"), "Use the default");
     await user.click(screen.getByRole("button", { name: /start session/i }));
     await waitFor(() => expect(mocks.createSession).toHaveBeenCalledOnce());
+    expect(mocks.createSession.mock.calls[0][0]).toMatchObject({ model: "c" });
     expect(mocks.createSession.mock.calls[0][0]).not.toHaveProperty("reasoning_effort");
   } finally {
     catalog.mockRestore();
@@ -381,10 +394,10 @@ test("creates a session with initial prompt, workspace, and client then opens it
     "Implement the dashboard chat flow",
   );
   await user.click(await screen.findByRole("button", { name: "Client default model" }));
-  await user.click(await screen.findByRole("button", { name: "Selected model" }));
+  await user.click(await screen.findByLabelText("Selected model"));
+  const efforts = await screen.findByLabelText("Reasoning effort");
+  await user.click(within(efforts).getByLabelText("high"));
   document.body.style.pointerEvents = "";
-  await user.click(await screen.findByLabelText("Reasoning effort"));
-  await user.click(await screen.findByText("high"));
   catalog.mockRestore();
   await fireEvent.click(screen.getByRole("button", { name: /start session/i }));
 

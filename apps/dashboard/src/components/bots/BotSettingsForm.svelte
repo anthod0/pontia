@@ -6,8 +6,7 @@
   import BotAvatarPicker from './BotAvatarPicker.svelte'
   import { randomAvatar } from './avatar'
   import ClientIcon from '../chat/ClientIcon.svelte'
-  import ClientModelSelect from '../chat/ClientModelSelect.svelte'
-  import ReasoningEffortSelect from '../chat/ReasoningEffortSelect.svelte'
+  import ModelEffortPicker from '../chat/ModelEffortPicker.svelte'
   import ModelSelectPlaceholder from '../chat/ModelSelectPlaceholder.svelte'
   import * as Select from '$lib/components/ui/select/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -126,14 +125,8 @@
     <Label for={`${id}-model`}>{$t('bots.model')}</Label>
     {#if selected}
       {#key clientId}
-        <ClientModelSelect id={`${id}-model`} client={selected} bind:value={model} bind:available={modelAvailable} disabled={saving}>
-          {#snippet children(selectedModel)}
-            {#if selectedModel}
-              <ReasoningEffortSelect class="w-full" options={selectedModel.reasoning_efforts ?? []} defaultEffort={selectedModel.default_reasoning_effort}
-                savedValue={bot?.model === model ? bot.reasoning_effort : null} bind:value={reasoningEffort} bind:unavailable={effortUnavailable} disabled={saving} />
-            {/if}
-          {/snippet}
-        </ClientModelSelect>
+        <ModelEffortPicker id={`${id}-model`} client={selected} bind:model bind:effort={reasoningEffort} savedEffort={bot?.model === model ? bot.reasoning_effort : null}
+          bind:available={modelAvailable} bind:effortUnavailable disabled={saving} />
       {/key}
     {:else}
       <ModelSelectPlaceholder id={`${id}-model`} label={$t('model.choose')} />

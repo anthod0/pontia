@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { testDevice } from "../deviceFixture";
 import { languagePreference } from "../../src/lib/i18n";
@@ -16,6 +16,7 @@ const bot: Bot = {
   avatar_shape: "classic",
   avatar_color: "blue",
 };
+const high = { id: "high", name: "high", description: "" };
 const models = [
   { id: "provider/first", name: "First model", description: "provider" },
   { id: "provider/second", name: "Second model", description: "provider" },
@@ -46,11 +47,11 @@ test("searches the catalog and saves the selected model ID when editing a Bot", 
   render(BotSettingsForm, { bot, onsaved: vi.fn() });
   await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
   await fireEvent.click(screen.getByLabelText("Model"));
-  await fireEvent.input(screen.getByRole("textbox", { name: "Search models" }), {
+  await fireEvent.input(screen.getByLabelText("Search models"), {
     target: { value: "provider/second" },
   });
-  expect(screen.queryByRole("button", { name: "First model" })).not.toBeInTheDocument();
-  await fireEvent.click(screen.getByRole("button", { name: "Second model" }));
+  expect(screen.queryByLabelText("First model")).not.toBeInTheDocument();
+  await fireEvent.click(screen.getByLabelText("Second model"));
   await fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() =>
     expect(save).toHaveBeenCalledWith(
@@ -71,16 +72,24 @@ test("searches the catalog and saves the selected model ID when editing a Bot", 
 
 test("requires an explicit choice when a saved effort is missing from the catalog", async () => {
   const save = vi.spyOn(testDevice.api, "saveBot").mockResolvedValue(bot);
+  vi.mocked(testDevice.api.listAgentClientModels).mockResolvedValue({
+    models: [{ ...models[0], reasoning_efforts: [high] }, models[1]],
+    version: "0.70.2",
+    fetched_at: Date.now(),
+    default_model: null,
+  });
   render(BotSettingsForm, { bot: { ...bot, reasoning_effort: "removed" }, onsaved: vi.fn() });
   await screen.findByRole("alert");
   const submit = screen.getByRole("button", { name: "Save" });
   expect(submit).toBeDisabled();
-  const effort = screen.getByRole("combobox", { name: "Reasoning effort" });
-  await fireEvent.keyDown(effort, { key: "ArrowDown" });
-  await screen.findByRole("option");
-  await fireEvent.keyDown(effort, { key: "Home" });
-  await fireEvent.keyDown(effort, { key: "Enter" });
+  const trigger = screen.getByLabelText("Model");
+  expect(trigger).toHaveAttribute("aria-invalid", "true");
+  expect(trigger).toHaveTextContent("removed");
+  await fireEvent.click(trigger);
+  const efforts = await screen.findByLabelText("Reasoning effort");
+  await fireEvent.click(within(efforts).getByLabelText("Default"));
   await waitFor(() => expect(submit).toBeEnabled());
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   await fireEvent.click(submit);
   await waitFor(() =>
     expect(save).toHaveBeenCalledWith(
@@ -113,7 +122,7 @@ test("switching clients clears the selection and loads that client catalog", asy
   await fireEvent.keyDown(client, { key: "Enter" });
   await waitFor(() => expect(submit).toBeDisabled());
   await fireEvent.click(screen.getByLabelText("Model"));
-  await fireEvent.click(await screen.findByRole("button", { name: "Other model" }));
+  await fireEvent.click(await screen.findByLabelText("Other model"));
   await waitFor(() => expect(submit).toBeEnabled());
   await fireEvent.click(submit);
   await waitFor(() =>

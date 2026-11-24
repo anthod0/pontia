@@ -3,9 +3,7 @@
   import type { Snippet } from 'svelte'
   import { useDeviceRuntime } from '../../device/context';
   import type { SessionCreationOption, WorkspaceView } from '../../api/types'
-  import ReasoningEffortSelect from './ReasoningEffortSelect.svelte'
-  import ClientModelSelect from './ClientModelSelect.svelte'
-  import { targetSegmentClass } from './targetSegment'
+  import ModelEffortPicker from './ModelEffortPicker.svelte'
   import MessageComposer from './MessageComposer.svelte'
   import SessionTargetSelector from './SessionTargetSelector.svelte'
   import { navigate } from '$lib/navigation'
@@ -77,12 +75,8 @@
   <div class={`mx-auto w-full space-y-3 ${fixedWorkspace ? 'max-w-4xl' : 'max-w-[760px]'}`}>
     <SessionTargetSelector bind:workspaceId bind:creationOptionId {workspaces} {workspacesLoading} {selectedWorkspace} {creationOptions} {fixedWorkspace} {deviceSelector} disabled={creating}>
       {#if selectedOption?.model_catalog_key && selectedWorkspace}
-        <ClientModelSelect id="session-model" {workspaceId} client={{ name: selectedOption.name, client_type: selectedOption.client_type, client_key: selectedOption.model_catalog_key, version: selectedOption.version }} bind:value={model} allowDefault disabled={creating}
-          class={targetSegmentClass}>
-          {#snippet children(selected)}
-            <ReasoningEffortSelect options={selected?.reasoning_efforts ?? []} defaultEffort={selected?.default_reasoning_effort} bind:value={reasoningEffort} disabled={creating} />
-          {/snippet}
-        </ClientModelSelect>
+        <ModelEffortPicker id="session-model" variant="toolbar" {workspaceId} client={{ name: selectedOption.name, client_type: selectedOption.client_type, client_key: selectedOption.model_catalog_key, version: selectedOption.version }}
+          bind:model bind:effort={reasoningEffort} allowDefault disabled={creating} />
       {/if}
     </SessionTargetSelector>
     <MessageComposer

@@ -3,7 +3,7 @@
   import { cn } from '$lib/utils.js'
   import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
 
-  // Stands in for ClientModelSelect until a client is chosen.
+  // Stands in for ModelEffortPicker until a client is chosen.
   let { id, label }: { id: string; label: string } = $props()
 </script>
 
