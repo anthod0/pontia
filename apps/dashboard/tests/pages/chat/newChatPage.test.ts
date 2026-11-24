@@ -215,6 +215,8 @@ test("switching clients clears the selected startup model", async () => {
   const user = userEvent.setup();
   const catalog = vi.spyOn(testDevice.api, "listAgentClientModels").mockResolvedValue({
     models: [{ id: "pi-only", name: "Pi model", description: "" }],
+    version: null,
+    fetched_at: Date.now(),
     default_model: null,
   });
   try {
@@ -241,6 +243,8 @@ test("selects the client default model without sending it on creation", async ()
       { id: "provider/other", name: "Other model", description: "" },
       { id: "provider/default", name: "Default model", description: "" },
     ],
+    version: null,
+    fetched_at: Date.now(),
     default_model: "provider/default",
   });
   try {
@@ -280,6 +284,8 @@ test("keeps a supported effort across model changes and clears it for a model wi
       { id: "b", name: "Second", description: "", reasoning_efforts: [high] },
       { id: "c", name: "Third", description: "", reasoning_efforts: [] },
     ],
+    version: null,
+    fetched_at: Date.now(),
     default_model: "a",
   });
   try {
@@ -365,6 +371,8 @@ test("creates a session with initial prompt, workspace, and client then opens it
         reasoning_efforts: [{ id: "high", name: "high", description: "" }],
       },
     ],
+    version: null,
+    fetched_at: Date.now(),
     default_model: null,
   });
   render(NewChatPage);

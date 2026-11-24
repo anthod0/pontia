@@ -85,6 +85,8 @@ test.each([false, true])(
   "selects a workspace model and resets it when the workspace changes: %s",
   async (switchWorkspace) => {
     const models = vi.spyOn(testDevice.api, "listAgentClientModels").mockResolvedValue({
+      version: null,
+      fetched_at: Date.now(),
       default_model: "fast",
       models: [
         { id: "fast", name: "Fast", description: "" },
@@ -97,6 +99,7 @@ test.each([false, true])(
         name: "Company Agent",
         client_type: "acp",
         model_catalog_key: "company-id",
+        version: null,
         metadata: { acp_agent_id: "company-id" },
       },
     ]);
@@ -111,13 +114,16 @@ test.each([false, true])(
     await user.click(await screen.findByRole("button", { name: "Deep" }));
     document.body.style.pointerEvents = "";
     await waitFor(() =>
-      expect(models).toHaveBeenCalledWith("acp", "company-id", expect.any(AbortSignal), "ws-1"),
+      expect(models).toHaveBeenCalledWith(
+        "acp",
+        "company-id",
+        expect.any(AbortSignal),
+        "ws-1",
+        true,
+      ),
     );
     if (switchWorkspace) {
       await fireEvent.keyDown(window, { key: "w", code: "KeyW", altKey: true });
-      await waitFor(() =>
-        expect(models).toHaveBeenCalledWith("acp", "company-id", expect.any(AbortSignal), "ws-2"),
-      );
     }
     await user.type(screen.getByPlaceholderText("Describe a task…"), "Review the changes");
     await user.click(screen.getByRole("button", { name: "Start session" }));

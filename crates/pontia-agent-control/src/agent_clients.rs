@@ -28,10 +28,18 @@ pub struct AgentClientDetails {
     pub updated_at: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AgentClientModels {
     pub models: Vec<crate::sessions::SessionModel>,
     pub default_model: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CachedModelCatalog {
+    #[serde(flatten)]
+    pub catalog: AgentClientModels,
+    pub version: Option<String>,
+    pub fetched_at: i64,
 }
 
 /// Management settings are not evidence of client installation, connection, or execution.
@@ -212,6 +220,41 @@ impl AgentClientService {
             .await?
             .expect("client has configuration");
         configuration.list_models(&effective, directory).await
+    }
+
+    pub async fn model_catalog(
+        &self,
+        client: &str,
+        key: &str,
+        directory: &Path,
+        prefer_cache: bool,
+    ) -> Result<CachedModelCatalog> {
+        if prefer_cache && let Some(saved) = self.repository.model_catalog(client, key).await? {
+            self.for_creation_key(client, key).await?;
+            return Ok(serde_json::from_str(&saved)?);
+        }
+        let version = self
+            .repository
+            .get(client, key)
+            .await?
+            .and_then(|row| row.version);
+        let fetched_at =
+            (time::OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000) as i64;
+        let entry = CachedModelCatalog {
+            catalog: self.list_models(client, key, directory).await?,
+            version,
+            fetched_at,
+        };
+        self.repository
+            .save_model_catalog(
+                client,
+                key,
+                entry.version.as_deref(),
+                &serde_json::to_string(&entry)?,
+                fetched_at,
+            )
+            .await?;
+        Ok(entry)
     }
 
     pub async fn validate_model_selection(

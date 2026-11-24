@@ -65,6 +65,7 @@ Object.defineProperty(Range.prototype, "getBoundingClientRect", {
 
 afterEach(async () => {
   cleanup();
+  localStorage.clear();
   const { testDevice } = await import("./deviceFixture");
   testDevice.queryClient.clear();
 

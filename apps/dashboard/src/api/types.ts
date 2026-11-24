@@ -726,6 +726,8 @@ export interface SessionModel {
 }
 
 export interface AgentClientModels {
+  version: string | null;
+  fetched_at: number;
   models: SessionModel[];
   default_model: string | null;
 }

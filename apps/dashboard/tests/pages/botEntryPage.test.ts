@@ -27,6 +27,8 @@ beforeEach(() => {
   ]);
   vi.spyOn(testDevice.api, "listAgentClientModels").mockResolvedValue({
     models: [{ id: "provider/model", name: "Test model", description: "provider" }],
+    version: null,
+    fetched_at: Date.now(),
     default_model: null,
   });
 });

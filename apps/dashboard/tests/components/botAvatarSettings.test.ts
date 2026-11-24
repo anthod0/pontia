@@ -24,6 +24,8 @@ test("edits an avatar, retains the selection after a failed save, and saves it o
   ]);
   vi.spyOn(testDevice.api, "listAgentClientModels").mockResolvedValue({
     models: [{ id: "provider/model", name: "Test model" }],
+    version: null,
+    fetched_at: Date.now(),
     default_model: null,
   });
   const saved = { ...bot, avatar_shape: "onigiri", avatar_color: "indigo" } as const;
