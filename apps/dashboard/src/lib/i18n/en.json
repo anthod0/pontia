@@ -301,7 +301,6 @@
   "common.exit": "Exit",
   "effort.unavailable": "The saved reasoning effort is unavailable. Choose a new value.",
   "effort.title": "Reasoning effort",
-  "effort.value": "Reasoning effort: {value}",
   "effort.clientDefault": "Client default",
   "effort.default": "Default",
   "effort.short": "Effort",

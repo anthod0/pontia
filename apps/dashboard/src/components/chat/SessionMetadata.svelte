@@ -5,7 +5,7 @@
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
   import GaugeIcon from 'phosphor-svelte/lib/GaugeIcon'
   import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon'
-  import CpuIcon from 'phosphor-svelte/lib/CpuIcon'
+  import PackageIcon from 'phosphor-svelte/lib/PackageIcon'
   import * as Popover from '$lib/components/ui/popover/index.js'
   import type { SessionView, WorkspaceGitStatusView } from '../../api/types'
   import ClientIcon from './ClientIcon.svelte'
@@ -28,8 +28,7 @@
     { key: 'client', icon: null },
     { key: 'workspace', icon: FolderIcon },
     { key: 'git', icon: GitBranchIcon },
-    { key: 'model', icon: CpuIcon },
-    { key: 'reasoning_effort', icon: GaugeIcon },
+    { key: 'model', icon: PackageIcon },
     { key: 'context', icon: GaugeIcon },
     { key: 'profile', icon: RobotIcon },
     { key: 'handle', icon: AtIcon },
@@ -45,14 +44,14 @@
     <Popover.Trigger onclick={onRefreshGitStatus} class="flex h-7 w-fit max-w-full min-w-0 items-center rounded-md px-1.5 text-left font-mono text-[11px] outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring" aria-label={$t('chat.detailsSummary', { summary: metadataSummary })}>
       <span data-chat-session-details-summary class="block min-w-0 flex-1 truncate">
         {#each visibleFields as field, index (field.key)}
-          {#if field.key === 'reasoning_effort' && index > 0}<span class="mx-1">·</span>{:else if index > 0}<span class="mx-1.5 inline-block h-2.5 border-l align-middle" aria-hidden="true"></span>{/if}
-          <span class="inline-flex items-center gap-1 align-middle text-muted-foreground" title={field.item.title}>
+          {#if index > 0}<span class="mx-1.5 inline-block h-2.5 border-l align-middle" aria-hidden="true"></span>{/if}
+          <span class="inline-flex max-w-full items-center gap-1 align-middle text-muted-foreground" title={field.item.title}>
             {#if field.key === 'client'}
               <ClientIcon clientType={session.client_type} {acpAgentId} class="size-[13px]" />
-            {:else if field.icon && field.key !== 'model' && field.key !== 'context' && field.key !== 'reasoning_effort'}
+            {:else if field.icon && field.key !== 'context'}
               <field.icon class="size-[13px] shrink-0" aria-hidden="true" />
             {/if}
-            {#if field.key === 'git' && gitStatus}<GitStatusInline {gitStatus} />{:else}<span>{field.item.value}</span>{/if}
+            {#if field.key === 'git' && gitStatus}<GitStatusInline {gitStatus} />{:else}<span class="truncate">{field.item.value}</span>{/if}
           </span>
         {/each}
       </span>
@@ -74,7 +73,7 @@
                 <span class="flex flex-wrap gap-1"><GitStatusInline {gitStatus} /></span>
                 {#if gitStatus.state === 'error' && !isOutsideGitRepository(gitStatus)}<span class="text-destructive">{field.item.title}</span>{/if}
               {:else}
-                {field.key === 'reasoning_effort' ? $t('effort.value', {value: field.item.value}) : field.key === 'workspace' ? field.item.title : field.item.value}
+                {field.key === 'workspace' ? field.item.title : field.item.value}
               {/if}
             </dd>
           </div>
