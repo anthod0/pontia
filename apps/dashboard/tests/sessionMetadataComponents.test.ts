@@ -95,6 +95,23 @@ function metadataProps(currentGitStatus = gitStatus({ unstaged_count: 1, clean: 
 }
 
 describe("session metadata component boundaries", () => {
+  test.each([
+    { effort: "high", expected: "gemini-neon · high" },
+    { effort: null, expected: "gemini-neon" },
+  ])("groups model metadata with effort $effort", ({ effort, expected }) => {
+    const items = sessionMetadataItems(
+      session({ model: "gemini-neon", reasoning_effort: effort }),
+      [],
+      undefined,
+      {},
+    );
+    expect(items.find((item) => item.key === "model")).toMatchObject({
+      value: expected,
+      title: expected,
+    });
+    expect(items.some((item) => item.key === "reasoning_effort")).toBe(false);
+  });
+
   test("session metadata details render as an accessible popover dialog", async () => {
     render(SessionMetadata, { props: metadataProps() });
 

@@ -301,7 +301,6 @@
   "common.exit": "结束会话",
   "effort.unavailable": "已保存的推理强度不再可用，请重新选择。",
   "effort.title": "推理强度",
-  "effort.value": "推理强度：{value}",
   "effort.clientDefault": "客户端默认",
   "effort.default": "默认",
   "effort.short": "强度",

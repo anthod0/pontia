@@ -183,20 +183,12 @@ export function sessionMetadataItems(
       title: clientSessionLabel(session),
     },
   ];
-  if (session.model)
-    items.push({
-      key: "model",
-      label: translate("model.title"),
-      value: session.model,
-      title: session.model,
-    });
-  if (session.reasoning_effort)
-    items.push({
-      key: "reasoning_effort",
-      label: translate("effort.title"),
-      value: session.reasoning_effort,
-      title: session.reasoning_effort,
-    });
+  if (session.model) {
+    const model = session.reasoning_effort
+      ? `${session.model} · ${session.reasoning_effort}`
+      : session.model;
+    items.push({ key: "model", label: translate("model.title"), value: model, title: model });
+  }
   if (gitStatus)
     items.push({
       key: "git",
