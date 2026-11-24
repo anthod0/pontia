@@ -2,17 +2,33 @@ use super::*;
 use pontia_bot::conversation::GenerationLimits;
 use time::{Duration, OffsetDateTime};
 
-async fn usage(control: &AgentControl, session: &str, used: u64, window: u64) {
+async fn session_fact(control: &AgentControl, session: &str, kind: EventType, payload: Value) {
     let snapshot = control
         .queries()
         .session_snapshot(session)
         .await
         .unwrap()
         .unwrap();
-    control.event_ingest_service().report_client_fact(
-        session, Some(&snapshot.runtimes[0].runtime_id), EventType::SessionContextUsageUpdated,
+    control
+        .event_ingest_service()
+        .report_client_fact(
+            session,
+            Some(&snapshot.runtimes[0].runtime_id),
+            kind,
+            payload,
+        )
+        .await
+        .unwrap();
+}
+
+async fn usage(control: &AgentControl, session: &str, used: u64, window: u64) {
+    session_fact(
+        control,
+        session,
+        EventType::SessionContextUsageUpdated,
         json!({"context_usage":{"used_tokens":used,"max_tokens":window,"confidence":"estimated"}}),
-    ).await.unwrap();
+    )
+    .await;
 }
 
 async fn current(service: &ConversationService, bot: &str) -> Option<String> {
@@ -24,6 +40,124 @@ async fn reconcile(service: &ConversationService) {
         .reconcile_generations(OffsetDateTime::now_utc())
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn completed_compaction_waits_for_idle_and_rotates_once_after_restart() {
+    let (_root, _pool, _client, control, conversation) = fixture().await;
+    let _exits = report_exits(&control);
+    let (id, old) = bot(&conversation).await;
+    usage(&control, &old, 300_000, 1_000_000).await;
+    session_fact(
+        &control,
+        &old,
+        EventType::SessionCompactionCompleted,
+        json!({"operation_id":"compact","trigger":"threshold"}),
+    )
+    .await;
+    usage(&control, &old, 10_000, 1_000_000).await;
+    reconcile(&conversation).await;
+    assert_eq!(current(&conversation, &id).await.as_ref(), Some(&old));
+
+    drop(conversation);
+    finish(&control, &old, EventType::TurnCompleted).await;
+    let recovered = test_conversation(control.clone());
+    reconcile(&recovered).await;
+    let new = current(&recovered, &id).await.unwrap();
+    assert_ne!(new, old);
+    reconcile(&recovered).await;
+    assert_eq!(current(&recovered, &id).await, Some(new));
+}
+
+#[tokio::test]
+async fn completion_wakes_the_generation_check_before_the_next_tick() {
+    let (_root, pool, _client, control, conversation) = fixture().await;
+    let _exits = report_exits(&control);
+    let (id, old) = bot(&conversation).await;
+    usage(&control, &old, 80_000, 1_000_000).await;
+    finish(&control, &old, EventType::TurnCompleted).await;
+    let mut updates = conversation.subscribe(&id);
+    let (shutdown, stopped) = tokio::sync::watch::channel(false);
+    let runner = tokio::spawn(conversation.clone().run_generations(stopped));
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        // Wait until the initial tick has checked this Session.
+        while !sqlx::query_scalar::<_, bool>(
+            "SELECT idle_since IS NOT NULL FROM bots WHERE bot_id = ?",
+        )
+        .bind(&id)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        {
+            tokio::task::yield_now().await;
+        }
+        session_fact(
+            &control,
+            &old,
+            EventType::SessionCompactionCompleted,
+            json!({"operation_id":"compact","trigger":"threshold"}),
+        )
+        .await;
+        while !matches!(updates.recv().await.unwrap(), ConversationUpdate::Reset) {}
+    })
+    .await
+    .unwrap();
+    assert_ne!(current(&conversation, &id).await.unwrap(), old);
+    shutdown.send(true).unwrap();
+    runner.await.unwrap();
+}
+
+#[tokio::test]
+async fn helper_compaction_does_not_rotate_its_bot() {
+    let (_root, _pool, _client, control, conversation) = fixture().await;
+    let _exits = report_exits(&control);
+    let (id, session) = bot(&conversation).await;
+    let helpers = HelperService::new(control.clone(), conversation.clone());
+    let worker = helper(&helpers, &session).await;
+    finish(&control, &session, EventType::TurnCompleted).await;
+    session_fact(
+        &control,
+        &worker,
+        EventType::SessionCompactionCompleted,
+        json!({"operation_id":"compact","trigger":"threshold"}),
+    )
+    .await;
+    reconcile(&conversation).await;
+    assert_eq!(current(&conversation, &id).await, Some(session));
+}
+
+#[tokio::test]
+async fn falling_usage_and_incomplete_compactions_do_not_rotate() {
+    let (_root, _pool, _client, control, conversation) = fixture().await;
+    let _exits = report_exits(&control);
+    let (id, session) = bot(&conversation).await;
+    usage(&control, &session, 300_000, 1_000_000).await;
+    usage(&control, &session, 10_000, 1_000_000).await;
+    finish(&control, &session, EventType::TurnCompleted).await;
+    reconcile(&conversation).await;
+    assert_eq!(current(&conversation, &id).await.as_ref(), Some(&session));
+    for (operation, aborted) in [("failure", false), ("cancellation", true)] {
+        let mut payload = json!({"operation_id":operation,"trigger":"threshold"});
+        session_fact(
+            &control,
+            &session,
+            EventType::SessionCompactionStarted,
+            payload.clone(),
+        )
+        .await;
+        reconcile(&conversation).await;
+        assert_eq!(current(&conversation, &id).await.as_ref(), Some(&session));
+        payload["aborted"] = json!(aborted);
+        session_fact(
+            &control,
+            &session,
+            EventType::SessionCompactionFailed,
+            payload,
+        )
+        .await;
+        reconcile(&conversation).await;
+        assert_eq!(current(&conversation, &id).await.as_ref(), Some(&session));
+    }
 }
 
 #[tokio::test]
