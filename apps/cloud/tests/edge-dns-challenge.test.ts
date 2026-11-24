@@ -6,6 +6,7 @@ import { edges, users } from "../src/lib/server/db/schema";
 import { CloudflareDnsProvider } from "../src/lib/server/edge-network";
 import { issueEdgeDeployment } from "../src/lib/server/edge-deployment";
 import { POST } from "../src/routes/api/edge/dns-challenge/+server";
+import { manageEdgePreview } from "../src/lib/server/edge-preview";
 import { testDatabase } from "./database";
 import { mockProvider } from "./provider";
 
@@ -30,6 +31,8 @@ function event(body: unknown, token = credential, allowed = true, keys: string[]
     platform: {
       env: {
         DB: database.binding,
+        PREVIEW_ZONE: "p.pontia.dev",
+        CLOUDFLARE_PREVIEW_DNS_ZONE_ID: "preview-zone",
         CLOUDFLARE_DNS_TOKEN: "provider-secret",
         CLOUDFLARE_DNS_ZONE_ID: "zone",
         EDGE_DNS_RATE_LIMIT: {
@@ -131,4 +134,53 @@ test("pending deployment can clean its own TXT but cannot bypass network verific
       )
     ).status,
   ).toBe(401);
+});
+
+test("upgraded private edge provisions wildcard DNS, confirms TLS and cleans up its preview records", async () => {
+  await registered();
+  const base = "brave-atlas.p.pontia.dev";
+  const records = new Map<
+    string,
+    { id: string; type: string; name: string; content: string; proxied?: boolean }
+  >();
+  let healthy = false;
+  mockProvider(async (input, init) => {
+    const url = new URL(String(input));
+    if (url.hostname === `__probe.${base}`) {
+      expect(url.port).toBe("8443");
+      expect(url.pathname).toBe("/__pontia_preview_health");
+      expect(init?.redirect).toBe("manual");
+      return new Response(healthy ? "ok" : "bad");
+    }
+    if (url.pathname.includes("/zones/zone/")) {
+      expect(url.searchParams.get("name")).toBe(hostname);
+      return Response.json({
+        success: true,
+        result: [{ id: "control", name: hostname, type: "A", content: "8.8.8.8" }],
+      });
+    }
+    expect(url.pathname).toContain("/zones/preview-zone/");
+    if (init?.method === "POST") {
+      const body = JSON.parse(String(init.body));
+      records.set(body.type, { ...body, id: body.type });
+    } else if (init?.method === "DELETE") {
+      records.delete(url.pathname.split("/").at(-1)!);
+    }
+    const matched = [...records.values()].filter(
+      (r) => r.name === url.searchParams.get("name") && r.type === url.searchParams.get("type"),
+    );
+    return Response.json({ success: true, result: matched });
+  });
+  for (let i = 0; i < 2; i++)
+    expect((await manageEdgePreview(event({}), "provision")).status).toBe(200);
+  expect(records.get("A")).toMatchObject({ name: `*.${base}`, content: "8.8.8.8", proxied: false });
+  expect((await call(event({ scope: "preview", operation: "publish", value }))).status).toBe(200);
+  expect(records.get("TXT")?.name).toBe(`_acme-challenge.${base}`);
+  expect((await manageEdgePreview(event({}), "confirm")).status).toBe(422);
+  expect((await database.db.select().from(edges).get())?.previewEnabled).toBe(0);
+  healthy = true;
+  expect((await manageEdgePreview(event({}), "confirm")).status).toBe(200);
+  expect((await database.db.select().from(edges).get())?.previewEnabled).toBe(1);
+  await new CloudflareDnsProvider("secret", "preview-zone", "p.pontia.dev").cleanupHostname(base);
+  expect(records.size).toBe(0);
 });

@@ -40,6 +40,7 @@ CREATE TABLE `edges` (
 	`service_credential_hash` text NOT NULL,
 	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	`updated_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
+	`preview_enabled` integer DEFAULT 0 NOT NULL CONSTRAINT "edges_preview_enabled_check" CHECK("preview_enabled" IN (0, 1)),
 	CONSTRAINT `fk_edges_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
 	CONSTRAINT "edges_access_scope_check" CHECK("access_scope" IN ('private', 'public'))
 );

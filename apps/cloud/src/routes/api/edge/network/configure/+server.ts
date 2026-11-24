@@ -8,6 +8,7 @@ import {
   CloudflareDnsProvider,
   configureEdgeNetwork,
   edgeHostname,
+  previewDns,
   validDnsChallenge,
 } from "$lib/server/edge-network";
 import { remoteDatabase } from "$lib/server/remote-access/http";
@@ -65,6 +66,7 @@ export const POST: RequestHandler = async (event) => {
         randomBytes: (length) => crypto.getRandomValues(new Uint8Array(length)),
         connect,
         dns,
+        preview: env.PREVIEW_ZONE ? { zone: env.PREVIEW_ZONE, dns: previewDns(env) } : undefined,
       },
       input.port,
       input.dns_challenge as string | undefined,

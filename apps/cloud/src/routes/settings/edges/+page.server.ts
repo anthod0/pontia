@@ -6,7 +6,7 @@ import { m } from "$lib/paraglide/messages";
 import { localizeHref } from "$lib/paraglide/runtime";
 import { edges } from "$lib/server/db/schema";
 import { removeOwnedEdge } from "$lib/server/edge-management";
-import { CloudflareDnsProvider } from "$lib/server/edge-network";
+import { previewBase, previewDns, CloudflareDnsProvider } from "$lib/server/edge-network";
 import type { Actions, PageServerLoad } from "./$types";
 
 async function activeUser(event: Pick<RequestEvent, "platform" | "cookies">) {
@@ -75,15 +75,17 @@ export const actions: Actions = {
       return fail(400, { error: m.edges_error_select_delete() });
     }
     try {
-      const result = await removeOwnedEdge(
-        authenticated.db,
-        authenticated.user.user_id,
-        edgeId,
-        new CloudflareDnsProvider(
-          authenticated.env.CLOUDFLARE_DNS_TOKEN,
-          authenticated.env.CLOUDFLARE_DNS_ZONE_ID,
-        ),
-      );
+      const result = await removeOwnedEdge(authenticated.db, authenticated.user.user_id, edgeId, {
+        async cleanupHostname(hostname) {
+          const env = authenticated.env;
+          if (env.PREVIEW_ZONE)
+            await previewDns(env).cleanupHostname(previewBase(hostname, env.PREVIEW_ZONE));
+          await new CloudflareDnsProvider(
+            env.CLOUDFLARE_DNS_TOKEN,
+            env.CLOUDFLARE_DNS_ZONE_ID,
+          ).cleanupHostname(hostname);
+        },
+      });
       if (result.status === "not_found") return fail(404, { error: m.edges_error_not_found() });
       if (result.status === "invalid_edge") {
         return fail(409, { error: m.edges_error_invalid_network() });

@@ -37,23 +37,22 @@ impl ServiceConfig {
     }
 
     pub fn read(path: &Path) -> Result<Self> {
-        let config: Self = serde_json::from_slice(
+        let mut config: Self = serde_json::from_slice(
             &fs::read(path).with_context(|| format!("failed to read {}", path.display()))?,
         )
         .context("edge service config is invalid")?;
         validate_edge_port(config.port).map_err(anyhow::Error::msg)?;
         hostname_from_tunnel_url(&format!("wss://{}/tunnel", config.hostname))?;
         validate_browser_origin(&config.browser_dashboard_origin)?;
+        let label = config
+            .hostname
+            .strip_suffix(".edge.pontia.dev")
+            .context("invalid control hostname")?;
+        let expected = format!("{label}.p.pontia.dev");
         if let Some(base) = &config.preview_base_hostname {
-            let label = config
-                .hostname
-                .strip_suffix(".edge.pontia.dev")
-                .context("invalid control hostname")?;
-            anyhow::ensure!(
-                base == &format!("{label}.p.pontia.dev"),
-                "invalid preview base hostname"
-            );
+            anyhow::ensure!(base == &expected, "invalid preview base hostname");
         }
+        config.preview_base_hostname = Some(expected);
         Ok(config)
     }
 }
@@ -127,6 +126,10 @@ mod tests {
         }
         std::fs::write(&path, br#"{"hostname":"brave-atlas.edge.pontia.dev"}"#).unwrap();
         let config = ServiceConfig::read(&path).unwrap();
+        assert_eq!(
+            config.preview_base_hostname.as_deref(),
+            Some("brave-atlas.p.pontia.dev")
+        );
         assert_eq!(config.port, 443);
         assert_eq!(config.acme_challenge, AcmeChallenge::Http01);
 

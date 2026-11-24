@@ -35,6 +35,7 @@ export type EdgeNetworkDependencies = {
   randomBytes(length: number): Uint8Array;
   connect(address: { hostname: string; port: number }): TcpSocket;
   dns: DnsProvider;
+  preview?: { zone: string; dns: DnsProvider };
 };
 
 type HttpFetcher = (input: string, init: RequestInit) => Promise<Response>;
@@ -216,6 +217,10 @@ export async function configureEdgeNetwork(
   }
 
   await dependencies.dns.ensureA(hostname, candidateIpv4);
+  if (dependencies.preview) {
+    const { zone, dns } = dependencies.preview;
+    await dns.ensureA(`*.${previewBase(hostname, zone)}`, candidateIpv4);
+  }
   if (dnsChallenge !== undefined) await dependencies.dns.publishTxt(hostname, dnsChallenge);
   return { status: "configured" as const, hostname };
 }
@@ -257,6 +262,7 @@ export class CloudflareDnsProvider implements DnsProvider {
   constructor(
     private readonly token: string,
     private readonly zoneId: string,
+    private readonly domain = EDGE_ZONE,
   ) {}
 
   private async txtRequest(operation: DnsOperation, path: string, init: RequestInit = {}) {
@@ -279,8 +285,16 @@ export class CloudflareDnsProvider implements DnsProvider {
     return readDnsProviderResponse(response, operation);
   }
 
+  private managedHostname(hostname: string) {
+    const suffix = `.${this.domain}`;
+    return (
+      hostname.endsWith(suffix) &&
+      edgeHostname(`wss://${hostname.slice(0, -suffix.length)}.${EDGE_ZONE}/tunnel`) !== null
+    );
+  }
+
   private async matchingTxt(hostname: string, value: string) {
-    if (!edgeHostname(`wss://${hostname}/tunnel`) || !validDnsChallenge(value)) {
+    if (!this.managedHostname(hostname) || !validDnsChallenge(value)) {
       throw new DnsProviderError("lookup", "local_validation_error");
     }
     const name = `_acme-challenge.${hostname}`;
@@ -330,7 +344,7 @@ export class CloudflareDnsProvider implements DnsProvider {
   }
 
   private async records(name: string, type: "A" | "TXT") {
-    const records: { id: string }[] = [];
+    const records: { id: string; content: string }[] = [];
     for (let page = 1; ; page++) {
       const body = await this.txtRequest(
         "lookup",
@@ -348,19 +362,26 @@ export class CloudflareDnsProvider implements DnsProvider {
         ) {
           throw new DnsProviderError("lookup", "invalid_provider_response");
         }
-        records.push({ id: record.id });
+        records.push({ id: record.id, content: record.content });
       }
       if (body.result.length < 20) break;
     }
     return records;
   }
 
+  async ipv4(hostname: string) {
+    const records = await this.records(hostname, "A");
+    if (records.length !== 1 || !isGlobalUnicastIpv4(records[0].content))
+      throw new DnsProviderError("lookup", "local_validation_error");
+    return records[0].content;
+  }
+
   async cleanupHostname(hostname: string) {
-    if (!edgeHostname(`wss://${hostname}/tunnel`)) {
+    if (!this.managedHostname(hostname)) {
       throw new DnsProviderError("lookup", "local_validation_error");
     }
     const records = [
-      ...(await this.records(hostname, "A")),
+      ...(await this.records(this.domain === EDGE_ZONE ? hostname : `*.${hostname}`, "A")),
       ...(await this.records(`_acme-challenge.${hostname}`, "TXT")),
     ];
     for (const record of records) {
@@ -399,7 +420,7 @@ export class CloudflareDnsProvider implements DnsProvider {
     ) {
       throw new DnsProviderError("lookup", "local_validation_error", lookup.status);
     }
-    if (record?.content !== undefined && record.content !== address) {
+    if (this.domain === EDGE_ZONE && record?.content !== undefined && record.content !== address) {
       throw new DnsProviderError("update", "local_validation_error");
     }
     if (record?.content === address && record.proxied === false) return;
@@ -424,4 +445,31 @@ export class CloudflareDnsProvider implements DnsProvider {
     }
     await readDnsProviderResponse(saved, operation);
   }
+}
+
+export function previewDns(env: App.Platform["env"]) {
+  return new CloudflareDnsProvider(
+    env.CLOUDFLARE_DNS_TOKEN,
+    env.CLOUDFLARE_PREVIEW_DNS_ZONE_ID || env.CLOUDFLARE_DNS_ZONE_ID,
+    env.PREVIEW_ZONE,
+  );
+}
+
+export function previewBase(controlHostname: string, zone: string) {
+  return `${controlHostname.split(".")[0]}.${zone}`;
+}
+
+export async function probePreview(base: string, tunnelUrl: string) {
+  const port = Number(new URL(tunnelUrl).port || 443);
+  const response = await fetch(
+    `https://${edgeAuthority("__probe." + base, port)}/__pontia_preview_health`,
+    {
+      redirect: "manual",
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      cache: "no-store",
+    },
+  );
+  return (
+    response.status === 200 && (await boundedText(response, MAX_PROBE_BYTES)) === HEALTH_RESPONSE
+  );
 }

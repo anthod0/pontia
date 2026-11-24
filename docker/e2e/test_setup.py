@@ -216,7 +216,7 @@ class SetupTests(unittest.TestCase):
         db.executescript(seed)  # Restarting Cloud must preserve the current session.
         cookie = json.loads((self.state / "browser-login.json").read_text())
         self.assertEqual((cookie["name"], cookie["url"], cookie["secure"], cookie["httpOnly"]),
-                         ("_rt", "https://pontia.dev/", True, True))
+                         ("__Host-_rt", "https://pontia.dev/", True, True))
         self.assertRegex(cookie["value"], r"^ptb_[A-Za-z0-9_-]{43}$")
         token_hash = base64.urlsafe_b64encode(
             hashlib.sha256(cookie["value"].encode()).digest()).decode().rstrip("=")

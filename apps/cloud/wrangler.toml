@@ -24,6 +24,7 @@ head_sampling_rate = 1
 persist = true
 
 [vars]
+PREVIEW_ZONE = "p.pontia.dev"
 AUTH_ORIGIN = "https://pontia.dev"
 
 [secrets]

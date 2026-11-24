@@ -257,12 +257,12 @@ class ContainerSmokeTests(unittest.TestCase):
                         "--", "sh", "-c", "printf forbidden > /home/e2e/outside-workspace.txt")
             login = json.loads((first.state / "browser-login.json").read_text())
             cookies = compose("exec", "-T", "browser", "node", "--input-type=module", "-e", BROWSER_COOKIES).stdout
-            self.assertIn({"name": "_rt", "value": login["value"], "domain": "pontia.dev"},
+            self.assertIn({"name": "__Host-_rt", "value": login["value"], "domain": "pontia.dev"},
                           json.loads(cookies))
             account = compose(
                 "exec", "-T", "cloud", "curl", "--silent", "--show-error", "--cacert", "/tls/test-ca.pem",
                 "--write-out", "%{http_code}", "--output", "/dev/null",
-                "--cookie", f"_rt={login['value']}", "https://pontia.dev/settings/account",
+                "--cookie", f"__Host-_rt={login['value']}", "https://pontia.dev/settings/account",
             ).stdout
             self.assertEqual(account, b"200")
             vocabulary = compose(

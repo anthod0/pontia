@@ -368,7 +368,7 @@ def prepare_login(state):
         expires_at=expires.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
     )
     write_private(state / "browser-login.json", json.dumps({
-        "name": "_rt", "value": token, "url": "https://pontia.dev/", "secure": True,
+        "name": "__Host-_rt", "value": token, "url": "https://pontia.dev/", "secure": True,
         "httpOnly": True, "sameSite": "Lax", "expires": int(expires.timestamp()),
     }) + "\n")
     return seed

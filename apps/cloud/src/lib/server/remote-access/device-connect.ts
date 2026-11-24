@@ -23,6 +23,16 @@ function writeU64(output: Uint8Array, offset: number, value: number) {
   );
 }
 
+export function capabilitySigningKey(signingKeyPkcs8: string) {
+  return crypto.subtle.importKey(
+    "pkcs8",
+    buffer(base64url.decode(signingKeyPkcs8)),
+    { name: "Ed25519" },
+    false,
+    ["sign"],
+  );
+}
+
 export async function connectDashboardDevice(
   db: Database,
   userId: string,
@@ -49,13 +59,7 @@ export async function connectDashboardDevice(
   const apiOrigin = edgeApiOrigin(device.tunnelUrl);
   if (!apiOrigin) return null;
   const issuedAt = Math.floor(now.getTime() / 1000);
-  const key = await crypto.subtle.importKey(
-    "pkcs8",
-    buffer(base64url.decode(signingKeyPkcs8)),
-    { name: "Ed25519" },
-    false,
-    ["sign"],
-  );
+  const key = await capabilitySigningKey(signingKeyPkcs8);
   const lifetimeSeconds = 4 * 60 * 60;
   const expiresAt = issuedAt + lifetimeSeconds;
   const admissionToken = await new SignJWT({ device_id: device.id, user_id: userId })

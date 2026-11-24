@@ -15,6 +15,7 @@ import {
   OPTIONS as connectOptions,
 } from "../src/routes/api/dashboard/devices/[device_handle]/connect/+server";
 import { GET as profile, OPTIONS as profileOptions } from "../src/routes/api/dashboard/me/+server";
+import { POST as preview } from "../src/routes/api/dashboard/devices/[device_handle]/preview-token/+server";
 import { testDatabase } from "./database";
 
 const callListDevices = listDevices as unknown as (event: RequestEvent) => Promise<Response>;
@@ -65,10 +66,11 @@ function event(
         DB: database.binding,
         JWT_SECRET: jwtSecret,
         AUTH_ORIGIN: cloudOrigin,
+        PREVIEW_ZONE: "p.pontia.dev",
         E2E_CAPABILITY_SIGNING_KEY: signingKey,
       },
     },
-    cookies: { get: (name: string) => (name === "_at" ? options.token : undefined) },
+    cookies: { get: (name: string) => (name === "__Host-_at" ? options.token : undefined) },
   } as unknown as RequestEvent;
 }
 
@@ -414,4 +416,59 @@ test("connect and renewal do not require writable ticket storage", async () => {
   } finally {
     await database.binding.exec("DROP TRIGGER reject_ticket");
   }
+});
+
+test("preview tokens bind a dashboard login to its ready device, edge, and port for four hours", async () => {
+  const token = await seedDashboardFixtureAndLogin();
+  const call = preview as unknown as (e: RequestEvent) => Promise<Response>;
+  const request = (body: unknown, handle = "office-mac", origin = dashboardOrigin) =>
+    call(
+      event(`/api/dashboard/devices/${handle}/preview-token`, {
+        method: "POST",
+        origin,
+        token,
+        body,
+      }),
+    );
+  expect((await request({ port: 5173 })).status).toBe(409);
+  expect((await request({ port: 5173 }, "other-device")).status).toBe(404);
+  expect((await request({ port: 5173 }, "office-mac", "https://pontia.dev")).status).toBe(403);
+  for (const body of [
+    { port: 22 },
+    { port: "5173" },
+    { port: 65536 },
+    { port: 0 },
+    { port: 1.5 },
+    { port: 5173, device: "other" },
+  ])
+    expect((await request(body)).status).toBe(400);
+  await database.db
+    .update(edges)
+    .set({ previewEnabled: 1, tunnelUrl: "wss://brave-atlas.edge.pontia.dev:8443/tunnel" })
+    .where(eq(edges.userId, ownerId));
+  const response = await request({ port: 5173 });
+  expect(response.status).toBe(200);
+  expect(response.headers.get("cache-control")).toBe("no-store");
+  const result = (await response.json()) as {
+    preview_origin: string;
+    expires_at: number;
+    token: string;
+  };
+  expect(result.preview_origin).toBe(
+    "https://5173-0195e7d41b227c339d44123456789abc.brave-atlas.p.pontia.dev:8443",
+  );
+  const { payload, protectedHeader } = await jwtVerify(result.token, signingKeys.publicKey, {
+    algorithms: ["EdDSA"],
+    typ: "pontia-preview+jwt",
+  });
+  expect(protectedHeader.typ).toBe("pontia-preview+jwt");
+  expect(payload).toEqual({
+    purpose: "localhost_preview",
+    sub: ownerId,
+    did: ownerDeviceId,
+    aud: "0195e7e1-1b22-7c33-9d44-123456789abc",
+    port: 5173,
+    iat: result.expires_at - 14400,
+    exp: result.expires_at,
+  });
 });

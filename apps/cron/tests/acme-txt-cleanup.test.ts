@@ -13,6 +13,12 @@ test("TXT cleanup uses provider creation time and record ID, never deletes a fre
       created_on: "2026-10-08T23:59:59Z",
     },
     {
+      id: "preview",
+      type: "TXT",
+      name: "_acme-challenge.brave-atlas.p.pontia.dev",
+      created_on: "2026-10-08T23:59:59Z",
+    },
+    {
       id: "new",
       type: "TXT",
       name: "_acme-challenge.brave-atlas.edge.pontia.dev",
@@ -52,8 +58,8 @@ test("TXT cleanup uses provider creation time and record ID, never deletes a fre
     }
     return Response.json({ success: true, result: records });
   }) as typeof fetch);
-  expect(await new CloudflareDnsProvider("secret", "zone").cleanupExpiredTxt(now)).toBe(1);
-  expect(deleted).toEqual(["old"]);
+  expect(await new CloudflareDnsProvider("secret", "zone").cleanupExpiredTxt(now)).toBe(2);
+  expect(deleted).toEqual(["old", "preview"]);
 });
 
 test("TXT cleanup enumerates all pages before deleting records", async () => {

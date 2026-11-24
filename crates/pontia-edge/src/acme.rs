@@ -22,12 +22,13 @@ pub struct CloudDnsChallenges<'a> {
     pub client: &'a HttpCloudClient,
     pub credential: &'a str,
     pub ticket: Option<&'a str>,
+    pub preview: bool,
 }
 
 impl CloudDnsChallenges<'_> {
     async fn change(&self, operation: DnsOperation, value: &str) -> Result<()> {
         self.client
-            .dns_challenge(self.credential, self.ticket, operation, value)
+            .dns_challenge(self.credential, self.ticket, operation, self.preview, value)
             .await
     }
 }
@@ -124,7 +125,12 @@ impl PreparedDnsOrder {
         output: &mut (impl Write + ?Sized),
     ) -> Result<IssuedCertificate> {
         if let Some(value) = &self.value {
-            wait_for_txt(hostname, value, output).await?;
+            wait_for_txt(
+                hostname.strip_prefix("*.").unwrap_or(hostname),
+                value,
+                output,
+            )
+            .await?;
         }
         report_issuance_progress(async {
             tokio::time::timeout(Duration::from_secs(180), self.validate_and_issue())

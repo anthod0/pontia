@@ -33,7 +33,7 @@ async function authenticatedEvent(userId: string): Promise<RequestEvent> {
   });
   const login = await issueLogin(database.db, loginId, secret);
   return {
-    cookies: { get: (name: string) => (name === "_at" ? login.token : undefined) },
+    cookies: { get: (name: string) => (name === "__Host-_at" ? login.token : undefined) },
     platform: {
       env: {
         AUTH_ORIGIN: "https://pontia.example",
@@ -228,7 +228,7 @@ test("an issued access JWT remains usable until it expires", async () => {
   await database.db.delete(authSessions).where(eq(authSessions.id, loginId));
 
   const result = (await issueDeployment({
-    cookies: { get: (name: string) => (name === "_at" ? login.token : undefined) },
+    cookies: { get: (name: string) => (name === "__Host-_at" ? login.token : undefined) },
     platform: {
       env: {
         AUTH_ORIGIN: "https://pontia.example",
@@ -256,7 +256,7 @@ test("an authenticated user can issue an edge deployment", async () => {
   const login = await issueLogin(database.db, loginId, secret);
 
   const result = (await issueDeployment({
-    cookies: { get: (name: string) => (name === "_at" ? login.token : undefined) },
+    cookies: { get: (name: string) => (name === "__Host-_at" ? login.token : undefined) },
     platform: {
       env: {
         AUTH_ORIGIN: "https://pontia.example",
