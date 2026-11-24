@@ -6,17 +6,18 @@
 	import { m } from '$lib/paraglide/messages';
 	import { localizeHref } from '$lib/paraglide/runtime';
 
-	// SVG logo sources: https://pi.dev/press-kit; Claude symbol extracted from
-	// the inline wordmark at https://claude.com/product/claude-code;
-	// https://grok.com/images/favicon.svg; OpenCode brand assets at
-	// https://opencode.ai/brand. The OpenAI symbol used for Codex comes from
-	// anomalyco/opencode: packages/ui/src/assets/icons/provider/openai.svg.
+	// SVG logo sources: Claude symbol extracted from the inline wordmark at
+	// https://claude.com/product/claude-code; https://grok.com/images/favicon.svg.
+	// The OpenAI symbol used for Codex comes from anomalyco/opencode:
+	// packages/ui/src/assets/icons/provider/openai.svg. The Google Antigravity
+	// and Kiro marks match the Dashboard client icons.
 	// Local vector assets live in static/client-logos/.
 	const clients = [
 		{ name: 'Codex', logo: '/client-logos/codex.svg', darkLogo: '/client-logos/codex-dark.svg' },
 		{ name: 'Claude Code', logo: '/client-logos/claude-code.svg' },
-		{ name: 'Pi', logo: '/client-logos/pi.svg' },
-		{ name: 'Grok Build', logo: '/client-logos/grok-build.svg' }
+		{ name: 'Grok Build', logo: '/client-logos/grok-build.svg' },
+		{ name: 'Google Antigravity', logo: '/client-logos/google-antigravity.svg' },
+		{ name: 'Kiro', logo: '/client-logos/kiro.svg' }
 	];
 	// Stage coordinates (viewBox 0 0 1080 420): the channel runs from the terminal's right edge
 	// to the phone's left edge at the terminal's vertical centre, and peaks under the lock.

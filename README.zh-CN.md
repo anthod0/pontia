@@ -11,7 +11,7 @@
   <p><a href="README.md">English</a> · 简体中文</p>
 </div>
 
-离开工位，agent 不停工。pi、Codex、Claude Code、Grok Build 这些编程 agent 照常在你自己的设备上跑，你在任何浏览器里都能查看进度、批准操作、引导方向，手机上也行。Pontia 免费且开源。
+离开工位，agent 不停工。pi、Codex、Claude Code、Grok Build、Google Antigravity、Kiro 这些编程 agent 照常在你自己的设备上跑，你在任何浏览器里都能查看进度、批准操作、引导方向，手机上也行。Pontia 免费且开源。
 
 <p align="center">
   <img src="apps/cloud/static/client-logos/pi.svg" height="28" alt="pi">
@@ -21,6 +21,10 @@
   <img src="apps/cloud/static/client-logos/claude-code.svg" height="28" alt="Claude Code">
   &nbsp;&nbsp;
   <img src="apps/cloud/static/client-logos/grok-build.svg" height="28" alt="Grok Build">
+  &nbsp;&nbsp;
+  <img src="apps/cloud/static/client-logos/google-antigravity.svg" height="28" alt="Google Antigravity">
+  &nbsp;&nbsp;
+  <img src="apps/cloud/static/client-logos/kiro.svg" height="28" alt="Kiro">
 </p>
 
 ![Pontia Dashboard：最近会话、编程对话、工具调用和测试结果](https://files.pontia.dev/cloud/dashboard-1280-9a7dd255904a.webp)
@@ -33,7 +37,7 @@
 - 🤖 **把工作交给 Bot**：像和助理聊天一样和设备上的 Bot 对话。它为每件事开启 Session，多件事同时推进，完成后向你汇报，长期对话里也记得你的项目。
 - 🔒 **端到端加密**：只有你的浏览器和你的设备能读到会话内容。用官方 Edge 或自己部署都行，Edge 只转发密文。
 
-在 Linux 和 macOS 上，你可以选择 pi、Codex、Claude Code 或 Grok Build（通过 ACP）运行 Bot 和助手。
+在 Linux 和 macOS 上，你可以选择 pi、Codex、Claude Code、Grok Build、Google Antigravity 或 Kiro（后三者通过 ACP）运行 Bot 和助手。
 
 ## 快速开始
 
@@ -49,6 +53,8 @@
 - **Codex**：`codex` CLI
 - **Claude Code**：Node.js LTS 和 npm，且 Claude Code 已登录
 - **Grok Build（ACP）**：将 `grok` 安装到服务用户的 PATH 中，初始化后按 [Agent Clients](https://pontia.dev/zh/docs/agent-clients#enable-an-acp-agent) 启用
+- **Google Antigravity（ACP）**：将 `agy` 安装到服务用户的 PATH 中，初始化后在 [Agent Clients](https://pontia.dev/zh/docs/agent-clients) 中启用
+- **Kiro（ACP）**：将 `kiro-cli` 安装到服务用户的 PATH 中，用 `kiro-cli login` 登录，初始化后在 [Agent Clients](https://pontia.dev/zh/docs/agent-clients) 中启用
 
 ### 初始化
 
