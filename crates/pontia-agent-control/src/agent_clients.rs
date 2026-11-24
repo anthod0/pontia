@@ -4,7 +4,7 @@ use pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientReposit
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::SqlitePool;
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, path::Path};
 
 use crate::{
     client_contract::{ClientConfiguration, ClientDetection, DetectionContext},
@@ -45,6 +45,26 @@ impl AgentClientService {
             repository: SqliteAgentClientRepository::new(pool),
             clients,
         }
+    }
+
+    /// Apply each enabled client's directory trust operation to the selected path.
+    pub async fn trust_directory(&self, directory: &Path) -> Result<()> {
+        let directory = directory.canonicalize()?;
+        if !directory.is_dir() {
+            return Err(Error::Domain("Directory trust requires a directory".into()));
+        }
+        for entry in self
+            .repository
+            .list()
+            .await?
+            .into_iter()
+            .filter(|row| row.enabled)
+        {
+            self.configuration(&entry.client_type)?
+                .trust_directory(&entry.client_key, &directory)
+                .await?;
+        }
+        Ok(())
     }
 
     pub fn initialize_private_directory(&self, directory: &std::path::Path) -> Result<()> {
