@@ -3,7 +3,7 @@
 x-local-hosts: &local-hosts
   - "pontia.dev=${E2E_CLOUD_IP:?Use scripts/docker-e2e}"
   - "app.pontia.dev=${E2E_DASHBOARD_IP:?Use scripts/docker-e2e}"
-  - "__probe.docker-e2e.p.pontia.dev=${E2E_EDGE_IP:?Use scripts/docker-e2e}"
+  - "probe.docker-e2e.p.pontia.dev=${E2E_EDGE_IP:?Use scripts/docker-e2e}"
   - "docker-e2e.edge.pontia.dev=${E2E_EDGE_IP:?Use scripts/docker-e2e}"
 
 x-preview-certificate: &preview-certificate

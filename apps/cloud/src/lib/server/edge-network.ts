@@ -462,7 +462,7 @@ export function previewBase(controlHostname: string, zone: string) {
 export async function probePreview(base: string, tunnelUrl: string) {
   const port = Number(new URL(tunnelUrl).port || 443);
   const response = await fetch(
-    `https://${edgeAuthority("__probe." + base, port)}/__pontia_preview_health`,
+    `https://${edgeAuthority("probe." + base, port)}/__pontia_preview_health`,
     {
       redirect: "manual",
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),

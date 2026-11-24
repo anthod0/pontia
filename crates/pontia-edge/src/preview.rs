@@ -110,7 +110,7 @@ async fn dispatch(State(hosts): State<Hosts>, req: Request) -> Response {
     else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    if label == "__probe"
+    if label == "probe"
         && req.method() == Method::GET
         && req.uri().path() == "/__pontia_preview_health"
     {
