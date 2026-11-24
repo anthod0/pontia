@@ -233,7 +233,7 @@ impl HelperService {
             }
             _ => None,
         };
-        let (client_type, client_key, model, reasoning_effort, instructions) =
+        let (client_type, client_key, model, reasoning_effort, instructions, mode) =
             if let Some((id, profile)) = &profile {
                 let (Some(client_type), Some(client_key), Some(model)) =
                     (&profile.client_type, &profile.client_key, &profile.model)
@@ -253,12 +253,16 @@ impl HelperService {
                     model,
                     &profile.reasoning_effort,
                     instructions,
+                    profile.mode,
                 )
             } else {
-                let instructions = if retrieval {
-                    include_str!("helpers/retrieval.md")
+                let (instructions, mode) = if retrieval {
+                    (
+                        include_str!("helpers/retrieval.md"),
+                        pontia_core::SessionMode::Restricted,
+                    )
                 } else {
-                    HELPER_INSTRUCTIONS
+                    (HELPER_INSTRUCTIONS, pontia_core::SessionMode::Default)
                 };
                 (
                     &bot.client_type,
@@ -266,6 +270,7 @@ impl HelperService {
                     &bot.model,
                     &bot.reasoning_effort,
                     instructions.into(),
+                    mode,
                 )
             };
         self.conversation.require_helper_client(client_type)?;
@@ -277,11 +282,7 @@ impl HelperService {
                 model,
                 ownership.clone(),
                 &instructions,
-                if retrieval {
-                    pontia_core::SessionMode::Restricted
-                } else {
-                    pontia_core::SessionMode::Default
-                },
+                mode,
             )
             .await?;
         request.reasoning_effort = reasoning_effort.clone();

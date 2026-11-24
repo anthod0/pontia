@@ -358,6 +358,7 @@ function agentProfile(
     client_key: client,
     model,
     reasoning_effort: null,
+    use_yolo: false,
     system_prompt: `You are ${name}. ${description}`,
     created_at: ago(60 * 24 * 10),
     updated_at: ago(60 * 24 * 2),

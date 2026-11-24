@@ -273,7 +273,8 @@ CREATE TABLE agent_profiles (
   system_prompt TEXT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  reasoning_effort TEXT CHECK (reasoning_effort IS NULL OR model IS NOT NULL)
+  reasoning_effort TEXT CHECK (reasoning_effort IS NULL OR model IS NOT NULL),
+  use_yolo INTEGER NOT NULL DEFAULT 0 CHECK (use_yolo IN (0, 1))
 );
 
 CREATE TABLE agent_bindings (

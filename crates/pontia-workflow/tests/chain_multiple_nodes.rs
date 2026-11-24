@@ -40,6 +40,7 @@ impl SessionCreator for SequencedSessionCreator {
         id: &str,
     ) -> pontia_workflow::Result<pontia_workflow::ProfileSessionConfig> {
         Ok(pontia_workflow::ProfileSessionConfig {
+            mode: Default::default(),
             client_type: "pi".into(),
             model: Some(format!("{id}-model")),
             reasoning_effort: None,

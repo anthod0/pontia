@@ -11,6 +11,7 @@ pub struct AgentProfileWriteRecord {
     pub client_key: Option<String>,
     pub model: Option<String>,
     pub reasoning_effort: Option<String>,
+    pub use_yolo: bool,
     pub system_prompt: Option<String>,
 }
 
@@ -25,9 +26,9 @@ impl SqliteAgentProfileRepository {
     }
 
     pub async fn create(&self, record: AgentProfileWriteRecord) -> Result<()> {
-        sqlx::query("INSERT INTO agent_profiles (profile_id, name, description, client_type, client_key, model, reasoning_effort, system_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        sqlx::query("INSERT INTO agent_profiles (profile_id, name, description, client_type, client_key, model, reasoning_effort, system_prompt, use_yolo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(record.profile_id).bind(record.name).bind(record.description)
-            .bind(record.client_type).bind(record.client_key).bind(record.model).bind(record.reasoning_effort).bind(record.system_prompt)
+            .bind(record.client_type).bind(record.client_key).bind(record.model).bind(record.reasoning_effort).bind(record.system_prompt).bind(record.use_yolo)
             .execute(&self.pool).await?;
         Ok(())
     }
@@ -43,9 +44,9 @@ impl SqliteAgentProfileRepository {
             return Ok(None);
         };
         let changed = description != record.description;
-        sqlx::query("UPDATE agent_profiles SET name=?, description=?, client_type=?, client_key=?, model=?, reasoning_effort=?, system_prompt=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE profile_id=?")
+        sqlx::query("UPDATE agent_profiles SET name=?, description=?, client_type=?, client_key=?, model=?, reasoning_effort=?, system_prompt=?, use_yolo=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE profile_id=?")
             .bind(record.name).bind(record.description).bind(record.client_type).bind(record.client_key)
-            .bind(record.model).bind(record.reasoning_effort).bind(record.system_prompt).bind(record.profile_id)
+            .bind(record.model).bind(record.reasoning_effort).bind(record.system_prompt).bind(record.use_yolo).bind(record.profile_id)
             .execute(&mut *tx).await?;
         tx.commit().await?;
         Ok(Some(changed))

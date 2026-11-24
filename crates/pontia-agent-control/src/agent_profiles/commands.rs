@@ -16,6 +16,7 @@ impl AgentProfileService {
     ) -> Result<()> {
         validate_request(&self.clients, request)?;
         if let (Some(client), Some(key)) = (&request.client_type, &request.client_key) {
+            self.validate_yolo(client, key, request.use_yolo)?;
             if validate_model && let Some(model) = &request.model {
                 return crate::agent_clients::AgentClientService::new(
                     self.pool.clone(),
@@ -141,6 +142,7 @@ impl From<UpsertAgentProfileRequest> for AgentProfileWriteRecord {
             client_key: request.client_key,
             model: request.model,
             reasoning_effort: request.reasoning_effort,
+            use_yolo: request.use_yolo,
             system_prompt: request.system_prompt,
         }
     }

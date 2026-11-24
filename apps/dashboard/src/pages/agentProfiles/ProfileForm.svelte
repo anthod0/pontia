@@ -12,6 +12,7 @@
   import { Button } from '$lib/components/ui/button/index.js'
   import { Input } from '$lib/components/ui/input/index.js'
   import { Label } from '$lib/components/ui/label/index.js'
+  import { Switch } from '$lib/components/ui/switch/index.js'
   import { Textarea } from '$lib/components/ui/textarea/index.js'
   import * as Select from '$lib/components/ui/select/index.js'
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
@@ -156,6 +157,11 @@
   </div>
   {#if draft.client_type && !selectedClient}<p role="status" class="-mt-2 text-sm text-muted-foreground">{$t('profiles.clientModelUnavailable')}</p>{/if}
   {#if errors.model}<p role="alert" class="-mt-2 text-sm text-destructive">{errors.model}</p>{/if}
+
+  <div class="flex items-center gap-2">
+    <Switch id={`${id}-yolo`} bind:checked={draft.use_yolo} disabled={saving} />
+    <Label for={`${id}-yolo`}>{$t('profiles.useYolo')}</Label>
+  </div>
 
   <div class="grid gap-2">
     <Label for={`${id}-prompt`}>{$t('profiles.systemPrompt')}</Label>

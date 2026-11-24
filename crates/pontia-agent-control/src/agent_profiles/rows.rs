@@ -11,6 +11,7 @@ impl From<AgentProfileRow> for AgentProfileView {
             client_key: row.client_key,
             model: row.model,
             reasoning_effort: row.reasoning_effort,
+            use_yolo: row.use_yolo,
             system_prompt: row.system_prompt,
             created_at: row.created_at,
             updated_at: row.updated_at,
