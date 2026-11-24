@@ -11,7 +11,7 @@
   <p>English · <a href="README.zh-CN.md">简体中文</a></p>
 </div>
 
-Leave your desk, not your agents. Pontia lets you run coding agents such as pi, Codex, Claude Code, and Grok Build on your own device, then check in, approve, and steer every session from any browser, including your phone. Pontia is free and open source.
+Leave your desk, not your agents. Pontia lets you run coding agents such as pi, Codex, Claude Code, Grok Build, Google Antigravity, and Kiro on your own device, then check in, approve, and steer every session from any browser, including your phone. Pontia is free and open source.
 
 <p align="center">
   <img src="apps/cloud/static/client-logos/pi.svg" height="28" alt="pi">
@@ -21,6 +21,10 @@ Leave your desk, not your agents. Pontia lets you run coding agents such as pi, 
   <img src="apps/cloud/static/client-logos/claude-code.svg" height="28" alt="Claude Code">
   &nbsp;&nbsp;
   <img src="apps/cloud/static/client-logos/grok-build.svg" height="28" alt="Grok Build">
+  &nbsp;&nbsp;
+  <img src="apps/cloud/static/client-logos/google-antigravity.svg" height="28" alt="Google Antigravity">
+  &nbsp;&nbsp;
+  <img src="apps/cloud/static/client-logos/kiro.svg" height="28" alt="Kiro">
 </p>
 
 ![Pontia Dashboard showing recent sessions, a coding conversation, tool execution, and test results.](https://files.pontia.dev/cloud/dashboard-1280-9a7dd255904a.webp)
@@ -33,7 +37,7 @@ Leave your desk, not your agents. Pontia lets you run coding agents such as pi, 
 - 🤖 **Hand off work to a Bot** — chat with a Bot on your device the way you would with an assistant. It starts Sessions for each task, runs several at once, reports back, and remembers your projects across long conversations.
 - 🔒 **Encrypted end to end** — only your browser and your device can read a session. Use an official Edge or run your own; either way, the Edge only relays ciphertext.
 
-On Linux and macOS, you can choose pi, Codex, Claude Code, or Grok Build (via ACP) for your Bots and helpers.
+On Linux and macOS, you can choose pi, Codex, Claude Code, Grok Build, Google Antigravity, or Kiro (the last three via ACP) for your Bots and helpers.
 
 ## Quick start
 
@@ -48,7 +52,9 @@ Install the clients you plan to use before initialization:
 - **pi:** the `pi` CLI and `tmux`;
 - **Codex:** the `codex` CLI;
 - **Claude Code:** Node.js LTS with npm, and a signed-in Claude Code;
-- **Grok Build (ACP):** `grok` on the service user’s PATH, enabled after initialization as described in [Agent Clients](https://pontia.dev/docs/agent-clients#enable-an-acp-agent).
+- **Grok Build (ACP):** `grok` on the service user’s PATH, enabled after initialization as described in [Agent Clients](https://pontia.dev/docs/agent-clients#enable-an-acp-agent);
+- **Google Antigravity (ACP):** `agy` on the service user’s PATH, enabled after initialization in [Agent Clients](https://pontia.dev/docs/agent-clients);
+- **Kiro (ACP):** `kiro-cli` on the service user’s PATH, signed in with `kiro-cli login`, and enabled after initialization in [Agent Clients](https://pontia.dev/docs/agent-clients).
 
 ### Initialize
 

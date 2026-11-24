@@ -132,7 +132,7 @@
   "faq_privacy_answer": "Dashboard の通信は、ブラウザーとデバイスの間でエンドツーエンドで暗号化されます。Edge は暗号文を中継するだけで、Pontia Cloud は通信経路に含まれません。",
   "faq_security_link": "セキュリティ",
   "faq_agents_question": "Pontia はどのコーディングエージェントに対応していますか？",
-  "faq_agents_answer": "Pontia は Pi、Codex、Claude Code、Grok Build と連携します。各エージェントは独自のログイン、モデル、サンドボックスを保持し、利用できる操作はクライアントによって異なります。",
+  "faq_agents_answer": "Pontia は Pi、Codex、Claude Code、Grok Build、Google Antigravity、Kiro と連携します。各エージェントは独自のログイン、モデル、サンドボックスを保持し、利用できる操作はクライアントによって異なります。",
   "faq_platforms_question": "どのプラットフォームに対応していますか？",
   "faq_platforms_answer": "Pontia は x86_64 および ARM64 の Linux と、macOS 11 以降で動作します。Dashboard は最新のデスクトップおよびモバイルブラウザーで使用でき、スマートフォンのホーム画面にインストールできます。",
   "faq_getting_started_link": "はじめに",
