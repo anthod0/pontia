@@ -659,14 +659,16 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
           (client) => client.client_type === type && client.client_key === key,
         )?.version ?? null,
       fetched_at: Date.now(),
-      models: device.data.models.map((model, index) => ({
-        ...model,
-        reasoning_efforts:
-          type === "pi"
-            ? ["off", "low", "medium", "high"].map((id) => ({ id, name: id, description: "" }))
-            : [],
-        default_reasoning_effort: type === "pi" && index === 0 ? "medium" : null,
-      })),
+      models: [...device.data.models, ...(device.data.clientModels[type] ?? [])].map(
+        (model, index) => ({
+          ...model,
+          reasoning_efforts:
+            type === "pi"
+              ? ["off", "low", "medium", "high"].map((id) => ({ id, name: id, description: "" }))
+              : [],
+          default_reasoning_effort: type === "pi" && index === 0 ? "medium" : null,
+        }),
+      ),
       default_model: device.data.models[0]?.id ?? null,
     }),
   ],

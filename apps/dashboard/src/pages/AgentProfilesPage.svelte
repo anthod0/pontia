@@ -17,6 +17,8 @@
   import { useSettingsDetail } from '../components/settings/settingsDetail'
   import ProfileForm from './agentProfiles/ProfileForm.svelte'
   import DeleteProfileDialog from './agentProfiles/DeleteProfileDialog.svelte'
+  import TemplateCards from './agentProfiles/TemplateCards.svelte'
+  import type { ProfileTemplate } from './agentProfiles/templates'
 
   const device = useDeviceRuntime()
   const profiles = device.agentProfileQueries.createAgentProfilesQuery()
@@ -28,6 +30,8 @@
   // `null` selects nothing; `''` opens the new-profile editor.
   let selectedId = $state<string | null>(null)
   let saving = $state(false)
+  // A template chosen from the empty state, applied when the new-profile editor opens.
+  let startTemplate = $state<ProfileTemplate>()
   let deleting = $state<AgentProfileView | null>(null)
   const selected = $derived(profiles.data?.find((profile) => profile.profile_id === selectedId))
   const editorOpen = $derived(selectedId === '' || !!selected)
@@ -52,6 +56,11 @@
     settingsDetail?.set(null)
   })
 
+  function openNew(template?: ProfileTemplate) {
+    startTemplate = template
+    selectedId = ''
+  }
+
   function clientName(profile: AgentProfileView) {
     return clients.data?.find((client) => client.client_type === profile.client_type && client.client_key === profile.client_key)?.name
       ?? `${profile.client_type} / ${profile.client_key}`
@@ -59,12 +68,12 @@
 </script>
 
 {#snippet newProfileAction()}
-  <Button class="mr-3 h-10 shrink-0 px-3 max-md:mt-2 md:hidden" disabled={creationDisabled} onclick={() => selectedId = ''}><PlusIcon data-icon="inline-start" />{$t('profiles.newShort')}</Button>
+  <Button class="mr-3 h-10 shrink-0 px-3 max-md:mt-2 md:hidden" disabled={creationDisabled} onclick={() => openNew()}><PlusIcon data-icon="inline-start" />{$t('profiles.newShort')}</Button>
 {/snippet}
 
 <section class="space-y-6">
   <div class="flex flex-wrap justify-end gap-2 max-md:hidden {editorOpen ? 'max-lg:hidden' : ''}">
-    <Button disabled={creationDisabled} onclick={() => selectedId = ''}><PlusIcon data-icon="inline-start" />{$t('profiles.new')}</Button>
+    <Button disabled={creationDisabled} onclick={() => openNew()}><PlusIcon data-icon="inline-start" />{$t('profiles.new')}</Button>
   </div>
 
   {#if profiles.isError}
@@ -79,6 +88,13 @@
         <Empty.Description>{$t('profiles.emptyDescription')}</Empty.Description>
       </Empty.Header>
     </Empty.Root>
+    <div class="grid gap-3">
+      <div class="grid gap-1">
+        <p class="text-sm font-medium text-heading">{$t('profiles.templatesTitle')}</p>
+        <p class="text-xs text-muted-foreground">{$t('profiles.templatesEmptyHint')}</p>
+      </div>
+      <TemplateCards clients={clients.data ?? []} onchoose={openNew} class="lg:grid-cols-3" />
+    </div>
   {:else}
     <div class="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
       <nav aria-label={$t('profiles.title')} class="space-y-1 {editorOpen ? 'max-lg:hidden' : ''}">
@@ -118,7 +134,7 @@
             </Alert.Root>
           {/if}
           {#key selectedId}
-            <ProfileForm profile={selected} clients={enabledClients} bind:saving
+            <ProfileForm profile={selected} clients={enabledClients} allClients={clients.data ?? []} template={selected ? undefined : startTemplate} bind:saving
               oncancel={selected ? undefined : () => selectedId = null}
               onsaved={(saved) => { selectedId = saved.profile_id; toast.success($t('profiles.saved')) }}
               ondelete={(profile) => deleting = profile} />
