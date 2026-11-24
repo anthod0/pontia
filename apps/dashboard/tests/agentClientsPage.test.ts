@@ -42,9 +42,13 @@ beforeEach(() => {
   api.listAgentClients.mockResolvedValue([peer("grok"), pi]);
 });
 
-test("a client shows its settings without a configuration editor or effective configuration", async () => {
+test("a client shows its settings without a configuration editor or internal record details", async () => {
   api.listAgentClients.mockResolvedValue([
-    { ...pi, detection: { status: "not_detected", detail: null } },
+    {
+      ...pi,
+      detection: { status: "not_detected", detail: null },
+      updated_at: "2026-11-24T09:10:27Z",
+    },
   ]);
   const user = userEvent.setup();
   render(AgentClientsPage);
@@ -52,6 +56,9 @@ test("a client shows its settings without a configuration editor or effective co
   expect(screen.getByRole("switch", { name: "Enabled" })).toBeEnabled();
   expect(screen.queryByRole("textbox")).toBeNull();
   expect(screen.queryByText("Effective configuration")).toBeNull();
+  expect(screen.queryByText(/Database record/)).toBeNull();
+  expect(screen.queryByText(/pi \/ pi/)).toBeNull();
+  expect(screen.queryByText("opaque-pi")).toBeNull();
 });
 
 test("disable sends only the enabled setting and reset removes the entire selected record", async () => {
