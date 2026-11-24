@@ -301,6 +301,11 @@ fn extract_binary(bytes: &[u8], binary: &str, destination: &Path) -> Result<(), 
 }
 
 impl PreparedUpdate {
+    /// The product version from the verified release tag, without its leading `v`.
+    pub fn product_version(&self) -> &str {
+        &self.version[1..]
+    }
+
     pub fn directory(&self) -> &Path {
         &self.directory
     }
@@ -541,6 +546,7 @@ mod tests {
     fn installs_both_binaries_before_restarting_and_releases_lock() {
         let root = tempfile::tempdir().unwrap();
         let update = prepared(root.path());
+        assert_eq!(update.product_version(), "1.2.3");
         assert!(lock_directory(root.path()).is_err());
         let mut calls = 0;
         update

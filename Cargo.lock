@@ -2754,6 +2754,7 @@ dependencies = [
  "pontia-core",
  "pontia-runtime",
  "pontia-storage-sqlite",
+ "pontia-version",
  "serde_json",
  "sqlx",
  "tempfile",
@@ -2813,6 +2814,7 @@ dependencies = [
  "pontia-client-pi",
  "pontia-config",
  "pontia-core",
+ "pontia-version",
  "serde_json",
 ]
 

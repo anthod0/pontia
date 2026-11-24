@@ -98,7 +98,7 @@ fn claude_detects_native_client_or_sdk_host_with_node() {
         vars: &vars,
         pontia_home: root.path(),
     };
-    let integration = pontia_client_claude::setup::integration();
+    let integration = pontia_client_claude::setup::integration("1.0.0");
     assert_eq!(
         integration.detect(&context).status,
         DetectionStatus::NotDetected

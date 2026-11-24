@@ -87,7 +87,7 @@ pontia setup codex
 pontia setup claude
 ```
 
-O Pi exige um `pi` instalado; a configuração dele instala o `@pontia/pi-client-plugin`. O Codex exige um CLI instalado com suporte a daemon; a configuração dele ativa a inicialização automática, verifica a conexão e instala o launcher e o PATH do shell. O Claude Code exige Node.js LTS; a configuração instala o host padrão quando ausente e verifica um host existente ou selecionado explicitamente.
+O Pi exige um `pi` instalado; a configuração dele instala o `@pontia/pi-client-plugin`. O Codex exige um CLI instalado com suporte a daemon; a configuração dele ativa a inicialização automática, verifica a conexão e instala o launcher e o PATH do shell. O Claude Code exige Node.js LTS. A configuração instala o host padrão na mesma versão do Pontia ou verifica o host que você selecionou explicitamente.
 
 Esses comandos salvam os caminhos de runtime, configuram o serviço do Pontia e habilitam os Clients selecionados. Para o Codex, abra um novo terminal ou execute o comando de ativação exibido. Conclua a autenticação usando o fluxo de login de cada Client; a configuração não faz login nem altera credenciais de modelo, configurações de sandbox ou política de aprovação.
 

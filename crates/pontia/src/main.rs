@@ -423,7 +423,7 @@ async fn run_update() -> Result<bool, String> {
             None
         };
         let Some(update) = update::prepare().await? else {
-            maintain_updated_clients(config.as_ref(), &manager).await?;
+            maintain_updated_clients(config.as_ref(), &manager, pontia_version::version()).await?;
             return Ok(true);
         };
         if config.is_some() && manager.running_executable()? != update.daemon_path() {
@@ -432,14 +432,14 @@ async fn run_update() -> Result<bool, String> {
         if config.is_none() {
             update.ensure_no_unmanaged_daemon()?;
         }
-        update.install(|| {
+        let version = update.install(|| {
             if let Some(config) = &config {
                 eprintln!("Restarting Pontia and waiting for it to become healthy...");
                 Lifecycle::new(&manager, &FileDefinitionStore, &HttpHealthProbe).restart(config)?;
             }
             Ok(())
         })?;
-        maintain_updated_clients(config.as_ref(), &manager).await?;
+        maintain_updated_clients(config.as_ref(), &manager, &version).await?;
         Ok(true)
     }
     #[cfg(target_os = "macos")]
@@ -450,7 +450,7 @@ async fn run_update() -> Result<bool, String> {
         // so keep treating stopped or failed loaded jobs as managed during replacement.
         let config = update_service_config(&manager, &user_home()?, true)?;
         let Some(update) = update::prepare().await? else {
-            maintain_updated_clients(config.as_ref(), &manager).await?;
+            maintain_updated_clients(config.as_ref(), &manager, pontia_version::version()).await?;
             return Ok(true);
         };
         if config.is_some() && manager.running_executable()? != update.daemon_path() {
@@ -459,14 +459,14 @@ async fn run_update() -> Result<bool, String> {
         if config.is_none() {
             update.ensure_no_unmanaged_daemon()?;
         }
-        update.install(|| {
+        let version = update.install(|| {
             if let Some(config) = &config {
                 eprintln!("Restarting Pontia and waiting for it to become healthy...");
                 Lifecycle::new(&manager, &FileDefinitionStore, &HttpHealthProbe).restart(config)?;
             }
             Ok(())
         })?;
-        maintain_updated_clients(config.as_ref(), &manager).await?;
+        maintain_updated_clients(config.as_ref(), &manager, &version).await?;
         Ok(true)
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -479,6 +479,7 @@ async fn run_update() -> Result<bool, String> {
 async fn maintain_updated_clients(
     config: Option<&AppConfig>,
     manager: &impl ServiceManager,
+    version: &str,
 ) -> Result<(), String> {
     let Some(config) = config else {
         eprintln!("Client integration maintenance skipped: no managed service was restored.");
@@ -496,9 +497,13 @@ async fn maintain_updated_clients(
     for (name, path) in manager.persisted_client_paths(&definition)? {
         vars.insert(name, path.to_string_lossy().into_owned());
     }
+    vars.insert(
+        "PONTIA_HOME".into(),
+        config.pontia_home.display().to_string(),
+    );
     pontia::client_maintenance::maintain_enabled(
         &entries,
-        &pontia_clients::integrations(),
+        &pontia_clients::integrations_for_version(version),
         &vars,
         &home,
         &ProcessCommandRunner,

@@ -32,10 +32,13 @@ impl CommandRunner for PackageRunner {
     fn run(&self, program: &str, args: &[String]) -> Result<CommandOutput, String> {
         let mut args = args.to_vec();
         if program == "npm" {
-            for arg in &mut args {
-                if arg == "@pontia/claude-client" {
-                    *arg = self.package.clone();
-                }
+            if args[0] == "install" {
+                let expected = format!("@pontia/claude-client@{}", pontia_version::version());
+                let package = args
+                    .iter_mut()
+                    .find(|arg| **arg == expected)
+                    .expect("install the release package");
+                *package = self.package.clone();
             }
             args.extend(["--cache".into(), self.cache.to_str().unwrap().into()]);
         }
@@ -58,7 +61,7 @@ async fn npm_install_reports_authentication_retries_without_fabricating_turns() 
         ("PONTIA_HOME".into(), pontia.to_str().unwrap().into()),
         ("CLAUDE_CONFIG_DIR".into(), config.to_str().unwrap().into()),
     ]);
-    let setup = pontia_client_claude::setup::integration()
+    let setup = pontia_client_claude::setup::integration(pontia_version::version())
         .prepare(&vars, root.path(), &runner)
         .unwrap();
     setup.preflight(&runner).unwrap();

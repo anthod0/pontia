@@ -28,7 +28,7 @@ pontia init
 
 之后如需安装或修复，运行 `pontia setup claude`。该命令也会启用 Claude Code Client。
 
-首次设置时，Pontia 会从 npm 将 `@pontia/claude-client` 包及其 Claude Agent SDK 依赖安装到 `$PONTIA_HOME/clients/claude-client`。这需要联网，并占用数百 MB 磁盘空间。之后再次设置会复用可用的安装。
+首次设置时，Pontia 会从 npm 将 `@pontia/claude-client` 包及其 Claude Agent SDK 依赖安装到 `$PONTIA_HOME/clients/claude-client`。这需要联网，并占用数百 MB 磁盘空间。再次设置时，如果已安装的客户端可用且版本与 Pontia 一致，就会直接复用。
 
 设置会为 Pontia 服务保存 Node.js 和 Claude Code 配置路径。
 
@@ -52,14 +52,7 @@ PONTIA_CLAUDE_HOST_PATH=/absolute/path/to/node_modules/@pontia/claude-client/dis
 
 ## 更新客户端
 
-`pontia update` 不会更新 Claude Code 客户端。要更新它，请先退出活动的 Claude Code Session，然后运行：
-
-```sh
-npm install --prefix "${PONTIA_HOME:-$HOME/.pontia}/clients/claude-client" --omit=dev @pontia/claude-client@latest
-pontia setup claude
-```
-
-设置会检查更新后的安装并启用该 Client。
+如果运行中的托管服务已启用 Claude Code，`pontia update` 会将默认安装的 `@pontia/claude-client` 更新到与 Pontia 相同的版本。如果你设置了 `PONTIA_CLAUDE_HOST_PATH`，请自行将该安装更新到与 Pontia 匹配的版本。
 
 ## Claude Code Session 的运行方式
 
