@@ -36,7 +36,7 @@ use tokio_tungstenite::{
     },
 };
 
-use crate::protocol;
+use crate::protocol::{self, HeaderDirection, TunnelRoute};
 
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
 const RESPONSE_HEAD_TIMEOUT: Duration = Duration::from_secs(30);
@@ -83,23 +83,83 @@ impl DeviceRequestHandler {
 #[derive(Clone)]
 pub struct TunnelConnection {
     sender: Arc<Mutex<SendRequest<Body>>>,
-    streams: Arc<Semaphore>,
+    e2e_streams: Arc<Semaphore>,
+    preview_http_streams: Arc<Semaphore>,
+    preview_ws_streams: Arc<Semaphore>,
     unavailable: Arc<AtomicBool>,
 }
 
 impl TunnelConnection {
     pub async fn request(&self, request: Request<Body>) -> Result<Response<Body>, TunnelError> {
+        self.request_e2e(request).await
+    }
+
+    pub async fn request_e2e(&self, request: Request<Body>) -> Result<Response<Body>, TunnelError> {
+        self.send(request, TunnelRoute::E2e).await
+    }
+
+    pub async fn request_preview_http(
+        &self,
+        request: Request<Body>,
+    ) -> Result<Response<Body>, TunnelError> {
+        let Some(route @ TunnelRoute::PreviewHttp { .. }) = TunnelRoute::parse(request.uri())
+        else {
+            return Err(TunnelError::InvalidRequest);
+        };
+        self.send(request, route).await
+    }
+
+    pub async fn open_preview_ws(
+        &self,
+        request: Request<Body>,
+    ) -> Result<Response<Body>, TunnelError> {
+        let Some(route @ TunnelRoute::PreviewWs { .. }) = TunnelRoute::parse(request.uri()) else {
+            return Err(TunnelError::InvalidRequest);
+        };
+        self.send(request, route).await
+    }
+
+    async fn send(
+        &self,
+        request: Request<Body>,
+        route: TunnelRoute,
+    ) -> Result<Response<Body>, TunnelError> {
         if self.unavailable.load(Ordering::Acquire) {
             return Err(TunnelError::Unavailable);
         }
-        let (parts, body) = request.into_parts();
+        let (pool, head_timeout) = match route {
+            TunnelRoute::E2e => {
+                if !protocol::canonical_tunnel_uri(request.uri()) {
+                    return Err(TunnelError::InvalidRequest);
+                }
+                (&self.e2e_streams, RESPONSE_HEAD_TIMEOUT)
+            }
+            TunnelRoute::PreviewHttp { .. } => {
+                (&self.preview_http_streams, Duration::from_secs(60))
+            }
+            TunnelRoute::PreviewWs { .. } => (&self.preview_ws_streams, Duration::from_secs(15)),
+        };
+        let permit = pool.clone().try_acquire_owned().map_err(|_| {
+            if self.unavailable.load(Ordering::Acquire) {
+                TunnelError::Unavailable
+            } else {
+                TunnelError::Overloaded
+            }
+        })?;
+        let permit = Arc::new(permit);
+        let (mut parts, body) = request.into_parts();
+        if route != TunnelRoute::E2e {
+            parts.headers =
+                protocol::tunnel_headers(&parts.headers, route, HeaderDirection::Request);
+        }
         let body_is_empty = body.is_end_stream();
         let invalid_body = Arc::new(AtomicBool::new(false));
-        let (body_finished, mut finished) = oneshot::channel();
+        let (body_finished, finished) = oneshot::channel();
         let request = Request::from_parts(
             parts,
             Body::new(TunnelRequestBody {
                 inner: body,
+                _permit: permit.clone(),
                 finished: if body_is_empty {
                     let _ = body_finished.send(());
                     None
@@ -109,13 +169,6 @@ impl TunnelConnection {
                 invalid: invalid_body.clone(),
             }),
         );
-        let permit = self.streams.clone().try_acquire_owned().map_err(|_| {
-            if self.unavailable.load(Ordering::Acquire) {
-                TunnelError::Unavailable
-            } else {
-                TunnelError::Overloaded
-            }
-        })?;
         let response = {
             let mut sender = self.sender.lock().await;
             sender
@@ -124,33 +177,32 @@ impl TunnelConnection {
                 .map_err(|_| self.connection_error(&invalid_body))?;
             sender.send_request(request)
         };
-        tokio::pin!(response);
-        let response = tokio::select! {
-            result = &mut response => result.map_err(|_| self.connection_error(&invalid_body))?,
-            completed = &mut finished => {
-                if completed.is_err() {
-                    response.await.map_err(|_| self.connection_error(&invalid_body))?
-                } else {
-                    timeout(RESPONSE_HEAD_TIMEOUT, response)
-                        .await
-                        .map_err(|_| TunnelError::Timeout)?
-                        .map_err(|_| self.connection_error(&invalid_body))?
-                }
+        let head_deadline = async {
+            if route == TunnelRoute::E2e && finished.await.is_err() {
+                std::future::pending::<()>().await;
             }
+            tokio::time::sleep(head_timeout).await;
+        };
+        let response = tokio::select! {
+            result = response => result.map_err(|_| self.connection_error(&invalid_body))?,
+            () = head_deadline => return Err(TunnelError::Timeout),
         };
         let (parts, body) = response.into_parts();
+        let permit = (!body.is_end_stream()).then_some(permit);
         Ok(Response::from_parts(
             parts,
             Body::new(PermitBody {
                 inner: body,
-                permit: Some(permit),
+                permit,
             }),
         ))
     }
 
     pub fn mark_unavailable(&self) {
         self.unavailable.store(true, Ordering::Release);
-        self.streams.close();
+        self.e2e_streams.close();
+        self.preview_http_streams.close();
+        self.preview_ws_streams.close();
     }
 
     fn connection_error(&self, invalid_body: &AtomicBool) -> TunnelError {
@@ -167,6 +219,7 @@ impl TunnelConnection {
 type BoxError = Box<dyn StdError + Send + Sync>;
 
 struct TunnelRequestBody {
+    _permit: Arc<OwnedSemaphorePermit>,
     inner: Body,
     finished: Option<oneshot::Sender<()>>,
     invalid: Arc<AtomicBool>,
@@ -212,7 +265,7 @@ impl HttpBody for TunnelRequestBody {
 
 struct PermitBody {
     inner: Incoming,
-    permit: Option<OwnedSemaphorePermit>,
+    permit: Option<Arc<OwnedSemaphorePermit>>,
 }
 
 impl HttpBody for PermitBody {
@@ -303,7 +356,9 @@ pub async fn connect_edge(
     Ok((
         TunnelConnection {
             sender: Arc::new(Mutex::new(sender)),
-            streams: Arc::new(Semaphore::new(protocol::MAX_CONCURRENT_STREAMS)),
+            e2e_streams: Arc::new(Semaphore::new(64)),
+            preview_http_streams: Arc::new(Semaphore::new(128)),
+            preview_ws_streams: Arc::new(Semaphore::new(32)),
             unavailable: Arc::new(AtomicBool::new(false)),
         },
         TunnelRuntime { driver, bridge },
@@ -341,9 +396,9 @@ async fn handle_device_request(
     handler: DeviceRequestHandler,
     request: Request<Incoming>,
 ) -> Response<Body> {
-    if !valid_device_request(&request) {
+    let Some(route) = device_route(&request) else {
         return invalid_response();
-    }
+    };
     let (mut parts, body) = request.into_parts();
     let origin = parts
         .uri
@@ -353,13 +408,14 @@ async fn handle_device_request(
         .parse::<Uri>()
         .expect("validated tunnel URI is valid origin-form");
     parts.uri = origin;
-    parts.headers = protocol::request_headers(&parts.headers);
+    parts.headers = protocol::tunnel_headers(&parts.headers, route, HeaderDirection::Request);
     let response = handler
         .handle(Request::from_parts(
             parts,
             Body::new(DeviceRequestBody {
                 inner: body,
-                idle: Box::pin(tokio::time::sleep(REQUEST_BODY_IDLE_TIMEOUT)),
+                idle: (!matches!(route, TunnelRoute::PreviewWs { .. }))
+                    .then(|| Box::pin(tokio::time::sleep(REQUEST_BODY_IDLE_TIMEOUT))),
             }),
         ))
         .await;
@@ -367,13 +423,13 @@ async fn handle_device_request(
     if parts.status.is_informational() || parts.status == StatusCode::SWITCHING_PROTOCOLS {
         return invalid_response();
     }
-    parts.headers = protocol::response_headers(&parts.headers);
+    parts.headers = protocol::tunnel_headers(&parts.headers, route, HeaderDirection::Response);
     Response::from_parts(parts, Body::new(ResponseBody(body)))
 }
 
 struct DeviceRequestBody {
     inner: Incoming,
-    idle: Pin<Box<tokio::time::Sleep>>,
+    idle: Option<Pin<Box<tokio::time::Sleep>>>,
 }
 
 impl HttpBody for DeviceRequestBody {
@@ -393,16 +449,26 @@ impl HttpBody for DeviceRequestBody {
                 .into())))
             }
             Poll::Ready(Some(Ok(frame))) => {
-                self.idle
-                    .as_mut()
-                    .reset(tokio::time::Instant::now() + REQUEST_BODY_IDLE_TIMEOUT);
+                if let Some(idle) = &mut self.idle {
+                    idle.as_mut()
+                        .reset(tokio::time::Instant::now() + REQUEST_BODY_IDLE_TIMEOUT);
+                }
                 Poll::Ready(Some(Ok(frame)))
             }
             Poll::Ready(Some(Err(error))) => Poll::Ready(Some(Err(error.into()))),
             Poll::Ready(None) => Poll::Ready(None),
-            Poll::Pending if self.idle.as_mut().poll(cx).is_ready() => Poll::Ready(Some(Err(
-                io::Error::new(io::ErrorKind::TimedOut, "tunnel request body timed out").into(),
-            ))),
+            Poll::Pending
+                if self
+                    .idle
+                    .as_mut()
+                    .is_some_and(|idle| idle.as_mut().poll(cx).is_ready()) =>
+            {
+                Poll::Ready(Some(Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "tunnel request body timed out",
+                )
+                .into())))
+            }
             Poll::Pending => Poll::Pending,
         }
     }
@@ -450,15 +516,18 @@ impl HttpBody for ResponseBody {
     }
 }
 
-fn valid_device_request(request: &Request<Incoming>) -> bool {
-    protocol::method_allowed(request.method())
-        && request.uri().scheme_str() == Some("https")
-        && request.uri().authority().map(|value| value.as_str()) == Some("pontia-device")
-        && protocol::canonical_tunnel_uri(request.uri())
-        && request
-            .headers()
-            .keys()
-            .all(protocol::request_header_allowed)
+fn device_route(request: &Request<Incoming>) -> Option<TunnelRoute> {
+    let uri = request.uri();
+    let route = TunnelRoute::parse(uri)?;
+    (uri.scheme_str() == Some("https")
+        && uri.authority()?.as_str() == "pontia-device"
+        && route.allows(request.method())
+        && (route != TunnelRoute::E2e
+            || request
+                .headers()
+                .keys()
+                .all(protocol::request_header_allowed)))
+    .then_some(route)
 }
 
 fn invalid_response() -> Response<Body> {

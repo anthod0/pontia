@@ -1,6 +1,8 @@
 mod client;
 pub mod protocol;
 mod transport;
+pub mod ws_frame;
+pub use ws_frame::WsTunnelFrame;
 
 pub use client::RemoteClient;
 pub use transport::{
