@@ -89,3 +89,42 @@ test("a missing attached file loses its download and preview actions", async () 
     unregister();
   }
 });
+
+test.each([
+  ["report.CSV", ","],
+  ["report.tsv", "\t"],
+])(
+  "%s opens as a table, cycles sort order and exposes the original source",
+  async (name, delimiter) => {
+    const source = [
+      ["Item", "Value"],
+      ["Item10", "2.5"],
+      ["Item2", "-1"],
+      ["Item1", "10"],
+    ]
+      .map((row) => row.join(delimiter))
+      .join("\n");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(source)));
+    render(SharedFilePreviewHarness, { paths: [`/tmp/${name}`] });
+    await fireEvent.click(screen.getByRole("button", { name: `Preview ${name}` }));
+    const table = within(await screen.findByRole("table"));
+    const items = () =>
+      table
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) => within(row).getAllByRole("cell")[0].textContent);
+    const value = table.getByRole("button", { name: "Value" });
+    await fireEvent.click(value);
+    expect(items()).toEqual(["Item2", "Item10", "Item1"]);
+    await fireEvent.click(value);
+    expect(items()).toEqual(["Item1", "Item10", "Item2"]);
+    await fireEvent.click(value);
+    expect(items()).toEqual(["Item10", "Item2", "Item1"]);
+    await fireEvent.click(table.getByRole("button", { name: "Item" }));
+    expect(items()).toEqual(["Item1", "Item2", "Item10"]);
+    await fireEvent.click(screen.getByRole("tab", { name: "Source" }));
+    expect(screen.getByRole("tabpanel", { name: "Source" }).textContent).toBe(source);
+    await fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
+    expect(await screen.findByRole("table")).toBeVisible();
+  },
+);

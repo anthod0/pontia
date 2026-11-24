@@ -31,7 +31,8 @@ export function createFilePreview(
   const name = $derived(path.slice(path.lastIndexOf("/") + 1));
   const language = $derived(textFileLanguage(path));
   const htmlPreview = $derived(language === "html" && name.includes("."));
-  const hasPreview = $derived(language === "markdown" || htmlPreview);
+  const delimiter = $derived(/\.csv$/i.test(name) ? "," : /\.tsv$/i.test(name) ? "\t" : null);
+  const hasPreview = $derived(language === "markdown" || htmlPreview || delimiter !== null);
   const key = $derived(downloadKey(target.device.id, target.sessionId, { path }));
   const task = $derived(tasks.current.find((task) => task.key === key));
   const receiving = $derived(task?.status === "receiving");
@@ -178,6 +179,9 @@ export function createFilePreview(
     },
     get htmlPreview() {
       return htmlPreview;
+    },
+    get delimiter() {
+      return delimiter;
     },
     get hasPreview() {
       return hasPreview;

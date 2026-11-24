@@ -6,6 +6,7 @@
   import * as Alert from '$lib/components/ui/alert/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
+  import DelimitedTablePreview from './DelimitedTablePreview.svelte'
   import DeviceProvider from '../../device/DeviceProvider.svelte'
   import { type FilePreviewTarget } from './filePreviewContext'
   import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon'
@@ -105,11 +106,13 @@ const preview = untrack(() => createFilePreview(target, openFile))
         </Empty.Header>
       </Empty.Root>
     {:else if preview.hasPreview}
-      <Tabs.Content value="preview" class={['min-h-0 flex-1', preview.htmlPreview ? 'overflow-hidden' : 'overflow-auto overscroll-contain p-4']} data-file-preview-content>
+      <Tabs.Content value="preview" class={['min-h-0 flex-1', preview.htmlPreview ? 'overflow-hidden' : preview.delimiter ? 'overflow-auto overscroll-contain' : 'overflow-auto overscroll-contain p-4']} data-file-preview-content>
         {#if preview.htmlPreview}
           {#if preview.view === 'preview'}
             <iframe title={$t('files.previewNamed', {name: preview.name})} srcdoc={preview.text} sandbox="allow-scripts allow-forms allow-modals" class="block size-full border-0 bg-white"></iframe>
           {/if}
+        {:else if preview.delimiter}
+          <DelimitedTablePreview text={preview.text} delimiter={preview.delimiter} />
         {:else}
           {#key target.device}
             <DeviceProvider device={target.device}>
