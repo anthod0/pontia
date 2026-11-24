@@ -127,7 +127,7 @@
   "remote_demo_state_finished": "完成",
   "remote_demo_composer": "给 Agent 发消息",
   "remote_demo_send": "发送",
-  "remote_demo_replay": "重新播放演示",
+  "remote_demo_restart": "重新开始",
   "remote_demo_label": "交互演示：同一个 Session 同时显示在终端和手机上",
   "how_pontia_works": "Pontia 的工作原理",
   "agent_clients": "Agent Client",

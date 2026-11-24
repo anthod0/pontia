@@ -2,7 +2,6 @@
 	import { onDestroy, tick } from 'svelte';
 	import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon';
 	import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon';
-	import ArrowCounterClockwiseIcon from 'phosphor-svelte/lib/ArrowCounterClockwiseIcon';
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
 	import EncryptedChannel from './remote/EncryptedChannel.svelte';
 	import SpinnerGapIcon from 'phosphor-svelte/lib/SpinnerGapIcon';
@@ -79,6 +78,13 @@
 		stage?.querySelector<HTMLElement>(`[data-surface='${focusSurface}'] [data-primary]`)?.focus({ preventScroll: true });
 	}
 
+	function handleTerminalKey(event: KeyboardEvent) {
+		if (waiting.kind !== 'approval' || event.altKey || event.ctrlKey || event.metaKey) return;
+		const key = event.key.toLowerCase();
+		if (key === 'y') void update(approve(demo), 'terminal');
+		if (key === 'n') void update(deny(demo), 'terminal');
+	}
+
 	function replay(from: Surface) {
 		void update(start(), from);
 	}
@@ -108,7 +114,8 @@
 		</a>
 
 		<div class="group group-terminal">
-			<div class={['terminal reveal', pulse?.from === 'terminal' && 'sending']} style="--i: 1" data-surface="terminal">
+			<!-- svelte-ignore a11y_no_noninteractive_element_interactions (The group handles approval shortcuts while it or its buttons have focus.) -->
+			<div class={['terminal reveal', pulse?.from === 'terminal' && 'sending']} style="--i: 1" data-surface="terminal" role="group" tabindex="-1" onkeydown={handleTerminalKey}>
 				<div class="terminal-bar" aria-hidden="true"><span class="lights"><i></i><i></i><i></i></span>~/code/atlas — codex</div>
 				<div class="terminal-body" bind:this={terminalFeed}>
 					{#each demo.entries as entry, index (index)}
@@ -133,7 +140,7 @@
 							<span class="t-ghost">{prompts[suggestion]()}</span><kbd>⏎</kbd>
 						</button>
 					{:else if waiting.kind === 'finished'}
-						<button type="button" class="t-input enter" data-primary aria-label={m.remote_demo_replay()} onclick={() => replay('terminal')}>
+						<button type="button" class="t-input enter" data-primary aria-label={m.remote_demo_restart()} onclick={() => replay('terminal')}>
 							<span class="cursor"></span>
 						</button>
 					{/if}
@@ -179,18 +186,22 @@
 					{/if}
 				{/each}
 			</div>
-			<div class="composer">
-				{#if waiting.kind === 'message'}
-					{@const suggestion = waiting.suggestion}
-					<button type="button" class="suggestion" data-primary onclick={() => update(send(demo, suggestion), 'phone')}>
-						<span>{prompts[suggestion]()}</span><span class="send" aria-label={m.remote_demo_send()}><ArrowUpIcon size={11} weight="bold" /></span>
-					</button>
-				{:else if waiting.kind === 'finished'}
-					<button type="button" class="replay" data-primary onclick={() => replay('phone')}><ArrowCounterClockwiseIcon size={12} />{m.remote_demo_replay()}</button>
-				{:else}
+			{#if waiting.kind === 'finished'}
+				<button type="button" class="composer" data-primary aria-label={m.remote_demo_restart()} onclick={() => replay('phone')}>
 					<span class="placeholder">{m.remote_demo_composer()}</span>
-				{/if}
-			</div>
+				</button>
+			{:else}
+				<div class="composer">
+					{#if waiting.kind === 'message'}
+						{@const suggestion = waiting.suggestion}
+						<button type="button" class="suggestion" data-primary onclick={() => update(send(demo, suggestion), 'phone')}>
+							<span>{prompts[suggestion]()}</span><span class="send" aria-label={m.remote_demo_send()}><ArrowUpIcon size={11} weight="bold" /></span>
+						</button>
+					{:else}
+						<span class="placeholder">{m.remote_demo_composer()}</span>
+					{/if}
+				</div>
+			{/if}
 		</div>
 	</div>
 	<p class="sr-only" aria-live="polite">{stateLabel}. {latestReply ? replies[latestReply.id]() : ''}</p>
@@ -253,7 +264,8 @@
 	.t-input:hover .t-ghost { color: #ebdbb2; }
 	.t-input:hover kbd { border-color: #fabd2f; color: #fabd2f; }
 	.t-status { margin: 0 1.3em; padding: 0.7em 0 1em; border-top: 1px dashed #3c3836; color: #83a598; }
-	.cursor { display: inline-block; width: 0.5em; height: 1em; margin-left: 0.4em; vertical-align: -0.15em; background: #ebdbb2; animation: blink 1s steps(1) infinite; }
+	.terminal:focus-within .cursor { display: inline-block; }
+	.cursor { display: none; width: 0.5em; height: 1em; margin-left: 0.4em; vertical-align: -0.15em; background: #ebdbb2; animation: blink 1s steps(1) infinite; }
 
 	.connection { z-index: 1; left: 43.9815%; top: 0; width: 31.0185%; height: 43.5714%; pointer-events: none; }
 
@@ -288,14 +300,12 @@
 	.p-answer { display: flex; align-items: center; justify-content: space-between; gap: 0.6em; padding: 0.6em 0.9em; border: 1px solid var(--border); border-radius: 0.7em; background: var(--background); font-weight: 500; color: var(--coverage-supported); }
 	.p-answer.answer-deny { color: var(--muted-foreground); }
 	.composer { display: flex; flex-shrink: 0; align-items: center; height: 2.4em; margin: 0.8em 0 1.6em; padding: 0 0.3em 0 0.9em; border: 1px solid var(--border); border-radius: 1.2em; background: var(--background); font-size: inherit; transition: border-color 0.2s; }
-	.composer:has(button) { border-color: var(--border-stronger); }
+	button.composer, .composer:has(button) { border-color: var(--border-stronger); }
 	.placeholder { font-size: 0.72em; color: var(--muted-foreground); }
-	.suggestion, .replay { display: flex; flex: 1; align-items: center; gap: 0.5em; min-width: 0; height: 100%; font-size: 0.72em; color: var(--foreground); text-align: left; }
+	.suggestion { display: flex; flex: 1; align-items: center; gap: 0.5em; min-width: 0; height: 100%; font-size: 0.72em; color: var(--foreground); text-align: left; }
 	.suggestion > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; animation: type-in 0.5s steps(18) both; }
 	.send { display: grid; flex-shrink: 0; place-items: center; width: 2.2em; height: 2.2em; border-radius: 50%; background: var(--button); color: white; transition: scale 0.15s var(--ease-out); }
 	.suggestion:hover .send { scale: 1.08; }
-	.replay { color: var(--primary); font-weight: 500; }
-	.replay:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 	.enter { animation: enter 0.36s var(--ease-out) both; }
 

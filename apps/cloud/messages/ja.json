@@ -127,7 +127,7 @@
   "remote_demo_state_finished": "完了",
   "remote_demo_composer": "エージェントにメッセージ",
   "remote_demo_send": "送信",
-  "remote_demo_replay": "デモをもう一度再生",
+  "remote_demo_restart": "最初からやり直す",
   "remote_demo_label": "インタラクティブデモ：ターミナルとスマートフォンに表示される同じ Session",
   "how_pontia_works": "Pontia の仕組み",
   "agent_clients": "Agent Client",
