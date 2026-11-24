@@ -1,4 +1,9 @@
 {
+  "preview.loading": "正在打开预览…",
+  "preview.popupBlocked": "浏览器已拦截预览标签页。",
+  "preview.open": "打开预览",
+  "preview.unavailable": "此 Edge 暂时无法提供预览。",
+  "preview.failed": "无法打开预览，请重试。",
   "common.searchOptions": "搜索选项",
   "common.noMatchingOptions": "没有匹配的选项",
   "bots.avatar": "头像",

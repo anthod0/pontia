@@ -3,6 +3,11 @@
   import ArrowSquareOutIcon from 'phosphor-svelte/lib/ArrowSquareOutIcon'
   import { cn, type WithElementRef } from '$lib/utils.js'
   import type { HTMLAttributes } from 'svelte/elements'
+  import { getContext } from 'svelte'
+  import { deviceContext } from '../../../../device/context'
+  import type { DeviceRuntime } from '../../../../device/runtime'
+  import { parseLocalhostPreviewTarget } from '$lib/localhostPreview'
+  import LocalhostPreviewLink from './localhost-preview-link.svelte'
   import MarkdownCodeBlock from './markdown-code-block.svelte'
   import LocalFileLink from './local-file-link.svelte'
   import { resolveLocalFileLink } from '$lib/downloads/localFilePath'
@@ -24,6 +29,7 @@
 </script>
 
 <script lang="ts">
+  const device = getContext<DeviceRuntime | undefined>(deviceContext)
   let {
     content,
     markdown = false,
@@ -52,10 +58,13 @@
     <SvelteMarkdown source={content} {streaming} {streamId} {renderers}>
       {#snippet link({ href, title, children })}
         {@const local = sessionId ? resolveLocalFileLink(href, linkBase) : null}
+        {@const preview = device?.access.openLocalhostPreview && parseLocalhostPreviewTarget(href)}
         {#if sessionId && local}
           {#key `${sessionId}:${local.path}#${local.anchor}`}
             <LocalFileLink {sessionId} path={local.path} anchor={local.anchor} {title} {children} />
           {/key}
+        {:else if preview && device?.access.openLocalhostPreview}
+          <LocalhostPreviewLink target={preview} open={device.access.openLocalhostPreview} {title} {children} />
         {:else}
           <a {href} {title} target="_blank" rel="noopener noreferrer">
             {@render children?.()}

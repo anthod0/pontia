@@ -304,3 +304,43 @@ export function dashboardBootstrapUrl(handle: string): string {
   if (!isValidDeviceHandle(handle)) throw new Error("Invalid device handle.");
   return `${PUBLIC_DASHBOARD_ORIGIN}/${encodeURIComponent(handle)}`;
 }
+
+export async function requestPreviewToken(
+  device: Pick<PublicDevice, "handle" | "deviceId">,
+  port: number,
+  signal: AbortSignal,
+) {
+  const response = await fetch(
+    `${CLOUD_ORIGIN}/api/dashboard/devices/${encodeURIComponent(device.handle)}/preview-token`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ port }),
+      signal,
+    },
+  );
+  if (!response.ok) throw new CloudRequestError("Cloud request failed.", response.status);
+  const value: unknown = await response.json();
+  const origin =
+    isRecord(value) && typeof value.preview_origin === "string"
+      ? URL.parse(value.preview_origin)
+      : null;
+  const hostPrefix = `${port}-${device.deviceId.replaceAll("-", "")}.`;
+  if (
+    !isRecord(value) ||
+    !origin ||
+    origin.origin !== value.preview_origin ||
+    origin.protocol !== "https:" ||
+    origin.port === "0" ||
+    !origin.hostname.startsWith(hostPrefix) ||
+    !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.p\.pontia\.dev$/.test(
+      origin.hostname.slice(hostPrefix.length),
+    ) ||
+    typeof value.token !== "string" ||
+    !value.token.trim() ||
+    !Number.isSafeInteger(value.expires_at)
+  )
+    throw new CloudRequestError("Cloud returned an invalid preview token response.");
+  return { origin: origin.origin, token: value.token };
+}

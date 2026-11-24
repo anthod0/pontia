@@ -91,6 +91,10 @@ export async function requestPublicDeviceConnection(): Promise<PublicDeviceConne
   throw new CloudRequestError("The mock cloud does not issue device connections.");
 }
 
+export async function launchLocalhostPreview(): Promise<never> {
+  throw new CloudRequestError("The mock Edge has no preview service.", 409);
+}
+
 export function createRemoteConnection(
   { handle }: Pick<PublicDevice, "handle" | "deviceId" | "edgeId">,
   _userId: string,

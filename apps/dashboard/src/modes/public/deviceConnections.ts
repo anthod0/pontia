@@ -1,5 +1,7 @@
+import { toast } from "svelte-sonner";
 import { translate } from "$lib/i18n";
 import { get, writable } from "svelte/store";
+import type { LocalhostPreviewTarget } from "$lib/localhostPreview";
 import { DeviceRuntime } from "../../device/runtime";
 import { createApiAccess } from "./apiAccess";
 import type { RemoteAccess } from "./remoteAccessLoader.svelte";
@@ -89,6 +91,35 @@ export function createDeviceConnections(remote: RemoteAccess) {
     publish();
   }
 
+  async function openPreview(entry: Entry, target: LocalhostPreviewTarget, signal: AbortSignal) {
+    try {
+      const submit = await remote.launchLocalhostPreview(
+        entry,
+        target,
+        signal,
+        translate("preview.loading"),
+      );
+      if (submit) {
+        toast.info(translate("preview.popupBlocked"), {
+          action: { label: translate("preview.open"), onClick: submit },
+        });
+      }
+    } catch (failure) {
+      if (signal.aborted) return;
+      if (failure instanceof remote.CloudRequestError && failure.status === 401) {
+        requireSignIn();
+        return;
+      }
+      toast.error(
+        translate(
+          failure instanceof remote.CloudRequestError && failure.status === 409
+            ? "preview.unavailable"
+            : "preview.failed",
+        ),
+      );
+    }
+  }
+
   async function connect(entry: Entry): Promise<void> {
     if (lifetime.signal.aborted || userId === null) return;
     stop(entry);
@@ -103,7 +134,10 @@ export function createDeviceConnections(remote: RemoteAccess) {
       await connection.connect();
       const id = await connection.uploadStorageScope();
       if (connection.signal.aborted) return;
-      const runtime = new DeviceRuntime(id, createApiAccess(connection), entry.name);
+      const access = createApiAccess(connection, (target) =>
+        openPreview(entry, target, connection.signal),
+      );
+      const runtime = new DeviceRuntime(id, access, entry.name);
       entry.runtime = runtime;
       entry.unsubscribe = runtime.connection.sseStatus.subscribe((status) => {
         if (status !== "open") return;

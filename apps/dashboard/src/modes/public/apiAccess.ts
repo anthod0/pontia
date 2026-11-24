@@ -3,8 +3,12 @@ import type { RemoteAccess } from "./remoteAccessLoader.svelte";
 
 type RemoteConnection = ReturnType<RemoteAccess["createRemoteConnection"]>;
 
-export function createApiAccess(connection: RemoteConnection): ApiAccess {
+export function createApiAccess(
+  connection: RemoteConnection,
+  openLocalhostPreview: ApiAccess["openLocalhostPreview"],
+): ApiAccess {
   return {
+    openLocalhostPreview,
     apiCredentials: "include",
     apiStreamUnavailableMessage: "Remote device access is not ready.",
     apiUrl: (path) => path,

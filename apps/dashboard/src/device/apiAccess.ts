@@ -1,4 +1,7 @@
+import type { LocalhostPreviewTarget } from "../lib/localhostPreview";
+
 export interface ApiAccess {
+  openLocalhostPreview?(target: LocalhostPreviewTarget): void;
   apiCredentials: RequestCredentials;
   apiStreamUnavailableMessage: string;
   apiUrl(path: string): string;

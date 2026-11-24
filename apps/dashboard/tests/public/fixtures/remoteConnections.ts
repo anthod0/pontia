@@ -44,6 +44,7 @@ export function createRemoteAccessFixture() {
   });
   const remote: RemoteAccess = {
     ...cloud,
+    launchLocalhostPreview: vi.fn(),
     retainSavedConnections: vi.fn(),
     deviceListCache: { read: vi.fn(() => null), save: vi.fn() },
     listPublicDevices: vi.fn(async (_signal?: AbortSignal) => ({
