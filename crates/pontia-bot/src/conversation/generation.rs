@@ -16,6 +16,7 @@ fn should_reconcile(event: &DomainEvent) -> bool {
         EventType::SessionReady
             | EventType::SessionExited
             | EventType::SessionError
+            | EventType::SessionCompactionCompleted
             | EventType::SessionContextUsageUpdated
             | EventType::TurnStarted
             | EventType::TurnCompleted
@@ -219,8 +220,16 @@ impl ConversationService {
             .context_usage
             .as_ref()
             .and_then(|usage| usage.max_tokens);
-        let upper = used.is_some_and(|used| self.generation_limits.exceeded(used, window));
-        let lower = if upper {
+        let compacted = self
+            .control
+            .queries()
+            .list_session_events(session)
+            .await?
+            .iter()
+            .any(|event| event.event_type == "session.compaction_completed");
+        let immediate =
+            compacted || used.is_some_and(|used| self.generation_limits.exceeded(used, window));
+        let lower = if immediate {
             false
         } else if used.is_some_and(|used| used > IDLE_TOKEN_LIMIT) {
             let timer = self.records.idle_timer(bot_id).await?;
@@ -244,10 +253,10 @@ impl ConversationService {
             self.records.clear_idle_timer(bot_id).await?;
             false
         };
-        if !upper && !lower {
+        if !immediate && !lower {
             return Ok(());
         }
-        let next = if upper {
+        let next = if immediate {
             Some(self.start_session(&bot, activity).await?)
         } else {
             None
