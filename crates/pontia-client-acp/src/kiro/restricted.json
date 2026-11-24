@@ -1,8 +1,8 @@
 {
   "name": "pontia-restricted",
   "description": "Pontia restricted Session",
-  "tools": ["read", "shell", "web"],
-  "excludedTools": ["load_resource"],
+  "tools": ["read_file", "execute_bash"],
+  "excludedTools": ["load_resource", "@mcp-disclosure", "job_list", "job_cancel"],
   "resources": [],
   "includeMcpJson": false,
   "includePowers": false,
@@ -10,9 +10,7 @@
     "rules": [
       { "capability": "skill", "match": ["**"], "effect": "deny" },
       { "capability": "fs_read", "match": ["**"], "effect": "allow" },
-      { "capability": "shell", "match": ["**"], "effect": "allow" },
-      { "capability": "web_search", "match": ["**"], "effect": "allow" },
-      { "capability": "web_fetch", "match": ["**"], "effect": "allow" }
+      { "capability": "shell", "match": ["**"], "effect": "allow" }
     ]
   }
 }

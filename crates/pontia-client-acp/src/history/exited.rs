@@ -44,7 +44,8 @@ pub(super) async fn load(
     let mode = ControlQueryService::new(db.clone())
         .session_mode(&source.session_id)
         .await?;
-    let mut meta = SessionPolicy::resolve(definition.restricted_execution, mode)?.meta;
+    let policy = SessionPolicy::resolve(definition.restricted_execution, mode)?;
+    let mut meta = policy.meta;
     let mut launch = crate::peer::resolve_command(&definition.launch, cwd)?;
     if mode == pontia_core::SessionMode::Restricted
         && matches!(
@@ -62,6 +63,9 @@ pub(super) async fn load(
         .extend(serde_json::from_str::<BTreeMap<String, String>>(
             &environment,
         )?);
+    if let Some(profile) = policy.profile {
+        profile.configure_launch(&mut launch);
+    }
     let mut load = LoadSessionRequest::new(SessionId::new(native), cwd.to_owned());
     let mut prefix = None;
     instructions::restore_load_meta(&mut meta, &binding.metadata, db, &source.session_id).await?;

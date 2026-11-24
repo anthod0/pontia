@@ -479,27 +479,12 @@ async fn restricted_session_merges_rules_and_retains_policy_on_resume() {
     assert_eq!(meta["yoloMode"], true);
     assert_eq!(meta["agentProfile"]["discoverSkills"], false);
     assert_eq!(
+        meta["agentProfile"]["tools"],
+        json!(["read_file", "run_terminal_cmd"])
+    );
+    assert_eq!(
         meta["agentProfile"]["disallowedTools"],
-        json!([
-            "Agent",
-            "workflow",
-            "send_subagent_message",
-            "get_task_output",
-            "wait_tasks",
-            "kill_task",
-            "scheduler_create",
-            "scheduler_delete",
-            "scheduler_list",
-            "monitor",
-            "search_replace",
-            "write",
-            "image_gen",
-            "image_edit",
-            "image_to_video",
-            "reference_to_video",
-            "search_tool",
-            "use_tool",
-        ])
+        json!(["search_tool", "use_tool"])
     );
     assert!(h.requests("session/load") >= 2);
     for load in wire.iter().filter(|v| v["method"] == "session/load") {

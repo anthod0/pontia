@@ -74,19 +74,10 @@ def check_bot_policy(session):
     directory = Path("/home/e2e/.grok/sessions") / urllib.parse.quote(session["workspace"], safe="")
     summary, = directory.glob("*/summary.json")
     profile = json.loads(summary.read_text())["agent_profile"]
-    denied = {
-        "Agent", "workflow", "send_subagent_message", "get_task_output", "wait_tasks", "kill_task",
-        "scheduler_create", "scheduler_delete", "scheduler_list", "monitor", "search_replace", "write",
-        "image_gen", "image_edit", "image_to_video", "reference_to_video", "search_tool", "use_tool",
-    }
     assert profile["name"] == "pontia-restricted"
     assert profile["discoverSkills"] is False
-    assert denied <= set(profile["disallowedTools"])
     definitions = json.loads(summary.with_name("tool_definitions.json").read_text())
-    tools = {tool["function"]["name"] for tool in definitions}
-    assert "run_terminal_command" in tools
-    assert tools.isdisjoint(denied | {"spawn_subagent", "wait_commands_or_subagents",
-                                      "get_command_or_subagent_output", "kill_command_or_subagent"})
+    assert {tool["function"]["name"] for tool in definitions} == {"read_file", "run_terminal_command"}
     events = [json.loads(line) for line in summary.with_name("events.jsonl").read_text().splitlines()]
     turns = [event for event in events if event["type"] == "turn_started"]
     assert turns and all(event["yolo_mode"] is True for event in turns)

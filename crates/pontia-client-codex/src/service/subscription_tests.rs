@@ -100,7 +100,19 @@ impl Fixture {
                 let result = match method.as_str() {
                     "config/read" => {
                         assert_eq!(request["params"]["cwd"], json!(codex_home));
-                        json!({"config":server_configuration.lock().await.clone()})
+                        let mut reply = json!({"config":server_configuration.lock().await.clone()});
+                        if request["params"]["includeLayers"] == true {
+                            reply["layers"] = json!([{"name":{"type":"project","dotCodexFolder":codex_home.join(".codex")},
+                            "disabledReason":"Project is untrusted","config":{"mcp_servers":{
+                                "project.local":{"command":"local","args":["serve"]},
+                                "project.remote":{"url":"https://example.test/mcp"}
+                            }}}]);
+                        }
+                        reply
+                    }
+                    "skills/list" => {
+                        assert_eq!(request["params"]["cwds"], json!([codex_home]));
+                        json!({"data":[{"cwd":codex_home,"skills":[{"name":"example"}],"errors":[]}]})
                     }
                     "initialize" => {
                         json!({"userAgent":"codex/test","codexHome":codex_home,"platformFamily":"unix","platformOs":"linux"})
@@ -314,11 +326,22 @@ async fn restricted_session_disables_native_agents_and_all_configured_mcp_server
         assert_eq!(config["agents.enabled"], false);
         assert_eq!(config["features.multi_agent"], false);
         assert_eq!(config["features.multi_agent_v2"], false);
+        assert_eq!(config["features.skip_host_skill_discovery"], true);
+        assert_eq!(config["features.skill_search"], false);
+        assert_eq!(config["features.apps"], false);
+        assert_eq!(config["features.plugins"], false);
+        assert_eq!(config["web_search"], "disabled");
+        assert_eq!(
+            config["tools.experimental_request_user_input.enabled"],
+            false
+        );
         assert_eq!(config["approval_policy"], "never");
         assert_eq!(config["sandbox_mode"], "danger-full-access");
         assert_eq!(
             config["mcp_servers"],
-            json!({"alpha":{"enabled":false},"team.beta":{"enabled":false}})
+            json!({"alpha":{"enabled":false},"team.beta":{"enabled":false},
+                "project.local":{"command":"local","enabled":false},
+                "project.remote":{"url":"https://example.test/mcp","enabled":false}})
         );
         assert!(
             config
@@ -406,7 +429,7 @@ async fn yolo_is_scoped_to_the_session_and_preserved_on_resume() {
 }
 
 #[tokio::test]
-async fn skill_instructions_are_disabled_only_for_the_requested_session_across_resume() {
+async fn discovered_skills_are_disabled_only_for_the_restricted_session_across_resume() {
     for disable_skills in [false, true] {
         let fixture = Fixture::create(
             None,
@@ -418,8 +441,10 @@ async fn skill_instructions_are_disabled_only_for_the_requested_session_across_r
             None,
         )
         .await;
-        *fixture.configuration.lock().await =
-            json!({"skills":{"include_instructions":true},"mcp_servers":{}});
+        *fixture.configuration.lock().await = json!({"skills":{"include_instructions":true,"config":[
+                {"path":"/previously-disabled/SKILL.md","enabled":false},
+                {"name":"example","enabled":true}
+            ]},"mcp_servers":{}});
         fixture.dispatch_first_input().await;
         fixture
             .app
@@ -437,6 +462,17 @@ async fn skill_instructions_are_disabled_only_for_the_requested_session_across_r
             let requests = fixture.thread_requests.lock().await;
             assert_eq!(requests.len(), 2);
             for request in requests.iter() {
+                assert_eq!(
+                    request["params"]["config"]["skills.config"],
+                    if disable_skills {
+                        json!([
+                            {"path":"/previously-disabled/SKILL.md","enabled":false},
+                            {"name":"example","enabled":false}
+                        ])
+                    } else {
+                        Value::Null
+                    }
+                );
                 assert_eq!(
                     request["params"]["config"]["skills.include_instructions"],
                     if disable_skills {
