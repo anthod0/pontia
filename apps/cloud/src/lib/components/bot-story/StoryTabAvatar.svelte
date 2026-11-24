@@ -246,6 +246,28 @@
     72% { transform: translate(1.5px, -1px); }
   }
 
+  /* ghost: drifts around, then pauses in place. */
+  .working.ghost .body {
+    transform-origin: 51px 56px;
+    animation: ghost-drift 3.2s ease-in-out infinite;
+  }
+
+  .working.ghost .shell {
+    animation: ghost-fade 3.2s ease-in-out infinite;
+  }
+
+  @keyframes ghost-drift {
+    0%, 80%, 100% { transform: none; }
+    20% { transform: translate(3px, -4px) rotate(5deg); }
+    40% { transform: translate(0, -6px); }
+    60% { transform: translate(-3px, -4px) rotate(-5deg); }
+  }
+
+  @keyframes ghost-fade {
+    0%, 80%, 100% { opacity: 1; }
+    40% { opacity: 0.72; }
+  }
+
   /* blob: stirring is done entirely by the SMIL morphs. */
 
   /* egg: about to hatch. */

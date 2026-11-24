@@ -98,6 +98,7 @@ export const avatarMotions = {
     ],
     shape: dropMorph(),
   },
+  ghost: { period: 3200, rest: [[0.8, 1]] },
   blob: { period: 1500, rest: [[0, 0]], shape: blob.shape, eyes: blob.eyes },
   egg: { period: 2400, rest: [[0.34, 1]] },
   pudding: { period: 2000, rest: [[0.6, 1]] },

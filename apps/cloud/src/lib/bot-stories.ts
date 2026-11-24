@@ -4,6 +4,7 @@ import { m } from "$lib/paraglide/messages";
 export const shapes = {
   mochi: "M51 30C72 30 84 44 88 62C91 74 92 84 80 84H22C10 84 11 74 14 62C18 44 30 30 51 30Z",
   drop: "M51 18C60 32 87 42 87 64C87 81 70 84 51 84C32 84 15 81 15 64C15 42 42 32 51 18Z",
+  ghost: "M18 50C18 32 32 24 51 24C70 24 84 32 84 50V76Q73 90 62 79Q51 90 40 79Q29 90 18 76Z",
   blob: "M24 34C34 22 52 30 62 26C76 20 92 34 86 52C82 64 92 76 78 82C64 88 50 78 36 84C20 90 10 76 14 62C17 52 15 44 24 34Z",
   egg: "M51 18C70 18 84 44 84 62C84 78 70 86 51 86C32 86 18 78 18 62C18 44 32 18 51 18Z",
   pudding:
@@ -105,7 +106,7 @@ export const stories: Story[] = [
   },
   {
     name: "Ivy",
-    shape: "drop",
+    shape: "ghost",
     color: "#98971a",
     label: m.story_local_label,
     caption: m.story_local_caption,
