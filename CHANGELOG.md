@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-25
+
+### Added
+
+- On phones, use the Chats, Sessions, Todo, and Device tabs to move around Dashboard. The Todo tab groups open items by Bot so you can reply, jump to the original message, or review recently resolved items.
+- Explore the interactive demo on the Pontia homepage to see how you can follow agent work across devices from your phone.
+
+### Changed
+
+- On the mobile Sessions tab, filter the list by Workspace or Session status. In New Chat, choose a Workspace, Agent Client, model, and reasoning effort before sending your first message.
+- In a Session on your phone, open file previews, Git diffs, and commit details in their own screens, then go back to the conversation.
+- Open the Device tab on your phone to check connection status, manage Workspaces and Agent Profiles, or view downloads. In the public Dashboard, you can also switch devices from this tab.
+
 ## [0.8.16] - 2026-11-25
 
 ### Added
@@ -1225,7 +1238,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.8.16...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/anthod0/pontia/compare/v0.8.16...v0.9.0
 [0.8.16]: https://github.com/anthod0/pontia/compare/v0.8.15...v0.8.16
 [0.8.14]: https://github.com/anthod0/pontia/compare/v0.8.13...v0.8.14
 [0.8.13]: https://github.com/anthod0/pontia/compare/v0.8.12...v0.8.13
