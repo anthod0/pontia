@@ -47,14 +47,13 @@ pub(super) async fn load(
     let policy = SessionPolicy::resolve(definition.restricted_execution, mode)?;
     let mut meta = policy.meta;
     let mut launch = crate::peer::resolve_command(&definition.launch, cwd)?;
-    if mode == pontia_core::SessionMode::Restricted
-        && matches!(
-            definition.restricted_execution,
-            Some(crate::RestrictedExecution::Antigravity)
-        )
-    {
+    if matches!(
+        definition.restricted_execution,
+        Some(crate::RestrictedExecution::Antigravity)
+    ) {
         crate::antigravity::configure_launch(
             adapter.root.get().ok_or_else(unavailable)?,
+            mode,
             &mut launch,
         )?;
     }

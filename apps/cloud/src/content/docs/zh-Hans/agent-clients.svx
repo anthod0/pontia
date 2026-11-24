@@ -68,7 +68,7 @@ Pontia Session 在绑定后会与一个客户端原生对话身份持久关联�
 
 每个 Client 使用自己的凭据、沙箱和本地权限。在开始集成之前，请登录每个 Client 并确认它能完成预期的工作。
 
-创建 Session 时，可以在 `POST /api/v1/sessions` 请求中指定 `mode`。省略该字段或传入 `default` 时，使用 Dashboard 新建会话时的客户端配置。`yolo` 让 Pi、Claude Code、Codex 或 Grok Build 跳过审批。`restricted` 使用客户端内置的工具限制和免审批配置，Bot、记忆检索和 Dreaming 均使用此模式。重启、恢复和历史分叉会沿用会话模式。
+创建 Session 时，可以在 `POST /api/v1/sessions` 请求中指定 `mode`。省略该字段或传入 `default` 时，使用 Dashboard 新建会话时的客户端配置。`yolo` 让 Pi、Claude Code、Codex、Grok Build、Antigravity 或 Kiro 跳过审批。`restricted` 使用客户端内置的工具限制和免审批配置，Bot、记忆检索和 Dreaming 均使用此模式。重启、恢复和历史分叉会沿用会话模式。
 
 例如，`{"client_type":"pi","workspace":"/path/to/workspace","mode":"restricted"}` 会在已登记的 Workspace 中启动 Pi，禁用编辑工具、MCP 和 skills。Kiro 和 Antigravity 的受限会话在 Pontia 管理的启动目录中安装 agent 文件。受限会话保留 shell 访问权限，仍可通过命令修改文件。
 

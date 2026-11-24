@@ -68,7 +68,7 @@ Depois da vinculação, uma Session do Pontia fica associada de forma permanente
 
 Cada Client usa suas próprias credenciais, sandbox e permissões locais. Entre em cada Client e verifique se ele consegue fazer o trabalho pretendido antes de iniciar a integração.
 
-Ao criar uma Session com `POST /api/v1/sessions`, omita `mode` ou envie `default` para usar as mesmas configurações do Client que o Dashboard usa. O modo `yolo` dispensa aprovações no Pi, Claude Code, Codex e Grok Build. O modo `restricted` usa as restrições de ferramentas do Client e dispensa aprovações. Bots, recuperação de memórias e Dreaming usam esse modo. Reinícios, retomadas e ramificações do histórico preservam o modo.
+Ao criar uma Session com `POST /api/v1/sessions`, omita `mode` ou envie `default` para usar as mesmas configurações do Client que o Dashboard usa. O modo `yolo` dispensa aprovações no Pi, Claude Code, Codex, Grok Build, Antigravity e Kiro. O modo `restricted` usa as restrições de ferramentas do Client e dispensa aprovações. Bots, recuperação de memórias e Dreaming usam esse modo. Reinícios, retomadas e ramificações do histórico preservam o modo.
 
 Por exemplo, `{"client_type":"pi","workspace":"/path/to/workspace","mode":"restricted"}` inicia o Pi em um Workspace registrado com as ferramentas de edição, o MCP e as skills desativados. No modo restrito, o Kiro e o Antigravity instalam arquivos do agente em um diretório de inicialização gerenciado pelo Pontia. O shell continua disponível e pode modificar arquivos.
 

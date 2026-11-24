@@ -40,9 +40,10 @@ fn acp_validates_the_selected_definition() {
         assert_eq!(configuration.supports_mode("plain", mode), mode == Default);
     }
     let builtin = AcpConfiguration::new(AcpAgents::builtin());
-    for key in ["kiro", "antigravity"] {
-        assert!(builtin.supports_mode(key, Restricted));
-        assert!(!builtin.supports_mode(key, Yolo));
+    for key in builtin.keys() {
+        for mode in [Default, Restricted, Yolo] {
+            assert!(builtin.supports_mode(&key, mode));
+        }
     }
 }
 
