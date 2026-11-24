@@ -42,12 +42,7 @@ impl ControlQueryService {
             )
         {
             session.capabilities.timeline = result.is_ok();
-            session.timeline_unavailable_reason = result.err().map(|error| match error {
-                pontia_core::Error::Conflict { code: "timeline_source_identity_mismatch", .. } => "Native history belongs to a different session.".into(),
-                pontia_core::Error::CapabilityUnavailable(message) if message.contains("source_unavailable:") => "Native history is not available on disk yet. Retry when the source is available.".into(),
-                pontia_core::Error::Conflict { code: "timeline_pending", .. } => "Native history is still being written. Retry shortly.".into(),
-                _ => "The native history format is unsupported or invalid.".into(),
-            });
+            session.timeline_unavailable_reason = result.err().map(timeline_unavailable_reason);
         }
         session.runtimes = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone()).list(&session.session_id).await?;
         if session
@@ -181,5 +176,49 @@ impl ControlQueryService {
             })
         })
         .transpose()
+    }
+}
+
+fn timeline_unavailable_reason(error: pontia_core::Error) -> String {
+    use pontia_core::Error;
+
+    match error {
+        Error::Conflict {
+            code: "timeline_source_identity_mismatch",
+            ..
+        } => "Native history belongs to a different session.",
+        Error::CapabilityUnavailable(message)
+            if message == "ACP history requires a fresh session/load after reattachment" =>
+        {
+            "Pontia reconnected to this session. History will reload after the current turn ends."
+        }
+        Error::CapabilityUnavailable(message) if message.contains("source_unavailable:") => {
+            "Native history is not available on disk yet. Retry when the source is available."
+        }
+        Error::Conflict {
+            code: "timeline_pending",
+            ..
+        } => "Native history is still being written. Retry shortly.",
+        _ => "The native history format is unsupported or invalid.",
+    }
+    .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::timeline_unavailable_reason;
+    use pontia_core::Error;
+
+    #[test]
+    fn pending_history_reload_has_a_distinct_reason_from_invalid_history() {
+        let reattached = Error::CapabilityUnavailable(
+            "ACP history requires a fresh session/load after reattachment".into(),
+        );
+        let invalid = Error::CapabilityUnavailable("invalid history format".into());
+
+        assert_ne!(
+            timeline_unavailable_reason(reattached),
+            timeline_unavailable_reason(invalid),
+        );
     }
 }
