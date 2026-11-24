@@ -8,7 +8,7 @@
   import ClientIcon from './ClientIcon.svelte'
   import { matchChatShortcut } from '$lib/shortcuts/definitions'
   import { adjacentValue } from '$lib/shortcuts/sessionNavigation'
-  import { targetSegmentClass, targetToolbarClass } from './targetSegment'
+  import { targetLabelClass, targetSegmentClass, targetToolbarClass } from './targetSegment'
 
   interface Props {
     workspaceId: string
@@ -83,7 +83,7 @@
       options={creationOptions} keyOf={option => option.id} labelOf={option => option.name}>
       {#snippet trigger()}
         <ClientIcon clientType={selectedOption?.client_type} acpAgentId={selectedOption?.metadata.acp_agent_id} class="size-3.5 text-foreground" />
-        <span class="min-w-0 truncate">{selectedOption?.name ?? $t('clients.agentClient')}</span>
+        <span class={targetLabelClass}>{selectedOption?.name ?? $t('clients.agentClient')}</span>
       {/snippet}
       {#snippet option(option)}
         <ClientIcon clientType={option.client_type} acpAgentId={option.metadata.acp_agent_id} class="size-3.5 text-foreground" />
@@ -95,7 +95,7 @@
       options={workspaces} keyOf={workspace => workspace.workspace_id} labelOf={workspace => workspaceTitle(workspace)}>
       {#snippet trigger()}
         <FolderIcon class="size-3.5 text-muted-foreground" aria-hidden="true" />
-        <span class="min-w-0 truncate">{selectedWorkspace ? workspaceTitle(selectedWorkspace) : workspacesLoading ? $t('common.loading') : $t('workspace.title')}</span>
+        <span class={targetLabelClass}>{selectedWorkspace ? workspaceTitle(selectedWorkspace) : workspacesLoading ? $t('common.loading') : $t('workspace.title')}</span>
       {/snippet}
       {#snippet option(workspace)}
         <div class="flex min-w-0 flex-col">
