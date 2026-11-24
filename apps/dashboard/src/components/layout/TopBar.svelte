@@ -6,12 +6,14 @@
   import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
   import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon'
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
+  import CaretLeftIcon from 'phosphor-svelte/lib/CaretLeftIcon'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import BotAvatar from '../bots/BotAvatar.svelte'
   import TopBarMoreMenu from './TopBarMoreMenu.svelte'
   import { navigate } from '$lib/navigation'
+  import { returnToLastPage } from '$lib/lastPage'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import { dashboardRelativePath } from '$lib/dashboardRoutes'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
@@ -76,6 +78,12 @@
   // Phones get larger touch targets; wider screens keep the compact bar.
   const mobileIconClass = 'size-11 md:size-7 [&_svg:not([class*=size-])]:size-5 md:[&_svg:not([class*=size-])]:size-4'
 
+  // Opens the Bot chat or Session chat last viewed on this device, else New Chat.
+  function backToChat(): void {
+    returnToLastPage()
+    onNewChat()
+  }
+
   function openRenameDialog(): void {
     renameError = null
     renameDialogOpen = true
@@ -103,7 +111,9 @@
   {#if settingsPath}
     <!-- Phones switch sections here; wider screens list them in the sidebar and show the current one as the title. -->
     <div class="flex min-w-0 items-center gap-2 px-3 md:hidden">
-      <Sidebar.Trigger class={mobileIconClass} />
+      <Button variant="ghost" size="icon-sm" class={mobileIconClass} aria-label={$t('nav.backToChat')} onclick={backToChat}>
+        <CaretLeftIcon />
+      </Button>
       <SettingsSectionNav />
     </div>
     <h1 class="hidden px-6 text-base font-semibold text-heading md:block">{settingsTitle}</h1>
