@@ -5,7 +5,6 @@
 	import ProfilesVisual from './ProfilesVisual.svelte';
 	import WorktreesVisual from './WorktreesVisual.svelte';
 	import MemoryVisual from './MemoryVisual.svelte';
-	import FilesVisual from './FilesVisual.svelte';
 	import DevicesVisual from './DevicesVisual.svelte';
 
 	let { story, step }: { story: Story; step: number } = $props();
@@ -14,7 +13,6 @@
 		profiles: ProfilesVisual,
 		worktrees: WorktreesVisual,
 		memory: MemoryVisual,
-		files: FilesVisual,
 		devices: DevicesVisual
 	};
 	const Visual = $derived(story.visual && visuals[story.visual]);

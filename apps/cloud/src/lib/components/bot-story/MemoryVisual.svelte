@@ -9,7 +9,7 @@
 
 	let { story, step }: { story: Story; step: number } = $props();
 	// The other Bots on the same device read the same USER.md and memory. They match the MacBook in DevicesVisual.
-	const others = ['Pip', 'Kai', 'Ivy'].map(storyByName);
+	const others = ['Juno', 'Kai', 'Ivy'].map(storyByName);
 </script>
 
 <div class="memory" style:--bot={story.color}>
