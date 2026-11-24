@@ -1,10 +1,9 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
   import { t, currentLocale } from '$lib/i18n'
-  import { statusLabel } from '$lib/i18n/status'
+  import SessionStateDot from './SessionStateDot.svelte'
   import { navigate } from '$lib/navigation'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
-  import { sessionStateDotClass } from '$lib/sessionState'
   import { clientSessionLabel } from '../../../clients'
   import ClientIcon from '../../../components/chat/ClientIcon.svelte'
   import {formatRelativeTime} from '$lib/format'
@@ -112,12 +111,7 @@
         >{#if session.pinned_at}<PushPinIcon class="size-4" />{/if}<strong class="flex-1 truncate"
           >{sessionChatTitle(session, $t)}</strong
         >
-        {#if session.state === 'busy' || session.state === 'waiting_for_interaction'}<small
-            >{statusLabel(session.state, $t)}</small
-          >{:else if session.state !== 'exited'}<span
-            class={'size-2 rounded-full ' + sessionStateDotClass(session.state)}
-            aria-label={statusLabel(session.state, $t)}
-          ></span>{/if}
+        <SessionStateDot state={session.state} />
       </span>
       <small class="flex justify-between text-muted-foreground"
         >{clientSessionLabel(session)}<time datetime={session.updated_at}>{formatRelativeTime(session.updated_at,$currentLocale)}</time></small

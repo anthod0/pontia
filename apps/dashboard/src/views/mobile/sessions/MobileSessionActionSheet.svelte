@@ -7,7 +7,7 @@
   } from '../../../components/chat/sessionPanel/sessionPanelContext.svelte'
   import { clientSessionLabel } from '../../../clients'
   import { t } from '$lib/i18n'
-  import { statusLabel } from '$lib/i18n/status'
+  import SessionStateDot from './SessionStateDot.svelte'
   import { navigate } from '$lib/navigation'
   import { useMobileStack } from '$lib/mobile/overlayStack.svelte'
   import { sessionRecentFiles, withSessionRecentFile } from '$lib/sessionRecentFiles'
@@ -108,8 +108,9 @@
 <Sheet.Root bind:open>
   <BottomSheet dismiss={() => (open = false)} aria-describedby={undefined}>
     <Sheet.Title class="truncate pr-12 text-lg font-semibold">{sessionChatTitle(session, $t)}</Sheet.Title>
-    <p class="truncate pb-2 text-xs text-muted-foreground">
-      {statusLabel(session.state, $t)} · {clientSessionLabel(session)} · {session.workspace}
+    <p class="flex items-center gap-1.5 pb-2 text-xs text-muted-foreground">
+      <SessionStateDot state={session.state} />
+      <span class="truncate">{clientSessionLabel(session)} · {session.workspace}</span>
     </p>
     <div class="overflow-auto">
       <button class="mobile-row" onclick={() => stack.back(() => openWorkspace('files'))}

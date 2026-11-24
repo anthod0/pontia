@@ -2,7 +2,7 @@
   import { useMobileHeader } from '../../../shell/mobile/header'
   import { onMount } from 'svelte'
   import { t } from '$lib/i18n'
-  import { statusLabel } from '$lib/i18n/status'
+  import SessionStateDot from './SessionStateDot.svelte'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import { isExecutingSessionState } from '$lib/sessionState'
   import { chromeMetrics } from '$lib/mobile/chromeMetrics'
@@ -37,12 +37,17 @@
   })
 </script>
 
-{#snippet title()}{#if session}<button
-      class="mobile-glass min-h-11 min-w-0 truncate rounded-full px-4 text-left"
+{#snippet title()}
+  {#if session}
+    <button
+      class="mobile-glass flex min-h-11 min-w-0 items-center gap-2 rounded-full px-4 text-left"
       onclick={() => (menuOpen = true)}
-      ><strong>{sessionChatTitle(session, $t)}</strong><small class="ml-2">{statusLabel(session.state, $t)}</small
-      ></button
-    >{/if}{/snippet}
+    >
+      <strong class="truncate">{sessionChatTitle(session, $t)}</strong>
+      <SessionStateDot state={session.state} />
+    </button>
+  {/if}
+{/snippet}
 {#snippet more()}{#if session}<button
       class="mobile-icon mobile-glass"
       aria-label={$t('chat.actions')}
