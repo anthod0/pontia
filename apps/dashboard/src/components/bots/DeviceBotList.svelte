@@ -4,7 +4,7 @@
   import { toast } from 'svelte-sonner'
   import { openBotChatStream } from '../../services/botChatStream'
   import { page } from '$app/state'
-  import { number, t } from '$lib/i18n'
+  import { t } from '$lib/i18n'
   import { dashboardPath, navigate } from '$lib/navigation'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
@@ -20,7 +20,7 @@
   import BotSettingsDialog from './BotSettingsDialog.svelte'
   import BotDeleteDialog from './BotDeleteDialog.svelte'
   import { ApiError } from '../../api/errors'
-  import type { Bot, BotSummary, BotWorkStatus } from '../../api/types'
+  import type { Bot, BotSummary } from '../../api/types'
 
   let { handle }: { handle?: string } = $props()
   const device = useDeviceRuntime()
@@ -60,12 +60,6 @@
   let menuOpen = $state(false)
 
   const rail = $derived(sidebar.state === 'collapsed' && !sidebar.isMobile)
-
-  function statusText(status: BotWorkStatus | undefined): string {
-    if (status?.kind === 'working') return $t('bots.workingOn', { title: status.title })
-    if (status?.kind === 'processing') return $t('bots.processing')
-    return $t('bots.idle')
-  }
 
   function showMenu(event: MouseEvent, bot: Bot) {
     const anchor = openContextMenu(event)
@@ -125,27 +119,31 @@
     <Sidebar.Menu>
       {#each bots.data ?? [] as bot, index (bot.bot_id)}
         {@const summary = summaries[index]?.data}
-        {@const working = summary?.status.kind === 'processing' || summary?.status.kind === 'working'}
+        {@const status = summary?.status}
+        {@const working = status?.kind === 'working' || status?.kind === 'processing'}
         {@const todos = summary?.open_todo_count ?? 0}
         {@const path = `/bots/${encodeURIComponent(bot.bot_id)}`}
         {@const active = page.params.botId === bot.bot_id && (handle === undefined || handle === page.params.handle)}
         <Sidebar.MenuItem>
           <Sidebar.MenuButton isActive={active} tooltipContent={bot.name}
-            class="relative touch-target:pr-12! h-auto min-h-12 gap-2.5 px-2 py-1.5 max-md:min-h-15 max-md:gap-3 max-md:px-2.5 max-md:py-2 [&_svg]:size-7 max-md:[&_svg]:size-9 group-data-[collapsible=icon]:min-h-0 group-data-[collapsible=icon]:p-1! group-data-[collapsible=icon]:[&_svg]:size-6">
+            class="group-has-data-[sidebar=menu-action]/menu-item:pr-3.5 touch-target:pr-12! h-auto min-h-12 gap-2.5 px-2 py-1.5 max-md:min-h-15 max-md:gap-3 max-md:px-2.5 max-md:py-2 [&_svg]:size-7 max-md:[&_svg]:size-9 group-data-[collapsible=icon]:min-h-0 group-data-[collapsible=icon]:p-1! group-data-[collapsible=icon]:[&_svg]:size-6">
             {#snippet child({ props })}
               <a {...props} href={scope ? scope + path : dashboardPath(path)} aria-current={active ? 'page' : undefined}
                 onclick={(event) => { event.preventDefault(); void navigate(path, undefined, { scope }) }}
                 oncontextmenu={(event) => showMenu(event, bot)}>
-                <BotAvatar shape={bot.avatar_shape} color={bot.avatar_color} {working} />
-                <span class="flex min-w-0 flex-1 flex-col gap-px group-data-[collapsible=icon]:hidden">
-                  <span class="truncate font-medium text-heading group-data-[active=true]/menu-button:font-semibold max-md:text-base">{bot.name}</span>
-                  <span class={['truncate text-xs max-md:text-[13px]', working ? 'text-primary' : 'text-muted-foreground']}>{statusText(summary?.status)}</span>
+                <span class="relative shrink-0">
+                  <BotAvatar shape={bot.avatar_shape} color={bot.avatar_color} {working} />
+                  {#if todos > 0}
+                    <span role="img" aria-label={$t('bots.openTodos', { count: todos })}
+                      class="pointer-events-none absolute -top-[3px] -right-[3px] size-2 rounded-full bg-primary ring-2 ring-sidebar transition-[box-shadow] duration-[80ms] group-hover/menu-button:ring-sidebar-accent group-data-active/menu-button:ring-sidebar-accent max-md:size-2.5"></span>
+                  {/if}
                 </span>
-                {#if todos > 0}
-                  <span class="flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-primary-solid px-[5px] text-[11px] font-semibold text-primary-foreground tabular-nums group-data-[collapsible=icon]:hidden"
-                    aria-label={$t('bots.openTodos', { count: todos })}>{$number(todos)}</span>
-                  <span class="absolute top-px right-px hidden size-2 rounded-full bg-primary-solid ring-2 ring-sidebar group-data-[collapsible=icon]:block" aria-hidden="true"></span>
-                {/if}
+                <span class="flex min-w-0 flex-1 flex-col gap-px group-data-[collapsible=icon]:sr-only">
+                  <span class="truncate font-medium text-heading group-data-[active=true]/menu-button:font-semibold max-md:text-base">{bot.name}</span>
+                  {#if working}
+                    <span class="truncate text-xs text-primary max-md:text-[13px]">{status.kind === 'working' ? status.title : $t('bots.processing')}</span>
+                  {/if}
+                </span>
               </a>
             {/snippet}
           </Sidebar.MenuButton>

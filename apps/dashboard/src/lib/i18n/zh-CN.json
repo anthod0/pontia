@@ -64,8 +64,6 @@
   "bots.executionFailed": "Bot 执行失败",
   "bots.sessionExited": "Bot Session 已退出",
   "bots.processing": "正在处理消息",
-  "bots.idle": "空闲",
-  "bots.workingOn": "工作中 · {title}",
   "bots.openTodos": "{count} 项待办",
   "bots.sidebarSetupDescription": "Bot 会替你开启和管理会话，并记住你的偏好。",
   "bots.reply": "回复",
