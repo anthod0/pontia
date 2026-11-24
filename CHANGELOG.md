@@ -7,9 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.14] - 2026-11-24
+
+### Upgrade notes
+
+- If you are upgrading from Pontia 0.8.12 or earlier, run `pontia setup claude` once after the upgrade on each machine that uses Claude Code.
+
 ### Added
 
+- On Linux and macOS, run `pontia auto-update enable` to check for updates every six hours. Use `pontia auto-update status` to inspect the schedule or `pontia auto-update disable` to turn it off.
+- Start an Agent Profile in Dashboard with one of six English-language presets: Researcher, Copywriter, Architect, Designer, Coder, or Motion designer. ACP templates use `client_key` to select the matching installed client.
+- Choose YOLO mode for Agent Profiles that should run without approval prompts.
+- Send `/reload` in an idle Bot chat to start a fresh Bot Session with your next message.
 - Create Antigravity and Kiro Sessions with `mode: "yolo"` to run without approval prompts. They keep their usual tools, MCP servers, and skills.
+
+### Changed
+
+- Dashboard shows installed Agent Client versions in Settings. You can choose a model and its reasoning effort from the same picker.
+- The Dashboard sidebar lists Bots first and offers context menus for Bots and Sessions.
+- Changing an Agent Profile’s client, model, or reasoning effort notifies Bots that use the profile.
+
+### Fixed
+
+- When Edge rejects a Dashboard write because its access token has expired, Dashboard renews access and retries the write.
+- On desktop, sidebar text stays on the same lines as the sidebar opens and closes. On phones, the sidebar slides in and out while the backdrop fades.
 
 ## [0.8.13] - 2026-11-24
 
@@ -1176,7 +1197,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.8.13...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.8.14...HEAD
+[0.8.14]: https://github.com/anthod0/pontia/compare/v0.8.13...v0.8.14
 [0.8.13]: https://github.com/anthod0/pontia/compare/v0.8.12...v0.8.13
 [0.8.12]: https://github.com/anthod0/pontia/compare/v0.8.11...v0.8.12
 [0.6.9]: https://github.com/anthod0/pontia/compare/v0.6.8...v0.6.9
