@@ -12,7 +12,7 @@
   import FolderOpenIcon from 'phosphor-svelte/lib/FolderOpenIcon'
   import StarIcon from 'phosphor-svelte/lib/StarIcon'
   import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
-  import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon'
+  import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
   import XIcon from 'phosphor-svelte/lib/XIcon'
   import { Button, type ButtonVariant } from '$lib/components/ui/button/index.js'
   import * as Dialog from '$lib/components/ui/dialog/index.js'
@@ -272,12 +272,12 @@
 {#snippet loadError(title: string, message: string, onretry: () => void)}
   <Empty.Root class="flex-1" role="alert">
     <Empty.Header>
-      <Empty.Media variant="icon"><WarningCircleIcon class="size-4 text-destructive" /></Empty.Media>
+      <Empty.Media variant="icon"><WarningCircleIcon class="text-destructive" /></Empty.Media>
       <Empty.Title>{title}</Empty.Title>
       <Empty.Description>{message}</Empty.Description>
     </Empty.Header>
     <Empty.Content>
-      <Button size="sm" variant="outline" onclick={onretry}><ArrowsClockwiseIcon class="size-4" /> {$t('common.retry')}</Button>
+      <Button size="sm" variant="outline" onclick={onretry}><ArrowClockwiseIcon data-icon="inline-start" />{$t('common.retry')}</Button>
     </Empty.Content>
   </Empty.Root>
 {/snippet}
@@ -295,7 +295,7 @@
   {:else if !workspaceRoots.length}
     <Empty.Root class="min-h-56">
       <Empty.Header>
-        <Empty.Media variant="icon"><FolderIcon class="size-4" /></Empty.Media>
+        <Empty.Media variant="icon"><FolderIcon /></Empty.Media>
         <Empty.Title>{$t('workspaces.noRoots')}</Empty.Title>
         <Empty.Description>{$t('workspaces.runPrefix')} <code class="rounded-sm bg-muted px-1 py-0.5 text-foreground">pontia init</code> {$t('workspaces.initSuffix')}</Empty.Description>
       </Empty.Header>
@@ -343,7 +343,7 @@
             icon: showHiddenDirectories ? EyeIcon : EyeSlashIcon,
           })}
         {/if}
-        {@render toolbarButton({ label: $t('common.refresh'), onclick: () => void refreshAll(), icon: ArrowsClockwiseIcon })}
+        {@render toolbarButton({ label: $t('common.refresh'), onclick: () => void refreshAll(), icon: ArrowClockwiseIcon })}
         {#if view === 'directory' && listing}
           {@const name = currentWorkspace?.name ?? workspaceName(listing.path)}
           {@render toolbarButton({
@@ -444,7 +444,7 @@
               {/each}
             </ul>
           {:else}
-            <Empty.Root class="flex-1"><Empty.Header><Empty.Media variant="icon"><StarIcon class="size-4" /></Empty.Media><Empty.Title>{$t('workspaces.noActive')}</Empty.Title><Empty.Description>{$t('workspaces.activateHint')}</Empty.Description></Empty.Header></Empty.Root>
+            <Empty.Root class="flex-1"><Empty.Header><Empty.Media variant="icon"><StarIcon /></Empty.Media><Empty.Title>{$t('workspaces.noActive')}</Empty.Title><Empty.Description>{$t('workspaces.activateHint')}</Empty.Description></Empty.Header></Empty.Root>
           {/if}
         {:else if view === 'unavailable'}
           <ul class="flex-1 overflow-auto p-1" aria-label={$t('workspaces.unavailable')}>
@@ -512,7 +512,7 @@
               {/each}
             </ul>
           {:else if listing}
-            <Empty.Root class="flex-1"><Empty.Header><Empty.Media variant="icon"><FolderOpenIcon class="size-4" /></Empty.Media><Empty.Title>{$t('workspaces.noSubdirectories')}</Empty.Title><Empty.Description>{hiddenEntryCount ? $t('workspaces.hiddenCount', { count: hiddenEntryCount }) : $t('workspaces.emptyDirectory')}</Empty.Description></Empty.Header></Empty.Root>
+            <Empty.Root class="flex-1"><Empty.Header><Empty.Media variant="icon"><FolderOpenIcon /></Empty.Media><Empty.Title>{$t('workspaces.noSubdirectories')}</Empty.Title><Empty.Description>{hiddenEntryCount ? $t('workspaces.hiddenCount', { count: hiddenEntryCount }) : $t('workspaces.emptyDirectory')}</Empty.Description></Empty.Header></Empty.Root>
           {:else}
             <Empty.Root class="flex-1"><Empty.Header><Empty.Title>{$t('workspaces.noRootOpen')}</Empty.Title><Empty.Description>{$t('workspaces.selectRoot')}</Empty.Description></Empty.Header></Empty.Root>
         {/if}

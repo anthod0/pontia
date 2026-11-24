@@ -97,12 +97,12 @@
   {:else if !user.data.text.trim()}
     <Empty.Root class="min-h-72">
       <Empty.Header>
-        <Empty.Media variant="icon"><UserCircleIcon class="size-4" /></Empty.Media>
+        <Empty.Media variant="icon"><UserCircleIcon /></Empty.Media>
         <Empty.Title>{$t('memory.userEmptyTitle')}</Empty.Title>
         <Empty.Description>{$t('memory.userEmptyDescription')}</Empty.Description>
       </Empty.Header>
       <Empty.Content>
-        <Button size="sm" variant="outline" onclick={() => edit(user.data.text)}><PencilSimpleIcon class="size-4" />{$t('memory.userWrite')}</Button>
+        <Button size="sm" variant="outline" onclick={() => edit(user.data.text)}><PencilSimpleIcon data-icon="inline-start" />{$t('memory.userWrite')}</Button>
       </Empty.Content>
     </Empty.Root>
   {:else}
@@ -119,7 +119,7 @@
         <ToggleGroup.Item value="source" class="px-2.5">{$t('memory.userSource')}</ToggleGroup.Item>
       </ToggleGroup.Root>
       <Button size="icon-sm" variant="ghost" aria-label={$t('common.copy')} title={$t('common.copy')} onclick={() => void copy()}><CopyIcon class="size-4" /></Button>
-      <Button size="sm" variant="outline" onclick={() => edit(user.data.text)}><PencilSimpleIcon class="size-4" />{$t('common.edit')}</Button>
+      <Button size="sm" variant="outline" onclick={() => edit(user.data.text)}><PencilSimpleIcon data-icon="inline-start" />{$t('common.edit')}</Button>
     </div>
     <div class="max-h-[34rem] overflow-auto px-5 py-4">
       {#if mode === 'rendered'}

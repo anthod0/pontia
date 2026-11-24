@@ -11,7 +11,7 @@
   import * as Empty from '$lib/components/ui/empty/index.js'
   import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
   import CaretLeftIcon from 'phosphor-svelte/lib/CaretLeftIcon'
-  import IdentificationCardIcon from 'phosphor-svelte/lib/IdentificationCardIcon'
+  import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import ProfileForm from './agentProfiles/ProfileForm.svelte'
   import DeleteProfileDialog from './agentProfiles/DeleteProfileDialog.svelte'
@@ -45,7 +45,7 @@
 
 <section class="space-y-6">
   <div class="flex flex-wrap justify-end gap-2 {editorOpen ? 'max-lg:hidden' : ''}">
-    <Button disabled={saving || loading || !profiles.data} onclick={() => selectedId = ''}><PlusIcon class="size-4" /> {$t('profiles.new')}</Button>
+    <Button disabled={saving || loading || !profiles.data} onclick={() => selectedId = ''}><PlusIcon data-icon="inline-start" />{$t('profiles.new')}</Button>
   </div>
 
   {#if profiles.isError}
@@ -55,7 +55,7 @@
   {:else if !profiles.data.length && selectedId !== ''}
     <Empty.Root class="border">
       <Empty.Header>
-        <Empty.Media variant="icon"><IdentificationCardIcon /></Empty.Media>
+        <Empty.Media variant="icon"><RobotIcon /></Empty.Media>
         <Empty.Title>{$t('profiles.emptyTitle')}</Empty.Title>
         <Empty.Description>{$t('profiles.emptyDescription')}</Empty.Description>
       </Empty.Header>
@@ -78,7 +78,7 @@
 
       {#if editorOpen}
         <div class="min-w-0 space-y-5">
-          <Button variant="ghost" size="sm" class="-ml-2 lg:hidden" disabled={saving} onclick={() => selectedId = null}><CaretLeftIcon class="size-4" />{$t('profiles.title')}</Button>
+          <Button variant="ghost" size="sm" class="-ml-2 lg:hidden" disabled={saving} onclick={() => selectedId = null}><CaretLeftIcon data-icon="inline-start" />{$t('profiles.title')}</Button>
           <div class="min-w-0 space-y-1">
             <h3 class="text-lg font-semibold break-words text-heading">{selected?.name ?? $t('profiles.new')}</h3>
             {#if selected?.client_type}

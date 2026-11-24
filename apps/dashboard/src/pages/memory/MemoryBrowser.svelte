@@ -65,7 +65,7 @@
 {:else if !items.length && !query}
   <Empty.Root class="min-h-72">
     <Empty.Header>
-      <Empty.Media variant="icon"><BrainIcon class="size-4" /></Empty.Media>
+      <Empty.Media variant="icon"><BrainIcon /></Empty.Media>
       <Empty.Title>{$t('memory.emptyTitle')}</Empty.Title>
       <Empty.Description>{$t('memory.emptyDescription')}</Empty.Description>
     </Empty.Header>

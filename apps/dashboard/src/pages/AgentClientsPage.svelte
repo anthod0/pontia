@@ -3,7 +3,7 @@
   import { useDeviceRuntime } from '../device/context';
   import { onMount } from 'svelte'
   import { toast } from 'svelte-sonner'
-  import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon'
+  import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
   import ArrowCounterClockwiseIcon from 'phosphor-svelte/lib/ArrowCounterClockwiseIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import WrenchIcon from 'phosphor-svelte/lib/WrenchIcon'
@@ -114,12 +114,12 @@
 </script>
 
 {#snippet restoreButton()}
-  <Button type="button" variant="ghost" disabled={busy} onclick={() => resetOpen = true}><ArrowCounterClockwiseIcon class="size-4" /> {$t('clients.restoreDefault')}</Button>
+  <Button type="button" variant="ghost" disabled={busy} onclick={() => resetOpen = true}><ArrowCounterClockwiseIcon data-icon="inline-start" />{$t('clients.restoreDefault')}</Button>
 {/snippet}
 
 <section class="space-y-6">
   <div class="flex flex-wrap justify-end gap-2">
-    <Button variant="outline" disabled={busy || loading} onclick={() => perform(refresh)}><ArrowsClockwiseIcon class="size-4" /> {$t('common.refresh')}</Button>
+    <Button variant="outline" disabled={busy || loading} onclick={() => perform(refresh)}><ArrowClockwiseIcon data-icon="inline-start" />{$t('common.refresh')}</Button>
   </div>
 
   {#if error}
@@ -187,8 +187,8 @@
                   <code class="inline-block rounded bg-muted px-2 py-1 text-xs">{selected.setup_command}</code>
                 </div>
                 <Button disabled={busy || setupLoading || !!setupConnectionError} onclick={() => selected && setup(selected)}>
-                  {#if startingSetup || selectedSetup?.status === 'running'}<CircleNotchIcon class="size-4 animate-spin" />{$t('clients.settingUp')}
-                  {:else}<WrenchIcon class="size-4" />{$t('clients.runSetup')}{/if}
+                  {#if startingSetup || selectedSetup?.status === 'running'}<CircleNotchIcon data-icon="inline-start" class="animate-spin" />{$t('clients.settingUp')}
+                  {:else}<WrenchIcon data-icon="inline-start" />{$t('clients.runSetup')}{/if}
                 </Button>
               </div>
               {#if selectedSetup}
