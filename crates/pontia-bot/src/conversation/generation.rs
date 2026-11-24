@@ -83,6 +83,24 @@ impl ConversationService {
         self
     }
 
+    pub async fn reload(&self, bot_id: &str) -> Result<()> {
+        let activity = self.activity(bot_id);
+        let _delivery = activity.delivery.lock().await;
+        let Some(session) = self.records.get(bot_id).await?.current_session_id else {
+            return Ok(());
+        };
+        if !self
+            .switch_if_idle(bot_id, &activity, &session, None)
+            .await
+            .inspect_err(|error| self.record_switch_failure(bot_id, &activity, error))?
+        {
+            return Err(Error::StateConflict(
+                "Bot Session is busy. Wait for it to become idle before reloading.".into(),
+            ));
+        }
+        Ok(())
+    }
+
     pub async fn run_generations(self, mut shutdown: watch::Receiver<bool>) {
         let mut events = self.control.agent_events().subscribe();
         let mut tick = tokio::time::interval(RECONCILE_INTERVAL);
@@ -125,17 +143,19 @@ impl ConversationService {
         activity: &Activity,
         now: OffsetDateTime,
     ) -> Result<()> {
-        let result = self.rotate_inner(bot_id, activity, now).await;
-        if let Err(error) = &result {
-            let mut failure = activity.switch_failure.lock().unwrap();
-            failure.0 += 1;
-            failure.1 = Some(match error {
-                Error::ControlUnknown(reason) => SwitchFailure::Unknown(reason.clone()),
-                error => SwitchFailure::Failed(error.to_string()),
-            });
-            self.generation_error(bot_id, activity, error);
-        }
-        result
+        self.rotate_inner(bot_id, activity, now)
+            .await
+            .inspect_err(|error| self.record_switch_failure(bot_id, activity, error))
+    }
+
+    fn record_switch_failure(&self, bot_id: &str, activity: &Activity, error: &Error) {
+        let mut failure = activity.switch_failure.lock().unwrap();
+        failure.0 += 1;
+        failure.1 = Some(match error {
+            Error::ControlUnknown(reason) => SwitchFailure::Unknown(reason.clone()),
+            error => SwitchFailure::Failed(error.to_string()),
+        });
+        self.generation_error(bot_id, activity, error);
     }
 
     pub(super) fn generation_error(&self, bot_id: &str, activity: &Activity, error: &Error) {
@@ -232,21 +252,34 @@ impl ConversationService {
         } else {
             None
         };
-        if self
+        if !self
+            .switch_if_idle(bot_id, activity, session, next.as_deref())
+            .await?
+        {
+            self.records.clear_idle_timer(bot_id).await?;
+        }
+        Ok(())
+    }
+
+    async fn switch_if_idle(
+        &self,
+        bot_id: &str,
+        activity: &Activity,
+        session: &str,
+        next: Option<&str>,
+    ) -> Result<bool> {
+        if !self
             .control
             .session_commands()
             .exit_if_idle(session)
             .await?
         {
-            self.records
-                .set_current_session(bot_id, next.as_deref())
-                .await?;
-            activity.generation_notice.lock().unwrap().take();
-            activity.notify(ConversationUpdate::Reset);
-        } else {
-            self.records.clear_idle_timer(bot_id).await?;
+            return Ok(false);
         }
-        Ok(())
+        self.records.set_current_session(bot_id, next).await?;
+        activity.generation_notice.lock().unwrap().take();
+        activity.notify(ConversationUpdate::Reset);
+        Ok(true)
     }
 
     async fn retire_obsolete(&self, bot_id: &str, activity: &Activity) -> Result<()> {

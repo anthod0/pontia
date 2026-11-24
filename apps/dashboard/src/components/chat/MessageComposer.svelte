@@ -5,6 +5,7 @@
   import { onDestroy, tick, type Snippet } from 'svelte'
   import ArrowsOutIcon from 'phosphor-svelte/lib/ArrowsOutIcon'
   import ArrowsInIcon from 'phosphor-svelte/lib/ArrowsInIcon'
+  import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
   import StackSimpleIcon from 'phosphor-svelte/lib/StackSimpleIcon'
   import StopIcon from 'phosphor-svelte/lib/StopIcon'
   import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon'
@@ -107,6 +108,7 @@
       case '/new': return { label: $t('chat.new'), icon: NotePencilIcon }
       case '/rename': return { label: $t('common.rename'), icon: PencilSimpleIcon }
       case '/exit': return { label: $t('common.exit'), icon: SignOutIcon }
+      case '/reload': return { label: $t('bots.reload'), icon: ArrowClockwiseIcon }
       case '/compact': return { label: $t('compaction.action'), icon: StackSimpleIcon }
       case '/pin': return item.active ? { label: $t('sessions.unpin'), icon: PushPinSlashIcon } : { label: $t('sessions.pin'), icon: PushPinIcon }
       case '/archive': return item.active ? { label: $t('common.unarchive'), icon: BoxArrowUpIcon } : { label: $t('common.archive'), icon: ArchiveIcon }
@@ -121,7 +123,7 @@
   const menuGroups: { names: ChatCommand['name'][] }[] = [
     { names: ['/new'] },
     { names: ['/rename', '/pin', '/archive'] },
-    { names: ['/compact'] },
+    { names: ['/compact', '/reload'] },
     { names: ['/exit'] },
   ]
   const visibleMenuGroups = $derived(menuGroups
@@ -201,7 +203,7 @@
       command.run(commandArgument)
       return
     }
-    value = command.name
+    if (command.name !== '/reload') value = command.name
     fullscreenOpen = false
     command.run()
   }

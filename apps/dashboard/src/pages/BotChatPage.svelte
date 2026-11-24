@@ -8,6 +8,7 @@
   import { MessageResponse } from '$lib/components/ai-elements/message/index.js'
   import SharedFiles from '../components/chat/files/SharedFiles.svelte'
   import { fileActionButton, fileActionClass, type FileActionLook } from '../components/chat/files/fileActionButton'
+  import { ApiError } from '../api/errors'
   import MessageComposer from '../components/chat/MessageComposer.svelte'
   import { parseUploadMessage } from '$lib/uploads/message'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
@@ -136,6 +137,23 @@
     toast.dismiss(actionToastId)
     feed?.followSend()
     showDelivery(await device.api.sendBotMessage(botId, sentQuote ? quotedMessage(sentQuote, content) : content))
+  }
+
+  let reloading = $state(false)
+  async function reload() {
+    if (reloading) return
+    reloading = true
+    try {
+      await device.api.reloadBot(botId)
+      if (draft.trim() === '/reload') draft = ''
+      toast.success($t('bots.reloadReady'))
+    } catch (error) {
+      toast.error(error instanceof ApiError && error.code === 'state_conflict'
+        ? $t('bots.reloadBusy')
+        : error instanceof Error ? error.message : String(error))
+    } finally {
+      reloading = false
+    }
   }
 
   async function send(content: string): Promise<boolean> {
@@ -320,6 +338,7 @@
       </div>
       <MessageComposer bind:this={composer} draftId={`bot:${botId}`} bind:value={draft} placeholder={$t('bots.message')} fullscreen
         submitDisabled={quote !== null && !draft.trim()}
+        busy={reloading} commands={[{ name: '/reload', description: $t('bots.reload'), run: reload }]}
         onSubmit={send} />
     </div>
   </section>
