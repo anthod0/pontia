@@ -15,7 +15,7 @@ Run this on the machine with your signed-in coding CLI. Setup registers the devi
 
 **Who can read a remote session?** Your browser and the selected device are the endpoints for end-to-end encryption. Pontia Cloud handles sign-in and authorizes the connection. The Edge is a zero-knowledge relay for Dashboard content. It sees ciphertext, routing metadata, traffic size and timing. Choose an official Edge or host a private Edge yourself. Agent tools run with their configured permissions on your machine. [Security model](https://pontia.dev/docs/security) · [Self-host an Edge](https://pontia.dev/docs/self-hosted-edge)
 
-![Juniper assigns two helpers to a field guide, returns the map audit and tracks two decisions.](assets/screenshots/lead-desk.webp)
+![Juniper assigns two helpers to a field guide, returns the map audit and tracks two decisions.](https://files.pontia.dev/cloud/lead-desk-2640-f11325427ccd.webp)
 
 ## One field guide, two helpers
 
@@ -36,21 +36,21 @@ Run this on the machine with your signed-in coding CLI. Setup registers the devi
 
 <table>
   <tr>
-    <td width="50%" valign="top"><a href="assets/screenshots/shared-memory.webp"><img src="assets/screenshots/shared-memory.webp" alt="Find a past trail decision in Memory"></a><br><strong>Find a past trail decision in Memory</strong></td>
-    <td width="50%" valign="top"><a href="assets/screenshots/role-profiles.webp"><img src="assets/screenshots/role-profiles.webp" alt="Set the field researcher’s model and reasoning effort"></a><br><strong>Set the field researcher’s model and reasoning effort</strong></td>
+    <td width="50%" valign="top"><a href="https://files.pontia.dev/cloud/shared-memory-2640-36fb6dde6684.webp"><img src="https://files.pontia.dev/cloud/shared-memory-2640-36fb6dde6684.webp" alt="Find a past trail decision in Memory"></a><br><strong>Find a past trail decision in Memory</strong></td>
+    <td width="50%" valign="top"><a href="https://files.pontia.dev/cloud/role-profiles-2640-7186bd2133d8.webp"><img src="https://files.pontia.dev/cloud/role-profiles-2640-7186bd2133d8.webp" alt="Set the field researcher’s model and reasoning effort"></a><br><strong>Set the field researcher’s model and reasoning effort</strong></td>
   </tr>
   <tr>
-    <td width="50%" valign="top"><a href="assets/screenshots/private-edge.webp"><img src="assets/screenshots/private-edge.webp" alt="Check the health of a private Edge"></a><br><strong>Check the health of a private Edge</strong></td>
-    <td width="50%" valign="top"><a href="assets/screenshots/helper-decisions.webp"><img src="assets/screenshots/helper-decisions.webp" alt="Reply to a Todo while the print editor works"></a><br><strong>Reply to a Todo while the print editor works</strong></td>
+    <td width="50%" valign="top"><a href="https://files.pontia.dev/cloud/private-edge-2640-69ad5bcacac0.webp"><img src="https://files.pontia.dev/cloud/private-edge-2640-69ad5bcacac0.webp" alt="Check the health of a private Edge"></a><br><strong>Check the health of a private Edge</strong></td>
+    <td width="50%" valign="top"><a href="https://files.pontia.dev/cloud/helper-decisions-2640-303231730ebb.webp"><img src="https://files.pontia.dev/cloud/helper-decisions-2640-303231730ebb.webp" alt="Reply to a Todo while the print editor works"></a><br><strong>Reply to a Todo while the print editor works</strong></td>
   </tr>
 </table>
 
 ### On your phone
 
 <p align="center">
-  <a href="assets/screenshots/phone-report.webp"><img src="assets/screenshots/phone-report.webp" width="30%" alt="Receive the map audit in chat"></a>
-  <a href="assets/screenshots/phone-decisions.webp"><img src="assets/screenshots/phone-decisions.webp" width="30%" alt="Answer decisions in the Todo queue"></a>
-  <a href="assets/screenshots/phone-devices.webp"><img src="assets/screenshots/phone-devices.webp" width="30%" alt="Switch devices and check on the lead"></a>
+  <a href="https://files.pontia.dev/cloud/phone-report-780-89961b4cba82.webp"><img src="https://files.pontia.dev/cloud/phone-report-780-89961b4cba82.webp" width="30%" alt="Receive the map audit in chat"></a>
+  <a href="https://files.pontia.dev/cloud/phone-decisions-780-0965988bfd21.webp"><img src="https://files.pontia.dev/cloud/phone-decisions-780-0965988bfd21.webp" width="30%" alt="Answer decisions in the Todo queue"></a>
+  <a href="https://files.pontia.dev/cloud/phone-devices-780-ed4abb0a446f.webp"><img src="https://files.pontia.dev/cloud/phone-devices-780-ed4abb0a446f.webp" width="30%" alt="Switch devices and check on the lead"></a>
 </p>
 
 ## Quick start
