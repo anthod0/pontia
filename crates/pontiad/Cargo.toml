@@ -6,6 +6,11 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+bytes = "1"
+futures-util = { version = "0.3", features = ["sink"] }
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+tokio-tungstenite = "0.30"
 tokio-stream = "0.1"
 pontia-agent-control.workspace = true
 pontia-clients.workspace = true

@@ -108,9 +108,16 @@ async fn main() -> Result<()> {
                     }
                 }
             });
+            let preview =
+                pontiad::LocalPreviewProxy::new(bound_addr.port(), cleanup_shutdown.subscribe());
             let handler = pontia_tunnel::DeviceRequestHandler::new(move |request| {
                 let ingress = ingress.clone();
-                async move { ingress.handle(request).await }
+                let preview = preview.clone();
+                async move {
+                    preview
+                        .dispatch(request, async |req| ingress.handle(req).await)
+                        .await
+                }
             });
             pontia_tunnel::RemoteClient::new(
                 &config.auth_origin,
