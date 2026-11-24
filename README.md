@@ -13,6 +13,7 @@ Pontia gives you a Lead Bot that coordinates coding agents on your own machines 
 - **Shared memory.** Bots on the same device can recall past decisions across sessions. Keep your standing instructions in `USER.md`.
 - **Agent Profiles.** Save a role’s instructions, client and model for other helpers to use.
 - **Remote access.** Switch between registered machines in the Dashboard. Each machine runs its own clients, with an end-to-end encrypted connection to your browser.
+- **Local files and ports.** Securely preview files, HTML prototypes, and localhost dev servers from your browser or phone.
 
 ## Supported clients
 
