@@ -3,7 +3,16 @@
 x-local-hosts: &local-hosts
   - "pontia.dev=${E2E_CLOUD_IP:?Use scripts/docker-e2e}"
   - "app.pontia.dev=${E2E_DASHBOARD_IP:?Use scripts/docker-e2e}"
+  - "__probe.docker-e2e.p.pontia.dev=${E2E_EDGE_IP:?Use scripts/docker-e2e}"
   - "docker-e2e.edge.pontia.dev=${E2E_EDGE_IP:?Use scripts/docker-e2e}"
+
+x-preview-certificate: &preview-certificate
+  type: bind
+  source: ${E2E_STATE}/preview-cert.pem
+  target: /run/preview-cert.pem
+  read_only: true
+  bind:
+    create_host_path: false
 
 x-build: &build
   context: ../..
@@ -21,8 +30,11 @@ services:
       <<: *build
       target: cloud
     init: true
+    environment:
+      NODE_EXTRA_CA_CERTS: /run/preview-cert.pem
     extra_hosts: *local-hosts
     volumes:
+      - *preview-certificate
       - type: bind
         source: ${E2E_CONFIG}/cloud.dev.vars
         target: /app/.dev.vars
@@ -153,12 +165,15 @@ services:
       target: browser
     hostname: pontia-e2e-browser
     init: true
+    environment:
+      E2E_EDGE_IP: ${E2E_EDGE_IP:?Use scripts/docker-e2e}
     shm_size: 1gb
     extra_hosts: *local-hosts
     ports:
       - "127.0.0.1::6080"
     volumes:
       - browser-home:/home/e2e
+      - *preview-certificate
       - type: bind
         source: ${E2E_STATE}/auth/browser
         target: /e2e-auth

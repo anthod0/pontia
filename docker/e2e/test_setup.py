@@ -284,7 +284,7 @@ class SetupTests(unittest.TestCase):
                 hosts = dict(entry.split("=", 1) for entry in hosts)
             self.assertEqual(hosts, {
                 "pontia.dev": "192.0.2.2", "app.pontia.dev": "192.0.2.3",
-                "docker-e2e.edge.pontia.dev": "192.0.2.4",
+                "docker-e2e.edge.pontia.dev": "192.0.2.4", "__probe.docker-e2e.p.pontia.dev": "192.0.2.4",
             })
             for port in service.get("ports", []):
                 self.assertEqual(port["host_ip"], "127.0.0.1")

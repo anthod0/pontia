@@ -139,8 +139,9 @@ ENTRYPOINT ["bash", "/usr/local/bin/device-entrypoint"]
 
 FROM base AS browser
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    chromium xvfb x11vnc novnc websockify openbox dbus-x11 x11-utils fonts-liberation fonts-noto-cjk \
+    libnss3-tools chromium xvfb x11vnc novnc websockify openbox dbus-x11 x11-utils fonts-liberation fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/* \
+    && npm install --prefix /opt/browser playwright-core@1.56.1 --no-audit --no-fund \
     && usermod --login e2e --home /home/e2e --move-home node \
     && groupmod --new-name e2e node \
     && chown -R 1000:1000 /home/e2e
