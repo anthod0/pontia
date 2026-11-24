@@ -4,8 +4,7 @@
   import { useDeviceRuntime } from '../../device/context'
   import type { AgentClientView, AgentProfileView } from '../../api/types'
   import ClientIcon from '../../components/chat/ClientIcon.svelte'
-  import ClientModelSelect from '../../components/chat/ClientModelSelect.svelte'
-  import ReasoningEffortSelect from '../../components/chat/ReasoningEffortSelect.svelte'
+  import ModelEffortPicker from '../../components/chat/ModelEffortPicker.svelte'
   import ModelSelectPlaceholder from '../../components/chat/ModelSelectPlaceholder.svelte'
   import { copyText } from '../../lib/copyText'
   import { dashboardPath } from '$lib/navigation'
@@ -249,14 +248,8 @@
       <Label for={`${id}-model`}>{$t('model.title')}</Label>
       {#if selectedClient}
         {#key selectedClient.id}
-          <ClientModelSelect id={`${id}-model`} client={selectedClient} bind:value={draft.model} bind:available={modelAvailable} disabled={saving}>
-            {#snippet children(selectedModel)}
-              {#if selectedModel}
-                <ReasoningEffortSelect class="w-full" options={selectedModel.reasoning_efforts ?? []} defaultEffort={selectedModel.default_reasoning_effort}
-                  savedValue={profile?.model === draft.model ? profile.reasoning_effort : null} bind:value={draft.reasoning_effort} bind:unavailable={effortUnavailable} disabled={saving} />
-              {/if}
-            {/snippet}
-          </ClientModelSelect>
+          <ModelEffortPicker id={`${id}-model`} client={selectedClient} bind:model={draft.model} bind:effort={draft.reasoning_effort}
+            savedEffort={profile?.model === draft.model ? profile.reasoning_effort : null} bind:available={modelAvailable} bind:effortUnavailable disabled={saving} />
         {/key}
       {:else}
         <ModelSelectPlaceholder id={`${id}-model`} label={draft.model || $t('model.choose')} />

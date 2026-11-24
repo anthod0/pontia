@@ -111,7 +111,7 @@ test.each([false, true])(
     const user = userEvent.setup();
     render(NewChatPage);
     await user.click(await screen.findByRole("button", { name: "Fast" }));
-    await user.click(await screen.findByRole("button", { name: "Deep" }));
+    await user.click(await screen.findByLabelText("Deep"));
     document.body.style.pointerEvents = "";
     await waitFor(() =>
       expect(models).toHaveBeenCalledWith(

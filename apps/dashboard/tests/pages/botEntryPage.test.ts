@@ -64,7 +64,7 @@ test("creates the first Bot from client and model and opens it on the selected d
   await fireEvent.click(screen.getByRole("radio", { name: "Rose" }));
   await waitFor(() => expect(screen.getByLabelText("Model")).toBeEnabled());
   await fireEvent.click(screen.getByLabelText("Model"));
-  await fireEvent.click(await screen.findByRole("button", { name: "Test model" }));
+  await fireEvent.click(await screen.findByLabelText("Test model"));
   const submit = screen.getByRole("button", { name: "Start chatting" });
   await waitFor(() => expect(submit).toBeEnabled());
   await fireEvent.click(submit);
