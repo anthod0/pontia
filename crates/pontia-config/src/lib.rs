@@ -9,6 +9,7 @@ mod environment;
 mod file_config;
 mod loading;
 mod paths;
+pub use paths::pontia_home;
 mod uploads;
 pub use bot::BotConfig;
 mod workspace_roots;

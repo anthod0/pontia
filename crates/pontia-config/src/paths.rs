@@ -7,7 +7,7 @@ use pontia_core::error::{Error, Result};
 
 use super::environment::get;
 
-pub(super) fn pontia_home(vars: &HashMap<String, String>) -> Result<PathBuf> {
+pub fn pontia_home(vars: &HashMap<String, String>) -> Result<PathBuf> {
     if let Some(value) = get(vars, "PONTIA_HOME") {
         return validate_root("PONTIA_HOME", value);
     }
