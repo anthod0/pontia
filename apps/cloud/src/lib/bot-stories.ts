@@ -30,7 +30,6 @@ export const codex: Agent = {
 };
 export const claude: Agent = { client: "Claude Code", logo: "/client-logos/claude-code.svg" };
 export const pi: Agent = { client: "Pi", logo: "/client-logos/pi.svg" };
-export const grokBuild: Agent = { client: "Grok Build", logo: "/client-logos/grok-build.svg" };
 
 /** A scripted chat. Step i shows lines[0..i]; per-step arrays have one entry per line. */
 export type Chat = {
@@ -42,7 +41,7 @@ export type Chat = {
   todoClosedAt?: number;
 };
 
-export type Visual = "sessions" | "profiles" | "worktrees" | "memory" | "devices";
+export type Visual = "sessions" | "models" | "local" | "memory" | "devices";
 
 /** One Bot tab. Its demo plays steps 0..steps-1 and the last step is the complete picture. */
 export type Story = {
@@ -96,22 +95,31 @@ export const stories: Story[] = [
     },
   }),
   {
+    name: "Juno",
+    shape: "drop",
+    color: "#458588",
+    label: m.story_work_label,
+    caption: m.story_work_caption,
+    visual: "sessions",
+    steps: 5,
+  },
+  {
     name: "Ivy",
     shape: "drop",
     color: "#98971a",
-    label: m.story_worktrees_label,
-    caption: m.story_worktrees_caption,
-    visual: "worktrees",
-    steps: 5,
+    label: m.story_local_label,
+    caption: m.story_local_caption,
+    visual: "local",
+    steps: 2,
   },
   {
     name: "Kai",
     shape: "mochi",
     color: "#689d6a",
-    label: m.story_profiles_label,
-    caption: m.story_profiles_caption,
-    visual: "profiles",
-    steps: 5,
+    label: m.story_models_label,
+    caption: m.story_models_caption,
+    visual: "models",
+    steps: 3,
   },
   {
     name: "Remy",
@@ -130,15 +138,6 @@ export const stories: Story[] = [
     caption: m.story_devices_caption,
     visual: "devices",
     steps: 3,
-  },
-  {
-    name: "Juno",
-    shape: "drop",
-    color: "#458588",
-    label: m.story_work_label,
-    caption: m.story_work_caption,
-    visual: "sessions",
-    steps: 5,
   },
 ];
 

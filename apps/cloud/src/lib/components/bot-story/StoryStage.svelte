@@ -2,16 +2,16 @@
 	import type { Story } from '$lib/bot-stories';
 	import StoryChat from './StoryChat.svelte';
 	import SessionsVisual from './SessionsVisual.svelte';
-	import ProfilesVisual from './ProfilesVisual.svelte';
-	import WorktreesVisual from './WorktreesVisual.svelte';
+	import ModelsVisual from './ModelsVisual.svelte';
+	import LocalVisual from './LocalVisual.svelte';
 	import MemoryVisual from './MemoryVisual.svelte';
 	import DevicesVisual from './DevicesVisual.svelte';
 
 	let { story, step }: { story: Story; step: number } = $props();
 	const visuals = {
 		sessions: SessionsVisual,
-		profiles: ProfilesVisual,
-		worktrees: WorktreesVisual,
+		models: ModelsVisual,
+		local: LocalVisual,
 		memory: MemoryVisual,
 		devices: DevicesVisual
 	};
