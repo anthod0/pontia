@@ -8,7 +8,6 @@
 	import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon';
 	import DotsThreeIcon from 'phosphor-svelte/lib/DotsThreeIcon';
 	import FunnelIcon from 'phosphor-svelte/lib/FunnelIcon';
-	import GearIcon from 'phosphor-svelte/lib/GearIcon';
 	import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon';
 	import PushPinIcon from 'phosphor-svelte/lib/PushPinIcon';
 	import QuestionIcon from 'phosphor-svelte/lib/QuestionIcon';
@@ -16,7 +15,7 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import { cn } from '$lib/utils';
 	import BotAvatarMark from '$lib/components/bot-story/BotAvatarMark.svelte';
-	import DemoSetup, { settingsSections, type DemoSettingsSection } from './DemoSetup.svelte';
+	import DemoNewChat from './DemoNewChat.svelte';
 	import DemoBotChat from './DemoBotChat.svelte';
 	import DemoConversation from './DemoConversation.svelte';
 	import DemoSessionPanel from './DemoSessionPanel.svelte';
@@ -35,8 +34,7 @@
 	let workspaceFilter = $state('');
 	// Like the Dashboard, the Session list shows only active sessions until the filter asks for all.
 	let sessionScope = $state<'active' | 'all'>('active');
-	let settingsSection = $state<DemoSettingsSection>('Common');
-	let setup = $state<'new' | 'settings' | 'sessions' | null>(null);
+	let setup = $state<'new' | 'sessions' | null>(null);
 	let sessionsOpen = $state(true);
 	let mobileSidebarOpen = $state(false);
 	let botId = $state<string | null>(null);
@@ -59,7 +57,7 @@
 	const dropdownContent = 'rounded-lg p-1 shadow-none';
 	const dropdownItem = 'gap-1.5 rounded-sm py-1 pl-1.5 text-sm';
 
-	function openView(view: 'new' | 'settings' | 'sessions') {
+	function openView(view: 'new' | 'sessions') {
 		setup = view;
 		mobileSidebarOpen = false;
 	}
@@ -208,13 +206,6 @@
 			</div>
 
 			<div class="demo-scroll min-h-0 flex-1 overflow-y-auto">
-				{#if setup === 'settings'}
-					<nav aria-label="Settings sections" class="space-y-1 p-2">
-						{#each settingsSections as name}
-							<button type="button" class={cn(menuButton, 'hover:bg-muted', settingsSection === name && 'bg-accent font-medium')} aria-current={settingsSection === name ? 'page' : undefined} onclick={() => settingsSection = name}>{name}</button>
-						{/each}
-					</nav>
-				{:else}
 				<div class="p-2">
 					<div class="flex h-8 items-center px-2 text-xs font-semibold text-heading">Bots</div>
 					<ul class="flex flex-col gap-1">
@@ -302,13 +293,11 @@
 					</ul>
 					{/if}
 				</div>
-				{/if}
 			</div>
 		</div>
 
-		<div class="relative p-2">
-			<button type="button" class={cn(menuButton, 'h-9 px-3 text-[13px] hover:bg-muted')} onclick={() => openView('settings')}><GearIcon /><span>Settings</span></button>
-			<span class="absolute top-3.5 right-3 flex size-5 items-center justify-center"><QuestionIcon class="size-4" /></span>
+		<div class="flex justify-end p-3" aria-hidden="true">
+			<QuestionIcon class="size-4" />
 		</div>
 	</aside>
 
@@ -332,16 +321,14 @@
 				{/each}
 			</Tabs.Root>
 		</section>
-	{:else if setup}
-		{#key setup}
-			<DemoSetup {device} mode={setup} bind:section={settingsSection} onsavememory={(text) => device.memory = text} onback={() => setup = null} onstart={(next) => {
-				device.sessions.unshift(next);
-				workspaceFilter = '';
-				sessionsOpen = true;
-				panelOpen = false;
-				selectSession(next);
-			}} />
-		{/key}
+	{:else if setup === 'new'}
+		<DemoNewChat {device} onback={() => setup = null} onstart={(next) => {
+			device.sessions.unshift(next);
+			workspaceFilter = '';
+			sessionsOpen = true;
+			panelOpen = false;
+			selectSession(next);
+		}} />
 	{:else if bot}
 		{#key bot.id}
 			<DemoBotChat

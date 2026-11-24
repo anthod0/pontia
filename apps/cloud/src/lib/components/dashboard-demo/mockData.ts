@@ -110,7 +110,6 @@ export interface DemoBot {
 export interface DemoDevice {
   handle: string;
   name: string;
-  memory: string;
   clients: DemoClient[];
   bots: DemoBot[];
   workspaces: DemoWorkspace[];
@@ -121,7 +120,6 @@ export const demoDevices: DemoDevice[] = [
   {
     handle: "studio",
     name: "Studio MacBook",
-    memory: "Link the release notes when a review is ready.",
     clients: ["codex", "claude", "pi", "grok", "antigravity", "kiro"],
     bots: [
       {
@@ -542,7 +540,6 @@ export const demoDevices: DemoDevice[] = [
   {
     handle: "build-server",
     name: "Build Server",
-    memory: "Include the staging build number in deployment updates.",
     clients: ["claude", "codex", "pi", "grok"],
     bots: [
       {
