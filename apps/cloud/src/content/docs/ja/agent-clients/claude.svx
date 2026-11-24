@@ -28,7 +28,7 @@ pontia init
 
 後からインストールまたは修復するには、`pontia setup claude` を実行します。これにより Claude Code Client も有効になります。
 
-初回のセットアップでは、`@pontia/claude-client` パッケージとその Claude Agent SDK の依存関係を npm から `$PONTIA_HOME/clients/claude-client` にインストールします。インターネット接続と数百 MB のディスク容量が必要です。以降のセットアップでは、動作するインストールを再利用します。
+初回のセットアップでは、`@pontia/claude-client` パッケージとその Claude Agent SDK の依存関係を npm から `$PONTIA_HOME/clients/claude-client` にインストールします。インターネット接続と数百 MB のディスク容量が必要です。以降のセットアップでは、インストール済みのクライアントが動作し、バージョンが Pontia と一致する場合は再利用します。
 
 セットアップは、Node.js と Claude Code の設定パスを Pontia サービス用に保存します。
 
@@ -52,14 +52,7 @@ PONTIA_CLAUDE_HOST_PATH=/absolute/path/to/node_modules/@pontia/claude-client/dis
 
 ## クライアントを更新する
 
-`pontia update` は Claude Code クライアントを更新しません。更新するには、アクティブな Claude Code Session を終了してから、次を実行します。
-
-```sh
-npm install --prefix "${PONTIA_HOME:-$HOME/.pontia}/clients/claude-client" --omit=dev @pontia/claude-client@latest
-pontia setup claude
-```
-
-セットアップは更新されたインストールを確認し、Client を有効にします。
+実行中の管理対象サービスで Claude Code が有効な場合、`pontia update` はデフォルトの `@pontia/claude-client` を Pontia と同じバージョンに更新します。`PONTIA_CLAUDE_HOST_PATH` を指定している場合は、そのクライアントを Pontia と同じバージョンに手動で更新してください。
 
 ## Claude Code Session の動作
 

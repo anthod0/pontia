@@ -87,7 +87,7 @@ pontia setup codex
 pontia setup claude
 ```
 
-Pi 需要已安装 `pi`；其设置会安装 `@pontia/pi-client-plugin`。Codex 需要已安装支持守护进程的 CLI；其设置会配置自动启动、验证连接，并安装启动器和 shell PATH。Claude Code 需要 Node.js LTS；设置会在缺失时安装默认 host，并检查现有或显式选择的 host。
+Pi 需要已安装 `pi`；其设置会安装 `@pontia/pi-client-plugin`。Codex 需要已安装支持守护进程的 CLI；其设置会配置自动启动、验证连接，并安装启动器和 shell PATH。Claude Code 需要 Node.js LTS。设置会安装与 Pontia 同版本的默认 host。如果你显式指定了 host，设置会检查该 host。
 
 这些命令会保存运行时路径、配置 Pontia 服务并启用所选 Client。对于 Codex，请打开新终端或运行打印出的激活命令。使用每个 Client 自己的登录流程完成认证；设置不会登录，也不会更改模型凭据、沙箱设置或审批策略。
 

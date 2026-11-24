@@ -22,7 +22,9 @@ impl PreparedUpdate {
         pontia_update::ensure_not_running(&self.daemon_path())
     }
 
-    pub fn install(self, restart: impl FnMut() -> Result<(), String>) -> Result<(), String> {
-        self.0.install(restart)
+    pub fn install(self, restart: impl FnMut() -> Result<(), String>) -> Result<String, String> {
+        let version = self.0.product_version().to_owned();
+        self.0.install(restart)?;
+        Ok(version)
     }
 }

@@ -45,7 +45,7 @@ fn setup_preserves_native_context_and_runtime_without_reading_credentials_or_cre
         ("CLAUDE_CONFIG_DIR".into(), config.to_str().unwrap().into()),
     ]);
     let runner = Runner { dependency_code: 0 };
-    let setup = pontia_client_claude::setup::integration()
+    let setup = pontia_client_claude::setup::integration("1.2.3")
         .prepare(&vars, root.path(), &runner)
         .unwrap();
     setup.preflight(&runner).unwrap();
@@ -67,7 +67,7 @@ fn setup_preserves_native_context_and_runtime_without_reading_credentials_or_cre
 fn setup_defaults_to_the_same_users_native_configuration() {
     let root = tempfile::tempdir().unwrap();
     let runner = Runner { dependency_code: 0 };
-    let setup = pontia_client_claude::setup::integration()
+    let setup = pontia_client_claude::setup::integration("1.2.3")
         .prepare(&HashMap::new(), root.path(), &runner)
         .unwrap();
     let paths: HashMap<_, _> = setup.service_environment_paths().into_iter().collect();
@@ -85,10 +85,20 @@ impl CommandRunner for Installer {
         let code = if program == "npm" && args[0] == "install" {
             self.downloads.fetch_add(1, Ordering::SeqCst);
             let prefix = args.iter().position(|arg| arg == "--prefix").unwrap();
-            let host = Path::new(&args[prefix + 1])
-                .join("node_modules/@pontia/claude-client/dist/src/main.js");
+            let package = Path::new(&args[prefix + 1]).join("node_modules/@pontia/claude-client");
+            let version = args
+                .last()
+                .unwrap()
+                .strip_prefix("@pontia/claude-client@")
+                .unwrap();
+            let host = package.join("dist/src/main.js");
             std::fs::create_dir_all(host.parent().unwrap()).unwrap();
             std::fs::write(host, "fixture").unwrap();
+            std::fs::write(
+                package.join("package.json"),
+                serde_json::json!({"version": version}).to_string(),
+            )
+            .unwrap();
             self.install_code
         } else if args.last().is_some_and(|arg| arg == "preflight") {
             self.dependency_code
@@ -111,7 +121,7 @@ fn installs_once_and_reuses_the_client_without_npm_downloads() {
         dependency_code: 0,
         downloads: AtomicUsize::new(0),
     };
-    let integration = pontia_client_claude::setup::integration();
+    let integration = pontia_client_claude::setup::integration("1.2.3");
     for _ in 0..2 {
         let setup = integration
             .prepare(&HashMap::new(), root.path(), &runner)
@@ -131,6 +141,37 @@ fn installs_once_and_reuses_the_client_without_npm_downloads() {
 }
 
 #[test]
+fn setup_and_maintenance_replace_a_healthy_older_package() {
+    let root = tempfile::tempdir().unwrap();
+    let pontia_home = root.path().join("service");
+    let vars = HashMap::from([("PONTIA_HOME".into(), pontia_home.display().to_string())]);
+    let runner = Installer {
+        install_code: 0,
+        dependency_code: 0,
+        downloads: AtomicUsize::new(0),
+    };
+    let manifest =
+        pontia_home.join("clients/claude-client/node_modules/@pontia/claude-client/package.json");
+    for version in ["1.0.0", "1.1.0"] {
+        let setup = pontia_client_claude::setup::integration(version)
+            .prepare(&vars, root.path(), &runner)
+            .unwrap();
+        setup.preflight(&runner).unwrap();
+        setup.install(&runner, &NoDefinitions).unwrap();
+        let installed: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
+        assert_eq!(installed["version"], version);
+    }
+    let integration = pontia_client_claude::setup::integration("2.0.0");
+    integration
+        .maintain(&vars, root.path(), &runner, &NoDefinitions)
+        .unwrap();
+    let installed: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(manifest).unwrap()).unwrap();
+    assert_eq!(installed["version"], "2.0.0");
+}
+
+#[test]
 fn failed_installation_or_dependency_check_leaves_no_partial_client_and_can_retry() {
     let root = tempfile::tempdir().unwrap();
     for (install_code, dependency_code) in [(1, 0), (0, 1), (0, 0)] {
@@ -139,7 +180,7 @@ fn failed_installation_or_dependency_check_leaves_no_partial_client_and_can_retr
             dependency_code,
             downloads: AtomicUsize::new(0),
         };
-        let setup = pontia_client_claude::setup::integration()
+        let setup = pontia_client_claude::setup::integration("1.2.3")
             .prepare(&HashMap::new(), root.path(), &runner)
             .unwrap();
         setup.preflight(&runner).unwrap();
@@ -168,7 +209,7 @@ fn repairs_a_missing_default_host_in_an_existing_installation_without_removing_o
         dependency_code: 0,
         downloads: AtomicUsize::new(0),
     };
-    let integration = pontia_client_claude::setup::integration();
+    let integration = pontia_client_claude::setup::integration("1.2.3");
     let setup = integration
         .prepare(&HashMap::new(), root.path(), &runner)
         .unwrap();
@@ -217,7 +258,7 @@ fn repairs_a_default_host_that_fails_its_dependency_check() {
         dependency_code: 0,
         downloads: AtomicUsize::new(0),
     });
-    let integration = pontia_client_claude::setup::integration();
+    let integration = pontia_client_claude::setup::integration("1.2.3");
     let setup = integration
         .prepare(&HashMap::new(), root.path(), &runner)
         .unwrap();

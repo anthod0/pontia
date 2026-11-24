@@ -3,10 +3,14 @@ pub use pontia_client_acp::relay::run_from_stdin as run_stdio_relay;
 use std::sync::Arc;
 
 pub fn integrations() -> Vec<Arc<dyn ClientIntegration>> {
+    integrations_for_version(pontia_version::version())
+}
+
+pub fn integrations_for_version(version: &str) -> Vec<Arc<dyn ClientIntegration>> {
     vec![
         pontia_client_pi::setup::integration(),
         pontia_client_codex::setup::integration(),
-        pontia_client_claude::setup::integration(),
+        pontia_client_claude::setup::integration(version),
     ]
 }
 

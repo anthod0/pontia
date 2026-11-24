@@ -16,4 +16,5 @@ tracing = "0.1.44"
 tempfile = "3"
 
 [dev-dependencies]
+pontia-version.workspace = true
 pontia-storage-sqlite.workspace = true

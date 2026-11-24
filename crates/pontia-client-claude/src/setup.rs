@@ -8,8 +8,10 @@ use std::{
     sync::Arc,
 };
 
-pub fn integration() -> Arc<dyn ClientIntegration> {
-    Arc::new(Integration)
+pub fn integration(version: &str) -> Arc<dyn ClientIntegration> {
+    Arc::new(Integration {
+        version: version.into(),
+    })
 }
 
 pub(crate) fn node() -> std::ffi::OsString {
@@ -59,8 +61,11 @@ pub(crate) fn detect(
     native
 }
 
-struct Integration;
+struct Integration {
+    version: String,
+}
 struct Prepared {
+    version: String,
     node: PathBuf,
     host: Option<PathBuf>,
     root: PathBuf,
@@ -140,6 +145,7 @@ impl ClientIntegration for Integration {
             return Err("Claude Code host and configuration paths must be absolute".into());
         }
         Ok(Box::new(Prepared {
+            version: self.version.clone(),
             node,
             host,
             root,
@@ -172,8 +178,7 @@ impl PreparedClientIntegration for Prepared {
         if let Some(host) = &self.host {
             return self.check_host(host, runner);
         }
-        let host = host_path(&self.root);
-        if self.check_host(&host, runner).is_ok() {
+        if self.managed_host_is_ready(runner)? {
             return Ok(());
         }
         if runner.run_status("npm", &["--version".into()])? != 0 {
@@ -185,22 +190,9 @@ impl PreparedClientIntegration for Prepared {
         if let Some(host) = &self.host {
             return self.check_host(host, runner);
         }
-        if self.check_host(&host_path(&self.root), runner).is_ok() {
+        if self.managed_host_is_ready(runner)? {
             return Ok(());
         }
-        let manifest_path = self
-            .root
-            .join("clients/claude-client/node_modules/@pontia/claude-client/package.json");
-        let manifest = match std::fs::read_to_string(&manifest_path) {
-            Ok(text) => serde_json::from_str::<serde_json::Value>(&text).ok(),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-            Err(error) => return Err(error.to_string()),
-        };
-        let package = manifest
-            .as_ref()
-            .and_then(|manifest| manifest["version"].as_str())
-            .map(|version| format!("@pontia/claude-client@{version}"))
-            .unwrap_or_else(|| "@pontia/claude-client".into());
         let parent = self.root.join("clients");
         std::fs::create_dir_all(&parent).map_err(|e| e.to_string())?;
         let stage = tempfile::tempdir_in(&parent).map_err(|e| e.to_string())?;
@@ -217,7 +209,7 @@ impl PreparedClientIntegration for Prepared {
                 "--omit=dev".into(),
                 "--no-audit".into(),
                 "--no-fund".into(),
-                package,
+                format!("@pontia/claude-client@{}", self.version),
             ],
         )?;
         if code != 0 {
@@ -245,6 +237,20 @@ impl PreparedClientIntegration for Prepared {
 }
 
 impl Prepared {
+    fn managed_host_is_ready(&self, runner: &dyn CommandRunner) -> Result<bool, String> {
+        let manifest = self
+            .root
+            .join("clients/claude-client/node_modules/@pontia/claude-client/package.json");
+        let text = match std::fs::read_to_string(manifest) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+            Err(error) => return Err(error.to_string()),
+        };
+        let current = serde_json::from_str::<serde_json::Value>(&text)
+            .is_ok_and(|manifest| manifest["version"].as_str() == Some(&self.version));
+        Ok(current && self.check_host(&host_path(&self.root), runner).is_ok())
+    }
+
     fn check_host(&self, host: &Path, runner: &dyn CommandRunner) -> Result<(), String> {
         if !host.is_file() {
             return Err("Claude Code client is missing; run pontia setup claude".into());

@@ -10,6 +10,7 @@ pontia-client-pi.workspace = true
 pontia-client-codex.workspace = true
 pontia-config.workspace = true
 pontia-core.workspace = true
+pontia-version.workspace = true
 serde_json.workspace = true
 pontia-client-acp = { version = "0.0.0", path = "../pontia-client-acp" }
 pontia-client-claude = { path = "../pontia-client-claude" }
