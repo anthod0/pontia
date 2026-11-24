@@ -289,6 +289,10 @@ async fn invalid_session_instructions_are_rejected() {
 #[tokio::test]
 async fn antigravity_prepares_its_workspace_agent_again_on_process_recovery() {
     let h = Harness::new(&[("ACP_ANTIGRAVITY", "1")]).await;
+    let cli = h.root.path().join("clients/antigravity/antigravity-cli");
+    std::fs::create_dir_all(&cli).unwrap();
+    let token = cli.join("antigravity-oauth-token");
+    std::fs::write(&token, "independent").unwrap();
     let cwd = h.root.path().join("bot/readonly");
     std::fs::create_dir_all(&cwd).unwrap();
     let session = create(
@@ -306,6 +310,8 @@ async fn antigravity_prepares_its_workspace_agent_again_on_process_recovery() {
     h.crash_agent(&session);
     h.wait_ready(&session, 2).await;
     assert_eq!(std::fs::read_to_string(agent).unwrap(), original);
+    assert!(!token.is_symlink());
+    assert_eq!(std::fs::read_to_string(token).unwrap(), "independent");
     let wire = h.wire();
     let launches: Vec<_> = wire.iter().filter_map(|item| item.get("startup")).collect();
     assert_eq!(launches.len(), 2);

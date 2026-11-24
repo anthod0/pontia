@@ -56,7 +56,7 @@ pub(super) async fn load(
         crate::antigravity::configure_launch(
             adapter.root.get().ok_or_else(unavailable)?,
             &mut launch,
-        );
+        )?;
     }
     launch
         .env
