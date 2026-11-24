@@ -345,7 +345,7 @@ impl SessionCommandService {
                 RuntimeStartRequest {
                     reasoning_effort: None,
                     launch_mode: self.queries.session_launch_mode(session_id).await?,
-                    execution_policy: self.queries.session_execution_policy(session_id).await?,
+                    mode: self.queries.session_mode(session_id).await?,
                     model: None,
                     runtime_id: target.runtime_id.clone(),
                     session_id: session_id.to_string(),
@@ -484,7 +484,7 @@ impl SessionCommandService {
         .await?;
         let prior_restart_count = 0;
         let environment = self.runtime_environment(session_id).await?;
-        let execution_policy = self.queries.session_execution_policy(session_id).await?;
+        let mode = self.queries.session_mode(session_id).await?;
         let launch_mode = self.queries.session_launch_mode(session_id).await?;
         let _launch = pontia_runtime::launch_lock::launch(pontia_home)?;
         let mut runtime_replacement_tx = self.pool.begin().await?;
@@ -515,7 +515,7 @@ impl SessionCommandService {
                 RuntimeStartRequest {
                     reasoning_effort: None,
                     launch_mode,
-                    execution_policy,
+                    mode,
                     model: None,
                     runtime_id: target.runtime_id.clone(),
                     session_id: session_id.to_string(),

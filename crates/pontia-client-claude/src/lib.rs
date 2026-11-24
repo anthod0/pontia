@@ -63,55 +63,8 @@ struct Configuration {
     host: Option<PathBuf>,
 }
 impl ClientConfiguration for Configuration {
-    fn restricted_execution_policy(
-        &self,
-        _key: &str,
-    ) -> Option<pontia_core::execution_policy::ExecutionPolicy> {
-        Some(pontia_core::execution_policy::ExecutionPolicy {
-            disabled_tools: [
-                "Edit",
-                "Write",
-                "NotebookEdit",
-                "Agent",
-                "Task",
-                "SendMessage",
-                "TeamCreate",
-                "TeamDelete",
-                "Workflow",
-                "EnterWorktree",
-                "ExitWorktree",
-                "CronCreate",
-                "CronDelete",
-                "ScheduleWakeup",
-                "RemoteTrigger",
-                "Monitor",
-            ]
-            .into_iter()
-            .map(str::to_owned)
-            .collect(),
-            disable_mcp: true,
-            yolo: false,
-            ..Default::default()
-        })
-    }
-
-    fn validate_execution_policy(
-        &self,
-        _key: &str,
-        policy: &pontia_core::execution_policy::ExecutionPolicy,
-    ) -> Result<()> {
-        if policy
-            .tools
-            .iter()
-            .flatten()
-            .chain(&policy.disabled_tools)
-            .any(|tool| tool.trim().is_empty())
-        {
-            return Err(pontia_core::Error::Domain(
-                "Claude tool entries must be nonempty native names or rules".into(),
-            ));
-        }
-        Ok(())
+    fn supports_mode(&self, _key: &str, _mode: pontia_core::SessionMode) -> bool {
+        true
     }
 
     fn supports_startup_model(&self) -> bool {

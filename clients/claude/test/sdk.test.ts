@@ -8,7 +8,7 @@ import { test } from "node:test";
 import { spawn } from "node:child_process";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { listModels } from "../src/models.js";
-import { Host, type QueryFactory, type ExecutionPolicy } from "../src/host.js";
+import { Host, type QueryFactory, type SessionMode } from "../src/host.js";
 import type { HostEvent } from "../src/facts.js";
 
 // Opt-in runs the real SDK against a loopback-only model substitute, never a live model.
@@ -239,9 +239,9 @@ test(
       assert.equal(code, 0);
       return JSON.parse(output) as Array<{ uuid: string; session_id: string; message: unknown }>;
     }
-    const create = (resume?: string, execution_policy?: ExecutionPolicy) => {
+    const create = (resume?: string, mode?: SessionMode) => {
       const host = new Host(
-        { session_id: "pontia-session", cwd, resume, model: "haiku", execution_policy },
+        { session_id: "pontia-session", cwd, resume, model: "haiku", mode },
         (event) => events.push(event),
         factory,
       );
@@ -395,24 +395,17 @@ test(
       } finally {
         await writeFile(path, saved);
       }
-      const policy: ExecutionPolicy = {
-        tools: ["Read", "Bash", "Glob", "Write", "Skill"],
-        disabled_tools: ["Write", "Agent"],
-        disable_mcp: true,
-        disable_skills: true,
-        yolo: true,
-      };
-      const restricted = create(undefined, policy);
+      const restricted = create(undefined, "restricted");
       await finish(restricted, randomUUID(), "Denied tool under YOLO");
       const restrictedNative = restricted.status().native_session_id!;
       await restricted.close();
-      const resumedRestricted = create(restrictedNative, policy);
+      const resumedRestricted = create(restrictedNative, "restricted");
       await finish(resumedRestricted, randomUUID(), "Denied tool after resume under YOLO");
       assert.ok(JSON.stringify(requests[0]).includes("PONTIA_SKILL_CATALOG_PROBE"));
       for (const index of [10, 12]) {
         assert.ok(!JSON.stringify(requests[index]).includes("PONTIA_SKILL_CATALOG_PROBE"));
         const names = requests[index]!.tools.map((tool) => tool.name);
-        assert.ok(names.includes("Glob"));
+        assert.ok(names.includes("Bash"), names.join(", "));
         assert.ok(!names.includes("Write"));
         assert.ok(!names.includes("Agent"));
         await assert.rejects(access(join(cwd, `write-${index + 1}.txt`)));

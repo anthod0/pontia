@@ -74,7 +74,7 @@ mod tests {
                 RuntimeStartRequest {
                     reasoning_effort: None,
                     launch_mode: Default::default(),
-                    execution_policy: Default::default(),
+                    mode: Default::default(),
                     model: None,
                     runtime_id: None,
                     session_id: session_id.clone(),
@@ -115,7 +115,7 @@ mod tests {
                 RuntimeStartRequest {
                     reasoning_effort: None,
                     launch_mode: Default::default(),
-                    execution_policy: Default::default(),
+                    mode: Default::default(),
                     model: None,
                     runtime_id: Some("runtime_named".into()),
                     session_id,
@@ -141,7 +141,7 @@ mod tests {
         let request = RuntimeStartRequest {
             reasoning_effort: None,
             launch_mode: Default::default(),
-            execution_policy: Default::default(),
+            mode: Default::default(),
             model: None,
             runtime_id: Some("runtime_lifecycle".into()),
             session_id: "sess_runtime_lifecycle_abcdef12".to_string(),
@@ -214,7 +214,7 @@ mod tests {
                 RuntimeStartRequest {
                     reasoning_effort: None,
                     launch_mode: Default::default(),
-                    execution_policy: Default::default(),
+                    mode: Default::default(),
                     model: None,
                     runtime_id: None,
                     session_id: session_id.clone(),

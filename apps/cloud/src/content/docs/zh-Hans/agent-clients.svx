@@ -50,7 +50,7 @@ pontia client enable grok
 
 Grok 会话空闲或已中断时，可以在 Dashboard 中使用 `/compact` 压缩对话上下文。压缩后可以在同一会话中继续对话，并在时间线上查看压缩记录。
 
-Bot、助手和 dreaming 均可选用 Grok Build。这些会话保留终端和读取工具，关闭 Grok 专门用于编辑文件、媒体落盘、工作树、子 Agent、工作流、定时、后台任务、监控和调用 MCP 的工具。Bot、检索助手和 dreaming 还会关闭技能自动发现。
+受限模式下，Grok Build保留终端和读取工具，关闭 Grok 专门用于编辑文件、媒体落盘、工作树、子 Agent、工作流、定时、后台任务、监控和调用 MCP 的工具。此模式还会关闭技能自动发现。
 
 向运行中的 Grok 会话、Bot 或助手发送消息，Grok 会在下次切换工具或模型时接收补充指令，并继续当前任务。如果已经错过本轮最后一次切换，消息会作为下一轮任务执行。
 
@@ -67,5 +67,9 @@ Pontia Session 在绑定后会与一个客户端原生对话身份持久关联�
 ## Client 凭据和权限
 
 每个 Client 使用自己的凭据、沙箱和本地权限。在开始集成之前，请登录每个 Client 并确认它能完成预期的工作。
+
+创建 Session 时，可以在 `POST /api/v1/sessions` 请求中指定 `mode`。省略该字段或传入 `default` 时，使用 Dashboard 新建会话时的客户端配置。`yolo` 让 Pi、Claude Code、Codex 或 Grok Build 跳过审批。`restricted` 使用客户端内置的工具限制和免审批配置，Bot、记忆检索和 Dreaming 均使用此模式。重启、恢复和历史分叉会沿用会话模式。
+
+例如，`{"client_type":"pi","workspace":"/path/to/workspace","mode":"restricted"}` 会在已登记的 Workspace 中启动 Pi，禁用编辑工具、MCP 和 skills。Kiro 和 Antigravity 的受限会话在 Pontia 管理的启动目录中安装 agent 文件。受限会话保留 shell 访问权限，仍可通过命令修改文件。
 
 当 Client 缺失、无法启动或不再报告输出时，请参阅[故障排除](/docs/troubleshooting)。

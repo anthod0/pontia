@@ -446,12 +446,13 @@ async fn failed_probe_close_is_reported_and_the_process_is_reaped() {
     h.stop().await;
 }
 
-async fn restricted_request(h: &Harness, model: &str, skills: bool) -> Result<String> {
+async fn restricted_request(h: &Harness, model: &str) -> Result<String> {
     let request: CreateSessionRequest = serde_json::from_value(json!({
         "client_type":"acp", "workspace":h.root.path(), "metadata":{"acp_agent_id":"second"},
         "model":model, "system_instructions":"Bound rules",
-        "execution_policy":{"disabled_tools":["Agent","workflow"],"yolo":true,"disable_skills":skills}
-    })).unwrap();
+        "mode":"restricted"
+    }))
+    .unwrap();
     let outcome = h.app.session_commands().create_session(request).await?;
     Ok(outcome.session_id().unwrap().to_owned())
 }
@@ -459,7 +460,7 @@ async fn restricted_request(h: &Harness, model: &str, skills: bool) -> Result<St
 #[tokio::test]
 async fn restricted_session_merges_rules_and_retains_policy_on_resume() {
     let h = Harness::new(&[("ACP_MODELS", "flat")]).await;
-    let session = restricted_request(&h, "deep", true).await.unwrap();
+    let session = restricted_request(&h, "deep").await.unwrap();
     h.app
         .session_commands()
         .terminate_session(&session)
@@ -479,7 +480,26 @@ async fn restricted_session_merges_rules_and_retains_policy_on_resume() {
     assert_eq!(meta["agentProfile"]["discoverSkills"], false);
     assert_eq!(
         meta["agentProfile"]["disallowedTools"],
-        json!(["Agent", "workflow"])
+        json!([
+            "Agent",
+            "workflow",
+            "send_subagent_message",
+            "get_task_output",
+            "wait_tasks",
+            "kill_task",
+            "scheduler_create",
+            "scheduler_delete",
+            "scheduler_list",
+            "monitor",
+            "search_replace",
+            "write",
+            "image_gen",
+            "image_edit",
+            "image_to_video",
+            "reference_to_video",
+            "search_tool",
+            "use_tool",
+        ])
     );
     assert!(h.requests("session/load") >= 2);
     for load in wire.iter().filter(|v| v["method"] == "session/load") {
@@ -500,7 +520,7 @@ async fn unverified_model_types_fail_before_native_session_creation() {
         ("unclassified", "grok-build-plan"),
     ] {
         std::fs::write(h.root.path().join("model-kind"), kind).unwrap();
-        assert!(restricted_request(&h, model, false).await.is_err());
+        assert!(restricted_request(&h, model).await.is_err());
     }
     assert_eq!(h.requests("session/new"), 0);
     assert_eq!(h.requests("session/prompt"), 0);
@@ -510,13 +530,12 @@ async fn unverified_model_types_fail_before_native_session_creation() {
 #[tokio::test]
 async fn changed_profile_blocks_resume_before_prompt() {
     let h = Harness::new(&[("ACP_MODELS", "flat")]).await;
-    let session = restricted_request(&h, "fast", false).await.unwrap();
+    let session = restricted_request(&h, "fast").await.unwrap();
     let wire = h.wire();
     let new = wire.iter().find(|v| v["method"] == "session/new").unwrap();
-    assert!(
-        new["params"]["_meta"]["agentProfile"]
-            .get("discoverSkills")
-            .is_none()
+    assert_eq!(
+        new["params"]["_meta"]["agentProfile"]["discoverSkills"],
+        false
     );
     h.app
         .session_commands()
@@ -538,7 +557,7 @@ async fn changed_profile_blocks_resume_before_prompt() {
 #[tokio::test]
 async fn model_type_is_checked_again_before_switching_on_resume() {
     let h = Harness::new(&[("ACP_MODELS", "flat")]).await;
-    let session = restricted_request(&h, "deep", false).await.unwrap();
+    let session = restricted_request(&h, "deep").await.unwrap();
     h.app
         .session_commands()
         .terminate_session(&session)
@@ -564,7 +583,7 @@ async fn effective_model_must_be_verified_even_when_requested_model_is_allowed()
     let h = Harness::new(&[("ACP_MODELS", "flat")]).await;
     std::fs::write(h.root.path().join("model.txt"), "deep").unwrap();
     h.release("strict-deep");
-    assert!(restricted_request(&h, "fast", false).await.is_err());
+    assert!(restricted_request(&h, "fast").await.is_err());
     assert_eq!(h.requests("session/new"), 1);
     assert_eq!(h.requests("session/prompt"), 0);
     h.stop().await;

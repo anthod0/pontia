@@ -1673,7 +1673,7 @@ async fn unsupported_result_disables_input_without_inventing_a_terminal_turn() {
 async fn standalone_session_instructions_are_fixed_before_input_and_survive_resume() {
     let h = Harness::new().await;
     let request =
-        serde_json::from_value(json!({"client_type":"claude-agent","workspace":h.root.path(),"system_instructions":"caller-marker","include_standalone_session_instructions":true,"execution_policy":{"tools":["Read","Bash","Write"],"disabled_tools":["Write","Agent"],"disable_mcp":true,"disable_skills":true,"yolo":true}}))
+        serde_json::from_value(json!({"client_type":"claude-agent","workspace":h.root.path(),"system_instructions":"caller-marker","include_standalone_session_instructions":true,"mode":"restricted"}))
             .unwrap();
     let created = h
         .app
@@ -1710,19 +1710,13 @@ async fn standalone_session_instructions_are_fixed_before_input_and_survive_resu
         pontia_agent_control::standalone_session_instructions()
     );
     assert_eq!(prompts, vec![json!(expected), json!(expected)]);
-    let policies: Vec<_> = h
+    let modes: Vec<_> = h
         .wire(session)
         .into_iter()
         .filter(|frame| frame["method"] == "spawn")
-        .map(|frame| frame["execution_policy"].clone())
+        .map(|frame| frame["mode"].clone())
         .collect();
-    assert_eq!(
-        policies,
-        vec![
-            json!({"tools":["Read","Bash","Write"],"disabled_tools":["Write","Agent"],"disable_mcp":true,"disable_skills":true,"yolo":true});
-            2
-        ]
-    );
+    assert_eq!(modes, vec![json!("restricted"); 2]);
     h.stop().await;
 }
 
@@ -1850,36 +1844,12 @@ async fn steering_uses_the_active_turn_while_after_idle_waits() {
 }
 
 #[tokio::test]
-async fn restricted_execution_policy_defaults_yolo_false_and_accepts_explicit_yolo_opt_in() {
-    let configuration = pontia_client_claude::registration()
-        .configuration
-        .expect("Claude configuration");
-    let restricted = configuration
-        .restricted_execution_policy("default")
-        .expect("Claude restricted execution policy");
-    assert_eq!(restricted.tools, None);
-    assert!(restricted.disable_mcp);
-    assert!(!restricted.yolo);
-    for tool in ["Edit", "Write", "NotebookEdit", "Agent", "Task"] {
-        assert!(
-            restricted.disabled_tools.iter().any(|entry| entry == tool),
-            "missing restricted tool {tool}"
-        );
-    }
-    configuration
-        .validate_execution_policy("default", &restricted)
-        .unwrap();
-    let mut approval_free = restricted.clone();
-    approval_free.yolo = true;
-    configuration
-        .validate_execution_policy("default", &approval_free)
-        .unwrap();
-
+async fn yolo_mode_reaches_the_sdk_host() {
     let h = Harness::new().await;
     let request = serde_json::from_value(json!({
         "client_type": "claude-agent",
         "workspace": h.root.path(),
-        "execution_policy": approval_free,
+        "mode": "yolo",
     }))
     .unwrap();
     let created = h
@@ -1889,7 +1859,7 @@ async fn restricted_execution_policy_defaults_yolo_false_and_accepts_explicit_yo
         .await
         .unwrap();
     let session = created.session_id().unwrap();
-    h.submit(session, "restricted yolo task").await;
+    h.submit(session, "yolo task").await;
     h.gate(session, 1, "start");
     h.gate(session, 1, "finish");
     h.wait_states(session, &["completed"]).await;
@@ -1898,7 +1868,7 @@ async fn restricted_execution_policy_defaults_yolo_false_and_accepts_explicit_yo
         .into_iter()
         .find(|frame| frame["method"] == "spawn")
         .expect("spawn frame");
-    assert_eq!(spawn["execution_policy"], json!(approval_free));
+    assert_eq!(spawn["mode"], "yolo");
     h.stop().await;
 }
 

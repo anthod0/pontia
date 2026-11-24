@@ -147,7 +147,7 @@ fn session_request(
     CreateSessionRequest {
         reasoning_effort: launch.reasoning_effort,
         launch_mode: Default::default(),
-        execution_policy: Default::default(),
+        mode: Default::default(),
         model: launch.model,
         ownership: Some(pontia_agent_control::SessionOwnership {
             application_id: "workflow".into(),

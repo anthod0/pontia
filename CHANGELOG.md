@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Git tab in Sessions and Bot chats has a History view. Choose any local or remote branch to read its commits without checking it out, then open a commit to see its message, the files it changed, and each file's diff.
 - Edit `USER.md` yourself in the About you tab of Dashboard Settings > Memory. After you save, every running Bot is told to use the new version. If a Bot changed the file while you were editing, your save is refused so it cannot overwrite that change.
 
+### Changed
+
+- `POST /api/v1/sessions` now takes `mode` (`default`, `yolo`, or `restricted`) in place of `execution_policy`. Omit it to use the Client’s normal settings. Existing restricted Bot Sessions use the current restricted configuration, including disabled skill discovery, on their next launch. Preparing a Bot directory now overwrites its Pi steering settings. When upgrading Pontia, update the Claude Code integration package with the [Claude Code update instructions](https://pontia.dev/docs/agent-clients/claude).
+
 ## [0.8.12] - 2026-11-24
 
 ### Added

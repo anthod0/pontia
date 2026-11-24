@@ -145,6 +145,7 @@ CREATE TABLE agent_clients (
     PRIMARY KEY (client_type, client_key)
 );
 
+-- session.created payloads store the Session mode as default, yolo, or restricted.
 CREATE TABLE events (
   event_id TEXT PRIMARY KEY NOT NULL,
   session_id TEXT NOT NULL,

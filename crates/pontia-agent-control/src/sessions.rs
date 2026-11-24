@@ -30,11 +30,12 @@ mod persistence;
 mod validation;
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct CreateSessionRequest {
     #[serde(skip)]
     pub launch_mode: pontia_core::LaunchMode,
     #[serde(default)]
-    pub execution_policy: pontia_core::execution_policy::ExecutionPolicy,
+    pub mode: pontia_core::SessionMode,
     pub model: Option<String>,
     pub reasoning_effort: Option<String>,
     #[serde(default, deserialize_with = "deserialize_client_type")]

@@ -210,29 +210,6 @@ impl ConversationService {
         &self.records
     }
 
-    fn restricted_execution_policy(
-        &self,
-        client_type: &str,
-        client_key: &str,
-    ) -> Result<pontia_core::execution_policy::ExecutionPolicy> {
-        let clients = self.control.clients();
-        let configuration = clients
-            .get(client_type)
-            .and_then(|entry| entry.configuration.as_ref())
-            .ok_or_else(|| {
-                Error::CapabilityUnavailable("Client cannot restrict Session tools".into())
-            })?;
-        let mut policy = configuration
-            .restricted_execution_policy(client_key)
-            .ok_or_else(|| {
-                Error::CapabilityUnavailable("Client cannot restrict Session tools".into())
-            })?;
-        policy.yolo = true;
-        policy.disable_skills = true;
-        configuration.validate_execution_policy(client_key, &policy)?;
-        Ok(policy)
-    }
-
     pub fn supports_bot_client(&self, client_type: &str, client_key: &str) -> bool {
         self.control
             .clients()
@@ -240,13 +217,11 @@ impl ConversationService {
             .is_some_and(|entry| {
                 entry.spec.capabilities.steer
                     && entry.instructions.is_some()
-                    && entry
-                        .configuration
-                        .as_ref()
-                        .is_some_and(|config| config.supports_startup_model())
-                    && self
-                        .restricted_execution_policy(client_type, client_key)
-                        .is_ok()
+                    && entry.configuration.as_ref().is_some_and(|config| {
+                        config.supports_startup_model()
+                            && config
+                                .supports_mode(client_key, pontia_core::SessionMode::Restricted)
+                    })
             })
     }
 
@@ -296,19 +271,26 @@ impl ConversationService {
         model: &str,
         ownership: SessionOwnership,
         instructions: &str,
-        restricted: bool,
+        mode: pontia_core::SessionMode,
     ) -> Result<CreateSessionRequest> {
         self.require_task_client(client_type)?;
-        let execution_policy = if restricted {
-            self.restricted_execution_policy(client_type, client_key)?
-        } else {
-            Default::default()
-        };
+        if mode == pontia_core::SessionMode::Restricted
+            && !self
+                .control
+                .clients()
+                .get(client_type)
+                .and_then(|entry| entry.configuration.as_ref())
+                .is_some_and(|config| config.supports_mode(client_key, mode))
+        {
+            return Err(Error::CapabilityUnavailable(
+                "Client cannot start restricted Sessions".into(),
+            ));
+        }
         let metadata = self.session_metadata(client_type, client_key).await?;
         Ok(CreateSessionRequest {
             reasoning_effort: None,
             launch_mode: Default::default(),
-            execution_policy,
+            mode,
             model: Some(model.into()),
             client_type: client_type.into(),
             title: None,
@@ -706,8 +688,7 @@ impl ConversationService {
             .create_session(CreateSessionRequest {
                 reasoning_effort: bot.reasoning_effort.clone(),
                 launch_mode: pontia_core::LaunchMode::Background,
-                execution_policy: self
-                    .restricted_execution_policy(&bot.client_type, &bot.client_key)?,
+                mode: pontia_core::SessionMode::Restricted,
                 model: Some(bot.model.clone()),
                 client_type: bot.client_type.clone(),
                 title: Some(bot.name.clone()),

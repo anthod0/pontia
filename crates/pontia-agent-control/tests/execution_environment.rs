@@ -16,12 +16,8 @@ use std::{
 #[derive(Default)]
 struct Launcher(Mutex<Vec<RuntimeStartRequest>>);
 impl pontia_agent_control::client_contract::ClientConfiguration for Launcher {
-    fn validate_execution_policy(
-        &self,
-        _key: &str,
-        _: &pontia_core::execution_policy::ExecutionPolicy,
-    ) -> Result<()> {
-        Ok(())
+    fn supports_mode(&self, _: &str, _: pontia_core::SessionMode) -> bool {
+        true
     }
     fn keys(&self) -> Vec<String> {
         vec!["default".into()]
@@ -93,14 +89,14 @@ async fn creation_restart_and_recovered_resume_keep_launch_context_out_of_events
     let control = build();
     let mut notices = control.agent_events().subscribe();
     let mut request: CreateSessionRequest = serde_json::from_value(json!({
-        "client_type": "generic", "workspace": root.path(), "launch_mode": "background",
-        "execution_policy": {"tools":["Read","Bash","custom_tool"],"disabled_tools":["Write","mcp__remote__*"],"disable_mcp":true,"disable_skills":true,"yolo":true}
+        "client_type": "generic", "workspace": root.path(),
+        "mode":"restricted"
     }))
     .unwrap();
     assert_eq!(request.launch_mode, pontia_core::LaunchMode::Foreground);
     request.launch_mode = pontia_core::LaunchMode::Background;
     request.runtime_environment = environment.clone();
-    let policy = request.execution_policy.clone();
+    let mode = request.mode;
     let outcome = control
         .session_commands()
         .create_session(request)
@@ -147,7 +143,7 @@ async fn creation_restart_and_recovered_resume_keep_launch_context_out_of_events
             assert_eq!(launch.session_id, session);
             assert_eq!(launch.launch_mode, pontia_core::LaunchMode::Background);
             assert_eq!(launch.environment, environment);
-            assert_eq!(launch.execution_policy, policy);
+            assert_eq!(launch.mode, mode);
             assert_eq!(launch.workspace.as_deref(), root.path().to_str());
         }
     }
@@ -172,8 +168,22 @@ async fn creation_restart_and_recovered_resume_keep_launch_context_out_of_events
     }
 }
 
+#[test]
+fn create_accepts_only_named_session_modes() {
+    for mode in ["default", "yolo", "restricted"] {
+        let request: CreateSessionRequest = serde_json::from_value(json!({"mode":mode})).unwrap();
+        assert_eq!(serde_json::to_value(request.mode).unwrap(), mode);
+    }
+    for invalid in [
+        json!({"mode":"background"}),
+        json!({"execution_policy":{"yolo":true}}),
+    ] {
+        assert!(serde_json::from_value::<CreateSessionRequest>(invalid).is_err());
+    }
+}
+
 #[tokio::test]
-async fn unsupported_execution_policy_is_rejected_before_creating_a_session() {
+async fn unsupported_mode_is_rejected_before_creating_a_session() {
     let root = tempfile::tempdir().unwrap();
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
@@ -182,16 +192,9 @@ async fn unsupported_execution_policy_is_rejected_before_creating_a_session() {
     let app = AgentControl::builder(pool.clone(), root.path().into())
         .clients(clients)
         .build();
-    for policy in [
-        json!({"tools":["read","bash"]}),
-        json!({"yolo":true}),
-        json!({"tools":[]}),
-        json!({"disabled_tools":["Write"]}),
-        json!({"disable_mcp":true}),
-        json!({"disable_skills":true}),
-    ] {
+    for mode in ["yolo", "restricted"] {
         let request = serde_json::from_value(
-            json!({"client_type":"generic", "workspace":root.path(), "execution_policy":policy}),
+            json!({"client_type":"generic", "workspace":root.path(), "mode":mode}),
         )
         .unwrap();
         assert!(matches!(
@@ -207,17 +210,14 @@ async fn unsupported_execution_policy_is_rejected_before_creating_a_session() {
 }
 
 #[tokio::test]
-async fn native_forks_inherit_the_source_policy_after_control_recovery() {
+async fn native_forks_inherit_the_source_mode_after_control_recovery() {
     let root = tempfile::tempdir().unwrap();
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
     let app = AgentControl::builder(pool.clone(), root.path().into()).build();
-    let policy = json!({"tools":["Read","Bash","custom_tool"],"disabled_tools":["Write","mcp__remote__*"],"disable_mcp":true,"disable_skills":true,"yolo":true});
+    let mode = json!("restricted");
     for (session, payload) in [
-        (
-            "parent",
-            json!({"execution_policy":policy,"launch_mode":"background"}),
-        ),
+        ("parent", json!({"mode":mode,"launch_mode":"background"})),
         ("legacy", json!({})),
         ("child", json!({})),
         ("grandchild", json!({})),
@@ -259,12 +259,12 @@ async fn native_forks_inherit_the_source_policy_after_control_recovery() {
         serde_json::to_value(
             recovered
                 .queries()
-                .session_execution_policy("grandchild")
+                .session_mode("grandchild")
                 .await
                 .unwrap()
         )
         .unwrap(),
-        policy
+        mode
     );
 }
 

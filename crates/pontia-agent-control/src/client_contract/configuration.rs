@@ -3,26 +3,13 @@ use serde_json::Value;
 
 /// Client-owned interpretation of management identities and effective configuration.
 pub trait ClientConfiguration: Send + Sync {
-    /// Native tool restrictions (`yolo: false`) for sessions that delegate edits and
-    /// agent orchestration; callers opt into approval/sandbox bypass (`yolo`) explicitly.
-    fn restricted_execution_policy(
-        &self,
-        _key: &str,
-    ) -> Option<pontia_core::execution_policy::ExecutionPolicy> {
-        None
+    fn supports_mode(&self, _key: &str, mode: pontia_core::SessionMode) -> bool {
+        mode == pontia_core::SessionMode::Default
     }
 
-    fn validate_execution_policy(
-        &self,
-        _key: &str,
-        policy: &pontia_core::execution_policy::ExecutionPolicy,
-    ) -> Result<()> {
-        if policy != &Default::default() {
-            return Err(pontia_core::Error::CapabilityUnavailable(
-                "Client cannot enforce the requested execution policy".into(),
-            ));
-        }
-        Ok(())
+    /// Client files applied when preparing a persistent private launch directory.
+    fn private_directory_files(&self) -> &'static [super::LaunchFile] {
+        &[]
     }
 
     fn supports_startup_reasoning_effort(&self) -> bool {

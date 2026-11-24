@@ -6,7 +6,7 @@ mod persistence;
 pub(crate) use persistence::resolve_session_directory;
 pub use persistence::{
     WorkspaceRegistration, get_workspace_record, require_active_workspace,
-    require_active_workspace_id, upsert_canonical_workspace,
+    require_active_workspace_id, require_managed_launch_directory, upsert_canonical_workspace,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

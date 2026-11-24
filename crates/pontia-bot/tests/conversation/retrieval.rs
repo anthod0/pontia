@@ -49,14 +49,13 @@ async fn retrieval_delivers_its_reply_then_exits_and_notifies_the_bot_once() {
         client.launched_efforts.lock().unwrap()[&reader].as_deref(),
         Some("low")
     );
-    assert!(client.launched_policies.lock().unwrap()[&reader].disable_skills);
-    assert!(
-        control
-            .queries()
-            .session_execution_policy(&reader)
-            .await
-            .unwrap()
-            .disable_skills
+    assert_eq!(
+        client.session_modes.lock().unwrap()[&reader],
+        pontia_core::SessionMode::Restricted
+    );
+    assert_eq!(
+        control.queries().session_mode(&reader).await.unwrap(),
+        pontia_core::SessionMode::Restricted
     );
     assert!(
         !instructions(&control, &reader)
@@ -419,11 +418,11 @@ async fn retrieval_can_change_workspace_filters_and_follow_graph_without_writing
 }
 
 #[tokio::test]
-async fn retrieval_rejects_clients_that_cannot_disable_skills_but_ordinary_helpers_still_run() {
+async fn retrieval_rejects_clients_that_cannot_run_restricted_but_ordinary_helpers_still_run() {
     let (root, _pool, client, control, conversation) = fixture().await;
     let (_, session) = bot(&conversation).await;
     let helpers = HelperService::new(control.clone(), conversation);
-    *client.policy_support.lock().unwrap() = PolicySupport::RejectDisableSkills;
+    *client.reject_restricted.lock().unwrap() = true;
 
     let result = helpers
         .execute(HelperRequest {
@@ -440,19 +439,17 @@ async fn retrieval_rejects_clients_that_cannot_disable_skills_but_ordinary_helpe
             Error::CapabilityUnavailable(_)
         ))
     ));
-    assert_eq!(client.launched_policies.lock().unwrap().len(), 1);
+    assert_eq!(client.session_modes.lock().unwrap().len(), 1);
     assert!(!root.path().join("bot/readonly").exists());
 
-    *client.policy_support.lock().unwrap() = PolicySupport::NoRestriction;
     let ordinary = helper(&helpers, &session).await;
-    assert!(!client.launched_policies.lock().unwrap()[&ordinary].disable_skills);
-    assert!(
-        !control
-            .queries()
-            .session_execution_policy(&ordinary)
-            .await
-            .unwrap()
-            .disable_skills
+    assert_eq!(
+        client.session_modes.lock().unwrap()[&ordinary],
+        pontia_core::SessionMode::Default
+    );
+    assert_eq!(
+        control.queries().session_mode(&ordinary).await.unwrap(),
+        pontia_core::SessionMode::Default
     );
 }
 

@@ -163,7 +163,7 @@ where
                     .create_session(CreateSessionRequest {
                         reasoning_effort: None,
                         launch_mode: Default::default(),
-                        execution_policy: Default::default(),
+                        mode: Default::default(),
                         model: None,
                         ownership: Some(ownership),
                         client_type: self.sessions.default_client_type()?,

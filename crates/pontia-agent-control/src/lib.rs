@@ -71,7 +71,7 @@ pub use workspaces::{WorkspaceRecord, get_workspace_record};
 
 pub mod client_contract;
 
-pub use pontia_core::execution_policy::ExecutionPolicy;
+pub use pontia_core::SessionMode;
 pub use views::WorkspaceView;
 
 pub use sessions::instructions::{SessionInstructionsService, standalone_session_instructions};

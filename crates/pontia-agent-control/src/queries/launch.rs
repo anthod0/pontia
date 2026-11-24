@@ -1,9 +1,9 @@
 use crate::ControlQueryService;
-use pontia_core::{Error, Result, execution_policy::ExecutionPolicy};
+use pontia_core::{Error, Result, SessionMode};
 
 impl ControlQueryService {
-    pub async fn session_execution_policy(&self, session: &str) -> Result<ExecutionPolicy> {
-        self.launch_attribute(session, "$.execution_policy").await
+    pub async fn session_mode(&self, session: &str) -> Result<SessionMode> {
+        self.launch_attribute(session, "$.mode").await
     }
 
     pub async fn session_launch_mode(&self, session: &str) -> Result<pontia_core::LaunchMode> {

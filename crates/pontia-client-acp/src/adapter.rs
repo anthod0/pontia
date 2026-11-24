@@ -210,20 +210,26 @@ impl ClientSession for AcpAdapter {
                 .map(Ok)
                 .unwrap_or_else(std::env::current_dir)?;
             let mut launch = definition.launch.clone();
-            if request.execution_policy != Default::default() {
-                match definition.restricted_execution {
-                    Some(crate::RestrictedExecution::Antigravity) => {
-                        crate::antigravity::prepare_launch(
-                            &root,
-                            &cwd,
-                            &request.execution_policy,
-                            &mut launch,
-                        )?;
+            if request.mode == pontia_core::SessionMode::Restricted {
+                let files = match definition.restricted_execution {
+                    Some(crate::RestrictedExecution::Antigravity) => crate::antigravity::FILES,
+                    Some(crate::RestrictedExecution::Kiro) => crate::kiro::restricted::FILES,
+                    _ => &[],
+                };
+                if !files.is_empty() {
+                    pontia_agent_control::workspaces::require_managed_launch_directory(
+                        &root, &cwd,
+                    )?;
+                    for file in files {
+                        file.install(&cwd)?;
                     }
-                    Some(crate::RestrictedExecution::Kiro) => {
-                        crate::kiro::restricted::prepare(&root, &cwd)?;
-                    }
-                    _ => {}
+                }
+                if matches!(
+                    definition.restricted_execution,
+                    Some(crate::RestrictedExecution::Antigravity)
+                ) {
+                    std::fs::create_dir_all(root.join("clients/antigravity"))?;
+                    crate::antigravity::configure_launch(&root, &mut launch);
                 }
             }
             peer::runtime_event(
@@ -731,8 +737,8 @@ impl ClientSession for AcpAdapter {
                 RuntimeStartRequest {
                     reasoning_effort,
                     launch_mode: Default::default(),
-                    execution_policy: pontia_agent_control::ControlQueryService::new(pool.clone())
-                        .session_execution_policy(&target.session_id)
+                    mode: pontia_agent_control::ControlQueryService::new(pool.clone())
+                        .session_mode(&target.session_id)
                         .await?,
                     model,
                     session_id: target.session_id.clone(),

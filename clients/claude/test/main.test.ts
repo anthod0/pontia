@@ -37,7 +37,7 @@ for (const invalidToken of [false, true]) {
         JSON.stringify({
           session_id: "private-session",
           runtime_id: "private-runtime",
-          cwd: sandbox.path,
+          launch: { cwd: sandbox.path, mode: "default" },
           pontia_home: invalidToken ? 1 : join(sandbox.path, "private-missing-directory"),
         }) + "\n",
       );
