@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-25
+
+### Added
+
+- Open a localhost link in a desktop Bot or Session chat to see a live preview in the right sidebar. Switch between desktop and phone widths while keeping the conversation in view.
+- Preview CSV and TSV files as tables and select a column to sort the rows. In JSON and YAML previews, expand or collapse branches to explore nested values.
+
+### Changed
+
+- Desktop chat sidebars slide open and closed while their contents keep the same layout. Desktop controls use the same rounded corners as on phones, and sidebar icon buttons and the scroll-to-bottom button are circular.
+- On phones, the Bot chat header shows the Bot’s static avatar. The bottom status bar shows its current activity beside an animated avatar while it works.
+- At startup, `pontiad` caches the model lists for enabled Agent Clients so the model picker can use them on first open.
+- Explore six Bot cards on the Pontia homepage, from answering a Lead Bot’s questions to securely previewing local files and dev servers. The English and Chinese READMEs cover the same six workflows.
+
+### Fixed
+
+- On phones, status dots appear only for Sessions that have yet to exit. Session rows show the correct ACP client icon, including Antigravity (`agy`), and client icons keep their intended size in New Chat.
+- Mobile header buttons stay circular even with long titles. In Chinese, the Bot reload message now explains that the next message starts a new Session with the latest configuration.
+
 ## [0.9.0] - 2026-11-25
 
 ### Added
@@ -1238,7 +1257,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/anthod0/pontia/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/anthod0/pontia/compare/v0.8.16...v0.9.0
 [0.8.16]: https://github.com/anthod0/pontia/compare/v0.8.15...v0.8.16
 [0.8.14]: https://github.com/anthod0/pontia/compare/v0.8.13...v0.8.14
