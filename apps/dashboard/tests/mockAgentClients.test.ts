@@ -48,6 +48,8 @@ test.each([
       client_type: type,
       client_key: key,
       enabled: false,
+      version: null,
+      version_checked_at: null,
       has_record: false,
     }),
   );

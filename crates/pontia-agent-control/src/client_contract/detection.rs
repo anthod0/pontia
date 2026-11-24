@@ -43,8 +43,22 @@ pub struct DetectionContext<'a> {
 }
 
 impl DetectionContext<'_> {
+    pub fn executable(&self, program: &str) -> Result<Option<std::path::PathBuf>, String> {
+        pontia_runtime::executable::find(program, self.vars.get("PATH").map(String::as_str))
+    }
+
+    pub async fn cli_version(&self, path: &Path, prefix: &str) -> Option<String> {
+        super::version::probe(
+            tokio::process::Command::new(path)
+                .env_clear()
+                .envs(self.vars),
+            prefix,
+        )
+        .await
+    }
+
     pub fn command(&self, program: &str) -> ClientDetection {
-        match pontia_runtime::executable::find(program, self.vars.get("PATH").map(String::as_str)) {
+        match self.executable(program) {
             Ok(Some(path)) => ClientDetection::detected(path.display().to_string()),
             Ok(None) => ClientDetection::not_detected(),
             Err(error) => ClientDetection::unknown(error),

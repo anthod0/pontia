@@ -43,7 +43,9 @@ pub async fn list_agent_clients(
         vars: &vars,
         pontia_home: state.pontia_home(),
     };
-    Ok(ok(json!({"agent_clients": service.list(&context).await?})))
+    let entries = service.list(&context).await?;
+    service.probe_enabled_in_background(state.pontia_home().to_path_buf(), false);
+    Ok(ok(json!({"agent_clients": entries})))
 }
 
 pub async fn get_agent_client(
@@ -93,6 +95,9 @@ pub async fn patch_agent_client(
         vars: &vars,
         pontia_home: state.pontia_home(),
     };
+    if enabled && let Err(error) = service.probe_version(&client, &key, &context, true).await {
+        tracing::warn!(%error, %client, %key, "Cannot check enabled client version");
+    }
     Ok(ok(
         json!({"agent_client": service.get(&client, &key, &context).await?}),
     ))

@@ -1,5 +1,7 @@
 use crate::runtime::{CodexRuntime, CodexServerTarget};
-use pontia_agent_control::client_contract::{ClientConfiguration, ClientOperation};
+use pontia_agent_control::client_contract::{
+    ClientConfiguration, ClientOperation, DetectionContext,
+};
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 use std::path::Path;
@@ -62,6 +64,21 @@ impl ClientConfiguration for CodexConfiguration {
         pontia_agent_control::agent_clients::AgentClientModels,
     > {
         Box::pin(crate::CodexService::available_models(directory))
+    }
+
+    fn probe_version<'a>(
+        &'a self,
+        _key: &'a str,
+        context: &'a DetectionContext<'_>,
+    ) -> ClientOperation<'a, Option<String>> {
+        Box::pin(async move {
+            let Ok(path) =
+                crate::setup::resolve_executable(context.vars.get("PATH").map(String::as_str))
+            else {
+                return Ok(None);
+            };
+            Ok(context.cli_version(&path, "codex-cli ").await)
+        })
     }
 
     fn detect(

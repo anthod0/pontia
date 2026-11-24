@@ -243,12 +243,11 @@ where
     writeln!(output, "{}", terminal::success("Pontia service is ready")).map_err(io_error)?;
     // Business settings belong to the running service, not the initialization CLI.
     for (client, _) in &installed {
-        if enabled.as_ref().is_some_and(|enabled| {
-            enabled.contains(&(client.client_type().into(), client.client_key().into()))
-        }) {
-            continue;
-        }
+        let was_enabled = enabled.as_ref().is_some_and(|entries| {
+            entries.contains(&(client.client_type().into(), client.client_key().into()))
+        });
         match platform.enable_client(&config, client.client_type(), client.client_key()) {
+            Ok(()) if was_enabled => {}
             Ok(()) => writeln!(
                 output,
                 "{}",

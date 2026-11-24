@@ -50,6 +50,8 @@ fn entry(has_record: bool, enabled: bool) -> AgentClientDetails {
         client_key: "default".into(),
         name: "Pi".into(),
         short_id: "pi".into(),
+        version: None,
+        version_checked_at: None,
         has_record,
         enabled,
         detection: ClientDetection::detected("pi"),

@@ -441,11 +441,95 @@ async fn detection_refreshes_from_files_without_changing_enabled_settings() {
         .unwrap();
     assert_eq!(found["detection"]["status"], "detected");
     assert_eq!(found["enabled"], true);
+    assert!(found["version"].is_null());
+    assert!(found["version_checked_at"].is_string());
+    fs::write(
+        &program,
+        "#!/bin/sh\n[ \"$*\" = --version ] && echo 'grok 1.0.92 (abc) [stable]'\n",
+    )
+    .unwrap();
+    let (_, enabled) = request(
+        &app,
+        "PATCH",
+        "/acp/grok",
+        Some(json!({"enabled":true})),
+        true,
+    )
+    .await;
+    assert_eq!(enabled["data"]["agent_client"]["version"], "1.0.92");
     fs::remove_file(&program).unwrap();
-    let (_, missing_again) = request(&app, "GET", "/acp/grok", None, true).await;
+    let (status, missing_again) = request(
+        &app,
+        "PATCH",
+        "/acp/grok",
+        Some(json!({"enabled": true})),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(missing_again["data"]["agent_client"]["version"], "1.0.92");
+    assert_ne!(
+        missing_again["data"]["agent_client"]["version_checked_at"],
+        enabled["data"]["agent_client"]["version_checked_at"]
+    );
     assert_eq!(
         missing_again["data"]["agent_client"]["detection"]["status"],
         "not_detected"
     );
     assert_eq!(missing_again["data"]["agent_client"]["enabled"], true);
+}
+
+#[tokio::test]
+async fn listing_returns_saved_details_while_the_version_check_runs() {
+    use std::{fs, os::unix::fs::PermissionsExt, time::Duration};
+    let root = tempfile::tempdir().unwrap();
+    let program = root.path().join("pi");
+    let gate = root.path().join("continue");
+    fs::write(
+        &program,
+        format!(
+            "#!/bin/sh\nwhile [ ! -e '{}' ]; do sleep 0.02; done\necho 2.3.4\n",
+            gate.display()
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
+
+    let db = connect_sqlite("sqlite::memory:").await.unwrap();
+    run_migrations(&db).await.unwrap();
+    let repo = pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
+        db.clone(),
+    );
+    repo.save("pi", "default", true).await.unwrap();
+    let mut registry = ClientRegistry::default();
+    let mut pi = pontia_client_pi::registration(None);
+    pi.configuration = Some(Arc::new(pontia_client_pi::config::PiConfiguration::new(
+        json!({"tui_command": program}),
+        json!({}),
+    )));
+    registry.register(pi);
+    let app = pontia_http::router(
+        AppState::builder(
+            pontia_agent_control::AgentControl::builder(db, root.path().into())
+                .clients(registry)
+                .build(),
+        )
+        .external_api_token(Some("test-token".into()))
+        .build(),
+    );
+    let (status, listed) = request(&app, "GET", "", None, true).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(listed["data"]["agent_clients"][0]["version"].is_null());
+    fs::write(gate, "").unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let (_, data) = request(&app, "GET", "/pi/default", None, true).await;
+            if data["data"]["agent_client"]["version"] == "2.3.4" {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("settings page triggered a background version check");
 }

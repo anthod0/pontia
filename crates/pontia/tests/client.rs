@@ -8,7 +8,7 @@ use std::{
 };
 
 fn entry(client: &str, key: &str, id: &str, short: &str) -> Value {
-    json!({"id":id,"client_type":client,"client_key":key,"name":"Editable display name","short_id":short,"enabled":true,"detection":{"status":"detected","detail":null},"setup_command":null,"has_record":false,"created_at":null,"updated_at":null})
+    json!({"id":id,"client_type":client,"client_key":key,"name":"Editable display name","short_id":short,"enabled":true,"detection":{"status":"detected","detail":null},"setup_command":null,"has_record":false,"version":null,"version_checked_at":null,"created_at":null,"updated_at":null})
 }
 
 fn run(

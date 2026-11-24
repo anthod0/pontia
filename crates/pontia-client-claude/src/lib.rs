@@ -90,6 +90,50 @@ impl ClientConfiguration for Configuration {
         })
     }
 
+    fn probe_version<'a>(
+        &'a self,
+        _key: &'a str,
+        context: &'a DetectionContext<'_>,
+    ) -> ClientOperation<'a, Option<String>> {
+        Box::pin(async move {
+            use pontia_agent_control::client_contract::version;
+            use tokio::process::Command;
+            let host = self
+                .host
+                .clone()
+                .unwrap_or_else(|| setup::host_path(context.pontia_home));
+            let binary = if host.is_file() {
+                let node = context
+                    .vars
+                    .get("PONTIA_CLAUDE_NODE_PATH")
+                    .map(String::as_str)
+                    .unwrap_or("node");
+                let Ok(Some(node)) = context.executable(node) else {
+                    return Ok(None);
+                };
+                // Resolve the same platform package as the SDK host's preflight.
+                let resolve = "require('node:module').createRequire(process.argv[1]).resolve('@anthropic-ai/claude-agent-sdk-' + process.platform + '-' + process.arch + '/claude')";
+                let Some(path) = version::output(
+                    Command::new(node)
+                        .args(["-p", resolve])
+                        .arg(host)
+                        .env_clear()
+                        .envs(context.vars),
+                )
+                .await
+                else {
+                    return Ok(None);
+                };
+                PathBuf::from(path)
+            } else if let Ok(Some(native)) = context.executable("claude") {
+                native
+            } else {
+                return Ok(None);
+            };
+            Ok(context.cli_version(&binary, "").await)
+        })
+    }
+
     fn detect(&self, _: &Value, context: &DetectionContext<'_>) -> ClientDetection {
         setup::detect(context, self.host.as_deref())
     }

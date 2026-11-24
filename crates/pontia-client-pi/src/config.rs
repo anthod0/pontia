@@ -1,4 +1,6 @@
-use pontia_agent_control::client_contract::ClientConfiguration;
+use pontia_agent_control::client_contract::{
+    ClientConfiguration, ClientOperation, DetectionContext,
+};
 use pontia_config::{ClientConfigDefaults, ConfigurationLayers, RuntimeCommandOverride};
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
@@ -50,6 +52,19 @@ impl ClientConfiguration for PiConfiguration {
         pontia_agent_control::agent_clients::AgentClientModels,
     > {
         Box::pin(async move { crate::models::list(&command(effective)?, directory).await })
+    }
+
+    fn probe_version<'a>(
+        &'a self,
+        key: &'a str,
+        context: &'a DetectionContext<'_>,
+    ) -> ClientOperation<'a, Option<String>> {
+        Box::pin(async move {
+            let Ok(Some(path)) = context.executable(&command(&self.merged(key))?) else {
+                return Ok(None);
+            };
+            Ok(context.cli_version(&path, "").await)
+        })
     }
 
     fn detect(

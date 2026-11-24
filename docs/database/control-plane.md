@@ -142,6 +142,8 @@ CREATE TABLE agent_clients (
     enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    version TEXT,
+    version_checked_at TEXT,
     PRIMARY KEY (client_type, client_key)
 );
 

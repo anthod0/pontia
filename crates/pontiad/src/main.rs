@@ -57,6 +57,10 @@ async fn main() -> Result<()> {
     tokio::spawn(workflow_coordinator.run(app_state.control().shutdown().subscribe()));
     let dashboard =
         http::dashboard::resolve_dashboard(&config.dashboard, &config.pontia_home).await;
+    let versions = pontia_agent_control::agent_clients::AgentClientService::new(
+        app_state.db(),
+        app_state.control().clients(),
+    );
     let state = http::HttpState::new(app_state, dashboard).with_bot_config(config.bot)?;
 
     info!(addr = %bound_addr, "starting pontia control plane");
@@ -127,6 +131,7 @@ async fn main() -> Result<()> {
         config.uploads,
         cleanup_shutdown.subscribe(),
     ));
+    versions.probe_enabled_in_background(config.pontia_home.clone(), true);
     let server_result = http::serve_with_shutdown_timeout(
         listener,
         http_entrypoints.local_http(),

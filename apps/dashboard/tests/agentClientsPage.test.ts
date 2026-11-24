@@ -29,6 +29,8 @@ const peer = (key: string): AgentClientView => ({
   enabled: true,
   detection: { status: "unknown", detail: null },
   setup_command: null,
+  version: null,
+  version_checked_at: null,
   has_record: true,
   created_at: null,
   updated_at: null,
