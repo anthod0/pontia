@@ -156,7 +156,7 @@ test("sidebar device switcher scopes the session list, actions, filters, and hig
     ).toBe(true),
   );
   document.body.style.pointerEvents = "";
-  await userEvent.click(screen.getByRole("button", { name: "Filter recent sessions" }));
+  await userEvent.click(screen.getByRole("button", { name: "Filter sessions" }));
   await userEvent.click(await screen.findByText("other", { exact: true }));
   await waitFor(() =>
     expect(sidebar().queryByRole("button", { name: "office-mac chat" })).not.toBeInTheDocument(),

@@ -206,7 +206,7 @@
           {#key active.runtime}
             <DeviceProvider device={active.runtime}>
               <DeviceBotList handle={active.handle} />
-              <DeviceSessionList handle={active.handle} />
+              <DeviceSessionList handle={active.handle} onNewChat={openNewChat} />
             </DeviceProvider>
           {/key}
         {:else if active?.state === 'offline'}

@@ -46,6 +46,9 @@ export type BotWorkStatus =
   | { kind: "working"; title: string }
   | { kind: "idle" };
 
+// What the sidebar shows for each Bot, taken from its latest message page.
+export type BotSummary = Pick<BotMessagePage, "status" | "open_todo_count">;
+
 export type BotClient = Pick<
   AgentClientView,
   "id" | "name" | "client_type" | "client_key" | "version"
