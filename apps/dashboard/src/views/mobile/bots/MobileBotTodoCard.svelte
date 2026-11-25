@@ -23,7 +23,7 @@
   const done = $derived(item.todo?.state === 'done' ? item.todo : null)
 </script>
 
-<article class="my-2 rounded-xl border bg-card px-3 pt-2">
+<article class="my-2 rounded-xl border bg-card p-3">
   <button class="block min-h-11 w-full text-left" onclick={onjump}>
     <span class="text-xs text-muted-foreground"
       ><MessageTime value={item.created_at} /> · {done

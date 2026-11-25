@@ -27,13 +27,13 @@
 </script>
 
 <MobileBotSheet bind:open title={$t('bots.reply')}>
-  <p class="line-clamp-3 rounded-xl bg-muted p-3">{quoteSummary(quote)}</p>
+  <p class="line-clamp-3 rounded-xl bg-muted px-4 py-3">{quoteSummary(quote)}</p>
   <textarea
     {@attach (node) => node.focus()}
     bind:value={text}
     readonly={sending}
     aria-label={$t('bots.message')}
-    class="my-2 w-full rounded-xl border p-3 text-base"></textarea>
+    class="my-2 w-full rounded-xl border px-4 py-3 text-base"></textarea>
   {#if error}<p role="alert">{error}</p>{/if}
   <button
     class="min-h-11 rounded-full bg-primary px-5 text-primary-foreground disabled:opacity-50"

@@ -233,9 +233,9 @@
     </div>
     {#if reply?.message.id === message.id}
       {@const current = reply}
-      <PromptInput.Root id="bot-todo-reply-box-{message.id}" class="mt-2" aria-label={$t('bots.reply')} onSubmit={() => submitReply(current)}>
-        <PromptInput.Textarea {@attach node => node.focus()} bind:value={current.text} placeholder={$t('bots.message')} aria-label={$t('bots.message')} readonly={current.sending} onkeydown={(event: KeyboardEvent) => replyKeydown(event, current)} class="text-[13px]" />
-        <PromptInput.Toolbar class="justify-end gap-1 px-1 pt-0 pb-1">
+      <PromptInput.Root id="bot-todo-reply-box-{message.id}" class="mt-2 p-3" aria-label={$t('bots.reply')} onSubmit={() => submitReply(current)}>
+        <PromptInput.Textarea {@attach node => node.focus()} bind:value={current.text} placeholder={$t('bots.message')} aria-label={$t('bots.message')} readonly={current.sending} onkeydown={(event: KeyboardEvent) => replyKeydown(event, current)} class="p-0 text-[13px]" />
+        <PromptInput.Toolbar class="justify-end gap-1 px-0 pt-2 pb-0">
           <Button variant="ghost" size="xs" disabled={current.sending} onclick={closeReply}>{$t('common.cancel')}</Button>
           <PromptInput.Submit class="h-6 touch-target:min-h-11 gap-1 px-2.5 text-xs" busy={current.sending} disabled={!current.text.trim()} />
         </PromptInput.Toolbar>
