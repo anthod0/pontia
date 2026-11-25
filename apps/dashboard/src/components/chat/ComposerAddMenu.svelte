@@ -15,14 +15,17 @@
     onClose: () => void
     mobile?: boolean
   } = $props()
-  let triggerButton = $state<HTMLButtonElement | null>(null)
+  let menuOpen = $state(false)
   let secretOpen = $state(false)
 </script>
-<ResponsiveMenu keepClearOf={triggerButton} label={$t('common.add')} side="top" align="start" onCloseAutoFocus={event => {if (secretOpen) event.preventDefault()}}>
+<ResponsiveMenu bind:open={menuOpen} label={$t('common.add')} side="top" align="start" onCloseAutoFocus={event => {if (secretOpen) event.preventDefault()}}>
   {#snippet trigger()}
-    <DropdownMenu.Trigger bind:ref={triggerButton} {disabled}>
+    <DropdownMenu.Trigger {disabled}>
       {#snippet child({props})}
-        <Button {...props} type="button" variant="ghost" size="icon-sm" class={mobile ? 'mobile-icon shrink-0' : ''} aria-label={$t('common.add')} title={$t('common.add')} {disabled}><PlusIcon class="size-4"/></Button>
+        <!-- Wait for the click to finish before covering the mobile trigger with menu items. -->
+        <Button {...props}
+          {...mobile ? {onpointerdown: undefined, onpointerup: undefined, onclick: () => menuOpen = !menuOpen} : {}}
+          type="button" variant="ghost" size="icon-sm" class={mobile ? 'mobile-icon shrink-0' : ''} aria-label={$t('common.add')} title={$t('common.add')} {disabled}><PlusIcon class="size-4"/></Button>
       {/snippet}
     </DropdownMenu.Trigger>
   {/snippet}
