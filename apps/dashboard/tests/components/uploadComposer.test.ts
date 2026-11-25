@@ -118,7 +118,9 @@ test("uploads files pasted into the input", async () => {
   const draftId = crypto.randomUUID();
   render(MessageComposer, { value: "", draftId, onSubmit: vi.fn() });
   const send = screen.getByRole("button", { name: "Send" });
-  await waitFor(() => expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled());
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Add", exact: true })).toBeEnabled(),
+  );
   const file = new File(["png"], "image.png", { type: "image/png" });
   const pasted = await fireEvent.paste(screen.getByRole("textbox"), {
     clipboardData: clipboard([file], []),
@@ -134,7 +136,9 @@ test("uploads files dropped anywhere on the main panel, showing the overlay whil
     vi.fn(() => new Promise(() => {})),
   );
   render(FileDropZoneHarness, { draftId: crypto.randomUUID() });
-  await waitFor(() => expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled());
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Add", exact: true })).toBeEnabled(),
+  );
   const feed = screen.getByText("Conversation feed");
   const dataTransfer = clipboard([new File(["pdf"], "notes.pdf", { type: "application/pdf" })], []);
   await fireEvent.dragEnter(feed, { dataTransfer });
@@ -150,7 +154,9 @@ test("uploads files dropped anywhere on the main panel, showing the overlay whil
 
 test("hides the overlay when the drag leaves the main panel", async () => {
   render(FileDropZoneHarness, { draftId: crypto.randomUUID() });
-  await waitFor(() => expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled());
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Add", exact: true })).toBeEnabled(),
+  );
   const feed = screen.getByText("Conversation feed");
   const textbox = screen.getByRole("textbox");
   const dataTransfer = clipboard([new File(["a"], "a.txt")], []);
@@ -173,7 +179,9 @@ test("hides the overlay when the drag leaves the main panel", async () => {
 
 test("leaves drops on the Bot side panel alone", async () => {
   render(FileDropZoneHarness, { draftId: crypto.randomUUID() });
-  await waitFor(() => expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled());
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Add", exact: true })).toBeEnabled(),
+  );
   const panel = screen.getByText("Bot side panel");
   const dataTransfer = clipboard([new File(["a"], "a.txt")], []);
   await fireEvent.dragEnter(panel, { dataTransfer });
@@ -184,7 +192,9 @@ test("leaves drops on the Bot side panel alone", async () => {
 
 test("refuses dropped files while the composer is busy", async () => {
   const view = render(FileDropZoneHarness, { draftId: crypto.randomUUID() });
-  await waitFor(() => expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled());
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Add", exact: true })).toBeEnabled(),
+  );
   await view.rerender({ busy: true });
   const feed = screen.getByText("Conversation feed");
   const dataTransfer = {
@@ -201,7 +211,9 @@ test("refuses dropped files while the composer is busy", async () => {
 
 test("ignores drags that carry no files", async () => {
   render(FileDropZoneHarness, { draftId: crypto.randomUUID() });
-  await waitFor(() => expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled());
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Add", exact: true })).toBeEnabled(),
+  );
   await fireEvent.dragEnter(screen.getByText("Conversation feed"), {
     dataTransfer: clipboard([], ["text/plain"]),
   });
@@ -211,7 +223,9 @@ test("ignores drags that carry no files", async () => {
 test("keeps rich text pastes that carry a rendered image as text", async () => {
   const draftId = crypto.randomUUID();
   render(MessageComposer, { value: "", draftId, onSubmit: vi.fn() });
-  await waitFor(() => expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled());
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Add", exact: true })).toBeEnabled(),
+  );
   const file = new File(["png"], "image.png", { type: "image/png" });
   const pasted = await fireEvent.paste(screen.getByRole("textbox"), {
     clipboardData: clipboard([file], ["text/plain", "text/rtf"]),

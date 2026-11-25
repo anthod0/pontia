@@ -955,5 +955,15 @@
   "profiles.templateModelMissing": "{client} does not offer the template's model {model}, so the client's default model is used.",
   "profiles.replaceTemplateTitle": "Replace what you entered?",
   "profiles.replaceTemplateDescription": "Applying “{name}” replaces the name, profile ID, description, YOLO mode, and system prompt. The client and model are replaced only if they are available on this device.",
-  "profiles.replace": "Replace"
+  "profiles.replace": "Replace",
+  "secrets.file": "File",
+  "secrets.secret": "Secret",
+  "secrets.add": "Add a secret",
+  "secrets.description": "Tools can read the uploaded file. Only a mask appears in chat.",
+  "secrets.show": "Show",
+  "secrets.hide": "Hide",
+  "secrets.multiline": "Multiline",
+  "secrets.sizeLimit": "Use at most 64 KiB.",
+  "secrets.label": "Label (optional)",
+  "secrets.labelLimit": "Use up to 64 characters without control characters."
 }

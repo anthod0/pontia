@@ -17,7 +17,7 @@
   import ArchiveIcon from 'phosphor-svelte/lib/ArchiveIcon'
   import BoxArrowUpIcon from 'phosphor-svelte/lib/BoxArrowUpIcon'
   import DotsThreeVerticalIcon from 'phosphor-svelte/lib/DotsThreeVerticalIcon'
-  import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
+  import ComposerAddMenu from './ComposerAddMenu.svelte'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
   import UploadAttachments from './UploadAttachments.svelte'
@@ -234,9 +234,8 @@
 
 {#snippet uploadButton(picker: { choose: () => void } | null)}
   {#if controller.uploads}
-    <Button type="button" variant="ghost" size="icon-sm" aria-label={$t('files.upload')} title={$t('files.upload')} disabled={controller.uploadUnavailable} onclick={() => picker?.choose()}>
-      <PlusIcon class="size-4" />
-    </Button>
+    <ComposerAddMenu disabled={!!controller.uploadUnavailable} onSelectFile={() => picker?.choose()} onConfirm={({value,label}) => controller.uploads?.addSecret(value,label)} onClose={focusInput}/>
+
   {/if}
 {/snippet}
 

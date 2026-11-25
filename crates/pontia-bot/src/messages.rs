@@ -53,31 +53,57 @@ impl MessageKind {
 }
 
 pub(crate) fn summary(kind: MessageKind, mut content: &str, limit: usize) -> String {
-    let mut files = String::new();
+    let mut attachments = Vec::new();
     if kind == MessageKind::UserInput {
         if content.starts_with("<user_quote ")
             && let Some((_, body)) = content.split_once("</user_quote>\n")
         {
             content = body;
         }
-        if content.starts_with("<user_uploads ")
-            && let Some((uploads, body)) = content.split_once("</user_uploads>")
-        {
-            content = body.trim_start();
-            if content.is_empty() {
-                files = uploads
-                    .lines()
-                    .filter_map(|line| {
-                        line.strip_suffix("</user_upload>")?
-                            .split_once('>')
-                            .map(|(_, name)| name)
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ");
+        for (open, close, child_close) in [
+            ("<user_uploads ", "</user_uploads>", "</user_upload>"),
+            ("<user_secrets ", "</user_secrets>", "</user_secret>"),
+        ] {
+            if content.starts_with(open)
+                && let Some((block, body)) = content.split_once(close)
+            {
+                content = body.trim_start();
+                for line in block.lines().skip(1) {
+                    let Some((tag, text)) = line
+                        .strip_suffix(child_close)
+                        .and_then(|s| s.split_once('>'))
+                    else {
+                        continue;
+                    };
+                    if child_close == "</user_upload>" {
+                        attachments.push(text.to_owned());
+                        continue;
+                    }
+                    let visible = tag
+                        .split_once(" label=\"")
+                        .and_then(|(_, s)| s.strip_suffix('"'))
+                        .unwrap_or(text);
+                    attachments.push(
+                        visible
+                            .replace("&lt;", "<")
+                            .replace("&gt;", ">")
+                            .replace("&quot;", "\"")
+                            .replace("&apos;", "'")
+                            .replace("&#9;", " ")
+                            .replace("&#10;", " ")
+                            .replace("&#13;", " ")
+                            .replace("&amp;", "&"),
+                    );
+                }
             }
         }
     }
-    let body = if content.is_empty() { &files } else { content };
+    let fallback = attachments.join(", ");
+    let body = if content.is_empty() {
+        &fallback
+    } else {
+        content
+    };
     body.split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
@@ -385,4 +411,21 @@ pub(crate) async fn append_message<'a>(
     .fetch_optional(executor)
     .await?
     .ok_or_else(|| Error::NotFound(format!("Bot {bot_id} not found")))
+}
+
+#[cfg(test)]
+mod summary_tests {
+    use super::*;
+    #[test]
+    fn summarizes_secret_labels_and_masks_after_quotes_and_uploads() {
+        let content = "<user_quote speaker=\"Bot\">hi</user_quote>\n<user_uploads note=\"files\">\n<user_upload path=\"/f\">file</user_upload>\n</user_uploads>\n<user_secrets note=\"private\">\n<user_secret path=\"/private\" label=\"A &amp; B\">*******</user_secret>\n<user_secret path=\"/hidden\">ab*******cd</user_secret>\n</user_secrets>";
+        assert_eq!(
+            summary(MessageKind::UserInput, content, 160),
+            "file, A & B, ab*******cd"
+        );
+        assert_eq!(
+            summary(MessageKind::UserInput, &format!("{content}\nDeploy now"), 6),
+            "Deploy"
+        );
+    }
 }

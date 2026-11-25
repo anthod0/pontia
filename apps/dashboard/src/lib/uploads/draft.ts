@@ -1,3 +1,5 @@
+import { maskSecret } from "./secretMask";
+import type { SecretFile } from "./message";
 import { translate } from "$lib/i18n";
 const CHUNK_SIZE = 1 << 20;
 import { writable } from "svelte/store";
@@ -25,6 +27,7 @@ export type UploadItem = {
   upload?: Upload;
   file?: File;
   error?: string;
+  secret?: Omit<SecretFile, "path">;
   saved: boolean;
   recreate?: boolean;
 };
@@ -63,6 +66,7 @@ export function createUploadDrafts(device: DeviceRuntime) {
       emit();
     }
     async function save(item: UploadItem) {
+      if (item.secret) return;
       try {
         await saveUploadRecord(item.record!);
         item.saved = true;
@@ -72,7 +76,7 @@ export function createUploadDrafts(device: DeviceRuntime) {
       }
     }
     async function forget(item: UploadItem) {
-      if (!item.record) return;
+      if (item.secret || !item.record) return;
       await removeUploadRecord(item.record);
     }
     function active(item: UploadItem, signal: AbortSignal) {
@@ -210,6 +214,21 @@ export function createUploadDrafts(device: DeviceRuntime) {
         }
       }
     })();
+    function enqueue(file: File, id: string, secret?: UploadItem["secret"]) {
+      const item: UploadItem = {
+        id,
+        secret,
+        file: secret ? file : undefined,
+        name: file.name,
+        size: file.size,
+        status: "hashing",
+        offset: 0,
+        saved: false,
+      };
+      state.items.push(item);
+      emit();
+      void transfer(item, file);
+    }
     return {
       subscribe: store.subscribe,
       initialized,
@@ -217,28 +236,26 @@ export function createUploadDrafts(device: DeviceRuntime) {
         await initialized;
         if (!state.ready || lifetime.signal.aborted) return;
         for (const file of files) {
-          const item: UploadItem = {
-            id: uploadKey(),
-            name: file.name,
-            size: file.size,
-            status: "hashing",
-            offset: 0,
-            saved: false,
-          };
-          state.items.push(item);
-          emit();
-          void transfer(item, file);
+          enqueue(file, uploadKey());
         }
       },
+      addSecret(value: string, label?: string) {
+        if (!state.ready || lifetime.signal.aborted) return;
+        const id = uploadKey();
+        const file = new File([value], `sec_${id.slice(0, 8)}.secret`, { type: "text/plain" });
+        enqueue(file, id, { masked: maskSecret(value), label: label?.trim() || undefined });
+      },
       retry(item: UploadItem, file?: File) {
-        return transfer(item, file);
+        return transfer(item, item.secret && !item.record ? item.file : file);
       },
       reconnect() {
         for (const item of state.items)
-          if (item.status === "failed" && !item.recreate) void transfer(item);
+          if (item.status === "failed" && !item.recreate)
+            void transfer(item, !item.record ? item.file : undefined);
       },
       async remove(item: UploadItem) {
         running.get(item.id)?.abort();
+        item.file = undefined;
         try {
           await forget(item);
         } catch (error) {
@@ -251,12 +268,17 @@ export function createUploadDrafts(device: DeviceRuntime) {
       },
       async clear() {
         const items = [...state.items];
+        for (const item of items) {
+          running.get(item.id)?.abort();
+          item.file = undefined;
+        }
         for (const item of items) await forget(item);
         state.items = state.items.filter((item) => !items.includes(item));
         emit();
       },
       destroy() {
         lifetime.abort();
+        for (const item of state.items) item.file = undefined;
       },
     };
   }

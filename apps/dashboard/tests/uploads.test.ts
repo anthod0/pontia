@@ -123,21 +123,22 @@ test("round trips escaped attachments and retains malformed tags as text", () =>
   expect(parseUploadMessage(uploadMessage("Read these", files))).toEqual({
     text: "Read these",
     files,
+    secrets: [],
   });
   expect(uploadMessage("Read these", files)).toMatch(
     /^<user_uploads [^\n]*>\n<user_upload [^\n]*<\/user_upload>\n<\/user_uploads>\nRead these$/,
   );
   const wrapper = uploadMessage("", [{ path: "/device/file", name: "report.txt" }]);
   const trailing = `Read these\n${wrapper}`;
-  expect(parseUploadMessage(trailing)).toEqual({ text: trailing, files: [] });
+  expect(parseUploadMessage(trailing)).toEqual({ text: trailing, files: [], secrets: [] });
   const invalid =
     '<user_upload path="relative">x</user_upload>\n<user_upload path="/x">&unknown;</user_upload>\n<user_upload path="/x"><script>bad</script></user_upload>';
   for (const tag of invalid.split("\n")) {
     const text = wrapper.replace(/<user_upload .*<\/user_upload>/, tag);
-    expect(parseUploadMessage(text)).toEqual({ text, files: [] });
+    expect(parseUploadMessage(text)).toEqual({ text, files: [], secrets: [] });
   }
   const bare = '<user_upload path="/device/file">report.txt</user_upload>';
-  expect(parseUploadMessage(bare)).toEqual({ text: bare, files: [] });
+  expect(parseUploadMessage(bare)).toEqual({ text: bare, files: [], secrets: [] });
 });
 
 test("removed references stay removed when IndexedDB deletion fails", async () => {
@@ -191,5 +192,5 @@ test("recognizes valid quoted XML attributes while keeping extra attributes and 
     ).files,
   ).toEqual([{ path: "/device/file", name: "report.txt" }]);
   const text = `<user_uploads note="Temporary files; copy any you need into the workspace.">\n<user_upload path="/device/file" onclick="bad">report.txt</user_upload>\n</user_uploads>`;
-  expect(parseUploadMessage(text)).toEqual({ text, files: [] });
+  expect(parseUploadMessage(text)).toEqual({ text, files: [], secrets: [] });
 });

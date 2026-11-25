@@ -1,4 +1,7 @@
+import { hasControl } from "./secretMask";
 export type UploadedFile = { path: string; name: string };
+
+export type SecretFile = { path: string; masked: string; label?: string };
 
 export function escapeXml(value: string): string {
   return value
@@ -14,7 +17,15 @@ export function escapeXml(value: string): string {
 const uploadsOpen = '<user_uploads note="Temporary files; copy any you need into the workspace.">';
 const uploadsClose = "</user_uploads>";
 
-export function uploadMessage(text: string, files: UploadedFile[]): string {
+const secretsOpen =
+  '<user_secrets note="Secret files; read directly by tools/scripts without printing, logging, or copying their plaintext into responses or the workspace.">';
+const secretsClose = "</user_secrets>";
+
+export function uploadMessage(
+  text: string,
+  files: UploadedFile[],
+  secrets: SecretFile[] = [],
+): string {
   return [
     ...(files.length
       ? [
@@ -24,6 +35,16 @@ export function uploadMessage(text: string, files: UploadedFile[]): string {
               `<user_upload path="${escapeXml(file.path)}">${escapeXml(file.name)}</user_upload>`,
           ),
           uploadsClose,
+        ]
+      : []),
+    ...(secrets.length
+      ? [
+          secretsOpen,
+          ...secrets.map(
+            ({ path, label, masked }) =>
+              `<user_secret path="${escapeXml(path)}"${label ? ` label="${escapeXml(label)}"` : ""}>${escapeXml(masked)}</user_secret>`,
+          ),
+          secretsClose,
         ]
       : []),
     text.trim(),
@@ -51,17 +72,48 @@ function parseUploadTag(line: string): UploadedFile | null {
   return { path, name };
 }
 
-export function parseUploadMessage(content: string): {
-  text: string;
-  files: UploadedFile[];
-} {
+function parseSecretTag(line: string): SecretFile | null {
+  if (!/^\s*<user_secret\s[^]*<\/user_secret>\s*$/.test(line)) return null;
+  // XML normalizes literal tabs and carriage returns in attributes before validation.
+  if (
+    /\slabel\s*=\s*(?:"[^"]*[\t\r][^"]*"|'[^']*[\t\r][^']*')/.test(line.slice(0, line.indexOf(">")))
+  )
+    return null;
+  const doc = new DOMParser().parseFromString(line, "application/xml");
+  const node = doc.documentElement;
+  const path = node.getAttribute("path");
+  const label = node.getAttribute("label");
+  const masked = node.textContent;
+  if (
+    doc.querySelector("parsererror") ||
+    node.tagName !== "user_secret" ||
+    !path?.startsWith("/") ||
+    !masked ||
+    (label !== null && (!label.trim() || hasControl(label))) ||
+    Array.from(node.attributes).some((attr) => attr.name !== "path" && attr.name !== "label") ||
+    Array.from(node.childNodes).some((child) => child.nodeType !== Node.TEXT_NODE)
+  )
+    return null;
+  return { path, masked, ...(label ? { label } : {}) };
+}
+
+export function parseUploadMessage(content: string) {
+  const plain = { text: content, files: [] as UploadedFile[], secrets: [] as SecretFile[] };
   const lines = content.split("\n");
-  const end = lines.indexOf(uploadsClose);
-  if (lines[0] !== uploadsOpen || end < 2) return { text: content, files: [] };
-  const files = lines.slice(1, end).map(parseUploadTag);
-  if (files.some((file) => !file)) return { text: content, files: [] };
-  return {
-    text: lines.slice(end + 1).join("\n"),
-    files: files as UploadedFile[],
-  };
+  let index = 0;
+  function block<T>(open: string, close: string, parse: (line: string) => T | null): T[] | null {
+    const items: T[] = [];
+    if (lines[index] !== open) return items;
+    index++;
+    while (index < lines.length && lines[index] !== close) {
+      const item = parse(lines[index++]);
+      if (!item) return null;
+      items.push(item);
+    }
+    if (!items.length || lines[index++] !== close) return null;
+    return items;
+  }
+  const files = block(uploadsOpen, uploadsClose, parseUploadTag);
+  const secrets = block(secretsOpen, secretsClose, parseSecretTag);
+  return files && secrets ? { text: lines.slice(index).join("\n"), files, secrets } : plain;
 }

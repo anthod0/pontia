@@ -1,5 +1,6 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
+  import SecretChip from '../../../components/chat/SecretChip.svelte'
   import { parseUploadMessage } from '$lib/uploads/message'
   import { parseQuestionReplies, questionRepliesText } from '$lib/session-chat/questionReply'
   import { onDestroy, tick, type Snippet } from 'svelte'
@@ -318,6 +319,11 @@
       data-chat-turn-id={chatMessage.turnId}
       data-chat-role={chatMessage.role}
     >
+      {#if uploadParts?.secrets.length && editingMessageId !== chatMessage.id}
+        <ul class="flex flex-wrap justify-end gap-2" data-user-message-secrets>
+          {#each uploadParts.secrets as secret}<li class="flex max-w-full items-center gap-1.5 rounded-md border bg-background px-2 py-1 text-xs"><SecretChip {secret}/></li>{/each}
+        </ul>
+      {/if}
       {#if uploadParts?.files.length && editingMessageId !== chatMessage.id}
         <ul class="flex flex-wrap justify-end gap-2" data-user-message-uploads>
           {#each uploadParts.files as file}<li class="rounded-md border bg-background px-2 py-1 text-xs" title={file.path}>{$t('files.uploadedPrefix')} {file.name}</li>{/each}

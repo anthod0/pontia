@@ -80,8 +80,15 @@ export function userPromptForDisplay(prompt: string): string {
 }
 
 export function titleFromInitialPrompt(prompt: string, maxLength = 60): string | null {
-  const { text, files } = parseUploadMessage(userPromptForDisplay(prompt));
-  const normalized = (text.trim() || files.map((file) => file.name).join(", "))
+  const { text, files, secrets } = parseUploadMessage(userPromptForDisplay(prompt));
+  const normalized = (
+    text.trim() ||
+    [
+      ...files.map((file) => file.name),
+      ...secrets.flatMap((secret) => (secret.label ? [secret.label] : [])),
+    ].join(", ") ||
+    (secrets.length ? defaultTranslate("secrets.secret") : "")
+  )
     .replace(/^```[\w-]*\s*/i, "")
     .replace(/```$/i, "")
     .split(/\r?\n/)

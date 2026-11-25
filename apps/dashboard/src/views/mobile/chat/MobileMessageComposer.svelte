@@ -8,7 +8,7 @@
   import type { ChatCommand } from '$lib/chatCommands'
   import UploadAttachments from '../../../components/chat/UploadAttachments.svelte'
   import StopIcon from 'phosphor-svelte/lib/StopIcon'
-  import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
+  import ComposerAddMenu from '../../../components/chat/ComposerAddMenu.svelte'
   import PaperPlaneTiltIcon from 'phosphor-svelte/lib/PaperPlaneTiltIcon'
   import ArrowsOutIcon from 'phosphor-svelte/lib/ArrowsOutIcon'
   let {
@@ -121,13 +121,7 @@
     disabled={busy || controller.sending}
   />{/if}
 <div class="mobile-glass flex items-end rounded-3xl p-1">
-  <button
-    class="mobile-icon shrink-0"
-    aria-label={$t('files.upload')}
-    disabled={controller.uploadUnavailable}
-    onmousedown={holdFocus}
-    onclick={() => picker?.choose()}><PlusIcon class="size-4" /></button
-  >
+    <ComposerAddMenu mobile disabled={!!controller.uploadUnavailable} onSelectFile={() => picker?.choose()} onConfirm={({value,label}) => controller.uploads?.addSecret(value,label)} onClose={focusInput}/>
   <div class="min-w-0 flex-1 [&_[role=listbox]]:max-w-full" bind:clientHeight={height} onpastecapture={paste}>
     <ChatCommandInput
       bind:this={inlineInput}

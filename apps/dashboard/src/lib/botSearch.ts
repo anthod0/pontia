@@ -22,16 +22,24 @@ function fold(text: string): string {
  * when the match is only in markup.
  */
 function matchedText(message: BotMessage, needle: string): string {
-  const quote = message.kind === "user_input" ? parseQuotedMessage(message.content).quote : null;
-  const text = plainLine(messageText(message));
+  const quoted = message.kind === "user_input" ? parseQuotedMessage(message.content) : null;
+  const quote = quoted?.quote;
+  const parts = quoted && parseUploadMessage(quoted.text);
+  const text = plainLine(parts?.text ?? messageText(message));
   const candidates = [
     message.kind === "bot_reply" ? text.replace(/!?\[([^\]]+)\]\([^)]+\)/g, "$1") : text,
     plainLine(quote?.kind === "message" ? quote.text : (quote?.name ?? "")),
     ...(message.kind === "bot_reply"
       ? attachedPaths(message.content)
-      : parseUploadMessage(message.content).files.flatMap((file) => [file.name, file.path])),
+      : [
+          ...(parts?.files.flatMap((file) => [file.name, file.path]) ?? []),
+          ...(parts?.secrets.flatMap((secret) => [secret.label ?? "", secret.masked]) ?? []),
+        ]),
   ];
-  return candidates.find((text) => fold(text).includes(needle)) ?? oneLine(message.content);
+  return (
+    candidates.find((text) => fold(text).includes(needle)) ??
+    (parts?.secrets.length ? candidates.filter(Boolean).join(" ") : oneLine(message.content))
+  );
 }
 
 /** A one-line excerpt around the first match, with every match marked. */

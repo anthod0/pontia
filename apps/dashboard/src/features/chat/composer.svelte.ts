@@ -47,8 +47,15 @@ export function createComposer(options: {
   );
   const completedFiles = $derived(
     attachments.items.flatMap((item) =>
-      item.status === "complete" && item.upload?.path
+      !item.secret && item.status === "complete" && item.upload?.path
         ? [{ name: item.name, path: item.upload.path }]
+        : [],
+    ),
+  );
+  const completedSecrets = $derived(
+    attachments.items.flatMap((item) =>
+      item.secret && item.status === "complete" && item.upload?.path
+        ? [{ ...item.secret, path: item.upload.path }]
         : [],
     ),
   );
@@ -67,7 +74,7 @@ export function createComposer(options: {
         ? Boolean(command.disabledReason) || (command.name === "/rename" && !commandArgument)
         : options.submitDisabled ||
           uploadBlocked ||
-          (!options.value.trim() && completedFiles.length === 0)),
+          (!options.value.trim() && completedFiles.length === 0 && completedSecrets.length === 0)),
   );
 
   /** Returns false when the composer cannot submit right now. */
@@ -85,8 +92,10 @@ export function createComposer(options: {
     try {
       if (!sentAwaitingCleanup)
         sentAwaitingCleanup =
-          (await options.onSubmit(uploadMessage(options.value, completedFiles), deliveryPolicy)) ===
-          true;
+          (await options.onSubmit(
+            uploadMessage(options.value, completedFiles, completedSecrets),
+            deliveryPolicy,
+          )) === true;
       if (sentAwaitingCleanup) {
         await draft?.clear();
         sentAwaitingCleanup = false;

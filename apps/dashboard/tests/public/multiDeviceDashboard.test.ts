@@ -533,7 +533,9 @@ test("an attachment still hashing survives device switches and uploads only to i
     return request(handle, path, init);
   });
   render(MultiDeviceDashboardHarness);
-  await waitFor(() => expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled());
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Add", exact: true })).toBeEnabled(),
+  );
   await fireEvent.change(screen.getByLabelText("Select files to upload"), {
     target: { files: [file] },
   });

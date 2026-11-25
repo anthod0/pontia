@@ -955,5 +955,15 @@
   "profiles.templateModelMissing": "{client} 中没有模板推荐的模型 {model}，已使用客户端默认模型。",
   "profiles.replaceTemplateTitle": "替换已填写的内容？",
   "profiles.replaceTemplateDescription": "套用「{name}」会覆盖名称、配置 ID、描述、YOLO 模式和系统提示词；客户端和模型仅在此设备可用时覆盖。",
-  "profiles.replace": "替换"
+  "profiles.replace": "替换",
+  "secrets.file": "文件",
+  "secrets.secret": "密钥",
+  "secrets.add": "添加密钥",
+  "secrets.description": "工具可读取上传的文件，聊天中仅显示掩码。",
+  "secrets.show": "显示",
+  "secrets.hide": "隐藏",
+  "secrets.multiline": "多行",
+  "secrets.sizeLimit": "密钥不能超过 64 KiB。",
+  "secrets.label": "标签（可选）",
+  "secrets.labelLimit": "标签最多 64 个字符，不能包含控制字符。"
 }

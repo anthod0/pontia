@@ -153,12 +153,20 @@ export function entryQuote(
 
 /** The full visible text of a message, or its file names when it has no text. */
 export function entryText(message: BotMessage): string {
+  if (message.kind === "bot_reply")
+    return (
+      messageText(message) ||
+      attachedPaths(message.content)
+        .map((path) => attachedFile(path).name)
+        .join("\n")
+    );
+  const { text, files, secrets } = parseUploadMessage(parseQuotedMessage(message.content).text);
   return (
-    messageText(message) ||
-    (message.kind === "bot_reply"
-      ? attachedPaths(message.content).map((path) => attachedFile(path).name)
-      : parseUploadMessage(message.content).files.map((file) => file.name)
-    ).join("\n")
+    text ||
+    [
+      ...files.map((file) => file.name),
+      ...secrets.map(({ label, masked }) => (label ? `${label} (${masked})` : masked)),
+    ].join("\n")
   );
 }
 

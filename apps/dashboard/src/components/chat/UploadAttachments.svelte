@@ -5,6 +5,7 @@
 </script>
 
 <script lang="ts">
+  import SecretChip from './SecretChip.svelte'
   import { toast } from 'svelte-sonner'
   import { Progress } from '$lib/components/ui/progress/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -22,8 +23,11 @@
     const { warning, items } = $draft
     notify('upload-warning', warning, () => toast.warning(warning!, { id: 'upload-warning' }))
     for (const item of items)
-      notify(`upload-error-${item.id}`, item.error, () => toast.error($t('files.uploadFailedNamed', { name: item.name }), { id: `upload-error-${item.id}`, description: item.error }))
+      notify(`upload-error-${item.id}`, item.error, () => toast.error($t('files.uploadFailedNamed', { name: displayName(item) }), { id: `upload-error-${item.id}`, description: item.error }))
   })
+  function displayName(item: UploadItem) {
+    return item.secret?.label ?? item.secret?.masked ?? item.name
+  }
   function notify(key: string, message: string | null | undefined, show: () => void) {
     if (!message) { notified.delete(key); return }
     if (notified.get(key) === message) return
@@ -46,17 +50,17 @@
   <ul class="flex flex-wrap gap-2">
     {#each $draft.items as item (item.id)}
       <li class="flex max-w-full flex-wrap items-center gap-1.5 rounded-md border border-border bg-background py-0.5 pl-2 pr-0.5 text-xs">
-        <span class="max-w-64 truncate" title={item.name}>{item.name}</span>
+        {#if item.secret}<SecretChip secret={item.secret}/>{:else}<span class="max-w-64 truncate" title={item.name}>{item.name}</span>{/if}
         {#if item.status === 'complete'}<span>{$t('files.uploaded')}</span>
         {:else if item.status === 'hashing'}<span role="status">{$t('files.checking')}</span>
-        {:else if item.status === 'uploading'}<Progress class="w-28" max={item.size || 1} value={item.offset} aria-label={$t('files.uploading', { name: item.name })} />
+        {:else if item.status === 'uploading'}<Progress class="w-28" max={item.size || 1} value={item.offset} aria-label={$t('files.uploading', { name: displayName(item) })} />
         {:else if item.status === 'select'}<span>{$t('files.resumeHint')}</span>
-        {:else if item.status === 'failed'}<span role="img" class="text-destructive" aria-label={$t('files.uploadFailedNamed', { name: item.name })} title={$t('files.uploadFailed')}><WarningCircleIcon class="size-3.5" weight="fill" /></span>{/if}
+        {:else if item.status === 'failed'}<span role="img" class="text-destructive" aria-label={$t('files.uploadFailedNamed', { name: displayName(item) })} title={$t('files.uploadFailed')}><WarningCircleIcon class="size-3.5" weight="fill" /></span>{/if}
         {#if (item.status === 'select' || item.status === 'failed') && !item.recreate}
-          <Button type="button" size="icon-sm" variant="ghost" {disabled} aria-label={$t('files.retryUpload', { name: item.name })} title={$t('common.retry')} onclick={() => item.file || (item.record && item.status === 'failed') ? void draft.retry(item) : choose(item)}><ArrowClockwiseIcon class="size-3.5" /></Button>
-          {#if !item.file}<Button type="button" size="icon-sm" variant="ghost" {disabled} aria-label={$t('files.selectNamed', { name: item.name })} title={$t('files.select')} onclick={() => choose(item)}><FolderOpenIcon class="size-3.5" /></Button>{/if}
+          <Button type="button" size="icon-sm" variant="ghost" {disabled} aria-label={$t('files.retryUpload', { name: displayName(item) })} title={$t('common.retry')} onclick={() => item.secret || item.file || (item.record && item.status === 'failed') ? void draft.retry(item) : choose(item)}><ArrowClockwiseIcon class="size-3.5" /></Button>
+          {#if !item.secret && !item.file}<Button type="button" size="icon-sm" variant="ghost" {disabled} aria-label={$t('files.selectNamed', { name: displayName(item) })} title={$t('files.select')} onclick={() => choose(item)}><FolderOpenIcon class="size-3.5" /></Button>{/if}
         {/if}
-        <Button type="button" size="icon-sm" variant="ghost" {disabled} aria-label={$t('files.removeAttachment', { name: item.name })} title={$t('common.remove')} onclick={() => void draft.remove(item)}><XIcon class="size-3.5" /></Button>
+        <Button type="button" size="icon-sm" variant="ghost" {disabled} aria-label={$t('files.removeAttachment', { name: displayName(item) })} title={$t('common.remove')} onclick={() => void draft.remove(item)}><XIcon class="size-3.5" /></Button>
       </li>
     {/each}
   </ul>

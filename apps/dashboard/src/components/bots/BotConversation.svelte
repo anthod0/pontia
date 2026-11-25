@@ -6,6 +6,7 @@
   import RetryMessageButton from '../chat/RetryMessageButton.svelte'
   import SharedFiles from '../chat/files/SharedFiles.svelte'
   import { fileActionButton, fileActionClass, type FileActionLook } from '../chat/files/fileActionButton'
+  import SecretChip from '../chat/SecretChip.svelte'
   import { parseUploadMessage } from '$lib/uploads/message'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import DotsThreeIcon from 'phosphor-svelte/lib/DotsThreeIcon'
@@ -51,7 +52,7 @@
       {#snippet row(entry)}
         {#if 'content' in entry}
           {@const quoted = entry.kind === 'user_input' ? parseQuotedMessage(entry.content) : { text: entry.content, quote: null }}
-          {@const parts = entry.kind === 'user_input' ? { ...parseUploadMessage(quoted.text), quote: quoted.quote } : { ...quoted, files: [] }}
+          {@const parts = entry.kind === 'user_input' ? { ...parseUploadMessage(quoted.text), quote: quoted.quote } : { ...quoted, files: [], secrets: [] }}
           {@const fileSession = timeline.fileLinkSession?.session_id}
           <div class={['flex gap-1', entry.kind === 'user_input' ? 'justify-end' : 'justify-start']}>
             {#if !mobile && entry.kind === 'user_input'}{@render menuButton(entry.id)}{#if entry.todo?.state === 'open'}{@render todoButton()}{/if}{/if}
@@ -61,7 +62,12 @@
               </div>
             {/if}
             <div class="max-w-[90%] [.mobile-shell_&]:max-w-[86%] min-w-0 space-y-2">
-              {#if parts.files.length}
+              {#if parts.secrets.length}
+        <ul class={['flex flex-wrap justify-end gap-2', !parts.text && highlightableClass]} {...(!parts.text ? quotableProps : {})} data-user-message-secrets>
+          {#each parts.secrets as secret}<li class="flex max-w-full items-center gap-1.5 rounded-md border bg-background px-2 py-1 text-xs"><SecretChip {secret}/></li>{/each}
+        </ul>
+      {/if}
+      {#if parts.files.length}
                 <ul class={['flex flex-wrap justify-end gap-2', !parts.text && highlightableClass]} {...(!parts.text ? quotableProps : {})} data-user-message-uploads>
                   {#each parts.files as file}<li class="rounded-md border bg-background px-2 py-1 text-xs [overflow-wrap:anywhere]" title={file.path}>{$t('files.uploadedPrefix')} {file.name}</li>{/each}
                 </ul>
