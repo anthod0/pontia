@@ -357,7 +357,7 @@ fn stream_key(identity: &LiveOutputIdentity) -> StreamKey {
     }
 }
 
-fn apply_update(items: &mut Vec<LiveOutputItem>, update: LiveOutputUpdate) -> Result<()> {
+pub fn apply_update(items: &mut Vec<LiveOutputItem>, update: LiveOutputUpdate) -> Result<()> {
     match update {
         LiveOutputUpdate::ToolStatusUpdated {
             call_id,

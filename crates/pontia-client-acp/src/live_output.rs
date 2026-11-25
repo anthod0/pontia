@@ -5,6 +5,7 @@ use pontia_agent_control::{
     LiveOutputPublishOutcome, LiveOutputService, LiveOutputSnapshotReplacement, LiveOutputSource,
     LiveOutputUpdate, LiveReasoningBound, LiveToolOutcome, LiveToolPhase, LiveToolResult,
     LiveToolStatus,
+    live_output::{MAX_ITEMS_PER_STREAM, apply_update},
 };
 use pontia_core::{Error, Result};
 use serde_json::Value;
@@ -21,21 +22,13 @@ pub(crate) async fn user_input(
 ) -> Result<()> {
     let mut publisher = publisher(output, session, runtime, prompt)?;
     publisher.prompt.thought = None;
-    let item_id = format!("input-{}", publisher.items.len());
-    let item = LiveOutputItem::UserInput {
-        item_id: item_id.clone(),
-        text: text.into(),
-    };
-    if publisher.prompt.sequence == 0 {
-        publisher.snapshot(vec![item]).await
-    } else {
-        publisher
-            .send(LiveOutputUpdate::UserInput {
-                item_id,
-                text: text.into(),
-            })
-            .await
-    }
+    let item_id = format!("input-{}", publisher.prompt.sequence);
+    publisher
+        .send(LiveOutputUpdate::UserInput {
+            item_id,
+            text: text.into(),
+        })
+        .await
 }
 
 pub(crate) async fn publish(
@@ -66,27 +59,19 @@ pub(crate) async fn publish(
                     .iter()
                     .rev()
                     .find_map(|item| match item {
+                        LiveOutputItem::AssistantText { item_id, .. } => Some(item_id.clone()),
                         LiveOutputItem::UserInput { item_id, .. } => {
                             Some(format!("response-{item_id}"))
                         }
                         _ => None,
                     })
-                    .unwrap_or_else(|| "response".into());
-                if publisher.prompt.sequence == 0 {
-                    publisher
-                        .snapshot(vec![LiveOutputItem::AssistantText {
-                            item_id,
-                            text: text.into(),
-                        }])
-                        .await?;
-                } else {
-                    publisher
-                        .send(LiveOutputUpdate::AssistantTextDelta {
-                            item_id,
-                            delta: text.into(),
-                        })
-                        .await?;
-                }
+                    .unwrap_or_else(|| format!("response-{}", publisher.prompt.sequence));
+                publisher
+                    .send(LiveOutputUpdate::AssistantTextDelta {
+                        item_id,
+                        delta: text.into(),
+                    })
+                    .await?;
             }
         }
         Some("agent_thought_chunk")
@@ -104,6 +89,30 @@ pub(crate) async fn publish(
         _ => {}
     }
     Ok(())
+}
+
+pub(crate) fn tool_text(update: &Value) -> Option<String> {
+    update
+        .get("content")
+        .and_then(Value::as_array)
+        .map(|content| {
+            content
+                .iter()
+                .filter_map(|item| {
+                    if item["type"] != "content" {
+                        return None;
+                    }
+                    match item.pointer("/content/type").and_then(Value::as_str) {
+                        Some("text") => item.pointer("/content/text").and_then(Value::as_str),
+                        Some("resource") => item
+                            .pointer("/content/resource/text")
+                            .and_then(Value::as_str),
+                        _ => None,
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
 }
 
 fn publisher<'a>(
@@ -152,7 +161,7 @@ impl Publisher<'_> {
         let item_id = self
             .prompt
             .thought
-            .get_or_insert_with(|| format!("thought-{}", self.items.len()))
+            .get_or_insert_with(|| format!("thought-{}", self.prompt.sequence))
             .clone();
         let update = LiveOutputUpdate::ReasoningDelta {
             item_id,
@@ -160,18 +169,6 @@ impl Publisher<'_> {
             truncated: false,
         };
         match update.bound_reasoning(&self.items) {
-            LiveReasoningBound::Update(LiveOutputUpdate::ReasoningDelta {
-                item_id,
-                delta,
-                truncated,
-            }) if self.prompt.sequence == 0 => {
-                self.snapshot(vec![LiveOutputItem::Reasoning {
-                    item_id,
-                    text: delta,
-                    truncated,
-                }])
-                .await
-            }
             LiveReasoningBound::Update(update) => self.send(update).await,
             LiveReasoningBound::Snapshot(items) => self.snapshot(items).await,
             LiveReasoningBound::Drop => Ok(()),
@@ -214,28 +211,17 @@ impl Publisher<'_> {
             let Some(name) = name else { return Ok(()) };
             let arguments = update.get("rawInput").cloned().unwrap_or(Value::Null);
             // Local item IDs cannot collide with arbitrary native call IDs or text.
-            let item_id = format!("tool-{}", self.items.len());
-            if self.prompt.sequence == 0 {
-                self.snapshot(vec![LiveOutputItem::ToolCall {
-                    item_id,
-                    call_id: call_id.into(),
-                    tool_name: name.into(),
-                    arguments,
-                    managed_tool_use: None,
-                    status: None,
-                    output: None,
-                    result: None,
-                }])
-                .await?;
-            } else {
-                self.send(LiveOutputUpdate::ToolCall {
-                    item_id,
-                    call_id: call_id.into(),
-                    tool_name: name.into(),
-                    arguments,
-                    managed_tool_use: None,
-                })
-                .await?;
+            let item_id = format!("tool-{}", self.prompt.sequence);
+            self.send(LiveOutputUpdate::ToolCall {
+                item_id,
+                call_id: call_id.into(),
+                tool_name: name.into(),
+                arguments,
+                managed_tool_use: None,
+            })
+            .await?;
+            if !self.items.iter().any(|item| matches!(item, LiveOutputItem::ToolCall { call_id: id, .. } if id == call_id)) {
+                return Ok(());
             }
         }
 
@@ -261,27 +247,7 @@ impl Publisher<'_> {
             })
             .await?;
         }
-        let text = update
-            .get("content")
-            .and_then(Value::as_array)
-            .map(|content| {
-                content
-                    .iter()
-                    .filter_map(|item| {
-                        if item["type"] != "content" {
-                            return None;
-                        }
-                        match item.pointer("/content/type").and_then(Value::as_str) {
-                            Some("text") => item.pointer("/content/text").and_then(Value::as_str),
-                            Some("resource") => item
-                                .pointer("/content/resource/text")
-                                .and_then(Value::as_str),
-                            _ => None,
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            });
+        let text = tool_text(update);
         // Unsupported content (e.g. terminal references) is not an empty text
         // output. It only clears text when replacing a previously visible output.
         if let Some(text) = &text
@@ -340,6 +306,38 @@ impl Publisher<'_> {
 
     async fn send(&mut self, update: LiveOutputUpdate) -> Result<()> {
         let update = update.bound_tool_content(&self.items);
+        let new_item = match &update {
+            LiveOutputUpdate::AssistantTextDelta { item_id, .. }
+            | LiveOutputUpdate::ReasoningDelta { item_id, .. } => {
+                !self.items.iter().any(|item| item.item_id() == item_id)
+            }
+            LiveOutputUpdate::ToolCall { .. } | LiveOutputUpdate::UserInput { .. } => true,
+            _ => false,
+        };
+        if self.prompt.sequence == 0 || (new_item && self.items.len() == MAX_ITEMS_PER_STREAM) {
+            let mut items = std::mem::take(&mut self.items);
+            let evicted = if items.len() == MAX_ITEMS_PER_STREAM {
+                let evict = items.iter().position(|item| match item {
+                    LiveOutputItem::ToolCall { status, .. } => status
+                        .as_ref()
+                        .is_some_and(|s| s.phase == LiveToolPhase::Ended),
+                    _ => true,
+                });
+                let Some(index) = evict else {
+                    // Every visible call is still in flight. Keep accepting their updates.
+                    return self.snapshot(items).await;
+                };
+                Some(items.remove(index))
+            } else {
+                None
+            };
+            apply_update(&mut items, update)?;
+            self.snapshot(items).await?;
+            if let Some(LiveOutputItem::ToolCall { call_id, .. }) = evicted {
+                self.prompt.raw_results.remove(&call_id);
+            }
+            return Ok(());
+        }
         let outcome = self
             .output
             .publish_batch(LiveOutputBatch {

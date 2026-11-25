@@ -27,6 +27,7 @@ pub(crate) struct Message {
     pub display: Option<String>,
     pub prompt: Option<usize>,
     pub interjection: bool,
+    pub(crate) raw_result: bool,
     pub(crate) tool: Option<(String, Option<String>)>,
 }
 
@@ -72,16 +73,11 @@ pub(crate) fn collect(
     update: &Value,
     protocol: Option<&crate::InterjectionProtocol>,
 ) -> Result<()> {
-    if protocol.is_some()
-        && update["sessionUpdate"] == "tool_call"
-        && let (Some(call), Some(title)) = (update["toolCallId"].as_str(), update["title"].as_str())
-    {
-        messages.push(Message {
-            role: "tool_call",
-            text: title.into(),
-            tool: Some((call.into(), update["status"].as_str().map(str::to_owned))),
-            ..Default::default()
-        });
+    if matches!(
+        update["sessionUpdate"].as_str(),
+        Some("tool_call" | "tool_call_update")
+    ) {
+        collect_tool(messages, update);
         return Ok(());
     }
     let role = match update["sessionUpdate"].as_str() {
@@ -108,7 +104,6 @@ pub(crate) fn collect(
                 text: text.into(),
                 prompt,
                 interjection,
-                tool: None,
                 display: interjection
                     .then(|| {
                         update
@@ -117,12 +112,87 @@ pub(crate) fn collect(
                             .map(str::to_owned)
                     })
                     .flatten(),
+                ..Default::default()
             });
             return Ok(());
         }
     }
     append(messages, role, text);
     Ok(())
+}
+
+fn collect_tool(messages: &mut Vec<Message>, update: &Value) {
+    let Some(id) = update["toolCallId"].as_str() else {
+        return;
+    };
+    let matches_id = |message: &Message| message.tool.as_ref().is_some_and(|(call, _)| call == id);
+    let status = update["status"].as_str();
+    let title = update["title"].as_str();
+    let call = messages
+        .iter_mut()
+        .rev()
+        .find(|m| m.role == "tool_call" && matches_id(m));
+    let mut merged_status = status.map(str::to_owned);
+    if let Some(call) = call {
+        if let Some(title) = title {
+            call.text = title.into();
+        }
+        if let Some((_, current)) = &mut call.tool {
+            if merged_status.is_some()
+                && !matches!(current.as_deref(), Some("completed" | "failed"))
+            {
+                current.clone_from(&merged_status);
+            }
+            merged_status.clone_from(current);
+        }
+    } else if let Some(title) = title {
+        messages.push(Message {
+            role: "tool_call",
+            text: title.into(),
+            tool: Some((id.into(), status.map(str::to_owned))),
+            ..Default::default()
+        });
+    }
+    let result = messages
+        .iter_mut()
+        .rev()
+        .find(|m| m.role == "tool_result" && matches_id(m));
+    let terminal = status.filter(|status| matches!(*status, "completed" | "failed"));
+    let result_status = merged_status.filter(|s| matches!(s.as_str(), "completed" | "failed"));
+    let raw = update.get("rawOutput");
+    let preview = match raw {
+        Some(value) => Some(
+            value
+                .as_str()
+                .map(str::to_owned)
+                .unwrap_or_else(|| value.to_string()),
+        ),
+        None if terminal.is_some() => {
+            crate::live_output::tool_text(update).filter(|text| !text.is_empty())
+        }
+        None => None,
+    };
+    if let Some(result) = result {
+        if let Some((_, current)) = &mut result.tool
+            && current.is_none()
+        {
+            *current = result_status;
+        }
+        if let Some(preview) = preview
+            && (raw.is_some() || !result.raw_result)
+        {
+            result.text = preview;
+            result.raw_result = raw.is_some();
+        }
+    } else if let Some(preview) = preview {
+        messages.push(Message {
+            role: "tool_result",
+            text: preview,
+            tool: Some((id.into(), result_status)),
+            raw_result: raw.is_some(),
+            ..Default::default()
+        });
+    }
 }
 
 #[derive(Default)]
@@ -228,7 +298,7 @@ fn index(binding: &AgentBindingResolveRequest, value: &str) -> Result<Anchor> {
 impl ClientData for AcpAdapter {
     fn timeline_cache_policy(&self) -> Option<TimelineCachePolicy> {
         Some(TimelineCachePolicy {
-            render_version: 1,
+            render_version: 2,
             read_while_online: false,
             backfill_all_turns_on_miss: true,
             supports_session_checkpoints: true,
@@ -561,7 +631,7 @@ fn render(
             let within_turn = messages[order + 1..]
                 .iter()
                 .find(|m| m.role != "context_compaction")
-                .is_some_and(|next| next.role == "assistant");
+                .is_some_and(|next| matches!(next.role, "assistant" | "tool_call" | "tool_result"));
             if let Some(last) = last_page_turn
                 && if within_turn {
                     start < offset && offset <= end
@@ -605,7 +675,7 @@ fn render(
             }
             &message.text
         };
-        if text.is_empty() {
+        if text.is_empty() && message.role != "tool_result" {
             continue;
         }
         items.push(TurnTimelineItem {
@@ -622,8 +692,13 @@ fn render(
                 },
                 kind: message.role.into(),
                 raw_kind: None,
-                role: message.role.into(),
-                title: message.tool.as_ref().map(|_| message.text.clone()),
+                role: if message.role == "tool_result" {
+                    "tool"
+                } else {
+                    message.role
+                }
+                .into(),
+                title: (message.role == "tool_call").then(|| message.text.clone()),
                 status: message.tool.as_ref().and_then(|(_, status)| status.clone()),
                 occurred_at: None,
                 content_preview: text.into(),
@@ -679,6 +754,45 @@ impl TurnTimelineReader for ProtocolOnly {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn standard_tool_updates_render_call_state_and_separate_results() {
+        let mut messages = Vec::new();
+        append(&mut messages, "user", "go");
+        for update in [
+            json!({"sessionUpdate":"tool_call","toolCallId":"a","title":"Inspect","status":"pending"}),
+            json!({"sessionUpdate":"tool_call","toolCallId":"b","title":"Run"}),
+            json!({"sessionUpdate":"tool_call_update","toolCallId":"a","status":"in_progress","content":[{"type":"content","content":{"type":"text","text":"partial"}}]}),
+            json!({"sessionUpdate":"tool_call_update","toolCallId":"b","rawOutput":{"code":7}}),
+            json!({"sessionUpdate":"tool_call_update","toolCallId":"b","status":"failed","content":[{"type":"content","content":{"type":"text","text":"fallback"}}]}),
+            json!({"sessionUpdate":"tool_call_update","toolCallId":"a","title":"Read","status":"completed","content":[{"type":"content","content":{"type":"text","text":"one"}},{"type":"content","content":{"type":"text","text":"two"}}]}),
+        ] {
+            collect(&mut messages, &update, None).unwrap();
+        }
+        let timeline = render(&messages, 0, 2, Some("turn"), None).unwrap();
+        let tools: Vec<_> = timeline
+            .iter()
+            .skip(1)
+            .map(|entry| {
+                let item = &entry.item;
+                (
+                    item.kind.as_str(),
+                    item.call_id.as_deref(),
+                    item.status.as_deref(),
+                    item.content_preview.as_str(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            tools,
+            [
+                ("tool_call", Some("a"), Some("completed"), "Read"),
+                ("tool_call", Some("b"), Some("failed"), "Run"),
+                ("tool_result", Some("b"), Some("failed"), r#"{"code":7}"#),
+                ("tool_result", Some("a"), Some("completed"), "one\ntwo"),
+            ]
+        );
+    }
 
     #[test]
     fn kiro_replay_keeps_checkpoints_between_chunks_and_between_turns() {

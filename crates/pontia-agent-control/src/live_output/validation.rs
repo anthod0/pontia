@@ -7,7 +7,7 @@ use super::{
     LiveToolStatus,
 };
 
-const MAX_ITEMS_PER_STREAM: usize = 256;
+pub const MAX_ITEMS_PER_STREAM: usize = 256;
 const MAX_TOTAL_TEXT_BYTES: usize = 1024 * 1024;
 pub(super) const MAX_TOTAL_TOOL_BYTES: usize = 1024 * 1024;
 pub(super) const MAX_TOTAL_REASONING_BYTES: usize = 1024 * 1024;

@@ -11,8 +11,9 @@ mod validation;
 pub use reasoning::LiveReasoningBound;
 pub use service::LiveOutputService;
 pub(crate) use store::LiveOutputStore;
-pub use store::LiveOutputSubscription;
+pub use store::{LiveOutputSubscription, apply_update};
 pub use tools::{LiveToolOutcome, LiveToolOutput, LiveToolPhase, LiveToolResult, LiveToolStatus};
+pub use validation::MAX_ITEMS_PER_STREAM;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
@@ -49,7 +50,7 @@ pub enum LiveOutputItem {
 }
 
 impl LiveOutputItem {
-    fn item_id(&self) -> &str {
+    pub fn item_id(&self) -> &str {
         match self {
             Self::AssistantText { item_id, .. }
             | Self::Reasoning { item_id, .. }

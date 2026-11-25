@@ -56,6 +56,63 @@ fn tool<'a>(snapshot: &'a Value, id: &str) -> &'a Value {
 }
 
 #[tokio::test]
+async fn rolling_snapshot_keeps_in_flight_calls_and_accepts_later_results() {
+    let call = |id: usize, status: &str| {
+        notification(json!({
+            "sessionUpdate":"tool_call","toolCallId":id.to_string(),"title":"Run","status":status
+        }))
+    };
+    let result = |id: usize| {
+        notification(json!({
+            "sessionUpdate":"tool_call_update","toolCallId":id.to_string(),"status":"completed","rawOutput":id
+        }))
+    };
+    let (h, session, turn) = start(vec![
+        (0..256)
+            .map(|id| {
+                call(
+                    id,
+                    if matches!(id, 1 | 2) {
+                        "completed"
+                    } else {
+                        "pending"
+                    },
+                )
+            })
+            .collect(),
+        vec![
+            call(256, "in_progress"),
+            call(257, "pending"),
+            call(258, "pending"),
+        ],
+        vec![result(0), result(256), result(257)],
+    ])
+    .await;
+    step(&h, 0).await;
+    let full = snapshot(&h, &session, &turn);
+    let pending_id = &tool(&full, "0")["item_id"];
+    step(&h, 1).await;
+    let rolled = snapshot(&h, &session, &turn);
+    let items = rolled["items"].as_array().unwrap();
+    assert_eq!(items.len(), 256);
+    assert_eq!(items[0]["item_id"], *pending_id);
+    assert_eq!(items[1]["call_id"], "3");
+    assert_eq!(items[254]["call_id"], "256");
+    assert_eq!(items[255]["call_id"], "257");
+    step(&h, 2).await;
+    let finished = snapshot(&h, &session, &turn);
+    assert!(finished["sequence"].as_u64() > rolled["sequence"].as_u64());
+    for id in [0, 256, 257] {
+        let call = tool(&finished, &id.to_string());
+        assert_eq!(call["item_id"], tool(&rolled, &id.to_string())["item_id"]);
+        assert_eq!(call["result"]["content"], id);
+    }
+    h.release("release-1");
+    h.wait_turn(&session, &turn, "completed").await;
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn usage_reports_update_the_session_without_starting_a_turn() {
     use pontia_agent_control::ContextUsageCapability;
 
