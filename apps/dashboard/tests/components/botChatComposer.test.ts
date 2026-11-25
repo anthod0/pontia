@@ -108,7 +108,7 @@ test("acknowledges queued Bot input without offering a failed-send retry", async
   await fireEvent.click(submit);
   await waitFor(() => expect(toast.info).toHaveBeenCalledOnce());
   expect(toast.error).not.toHaveBeenCalled();
-  expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Click to resend" })).not.toBeInTheDocument();
 });
 
 test("keeps text and attachments after a rejected send so the user can retry", async () => {
@@ -177,7 +177,7 @@ test("reports a failed message retry in a toast with a Retry action", async () =
     .spyOn(testDevice.api, "retryBotMessage")
     .mockRejectedValueOnce(new Error("Still offline"))
     .mockResolvedValueOnce({ ...failed, status: "normal" });
-  await fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+  await fireEvent.click(await screen.findByRole("button", { name: "Click to resend" }));
   await waitFor(() =>
     expect(toast.error).toHaveBeenCalledExactlyOnceWith(
       "Still offline",

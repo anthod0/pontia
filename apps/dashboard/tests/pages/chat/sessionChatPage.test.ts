@@ -2005,10 +2005,12 @@ test("retries a failed branch delivery with its original target", async () => {
   render(SessionChatPage);
 
   await screen.findByText("Corrected historical input");
-  expect(screen.getByText("Pi navigation failed")).toBeVisible();
-  await userEvent.click(
-    screen.getByRole("button", { name: /retry inbox message corrected historical input/i }),
-  );
+  const resend = screen.getByRole("button", {
+    name: /retry inbox message corrected historical input/i,
+  });
+  resend.focus();
+  expect(await screen.findByRole("tooltip")).toHaveTextContent("Pi navigation failed");
+  await userEvent.click(resend);
 
   expect(mocks.retryInboxMessage).toHaveBeenCalledWith(
     "session-2",

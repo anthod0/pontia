@@ -217,6 +217,7 @@
   "chat.waitingHistory": "等待原生历史记录",
   "chat.conversationUnavailable": "对话历史不可用",
   "chat.noConversationHistory": "此会话的对话历史不可用。",
+  "chat.resendFailed": "点击重新发送",
   "chat.retryHistory": "重新加载历史记录",
   "chat.loadingHistory": "正在等待原生历史记录…",
   "chat.compactionHistoryUnavailable": "部分压缩历史不可用",

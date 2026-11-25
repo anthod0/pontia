@@ -123,8 +123,6 @@ test("shows the send time of every message and notice in the feed", async () => 
     const row = log.querySelector(`[data-bot-entry-id="${id}"]`)!;
     expect(row.querySelector("time")).toHaveAttribute("datetime", times[index]);
   });
-  const failed = log.querySelector('[data-bot-entry-id="u"] [data-bot-message-meta]')!;
-  expect(failed).toHaveTextContent("Message failed to send");
 });
 
 test.each([

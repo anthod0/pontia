@@ -3,6 +3,7 @@
   import { t } from '$lib/i18n'
   import { Button } from '$lib/components/ui/button/index.js'
   import { MessageResponse } from '$lib/components/ai-elements/message/index.js'
+  import RetryMessageButton from '../chat/RetryMessageButton.svelte'
   import SharedFiles from '../chat/files/SharedFiles.svelte'
   import { fileActionButton, fileActionClass, type FileActionLook } from '../chat/files/fileActionButton'
   import { parseUploadMessage } from '$lib/uploads/message'
@@ -52,6 +53,11 @@
           {@const fileSession = timeline.fileLinkSession?.session_id}
           <div class={['flex gap-1', entry.kind === 'user_input' ? 'justify-end' : 'justify-start']}>
             {#if !mobile && entry.kind === 'user_input'}{@render menuButton(entry.id)}{#if entry.todo?.state === 'open'}{@render todoButton()}{/if}{/if}
+            {#if entry.status === 'failed' && entry.kind === 'user_input'}
+              <div class="mt-1.5 self-start max-md:mt-0">
+                <RetryMessageButton disabled={chat.retrying.includes(entry.id)} onclick={() => void chat.retry(entry.id)} />
+              </div>
+            {/if}
             <div class="max-w-[90%] [.mobile-shell_&]:max-w-[86%] min-w-0 space-y-2">
               {#if parts.files.length}
                 <ul class={['flex flex-wrap justify-end gap-2', !parts.text && highlightableClass]} {...(!parts.text ? quotableProps : {})} data-user-message-uploads>
@@ -88,12 +94,6 @@
                 </div>
               {/if}
               <div class={['-mt-1 flex items-center gap-2 text-xs text-muted-foreground', entry.kind === 'user_input' ? 'justify-end' : 'justify-start']} data-bot-message-meta>
-                {#if entry.status === 'failed'}
-                  <span class="flex items-center gap-2 text-destructive">
-                    {$t('bots.sendFailed')}
-                    <Button variant="ghost" size="xs" disabled={chat.retrying.includes(entry.id)} onclick={() => void chat.retry(entry.id)}>{$t('common.retry')}</Button>
-                  </span>
-                {/if}
                 {#if mobile && entry.todo?.state === 'open'}
                   {@render todoButton()}
                 {/if}
@@ -101,6 +101,11 @@
                 {#if mobile}{@render menuButton(entry.id)}{/if}
               </div>
             </div>
+            {#if entry.status === 'failed' && entry.kind === 'bot_reply'}
+              <div class="mt-1.5 self-start max-md:mt-0">
+                <RetryMessageButton disabled={chat.retrying.includes(entry.id)} onclick={() => void chat.retry(entry.id)} />
+              </div>
+            {/if}
             {#if !mobile && entry.kind === 'bot_reply' && entry.todo?.state === 'open'}
               {@render todoButton()}
             {/if}

@@ -217,6 +217,7 @@
   "chat.waitingHistory": "Waiting for native history",
   "chat.conversationUnavailable": "Conversation history unavailable",
   "chat.noConversationHistory": "Conversation history is unavailable for this session.",
+  "chat.resendFailed": "Click to resend",
   "chat.retryHistory": "Retry history",
   "chat.loadingHistory": "Waiting for native history…",
   "chat.compactionHistoryUnavailable": "Some compaction history is unavailable",
