@@ -139,12 +139,17 @@ impl SessionState {
     }
 
     fn preserves_history(&self, replay: &[crate::history::Message]) -> bool {
-        let mut known = self.history.as_slice();
+        // Antigravity replays still-running steps before all history and rebuilds an
+        // interrupted prompt from completed steps, so its tools have no stable position.
+        let positioned = |message: &&crate::history::Message| {
+            !self.agent.prompt_steering || message.tool.is_none()
+        };
+        let history: Vec<_> = self.history.iter().filter(positioned).collect();
+        let replay: Vec<_> = replay.iter().filter(positioned).collect();
+        let mut known = history.as_slice();
         if !self.steered_inputs.is_empty()
             && let Some(start) = known.iter().rposition(|message| message.role == "user")
         {
-            // Antigravity rebuilds the interrupted prompt's output from completed
-            // steps. Its live tool updates have no stable position in that replay.
             let Some(tail) = replay.get(start..) else {
                 return false;
             };
@@ -177,7 +182,7 @@ impl SessionState {
                             || loaded.text == known.text
                             || ((known.role == "assistant"
                                 || self.steering_history_pending && known.role == "user")
-                                && index + 1 == self.history.len()
+                                && index + 1 == history.len()
                                 && loaded.text.starts_with(&known.text)))
                 })
             })

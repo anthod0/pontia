@@ -282,6 +282,53 @@ async fn antigravity_replays_an_interrupted_prompt_before_the_next_input() {
     h.stop().await;
 }
 
+/// Runs one steered Antigravity Turn whose prompts are numbered from `first`.
+async fn steered_turn(h: &Harness, session: &str, first: usize) {
+    let turn = submit(h, session, "steer").await["turn_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    h.release(&format!("update-{first}"));
+    h.wait_turn(session, &turn, "running").await;
+    assert_eq!(submit(h, session, "steer").await["turn_id"], turn);
+    h.release(&format!("release-{first}"));
+    h.release(&format!("update-{}", first + 1));
+    h.release(&format!("release-{}", first + 1));
+    h.wait_turn(session, &turn, "completed").await;
+}
+
+#[tokio::test]
+async fn antigravity_accepts_a_running_step_replayed_before_its_history() {
+    let h = Harness::new(&[("ACP_ANTIGRAVITY", "1")]).await;
+    let session = h.create("antigravity").await.unwrap();
+    let path = h.root.path().join("history.jsonl");
+    let server = |status: &str| {
+        json!({"sessionUpdate":"tool_call","toolCallId":"server","title":"Serve","status":status})
+            .to_string()
+    };
+    steered_turn(&h, &session, 1).await;
+
+    // While a background command runs, agy replays its step before all history.
+    let transcript = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(&path, format!("{}\n{transcript}", server("in_progress"))).unwrap();
+    steered_turn(&h, &session, 3).await;
+
+    // Once the command stops, its step returns to its native position.
+    let transcript = std::fs::read_to_string(&path).unwrap();
+    let mut lines: Vec<_> = transcript.lines().skip(1).collect();
+    let stopped = server("failed");
+    lines.insert(1, &stopped);
+    std::fs::write(&path, lines.join("\n")).unwrap();
+    let next = submit(&h, &session, "steer").await;
+    h.release("update-5");
+    h.release("release-5");
+    h.wait_turn(&session, next["turn_id"].as_str().unwrap(), "completed")
+        .await;
+    assert_eq!(h.events(&session, "turn.dispatch_failed").await, 0);
+    assert_eq!(h.requests("session/prompt"), 5);
+    h.stop().await;
+}
+
 #[tokio::test]
 async fn prompt_required_keeps_unconsumed_steer_queued() {
     let h = Harness::new(&[
