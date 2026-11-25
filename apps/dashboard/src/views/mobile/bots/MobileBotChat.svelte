@@ -15,7 +15,7 @@
   import BotConversation from '../../../components/bots/BotConversation.svelte'
   import BotChatSkeleton from '../../../components/bots/BotChatSkeleton.svelte'
   import BotAvatar from '../../../components/bots/BotAvatar.svelte'
-  import BotQuoteBlock from '../../../components/bots/BotQuoteBlock.svelte'
+  import BotQuoteChip from '../../../components/bots/BotQuoteChip.svelte'
   import type { BotChatController } from '../../../features/bots/botChat.svelte'
   import MobileMessageComposer from '../chat/MobileMessageComposer.svelte'
   import MobileBotMenuSheet from './MobileBotMenuSheet.svelte'
@@ -93,6 +93,9 @@
     }
   })
 </script>
+{#snippet chip()}
+  {#if chat.quote}<BotQuoteChip quote={chat.quote} speaker={chat.quoteSpeaker(chat.quote)} image={chat.quoteImage(chat.quote)} onremove={() => chat.setQuote(null)} />{/if}
+{/snippet}
 
 {#snippet title()}
   {#if timeline.bot}<button
@@ -145,18 +148,14 @@
             onclick={() => (todos = true)}>{$t('bots.todos')} · {timeline.openTodoCount}</button
           >{/if}
       </div>
-      {#if chat.quote}<BotQuoteBlock
-          quote={chat.quote}
-          speaker={chat.quoteSpeaker(chat.quote)}
-          image={chat.quoteImage(chat.quote)}
-          onremove={() => chat.setQuote(null)}
-        />{/if}
       <MobileMessageComposer
         bind:this={chat.composer}
         bind:value={chat.draft}
         draftId={'bot:' + chat.botId}
         busy={chat.reloading}
         commands={[{ name: '/reload', description: $t('bots.reload'), run: chat.reload }]}
+        prefix={chat.quote ? chip : undefined}
+        onRemovePrefix={() => chat.setQuote(null)}
         submitDisabled={!!chat.quote && !chat.draft.trim()}
         onSubmit={chat.send}
       />

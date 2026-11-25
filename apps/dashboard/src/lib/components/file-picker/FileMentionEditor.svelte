@@ -1,7 +1,9 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
   import { useDeviceRuntime } from '../../../device/context';
-  import { onMount, tick } from 'svelte'
+  import { Portal } from '$lib/components/ui/popover/index.js'
+  import { Decoration, DecorationSet } from '@tiptap/pm/view'
+  import { onMount, tick, type Snippet } from 'svelte'
   import { Editor, Extension, type Extensions } from '@tiptap/core'
   import Document from '@tiptap/extension-document'
   import HardBreak from '@tiptap/extension-hard-break'
@@ -33,6 +35,8 @@
     mentionIdentities?: Map<string, FilePickerFileView>
     suggestionListId?: string
     activeSuggestionId?: string
+    prefix?: Snippet
+    onRemovePrefix?: () => void
     extensions?: Extensions
   }
 
@@ -50,11 +54,14 @@
     mentionIdentities = new Map(),
     suggestionListId,
     activeSuggestionId,
+    prefix,
+    onRemovePrefix,
     extensions = [],
   }: Props = $props()
 
   const suggestionPluginKey = new PluginKey('fileMentionSuggestion')
 
+  let prefixHost = $state<HTMLSpanElement>()
   let editorElement = $state<HTMLDivElement | null>(null)
   let listbox = $state<HTMLDivElement | null>(null)
   let editorState = $state<{ editor: Editor | null }>({ editor: null })
@@ -131,9 +138,22 @@
     return editor.commands.deleteRange({ from: beforeSpace - mention.nodeSize, to: selection.from })
   }
 
+  function removePrefixAtStart(): boolean {
+    const editor = editorState.editor
+    if (!prefix || !onRemovePrefix || !editor) return false
+    // Home can move the browser caret before ProseMirror receives selectionchange.
+    const caret = editor.view.dom.ownerDocument.getSelection()
+    if (caret?.anchorNode && editor.view.dom.contains(caret.anchorNode)) {
+      if (!caret.isCollapsed || editor.view.posAtDOM(caret.anchorNode, caret.anchorOffset) !== 1) return false
+    } else if (!editor.state.selection.empty || editor.state.selection.from !== 1) return false
+    editor.commands.setTextSelection(1)
+    onRemovePrefix()
+    return true
+  }
+
   function handleEditorKeyDown(_view: unknown, event: KeyboardEvent): boolean {
     if (event.isComposing || event.keyCode === 229) return false
-    if (event.key === 'Backspace' && deleteAdjacentMention()) {
+    if (event.key === 'Backspace' && (removePrefixAtStart() || deleteAdjacentMention())) {
       event.preventDefault()
       return true
     }
@@ -173,6 +193,8 @@
   onMount(() => {
     if (!editorElement) return
 
+    const host = document.createElement('span')
+    prefixHost = host
     const editor = new Editor({
       element: editorElement,
       extensions: [
@@ -180,7 +202,7 @@
         Paragraph,
         Text,
         HardBreak,
-        Placeholder.configure({ placeholder: () => placeholder }),
+        Placeholder.configure({ placeholder: () => prefix ? '' : placeholder }),
         ...extensions,
         Extension.create({
           name: 'promptKeyboard',
@@ -215,6 +237,9 @@
       content: promptDocumentFromText(value, mentionIdentities),
       editable: !disabled,
       editorProps: {
+        decorations: state => prefix
+          ? DecorationSet.create(state.doc, [Decoration.widget(1, host, { side: -1, stopEvent: () => true })])
+          : null,
         attributes: {
           ...(id ? { id } : {}),
           role: 'textbox',
@@ -226,6 +251,11 @@
         },
         handleKeyDown: handleEditorKeyDown,
         handleDOMEvents: {
+          beforeinput: (_view, event) => {
+            if (event.inputType !== 'deleteContentBackward' || event.isComposing || !removePrefixAtStart()) return false
+            event.preventDefault()
+            return true
+          },
           focus: (_view, event) => {
             if (autofocus && !initialFocusHandled) {
               initialFocusHandled = true
@@ -261,10 +291,10 @@
   })
 
   $effect(() => {
-    const nextPlaceholder = placeholder
+    const nextPlaceholder = prefix ? '' : placeholder
     const editor = editorState.editor
     if (!editor) return
-    editor.view.dom.setAttribute('aria-label', nextPlaceholder)
+    editor.view.dom.setAttribute('aria-label', placeholder)
     editor.view.dom.setAttribute('aria-placeholder', nextPlaceholder)
     editor.view.dom.setAttribute('placeholder', nextPlaceholder)
     editor.view.dispatch(editor.state.tr)
@@ -299,6 +329,8 @@
     editor.commands.setTextSelection(editor.state.doc.content.size - 1)
   })
 </script>
+
+{#if prefixHost && prefix}<Portal to={prefixHost}>{@render prefix()}</Portal>{/if}
 
 <div class="relative w-full">
   <div bind:this={editorElement}></div>

@@ -81,6 +81,15 @@ async function quoteFromMenu(row: HTMLElement) {
   );
 }
 
+// jsdom cannot hit-test the editable line beside a non-editable widget.
+async function typeReply(text: string) {
+  const editor = screen.getByRole("textbox");
+  editor.focus();
+  const paragraph = editor.querySelector("p")!;
+  document.getSelection()!.collapse(paragraph, paragraph.childNodes.length);
+  await userEvent.keyboard(text);
+}
+
 // A tap reaches the button as a click whose pointer is a touch.
 async function tap(element: Element) {
   await fireEvent(
@@ -117,7 +126,7 @@ test("sends a quoted Bot reply as a user_quote element before the typed text", a
   render(BotChatPage, { botId: bot.bot_id });
   await screen.findByText("certificate");
   await quoteFromMenu(rows()[0]);
-  await userEvent.type(screen.getByRole("textbox"), "Who owns this?");
+  await typeReply("Who owns this?");
   await fireEvent.click(screen.getByRole("button", { name: "Send" }));
   await waitFor(() =>
     expect(send).toHaveBeenCalledWith(
@@ -138,7 +147,7 @@ test("quotes one attached file with its message ID and path", async () => {
   // The reply text and each attached file are quotable.
   expect(rows()).toHaveLength(3);
   await quoteFromMenu(rows()[1]);
-  await userEvent.type(screen.getByRole("textbox"), "Check it");
+  await typeReply("Check it");
   await fireEvent.click(screen.getByRole("button", { name: "Send" }));
   await waitFor(() =>
     expect(send).toHaveBeenCalledWith(
@@ -156,13 +165,37 @@ test("a second quote replaces the first", async () => {
   await quoteFromMenu(rows()[0]);
   await quoteFromMenu(rows()[1]);
   expect(screen.getAllByRole("button", { name: /^Remove quote/ })).toHaveLength(1);
-  await userEvent.type(screen.getByRole("textbox"), "ok");
+  await typeReply("ok");
   await fireEvent.click(screen.getByRole("button", { name: "Send" }));
   await waitFor(() => expect(send).toHaveBeenCalledOnce());
   expect(send.mock.calls[0][1]).toBe(
     `<user_quote message_id="${id(2)}" speaker="Bot">Second answer</user_quote>\nok`,
   );
 });
+
+test.each(["Backspace", "deleteContentBackward"])(
+  "removes the quote at the start with %s",
+  async (key) => {
+    serve([reply]);
+    const send = sent();
+    render(BotChatPage, { botId: bot.bot_id });
+    await screen.findByText("certificate");
+    await quoteFromMenu(rows()[0]);
+    const editor = screen.getByRole("textbox");
+    expect(within(editor).getByRole("button", { name: /^Remove quote/ })).toBeInTheDocument();
+    await typeReply("Unquoted");
+    document.getSelection()!.collapse(editor.querySelector("p"), 0);
+    if (key === "Backspace") await fireEvent.keyDown(editor, { key });
+    else
+      await fireEvent(
+        editor,
+        new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: key }),
+      );
+    await waitFor(() => expect(within(editor).queryByRole("button")).toBeNull());
+    await fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(send).toHaveBeenCalledWith(bot.bot_id, "Unquoted"));
+  },
+);
 
 test("keeps the pending quote after reopening the chat until it is removed", async () => {
   serve([reply]);
@@ -206,7 +239,7 @@ test("cannot send a quote without text, even with an attachment", async () => {
   expect(submit).toBeDisabled();
   await userEvent.keyboard("{Enter}");
   expect(send).not.toHaveBeenCalled();
-  await userEvent.type(screen.getByRole("textbox"), "x");
+  await typeReply("x");
   await fireEvent.click(submit);
   await waitFor(() => expect(send).toHaveBeenCalledOnce());
   expect(send.mock.calls[0][1]).toMatch(
@@ -220,7 +253,7 @@ test("keeps the quote when sending fails", async () => {
   render(BotChatPage, { botId: bot.bot_id });
   await screen.findByText("certificate");
   await quoteFromMenu(rows()[0]);
-  await userEvent.type(screen.getByRole("textbox"), "hi");
+  await typeReply("hi");
   await fireEvent.click(screen.getByRole("button", { name: "Send" }));
   await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Offline", expect.anything()));
   expect(screen.getByRole("button", { name: /^Remove quote/ })).toBeInTheDocument();
@@ -433,7 +466,7 @@ test("quotes a native touch selection from the floating bar", async () => {
   const bar = within(await screen.findByRole("toolbar"));
   expect(bar.queryByRole("button", { name: /Copy/ })).not.toBeInTheDocument();
   await fireEvent.click(bar.getByRole("button", { name: /Quote/ }));
-  await userEvent.type(screen.getByRole("textbox"), "Why?");
+  await typeReply("Why?");
   await fireEvent.click(screen.getByRole("button", { name: "Send" }));
   await waitFor(() =>
     expect(send).toHaveBeenCalledWith(
@@ -463,7 +496,7 @@ test.each([false, true])(
     await tap(within(row).getByRole("button", { name: "Message actions" }));
     const sheet = within(await screen.findByRole("dialog"));
     await fireEvent.click(sheet.getByRole("menuitem", { name: /Quote image/ }));
-    await userEvent.type(screen.getByRole("textbox"), "This one");
+    await typeReply("This one");
     await fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() =>
       expect(send).toHaveBeenCalledWith(
@@ -503,7 +536,7 @@ test.each([false, true])(
     if (!restore) await quoteFromMenu(rows()[0]);
     const pending = document.querySelector("[data-bot-pending-quote]")!;
     expect(pending.querySelector("span")!.textContent).toBe(expected);
-    await userEvent.type(screen.getByRole("textbox"), "Explain");
+    await typeReply("Explain");
     await fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() =>
       expect(send).toHaveBeenCalledWith(
@@ -649,7 +682,7 @@ test("opens an outstanding todo from the feed and quotes it into the composer", 
   await fireEvent.click(item.getByRole("button", { name: "Quote" }));
   const textbox = screen.getByRole("textbox");
   await waitFor(() => expect(textbox).toHaveFocus());
-  await userEvent.type(textbox, "Approved");
+  await typeReply("Approved");
   await fireEvent.click(screen.getByRole("button", { name: "Send" }));
   await waitFor(() => expect(send).toHaveBeenCalledWith(bot.bot_id, quotedTodo("Approved")));
 });
@@ -661,7 +694,7 @@ test("replies to a todo from its own box with the same request as quoting it, le
   await quoteFromMenu(rows()[1]);
   const composer = () =>
     within(screen.getByRole("region", { name: bot.name })).getByRole("textbox");
-  await userEvent.type(composer(), "Composer draft");
+  await typeReply("Composer draft");
 
   await fireEvent.click(item.getByRole("button", { name: "Reply" }));
   const box = item.getByRole("textbox", { name: "Message" });

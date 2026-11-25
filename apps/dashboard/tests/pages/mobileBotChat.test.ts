@@ -77,6 +77,7 @@ test("quoting a todo returns to the current Bot draft and sends both together", 
     await within(await screen.findByRole("dialog")).findByRole("button", { name: "Quote" }),
   );
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(within(input).getByRole("button", { name: /^Remove quote/ })).toBeVisible();
   expect(input).toHaveTextContent("Looks good");
   await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeEnabled());
   await fireEvent.click(screen.getByRole("button", { name: "Send" }));

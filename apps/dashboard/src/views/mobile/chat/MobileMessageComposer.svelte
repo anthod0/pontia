@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte'
   import type { FilePickerFileView } from '../../../api/types'
   import ChatCommandInput from '../../../components/chat/ChatCommandInput.svelte'
   import { t } from '$lib/i18n'
@@ -12,6 +13,8 @@
   import ArrowsOutIcon from 'phosphor-svelte/lib/ArrowsOutIcon'
   let {
     value = $bindable(''),
+    prefix,
+    onRemovePrefix,
     draftId,
     workspaceId,
     autofocus = false,
@@ -24,6 +27,8 @@
     value: string
     autofocus?: boolean
     workspaceId?: string
+    prefix?: Snippet
+    onRemovePrefix?: () => void
     draftId: string
     commands: ChatCommand[]
     busy: boolean
@@ -89,6 +94,8 @@
       <ChatCommandInput
         bind:this={expandedInput}
         bind:value
+        {prefix}
+        {onRemovePrefix}
         {workspaceId}
         {mentionIdentities}
         {commands}
@@ -125,6 +132,8 @@
     <ChatCommandInput
       bind:this={inlineInput}
       bind:value
+      {prefix}
+      {onRemovePrefix}
       {workspaceId}
       {mentionIdentities}
       {commands}

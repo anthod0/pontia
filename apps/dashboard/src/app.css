@@ -437,11 +437,7 @@ body {
 .mobile-bot-chat :is([data-shared-file], [data-shared-files]) {
   max-width: min(100%, 260px);
 }
-.mobile-bot-chat [data-bot-pending-quote] {
-  min-height: 44px;
-  background: var(--glass-strong);
-}
-.mobile-bot-chat button,
+.mobile-bot-chat button:where(:not([data-bot-pending-quote])),
 .mobile-bot-screen button,
 [data-mobile-bot-sheet] button {
   min-width: 44px;

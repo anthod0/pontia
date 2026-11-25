@@ -7,7 +7,7 @@
   import BotChatSkeleton from '../../../components/bots/BotChatSkeleton.svelte'
   import { provideLocalhostPreview } from '../../../components/chat/localhostPreviewContext'
   import { provideFilePreviewNavigator } from '../../../components/chat/filePreviewContext'
-  import BotQuoteBlock from '../../../components/bots/BotQuoteBlock.svelte'
+  import BotQuoteChip from '../../../components/bots/BotQuoteChip.svelte'
   import DesktopBotPanel from './DesktopBotPanel.svelte'
   import type { BotChatController } from '../../../features/bots/botChat.svelte'
   import BotConversation from '../../../components/bots/BotConversation.svelte'
@@ -31,6 +31,9 @@
   })
 
 </script>
+{#snippet chip()}
+  {#if chat.quote}<BotQuoteChip quote={chat.quote} speaker={chat.quoteSpeaker(chat.quote)} image={chat.quoteImage(chat.quote)} onremove={() => chat.setQuote(null)} />{/if}
+{/snippet}
 {#snippet refreshFailure()}
   <div class="flex items-center justify-center gap-2 text-sm" role="alert">
     {timeline.refreshError}
@@ -57,10 +60,9 @@
           <span class="shimmer line-clamp-2 min-w-0 [overflow-wrap:anywhere]" title={timeline.status.title}>{timeline.status.title}</span>
         </p>
       {/if}
-      <div aria-live="polite">
-        {#if chat.quote}<BotQuoteBlock quote={chat.quote} speaker={chat.quoteSpeaker(chat.quote)} image={chat.quoteImage(chat.quote)} onremove={() => chat.setQuote(null)} />{/if}
-      </div>
       <MessageComposer bind:this={chat.composer} draftId={`bot:${chat.botId}`} bind:value={chat.draft} placeholder={$t('bots.message')} fullscreen
+        prefix={chat.quote ? chip : undefined}
+        onRemovePrefix={() => chat.setQuote(null)}
         submitDisabled={chat.quote !== null && !chat.draft.trim()}
         busy={chat.reloading} commands={[{ name: '/reload', description: $t('bots.reload'), run: chat.reload }]}
         onSubmit={chat.send} />

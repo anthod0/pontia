@@ -47,6 +47,8 @@
     autofocus?: boolean
     commands?: ChatCommand[]
     header?: Snippet
+    prefix?: Snippet
+    onRemovePrefix?: () => void
     draftId?: string
     retainDraft?: boolean
     onSubmit: (message: string, deliveryPolicy: InboxDeliveryPolicy) => void | Promise<boolean | void>
@@ -70,6 +72,8 @@
     autofocus = false,
     commands = [],
     header,
+    prefix,
+    onRemovePrefix,
     draftId,
     retainDraft = false,
     onSubmit,
@@ -282,7 +286,7 @@
   {/if}
   <PromptInput.Body class={compact ? 'col-start-2 row-start-2' : undefined} onpastecapture={pasteFiles}>
     <div bind:this={inlineInput} class="relative">
-      <ChatCommandInput bind:this={editor} id={inputId} bind:value {commands} onCommand={controller.executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? `min-h-0 py-2 text-base sm:text-[13.5px] ${compact ? 'px-0' : 'pl-3 pr-10 sm:pr-3'}` : 'min-h-[52px] px-4 py-3 text-base sm:text-[13.5px]'} />
+      <ChatCommandInput bind:this={editor} id={inputId} bind:value {prefix} {onRemovePrefix} {commands} onCommand={controller.executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? `min-h-0 py-2 text-base sm:text-[13.5px] ${compact ? 'px-0' : 'pl-3 pr-10 sm:pr-3'}` : 'min-h-[52px] px-4 py-3 text-base sm:text-[13.5px]'} />
       {#if fullscreen && !compact}
         <Button type="button" variant="ghost" size="icon-sm" class="absolute right-1 top-1 sm:hidden" aria-label={$t('chat.expandComposer')} onclick={() => void openFullscreen()}>
           <ArrowsOutIcon class="size-4" />
@@ -328,7 +332,7 @@
       <PromptInput.Root class="mt-2 flex min-h-0 w-full flex-1 flex-col shadow-none" onSubmit={submitAndCloseFullscreen}>
         {#if controller.uploads}<UploadAttachments bind:this={fullscreenUploadPicker} draft={controller.uploads} disabled={disabled || busy || controller.sending} />{/if}
         <PromptInput.Body class="min-h-0 flex-1" onpastecapture={pasteFiles}>
-          <ChatCommandInput bind:this={fullscreenEditor} bind:value {commands} commandSide="bottom" onCommand={controller.executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget autofocus onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-[52px] overscroll-contain pr-2" />
+          <ChatCommandInput bind:this={fullscreenEditor} bind:value {prefix} {onRemovePrefix} {commands} commandSide="bottom" onCommand={controller.executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget autofocus onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-[52px] overscroll-contain pr-2" />
         </PromptInput.Body>
         {#if command?.disabledReason}<p role="status" class="pb-2 text-xs text-muted-foreground">{command.disabledReason}</p>{/if}
         <PromptInput.Toolbar class={controller.uploads ? 'shrink-0 pt-0' : 'shrink-0 justify-end pt-0'}>
