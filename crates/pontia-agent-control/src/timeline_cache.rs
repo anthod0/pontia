@@ -81,9 +81,20 @@ impl TimelineCache {
         &self,
         event: &pontia_core::domain::DomainEvent,
     ) -> Result<()> {
-        let db = self.db().await?;
-        sqlx::query("INSERT OR IGNORE INTO cached_compactions SELECT session_id,?,? FROM cached_sessions WHERE session_id=?")
-            .bind(&event.event_id).bind(event.occurred_at.unix_timestamp()).bind(&event.session_id).execute(db).await?;
+        let mut tx = self.db().await?.begin_with("BEGIN IMMEDIATE").await?;
+        let at = event.occurred_at.unix_timestamp();
+        sqlx::query("INSERT OR IGNORE INTO cached_sessions VALUES(?,?)")
+            .bind(&event.session_id)
+            .bind(at)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("INSERT OR IGNORE INTO cached_compactions VALUES(?,?,?)")
+            .bind(&event.session_id)
+            .bind(&event.event_id)
+            .bind(at)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
         Ok(())
     }
 

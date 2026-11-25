@@ -264,10 +264,10 @@ test(
       });
     const hosts: Host[] = [];
     const events: HostEvent[] = [];
-    async function history(session: string) {
+    async function runHistory(session: string, mode: "history" | "history-info") {
       const child = spawn(
         process.execPath,
-        [new URL("../src/main.js", import.meta.url).pathname, "history"],
+        [new URL("../src/main.js", import.meta.url).pathname, mode],
         { env, stdio: ["pipe", "pipe", "ignore"] },
       );
       child.stdin.end(JSON.stringify({ session_id: session, cwd }) + "\n");
@@ -277,7 +277,14 @@ test(
       });
       const code = await new Promise<number | null>((resolve) => child.on("close", resolve));
       assert.equal(code, 0);
-      return JSON.parse(output) as Array<{ uuid: string; session_id: string; message: unknown }>;
+      return output;
+    }
+    async function history(session: string) {
+      return JSON.parse(await runHistory(session, "history")) as Array<{
+        uuid: string;
+        session_id: string;
+        message: unknown;
+      }>;
     }
     const create = (resume?: string, mode?: SessionMode) => {
       const host = new Host(
@@ -428,7 +435,10 @@ test(
       );
       assert.ok(transcript);
       const path = join(config, transcript);
+      const info = JSON.parse(await runHistory(native, "history-info"));
       const saved = await readFile(path);
+      assert.equal(info[0], saved.length);
+      assert.ok(Number.isFinite(info[1]));
       try {
         await writeFile(path, "invalid transcript\n");
         await assert.rejects(history(native));

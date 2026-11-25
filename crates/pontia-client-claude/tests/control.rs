@@ -940,6 +940,7 @@ async fn missing_history_is_an_error_and_never_starts_a_replacement_conversation
         .await
         .unwrap()
         .unwrap();
+    assert_eq!(h.history(&session).await.unwrap().groups[0].items.len(), 2);
     // Remove only this test's native-source fixture under its owned TempDir.
     std::fs::remove_file(
         h.root
@@ -1903,6 +1904,27 @@ async fn compacted_sdk_history_keeps_readable_turns_and_resumes_without_private_
     let summary = json!({"session_id":binding.client_session_key,"uuid":"compact-summary","type":"user","isCompactSummary":true,"is_meta":true,"message":{"role":"user","content":"private summary"}});
     let command = json!({"session_id":binding.client_session_key,"uuid":"local-command","type":"user","isCompletedLocalCommand":true,"message":{"role":"user","content":"local command result"}});
     let service = TurnTimelineService::new(h.app.event_ingest_service());
+    let page = || service.page(session.clone(), TurnTimelineDirection::Backward, None, 20);
+    let original = page().await.unwrap();
+    assert_eq!(original.items.len(), 4);
+    let reads = || std::fs::read_to_string(h.root.path().join("history-reads")).unwrap();
+    let first_reads = reads();
+    assert_eq!(page().await.unwrap().items, original.items);
+    assert_eq!(reads(), first_reads);
+    let omit_size = h.root.path().join("omit-file-size");
+    std::fs::write(&omit_size, "").unwrap();
+    assert_eq!(page().await.unwrap().items, original.items);
+    assert!(reads().len() > first_reads.len());
+    std::fs::remove_file(omit_size).unwrap();
+
+    h.app
+        .session_commands()
+        .compact_session(&session)
+        .await
+        .unwrap();
+    h.wait_session(&session, "busy").await;
+    h.gate(&session, 1, "compact");
+    h.wait_session(&session, "idle").await;
     write(&rows[2..]);
     assert!(matches!(
         service
@@ -1940,6 +1962,28 @@ async fn compacted_sdk_history_keeps_readable_turns_and_resumes_without_private_
             .items
             .is_empty()
     );
+    let cache = sqlx::SqlitePool::connect_with(
+        sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(h.root.path().join("cache/session-timeline.db"))
+            .read_only(true),
+    )
+    .await
+    .unwrap();
+    let generations: Vec<(i64, i64)> = sqlx::query_as(
+        "SELECT generation,count(*) FROM cached_turns WHERE session_id=? AND source_key='native' GROUP BY generation ORDER BY generation",
+    ).bind(&session).fetch_all(&cache).await.unwrap();
+    assert_eq!(generations.len(), 2);
+    assert_eq!(generations[0], (0, 2));
+    assert_eq!(generations[1].1, 2);
+    let event: String = sqlx::query_scalar("SELECT event_id FROM events WHERE session_id=? AND event_type='session.compaction_completed'")
+        .bind(&session).fetch_one(&h.app.db()).await.unwrap();
+    let marker: String =
+        sqlx::query_scalar("SELECT event_id FROM cached_compactions WHERE session_id=?")
+            .bind(&session)
+            .fetch_one(&cache)
+            .await
+            .unwrap();
+    assert_eq!(marker, event);
     // Automatic compaction can remove the input in the middle of a Turn.
     write(&[summary.clone(), rows[3].clone()]);
     let page = service

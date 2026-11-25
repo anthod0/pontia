@@ -263,6 +263,15 @@ async fn pre_compaction_rendering_survives_new_generation() {
         item("assistant", "after compaction"),
     ];
     f.cache.write(&old, &turn(), &before).await.unwrap();
+    f.cache.write(&new, &turn(), &after).await.unwrap();
+    assert_eq!(f.cache.read(&old, &[turn()]).await.unwrap(), Some(before));
+    assert_eq!(f.cache.read(&new, &[turn()]).await.unwrap(), Some(after));
+}
+
+#[tokio::test]
+async fn compaction_before_the_first_history_read_keeps_its_timestamp() {
+    let f = Fixture::new().await;
+    f.session("session", false, "idle").await;
     let mark = pontia_core::domain::DomainEvent::new(
         "compact".into(),
         "session".into(),
@@ -276,9 +285,6 @@ async fn pre_compaction_rendering_survives_new_generation() {
     let recorded:i64=sqlx::query_scalar("SELECT occurred_at FROM cached_compactions WHERE session_id='session' AND event_id='compact'")
         .fetch_one(f.cache.db().await.unwrap()).await.unwrap();
     assert_eq!(recorded, mark.occurred_at.unix_timestamp());
-    f.cache.write(&new, &turn(), &after).await.unwrap();
-    assert_eq!(f.cache.read(&old, &[turn()]).await.unwrap(), Some(before));
-    assert_eq!(f.cache.read(&new, &[turn()]).await.unwrap(), Some(after));
 }
 
 #[tokio::test]

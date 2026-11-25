@@ -6,7 +6,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 }});
 const { connectRuntime, CONTROL_VERSION } = await import("../../../../clients/shared/control-socket.ts");
 import { randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { execFileSync } from "node:child_process";
@@ -15,9 +15,13 @@ const lines = createInterface({ input: process.stdin });
 const line = await new Promise((resolve) => lines.once("line", resolve));
 lines.close();
 const input = JSON.parse(line);
-if (process.argv[2] === "history") {
+if (process.argv[2] === "history-info") {
+  const stat = statSync(join(input.cwd, `history-${input.session_id}.jsonl`));
+  process.stdout.write(JSON.stringify([existsSync(join(input.cwd, "omit-file-size")) ? null : stat.size, stat.mtimeMs]));
+} else if (process.argv[2] === "history") {
   const config = input;
   try {
+    appendFileSync(join(config.cwd, "history-reads"), config.session_id + "\n");
     const messages = readFileSync(join(config.cwd, `history-${config.session_id}.jsonl`), "utf8")
       .trim()
       .split("\n")

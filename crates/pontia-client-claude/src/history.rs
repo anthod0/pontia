@@ -28,10 +28,40 @@ pub(crate) async fn read_sdk(
     cwd: &str,
     config: &Path,
 ) -> Result<Vec<Value>> {
+    decode_messages(
+        &sdk_output("history", script, session, cwd, config).await?,
+        session,
+    )
+}
+
+fn decode_messages(bytes: &[u8], session: &str) -> Result<Vec<Value>> {
+    let messages: Vec<Value> = serde_json::from_slice(bytes).map_err(|_| source_unavailable())?;
+    if messages.is_empty() {
+        return Err(source_unavailable());
+    }
+    if messages
+        .iter()
+        .any(|message| message["session_id"] != session)
+    {
+        return Err(Error::Conflict {
+            code: "timeline_source_identity_mismatch",
+            message: "Claude Code history identity mismatch".into(),
+        });
+    }
+    Ok(messages)
+}
+
+async fn sdk_output(
+    mode: &str,
+    script: &Path,
+    session: &str,
+    cwd: &str,
+    config: &Path,
+) -> Result<Vec<u8>> {
     let operation = async {
         let mut child = Command::new(crate::setup::node())
             .arg(script)
-            .arg("history")
+            .arg(mode)
             .env("CLAUDE_CONFIG_DIR", config)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -52,21 +82,7 @@ pub(crate) async fn read_sdk(
         if !output.status.success() {
             return Err(source_unavailable());
         }
-        let messages: Vec<Value> =
-            serde_json::from_slice(&output.stdout).map_err(|_| source_unavailable())?;
-        if messages.is_empty() {
-            return Err(source_unavailable());
-        }
-        if messages
-            .iter()
-            .any(|message| message["session_id"] != session)
-        {
-            return Err(Error::Conflict {
-                code: "timeline_source_identity_mismatch",
-                message: "Claude Code history identity mismatch".into(),
-            });
-        }
-        Ok(messages)
+        Ok(output.stdout)
     };
     tokio::time::timeout(Duration::from_secs(30), operation)
         .await
@@ -95,6 +111,16 @@ fn anchor(binding: &AgentBindingResolveRequest, value: &str) -> Result<String> {
 }
 
 impl ClientData for Adapter {
+    fn timeline_cache_policy(&self) -> Option<TimelineCachePolicy> {
+        Some(TimelineCachePolicy {
+            render_version: 1,
+            read_while_online: true,
+            backfill_all_turns_on_miss: true,
+            supports_session_checkpoints: false,
+            preserve_pre_compaction: true,
+        })
+    }
+
     fn normalize_payload(&self, _: EventType, data: Value) -> Result<Value> {
         Ok(data)
     }
@@ -117,6 +143,7 @@ impl ClientData for Adapter {
             adapter: self.clone(),
             binding,
             messages: OnceCell::new(),
+            fingerprint: OnceCell::new(),
         }))
     }
     fn capture_native_boundary(
@@ -164,31 +191,53 @@ struct History {
     adapter: Adapter,
     binding: AgentBindingResolveRequest,
     messages: OnceCell<Vec<Value>>,
+    fingerprint: OnceCell<Option<String>>,
 }
 impl History {
+    async fn sdk_output(&self, mode: &str) -> Result<Vec<u8>> {
+        let (pool, root) = self.adapter.context.get().ok_or_else(unavailable)?;
+        let binding = AgentBindingService::new(pool.clone())
+            .binding_for_session(&self.binding.session_id)
+            .await?
+            .ok_or_else(source_unavailable)?;
+        if binding.id != self.binding.id
+            || binding.client_session_key != self.binding.client_session_key
+        {
+            return Err(source_unavailable());
+        }
+        let config = binding.metadata["claude_config_dir"]
+            .as_str()
+            .ok_or_else(source_unavailable)?;
+        sdk_output(
+            mode,
+            &self.adapter.script(root)?,
+            &binding.client_session_key,
+            &binding.launch_cwd,
+            Path::new(config),
+        )
+        .await
+    }
+
+    async fn fingerprint(&self) -> &Option<String> {
+        self.fingerprint
+            .get_or_init(|| async {
+                let bytes = self.sdk_output("history-info").await.ok()?;
+                let (size, modified): (u64, serde_json::Number) =
+                    serde_json::from_slice(&bytes).ok()?;
+                Some(format!("{size}:{modified}"))
+            })
+            .await
+    }
+
     async fn messages(&self) -> Result<&Vec<Value>> {
         self.messages
             .get_or_try_init(|| async {
-                let (pool, root) = self.adapter.context.get().ok_or_else(unavailable)?;
-                let binding = AgentBindingService::new(pool.clone())
-                    .binding_for_session(&self.binding.session_id)
-                    .await?
-                    .ok_or_else(source_unavailable)?;
-                if binding.id != self.binding.id
-                    || binding.client_session_key != self.binding.client_session_key
-                {
-                    return Err(source_unavailable());
-                }
-                let config = binding.metadata["claude_config_dir"]
-                    .as_str()
-                    .ok_or_else(source_unavailable)?;
-                read_sdk(
-                    &self.adapter.script(root)?,
-                    &binding.client_session_key,
-                    &binding.launch_cwd,
-                    Path::new(config),
+                // Recovery can load messages before the timeline cache probes the source.
+                self.fingerprint().await;
+                decode_messages(
+                    &self.sdk_output("history").await?,
+                    &self.binding.client_session_key,
                 )
-                .await
             })
             .await
     }
@@ -209,6 +258,10 @@ impl History {
     }
 }
 impl NativeHistory for History {
+    fn cache_fingerprint(&self) -> Option<HistoryRead<'_, Option<String>>> {
+        Some(Box::pin(async { self.fingerprint().await.clone() }))
+    }
+
     fn select_timeline(
         &self,
         turns: Vec<SessionTimelineTurn>,
@@ -218,7 +271,9 @@ impl NativeHistory for History {
             if source == Some(HistorySource::File) {
                 return Err(source_unavailable());
             }
-            self.messages().await?;
+            if self.fingerprint().await.is_none() {
+                self.messages().await?;
+            }
             Ok(Some(HistorySelection {
                 source: HistorySource::Native,
                 turn_ids: turns.into_iter().map(|turn| turn.turn_id).collect(),

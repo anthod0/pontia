@@ -1,5 +1,5 @@
 import { bootstrap, serve } from "./server.js";
-import { readHistory } from "./history.js";
+import { historyInfo, readHistory } from "./history.js";
 import { listModels } from "./models.js";
 import { preflight } from "./preflight.js";
 
@@ -20,10 +20,15 @@ async function main(): Promise<void> {
     const newline = input.indexOf(10);
     if (newline < 0) continue;
     const data = JSON.parse(input.subarray(0, newline).toString("utf8"));
-    if (process.argv[2] === "history") {
+    if (process.argv[2] === "history" || process.argv[2] === "history-info") {
       if (typeof data.session_id !== "string" || typeof data.cwd !== "string")
         throw new Error("invalid_history_request");
-      process.stdout.write(JSON.stringify(await readHistory(data.session_id, data.cwd)) + "\n");
+      if (process.argv[2] === "history-info") {
+        const info = await historyInfo(data.session_id, data.cwd);
+        process.stdout.write(JSON.stringify([info.fileSize, info.lastModified]) + "\n");
+      } else {
+        process.stdout.write(JSON.stringify(await readHistory(data.session_id, data.cwd)) + "\n");
+      }
       return;
     }
     const config = bootstrap(data);
