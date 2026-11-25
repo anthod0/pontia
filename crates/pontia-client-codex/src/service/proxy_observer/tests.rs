@@ -118,6 +118,7 @@ impl Fixture {
                                     pontia = params["clientInfo"]["name"] == "pontia";
                                     json!({"userAgent":"codex/test","codexHome":home,"platformFamily":"unix","platformOs":std::env::consts::OS})
                                 }
+                                "skills/list" => json!({"data":[{"skills":[{"name":"workspace-skill"}]}]}),
                                 "config/read" => json!({"config":configuration.lock().await.clone()}),
                                 "thread/start" | "thread/fork" => {
                                     let inherited = threads.get(native).map(|parent| {

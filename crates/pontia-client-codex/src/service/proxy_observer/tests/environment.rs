@@ -138,3 +138,95 @@ async fn concurrent_first_resumes_share_one_environment_identity() {
     assert_eq!(count, 1);
     f.stop().await;
 }
+
+#[tokio::test]
+async fn proxy_resume_keeps_the_bound_restricted_session_configuration() {
+    let f = Fixture::new().await;
+    *f.configuration.lock().await = json!({"mcp_servers":{"workspace":{"command":"fixture"}}});
+    let created = f
+        .app
+        .session_commands()
+        .create_session(
+            serde_json::from_value(json!({
+                "client_type":"codex", "workspace":f.root.path(), "mode":"restricted"
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let session = created.session_id().unwrap();
+    f.app
+        .turn_commands()
+        .create_and_dispatch_turn(session, "hello".into(), json!({}))
+        .await
+        .unwrap();
+    let native = AgentBindingService::new(f.app.db())
+        .binding_for_session(session)
+        .await
+        .unwrap()
+        .unwrap()
+        .client_session_key;
+    f.complete(&native).await;
+    f.session(&native, "idle").await;
+    let path = f.root.path().join("stored.jsonl");
+    f.threads.lock().await.get_mut(&native).unwrap().value["path"] = json!(path);
+    let mut cli = f.client().await;
+    let reply = rpc(
+        &mut cli,
+        "thread/resume",
+        json!({"threadId":native, "path":path, "config":{
+            "features.multi_agent":true, "mcp_servers.extra.enabled":true, "skills.config":[]
+        }}),
+    )
+    .await;
+    assert_eq!(reply["result"]["thread"]["id"], native);
+    let config = f.threads.lock().await[&native].config.clone();
+    assert_eq!(config["approval_policy"], "never");
+    assert_eq!(config["sandbox_mode"], "danger-full-access");
+    assert_eq!(
+        config["shell_environment_policy.set"]["PONTIA_SESSION_ID"],
+        session
+    );
+    assert_eq!(
+        config["mcp_servers"],
+        json!({"workspace":{"enabled":false}})
+    );
+    assert!(config.get("mcp_servers.extra.enabled").is_none());
+    assert_eq!(
+        config["skills.config"],
+        json!([{"name":"workspace-skill","enabled":false}])
+    );
+    assert_eq!(config["features.multi_agent"], false);
+    assert_eq!(config["web_search"], "disabled");
+    for extra in [
+        json!({"ephemeral":true}),
+        json!({"path":"another.jsonl"}),
+        json!({}),
+    ] {
+        if extra == json!({}) {
+            *f.configuration.lock().await = json!({});
+        }
+        let mut cli = f.client().await;
+        let mut params = extra;
+        params["threadId"] = json!(native);
+        cli.send(Message::text(
+            json!({"id":2,"method":"thread/resume","params":params}).to_string(),
+        ))
+        .await
+        .unwrap();
+        let frame = tokio::time::timeout(Duration::from_secs(5), cli.next())
+            .await
+            .unwrap();
+        assert!(!matches!(frame, Some(Ok(Message::Text(_)))));
+    }
+    assert_eq!(
+        f.calls
+            .lock()
+            .await
+            .iter()
+            .filter(|(pontia, method, _)| !pontia && method == "thread/resume")
+            .count(),
+        1
+    );
+    f.stop().await;
+}

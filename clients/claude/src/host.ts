@@ -6,7 +6,7 @@ import {
   type SDKAssistantMessage,
   type SDKPartialAssistantMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import { restrictedOptions } from "./restricted.js";
+import { restrictedOptions, restrictedTools } from "./restricted.js";
 import { Compaction } from "./compaction.js";
 import { Input } from "./input.js";
 import { Interactions } from "./interactions.js";
@@ -116,10 +116,14 @@ export class Host {
             }
           : {}),
         includePartialMessages: true,
-        settingSources: ["user", "project", "local"],
         canUseTool: (tool, input, context) => {
           if (this.closed || this.closing || this.unavailable)
             return Promise.resolve({ behavior: "deny", message: "Tool approval is unavailable." });
+          if (restricted && !restrictedTools.includes(tool))
+            return Promise.resolve({
+              behavior: "deny",
+              message: "Tool unavailable in restricted mode.",
+            });
           if (bypass) return Promise.resolve({ behavior: "allow", updatedInput: input });
           return this.interactions.request(tool, input, context);
         },
@@ -136,6 +140,7 @@ export class Host {
         const launch: Options = restricted
           ? restrictedOptions(this.options.pontia_home, this.options.cwd, this.options.session_id)
           : {
+              settingSources: ["user", "project", "local"],
               settings: { env: { PONTIA_SESSION_ID: this.options.session_id } },
               permissionMode: bypass ? "bypassPermissions" : "default",
               ...(bypass

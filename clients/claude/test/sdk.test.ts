@@ -53,7 +53,11 @@ test(
       await writeFile(
         path,
         JSON.stringify({
-          env: { PONTIA_SESSION_ID: "wrong-settings-session", ENABLE_TOOL_SEARCH: "true" },
+          env: {
+            PONTIA_SESSION_ID: "wrong-settings-session",
+            ENABLE_TOOL_SEARCH: "true",
+            PONTIA_SETTINGS_PROBE: "loaded",
+          },
           permissions: { defaultMode: "default" },
         }),
       );
@@ -118,7 +122,10 @@ test(
                             type: "tool_use",
                             id: `restricted-env-${requests.length}`,
                             name: "Bash",
-                            input: { command: "printenv PONTIA_SESSION_ID" },
+                            input: {
+                              command:
+                                'printf "%s %s" "$PONTIA_SESSION_ID" "${PONTIA_SETTINGS_PROBE:-isolated}"',
+                            },
                           },
                           {
                             type: "tool_use",
@@ -442,7 +449,7 @@ test(
           (event) => event.kind === "tool_result" && event.call_id === call,
         );
         assert.ok(event?.kind === "tool_result" && !event.failed);
-        assert.equal(String(event.content).trim(), "pontia-session");
+        assert.equal(String(event.content).trim(), "pontia-session isolated");
       }
       assert.ok(JSON.stringify(requests[0]).includes("PONTIA_SKILL_CATALOG_PROBE"));
       for (const index of [10, 12]) {

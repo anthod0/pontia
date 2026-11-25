@@ -45,23 +45,6 @@ pub(crate) async fn prepare_proxy_request(
     config: &Value,
 ) -> Result<Option<Value>> {
     use crate::proxy::ThreadOperation;
-    if params["ephemeral"] == true {
-        return Ok(None);
-    }
-    if operation == ThreadOperation::Resume
-        && let Some(thread) = params["threadId"].as_str()
-        && let Some(binding) = pontia_agent_control::AgentBindingService::new(state.db())
-            .binding_for_client_session("codex", thread)
-            .await?
-        && state
-            .queries()
-            .session_mode(&binding.session_id)
-            .await?
-            .bypasses_approvals()
-    {
-        params["approvalPolicy"] = json!("never");
-        params["sandbox"] = json!("danger-full-access");
-    }
     let mut instructions = match operation {
         ThreadOperation::Start => {
             let resolved = pontia_agent_control::SessionInstructionsService::new(state.db())

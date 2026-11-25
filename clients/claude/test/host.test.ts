@@ -114,7 +114,7 @@ for (const mode of ["default", "yolo", "restricted"] as const) {
         options.extraArgs,
         restricted ? { "disable-slash-commands": null } : undefined,
       );
-      assert.deepEqual(options.settingSources, ["user", "project", "local"]);
+      assert.deepEqual(options.settingSources, restricted ? [] : ["user", "project", "local"]);
       assert.deepEqual(
         options.disallowedTools,
         restricted ? ["Skill", "mcp__*"] : mode === "yolo" ? ["AskUserQuestion"] : [],
@@ -124,6 +124,7 @@ for (const mode of ["default", "yolo", "restricted"] as const) {
         assert.ok(typeof path === "string");
         assert.equal(dirname(path), cwd);
         const settings = JSON.parse(await readFile(path, "utf8"));
+        assert.equal(settings.disableAllHooks, true);
         assert.deepEqual(settings.permissions, {
           defaultMode: "bypassPermissions",
           deny: options.disallowedTools,
@@ -139,6 +140,14 @@ for (const mode of ["default", "yolo", "restricted"] as const) {
           { signal, toolUseID: "call", requestId: "permission" },
         );
         assert.equal(result?.behavior, "allow");
+        for (const tool of ["Read", "Write", "Skill", "mcp__example__lookup"]) {
+          const decision = await options.canUseTool!(
+            tool,
+            {},
+            { signal, toolUseID: "call", requestId: "permission" },
+          );
+          assert.equal(decision?.behavior, restricted && tool !== "Read" ? "deny" : "allow");
+        }
         const answer = await options.onElicitation!(
           { serverName: "server", message: "confirm" },
           { signal, requestId: "confirm" },

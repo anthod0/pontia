@@ -3,8 +3,11 @@ import { realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 
+export const restrictedTools = ["Read", "Bash"];
+
 export function restrictedOptions(home: string, cwd: string, sessionId: string): Options {
   const settings = {
+    disableAllHooks: true,
     permissions: {
       defaultMode: "bypassPermissions" as const,
       deny: ["Skill", "mcp__*"],
@@ -30,7 +33,8 @@ export function restrictedOptions(home: string, cwd: string, sessionId: string):
 
   return {
     settings: path,
-    tools: ["Read", "Bash"],
+    tools: restrictedTools,
+    settingSources: [],
     // Managed settings can ignore file-based deny rules or override defaultMode.
     disallowedTools: settings.permissions.deny,
     permissionMode: settings.permissions.defaultMode,

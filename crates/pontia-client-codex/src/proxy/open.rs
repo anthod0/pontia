@@ -1,10 +1,10 @@
 use super::ThreadOperation;
 use crate::{
     runtime::CodexRuntime,
-    service::{environment::environment_config, instructions},
+    service::{CodexService, environment::environment_config, instructions},
 };
 use pontia_agent_control::{AgentBindingService, AgentControl};
-use pontia_core::{Error, Result};
+use pontia_core::{Error, Result, SessionMode};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
@@ -22,6 +22,24 @@ pub(super) async fn prepare(
     params: &mut Value,
 ) -> Result<Option<Prepared>> {
     if params["ephemeral"] == true {
+        if operation == ThreadOperation::Resume
+            && params["path"].as_str().is_some_and(|path| !path.is_empty())
+        {
+            return Err(Error::StateConflict(
+                "Ephemeral Codex resume cannot select a stored rollout".into(),
+            ));
+        }
+        if operation == ThreadOperation::Resume
+            && let Some(thread) = params["threadId"].as_str()
+            && let Some(binding) = AgentBindingService::new(state.db())
+                .binding_for_client_session("codex", thread)
+                .await?
+            && state.queries().session_mode(&binding.session_id).await? == SessionMode::Restricted
+        {
+            return Err(Error::StateConflict(
+                "Cannot resume a restricted Codex session as ephemeral".into(),
+            ));
+        }
         return Ok(None);
     }
     let runtime =
@@ -41,10 +59,41 @@ pub(super) async fn prepare(
     } else {
         None
     };
+    let mode = match &source {
+        Some(binding) if operation == ThreadOperation::Resume => {
+            state.queries().session_mode(&binding.session_id).await?
+        }
+        _ => SessionMode::Default,
+    };
+    if operation == ThreadOperation::Resume
+        && let Some(path) = params["path"].as_str().filter(|path| !path.is_empty())
+    {
+        // On cold resume Codex prefers the rollout path to threadId. Forward by
+        // verified ID so the native thread and the Session policy always match.
+        let snapshot = runtime
+            .connection()
+            .await?
+            .call(
+                "thread/read",
+                json!({"threadId":params["threadId"],"includeTurns":false}),
+            )
+            .await?;
+        if snapshot["thread"]["path"].as_str() != Some(path) {
+            return Err(Error::StateConflict(
+                "Codex resume path and thread ID differ".into(),
+            ));
+        }
+        params.as_object_mut().unwrap().remove("path");
+    }
     if let Some(binding) = &source
         && crate::runtime::CodexServerTarget::for_session(&state.db(), &binding.session_id).await?
             != runtime.target
     {
+        if mode == SessionMode::Restricted {
+            return Err(Error::StateConflict(
+                "Restricted Codex session belongs to another server".into(),
+            ));
+        }
         return Ok(None);
     }
     let binding = source.filter(|_| operation == ThreadOperation::Resume);
@@ -53,6 +102,42 @@ pub(super) async fn prepare(
         .map(|binding| binding.session_id.clone())
         .unwrap_or_else(|| pontia_core::ids::new_session_id().to_string());
     let connection = runtime.connection().await?;
+    if let Some(binding) = &binding
+        && mode == SessionMode::Restricted
+    {
+        pontia_agent_control::workspaces::require_active_workspace(
+            &state.db(),
+            &binding.launch_cwd,
+        )
+        .await?;
+        let config = CodexService::new(state.event_ingest_service())
+            .session_config(&session, &connection, &binding.launch_cwd)
+            .await?;
+        // Rebuild launch options from the bound Session. CLI config and profiles can
+        // introduce tools outside the configuration inspected by session_config.
+        params.as_object_mut().unwrap().retain(|key, _| {
+            matches!(
+                key.as_str(),
+                "threadId"
+                    | "excludeTurns"
+                    | "initialTurnsPage"
+                    | "model"
+                    | "serviceTier"
+                    | "personality"
+            )
+        });
+        params["cwd"] = json!(binding.launch_cwd);
+        params["approvalPolicy"] = json!("never");
+        params["sandbox"] = json!("danger-full-access");
+        params["config"] = config;
+        return Ok(Some(Prepared {
+            runtime,
+            session,
+            bound: true,
+            session_instructions: None,
+            _identity: identity,
+        }));
+    }
     let native_cwd = if params["cwd"].as_str().is_none() && operation != ThreadOperation::Start {
         if let Some(native) = params["threadId"].as_str() {
             match connection
@@ -88,6 +173,10 @@ pub(super) async fn prepare(
     let response = connection
         .call("config/read", json!({"cwd":cwd,"includeLayers":false}))
         .await?;
+    if mode.bypasses_approvals() {
+        params["approvalPolicy"] = json!("never");
+        params["sandbox"] = json!("danger-full-access");
+    }
     let session_instructions =
         instructions::prepare_proxy_request(state, operation, params, &response["config"]).await?;
     let mut effective = response["config"].clone();
