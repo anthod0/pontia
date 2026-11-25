@@ -9,6 +9,7 @@ mod source;
 mod static_serving;
 
 pub use source::resolve_dashboard;
+pub(crate) use static_serving::security_headers;
 pub use static_serving::{dashboard, dashboard_asset, dashboard_path};
 
 #[derive(Debug, Clone, PartialEq, Eq)]

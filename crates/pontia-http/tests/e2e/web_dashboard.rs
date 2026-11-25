@@ -27,6 +27,42 @@ async fn test_state_with_dashboard(
 }
 
 #[tokio::test]
+async fn dashboard_and_preview_shell_have_distinct_embedding_policies() {
+    let (_dir, root) = build_local_dashboard("dashboard", "custom.js");
+    std::fs::write(root.join("file-preview.htm"), "<iframe sandbox></iframe>").unwrap();
+    let (state, _home) = test_state_with_dashboard(ResolvedDashboard::available(root)).await;
+    let app = http::router(state);
+    for (path, frame_options, ancestors) in [
+        ("/dashboard", "DENY", "'none'"),
+        ("/dashboard/devices", "DENY", "'none'"),
+        ("/dashboard/assets/missing.js", "DENY", "'none'"),
+        ("/dashboard/file-preview.htm", "SAMEORIGIN", "'self'"),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(Request::get(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let headers = response.headers();
+        assert_eq!(headers["x-frame-options"], frame_options);
+        assert!(
+            headers["content-security-policy"]
+                .to_str()
+                .unwrap()
+                .contains(&format!("frame-ancestors {ancestors}"))
+        );
+        assert_eq!(headers["x-content-type-options"], "nosniff");
+        assert_eq!(headers["referrer-policy"], "strict-origin");
+        assert!(
+            headers["permissions-policy"]
+                .to_str()
+                .unwrap()
+                .contains("camera=()")
+        );
+    }
+}
+
+#[tokio::test]
 async fn dashboard_serves_configured_local_entrypoint() {
     let (_dir, root) = build_local_dashboard("custom dashboard", "custom.js");
 

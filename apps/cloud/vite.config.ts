@@ -23,6 +23,7 @@ export default defineConfig({
     paraglideVitePlugin({ project: "./project.inlang" }),
     tailwindcss(),
     sveltekit({
+      csp: { directives: { "script-src": ["self"] } },
       alias: { $assets: "../../assets" },
       extensions: [".svelte", ".svx"],
       preprocess: [

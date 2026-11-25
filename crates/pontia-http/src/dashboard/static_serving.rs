@@ -2,11 +2,43 @@ use std::path::{Component, Path, PathBuf};
 
 use axum::{
     extract::State,
-    http::{StatusCode, Uri, header},
+    http::{HeaderValue, StatusCode, Uri, header},
     response::{IntoResponse, Response},
 };
 
 use super::ResolvedDashboard;
+
+pub(crate) async fn security_headers(mut response: Response) -> Response {
+    let headers = response.headers_mut();
+    headers.entry(header::CONTENT_SECURITY_POLICY).or_insert(HeaderValue::from_static(concat!(
+        "default-src 'self'; ",
+        "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; ",
+        "style-src 'self' 'unsafe-inline'; ",
+        "img-src 'self' https: data: blob:; ",
+        "connect-src 'self' https://pontia.dev https://*.edge.pontia.dev:* wss://*.edge.pontia.dev:*; ",
+        "frame-src 'self' http: https: blob:; ",
+        "form-action 'self' https://*.pontia.run:*; ",
+        "object-src 'none'; ",
+        "base-uri 'none'; ",
+        "frame-ancestors 'none'",
+    )));
+    headers
+        .entry(header::X_FRAME_OPTIONS)
+        .or_insert(HeaderValue::from_static("DENY"));
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(
+        header::REFERRER_POLICY,
+        HeaderValue::from_static("strict-origin"),
+    );
+    headers.insert(
+        "permissions-policy",
+        HeaderValue::from_static("camera=(), microphone=(), geolocation=(), payment=(), usb=()"),
+    );
+    response
+}
 
 pub async fn dashboard(State(dashboard): State<ResolvedDashboard>) -> Response {
     let Some(root) = dashboard.root() else {
@@ -64,14 +96,25 @@ async fn try_dashboard_dist_file(
     }
 
     tokio::fs::read(path).await.ok().map(|bytes| {
-        (
+        let mut response = (
             [
                 (header::CONTENT_TYPE, content_type(relative_path)),
                 (header::CACHE_CONTROL, cache_control(relative_path)),
             ],
             bytes,
         )
-            .into_response()
+            .into_response();
+        if relative_path == "file-preview.htm" {
+            response.headers_mut().insert(
+                header::CONTENT_SECURITY_POLICY,
+                HeaderValue::from_static("frame-ancestors 'self'; object-src 'none'"),
+            );
+            response.headers_mut().insert(
+                header::X_FRAME_OPTIONS,
+                HeaderValue::from_static("SAMEORIGIN"),
+            );
+        }
+        response
     })
 }
 
@@ -88,7 +131,9 @@ fn safe_asset_path(relative_path: &str) -> Option<PathBuf> {
 }
 
 fn content_type(path: &str) -> &'static str {
-    if path.ends_with(".js") {
+    if path == "file-preview.htm" {
+        "text/html; charset=utf-8"
+    } else if path.ends_with(".js") {
         "text/javascript; charset=utf-8"
     } else if path.ends_with(".css") {
         "text/css; charset=utf-8"

@@ -38,6 +38,12 @@ worker.addEventListener("fetch", (event) => {
     (url.pathname === base || url.pathname.startsWith(`${base}/`));
   if (!isDashboardRequest) return;
 
+  // The preview shell is a separate document with its own framing policy.
+  if (url.pathname === base + "/file-preview.htm") {
+    event.respondWith(cacheFirst(url.pathname));
+    return;
+  }
+
   if (request.mode === "navigate") {
     event.respondWith(networkFirstNavigation(request));
     return;

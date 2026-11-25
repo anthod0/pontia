@@ -26,6 +26,11 @@ async fn health_check_reports_the_running_version() {
         response.headers()["pontia-edge-version"],
         include_str!("../../../VERSION").trim()
     );
+    assert_eq!(
+        response.headers()["strict-transport-security"],
+        "max-age=31536000; includeSubDomains"
+    );
+    assert_eq!(response.headers()["x-content-type-options"], "nosniff");
     assert_eq!(response.text().await.unwrap(), "ok");
 }
 

@@ -79,11 +79,12 @@ impl HttpEntrypoints {
             ))
             .with_state(state.clone());
         let local_http = Router::new()
-            .route("/healthz", get(health::healthz))
             .route("/dashboard", get(dashboard::dashboard))
             .route("/dashboard/", get(dashboard::dashboard))
             .route("/dashboard/assets/{*path}", get(dashboard::dashboard_asset))
             .route("/dashboard/{*path}", get(dashboard::dashboard_path))
+            .route_layer(middleware::map_response(dashboard::security_headers))
+            .route("/healthz", get(health::healthz))
             .with_state(state)
             .merge(external_api.clone())
             .merge(shutdown_api);

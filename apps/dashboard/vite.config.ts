@@ -28,7 +28,9 @@ export default defineConfig(({ mode }) => {
       ...(process.env.VITEST || devBackend ? [] : [mockApi({ publicDashboard })]),
       tailwindcss(),
       sveltekit({
+        csp: { directives: { "script-src": ["self", "wasm-unsafe-eval"] } },
         preprocess: vitePreprocess(),
+        serviceWorker: { files: (file) => file !== "_headers" },
         files: {
           assets: "public",
         },

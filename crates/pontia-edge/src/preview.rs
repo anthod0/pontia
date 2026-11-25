@@ -101,7 +101,16 @@ async fn dispatch(State(hosts): State<Hosts>, req: Request) -> Response {
     };
     let host = auth.host().to_ascii_lowercase();
     if host.eq_ignore_ascii_case(&hosts.control_hostname) {
-        return hosts.control.oneshot(req).await.unwrap();
+        let mut response = hosts.control.oneshot(req).await.unwrap();
+        response.headers_mut().insert(
+            header::STRICT_TRANSPORT_SECURITY,
+            header::HeaderValue::from_static("max-age=31536000; includeSubDomains"),
+        );
+        response.headers_mut().insert(
+            header::X_CONTENT_TYPE_OPTIONS,
+            header::HeaderValue::from_static("nosniff"),
+        );
+        return response;
     }
     let Some(label) = hosts
         .preview_suffix

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { fireEvent, render, screen, within } from "@testing-library/svelte";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import SharedFilePreviewHarness from "./SharedFilePreviewHarness.svelte";
@@ -41,14 +42,23 @@ test.each(["demo.html", "demo.HTM"])(
     const panel = within(screen.getByRole("complementary"));
     const frame = await panel.findByTitle(`Preview ${name}`);
     expect(frame).toBeInstanceOf(HTMLIFrameElement);
-    expect(frame).toHaveAttribute("sandbox", "allow-scripts allow-forms");
-    expect(frame).toHaveAttribute("srcdoc", html);
+    const shell = (frame as HTMLIFrameElement).contentDocument!;
+    shell.open();
+    shell.write(readFileSync("public/file-preview.htm", "utf8"));
+    shell.close();
+    const sandbox = shell.querySelector("iframe")!;
+    expect(sandbox.getAttribute("sandbox")).toBe("allow-scripts allow-forms");
+    await fireEvent.load(frame);
+    expect(sandbox.srcdoc).toBe(html);
 
     await fireEvent.click(panel.getByRole("tab", { name: "Source" }));
     expect(frame).not.toBeInTheDocument();
     expect(panel.getByRole("tabpanel", { name: "Source" }).textContent).toBe(html);
     await fireEvent.click(panel.getByRole("tab", { name: "Preview" }));
-    expect(await panel.findByTitle(`Preview ${name}`)).toHaveAttribute("srcdoc", html);
+    expect(await panel.findByTitle(`Preview ${name}`)).toHaveAttribute(
+      "src",
+      expect.stringContaining("file-preview.htm"),
+    );
   },
 );
 

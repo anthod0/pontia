@@ -3,6 +3,7 @@ import { dev } from "$app/environment";
 import { deLocalizeUrl } from "$lib/paraglide/runtime";
 import { paraglideMiddleware } from "$lib/paraglide/server";
 import { localeNavigation } from "$lib/server/locale-navigation";
+import { secureResponse } from "$lib/server/security-headers";
 
 const privatePages = ["/login", "/settings", "/device", "/auth/account-conflict"];
 
@@ -22,5 +23,10 @@ const handlePage: Handle = ({ event, resolve }) =>
     return response;
   });
 
-export const handle: Handle = (input) =>
-  dev ? localeNavigation(input.event.request, async () => handlePage(input)) : handlePage(input);
+export const handle: Handle = async (input) =>
+  dev
+    ? secureResponse(
+        input.event.request,
+        await localeNavigation(input.event.request, async () => handlePage(input)),
+      )
+    : handlePage(input);
