@@ -23,6 +23,7 @@ async fn app_with_acp(
     let db = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&db).await.unwrap();
     let mut clients = ClientRegistry::default();
+    clients.register_integration(pontia_client_codex::setup::integration());
     clients.register_integration(pontia_client_pi::setup::integration());
     let mut pi = pontia_client_pi::registration(None);
     pi.configuration = Some(Arc::new(pontia_client_pi::config::PiConfiguration::new(
@@ -156,6 +157,15 @@ async fn management_lists_builtin_entries_and_rejects_unknown_acp_clients() {
             )
         })
         .collect();
+    for entry in entries.iter().filter(|entry| entry["client_type"] == "acp") {
+        assert_eq!(entry["setup"]["status"], "not_required");
+    }
+    let codex = entries
+        .iter()
+        .find(|entry| entry["client_type"] == "codex")
+        .unwrap();
+    assert_eq!(codex["setup"]["status"], "required");
+    assert!(codex["setup"]["detail"].is_string());
     assert!(identities.windows(2).all(|pair| pair[0] < pair[1]));
     assert_eq!(
         identities
@@ -355,6 +365,40 @@ async fn invalid_patches_are_atomic_and_unknown_queries_are_not_found() {
 }
 
 #[tokio::test]
+async fn setup_inspection_errors_are_reported_per_entry_and_rechecked_on_read() {
+    use std::{fs, os::unix::fs::PermissionsExt};
+    let (app, root) = app().await;
+    let launcher = root.path().join("bin/codex");
+    fs::create_dir(root.path().join("bin")).unwrap();
+    fs::create_dir_all(root.path().join("state")).unwrap();
+    fs::write(&launcher, "#!/bin/sh\n# Pontia Codex launcher\n").unwrap();
+    fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755)).unwrap();
+    let manifest = root.path().join("state/codex-shim.json");
+    fs::write(&manifest, "{").unwrap();
+
+    let (status, response) = request(
+        &app,
+        "PATCH",
+        "/codex/default",
+        Some(json!({"enabled":false})),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let entry = &response["data"]["agent_client"];
+    assert_eq!(entry["setup"]["status"], "unknown");
+    assert!(entry["setup"]["detail"].is_string());
+
+    fs::remove_file(manifest).unwrap();
+    let (status, response) = request(&app, "GET", "/codex/default", None, true).await;
+    assert_eq!(status, StatusCode::OK);
+    let current = &response["data"]["agent_client"];
+    assert_eq!(current["setup"]["status"], "required");
+    assert_eq!(current["detection"], entry["detection"]);
+    assert_eq!(current["enabled"], false);
+}
+
+#[tokio::test]
 async fn setup_is_advertised_only_for_registered_integrations_and_rejects_other_targets() {
     let (app, root) = app().await;
     let (_, pi) = request(&app, "GET", "/pi/default", None, true).await;
@@ -363,6 +407,10 @@ async fn setup_is_advertised_only_for_registered_integrations_and_rejects_other_
         "pontia setup pi"
     );
     let (_, acp) = request(&app, "GET", "/acp/grok", None, true).await;
+    assert_eq!(
+        acp["data"]["agent_client"]["setup"]["status"],
+        "not_required"
+    );
     assert!(acp["data"]["agent_client"]["setup_command"].is_null());
     assert_eq!(
         request(&app, "POST", "/acp/grok/setup", None, true).await.0,
@@ -439,6 +487,11 @@ async fn detection_refreshes_from_files_without_changing_enabled_settings() {
         .iter()
         .find(|c| c["client_key"] == "grok")
         .unwrap();
+    assert_eq!(
+        missing["data"]["agent_client"]["setup"]["status"],
+        "not_required"
+    );
+    assert_eq!(found["setup"]["status"], "not_required");
     assert_eq!(found["detection"]["status"], "detected");
     assert_eq!(found["enabled"], true);
     assert!(found["version"].is_null());

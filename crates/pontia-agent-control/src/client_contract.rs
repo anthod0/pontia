@@ -28,7 +28,9 @@ pub use session::{
     ClientExitMode, ClientExitOutcome, ClientOperation, ClientSession, ClientSessionDetails,
     InProcessClient, NativeSessionFork, SessionCreationOption,
 };
-pub use setup::{ClientIntegration, PreparedClientIntegration, PreparedClientUninstall};
+pub use setup::{
+    ClientIntegration, ClientSetup, PreparedClientIntegration, PreparedClientUninstall,
+};
 #[cfg(any(test, feature = "generic-test-client"))]
 mod generic_test;
 pub mod raw_transcripts;

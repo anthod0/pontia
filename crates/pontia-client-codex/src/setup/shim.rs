@@ -112,6 +112,52 @@ pub(super) fn is_shim(path: &Path) -> Result<bool, String> {
     Ok(line.trim_end() == MARKER)
 }
 
+pub(super) fn detect_setup(root: &Path) -> Result<super::ClientSetup, String> {
+    use super::ClientSetup;
+    let launcher = root.join("bin/codex");
+    if !pontia_runtime::executable::is_executable(&launcher)? || !is_shim(&launcher)? {
+        return Ok(ClientSetup::Required(format!(
+            "Missing Pontia launcher at {}",
+            launcher.display()
+        )));
+    }
+    let manifest = root.join("state/codex-shim.json");
+    let Some(text) = read_optional(&manifest)? else {
+        return Ok(ClientSetup::Required(format!(
+            "Missing {}",
+            manifest.display()
+        )));
+    };
+    let shells: ShellFiles = serde_json::from_str(&text)
+        .map_err(|error| format!("Invalid {}: {error}", manifest.display()))?;
+    let setup = ShimSetup {
+        root: root.into(),
+        shells,
+    };
+    let env_path = setup.env_script_path();
+    if read_optional(&env_path)?.is_none_or(|script| script.is_empty()) {
+        return Ok(ClientSetup::Required(format!(
+            "Missing activation script at {}",
+            env_path.display()
+        )));
+    }
+    let block = setup.shell_block()?;
+    if setup.shells.paths.is_empty() {
+        return Ok(ClientSetup::Required(
+            "Missing shell configuration paths".into(),
+        ));
+    }
+    for path in &setup.shells.paths {
+        if read_optional(path)?.is_none_or(|text| !text.contains(block.trim_end())) {
+            return Ok(ClientSetup::Required(format!(
+                "Missing launcher PATH block in {}",
+                path.display()
+            )));
+        }
+    }
+    Ok(ClientSetup::Initialized)
+}
+
 impl ShimSetup {
     pub(super) fn inspect(
         vars: &HashMap<String, String>,
@@ -138,6 +184,18 @@ impl ShimSetup {
             "env.fish"
         } else {
             "env.sh"
+        })
+    }
+
+    fn shell_block(&self) -> Result<String, String> {
+        let env_quoted = quote(absolute_utf8_path(
+            &self.env_script_path(),
+            "shell environment script",
+        )?);
+        Ok(if self.shells.fish {
+            format!("{BEGIN}\nif test -f {env_quoted}; source {env_quoted}; end\n{END}\n")
+        } else {
+            format!("{BEGIN}\nif [ -f {env_quoted} ]; then . {env_quoted}; fi\n{END}\n")
         })
     }
 
@@ -218,12 +276,7 @@ impl ShimSetup {
         };
         write_changed(&env_path, &env_script)?;
         pontia_runtime::local_service::remove_file_if_present(&stale_env_path)?;
-        let env_quoted = quote(absolute_utf8_path(&env_path, "shell environment script")?);
-        let block = if shells.fish {
-            format!("{BEGIN}\nif test -f {env_quoted}; source {env_quoted}; end\n{END}\n")
-        } else {
-            format!("{BEGIN}\nif [ -f {env_quoted} ]; then . {env_quoted}; fi\n{END}\n")
-        };
+        let block = self.shell_block()?;
         for path in &shells.paths {
             edit_shell(path, Some(&block))?;
         }

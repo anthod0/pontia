@@ -513,3 +513,47 @@ fn launcher_checks_the_effective_directory_with_argument_boundaries_preserved() 
         );
     }
 }
+
+#[tokio::test]
+async fn detects_installed_artifacts_and_partial_codex_setup() {
+    use pontia_agent_control::client_contract::{ClientSetup, DetectionContext};
+    let mut fixture = Fixture::new("bash");
+    fixture
+        .vars
+        .insert("HOME".into(), fixture.home.display().to_string());
+    let context = DetectionContext {
+        vars: &fixture.vars,
+        pontia_home: &fixture.root,
+    };
+    let integration = crate::setup::integration();
+    assert!(matches!(
+        integration.detect_setup(&context).await.unwrap(),
+        ClientSetup::Required(_)
+    ));
+    fixture.enable();
+    assert!(matches!(
+        integration.detect_setup(&context).await.unwrap(),
+        ClientSetup::Required(_)
+    ));
+    let service = crate::setup::codex_service_path(&fixture.home);
+    fs::create_dir_all(service.parent().unwrap()).unwrap();
+    let render = if cfg!(target_os = "macos") {
+        crate::setup::render_codex_launchd
+    } else {
+        crate::setup::render_codex_systemd
+    };
+    fs::write(
+        service,
+        render(&fixture.native.join("codex"), &fixture.home.join(".codex")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        integration.detect_setup(&context).await.unwrap(),
+        ClientSetup::Initialized
+    );
+    fs::write(fixture.home.join(".bashrc"), "# user config").unwrap();
+    assert!(matches!(
+        integration.detect_setup(&context).await.unwrap(),
+        ClientSetup::Required(_)
+    ));
+}

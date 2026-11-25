@@ -275,3 +275,52 @@ fn maintenance_propagates_plugin_installation_failure() {
         [["install", "npm:@pontia/pi-client-plugin"]]
     );
 }
+
+#[tokio::test]
+async fn detects_only_complete_user_plugins_and_reports_list_failures() {
+    use pontia_agent_control::client_contract::{ClientSetup, DetectionContext};
+    use std::{fs, os::unix::fs::PermissionsExt};
+    let root = tempfile::tempdir().unwrap();
+    let pi = root.path().join("pi");
+    fs::write(&pi, "#!/bin/sh\n[ \"$1\" = list ] && /bin/cat listing\n").unwrap();
+    fs::set_permissions(&pi, fs::Permissions::from_mode(0o755)).unwrap();
+    let vars = HashMap::from([("PATH".into(), root.path().display().to_string())]);
+    let context = DetectionContext {
+        vars: &vars,
+        pontia_home: root.path(),
+    };
+    let integration = pontia_client_pi::setup::integration();
+    assert!(integration.detect_setup(&context).await.is_err());
+    let package = format!(
+        "  npm:@pontia/pi-client-plugin@1.0\n    {}\n",
+        root.path().display()
+    );
+    fs::write(
+        root.path().join("package.json"),
+        r#"{"name":"@pontia/pi-client-plugin","pi":{"extensions":["index.ts"]}}"#,
+    )
+    .unwrap();
+    fs::write(
+        root.path().join("listing"),
+        format!("User packages:\n{package}"),
+    )
+    .unwrap();
+    assert!(matches!(
+        integration.detect_setup(&context).await.unwrap(),
+        ClientSetup::Required(_)
+    ));
+    fs::write(root.path().join("index.ts"), "").unwrap();
+    assert_eq!(
+        integration.detect_setup(&context).await.unwrap(),
+        ClientSetup::Initialized
+    );
+    fs::write(
+        root.path().join("listing"),
+        format!("Project packages:\n{package}"),
+    )
+    .unwrap();
+    assert!(matches!(
+        integration.detect_setup(&context).await.unwrap(),
+        ClientSetup::Required(_)
+    ));
+}

@@ -3,6 +3,10 @@ use tokio::{io::AsyncReadExt, process::Command};
 
 /// Read a short, successful CLI response. Dropping the future also stops the child.
 pub async fn output(command: &mut Command) -> Option<String> {
+    bounded_output(command, 4096).await
+}
+
+pub async fn bounded_output(command: &mut Command, max_bytes: usize) -> Option<String> {
     tokio::time::timeout(Duration::from_secs(3), async {
         let mut child = command
             .stdin(Stdio::null())
@@ -15,11 +19,11 @@ pub async fn output(command: &mut Command) -> Option<String> {
         child
             .stdout
             .take()?
-            .take(4097)
+            .take(max_bytes as u64 + 1)
             .read_to_end(&mut bytes)
             .await
             .ok()?;
-        if bytes.len() > 4096 || !child.wait().await.ok()?.success() {
+        if bytes.len() > max_bytes || !child.wait().await.ok()?.success() {
             return None;
         }
         String::from_utf8(bytes)

@@ -274,3 +274,67 @@ fn repairs_a_default_host_that_fails_its_dependency_check() {
     assert_eq!(std::fs::read_to_string(host).unwrap(), "fixture");
     assert_eq!(runner.0.downloads.load(Ordering::SeqCst), 2);
 }
+
+#[tokio::test]
+async fn claude_setup_requires_the_selected_host_and_node_independently_of_native_cli() {
+    use pontia_agent_control::client_contract::{ClientSetup, DetectionContext, DetectionStatus};
+    use std::{fs, os::unix::fs::PermissionsExt};
+    let root = tempfile::tempdir().unwrap();
+    let mut vars = HashMap::from([("PATH".into(), root.path().display().to_string())]);
+    let integration = pontia_client_claude::setup::integration("1.0.0");
+    let context = DetectionContext {
+        vars: &vars,
+        pontia_home: root.path(),
+    };
+    let cli = root.path().join("claude");
+    fs::write(&cli, "").unwrap();
+    fs::set_permissions(cli, fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(
+        integration.detect(&context).status,
+        DetectionStatus::Detected
+    );
+    assert!(matches!(
+        integration.detect_setup(&context).await.unwrap(),
+        ClientSetup::Required(_)
+    ));
+    let managed = root
+        .path()
+        .join("clients/claude-client/node_modules/@pontia/claude-client/dist/src/main.js");
+    fs::create_dir_all(managed.parent().unwrap()).unwrap();
+    fs::write(&managed, "export {};").unwrap();
+    fs::write(
+        root.path()
+            .join("clients/claude-client/node_modules/@pontia/claude-client/package.json"),
+        r#"{"version":"0.9.0"}"#,
+    )
+    .unwrap();
+    assert!(matches!(
+        integration.detect_setup(&context).await.unwrap(),
+        ClientSetup::Required(_)
+    ));
+    let node = root.path().join("node");
+    fs::write(&node, "").unwrap();
+    fs::set_permissions(node, fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(
+        integration.detect_setup(&context).await.unwrap(),
+        ClientSetup::Initialized
+    );
+    let custom = root.path().join("custom.js");
+    vars.insert(
+        "PONTIA_CLAUDE_HOST_PATH".into(),
+        custom.display().to_string(),
+    );
+    let context = DetectionContext {
+        vars: &vars,
+        pontia_home: root.path(),
+    };
+    assert!(matches!(
+        integration.detect_setup(&context).await.unwrap(),
+        ClientSetup::Required(_)
+    ));
+    fs::rename(managed, custom).unwrap();
+    assert_eq!(
+        integration.detect_setup(&context).await.unwrap(),
+        ClientSetup::Initialized
+    );
+}

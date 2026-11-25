@@ -7,7 +7,9 @@ use sqlx::SqlitePool;
 use std::{collections::BTreeSet, path::Path};
 
 use crate::{
-    client_contract::{ClientConfiguration, ClientDetection, DetectionContext, DetectionStatus},
+    client_contract::{
+        ClientConfiguration, ClientDetection, ClientSetup, DetectionContext, DetectionStatus,
+    },
     clients::ClientRegistry,
 };
 
@@ -20,6 +22,8 @@ pub struct AgentClientDetails {
     pub short_id: String,
     pub enabled: bool,
     pub detection: ClientDetection,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub setup: Option<ClientSetup>,
     pub setup_command: Option<String>,
     pub has_record: bool,
     pub version: Option<String>,
@@ -133,15 +137,22 @@ impl AgentClientService {
         }
         let effective = configuration.merged(key);
         let (name, short_id) = configuration.presentation(key, &effective);
+        let integration = self.clients.integration(client, key);
+        let setup = match integration {
+            Some(integration) => integration
+                .detect_setup(context)
+                .await
+                .unwrap_or_else(|error| ClientSetup::Unknown(error.to_string())),
+            None => ClientSetup::NotRequired,
+        };
         Ok(AgentClientDetails {
             id: URL_SAFE_NO_PAD.encode(serde_json::to_vec(&(client, key))?),
             client_type: client.into(),
             client_key: key.into(),
             name,
             short_id,
-            setup_command: self
-                .clients
-                .integration(client, key)
+            setup: Some(setup),
+            setup_command: integration
                 .map(|integration| format!("pontia setup {}", integration.setup_name())),
             enabled: record.as_ref().is_some_and(|row| row.enabled),
             has_record: record.is_some(),

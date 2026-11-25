@@ -4,6 +4,16 @@ use std::{
     path::{Path, PathBuf},
 };
 
+/// State of the Pontia integration on this device, independent of client discovery.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "status", content = "detail", rename_all = "snake_case")]
+pub enum ClientSetup {
+    Initialized,
+    Required(String),
+    NotRequired,
+    Unknown(String),
+}
+
 /// Client-owned local integration operations; the CLI owns selection and confirmation.
 pub trait ClientIntegration: Send + Sync {
     fn client_type(&self) -> &'static str;
@@ -11,6 +21,16 @@ pub trait ClientIntegration: Send + Sync {
         self.client_type()
     }
     fn detect(&self, context: &super::DetectionContext<'_>) -> super::ClientDetection;
+    fn detect_setup<'a>(
+        &'a self,
+        _context: &'a super::DetectionContext<'_>,
+    ) -> super::ClientOperation<'a, ClientSetup> {
+        Box::pin(async {
+            Ok(ClientSetup::Unknown(
+                "No setup detector is available".into(),
+            ))
+        })
+    }
     fn client_key(&self) -> &'static str {
         "default"
     }

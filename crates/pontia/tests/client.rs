@@ -122,6 +122,7 @@ fn run(
 fn list_prints_a_table_by_default_and_full_entries_with_json() {
     let mut disabled = entry("acp", "grok", "opaque-grok", "grok");
     disabled["name"] = json!("Grok Build");
+    disabled["setup"] = json!({"status":"not_required"});
     disabled["enabled"] = json!(false);
     let entries = vec![entry("pi", "default", "opaque-pi", "pi"), disabled];
 

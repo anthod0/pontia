@@ -1,5 +1,6 @@
 use pontia_agent_control::client_contract::{
-    ClientIntegration, PreparedClientIntegration, PreparedClientUninstall,
+    ClientIntegration, ClientOperation, ClientSetup, DetectionContext, PreparedClientIntegration,
+    PreparedClientUninstall,
 };
 use pontia_runtime::local_service::{CommandRunner, DefinitionStore};
 use std::{
@@ -18,10 +19,19 @@ pub(crate) fn node() -> std::ffi::OsString {
     std::env::var_os("PONTIA_CLAUDE_NODE_PATH").unwrap_or_else(|| "node".into())
 }
 
-const HOST_SCRIPT: &str = "node_modules/@pontia/claude-client/dist/src/main.js";
+const HOST_PACKAGE: &str = "node_modules/@pontia/claude-client";
+const HOST_ENTRY: &str = "dist/src/main.js";
+
+fn host_manifest(root: &Path) -> PathBuf {
+    root.join("clients/claude-client")
+        .join(HOST_PACKAGE)
+        .join("package.json")
+}
 
 pub(crate) fn host_path(root: &Path) -> PathBuf {
-    root.join("clients/claude-client").join(HOST_SCRIPT)
+    root.join("clients/claude-client")
+        .join(HOST_PACKAGE)
+        .join(HOST_ENTRY)
 }
 
 pub(crate) fn detect(
@@ -104,6 +114,68 @@ impl ClientIntegration for Integration {
             context,
             context.vars.get("PONTIA_CLAUDE_HOST_PATH").map(Path::new),
         )
+    }
+    fn detect_setup<'a>(
+        &'a self,
+        context: &'a DetectionContext<'_>,
+    ) -> ClientOperation<'a, ClientSetup> {
+        Box::pin(async move {
+            let host = match context.vars.get("PONTIA_CLAUDE_HOST_PATH") {
+                Some(host) => PathBuf::from(host),
+                None => {
+                    let manifest = host_manifest(context.pontia_home);
+                    match std::fs::read(&manifest) {
+                        Ok(bytes) => {
+                            let package: serde_json::Value = serde_json::from_slice(&bytes)?;
+                            if package["version"].as_str().is_none_or(str::is_empty) {
+                                return Ok(ClientSetup::Required(format!(
+                                    "Missing package version in {}",
+                                    manifest.display()
+                                )));
+                            }
+                        }
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                            return Ok(ClientSetup::Required(format!(
+                                "Missing Claude SDK host package at {}",
+                                manifest.display()
+                            )));
+                        }
+                        Err(error) => return Err(error.into()),
+                    }
+                    host_path(context.pontia_home)
+                }
+            };
+            match host.metadata() {
+                Ok(metadata) if metadata.is_file() && metadata.len() > 0 => {}
+                Ok(_) => {
+                    return Ok(ClientSetup::Required(format!(
+                        "Expected a Claude SDK host file at {}",
+                        host.display()
+                    )));
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    return Ok(ClientSetup::Required(format!(
+                        "Missing Claude SDK host at {}",
+                        host.display()
+                    )));
+                }
+                Err(error) => return Err(error.into()),
+            }
+            let node = context
+                .vars
+                .get("PONTIA_CLAUDE_NODE_PATH")
+                .map(String::as_str)
+                .unwrap_or("node");
+            match context
+                .executable(node)
+                .map_err(pontia_core::Error::Domain)?
+            {
+                Some(_) => Ok(ClientSetup::Initialized),
+                None => Ok(ClientSetup::Required(format!(
+                    "Missing Node runtime: {node}"
+                ))),
+            }
+        })
     }
     fn skipped_summary(&self) -> Vec<String> {
         vec!["Skip Claude Code".into()]
@@ -217,7 +289,7 @@ impl PreparedClientIntegration for Prepared {
                 "Claude Code client installation failed with exit code {code}"
             ));
         }
-        self.check_host(&stage.path().join(HOST_SCRIPT), runner)?;
+        self.check_host(&stage.path().join(HOST_PACKAGE).join(HOST_ENTRY), runner)?;
         publish_installation(stage.path(), &parent.join("claude-client"))?;
         Ok(())
     }
@@ -238,9 +310,7 @@ impl PreparedClientIntegration for Prepared {
 
 impl Prepared {
     fn managed_host_is_ready(&self, runner: &dyn CommandRunner) -> Result<bool, String> {
-        let manifest = self
-            .root
-            .join("clients/claude-client/node_modules/@pontia/claude-client/package.json");
+        let manifest = host_manifest(&self.root);
         let text = match std::fs::read_to_string(manifest) {
             Ok(text) => text,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),

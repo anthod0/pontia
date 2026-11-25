@@ -1,6 +1,6 @@
 use pontia::client_maintenance::maintain_enabled;
 use pontia_agent_control::agent_clients::AgentClientDetails;
-use pontia_agent_control::client_contract::ClientDetection;
+use pontia_agent_control::client_contract::{ClientDetection, ClientSetup};
 use pontia_runtime::local_service::{CommandOutput, CommandRunner, DefinitionStore};
 use std::{cell::RefCell, collections::HashMap, path::Path};
 
@@ -55,6 +55,7 @@ fn entry(has_record: bool, enabled: bool) -> AgentClientDetails {
         has_record,
         enabled,
         detection: ClientDetection::detected("pi"),
+        setup: Some(ClientSetup::Initialized),
         setup_command: None,
         created_at: None,
         updated_at: None,

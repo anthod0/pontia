@@ -1,5 +1,6 @@
 use pontia_agent_control::client_contract::{
-    ClientIntegration, PreparedClientIntegration, PreparedClientUninstall,
+    ClientIntegration, ClientOperation, ClientSetup, DetectionContext, PreparedClientIntegration,
+    PreparedClientUninstall,
 };
 use pontia_runtime::local_service::{CommandRunner, DefinitionStore};
 use std::{collections::HashMap, path::Path, sync::Arc};
@@ -39,6 +40,41 @@ impl ClientIntegration for PiIntegration {
         context: &pontia_agent_control::client_contract::DetectionContext<'_>,
     ) -> pontia_agent_control::client_contract::ClientDetection {
         context.command("pi")
+    }
+    fn detect_setup<'a>(
+        &'a self,
+        context: &'a DetectionContext<'_>,
+    ) -> ClientOperation<'a, ClientSetup> {
+        Box::pin(async move {
+            let Some(pi) = context
+                .executable("pi")
+                .map_err(pontia_core::Error::Domain)?
+            else {
+                return Ok(ClientSetup::Unknown(
+                    "Pi is unavailable to list user packages".into(),
+                ));
+            };
+            let listing = pontia_agent_control::client_contract::version::bounded_output(
+                tokio::process::Command::new(pi)
+                    .arg("list")
+                    .env_clear()
+                    .envs(context.vars)
+                    .env("NO_COLOR", "1")
+                    .current_dir(context.pontia_home),
+                256 * 1024,
+            )
+            .await
+            .ok_or_else(|| pontia_core::Error::Domain("Cannot list Pi user packages".into()))?;
+            match plugin_action(&listing, false).map_err(pontia_core::Error::Domain)? {
+                PluginAction::Ready => Ok(ClientSetup::Initialized),
+                PluginAction::Restore(path) => Ok(ClientSetup::Required(format!(
+                    "Restore Pi plugin files at {path}"
+                ))),
+                _ => Ok(ClientSetup::Required(
+                    "Install the Pontia Pi user plugin".into(),
+                )),
+            }
+        })
     }
     fn skipped_summary(&self) -> Vec<String> {
         vec!["Skip pi".into()]
@@ -86,70 +122,16 @@ impl PiIntegration {
         if packages.code != 0 {
             return Err(format!("pi list failed with exit code {}", packages.code));
         }
-        let mut source = "npm:@pontia/pi-client-plugin".to_string();
-        let mut update_source = None;
-        let mut current: Option<String> = None;
-        for line in packages.stdout.lines() {
-            if line == "Project packages:" {
-                break;
+        let args = match plugin_action(&packages.stdout, update)? {
+            PluginAction::Ready => return Ok(()),
+            PluginAction::Restore(path) => {
+                return Err(format!(
+                    "Pi integration files are missing at {path}; restore that package before retrying"
+                ));
             }
-            if let Some(path) = line.strip_prefix("    ") {
-                let Some(candidate) = current.take() else {
-                    continue;
-                };
-                let path = Path::new(path.trim());
-                let manifest = match std::fs::read_to_string(path.join("package.json")) {
-                    Ok(text) => serde_json::from_str::<serde_json::Value>(&text).ok(),
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-                    Err(error) => return Err(error.to_string()),
-                };
-                if let Some(manifest) =
-                    manifest.filter(|manifest| manifest["name"] == "@pontia/pi-client-plugin")
-                {
-                    if manifest["pi"]["extensions"]
-                        .as_array()
-                        .is_some_and(|extensions| {
-                            !extensions.is_empty()
-                                && extensions.iter().all(|entry| {
-                                    entry
-                                        .as_str()
-                                        .is_some_and(|entry| path.join(entry).is_file())
-                                })
-                        })
-                    {
-                        if update && candidate.starts_with("npm:") {
-                            update_source = Some(candidate);
-                            continue;
-                        }
-                        return Ok(());
-                    }
-                    source = candidate;
-                    if source.starts_with("npm:") {
-                        if !update && let Some(version) = manifest["version"].as_str() {
-                            source = format!("npm:@pontia/pi-client-plugin@{version}");
-                        }
-                    } else {
-                        return Err(format!(
-                            "Pi integration files are missing at {}; restore that package before retrying",
-                            path.display()
-                        ));
-                    }
-                }
-            } else if let Some(candidate) = line.strip_prefix("  ") {
-                let candidate = candidate.trim_end_matches(" (filtered)").to_string();
-                if candidate == "npm:@pontia/pi-client-plugin"
-                    || candidate.starts_with("npm:@pontia/pi-client-plugin@")
-                {
-                    source = candidate.clone();
-                }
-                current = Some(candidate);
-            }
-        }
-        let args = if let Some(source) = update_source {
+            PluginAction::Install(source) => vec!["install".into(), source],
             // Pi otherwise also updates matching packages in a trusted project.
-            vec!["update".into(), source, "--no-approve".into()]
-        } else {
-            vec!["install".into(), source]
+            PluginAction::Update(source) => vec!["update".into(), source, "--no-approve".into()],
         };
         let code = runner
             .run_interactive("pi", &args)
@@ -163,4 +145,74 @@ impl PiIntegration {
             ))
         }
     }
+}
+
+enum PluginAction {
+    Ready,
+    Restore(String),
+    Install(String),
+    Update(String),
+}
+
+fn plugin_action(listing: &str, update: bool) -> Result<PluginAction, String> {
+    let mut source = "npm:@pontia/pi-client-plugin".to_string();
+    let mut update_source = None;
+    let mut current: Option<String> = None;
+    for line in listing.lines() {
+        if line == "Project packages:" {
+            break;
+        }
+        if let Some(path) = line.strip_prefix("    ") {
+            let Some(candidate) = current.take() else {
+                continue;
+            };
+            let path = Path::new(path.trim());
+            let manifest = match std::fs::read_to_string(path.join("package.json")) {
+                Ok(text) => serde_json::from_str::<serde_json::Value>(&text).ok(),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                Err(error) => return Err(error.to_string()),
+            };
+            if let Some(manifest) =
+                manifest.filter(|manifest| manifest["name"] == "@pontia/pi-client-plugin")
+            {
+                if manifest["pi"]["extensions"]
+                    .as_array()
+                    .is_some_and(|extensions| {
+                        !extensions.is_empty()
+                            && extensions.iter().all(|entry| {
+                                entry
+                                    .as_str()
+                                    .is_some_and(|entry| path.join(entry).is_file())
+                            })
+                    })
+                {
+                    if update && candidate.starts_with("npm:") {
+                        update_source = Some(candidate);
+                        continue;
+                    }
+                    return Ok(PluginAction::Ready);
+                }
+                source = candidate;
+                if source.starts_with("npm:") {
+                    if !update && let Some(version) = manifest["version"].as_str() {
+                        source = format!("npm:@pontia/pi-client-plugin@{version}");
+                    }
+                } else {
+                    return Ok(PluginAction::Restore(path.display().to_string()));
+                }
+            }
+        } else if let Some(candidate) = line.strip_prefix("  ") {
+            let candidate = candidate.trim_end_matches(" (filtered)").to_string();
+            if candidate == "npm:@pontia/pi-client-plugin"
+                || candidate.starts_with("npm:@pontia/pi-client-plugin@")
+            {
+                source = candidate.clone();
+            }
+            current = Some(candidate);
+        }
+    }
+    Ok(match update_source {
+        Some(source) => PluginAction::Update(source),
+        None => PluginAction::Install(source),
+    })
 }

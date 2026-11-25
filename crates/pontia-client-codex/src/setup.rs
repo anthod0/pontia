@@ -6,7 +6,8 @@ use std::{
 };
 
 use pontia_agent_control::client_contract::{
-    ClientIntegration, PreparedClientIntegration, PreparedClientUninstall,
+    ClientIntegration, ClientOperation, ClientSetup, DetectionContext, PreparedClientIntegration,
+    PreparedClientUninstall,
 };
 use pontia_runtime::local_service::{
     CommandOutput, CommandRunner, DefinitionStore, absolute_utf8_path,
@@ -47,6 +48,41 @@ impl ClientIntegration for CodexIntegration {
         context: &pontia_agent_control::client_contract::DetectionContext<'_>,
     ) -> pontia_agent_control::client_contract::ClientDetection {
         detect(context)
+    }
+    fn detect_setup<'a>(
+        &'a self,
+        context: &'a DetectionContext<'_>,
+    ) -> ClientOperation<'a, ClientSetup> {
+        Box::pin(async move {
+            let launcher =
+                shim::detect_setup(context.pontia_home).map_err(pontia_core::Error::Domain)?;
+            if launcher != ClientSetup::Initialized {
+                return Ok(launcher);
+            }
+            let home = context
+                .vars
+                .get("HOME")
+                .filter(|value| Path::new(value).is_absolute())
+                .ok_or_else(|| pontia_core::Error::Domain("User home unavailable".into()))?;
+            let service = codex_service_path(Path::new(home));
+            let definition = match std::fs::read_to_string(&service) {
+                Ok(definition) => definition,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+                Err(error) => return Err(error.into()),
+            };
+            let daemon_command = if cfg!(target_os = "macos") {
+                "<string>app-server</string>\n    <string>daemon</string>\n    <string>start</string>"
+            } else {
+                " app-server daemon start"
+            };
+            if !definition.contains(daemon_command) {
+                return Ok(ClientSetup::Required(format!(
+                    "Missing Codex daemon startup command in {}",
+                    service.display()
+                )));
+            }
+            Ok(ClientSetup::Initialized)
+        })
     }
     fn skipped_summary(&self) -> Vec<String> {
         vec!["Skip Codex".into()]
