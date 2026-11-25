@@ -12,7 +12,7 @@ fn builtin_launch_and_management_settings() {
     );
     assert_eq!(
         configuration.resolve("antigravity").unwrap(),
-        json!({"name":"Google Antigravity","command":"agy","args":["acp"],"env":{}})
+        json!({"name":"Antigravity","command":"agy","args":["acp"],"env":{}})
     );
     assert_eq!(
         configuration.resolve("kiro").unwrap(),

@@ -137,7 +137,7 @@ test("returns to the list after switching a profile to another enabled client an
   await open("Executor");
   const names = await chooseClient("Codex");
   expect(names).not.toContain("Claude Code");
-  expect(names).toEqual(["Pi", "Codex", "Google Antigravity", "Grok Build"]);
+  expect(names).toEqual(["Pi", "Codex", "Antigravity", "Grok Build"]);
   await chooseModel(2);
   await fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() => expect(screen.queryByLabelText("Profile ID")).toBeNull());

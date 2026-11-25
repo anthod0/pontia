@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clientControlDetails, defaultClientType } from "../src/clients";
+import { clientControlDetails, clientSessionLabel, defaultClientType } from "../src/clients";
 import type { SessionView } from "../src/api/types";
 
 const session = (client_type: string, extra = {}): SessionView =>
@@ -22,5 +22,14 @@ describe("registered dashboard clients", () => {
     expect(clientControlDetails(session("codex", { codex: details }))).toEqual(details);
     expect(clientControlDetails(session("codex"))).toBeNull();
     expect(clientControlDetails(session("pi", { codex: details }))).toBeNull();
+  });
+  it("labels an ACP session with the configured agent name only", () => {
+    const acp = {
+      agent_id: "antigravity",
+      name: "Antigravity",
+      agent_info: { name: "agy", title: "Antigravity ACP Server", version: "1.5.16" },
+    };
+    expect(clientSessionLabel(session("acp", { acp }))).toBe("Antigravity");
+    expect(clientSessionLabel(session("acp", { acp: { agent_id: "custom" } }))).toBe("custom");
   });
 });

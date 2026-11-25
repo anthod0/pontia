@@ -43,7 +43,7 @@ export const templateClientNames: Record<string, string> = {
 
 const acpNames = new Map([
   ["grok", "Grok Build"],
-  ["antigravity", "Google Antigravity"],
+  ["antigravity", "Antigravity"],
   ["kiro", "Kiro"],
 ]);
 

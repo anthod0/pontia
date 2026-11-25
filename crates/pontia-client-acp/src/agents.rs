@@ -59,7 +59,7 @@ impl AcpAgents {
             (
                 "antigravity".into(),
                 AcpAgentDefinition {
-                    name: "Google Antigravity".into(),
+                    name: "Antigravity".into(),
                     launch: AcpLaunch {
                         command: "agy".into(),
                         args: vec!["acp".into()],

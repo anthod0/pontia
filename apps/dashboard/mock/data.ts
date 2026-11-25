@@ -103,7 +103,7 @@ const creationOptions: Omit<SessionCreationOption, "version">[] = [
   },
   {
     id: '["acp","antigravity"]',
-    name: "Google Antigravity",
+    name: "Antigravity",
     client_type: "acp",
     metadata: { acp_agent_id: "antigravity" },
   },
@@ -768,7 +768,7 @@ export function createSampleData(): MockData {
       agentClient("pi", "default", "Pi", "0.70.2"),
       agentClient("codex", "default", "Codex", "0.171.0"),
       agentClient("claude-agent", "default", "Claude Code", "2.1.318"),
-      agentClient("acp", "antigravity", "Google Antigravity"),
+      agentClient("acp", "antigravity", "Antigravity"),
       agentClient("acp", "grok", "Grok Build", "1.0.92"),
     ],
     creationOptions,
