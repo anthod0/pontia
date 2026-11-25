@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-11-25
+
+### Added
+
+- Mark an existing Bot chat message as a todo or resolve it from the conversation. The Todo view separates pending items from recent activity grouped by day.
+- Use `pontia bot profile templates` to browse the recommended Agent Profiles, including offline. Bots can guide you through creating your first Profile. All six built-in templates enable YOLO mode by default.
+- Bots can search their own chat history when recalling earlier conversations.
+
+### Changed
+
+- The desktop Git panel shows commit history on a timeline and distinguishes pushed commits from local commits. The preview sidebar remembers localhost pages as you switch tabs.
+- On phones, Bot and Session chats use the same rich text command editor as desktop. Bot chats show quoted messages inside the composer and open images in the shared viewer.
+- On phones, start your first Bot from the Chats tab. Workspace setup opens an available directory so you can choose where to work.
+- Reopening the history of a finished Session is faster for ACP, Claude, Codex, and Pi.
+- The Ivy demo on the Pontia homepage now walks through the Atlas sign-in flow and shows previews of a local dev server and an HTML file.
+
+### Fixed
+
+- Session file previews block sensitive paths. HTML file previews run in a stricter sandbox. The local Dashboard blocks localhost previews of its own ports.
+- Restricted Codex and Claude Sessions preserve their isolation settings.
+
 ## [0.9.1] - 2026-11-25
 
 ### Added
@@ -1257,7 +1278,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/anthod0/pontia/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/anthod0/pontia/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/anthod0/pontia/compare/v0.8.16...v0.9.0
 [0.8.16]: https://github.com/anthod0/pontia/compare/v0.8.15...v0.8.16
