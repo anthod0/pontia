@@ -24,9 +24,13 @@
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
   import TrashIcon from 'phosphor-svelte/lib/TrashIcon'
-  import { buildAgentProfileInput, createAgentProfileDraft, createAgentProfileDraftFromProfile, profileIdFromName, type AgentProfileDraftErrors } from './form'
+  import { buildAgentProfileInput, createAgentProfileDraft, createAgentProfileDraftFromProfile, profileIdFromName, type AgentProfileDraft, type AgentProfileDraftErrors } from './form'
 
-  let { profile, clients, allClients = clients, template, oncancel, onsaved, ondelete, saving = $bindable(false) }: {
+  let { profile, startDraft, quickTemplates, botName, onedit, clients, allClients = clients, template, oncancel, onsaved, ondelete, saving = $bindable(false) }: {
+    startDraft?: AgentProfileDraft
+    quickTemplates?: ProfileTemplate[]
+    botName?: string
+    onedit?: (draft: AgentProfileDraft) => void
     profile?: AgentProfileView
     /** Enabled clients the profile can launch with. */
     clients: AgentClientView[]
@@ -46,8 +50,8 @@
 
   // Callers re-key the form per profile, so it seeds its draft once.
   const initial = untrack(() => profile)
-  let draft = $state(initial ? createAgentProfileDraftFromProfile(initial) : createAgentProfileDraft())
-  let idEdited = $state(false)
+  let draft = $state(initial ? createAgentProfileDraftFromProfile(initial) : untrack(() => startDraft) ?? createAgentProfileDraft())
+  let idEdited = $state(!!untrack(() => startDraft))
   let copied = $state(false)
   let errors = $state<AgentProfileDraftErrors>({})
   let error = $state('')
@@ -62,8 +66,9 @@
   // they are copied into the baseline instead of counting as the user's changes.
   let settling = $state(true)
   let applied = $state<ProfileTemplate | null>(null)
-  let pickerOpen = $state(true)
+  let pickerOpen = $state(!untrack(() => template))
   let replacing = $state<ProfileTemplate | null>(null)
+  let resolvingTemplate = $state(false)
   let applying = 0
   let fill = $state<{ kind: 'missing' | 'disabled' | 'model'; template: ProfileTemplate } | null>(null)
   // The note describes the client and model the template left; it goes away once the user changes them.
@@ -96,17 +101,8 @@
     replacing = null
     const attempt = ++applying
     const client = templateClient(next, clients)
-    let resolved = { model: next.model, reasoning_effort: next.reasoning_effort ?? '', fallback: false }
-    if (client) {
-      try {
-        resolved = templateModel(next, await device.queryClient.ensureQueryData(modelCatalogQuery(device, client)))
-      } catch {
-        // The model picker reports catalog errors itself.
-      }
-    }
-    if (attempt !== applying) return
+    resolvingTemplate = true
     const filled = applyProfileTemplate(draft, next, clients)
-    if (client) Object.assign(filled, { model: resolved.model, reasoning_effort: resolved.reasoning_effort })
     if (filled.client_type !== draft.client_type || filled.client_key !== draft.client_key) {
       effortUnavailable = false
       modelAvailable = false
@@ -118,8 +114,24 @@
     errors = {}
     applied = next
     pickerOpen = false
+    fill = null
+    let fallback = false
+    if (client) {
+      try {
+        const catalog = await device.queryClient.ensureQueryData(modelCatalogQuery(device, client))
+        if (attempt !== applying) return
+        const resolved = templateModel(next, catalog)
+        draft.model = baseline.model = resolved.model
+        draft.reasoning_effort = baseline.reasoning_effort = resolved.reasoning_effort
+        fallback = resolved.fallback
+      } catch {
+        // The model picker reports catalog errors itself.
+      }
+    }
+    if (attempt !== applying) return
+    resolvingTemplate = false
     const status = templateClientStatus(next, allClients)
-    const kind = status === 'available' ? (resolved.fallback ? 'model' : null) : status
+    const kind = status === 'available' ? (fallback ? 'model' : null) : status
     fill = kind ? { kind, template: next } : null
   }
 
@@ -148,7 +160,7 @@
 
   async function save(event: SubmitEvent) {
     event.preventDefault()
-    if (saving || effortUnavailable) return
+    if (saving || resolvingTemplate || effortUnavailable) return
     error = ''
     const result = buildAgentProfileInput(draft, { creating: !profile })
     errors = result.ok ? {} : result.errors
@@ -172,15 +184,24 @@
 {#if !initial}
   {#if applied && !pickerOpen}
     {@const AppliedIcon = templateIcon(applied)}
-    <div class="flex min-w-0 items-center gap-2.5 rounded-lg border bg-muted/40 px-3 py-2">
+    {#if quickTemplates}
+      <div class="no-scrollbar flex gap-2 overflow-x-auto md:hidden">
+        {#each quickTemplates as option (option.id)}
+          {@const Icon = templateIcon(option)}
+          <button type="button" class="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm aria-pressed:border-primary aria-pressed:bg-selected" aria-pressed={option.id === applied.id} onclick={() => chooseTemplate(option)}><Icon class="size-4"/>{option.text.en.name}</button>
+        {/each}
+      </div>
+      <p class="line-clamp-2 text-xs text-muted-foreground md:hidden">{applied.text.en.description}</p>
+    {/if}
+    <div class="flex min-w-0 items-center gap-2.5 rounded-lg border bg-muted/40 px-3 py-2 {botName ? 'max-md:hidden' : ''}">
       <span class="flex size-7 shrink-0 items-center justify-center rounded-md bg-background text-foreground"><AppliedIcon class="size-4" /></span>
       <p class="min-w-0 flex-1 text-sm">
         <span class="text-muted-foreground">{$t('profiles.templateApplied')}</span>
-        <span class="font-medium text-heading">{applied.text.en.name}</span><span class="text-muted-foreground max-sm:hidden">{$t('profiles.templateAppliedHint')}</span>
+        <span class="font-medium text-heading">{applied.text.en.name}</span>{#if botName}<span class="line-clamp-2 text-xs text-muted-foreground">{applied.text.en.description}</span>{:else}<span class="text-muted-foreground max-sm:hidden">{$t('profiles.templateAppliedHint')}</span>{/if}
       </p>
       <Button type="button" variant="ghost" size="sm" class="shrink-0" disabled={saving} onclick={() => pickerOpen = true}><SwapIcon data-icon="inline-start" />{$t('profiles.changeTemplate')}</Button>
     </div>
-  {:else}
+  {:else if pickerOpen}
     <div class="grid gap-3">
       <div class="flex items-end justify-between gap-2">
         <div class="grid gap-1">
@@ -189,21 +210,21 @@
         </div>
         {#if applied}<Button type="button" variant="ghost" size="sm" class="shrink-0" onclick={() => pickerOpen = false}>{$t('profiles.hideTemplates')}</Button>{/if}
       </div>
-      <TemplateCards clients={allClients} selected={applied?.id} onchoose={chooseTemplate} class="xl:grid-cols-3" />
+      <TemplateCards templates={quickTemplates} clients={allClients} selected={applied?.id} onchoose={chooseTemplate} class="xl:grid-cols-3" />
     </div>
   {/if}
-  <Separator />
+  {#if !botName}<Separator />{/if}
 {/if}
 
-<form class="grid gap-5" onsubmit={save} novalidate>
-  <div class="grid gap-4 sm:grid-cols-2">
-    <div class="grid content-start gap-2">
+<form class:quick-profile={!!botName} class="grid min-w-0 gap-5" onsubmit={save} novalidate>
+  <div class="field-pair grid gap-4 sm:grid-cols-2">
+    <div class="profile-field grid min-w-0 content-start gap-2">
       <Label for={`${id}-name`}>{$t('profiles.name')}</Label>
       <Input id={`${id}-name`} bind:value={draft.name} disabled={saving} aria-invalid={!!errors.name}
         oninput={() => { if (!profile && !idEdited) draft.profile_id = profileIdFromName(draft.name) }} />
       {#if errors.name}<p role="alert" class="text-sm text-destructive">{errors.name}</p>{/if}
     </div>
-    <div class="grid content-start gap-2">
+    <div class="profile-field grid min-w-0 content-start gap-2">
       {#if profile}
         <Label for={`${id}-id`}>{$t('profiles.id')}</Label>
         <div class="flex min-w-0 items-center gap-1">
@@ -220,16 +241,19 @@
     </div>
   </div>
 
+  {#snippet description()}
   <div class="grid gap-2">
     <Label for={`${id}-description`}>{$t('profiles.description')}</Label>
-    <Textarea id={`${id}-description`} bind:value={draft.description} rows={2} disabled={saving} />
-    <p class="text-xs text-muted-foreground">{$t('profiles.descriptionHint')}</p>
+    <Textarea id={`${id}-description`} bind:value={draft.description} class={botName ? "field-sizing-fixed" : undefined} rows={2} disabled={saving} />
+    <p class="text-xs text-muted-foreground">{botName ? $t('bots.profileHint.descriptionHint', {name: botName}) : $t('profiles.descriptionHint')}</p>
   </div>
 
-  <div class="grid gap-4 sm:grid-cols-2">
-    <div class="grid content-start gap-2">
+  {/snippet}
+  {#if !botName}{@render description()}{/if}
+  <div class="field-pair grid gap-4 sm:grid-cols-2">
+    <div class="profile-field grid min-w-0 content-start gap-2">
       <Label for={`${id}-client`}>{$t('clients.agentClient')}</Label>
-      <ResponsiveSelect value={selectedClient?.id ?? ''} onValueChange={(clientId) => { settling = false; chooseClient(clientId) }} disabled={saving}
+      <ResponsiveSelect value={selectedClient?.id ?? ''} onValueChange={(clientId) => { settling = false; chooseClient(clientId) }} disabled={saving || resolvingTemplate}
         label={$t('clients.agentClient')} triggerClass="w-full" id={`${id}-client`}
         options={clients} keyOf={client => client.id} labelOf={client => client.name}>
         {#snippet trigger()}
@@ -242,12 +266,12 @@
       </ResponsiveSelect>
       {#if !clients.length}<p role="status" class="text-sm text-muted-foreground">{$t('profiles.noClients')} <a class="underline underline-offset-4" href={dashboardPath('/settings/clients')}>{$t('settings.agentClients')}</a></p>{/if}
     </div>
-    <div class="grid content-start gap-2">
+    <div class="profile-field grid min-w-0 content-start gap-2">
       <Label for={`${id}-model`}>{$t('model.title')}</Label>
       {#if selectedClient}
         {#key selectedClient.id}
           <ModelEffortPicker id={`${id}-model`} client={selectedClient} bind:model={draft.model} bind:effort={draft.reasoning_effort}
-            savedEffort={profile?.model === draft.model ? profile.reasoning_effort : null} bind:available={modelAvailable} bind:effortUnavailable disabled={saving} />
+            savedEffort={profile?.model === draft.model ? profile.reasoning_effort : null} bind:available={modelAvailable} bind:effortUnavailable disabled={saving || resolvingTemplate} />
         {/key}
       {:else}
         <ModelSelectPlaceholder id={`${id}-model`} label={draft.model || $t('model.choose')} />
@@ -271,11 +295,13 @@
   {/if}
   {#if errors.model}<p role="alert" class="-mt-2 text-sm text-destructive">{errors.model}</p>{/if}
 
-  <div class="flex items-center gap-2">
+  {#if botName}{@render description()}{/if}
+  {#if !botName}<div class="flex items-center gap-2">
     <Switch id={`${id}-yolo`} bind:checked={draft.use_yolo} disabled={saving} />
     <Label for={`${id}-yolo`}>{$t('profiles.useYolo')}</Label>
-  </div>
+  </div>{/if}
 
+  {#snippet prompt()}
   <div class="grid gap-2">
     <Label for={`${id}-prompt`}>{$t('profiles.systemPrompt')}</Label>
     <Textarea id={`${id}-prompt`} bind:value={draft.system_prompt} rows={8} spellcheck={false} class="min-h-40 font-mono text-xs leading-5" disabled={saving} aria-invalid={!!errors.system_prompt} />
@@ -283,13 +309,19 @@
     {:else}<p class="text-xs text-muted-foreground">{$t('profiles.promptHint')}</p>{/if}
   </div>
 
+  {/snippet}
+  {#if botName}
+    <details open={!!errors.system_prompt}><summary class="cursor-pointer py-2 text-sm">{$t('profiles.systemPrompt')} <small class="text-muted-foreground">{$t('bots.profileHint.promptCollapsed')}</small></summary>{@render prompt()}</details>
+  {:else}{@render prompt()}{/if}
+
   {#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
   <div class="profile-actions flex flex-wrap justify-end gap-2">
+    {#if onedit}<Button type="button" variant="link" class="mr-auto px-0 max-md:order-last max-md:w-full" disabled={saving || resolvingTemplate || !applied} onclick={() => onedit?.($state.snapshot(draft))}>{$t('bots.profileHint.editInSettings')} ↗</Button>{/if}
     {#if profile && ondelete}
       <Button type="button" variant="ghost" class="text-destructive hover:text-destructive" disabled={saving} aria-label={$t('profiles.deleteNamed', { name: profile.name })} onclick={() => profile && ondelete?.(profile)}><TrashIcon data-icon="inline-start" />{$t('common.delete')}</Button>
     {/if}
-    {#if oncancel}<Button type="button" variant="outline" disabled={saving} onclick={oncancel}>{$t('common.cancel')}</Button>{/if}
-    <Button type="submit" disabled={saving || effortUnavailable || (!profile && !clients.length)}>{$t(profile ? 'common.save' : 'profiles.create')}</Button>
+    {#if oncancel}<Button class={botName ? "max-md:hidden" : undefined} type="button" variant="outline" disabled={saving} onclick={oncancel}>{$t('common.cancel')}</Button>{/if}
+    <Button type="submit" aria-disabled={resolvingTemplate || undefined} class={botName ? "max-md:h-12 max-md:w-full max-md:rounded-full" : undefined} disabled={saving || effortUnavailable || (!profile && !clients.length)}>{$t(botName ? 'common.add' : profile ? 'common.save' : 'profiles.create')}</Button>
   </div>
 </form>
 
@@ -307,6 +339,20 @@
 </AlertDialog.Root>
 
 <style>
+  @media (max-width: 767px) {
+    .quick-profile { gap: .5rem }
+    .quick-profile .field-pair { gap: 0 }
+    .quick-profile .profile-field {
+      min-height: 48px; align-items: center; align-content: center;
+      grid-template-columns: minmax(5.5rem,auto) minmax(0,1fr);
+      border-bottom: 1px solid var(--border);
+    }
+    .quick-profile .profile-field :global(:is(input,button)) { min-height:44px; border-color: transparent }
+    .quick-profile .profile-field :global(input) { text-align: right }
+    .quick-profile :global(textarea) { field-sizing: fixed }
+    .quick-profile summary { min-height:44px }
+    .quick-profile .profile-actions :global(button) { min-height:44px }
+  }
   :global(.mobile-screen) form { padding-bottom: calc(4rem + env(safe-area-inset-bottom)) }
   :global(.mobile-screen) .profile-actions {
     position: absolute;

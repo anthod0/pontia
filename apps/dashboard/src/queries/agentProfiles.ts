@@ -7,9 +7,13 @@ export function createAgentProfileQueries(device: DeviceRuntime) {
   const queryKey = agentProfileKeys.all;
   const invalidate = () => device.queryClient.invalidateQueries({ queryKey });
 
-  function createAgentProfilesQuery() {
+  function createAgentProfilesQuery(enabled = () => true) {
     return createQuery(
-      () => ({ queryKey, queryFn: ({ signal }) => device.api.listAgentProfiles({ signal }) }),
+      () => ({
+        queryKey,
+        enabled: enabled(),
+        queryFn: ({ signal }) => device.api.listAgentProfiles({ signal }),
+      }),
       () => device.queryClient,
     );
   }

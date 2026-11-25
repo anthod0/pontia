@@ -129,6 +129,7 @@
           {#key settings.selectedId}
             <ProfileForm
               profile={settings.selected}
+              startDraft={settings.startDraft}
               clients={settings.enabledClients}
               allClients={settings.clients.data ?? []}
               template={settings.selected ? undefined : settings.startTemplate}

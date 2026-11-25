@@ -8,7 +8,8 @@
   import { profileTemplates } from './publishedTemplates'
   import { templateClientName, templateClientStatus, templateIcon, type ProfileTemplate } from './templates'
 
-  let { clients, selected, onchoose, class: className }: {
+  let { templates = $profileTemplates, clients, selected, onchoose, class: className }: {
+    templates?: ProfileTemplate[]
     clients: AgentClientView[]
     selected?: string
     onchoose: (template: ProfileTemplate) => void
@@ -17,7 +18,7 @@
 </script>
 
 <div class={cn('no-scrollbar -mx-4 flex snap-x snap-mandatory scroll-px-4 gap-2 overflow-x-auto px-4 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0', className)}>
-  {#each $profileTemplates as template (template.id)}
+  {#each templates as template (template.id)}
     {@const text = template.text.en}
     {@const status = templateClientStatus(template, clients)}
     {@const clientName = templateClientName(template, clients)}

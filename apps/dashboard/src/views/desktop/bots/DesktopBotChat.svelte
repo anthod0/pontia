@@ -7,6 +7,7 @@
   import BotChatSkeleton from '../../../components/bots/BotChatSkeleton.svelte'
   import { provideLocalhostPreview } from '../../../components/chat/localhostPreviewContext'
   import { provideFilePreviewNavigator } from '../../../components/chat/filePreviewContext'
+  import ProfileHint from '../../../components/bots/ProfileHint.svelte'
   import BotQuoteChip from '../../../components/bots/BotQuoteChip.svelte'
   import DesktopBotPanel from './DesktopBotPanel.svelte'
   import type { BotChatController } from '../../../features/bots/botChat.svelte'
@@ -60,6 +61,7 @@
           <span class="shimmer line-clamp-2 min-w-0 [overflow-wrap:anywhere]" title={timeline.status.title}>{timeline.status.title}</span>
         </p>
       {/if}
+      <ProfileHint {chat} name={timeline.bot.name} />
       <MessageComposer bind:this={chat.composer} draftId={`bot:${chat.botId}`} bind:value={chat.draft} placeholder={$t('bots.message')} fullscreen
         prefix={chat.quote ? chip : undefined}
         onRemovePrefix={() => chat.setQuote(null)}

@@ -1,3 +1,6 @@
+import { page } from "$app/state";
+import { untrack } from "svelte";
+import type { AgentProfileDraft } from "../../pages/agentProfiles/form";
 import { createQuery } from "@tanstack/svelte-query";
 import { translate } from "$lib/i18n";
 import { toast } from "svelte-sonner";
@@ -5,14 +8,51 @@ import { useDeviceRuntime } from "../../device/context";
 import type { AgentProfileView } from "../../api/types";
 import type { ProfileTemplate } from "../../pages/agentProfiles/templates";
 
-export function createAgentProfiles() {
+export function createProfileQueries(enabled = () => true) {
   const device = useDeviceRuntime();
-  const profiles = device.agentProfileQueries.createAgentProfilesQuery();
+  const profiles = device.agentProfileQueries.createAgentProfilesQuery(enabled);
   const clients = createQuery(
-    () => ({ queryKey: ["agent-clients"], queryFn: () => device.api.listAgentClients() }),
+    () => ({
+      enabled: enabled(),
+      queryKey: ["agent-clients"],
+      queryFn: () => device.api.listAgentClients(),
+    }),
     () => device.queryClient,
   );
   const enabledClients = $derived(clients.data?.filter((client) => client.enabled) ?? []);
+  return {
+    profiles,
+    clients,
+    get enabledClients() {
+      return enabledClients;
+    },
+  };
+}
+
+export function createAgentProfiles(onopen?: (title: string) => void) {
+  const queries = createProfileQueries();
+  const { profiles, clients } = queries;
+  let startDraft = $state<AgentProfileDraft>();
+  let incoming = untrack(() => ({
+    draft: page.state.profileDraft,
+    profile: page.url.searchParams.get("profile"),
+  }));
+  $effect(() => {
+    if ((!incoming.draft && !incoming.profile) || loading || !profiles.data) return;
+    const { draft, profile } = incoming;
+    incoming = { draft: undefined, profile: null };
+    if (draft) {
+      selectedId = "";
+      startDraft = draft;
+      untrack(() => onopen?.(translate("profiles.new")));
+    } else {
+      const target = profiles.data.find((item) => item.profile_id === profile);
+      if (target) {
+        selectedId = target.profile_id;
+        untrack(() => onopen?.(target.name));
+      }
+    }
+  });
   // `null` selects nothing; `''` opens the new-profile editor.
   let selectedId = $state<string | null>(null);
   let saving = $state(false);
@@ -27,6 +67,7 @@ export function createAgentProfiles() {
   const creationDisabled = $derived(saving || loading || !profiles.data);
 
   function openNew(template?: ProfileTemplate) {
+    startDraft = undefined;
     startTemplate = template;
     selectedId = "";
   }
@@ -63,8 +104,11 @@ export function createAgentProfiles() {
     get editorOpen() {
       return editorOpen;
     },
+    get startDraft() {
+      return startDraft;
+    },
     get enabledClients() {
-      return enabledClients;
+      return queries.enabledClients;
     },
     get loading() {
       return loading;

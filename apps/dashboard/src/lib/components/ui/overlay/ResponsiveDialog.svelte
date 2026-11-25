@@ -6,7 +6,7 @@
   import BottomSheet from './BottomSheet.svelte'
   import { cn } from '$lib/utils'
 
-  let { mode, dismiss, class: className, children, ...props }: Pick<ComponentProps<typeof Dialog.Content>, 'class' | 'children' | 'showCloseButton' | 'aria-describedby'> & (
+  let { mode, dismiss, class: className, children, ...props }: Pick<ComponentProps<typeof Dialog.Content>, 'class' | 'children' | 'showCloseButton' | 'aria-describedby' | 'onOpenAutoFocus' | 'onCloseAutoFocus'> & (
     { mode: 'sheet'; dismiss: () => void } | { mode: 'fullscreen'; dismiss?: never }
   ) = $props()
   const mobile = new IsMobile()

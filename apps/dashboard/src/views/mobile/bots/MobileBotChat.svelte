@@ -15,6 +15,7 @@
   import BotConversation from '../../../components/bots/BotConversation.svelte'
   import BotChatSkeleton from '../../../components/bots/BotChatSkeleton.svelte'
   import BotAvatar from '../../../components/bots/BotAvatar.svelte'
+  import ProfileHint from '../../../components/bots/ProfileHint.svelte'
   import BotQuoteChip from '../../../components/bots/BotQuoteChip.svelte'
   import type { BotChatController } from '../../../features/bots/botChat.svelte'
   import MobileMessageComposer from '../chat/MobileMessageComposer.svelte'
@@ -148,6 +149,7 @@
             onclick={() => (todos = true)}>{$t('bots.todos')} · {timeline.openTodoCount}</button
           >{/if}
       </div>
+      <ProfileHint {chat} name={timeline.bot.name} />
       <MobileMessageComposer
         bind:this={chat.composer}
         bind:value={chat.draft}

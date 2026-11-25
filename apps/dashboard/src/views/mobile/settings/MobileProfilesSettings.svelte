@@ -15,7 +15,7 @@
   import type { ProfileTemplate } from '../../../pages/agentProfiles/templates'
   import { createAgentProfiles } from '../../../features/settings/agentProfiles.svelte'
   import { useMobileStack } from '$lib/mobile/overlayStack.svelte'
-  const settings = createAgentProfiles()
+  const settings = createAgentProfiles(openEditor)
   const stack = useMobileStack()!
   const { action } = useMobileHeader()
   let editorId: string
@@ -109,6 +109,7 @@
   {#key settings.selectedId}
     <ProfileForm
       profile={settings.selected}
+      startDraft={settings.startDraft}
       clients={settings.enabledClients}
       allClients={settings.clients.data ?? []}
       template={settings.selected ? undefined : settings.startTemplate}
