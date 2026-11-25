@@ -18,6 +18,9 @@ pub(super) enum BotTool {
     /// Create, message, inspect, compact, or close helpers; helpers use reply to report to their Bot
     #[command(subcommand)]
     Helper(HelperCommand),
+    /// Read the requesting Bot's chat history (deep retrieval helper)
+    #[command(subcommand)]
+    ChatHistory(ChatHistory),
     /// Read Session messages without changing execution state
     SessionMessages(SessionMessages),
     /// Update shared USER.md (at most 2,000 characters)
@@ -45,6 +48,29 @@ pub(super) enum BotTool {
     Workspace(WorkspaceCommand),
     /// Read or maintain device memories
     Memory(MemoryArgs),
+}
+
+#[derive(Debug, Subcommand, Serialize)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub(super) enum ChatHistory {
+    /// Search for literal text, newest matches first
+    Search {
+        #[arg(long, allow_hyphen_values = true)]
+        keyword: String,
+        /// Continue from next_before in the preceding page
+        #[arg(long)]
+        before: Option<String>,
+        #[arg(long, default_value_t = 10, value_parser = clap::value_parser!(u32).range(1..=100))]
+        limit: u32,
+    },
+    /// Read the matched message and its chronological neighbors
+    Context {
+        #[arg(long)]
+        message_id: String,
+        /// Maximum messages on each side of the anchor
+        #[arg(long, default_value_t = 3, value_parser = clap::value_parser!(u32).range(0..=50))]
+        radius: u32,
+    },
 }
 
 #[derive(Debug, Args, Serialize)]
@@ -337,4 +363,46 @@ pub(super) struct MemoryArgs {
     pub reason: Option<String>,
     #[command(subcommand)]
     pub command: MemoryCommand,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn chat_history_commands_parse_only_scoped_reads() {
+        for args in [
+            vec!["search", "--keyword", "部署"],
+            vec!["context", "--message-id", "m1", "--radius", "0"],
+        ] {
+            let cli = crate::Cli::try_parse_from(
+                ["pontia", "bot", "chat-history"].into_iter().chain(args),
+            )
+            .unwrap();
+            let crate::Command::Bot(BotCommand {
+                command: BotTool::ChatHistory(input),
+                ..
+            }) = cli.command
+            else {
+                panic!("expected chat-history")
+            };
+            serde_json::from_value::<pontia_bot::conversation::chat_history::ChatQuery>(
+                serde_json::to_value(input).unwrap(),
+            )
+            .unwrap();
+        }
+        for args in [
+            vec!["search", "--keyword", "部署", "--bot-id", "other"],
+            vec!["context", "--message-id", "m1", "--radius", "51"],
+            vec!["delete", "--message-id", "m1"],
+        ] {
+            assert!(
+                crate::Cli::try_parse_from(
+                    ["pontia", "bot", "chat-history"].into_iter().chain(args)
+                )
+                .is_err()
+            );
+        }
+    }
 }

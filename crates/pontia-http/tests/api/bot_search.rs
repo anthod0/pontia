@@ -1,6 +1,6 @@
 use super::{common::test_app::TestApp, support::http::get_json};
 use axum::http::StatusCode;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 async fn fixture() -> TestApp {
     let app = TestApp::new().await;
@@ -201,5 +201,150 @@ async fn rejects_invalid_requests() {
     assert_eq!(
         search(&app, "missing", &[("q", "部署")]).await.0,
         StatusCode::NOT_FOUND
+    );
+}
+
+async fn chat_tool(
+    app: &TestApp,
+    tool: &str,
+    session: &str,
+    credential: &str,
+    input: Value,
+) -> (StatusCode, Value) {
+    use super::support::http::{TOKEN, json_response};
+    use axum::{
+        body::Body,
+        http::{Request, header},
+    };
+    use tower::ServiceExt;
+
+    let response = pontia_http::router(app.state.clone())
+        .oneshot(
+            Request::post(format!("/api/v1/bot/{tool}"))
+                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(pontia_bot::identity::TOOL_TOKEN_HEADER, credential)
+                .body(Body::from(
+                    json!({"session_id":session,"input":input}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    json_response(response).await
+}
+
+async fn retrieval_fixture() -> TestApp {
+    let app = fixture().await;
+    sqlx::query(r#"INSERT INTO sessions(session_id,client_type,state,role,runtime_environment)
+        VALUES ('reader','generic','idle','retrieval','{"PONTIA_BOT_TOOL_TOKEN":"cred-a"}'),
+               ('other-reader','generic','idle','retrieval','{"PONTIA_BOT_TOOL_TOKEN":"cred-b"}'),
+               ('helper','generic','idle',NULL,'{"PONTIA_BOT_TOOL_TOKEN":"cred-h"}');
+        INSERT INTO bot_helpers(reference,bot_id,session_id) VALUES
+            ('helper:a:r','a','reader'), ('helper:b:r','b','other-reader'), ('helper:a:h','a','helper');"#)
+        .execute(&app.db).await.unwrap();
+    app
+}
+
+#[tokio::test]
+async fn retrieval_search_and_chronological_context_stay_in_the_requesting_bot_chat() {
+    let app = retrieval_fixture().await;
+    for (session, credential, input, expected) in [
+        (
+            "reader",
+            "cred-a",
+            json!({"action":"search","keyword":"部署","limit":10}),
+            vec!["m2", "m1"],
+        ),
+        (
+            "other-reader",
+            "cred-b",
+            json!({"action":"search","keyword":"部署","limit":10}),
+            vec!["other"],
+        ),
+        (
+            "reader",
+            "cred-a",
+            json!({"action":"context","message_id":"t1","radius":2}),
+            vec!["m6", "m7", "t1", "t2", "t3"],
+        ),
+        (
+            "reader",
+            "cred-a",
+            json!({"action":"context","message_id":"t1","radius":0}),
+            vec!["t1"],
+        ),
+    ] {
+        let (status, body) = chat_tool(&app, "chat-history", session, credential, input).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let ids: Vec<_> = body["data"]["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|message| message["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(ids, expected);
+    }
+    for (input, status) in [
+        (
+            json!({"action":"context","message_id":"other","radius":1}),
+            StatusCode::NOT_FOUND,
+        ),
+        (
+            json!({"action":"search","keyword":"部署","limit":1,"before":"other"}),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            json!({"action":"search","keyword":"部署","limit":1,"bot_id":"b"}),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            json!({"action":"context","message_id":"t1","radius":51}),
+            StatusCode::BAD_REQUEST,
+        ),
+    ] {
+        assert_eq!(
+            chat_tool(&app, "chat-history", "reader", "cred-a", input)
+                .await
+                .0,
+            status
+        );
+    }
+}
+
+#[tokio::test]
+async fn chat_reads_require_a_live_retrieval_credential_and_grant_no_write_permission() {
+    let app = retrieval_fixture().await;
+    let search = json!({"action":"search","keyword":"部署","limit":1});
+    for (session, credential) in [("other-reader", "cred-a"), ("helper", "cred-h")] {
+        assert_eq!(
+            chat_tool(&app, "chat-history", session, credential, search.clone())
+                .await
+                .0,
+            StatusCode::FORBIDDEN
+        );
+    }
+    assert_eq!(
+        chat_tool(
+            &app,
+            "send-to-user",
+            "reader",
+            "cred-a",
+            json!({"message":"unauthorized"})
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    assert!(ids(&app, &[("q", "unauthorized")]).await.0.is_empty());
+    sqlx::query("UPDATE sessions SET state='exited' WHERE session_id='reader'")
+        .execute(&app.db)
+        .await
+        .unwrap();
+    assert_eq!(
+        chat_tool(&app, "chat-history", "reader", "cred-a", search)
+            .await
+            .0,
+        StatusCode::FORBIDDEN
     );
 }

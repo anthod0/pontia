@@ -43,6 +43,7 @@ pub(crate) async fn run(command: BotCommand, config: &AppConfig) -> Result<(), S
         }
         BotTool::Profile(input) => ("profile", json!(input), true),
         BotTool::Workspace(input) => ("workspace", json!(input), true),
+        BotTool::ChatHistory(input) => ("chat-history", json!(input), false),
         BotTool::SessionMessages(input) => ("session-messages", json!(input), false),
         BotTool::UpdateUser(input) => ("user", json!(input), false),
         BotTool::SetDescription { description } => {

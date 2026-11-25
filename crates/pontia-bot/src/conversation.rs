@@ -23,6 +23,7 @@ pub mod profiles;
 mod status;
 pub use status::WorkStatus;
 
+pub mod chat_history;
 mod deletion;
 pub use deletion::DeletionBlockers;
 mod generation;
@@ -429,6 +430,26 @@ impl ConversationService {
             });
         }
         Ok(file)
+    }
+
+    async fn active_helper(&self, session_id: &str) -> Result<Option<(String, BotRole)>> {
+        let Some(bot_id) = crate::helpers::helper_bot(&self.control.db(), session_id).await? else {
+            return Ok(None);
+        };
+        let session = self
+            .control
+            .queries()
+            .get_session(session_id)
+            .await?
+            .filter(|session| session.state != "exited")
+            .ok_or_else(|| Error::Conflict {
+                code: "bot_session_required",
+                message: "An active helper Session is required".into(),
+            })?;
+        Ok(Some((
+            bot_id,
+            crate::helpers::helper_role(session.role.as_deref()),
+        )))
     }
 
     pub async fn search_messages(
@@ -854,23 +875,13 @@ impl BotIdentity for ConversationService {
                     workspace_id: None,
                 });
             }
-            if crate::helpers::helper_bot(&self.control.db(), session_id)
+            if let Some((_, role)) = self
+                .active_helper(session_id)
                 .await
                 .map_err(|_| IdentityError)?
-                .is_some()
             {
-                let session = self
-                    .control
-                    .queries()
-                    .get_session(session_id)
-                    .await
-                    .map_err(|_| IdentityError)?
-                    .ok_or(IdentityError)?;
-                if session.state == "exited" {
-                    return Err(IdentityError);
-                }
                 return Ok(BotAccess {
-                    role: crate::helpers::helper_role(session.role.as_deref()),
+                    role,
                     workspace_id: None,
                 });
             }

@@ -269,6 +269,24 @@ pub async fn set_description(
     Ok(ok(json!({"description": bot.description})))
 }
 
+pub async fn chat_history(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    request: Result<
+        Json<BotToolRequest<pontia_bot::conversation::chat_history::ChatQuery>>,
+        JsonRejection,
+    >,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let Json(request) = request.map_err(|error| ApiError::invalid_request(error.body_text()))?;
+    super::bot_context::authorize_tool(&state, &headers, &request.session_id).await?;
+    let result = state
+        .bots()
+        .chat_history(&request.session_id, request.input)
+        .await
+        .map_err(bot_tool_error)?;
+    Ok(ok(json!(result)))
+}
+
 pub async fn link_message(
     State(state): State<HttpState>,
     headers: HeaderMap,
