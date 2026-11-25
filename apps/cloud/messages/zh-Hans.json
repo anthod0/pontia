@@ -93,7 +93,7 @@
   "hero_description": "离开工位，Agent 不停工。Bot 帮你推进任务，会话、文件和本地预览随时可看。",
   "hero_copy_failed": "无法复制。请选中命令手动复制。",
   "hero_requirements": "Linux 和 macOS",
-  "hero_demo_caption": "使用示例数据的交互式 Dashboard 演示。选择一个 Session 或切换设备来体验。",
+  "hero_demo_caption": "使用示例数据的交互式 Dashboard 演示。选择 Session 或切换设备，打开 Markdown 文件，查看 Git 变更和提交历史，或点击 localhost 链接体验 Atlas 应用。",
   "bots_title": "Agent 再多，也不用一个个盯。",
   "bots_intro": "把工作交给常驻本机的 Bot。它让多个助手在各自的环境里并行工作，把等你拍板的事列为待办，隔天也能接着做。",
   "bots_pick": "选一个 Bot，看看它怎么干活。",

@@ -1,5 +1,5 @@
 <script lang="ts" module>
-	export type PanelTab = 'files' | 'context' | 'todo' | 'search' | 'git';
+	export type PanelTab = 'files' | 'preview' | 'context' | 'todo' | 'search' | 'git';
 </script>
 
 <script lang="ts">
@@ -28,6 +28,9 @@
 	import BotAvatarMark from '$lib/components/bot-story/BotAvatarMark.svelte';
 	import DemoFilesTab from './DemoFilesTab.svelte';
 	import DemoGitChanges from './DemoGitChanges.svelte';
+	import DemoPreviewTab from './DemoPreviewTab.svelte';
+	import DemoStackHeader from './DemoStackHeader.svelte';
+	import GlobeIcon from 'phosphor-svelte/lib/GlobeIcon';
 	import type { DemoBot, DemoBotEntry, DemoTodo, DemoWorkspace } from './mockData';
 	import { plainText } from './text';
 
@@ -39,6 +42,8 @@
 		element = $bindable(),
 		tab = $bindable(),
 		file = $bindable(),
+		preview = $bindable(),
+		phone,
 		selected = $bindable(),
 		recent = $bindable(),
 		query = $bindable(),
@@ -57,6 +62,9 @@
 		element?: HTMLElement;
 		tab: PanelTab;
 		file: string | null;
+		/** The localhost address the Preview tab shows. */
+		preview: string | null;
+		phone: boolean;
 		selected: string | null;
 		/** Recently opened files, newest first. */
 		recent: string[];
@@ -101,9 +109,19 @@
 	const results = $derived(query.trim() ? messages.filter((entry) => plainText(entry).toLowerCase().includes(query.trim().toLowerCase())).reverse() : []);
 	const workspace = $derived(workspaces.find((item) => item.id === workspaceId));
 
-	const tabTrigger = 'h-full flex-none px-1 text-xs @[27.5rem]/panel:px-2 @[27.5rem]/panel:text-sm text-foreground/60 hover:text-foreground data-[state=active]:text-foreground data-[state=active]:after:opacity-100 [&_svg]:size-4';
+	const tabTitles: Record<PanelTab, string> = { files: 'Files', preview: 'Preview', context: 'Context', todo: 'Todo', search: 'Search', git: 'Git' };
+	const tabTrigger = 'h-full flex-none px-1 text-xs @[32rem]/panel:px-2 @[32rem]/panel:text-sm text-foreground/60 hover:text-foreground data-[state=active]:text-foreground data-[state=active]:after:opacity-100 [&_svg]:size-4';
 	const smallButton = 'inline-flex h-6 items-center gap-1 rounded-md px-2 text-xs font-medium hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary [&_svg]:size-3.5';
-	const iconButton = 'flex size-7 shrink-0 items-center justify-center rounded-md text-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary';
+	const iconButton = 'flex size-7 shrink-0 items-center justify-center rounded-full text-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary';
+
+	const stack = $derived(tab === 'git' ? git?.title() : null);
+
+	function back() {
+		if (tab === 'git' && git?.goBack()) return;
+		if (tab === 'git' && phone && workspaceId) workspaceId = null;
+		else if (tab === 'files' && file) file = null;
+		else onclose();
+	}
 
 	function highlight(text: string): { text: string; match: boolean }[] {
 		const needle = query.trim().toLowerCase();
@@ -199,16 +217,25 @@
 	</span>
 {/snippet}
 
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <aside
+	tabindex="-1"
+	{@attach node => node.focus({ preventScroll: true })}
+	onkeydown={(event) => {
+		if (event.key !== 'Escape' || event.defaultPrevented) return;
+		event.preventDefault();
+		back();
+	}}
 	bind:this={element}
-	class="@container/panel absolute inset-0 z-20 flex min-w-0 flex-col bg-surface @5xl:static @5xl:z-auto @5xl:w-[28rem] @5xl:shrink-0 @5xl:border-l @5xl:border-border"
+	class="demo-stack-screen @container/panel absolute inset-0 z-20 flex min-w-0 flex-col bg-surface @5xl:static @5xl:z-auto @5xl:w-[28rem] @5xl:shrink-0 @5xl:border-l @5xl:border-border"
 	aria-label="Sidebar"
 >
 	<Tabs.Root bind:value={tab} class="min-h-0 flex-1 flex-col gap-0">
-		<header class="flex h-12 shrink-0 items-center justify-between gap-1 border-b border-border px-2">
+		<header class="flex h-12 shrink-0 items-center justify-between gap-1 border-b border-border px-2 @max-3xl/demo:hidden">
 			<!-- Narrow panels show the tab labels without icons; the phone frame also scrolls them sideways. -->
-			<Tabs.List variant="line" aria-label="Sidebar" class="no-scrollbar h-full min-w-0 justify-start gap-0 overflow-x-auto p-0 @max-[27.5rem]/panel:[&_svg]:hidden">
+			<Tabs.List variant="line" aria-label="Sidebar" class="no-scrollbar h-full min-w-0 justify-start gap-0 overflow-x-auto p-0 @max-[32rem]/panel:[&_svg]:hidden">
 				<Tabs.Trigger value="files" class={tabTrigger}><FileTextIcon />Files</Tabs.Trigger>
+				<Tabs.Trigger value="preview" class={tabTrigger}><GlobeIcon />Preview</Tabs.Trigger>
 				<Tabs.Trigger value="context" class={tabTrigger}><TreeStructureIcon />Context</Tabs.Trigger>
 				<Tabs.Trigger value="todo" class={tabTrigger}>
 					<ListChecksIcon />Todo
@@ -219,6 +246,11 @@
 			</Tabs.List>
 			<button type="button" class={iconButton} aria-label="Close" title="Close" onclick={onclose}><XIcon class="size-4" /></button>
 		</header>
+		<div class="hidden @max-3xl/demo:block">
+			<DemoStackHeader title={stack?.title ?? (tab === 'files' && file ? file : tabTitles[tab])} subtitle={stack ? stack.subtitle : bot.name} onback={back} />
+		</div>
+
+		{#if tab === 'preview'}<DemoPreviewTab bind:url={preview} />{/if}
 
 		<DemoFilesTab files={bot.files} {file} {recent} onopen={onopenfile} onclose={() => (file = null)} onclear={() => (recent = [])} />
 
@@ -289,7 +321,7 @@
 						placeholder="Search this chat"
 						aria-label="Search messages"
 						bind:value={query}
-						onkeydown={(event) => { if (event.key === 'Escape') query = ''; }}
+						onkeydown={(event) => { if (event.key === 'Escape' && query) { event.preventDefault(); query = ''; } }}
 					/>
 					{#if query}
 						<button type="button" class="absolute top-1/2 right-1.5 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Clear" onclick={() => (query = '')}><XIcon class="size-3.5" /></button>
@@ -322,14 +354,13 @@
 			</div>
 		</Tabs.Content>
 
-		<Tabs.Content onkeydown={(event) => git?.keydown(event)} value="git" class="flex min-h-0 flex-col">
+		<Tabs.Content value="git" class="flex min-h-0 flex-col">
 			{#if workspace}
 				{#key workspace.id}
 					<DemoGitChanges bind:this={git} git={workspace.git} hint="↑↓ select · Enter open · Esc back">
-						{#snippet header()}
-							<div class="flex h-12 shrink-0 items-center gap-1 border-b border-border px-2">
+						{#snippet heading()}
 								<Select.Root type="single" value={workspace.id} onValueChange={(value) => (workspaceId = value)}>
-									<Select.Trigger class="h-9! min-w-0 flex-1 rounded-md border-0 px-2 text-sm hover:bg-muted" title={workspace.path} aria-label={`Workspace: ${workspace.name}`}>
+									<Select.Trigger class="-ml-2 h-8! min-w-0 flex-1 rounded-full border-0 px-2 text-sm hover:bg-muted" title={workspace.path} aria-label={`Workspace: ${workspace.name}`}>
 										<FolderIcon class="size-4 text-muted-foreground" />
 										<span class="min-w-0 flex-1 truncate text-left font-medium text-heading">{workspace.name}</span>
 										<span class="text-xs text-muted-foreground tabular-nums">{workspace.git.changes.length}</span>
@@ -340,8 +371,6 @@
 										{/each}
 									</Select.Content>
 								</Select.Root>
-								<span class="flex size-7 items-center justify-center" aria-hidden="true"><ArrowClockwiseIcon class="size-4" /></span>
-							</div>
 						{/snippet}
 					</DemoGitChanges>
 				{/key}

@@ -67,7 +67,7 @@
 			</div>
 			<div class="dashboard-frame"><DashboardDemo /></div>
 		</div>
-		<figcaption class="sr-only">{m.hero_demo_caption()}</figcaption>
+		<figcaption id="hero-demo-caption" class="sr-only">{m.hero_demo_caption()}</figcaption>
 	</figure>
 </section>
 

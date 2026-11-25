@@ -16,6 +16,8 @@
 	import { cn } from '$lib/utils';
 	import BotAvatarMark from '$lib/components/bot-story/BotAvatarMark.svelte';
 	import DemoNewChat from './DemoNewChat.svelte';
+	import DemoActionSheet from './DemoActionSheet.svelte';
+	import DemoBrowserTab from './DemoBrowserTab.svelte';
 	import DemoBotChat from './DemoBotChat.svelte';
 	import DemoConversation from './DemoConversation.svelte';
 	import DemoSessionPanel from './DemoSessionPanel.svelte';
@@ -25,9 +27,27 @@
 	let deviceHandle = $state(demoDevices[0].handle);
 	let previousDeviceHandle = $state<string | null>(null);
 	let panelOpen = $state(false);
-	let panelTab = $state<'files' | 'git'>('files');
+	let panelTab = $state<'files' | 'preview' | 'git'>('files');
 	let file = $state<string | null>(null);
 	let diff = $state<DemoChange | null>(null);
+	let preview = $state<string | null>(null);
+	// Phones open localhost links in a new browser tab, which the demo draws inside the frame.
+	let browserTab = $state<string | null>(null);
+	let browserLink: HTMLElement | null;
+
+	function openBrowser(url: string) {
+		browserLink = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		browserTab = url;
+	}
+
+	function closeBrowser() {
+		browserTab = null;
+		browserLink?.focus({ preventScroll: true });
+	}
+	let actions = $state(false);
+	let actionsButton = $state<HTMLButtonElement>();
+	let width = $state(0);
+	const phone = $derived(width > 0 && width < 768);
 	let panelButton = $state<HTMLButtonElement>();
 	// Open on a session whose conversation fits without scrolling.
 	let sessionId = $state('review-api');
@@ -73,6 +93,7 @@
 		panelOpen = false;
 		file = null;
 		diff = null;
+		preview = null;
 	}
 
 	function selectSession(next: DemoSession): void {
@@ -97,12 +118,30 @@
 		panelOpen = true;
 	}
 
+	/** Desktop shows a localhost link in the Preview tab; phones open it in a browser tab. */
+	function openPreview(url: string) {
+		if (phone) {
+			openBrowser(url);
+			return;
+		}
+		preview = url;
+		panelTab = 'preview';
+		panelOpen = true;
+	}
+
+	function openPanel(tab: 'files' | 'git') {
+		actions = false;
+		panelTab = tab;
+		panelOpen = true;
+	}
+
 	function closePanel() {
 		panelOpen = false;
-		panelButton?.focus({ preventScroll: true });
+		(phone ? actionsButton : panelButton)?.focus({ preventScroll: true });
 	}
 
 	function shortcut(event: KeyboardEvent) {
+		if (browserTab || event.defaultPrevented) return;
 		if (event.key === 'Escape' && mobileSidebarOpen) {
 			mobileSidebarOpen = false;
 			event.preventDefault();
@@ -151,7 +190,7 @@
 {/snippet}
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div onkeydown={shortcut} class="dashboard-demo demo-git-colors @container relative flex h-full overflow-hidden bg-surface text-foreground" role="region" aria-label="Interactive Dashboard demo with sample data">
+<div bind:clientWidth={width} onkeydown={shortcut} class="dashboard-demo demo-git-colors @container/demo relative flex h-full overflow-hidden bg-surface text-foreground" role="region" aria-labelledby="hero-demo-caption">
 	{#if mobileSidebarOpen}
 		<button type="button" class="absolute inset-0 z-20 bg-black/40 @3xl:hidden" aria-label="Close sidebar" onclick={() => (mobileSidebarOpen = false)}></button>
 	{/if}
@@ -335,46 +374,56 @@
 				{bot}
 				workspaces={device.workspaces}
 				onopensidebar={() => (mobileSidebarOpen = true)}
+				{phone}
+				onopenbrowser={openBrowser}
 				ontodochange={(entry, todo) => (entry.todo = todo)}
 				onsend={(text, quote) => bot.entries.push({ id: crypto.randomUUID(), kind: 'user', text, quote, time: 'Just now' })}
 			/>
 		{/key}
 	{:else}
 		<div class="relative flex min-w-0 flex-1 flex-col">
-			<!-- Like the Dashboard, the top bar floats over the conversation. -->
-			<div class="pointer-events-none absolute inset-x-0 top-0 z-10 flex h-12 items-center gap-2 px-3 @3xl:px-4">
-				<div class="pointer-events-auto flex h-8 max-md:h-10 min-w-0 items-center rounded-lg bg-popover px-1 ring-1 ring-foreground/10">
-					<button type="button" class="flex size-10 shrink-0 items-center justify-center rounded-md hover:bg-muted @3xl:hidden" aria-label="Open sidebar" aria-expanded={mobileSidebarOpen} onclick={() => (mobileSidebarOpen = true)}>
-						<CaretLeftIcon class="size-4" />
-					</button>
-					<span class="mx-1 hidden min-w-0 max-w-80 truncate px-2 py-0.5 text-sm text-heading @3xl:block">{session.title}</span>
+			<!-- Like the Dashboard, the top bar floats over the conversation. Desktop uses pills; phones use the mobile Dashboard's glass circles. -->
+			<div class="pointer-events-none absolute inset-x-0 top-0 z-10 flex h-12 items-center gap-2 px-3 @3xl:px-4 @max-3xl/demo:h-16 @max-3xl/demo:bg-linear-to-b @max-3xl/demo:from-surface @max-3xl/demo:from-70% @max-3xl/demo:to-surface/0 @max-3xl/demo:pt-1">
+				<button type="button" class="demo-glass pointer-events-auto grid size-10 shrink-0 place-items-center rounded-full @3xl:hidden" aria-label="Open sidebar" aria-expanded={mobileSidebarOpen} onclick={() => (mobileSidebarOpen = true)}>
+					<CaretLeftIcon class="size-[18px]" />
+				</button>
+				<div class="pointer-events-auto flex h-8 min-w-0 items-center rounded-full bg-popover px-1 ring-1 ring-foreground/10 demo-title-pill @max-3xl/demo:h-10 @max-3xl/demo:ring-0">
+					<span class="mx-1 min-w-0 max-w-80 truncate px-2 py-0.5 text-sm text-heading @max-3xl/demo:text-[15px] @max-3xl/demo:font-semibold">{session.title}</span>
+					{#if session.state !== 'exited'}<span class={cn('mr-3 hidden size-2 shrink-0 rounded-full @max-3xl/demo:block', stateDot[session.state])}></span>{/if}
 				</div>
 				<span class="flex-1"></span>
-				<span class="pointer-events-auto flex h-8 max-md:h-10 shrink-0 items-center rounded-lg bg-popover px-1 ring-1 ring-foreground/10 @3xl:hidden" aria-hidden="true">
-					<span class="flex size-7 items-center justify-center"><DotsThreeIcon class="size-5" weight="bold" /></span>
-				</span>
-				<span class="pointer-events-auto flex h-8 max-md:h-10 shrink-0 items-center rounded-lg bg-popover px-1 ring-1 ring-foreground/10">
-					<button
-						type="button"
-						class={cn('relative flex size-7 max-md:size-10 items-center justify-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary', panelOpen && 'bg-muted text-heading')}
-						bind:this={panelButton}
-						aria-label="Sidebar"
-						aria-pressed={panelOpen}
-						title="Sidebar"
-						onclick={() => (panelOpen = !panelOpen)}
-					>
-						<SidebarSimpleIcon class="size-4 -scale-x-100" />
-					</button>
-				</span>
+				<button type="button" class="demo-glass pointer-events-auto grid size-10 shrink-0 place-items-center rounded-full @3xl:hidden" bind:this={actionsButton} aria-label="Chat actions" onclick={() => (actions = true)}>
+					<DotsThreeIcon class="size-5" weight="bold" />
+				</button>
+				<button
+					type="button"
+					class={cn('pointer-events-auto relative flex size-8 items-center justify-center rounded-full ring-1 ring-foreground/10 hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary @max-3xl/demo:hidden', panelOpen ? 'bg-muted text-heading' : 'bg-popover')}
+					bind:this={panelButton}
+					aria-label="Sidebar"
+					aria-pressed={panelOpen}
+					title="Sidebar"
+					onclick={() => (panelOpen = !panelOpen)}
+				>
+					<SidebarSimpleIcon class="size-4 -scale-x-100" />
+				</button>
 			</div>
 			{#key session.id}
-				<DemoConversation {session} {workspace} onopenfile={openFile} />
+				<DemoConversation {session} {workspace} onopenfile={openFile} onopenpreview={openPreview} />
 			{/key}
 		</div>
 
 		{#if panelOpen}
-			<DemoSessionPanel {session} {workspace} bind:tab={panelTab} bind:file bind:diff onopenfile={openFile} onclear={() => (session.recentFiles = [])} onclose={closePanel} />
+			<DemoSessionPanel {session} {workspace} bind:tab={panelTab} bind:file bind:diff bind:preview onopenfile={openFile} onclear={() => (session.recentFiles = [])} onclose={closePanel} />
 		{/if}
+		{#if actions}
+			<DemoActionSheet title={session.title} subtitle={`${workspace.path}`} onclose={() => { actions = false; actionsButton?.focus({ preventScroll: true }); }} rows={[
+				{ label: 'Files', detail: String(session.recentFiles?.length ?? 0), onselect: () => openPanel('files') },
+				{ label: 'Git', detail: `${workspace.git.branch}${workspace.git.changes.length ? ' dirty' : ''}`, onselect: () => openPanel('git') }
+			]} />
+		{/if}
+	{/if}
+	{#if browserTab}
+		<DemoBrowserTab bind:url={browserTab} onclose={closeBrowser} />
 	{/if}
 </div>
 
@@ -391,6 +440,48 @@
 		--demo-git-modified: #fabd2f;
 		--demo-git-untracked: #8ec07c;
 		--demo-git-behind: #d3869b;
+	}
+	/* Radii of the Dashboard's desktop shell. The site's radius-xl is 12px; the Dashboard's is 10px. */
+	.dashboard-demo {
+		--radius-xl: 10px;
+		--radius-field: var(--radius-xl);
+		--demo-code-heading: #9d0006;
+		--demo-code-strong: #af3a03;
+		--glass-line: rgb(0 0 0 / 7%);
+		--glass-shadow: 0 1px 1px rgb(0 0 0 / 4%), 0 6px 18px rgb(0 0 0 / 8%);
+	}
+	:global(.dark) .dashboard-demo {
+		--demo-code-heading: #fb4934;
+		--demo-code-strong: #fe8019;
+		--glass-line: rgb(255 255 255 / 9%);
+		--glass-shadow: 0 1px 1px rgb(0 0 0 / 20%), 0 8px 22px rgb(0 0 0 / 35%);
+	}
+	/* The mobile Dashboard's floating glass controls. */
+	.dashboard-demo :global(.demo-glass) {
+		background: color-mix(in srgb, var(--background) 82%, transparent);
+		border: 1px solid var(--glass-line);
+		box-shadow: var(--glass-shadow);
+		backdrop-filter: saturate(1.7) blur(18px);
+	}
+	:global(.dark) .dashboard-demo :global(.demo-glass) {
+		background: color-mix(in srgb, #3c3836 78%, transparent);
+	}
+	@media (prefers-reduced-motion: no-preference) {
+		@container demo (max-width: 47.999rem) {
+			.dashboard-demo :global(.demo-stack-screen) { animation: stack-enter 180ms ease-out; }
+		}
+	}
+	@keyframes stack-enter { from { transform: translateX(100%); } }
+	@container demo (max-width: 47.999rem) {
+		.dashboard-demo :global(.demo-title-pill) {
+			background: color-mix(in srgb, var(--background) 82%, transparent);
+			border: 1px solid var(--glass-line);
+			box-shadow: var(--glass-shadow);
+			backdrop-filter: saturate(1.7) blur(18px);
+		}
+		:global(.dark) .dashboard-demo :global(.demo-title-pill) {
+			background: color-mix(in srgb, #3c3836 78%, transparent);
+		}
 	}
 	/* The site styles focused buttons with an offset outline; the demo uses the Dashboard's focus ring. */
 	.dashboard-demo :global(button:focus-visible) {

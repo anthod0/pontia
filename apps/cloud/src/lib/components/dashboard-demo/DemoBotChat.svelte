@@ -17,13 +17,18 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import DemoBotPanel, { type PanelTab } from './DemoBotPanel.svelte';
 	import DemoInline from './DemoInline.svelte';
+	import DemoActionSheet from './DemoActionSheet.svelte';
+	import PaperPlaneTiltIcon from 'phosphor-svelte/lib/PaperPlaneTiltIcon';
 	import type { DemoBot, DemoBotEntry, DemoTodo, DemoWorkspace } from './mockData';
 	import { plainText } from './text';
 
-	let { bot, workspaces, onopensidebar, ontodochange, onsend }: {
+	let { bot, workspaces, phone, onopensidebar, onopenbrowser, ontodochange, onsend }: {
 		bot: DemoBot;
 		workspaces: DemoWorkspace[];
+		/** Whether the demo uses the phone layout, where localhost links open a browser tab. */
+		phone: boolean;
 		onopensidebar: () => void;
+		onopenbrowser: (url: string) => void;
 		onsend: (text: string, quote?: string) => void;
 		ontodochange: (entry: Extract<DemoBotEntry, { kind: 'bot' }>, todo: DemoTodo) => void;
 	} = $props();
@@ -33,6 +38,9 @@
 	let panelOpen = $state(false);
 	let tab = $state<PanelTab>('files');
 	let file = $state<string | null>(null);
+	let preview = $state<string | null>(null);
+	let menu = $state(false);
+	let actionsButton = $state<HTMLButtonElement>();
 	let selected = $state<string | null>(null);
 	// The chat is recreated for another Bot.
 	// svelte-ignore state_referenced_locally
@@ -67,6 +75,12 @@
 		file = path;
 		recent = [path, ...recent.filter((item) => item !== path)];
 		openPanel('files');
+	}
+
+	function openPreview(url: string) {
+		if (phone) return onopenbrowser(url);
+		preview = url;
+		openPanel('preview');
 	}
 
 	function viewContext(id: string) {
@@ -132,23 +146,24 @@
 {/snippet}
 
 <div class="relative flex min-w-0 flex-1 flex-col">
-	<div class="pointer-events-none absolute inset-x-0 top-0 z-10 flex h-12 items-center gap-2 px-3 @3xl:px-4">
-		<span class="pointer-events-auto flex h-8 shrink-0 items-center rounded-lg bg-popover px-1 ring-1 ring-foreground/10 @3xl:hidden">
-			<button type="button" class="flex size-7 items-center justify-center rounded-md hover:bg-muted" aria-label="Open sidebar" onclick={onopensidebar}>
-				<CaretLeftIcon class="size-4" />
-			</button>
-		</span>
-		<div class="pointer-events-auto flex h-8 min-w-0 items-center rounded-lg bg-popover px-1 ring-1 ring-foreground/10">
-			<span class="mx-1 flex min-w-0 max-w-80 items-center gap-1.5 px-2 py-0.5 text-sm text-heading">
+	<div class="pointer-events-none absolute inset-x-0 top-0 z-10 flex h-12 items-center gap-2 px-3 @3xl:px-4 @max-3xl/demo:h-16 @max-3xl/demo:bg-linear-to-b @max-3xl/demo:from-surface @max-3xl/demo:from-70% @max-3xl/demo:to-surface/0 @max-3xl/demo:pt-1">
+		<button type="button" class="demo-glass pointer-events-auto grid size-10 shrink-0 place-items-center rounded-full @3xl:hidden" aria-label="Open sidebar" onclick={onopensidebar}>
+			<CaretLeftIcon class="size-[18px]" />
+		</button>
+		<div class="demo-title-pill pointer-events-auto flex h-8 min-w-0 items-center rounded-full bg-popover px-1 ring-1 ring-foreground/10 @max-3xl/demo:h-10 @max-3xl/demo:ring-0">
+			<span class="mx-1 flex min-w-0 max-w-80 items-center gap-1.5 px-2 py-0.5 text-sm text-heading @max-3xl/demo:text-[15px] @max-3xl/demo:font-semibold">
 				<span class="size-5 shrink-0"><BotAvatarMark shape={bot.shape} color={bot.color} /></span>
 				<span class="min-w-0 truncate">{bot.name}</span>
 			</span>
 		</div>
 		<span class="flex-1"></span>
-		<span class="pointer-events-auto flex h-8 shrink-0 items-center rounded-lg bg-popover px-1 ring-1 ring-foreground/10">
+		<button type="button" class="demo-glass pointer-events-auto grid size-10 shrink-0 place-items-center rounded-full @3xl:hidden" bind:this={actionsButton} aria-label="Chat actions" onclick={() => (menu = true)}>
+			<DotsThreeIcon class="size-5" weight="bold" />
+		</button>
+		<span class="pointer-events-auto flex shrink-0 items-center @max-3xl/demo:hidden">
 			<button
 				type="button"
-				class={cn('relative flex size-7 items-center justify-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary', panelOpen && 'bg-muted text-heading')}
+				class={cn('relative flex size-8 items-center justify-center rounded-full ring-1 ring-foreground/10 hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary', panelOpen ? 'bg-muted text-heading' : 'bg-popover')}
 				aria-label={count ? `Sidebar, ${count} ${count === 1 ? 'todo' : 'todos'}` : 'Sidebar'}
 				aria-pressed={panelOpen}
 				title="Sidebar"
@@ -160,7 +175,7 @@
 	</div>
 
 	<div bind:this={scroller} class="demo-scroll relative min-h-0 flex-1 overflow-y-auto px-4 md:px-8" role="log" aria-label="Messages">
-		<ol class="mx-auto flex w-full max-w-3xl flex-col gap-5 pt-14 pb-5 @3xl:pt-12">
+		<ol class="mx-auto flex w-full max-w-3xl flex-col gap-5 pt-14 pb-5 @3xl:pt-12 @max-3xl/demo:pt-16">
 			{#each bot.entries as entry (entry.id)}
 				{@const ringed = highlighted === entry.id && 'ring-2 ring-primary/50'}
 				<li data-entry-id={entry.id}>
@@ -178,10 +193,10 @@
 									<div class={cn('rounded-2xl bg-muted px-4 py-3 text-sm leading-6 break-words transition-shadow', ringed)}>
 										{#each entry.blocks as block}
 											{#if block.kind === 'p'}
-												<p class="my-2 first:mt-0 last:mb-0"><DemoInline text={block.text} code="bg-background" onlink={openFile} /></p>
+												<p class="my-2 first:mt-0 last:mb-0"><DemoInline text={block.text} code="bg-background" onlink={openFile} onpreview={openPreview} /></p>
 											{:else}
 												<ul class="my-2 list-disc pl-5 first:mt-0 last:mb-0">
-													{#each block.items as item}<li class="my-0.5"><DemoInline text={item} code="bg-background" onlink={openFile} /></li>{/each}
+													{#each block.items as item}<li class="my-0.5"><DemoInline text={item} code="bg-background" onlink={openFile} onpreview={openPreview} /></li>{/each}
 												</ul>
 											{/if}
 										{/each}
@@ -234,18 +249,18 @@
 					</button>
 				</div>
 			{/if}
-			<form class="flex items-center rounded-lg border border-border bg-background" onsubmit={(event) => {
+			<form class="flex items-center rounded-3xl border border-border bg-background focus-within:border-primary @max-3xl/demo:min-h-12 @max-3xl/demo:rounded-full @max-3xl/demo:pr-1" onsubmit={(event) => {
 				event.preventDefault();
 				if (!draft.trim()) return;
 				void send(draft.trim(), quote?.id);
 				draft = '';
 				quote = null;
 			}}>
-				<span class="flex size-7 shrink-0 items-center justify-center pl-1 text-foreground"><PlusIcon class="size-4" /></span>
+				<span class="flex size-7 shrink-0 items-center justify-center pl-1 text-foreground @max-3xl/demo:ml-2"><PlusIcon class="size-4" /></span>
 				<input bind:this={composer} bind:value={draft} class="min-w-0 flex-1 bg-transparent py-2 pl-1.5 text-[13.5px] outline-none placeholder:text-muted-foreground" placeholder="Message" aria-label="Message" />
 				<div class="shrink-0 p-1">
-					<button type="submit" disabled={!draft.trim()} aria-label="Send" class="inline-flex h-7 w-7 items-center justify-center gap-1.5 rounded-md bg-primary-solid text-xs font-semibold text-primary-foreground disabled:bg-border disabled:text-inactive @md:w-auto @md:px-3">
-						<span class="hidden @md:inline">Send</span><ArrowUpIcon class="size-3.5" />
+					<button type="submit" disabled={!draft.trim()} aria-label="Send" class="inline-flex h-7 w-7 items-center justify-center gap-1.5 rounded-full bg-primary-solid text-xs font-semibold text-primary-foreground disabled:bg-border disabled:text-inactive @md:w-auto @md:px-3 @max-3xl/demo:size-10! @max-3xl/demo:px-0! @max-3xl/demo:disabled:bg-primary/35 @max-3xl/demo:disabled:text-primary-foreground">
+						<span class="hidden @md:inline @max-3xl/demo:hidden!">Send</span><ArrowUpIcon class="size-3.5 @max-3xl/demo:hidden" /><PaperPlaneTiltIcon class="hidden size-5 @max-3xl/demo:block" />
 					</button>
 				</div>
 			</form>
@@ -254,7 +269,15 @@
 </div>
 
 {#if panelOpen}
-	<DemoBotPanel bind:element={panelElement} bind:tab bind:file bind:selected bind:recent bind:query bind:searchSelected bind:workspaceId {bot} {workspaces} {count} onopenfile={openFile} onjump={jump} onquote={addQuote} onreply={send} {ontodochange} onclose={() => (panelOpen = false)} />
+	<DemoBotPanel {phone} bind:element={panelElement} bind:tab bind:file bind:preview bind:selected bind:recent bind:query bind:searchSelected bind:workspaceId {bot} {workspaces} {count} onopenfile={openFile} onjump={jump} onquote={addQuote} onreply={send} {ontodochange} onclose={() => (panelOpen = false)} />
+{/if}
+{#if menu}
+	<DemoActionSheet title={bot.name} subtitle="Bot" onclose={() => { menu = false; actionsButton?.focus({ preventScroll: true }); }} rows={[
+		{ label: 'Files', detail: String(recent.length), onselect: () => { menu = false; openPanel('files'); } },
+		{ label: 'Todo', detail: String(count), onselect: () => { menu = false; openPanel('todo'); } },
+		{ label: 'Search', onselect: () => { menu = false; openPanel('search'); } },
+		{ label: 'Git', onselect: () => { menu = false; openPanel('git'); } }
+	]} />
 {/if}
 
 <style>

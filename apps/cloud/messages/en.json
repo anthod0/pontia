@@ -93,7 +93,7 @@
   "hero_description": "Leave your desk, not your agents. A Bot keeps work moving, with your sessions, files, and local previews always within reach.",
   "hero_copy_failed": "Could not copy. Select the command to copy it.",
   "hero_requirements": "Linux and macOS",
-  "hero_demo_caption": "Interactive Dashboard demo with sample data. Select a session or switch devices to explore.",
+  "hero_demo_caption": "Interactive Dashboard demo with sample data. Choose a session or switch devices. Open a Markdown file, explore Git changes and commit history, or follow a localhost link to try the Atlas app.",
   "bots_title": "Stop babysitting your agents.",
   "bots_intro": "Hand work to a persistent Bot on your machine. It runs isolated helpers in parallel, queues decisions as todos, and keeps context across days.",
   "bots_pick": "Pick a Bot to see how it works.",

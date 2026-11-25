@@ -14,6 +14,7 @@
 	import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon';
 	import CircleHalfIcon from 'phosphor-svelte/lib/CircleHalfIcon';
 	import LightbulbIcon from 'phosphor-svelte/lib/LightbulbIcon';
+	import PaperPlaneTiltIcon from 'phosphor-svelte/lib/PaperPlaneTiltIcon';
 	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
 	import StopIcon from 'phosphor-svelte/lib/StopIcon';
 	import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon';
@@ -24,7 +25,7 @@
 	import DemoInline from './DemoInline.svelte';
 	import { demoClients, type DemoSession, type DemoStep, type DemoWorkspace } from './mockData';
 
-	let { session, workspace, onopenfile }: { session: DemoSession; workspace: DemoWorkspace; onopenfile: (path: string) => void } = $props();
+	let { session, workspace, onopenfile, onopenpreview }: { session: DemoSession; workspace: DemoWorkspace; onopenfile: (path: string) => void; onopenpreview: (url: string) => void } = $props();
 
 	let scroller: HTMLDivElement;
 	onMount(() => {
@@ -99,10 +100,10 @@
 
 <div bind:this={root} class="relative flex min-h-0 flex-1 transform-gpu flex-col has-[[data-dialog-content]]:z-20">
 	<div bind:this={scroller} class="demo-scroll min-h-0 flex-1 overflow-y-auto px-4 md:px-8">
-		<div class="mx-auto flex w-full max-w-[760px] flex-col gap-4 pt-14 pb-6 @3xl:pt-12">
+		<div class="mx-auto flex w-full max-w-[760px] flex-col gap-4 pt-14 pb-6 @3xl:pt-12 @max-3xl/demo:pt-16">
 			<div class="flex flex-col items-end gap-1.5">
 				<div class="max-w-[min(95%,720px)] rounded-lg border border-border bg-background px-4 py-3 text-[13.5px] leading-relaxed text-heading">
-					<DemoInline onlink={onopenfile} text={session.prompt} />
+					<DemoInline text={session.prompt} />
 				</div>
 				<div class="flex h-7 items-center gap-0.5 text-muted-foreground" aria-hidden="true">
 					<span class="px-1 text-xs tabular-nums">{session.steps.length ? '10:42 AM' : 'Just now'}</span>
@@ -115,12 +116,13 @@
 				<div class="mb-3">
 					<button
 						type="button"
-						class="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-sm py-1 pr-3 text-sm leading-5 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
+						class="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-sm py-1 pr-3 text-sm leading-5 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary @max-3xl/demo:gap-2 @max-3xl/demo:rounded-xl @max-3xl/demo:border @max-3xl/demo:border-border @max-3xl/demo:bg-background @max-3xl/demo:px-3 @max-3xl/demo:py-2.5 @max-3xl/demo:text-foreground"
 						aria-expanded={stepsOpen}
 						aria-label={stepsOpen ? 'Hide agent work steps' : 'Show agent work steps'}
 						onclick={() => (stepsOpen = !stepsOpen)}
 					>
-						<span class="truncate">{session.steps.length} {session.steps.length === 1 ? 'step' : 'steps'}</span>
+						<TerminalWindowIcon class="hidden size-4 shrink-0 @max-3xl/demo:block" aria-hidden="true" />
+						<span class="truncate">{session.steps.length} {session.steps.length === 1 ? 'step' : 'steps'}<span class="hidden @max-3xl/demo:inline">&nbsp; {working ? 'working for' : 'worked for'} {formatDuration(session.duration)}</span></span>
 						<CaretRightIcon class={cn('size-4 shrink-0 transition-transform', stepsOpen && 'rotate-90')} aria-hidden="true" />
 					</button>
 					{#if stepsOpen}
@@ -144,10 +146,10 @@
 				<div class="text-sm leading-[1.85] text-foreground [&>*:first-child]:mt-0">
 					{#each session.reply as block}
 						{#if block.kind === 'p'}
-							<div class="my-3"><DemoInline onlink={onopenfile} text={block.text} /></div>
+							<div class="my-3"><DemoInline onlink={onopenfile} onpreview={onopenpreview} text={block.text} /></div>
 						{:else if block.kind === 'ul'}
 							<ul class="my-3 list-disc pl-5">
-								{#each block.items as item}<li class="my-1"><DemoInline onlink={onopenfile} text={item} /></li>{/each}
+								{#each block.items as item}<li class="my-1"><DemoInline onlink={onopenfile} onpreview={onopenpreview} text={item} /></li>{/each}
 							</ul>
 						{:else}
 							<div class="my-4 overflow-hidden rounded-lg border border-border bg-muted">
@@ -184,10 +186,16 @@
 		</div>
 	</div>
 
-	<div class="relative bg-surface px-4 pb-2 md:px-8 md:pb-5">
+	<div class="relative bg-surface px-4 pb-2 md:px-8 md:pb-5 @max-3xl/demo:px-3">
 		<div class="pointer-events-none absolute inset-x-0 bottom-full h-6 bg-linear-to-t from-surface to-surface/0"></div>
 		<div class="mx-auto w-full max-w-[760px]">
-			<div class="mb-1 flex min-w-0 items-center justify-end gap-2">
+			<!-- Phones show the session metadata as a row of chips above a pill composer, like the mobile Dashboard. -->
+			<div class="demo-scroll mb-2 hidden gap-1.5 overflow-x-auto pb-1 font-mono text-[11.5px] text-foreground @max-3xl/demo:flex">
+				{#each [workspace.name, client.name, model, git.branch] as chip}
+					<span class="shrink-0 rounded-full border border-border bg-background px-2.5 py-1 whitespace-nowrap">{chip}</span>
+				{/each}
+			</div>
+			<div class="mb-1 flex min-w-0 items-center justify-end gap-2 @max-3xl/demo:hidden">
 				<div class="min-w-0 flex-1">
 				<Root>
 					<Trigger
@@ -222,15 +230,15 @@
 				</div>
 				<span class="flex size-7 shrink-0 items-center justify-center text-foreground" aria-hidden="true"><DotsThreeVerticalIcon class="size-5" /></span>
 			</div>
-			<div class="flex items-center rounded-lg border border-border bg-background" aria-hidden="true">
-				<span class="flex size-7 shrink-0 items-center justify-center pl-1 text-foreground"><PlusIcon class="size-4" /></span>
-				<div class="min-w-0 flex-1 py-2 pl-1.5 text-[13.5px] text-muted-foreground">Follow up…</div>
+			<div class="flex items-center rounded-3xl border border-border bg-background @max-3xl/demo:min-h-12 @max-3xl/demo:rounded-full @max-3xl/demo:pr-1" aria-hidden="true">
+				<span class="flex size-7 shrink-0 items-center justify-center pl-1 text-foreground @max-3xl/demo:ml-2"><PlusIcon class="size-4" /></span>
+				<div class="min-w-0 flex-1 py-2 pl-1.5 text-[13.5px] text-muted-foreground @max-3xl/demo:pl-2.5">Follow up…</div>
 				<div class="shrink-0 p-1">
 					{#if working}
-						<span class="inline-flex size-7 items-center justify-center rounded-md bg-primary-solid text-primary-foreground"><StopIcon class="size-4" /></span>
+						<span class="inline-flex size-7 items-center justify-center rounded-full bg-primary-solid text-primary-foreground @max-3xl/demo:size-10"><StopIcon class="size-4" weight="fill" /></span>
 					{:else}
-						<span class="inline-flex h-7 w-7 items-center justify-center gap-1.5 rounded-md bg-border text-xs font-semibold text-inactive @md:w-auto @md:px-3">
-							<span class="hidden @md:inline">Send</span><ArrowUpIcon class="size-3.5" />
+						<span class="inline-flex h-7 w-7 items-center justify-center gap-1.5 rounded-full bg-border text-xs font-semibold text-inactive @md:w-auto @md:px-3 @max-3xl/demo:size-10! @max-3xl/demo:bg-primary/35 @max-3xl/demo:px-0! @max-3xl/demo:text-primary-foreground">
+							<span class="hidden @md:inline @max-3xl/demo:hidden!">Send</span><ArrowUpIcon class="size-3.5 @max-3xl/demo:hidden" /><PaperPlaneTiltIcon class="hidden size-5 @max-3xl/demo:block" />
 						</span>
 					{/if}
 				</div>

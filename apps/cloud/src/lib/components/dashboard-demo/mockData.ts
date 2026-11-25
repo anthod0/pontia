@@ -54,9 +54,22 @@ export type DemoChangeGroup = "staged" | "unstaged" | "untracked";
 export interface DemoChange {
   path: string;
   group: DemoChangeGroup;
-  status: "M" | "A" | "?";
+  status: "M" | "A" | "D" | "?";
   /** Unified diff body: lines start with "@@", "+", "-" or " ". */
   diff: string;
+}
+
+export interface DemoCommit {
+  hash: string;
+  subject: string;
+  body?: string;
+  author: string;
+  /** Day heading in History: "today", "yesterday" or a date. */
+  day: string;
+  time: string;
+  pushed: boolean;
+  parents: string[];
+  files: Omit<DemoChange, "group">[];
 }
 
 export interface DemoGit {
@@ -64,7 +77,8 @@ export interface DemoGit {
   upstream: string;
   ahead: number;
   behind: number;
-  commit: { hash: string; subject: string; path: string; diff: string };
+  /** Newest first, as the History view lists them. */
+  commits: DemoCommit[];
   changes: DemoChange[];
 }
 
@@ -131,7 +145,7 @@ export const demoDevices: DemoDevice[] = [
         recentFiles: ["docs/release-notes.md", "reports/release-2.3.md"],
         files: {
           "docs/release-notes.md":
-            "# Atlas 2.4\n\n## Highlights\n\n- Open the command menu with Ctrl+K.\n- Project lists are paginated with a cursor.\n- Settings has profile, notification and danger zone sections.\n\n## Breaking changes\n\n- `GET /projects` returns `items` instead of `projects`.\n",
+            "# Atlas 2.4\n\nRelease notes drafted from this week's merged pull requests.\n\n## Highlights\n\n- **Command menu**: open it anywhere with `⌘K` / `Ctrl+K`.\n- **Cursor pagination** for project lists.\n- A new **Settings** page with profile, notifications and danger zone.\n\n## Breaking changes\n\n> `GET /projects` now returns `items` instead of `projects`.\n\n```ts\nconst { items, cursor } = await atlas.projects.list({ limit: 50 });\n```\n\n| Area | Change | PR |\n| --- | --- | --- |\n| API | `items` + `cursor` | #412 |\n| UI | Command menu | #398 |\n",
           "reports/release-2.3.md":
             "# Release 2.3 check\n\nDeploy: finished at 21:02\nMigrations: 3 applied on staging\nSmoke tests: 42 passed\n\nStaging certificate expires on Nov 28.\n",
         },
@@ -204,7 +218,7 @@ export const demoDevices: DemoDevice[] = [
               },
               {
                 kind: "p",
-                text: "Clients must act on one change: `GET /projects` now returns `items`.",
+                text: "Clients must act on one change: `GET /projects` now returns `items`. The preview build is at [localhost:5173/projects](http://localhost:5173/projects).",
               },
             ],
           },
@@ -266,12 +280,110 @@ export const demoDevices: DemoDevice[] = [
         git: {
           branch: "feat/command-menu",
           upstream: "origin/feat/command-menu",
-          commit: {
-            hash: "4c2a9d8",
-            subject: "Register the command menu",
-            path: "src/commands.ts",
-            diff: '@@ -0,0 +1 @@\n+export const commands = ["open", "search"];',
-          },
+          commits: [
+            {
+              hash: "4c2a9d8",
+              subject: "Open the command menu with ⌘K",
+              body: "Escape closes the menu and returns focus to the trigger.",
+              author: "Ada Lovelace",
+              day: "today",
+              time: "10:26 AM",
+              pushed: false,
+              parents: ["9b1e04f"],
+              files: [
+                {
+                  path: "src/lib/CommandMenu.svelte",
+                  status: "M",
+                  diff: '@@ -12,6 +12,13 @@\n   let open = $state(false);\n+\n+  function onKeydown(event: KeyboardEvent) {\n+    if ((event.metaKey || event.ctrlKey) && event.key === "k") {\n+      event.preventDefault();\n+      open = !open;\n+    }\n+  }\n </script>',
+                },
+                {
+                  path: "src/lib/shortcuts.ts",
+                  status: "A",
+                  diff: '@@ -0,0 +1,3 @@\n+export const shortcuts = {\n+  commandMenu: "mod+k",\n+};',
+                },
+              ],
+            },
+            {
+              hash: "9b1e04f",
+              subject: "Add the command menu skeleton",
+              author: "Ada Lovelace",
+              day: "today",
+              time: "9:58 AM",
+              pushed: false,
+              parents: ["e71c2aa"],
+              files: [
+                {
+                  path: "src/lib/CommandMenu.svelte",
+                  status: "A",
+                  diff: '@@ -0,0 +1,4 @@\n+<script lang="ts">\n+  let open = $state(false);\n+</script>\n+<dialog {open}></dialog>',
+                },
+              ],
+            },
+            {
+              hash: "e71c2aa",
+              subject: "Merge branch 'main' into feat/command-menu",
+              author: "Grace Hopper",
+              day: "today",
+              time: "9:40 AM",
+              pushed: true,
+              parents: ["3f8d6b1", "51ac0e9"],
+              files: [
+                {
+                  path: "src/api/projects.ts",
+                  status: "M",
+                  diff: "@@ -40,4 +40,4 @@\n   return {\n-    projects: rows,\n+    items: rows,\n   };",
+                },
+              ],
+            },
+            {
+              hash: "3f8d6b1",
+              subject: "Paginate projects with a cursor",
+              author: "Grace Hopper",
+              day: "yesterday",
+              time: "6:12 PM",
+              pushed: true,
+              parents: ["51ac0e9"],
+              files: [
+                {
+                  path: "src/api/projects.ts",
+                  status: "M",
+                  diff: "@@ -40,5 +40,5 @@\n   const rows = await db.projects.list(params);\n   return {\n-    next: null,\n+    cursor: rows.at(-1)?.id ?? null,\n   };",
+                },
+              ],
+            },
+            {
+              hash: "51ac0e9",
+              subject: "Add the settings page",
+              author: "Ada Lovelace",
+              day: "yesterday",
+              time: "2:30 PM",
+              pushed: true,
+              parents: ["0d94f27"],
+              files: [
+                {
+                  path: "src/routes/settings/+page.svelte",
+                  status: "A",
+                  diff: "@@ -0,0 +1,3 @@\n+<h1>Settings</h1>\n+<ProfileForm />\n+<DangerZone />",
+                },
+              ],
+            },
+            {
+              hash: "0d94f27",
+              subject: "Release 2.3.0",
+              author: "Grace Hopper",
+              day: "Nov 21, 2026",
+              time: "9:02 PM",
+              pushed: true,
+              parents: ["8a1b3c2"],
+              files: [
+                {
+                  path: "package.json",
+                  status: "M",
+                  diff: '@@ -2,3 +2,3 @@\n   "name": "atlas",\n-  "version": "2.2.4",\n+  "version": "2.3.0",',
+                },
+              ],
+            },
+          ],
           ahead: 2,
           behind: 0,
           changes: [
@@ -315,12 +427,40 @@ export const demoDevices: DemoDevice[] = [
         git: {
           branch: "main",
           upstream: "origin/main",
-          commit: {
-            hash: "9ef80c4",
-            subject: "Document the projects endpoint",
-            path: "api.md",
-            diff: "@@ -0,0 +1 @@\n+Use GET /projects to list projects.",
-          },
+          commits: [
+            {
+              hash: "9ef80c4",
+              subject: "Document the projects endpoint",
+              author: "Grace Hopper",
+              day: "today",
+              time: "8:15 AM",
+              pushed: true,
+              parents: ["2b7d0e1"],
+              files: [
+                {
+                  path: "api.md",
+                  status: "M",
+                  diff: "@@ -1 +1,2 @@\n Projects\n+Use GET /projects to list projects.",
+                },
+              ],
+            },
+            {
+              hash: "2b7d0e1",
+              subject: "Add the search page",
+              author: "Ada Lovelace",
+              day: "Nov 20, 2026",
+              time: "4:40 PM",
+              pushed: true,
+              parents: ["77c0f3a"],
+              files: [
+                {
+                  path: "src/routes/search/+page.ts",
+                  status: "A",
+                  diff: "@@ -0,0 +1 @@\n+export const load = () => ({ results: [] });",
+                },
+              ],
+            },
+          ],
           ahead: 0,
           behind: 0,
           changes: [
@@ -371,7 +511,7 @@ export const demoDevices: DemoDevice[] = [
           },
           {
             kind: "p",
-            text: "All **12 tests pass**, including keyboard navigation and focus restoration.",
+            text: "All **12 tests pass**. The dev server is running at [localhost:5173/projects](http://localhost:5173/projects), press **⌘K** there to try it.",
           },
         ],
       },
@@ -385,8 +525,10 @@ export const demoDevices: DemoDevice[] = [
         reasoningEffort: "high",
         context: "52% · 104k / 200k",
         handle: "atlas-review",
-        recentFiles: ["src/api/projects.ts"],
+        recentFiles: ["notes/api-review.md", "src/api/projects.ts"],
         files: {
+          "notes/api-review.md":
+            "# API review: v2.3.0..HEAD\n\nChecked **14 files** in `src/api/` against the last release.\n\n## Breaking changes\n\n- `GET /projects` returns `items` instead of `projects`.\n- Older SDKs read `projects` and will see an empty list.\n\n> Ship a migration note with 2.4 and keep `projects` as an alias for one release.\n\n## Compatible changes\n\n| Change | Clients |\n| --- | --- |\n| Optional `cursor` parameter | Unaffected |\n| New `next` link header | Unaffected |\n\n```ts\nconst { items, cursor } = await atlas.projects.list({ limit: 50 });\n```\n",
           "src/api/projects.ts":
             "export async function listProjects(params: ListParams) {\n  const rows = await db.projects.list(params);\n  return {\n    items: rows,\n    cursor: rows.at(-1)?.id ?? null,\n  };\n}",
         },
@@ -413,7 +555,10 @@ export const demoDevices: DemoDevice[] = [
               "The new `cursor` parameter is optional, so pagination stays compatible.",
             ],
           },
-          { kind: "p", text: "Checking the webhook payloads next." },
+          {
+            kind: "p",
+            text: "Notes so far are in [api-review.md](notes/api-review.md). Checking the webhook payloads next.",
+          },
         ],
       },
       {
@@ -593,12 +738,40 @@ export const demoDevices: DemoDevice[] = [
         git: {
           branch: "ops/staging",
           upstream: "origin/ops/staging",
-          commit: {
-            hash: "6bca583",
-            subject: "Configure staging replicas",
-            path: "staging.yaml",
-            diff: "@@ -1 +1 @@\n-replicas: 1\n+replicas: 2",
-          },
+          commits: [
+            {
+              hash: "d41e7b0",
+              subject: "Rotate staging certificates",
+              author: "Ada Lovelace",
+              day: "today",
+              time: "7:48 AM",
+              pushed: false,
+              parents: ["6bca583"],
+              files: [
+                {
+                  path: "staging/lb/certs.tf",
+                  status: "M",
+                  diff: '@@ -5,2 +5,2 @@\n-  not_after = "2025-11-30"\n+  not_after = "2026-02-28"',
+                },
+              ],
+            },
+            {
+              hash: "6bca583",
+              subject: "Configure staging replicas",
+              author: "Grace Hopper",
+              day: "yesterday",
+              time: "11:20 PM",
+              pushed: true,
+              parents: ["1f0a9c4"],
+              files: [
+                {
+                  path: "staging.yaml",
+                  status: "M",
+                  diff: "@@ -1 +1 @@\n-replicas: 1\n+replicas: 2",
+                },
+              ],
+            },
+          ],
           ahead: 1,
           behind: 1,
           changes: [
@@ -624,12 +797,24 @@ export const demoDevices: DemoDevice[] = [
         git: {
           branch: "feat/invoice-export",
           upstream: "origin/feat/invoice-export",
-          commit: {
-            hash: "a850d1e",
-            subject: "Add the invoice export route",
-            path: "routes.ts",
-            diff: '@@ -0,0 +1 @@\n+router.get("/invoices/export", exportInvoices);',
-          },
+          commits: [
+            {
+              hash: "a850d1e",
+              subject: "Add the invoice export route",
+              author: "Ada Lovelace",
+              day: "yesterday",
+              time: "3:05 PM",
+              pushed: true,
+              parents: ["c3e2d19"],
+              files: [
+                {
+                  path: "routes.ts",
+                  status: "M",
+                  diff: '@@ -8,0 +9 @@\n+router.get("/invoices/export", exportInvoices);',
+                },
+              ],
+            },
+          ],
           ahead: 0,
           behind: 0,
           changes: [],

@@ -93,7 +93,7 @@
   "hero_description": "Mesmo longe da mesa, seus agentes continuam trabalhando. Um Bot dá andamento às tarefas, e suas sessões, arquivos e prévias locais ficam sempre ao seu alcance.",
   "hero_copy_failed": "Não foi possível copiar. Selecione o comando para copiá-lo.",
   "hero_requirements": "Linux e macOS",
-  "hero_demo_caption": "Demonstração interativa do Dashboard com dados de exemplo. Selecione uma Session ou troque de dispositivo para explorar.",
+  "hero_demo_caption": "Demonstração interativa do Dashboard com dados de exemplo. Selecione uma Session ou troque de dispositivo. Abra um arquivo Markdown, explore as alterações e o histórico de commits do Git ou siga um link localhost para experimentar o aplicativo Atlas.",
   "bots_title": "Chega de ficar de babá dos seus agentes.",
   "bots_intro": "Delegue o trabalho a um Bot que fica ativo na sua máquina. Ele coordena auxiliares em paralelo em ambientes isolados, registra decisões como pendências e mantém o contexto de um dia para o outro.",
   "bots_pick": "Escolha um Bot para ver como ele trabalha.",
