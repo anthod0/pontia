@@ -659,24 +659,66 @@ impl ConversationService {
         self.rotate(bot_id, activity, time::OffsetDateTime::now_utc())
             .await?;
         let bot = self.records.get(bot_id).await?;
-        let session_id = if mode == DeliveryMode::LiveOnly {
-            let Some(session) = bot.current_session_id else {
-                return Ok(None);
-            };
-            session
-        } else {
-            match self.current_session(bot, activity).await {
-                Ok(session) => session,
-                Err(error) => {
-                    self.generation_error(bot_id, activity, &error);
-                    return Err(error);
-                }
-            }
+        let previous = bot.current_session_id.clone();
+        let Some(session_id) = self.delivery_session(bot, activity, mode).await? else {
+            return Ok(None);
         };
+        let result = self.submit_to_session(bot_id, &session_id, input).await;
+        let Err(Error::CapabilityUnavailable(reason)) = &result else {
+            return result.map(Some);
+        };
+        let bot = self.records.get(bot_id).await?;
+        // Only a reused Session that the client can no longer serve is replaced, and only once.
+        if previous.as_deref() != Some(&session_id)
+            || !self.supports_bot_client(&bot.client_type, &bot.client_key)
+        {
+            return result.map(Some);
+        }
+        tracing::warn!(%bot_id, %session_id, %reason, "Replacing a Bot Session that cannot accept input");
+        if let Err(error) = self
+            .control
+            .session_commands()
+            .terminate_session(&session_id)
+            .await
+        {
+            tracing::warn!(%bot_id, %session_id, %error, "Cannot terminate the replaced Bot Session");
+        }
+        let bot = self.records.set_current_session(bot_id, None).await?;
+        activity.notify(ConversationUpdate::Reset);
+        let Some(session_id) = self.delivery_session(bot, activity, mode).await? else {
+            return Ok(None);
+        };
+        self.submit_to_session(bot_id, &session_id, input)
+            .await
+            .map(Some)
+    }
+
+    async fn delivery_session(
+        &self,
+        bot: Bot,
+        activity: &Activity,
+        mode: DeliveryMode,
+    ) -> Result<Option<String>> {
+        if mode == DeliveryMode::LiveOnly {
+            return Ok(bot.current_session_id);
+        }
+        let bot_id = bot.bot_id.clone();
+        self.current_session(bot, activity)
+            .await
+            .map(Some)
+            .inspect_err(|error| self.generation_error(&bot_id, activity, error))
+    }
+
+    async fn submit_to_session(
+        &self,
+        bot_id: &str,
+        session_id: &str,
+        input: &str,
+    ) -> Result<LiveInputDelivery> {
         let position = self
             .control
             .queries()
-            .session_snapshot(&session_id)
+            .session_snapshot(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("Session {session_id} not found")))?
             .event_position;
@@ -690,7 +732,7 @@ impl ConversationService {
         let result = self
             .control
             .inbox_commands()
-            .submit_live_input(&session_id, input.into())
+            .submit_live_input(session_id, input.into())
             .await;
         if result.is_err() && !matches!(&result, Err(Error::ControlUnknown(_))) {
             sqlx::query("UPDATE bots SET awaiting_reply = 0 WHERE bot_id = ?")
@@ -698,7 +740,7 @@ impl ConversationService {
                 .execute(&self.control.db())
                 .await?;
         }
-        result.map(Some)
+        result
     }
 
     async fn current_session(&self, bot: Bot, activity: &Activity) -> Result<String> {

@@ -37,6 +37,8 @@ const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
 struct Client {
     inputs: Mutex<Vec<AgentInput>>,
     blocked: Mutex<Option<String>>,
+    unavailable: Mutex<std::collections::HashSet<String>>,
+    all_unavailable: Mutex<bool>,
     launch_gate: Mutex<
         Option<(
             tokio::sync::oneshot::Sender<()>,
@@ -214,6 +216,12 @@ impl InProcessClient for Client {
         let first = !inputs.iter().any(|previous| previous.input == input.input);
         let failure = if self.blocked.lock().unwrap().as_deref() == Some(&input.session_id) {
             Err(Error::ControlUnknown("connection lost".into()))
+        } else if *self.all_unavailable.lock().unwrap()
+            || self.unavailable.lock().unwrap().contains(&input.session_id)
+        {
+            Err(Error::CapabilityUnavailable(
+                "session history is corrupted".into(),
+            ))
         } else {
             match input.input.lines().last() {
                 Some("reject once") if first => Err(Error::Domain("rejected".into())),
@@ -474,6 +482,102 @@ async fn failed_messages_show_processing_only_after_a_successful_retry() {
         .unwrap();
     service.retry(&bot.bot_id, &failed.id).await.unwrap();
     assert!(service.chat(&bot.bot_id).await.unwrap().status == WorkStatus::Processing);
+}
+
+#[tokio::test]
+async fn unavailable_session_is_replaced_and_the_input_redelivered() {
+    let (_root, _pool, client, control, service) = fixture().await;
+    let bot = service
+        .records()
+        .create(bot_configuration("Bot", MODEL), Default::default())
+        .await
+        .unwrap();
+    let id = bot.bot_id;
+    let current = || async { service.records().get(&id).await.unwrap().current_session_id };
+    let terminated = |session: String| {
+        let control = control.clone();
+        async move {
+            control
+                .queries()
+                .session_snapshot(&session)
+                .await
+                .unwrap()
+                .unwrap()
+                .runtimes
+                .iter()
+                .all(|runtime| !GenericRuntimeManager.is_alive(&runtime.runtime_id))
+        }
+    };
+    service.send(&id, "wake").await.unwrap();
+    let broken = current().await.unwrap();
+    client.unavailable.lock().unwrap().insert(broken.clone());
+
+    let sent = service.send(&id, "after corruption").await.unwrap().message;
+    assert_eq!(sent.status, MessageStatus::Normal);
+    let replacement = current().await.unwrap();
+    assert_ne!(replacement, broken);
+    assert!(terminated(broken).await);
+    let last = client.inputs.lock().unwrap().last().unwrap().clone();
+    assert_eq!(last.session_id, replacement);
+    assert!(last.input.ends_with("after corruption"));
+
+    client
+        .unavailable
+        .lock()
+        .unwrap()
+        .insert(replacement.clone());
+    service
+        .deliver_input(&id, "Source: System Notification\nRecovered")
+        .await
+        .unwrap();
+    let notified = current().await.unwrap();
+    assert_ne!(notified, replacement);
+    assert!(terminated(replacement).await);
+    let last = client.inputs.lock().unwrap().last().unwrap().clone();
+    assert_eq!(last.session_id, notified);
+    assert!(last.input.ends_with("Recovered"));
+}
+
+#[tokio::test]
+async fn unavailable_replacement_session_fails_the_input_without_another_rebuild() {
+    let (_root, _pool, client, _control, service) = fixture().await;
+    let bot = service
+        .records()
+        .create(bot_configuration("Bot", MODEL), Default::default())
+        .await
+        .unwrap();
+    let id = bot.bot_id;
+    service.send(&id, "wake").await.unwrap();
+    *client.all_unavailable.lock().unwrap() = true;
+    let launches = client.launch_modes.lock().unwrap().len();
+
+    let failed = service.send(&id, "still broken").await.unwrap().message;
+    assert_eq!(failed.status, MessageStatus::Failed);
+    assert_eq!(client.launch_modes.lock().unwrap().len(), launches + 1);
+}
+
+#[tokio::test]
+async fn unavailable_client_keeps_the_current_session() {
+    let (_root, _pool, client, _control, service) = fixture().await;
+    let bot = service
+        .records()
+        .create(bot_configuration("Bot", MODEL), Default::default())
+        .await
+        .unwrap();
+    let id = bot.bot_id;
+    service.send(&id, "wake").await.unwrap();
+    let session = service.records().get(&id).await.unwrap().current_session_id;
+    *client.all_unavailable.lock().unwrap() = true;
+    *client.reject_restricted.lock().unwrap() = true;
+    let launches = client.launch_modes.lock().unwrap().len();
+
+    let failed = service.send(&id, "client removed").await.unwrap().message;
+    assert_eq!(failed.status, MessageStatus::Failed);
+    assert_eq!(client.launch_modes.lock().unwrap().len(), launches);
+    assert_eq!(
+        service.records().get(&id).await.unwrap().current_session_id,
+        session
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
