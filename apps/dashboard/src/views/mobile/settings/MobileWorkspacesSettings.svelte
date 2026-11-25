@@ -7,6 +7,9 @@
   import { Button } from '$lib/components/ui/button'
   import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
   import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon'
+  import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
+  import FolderStarIcon from 'phosphor-svelte/lib/FolderStarIcon'
+  import EyeIcon from 'phosphor-svelte/lib/EyeIcon'
   import DotsThreeIcon from 'phosphor-svelte/lib/DotsThreeIcon'
   import RenameWorkspaceDialog from '../../../components/workspaces/RenameWorkspaceDialog.svelte'
   import { createWorkspaceBrowser } from '../../../features/settings/workspaceBrowser.svelte'
@@ -70,7 +73,7 @@
   <p role="status">{$t('workspaces.loadingBrowser')}</p>
 {:else}
   {#if !browser.workspaceRoots.length}<p class="py-3">{$t('workspaces.noRoots')}<br />{$t('workspaces.runPrefix')} <code>pontia init</code> {$t('workspaces.initSuffix')}</p>{/if}
-  <nav class="flex gap-2 overflow-x-auto py-2" aria-label={$t('workspaces.browserLocations')}>
+  <nav class="mb-3 flex gap-1 overflow-x-auto rounded-2xl bg-muted p-1" aria-label={$t('workspaces.browserLocations')}>
     <button
       class="location"
       aria-pressed={browser.view === 'active'}
@@ -150,7 +153,8 @@
           <small>{browser.workspaceAvailabilityLabel(workspace.availability)}</small>
         </div>
         <Button
-          variant="outline"
+          variant="secondary"
+          class="h-11 rounded-xl px-3"
           disabled={browser.actionsDisabled}
           onclick={() => browser.deleteRegisteredWorkspace(workspace.workspace_id)}
           >{$t('workspaces.revoke')}</Button
@@ -158,55 +162,61 @@
       </div>
     {:else}<p class="py-4">{$t('workspaces.noneUnavailable')}</p>{/each}
   {:else}
-    <div class="flex items-center gap-2">
-      <button
-        class="mobile-icon"
-        disabled={browser.parentPath === null}
-        aria-label={$t('workspaces.parentDirectory')}
-        onclick={() => browser.openPath(browser.parentPath ?? '')}><ArrowUpIcon /></button
-      >
-      <nav
-        class="flex flex-1 overflow-x-auto whitespace-nowrap font-mono text-xs"
-        aria-label={$t('workspaces.currentPath')}
-      >
-        {#each browser.breadcrumbs as crumb (crumb.path)}<button
-            class="min-h-11 px-1"
-            onclick={() => browser.openPath(crumb.path)}>{crumb.label}/</button
-          >{/each}
-      </nav>
-      <button
-        class="min-h-11 text-xs"
-        class:text-primary={browser.showHiddenDirectories}
-        aria-pressed={browser.showHiddenDirectories}
-        onclick={() => (browser.showHiddenDirectories = !browser.showHiddenDirectories)}
-        >{$t('workspaces.showHidden')}</button
-      >
-    </div>
-    {#if browser.entriesQuery.isError}<p role="alert">{browser.entriesQuery.error.message}</p>
-      <Button onclick={() => browser.retryDirectory()}>{$t('common.retry')}</Button>
-    {:else if browser.listing}
-      {#each browser.listing.warnings as warning (warning)}<p>{warning}</p>{/each}
-      {#each browser.visibleEntries as entry (entry.path)}
-        <div class="flex items-center gap-2">
-          <button class="mobile-row min-w-0 flex-1" onclick={() => browser.openPath(entry.path)}
-            ><span class="truncate">{entry.name}</span></button
-          >
-          <Button
-            variant="outline"
-            disabled={browser.actionsDisabled}
-            onclick={() => browser.togglePath(entry.path, browser.workspaceForEntry(entry))}
-            >{$t(entry.is_workspace ? 'workspaces.deactivate' : 'workspaces.activate')}</Button
-          >
-        </div>
-      {:else}<p class="py-4">{$t('workspaces.noSubdirectories')}</p>{/each}
-      <div class="sticky bottom-0 flex items-center gap-2 border-t bg-surface py-3">
-        <span class="min-w-0 flex-1 truncate font-mono text-xs">{browser.listing.canonical_path}</span><Button
-          disabled={browser.actionsDisabled}
-          onclick={() => browser.listing && browser.togglePath(browser.listing.path, browser.currentWorkspace)}
-          >{$t(browser.currentWorkspace ? 'workspaces.deactivateCurrent' : 'workspaces.activateCurrent')}</Button
+    <div class="rounded-2xl border bg-card px-3">
+      <div class="flex items-center gap-2 border-b py-1">
+        <button
+          class="mobile-icon disabled:opacity-40"
+          disabled={browser.parentPath === null}
+          aria-label={$t('workspaces.parentDirectory')}
+          onclick={() => browser.openPath(browser.parentPath ?? '')}><ArrowUpIcon /></button
+        >
+        <nav
+          class="flex flex-1 overflow-x-auto whitespace-nowrap font-mono text-xs"
+          aria-label={$t('workspaces.currentPath')}
+        >
+          {#each browser.breadcrumbs as crumb (crumb.path)}<button
+              class="min-h-11 px-1"
+              onclick={() => browser.openPath(crumb.path)}>{crumb.label}/</button
+            >{/each}
+        </nav>
+        <button
+          class="mobile-icon"
+          aria-label={$t('workspaces.showHidden')}
+          class:text-primary={browser.showHiddenDirectories}
+          aria-pressed={browser.showHiddenDirectories}
+          onclick={() => (browser.showHiddenDirectories = !browser.showHiddenDirectories)}
+          ><EyeIcon /></button
         >
       </div>
-    {:else}<p role="status">{$t('common.loading')}</p>{/if}
+      {#if browser.entriesQuery.isError}<p role="alert">{browser.entriesQuery.error.message}</p>
+        <Button onclick={() => browser.retryDirectory()}>{$t('common.retry')}</Button>
+      {:else if browser.listing}
+        {#each browser.listing.warnings as warning (warning)}<p>{warning}</p>{/each}
+        {#each browser.visibleEntries as entry (entry.path)}
+          <div class="mobile-row py-1">
+            <button class="flex min-h-11 min-w-0 flex-1 items-center gap-3 text-left" onclick={() => browser.openPath(entry.path)}
+              >{#if entry.is_workspace}<FolderStarIcon class="shrink-0 text-primary" />{:else}<FolderIcon class="shrink-0 text-muted-foreground" />{/if}
+              <span class="truncate">{entry.name}</span></button
+            >
+            <Button
+              variant="secondary"
+              class="h-11 rounded-xl px-3"
+              disabled={browser.actionsDisabled}
+              onclick={() => browser.togglePath(entry.path, browser.workspaceForEntry(entry))}
+              >{$t(entry.is_workspace ? 'workspaces.deactivate' : 'workspaces.activate')}</Button
+            >
+          </div>
+        {:else}<p class="py-4">{$t('workspaces.noSubdirectories')}</p>{/each}
+        <div class="sticky bottom-0 flex items-center gap-2 rounded-b-2xl bg-card py-3">
+          <span class="min-w-0 flex-1 truncate font-mono text-xs">{browser.listing.canonical_path}</span><Button
+            disabled={browser.actionsDisabled}
+            class="h-11 rounded-xl px-3"
+            onclick={() => browser.listing && browser.togglePath(browser.listing.path, browser.currentWorkspace)}
+            >{$t(browser.currentWorkspace ? 'workspaces.deactivateCurrent' : 'workspaces.activateCurrent')}</Button
+          >
+        </div>
+      {:else}<p role="status">{$t('common.loading')}</p>{/if}
+    </div>
   {/if}
 {/if}
 <Sheet.Root bind:open={menuOpen}
@@ -231,12 +241,14 @@
   .location {
     flex: none;
     min-height: 44px;
-    border-radius: 999px;
+    border-radius: 0.75rem;
     padding: 0 0.85rem;
-    background: var(--muted);
+    color: var(--muted-foreground);
+    font-size: 0.875rem;
   }
   .location[aria-pressed='true'] {
-    background: var(--primary);
-    color: var(--primary-foreground);
+    background: var(--card);
+    color: var(--foreground);
+    font-weight: 600;
   }
 </style>
