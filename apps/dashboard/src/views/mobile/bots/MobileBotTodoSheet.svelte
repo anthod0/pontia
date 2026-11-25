@@ -36,9 +36,9 @@
   let replying = $state(false)
 </script>
 
-{#snippet card(item: BotMessage)}
+{#snippet card(item: BotMessage, botName: string)}
   <MobileBotTodoCard
-    {item}
+    {item} {botName}
     onjump={() => onjump(item.id)}
     oncontext={() => oncontext(item.id)}
     onreply={() => {
@@ -46,7 +46,7 @@
       replying = true
     }}
     onquote={() => stack.back(() => chat.addQuote(entryQuote(item)!))}
-    onignore={() => chat.changeTodo(item.id, 'resolve')}
+    onignore={() => chat.changeTodo(item.id, false)}
   />
 {/snippet}
 <MobileBotSheet bind:open title={$t('bots.todos')}>
@@ -55,11 +55,12 @@
     </p>
   {:else if todos.data && chat.timeline.bot}
     {@const data = todos.data}
-    <TodoViews count={data.open.length} groups={[{ bot: chat.timeline.bot, items: data.recently_resolved }]}
+    {@const bot = chat.timeline.bot}
+    <TodoViews count={data.open.length} groups={[{ bot, items: data.recently_resolved }]}
       onjump={(_, item) => onjump(item.id)} oncontext={(_, item) => oncontext(item.id)}
-      onreopen={(_, item) => chat.changeTodo(item.id, 'reopen')}>
+      onreopen={(_, item) => chat.changeTodo(item.id, true)}>
       {#snippet pending()}
-        {#each data.open as item (item.id)}{@render card(item)}{:else}<p>{$t('bots.noTodos')}</p>{/each}
+        {#each data.open as item (item.id)}{@render card(item, bot.name)}{:else}<p>{$t('bots.noTodos')}</p>{/each}
       {/snippet}
     </TodoViews>
   {:else}<p role="status">{$t('common.loading')}</p>{/if}

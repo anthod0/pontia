@@ -118,7 +118,7 @@ async fn fixed_windows_merge_by_last_occurrence_and_send_only_to_live_recipients
         .await
         .unwrap();
     service
-        .change_todo(&id, &task, TodoAction::Reopen)
+        .change_todo(&id, &task, TodoAction::Mark)
         .await
         .unwrap();
     control
@@ -158,7 +158,7 @@ async fn fixed_windows_merge_by_last_occurrence_and_send_only_to_live_recipients
         assert_eq!(
             inputs[before].input,
             format!(
-                "{common}\n\nUser reopened todo message {task}: \"One {}\"",
+                "{common}\n\nUser reopened todo on Bot message {task} (previously closed by user): \"One {}\"",
                 "字".repeat(76)
             )
         );

@@ -121,6 +121,7 @@ fn external_api_router(state: HttpState) -> Router {
         .route("/api/v1/bot/workspace", post(api::workspace_command))
         .route("/api/v1/bot/description", post(api::bots::set_description))
         .route("/api/v1/bot/link-message", post(api::bots::link_message))
+        .route("/api/v1/bot/todo", post(api::bots::session_todo))
         .route("/api/v1/bot/send-to-user", post(api::bots::reply))
         .route("/api/v1/bot/dreaming", post(api::dreaming_command))
         .route("/api/v1/bot/helper", post(api::helper_command))
@@ -156,12 +157,8 @@ fn external_api_router(state: HttpState) -> Router {
         .route("/api/v1/bots/{bot_id}/reload", post(api::bots::reload))
         .route("/api/v1/bots/{bot_id}/todos", get(api::bots::todos))
         .route(
-            "/api/v1/bots/{bot_id}/todos/{message_id}/resolve",
-            post(api::bots::resolve_todo),
-        )
-        .route(
-            "/api/v1/bots/{bot_id}/todos/{message_id}/reopen",
-            post(api::bots::reopen_todo),
+            "/api/v1/bots/{bot_id}/messages/{message_id}/todo",
+            put(api::bots::mark_todo).delete(api::bots::resolve_todo),
         )
         .route("/api/v1/bots/{bot_id}/stream", get(api::bots::stream))
         .route("/api/v1/uploads", post(api::create_upload))

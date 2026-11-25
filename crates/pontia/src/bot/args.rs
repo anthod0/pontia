@@ -38,6 +38,9 @@ pub(super) enum BotTool {
         #[arg(long, value_name = "ID", required = true, num_args = 1..)]
         related_to: Vec<String>,
     },
+    /// Update a todo on an existing chat message
+    #[command(subcommand)]
+    Todo(TodoCommand),
     /// Send one complete reply to the user
     SendToUser(SendToUser),
     /// Manage shared Agent Profiles
@@ -70,6 +73,19 @@ pub(super) enum ChatHistory {
         /// Maximum messages on each side of the anchor
         #[arg(long, default_value_t = 3, value_parser = clap::value_parser!(u32).range(0..=50))]
         radius: u32,
+    },
+}
+
+#[derive(Debug, Subcommand, Serialize)]
+#[serde(tag = "action", content = "input", rename_all = "snake_case")]
+pub(super) enum TodoCommand {
+    Mark {
+        #[arg(long)]
+        message_id: String,
+    },
+    Resolve {
+        #[arg(long)]
+        message_id: String,
     },
 }
 

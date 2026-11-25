@@ -17,7 +17,7 @@ const message = {
   status: "normal",
   created_at: "2026-10-01T01:00:00Z",
   content: "Review this",
-  todo: { state: "open" },
+  todo: { state: "open", by: "bot", at: "2026-11-21T08:00:00Z" },
 } as const;
 const data: BotMessagePage = {
   bot: {

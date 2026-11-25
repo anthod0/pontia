@@ -466,6 +466,25 @@ async fn send_to_user_rejects_the_removed_working_on_argument() {
 }
 
 #[tokio::test]
+async fn todo_commands_target_an_existing_message_in_the_callers_session() {
+    let mut f = Fixture::new("todo", json!({"changed":true})).await;
+    for action in ["mark", "resolve"] {
+        assert!(
+            f.cli(&["todo", action, "--message-id", "m"])
+                .await
+                .status
+                .success()
+        );
+        assert_eq!(
+            f.requests.recv().await.unwrap(),
+            json!({
+                "session_id":"caller-session", "command":{"action":action,"input":{"message_id":"m"}}
+            })
+        );
+    }
+}
+
+#[tokio::test]
 async fn send_to_user_forwards_todo_and_repeated_link_and_resolution_targets() {
     let mut f = Fixture::new("send-to-user", json!({"sent": true, "message_id": "new"})).await;
     let output = f

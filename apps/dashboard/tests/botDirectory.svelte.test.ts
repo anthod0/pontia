@@ -33,7 +33,7 @@ test("removing the only Bot with open todos clears the directory indicator", asy
   }
 });
 
-test("loads todos concurrently for just the Bots with open items", async () => {
+test("loads todos concurrently across Bots including their resolved history", async () => {
   const ids = ["first", "empty", "last"];
   testDevice.queryClient.setQueryData(
     ["bots"],
@@ -50,7 +50,7 @@ test("loads todos concurrently for just the Bots with open items", async () => {
     createBotTodos(testDevice, createBotDirectory(testDevice));
   });
   try {
-    await waitFor(() => expect(getTodos.mock.calls.map(([id]) => id)).toEqual(["first", "last"]));
+    await waitFor(() => expect(getTodos.mock.calls.map(([id]) => id)).toEqual(ids));
   } finally {
     stop();
     getTodos.mockRestore();
@@ -75,7 +75,7 @@ test("loads recent history for a Bot with no open todos or cached history", asyn
     .mockResolvedValue({ open: [], recently_resolved: [done] });
   let todos!: ReturnType<typeof createBotTodos>;
   const stop = $effect.root(() => {
-    todos = createBotTodos(testDevice, createBotDirectory(testDevice), true);
+    todos = createBotTodos(testDevice, createBotDirectory(testDevice));
   });
   try {
     await waitFor(() => expect(todos.groups[0]?.result.data?.recently_resolved).toEqual([done]));

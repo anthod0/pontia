@@ -434,11 +434,7 @@ test("with a mouse, the message actions button opens the same menu as a right-cl
   await userEvent.click(button);
   const menu = await screen.findByRole("menu");
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  expect(
-    within(menu)
-      .getAllByRole("menuitem")
-      .map((item) => item.textContent),
-  ).toEqual(["ReplyR", "Copy", "View context"]);
+  expect(within(menu).getByRole("menuitem", { name: "Mark as todo" })).toBeVisible();
   // The button stays visible while its menu is open.
   expect(button).toHaveAttribute("aria-expanded", "true");
   await userEvent.keyboard("{Escape}");
@@ -596,7 +592,10 @@ test("shows whole messages with their line breaks in the context tab", async () 
   expect(text).not.toHaveClass("line-clamp-3");
 });
 
-const todo = { ...reply, todo: { state: "open" as const } };
+const todo = {
+  ...reply,
+  todo: { state: "open" as const, by: "bot" as const, at: "2026-11-21T08:00:00Z" },
+};
 const quotedTodo = (text: string) =>
   `<user_quote message_id="${reply.id}" speaker="Bot">${reply.content}</user_quote>\n${text}`;
 
@@ -614,7 +613,7 @@ async function openTodos() {
 test("lists a todo's actions with context first, then Ignore, Quote and Reply", async () => {
   serve([todo]);
   const item = await openTodos();
-  const actions = ["Context", "Ignore", "Quote", "Reply"].map((name) =>
+  const actions = ["Context", "Cancel todo", "Quote", "Reply"].map((name) =>
     item.getByRole("button", { name }),
   );
   for (const [before, after] of actions.slice(0, -1).map((button, i) => [button, actions[i + 1]]))
@@ -637,21 +636,23 @@ test("dates a todo and its closing time in the todo panel", async () => {
   const done = await panel.findByRole("listitem");
   expect(done.querySelector("time")).toHaveAttribute("datetime", at);
   expect(panel.getByRole("heading", { name: /Nov 21/ })).toBeVisible();
-  expect(panel.queryByRole("button", { name: "Reopen" })).toBeNull();
+  const mark = vi.spyOn(testDevice.api, "setBotTodo").mockResolvedValue(todo);
+  await fireEvent.click(panel.getByRole("button", { name: "Reopen" }));
+  await waitFor(() => expect(mark).toHaveBeenCalledWith(bot.bot_id, id(3), true));
 });
 
 test("ignoring a todo resolves it like marking it done", async () => {
   serve([todo]);
-  const change = vi.spyOn(testDevice.api, "changeBotTodo").mockResolvedValue({
+  const change = vi.spyOn(testDevice.api, "setBotTodo").mockResolvedValue({
     ...todo,
     todo: { state: "done", by: "user", at: new Date().toISOString() },
   });
   const item = await openTodos();
-  await fireEvent.click(item.getByRole("button", { name: "Ignore" }));
-  await waitFor(() => expect(change).toHaveBeenCalledWith(bot.bot_id, todo.id, "resolve"));
+  await fireEvent.click(item.getByRole("button", { name: "Cancel todo" }));
+  await waitFor(() => expect(change).toHaveBeenCalledWith(bot.bot_id, todo.id, false));
   await waitFor(() =>
     expect(toast.success).toHaveBeenCalledWith(
-      "Ignored",
+      "Todo cancelled",
       expect.objectContaining({ action: expect.objectContaining({ label: "Undo" }) }),
     ),
   );
@@ -659,17 +660,17 @@ test("ignoring a todo resolves it like marking it done", async () => {
 
 test("ignores an open todo from its message menu", async () => {
   serve([todo]);
-  const change = vi.spyOn(testDevice.api, "changeBotTodo").mockResolvedValue({
+  const change = vi.spyOn(testDevice.api, "setBotTodo").mockResolvedValue({
     ...todo,
     todo: { state: "done", by: "user", at: new Date().toISOString() },
   });
   render(BotChatPage, { botId: bot.bot_id });
   await fireEvent.contextMenu(await screen.findByText("certificate"), { clientX: 10, clientY: 10 });
-  await fireEvent.click(await screen.findByRole("menuitem", { name: "Ignore" }));
-  await waitFor(() => expect(change).toHaveBeenCalledWith(bot.bot_id, todo.id, "resolve"));
+  await fireEvent.click(await screen.findByRole("menuitem", { name: "Cancel todo" }));
+  await waitFor(() => expect(change).toHaveBeenCalledWith(bot.bot_id, todo.id, false));
   await waitFor(() =>
     expect(toast.success).toHaveBeenCalledWith(
-      "Ignored",
+      "Todo cancelled",
       expect.objectContaining({ action: expect.objectContaining({ label: "Undo" }) }),
     ),
   );
@@ -766,11 +767,11 @@ test("a reply with only attachments keeps its message menu", async () => {
   const buttons = screen.getAllByRole("button", { name: "Message actions" });
   await userEvent.click(buttons.at(-1)!);
   const menu = await screen.findByRole("menu");
-  expect(
-    within(menu)
-      .getAllByRole("menuitem")
-      .map((item) => item.textContent),
-  ).toEqual(["ReplyR", "Copy", "View context"]);
+  const mark = vi
+    .spyOn(testDevice.api, "setBotTodo")
+    .mockResolvedValue({ ...only, todo: todo.todo });
+  await fireEvent.click(within(menu).getByRole("menuitem", { name: "Mark as todo" }));
+  await waitFor(() => expect(mark).toHaveBeenCalledWith(bot.bot_id, only.id, true));
 });
 
 test("a file's message menu button looks the same as its download button", async () => {

@@ -43,7 +43,7 @@
   let { bot, count, onjump, onquote, onreply, ontodochange }: {
     bot: Bot
     count: number
-    ontodochange: (id: string, action: 'resolve' | 'reopen') => void
+    ontodochange: (id: string, open: boolean) => void
     onjump: (id: string) => Promise<void>
     onquote: (quote: BotQuote) => Promise<void>
     /** Sends `text` quoting `quote`; `retry` resubmits the reply box and returns false when it cannot. */
@@ -201,14 +201,14 @@
   <li class="rounded-xl border bg-background p-3">
     <button type="button" class="block w-full rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring" onclick={() => jump(message.id)}>
       <span class="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-        <BotAvatar shape={bot.avatar_shape} color={bot.avatar_color} class="size-4" />
+        {#if message.kind === 'user_input'}{$t('bots.you')}{:else}<BotAvatar shape={bot.avatar_shape} color={bot.avatar_color} class="size-4" />{bot.name}{/if}
         <MessageTime value={message.created_at} class="px-0" />
       </span>
       <span class="line-clamp-3 text-[13px] leading-5 [overflow-wrap:anywhere]">{todoSummary(message)}</span>
     </button>
     <div class="mt-2 flex items-center gap-1 touch-target:flex-wrap touch-target:gap-2 touch-target:[&>button]:min-h-11 touch-target:[&>button]:min-w-11">
       <Button variant="ghost" size="xs" onclick={() => viewContext(message.id)}><TreeStructureIcon />{$t('bots.context')}</Button>
-      <Button variant="ghost" size="xs" class="ml-auto" onclick={() => ontodochange(message.id, 'resolve')}><EyeSlashIcon />{$t('bots.ignore')}</Button>
+      <Button variant="ghost" size="xs" class="ml-auto" onclick={() => ontodochange(message.id, false)}><EyeSlashIcon />{$t('bots.cancelTodo')}</Button>
       <Button variant="ghost" size="xs" onclick={() => quoteTodo(message)}><QuotesIcon />{$t('bots.quote')}</Button>
       <Button id="bot-todo-reply-{message.id}" variant="outline" size="xs" aria-expanded={reply?.message.id === message.id} aria-controls="bot-todo-reply-box-{message.id}" onclick={() => toggleReply(message)}><ArrowBendUpLeftIcon />{$t('bots.reply')}</Button>
     </div>
@@ -305,7 +305,7 @@
           {@const data = todos.data}
           <TodoViews count={data.open.length} groups={[{ bot, items: data.recently_resolved }]}
             onjump={(_, item) => jump(item.id)} oncontext={(_, item) => viewContext(item.id)}
-            onreopen={(_, item) => ontodochange(item.id, 'reopen')}>
+            onreopen={(_, item) => ontodochange(item.id, true)}>
             {#snippet pending()}
               {#if data.open.length}
                 <ul class="space-y-2">

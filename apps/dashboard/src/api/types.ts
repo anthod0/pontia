@@ -58,7 +58,7 @@ export interface BotMessage {
   id: string;
   kind: "user_input" | "bot_reply";
   todo?:
-    | { state: "open" }
+    | { state: "open"; by: "user" | "bot"; at: string }
     | { state: "done"; by: "user" | "bot"; at: string; message_id?: string }
     | null;
   content: string;

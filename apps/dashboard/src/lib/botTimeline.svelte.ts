@@ -29,7 +29,11 @@ function equalEntry(a: BotEntry, b: BotEntry): boolean {
       ("content" in b &&
         a.content === b.content &&
         a.status === b.status &&
-        a.todo?.state === b.todo?.state))
+        a.todo?.state === b.todo?.state &&
+        a.todo?.by === b.todo?.by &&
+        a.todo?.at === b.todo?.at &&
+        (a.todo?.state !== "done" ||
+          (b.todo?.state === "done" && a.todo.message_id === b.todo.message_id))))
   );
 }
 
@@ -265,6 +269,7 @@ export class BotTimeline {
       if ("content" in row && (row.todo?.state === "open" || row.todo?.by === "user"))
         this.stale.add(row.id);
     }
+    for (const id of this.visible) this.stale.add(id);
     for (const row of latest.entries) this.stale.delete(row.id);
     await this.verifyVisible();
     const pending: BotEntry[] = [];

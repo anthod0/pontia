@@ -214,12 +214,48 @@ pub async fn resolve_todo(
     ))
 }
 
-pub async fn reopen_todo(
+pub async fn mark_todo(
     State(state): State<HttpState>,
     Path((bot_id, message_id)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     Ok(ok(
-        json!({"message": state.bots().change_todo(&bot_id, &message_id, TodoAction::Reopen).await?}),
+        json!({"message": state.bots().change_todo(&bot_id, &message_id, TodoAction::Mark).await?}),
+    ))
+}
+
+#[derive(Deserialize)]
+pub struct SessionTodo {
+    session_id: String,
+    command: TodoCommand,
+}
+#[derive(Deserialize)]
+struct TodoCommand {
+    action: TodoAction,
+    input: TodoTarget,
+}
+#[derive(Deserialize)]
+struct TodoTarget {
+    message_id: String,
+}
+
+pub async fn session_todo(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    request: Result<Json<SessionTodo>, JsonRejection>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let Json(request) = request.map_err(|error| ApiError::invalid_request(error.body_text()))?;
+    super::bot_context::authorize_tool(&state, &headers, &request.session_id).await?;
+    let (message, changed) = state
+        .bots()
+        .session_todo(
+            &request.session_id,
+            &request.command.input.message_id,
+            request.command.action,
+        )
+        .await
+        .map_err(bot_tool_error)?;
+    Ok(ok(
+        json!({"message_id":message.id,"todo":message.todo,"changed":changed}),
     ))
 }
 

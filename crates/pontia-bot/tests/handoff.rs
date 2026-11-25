@@ -535,7 +535,7 @@ async fn open_todos_include_the_latest_twenty_even_outside_recent_chat() {
         f.message("a", index, &format!("Release item {index}"))
             .await;
     }
-    sqlx::query("INSERT INTO bot_todos(message_id,state) SELECT id,'open' FROM bot_messages WHERE kind='bot_reply' AND id <= 'msg-a-43'")
+    sqlx::query("INSERT INTO bot_todos(message_id,state,opened_by,opened_at) SELECT id,'open','bot',created_at FROM bot_messages WHERE kind='bot_reply' AND id <= 'msg-a-43'")
         .execute(&f.pool).await.unwrap();
     let doc = f.generate().await;
     let todos = section(&doc, "Open todos");

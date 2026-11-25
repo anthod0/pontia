@@ -12,7 +12,7 @@
   import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon'
   import QuotesIcon from 'phosphor-svelte/lib/QuotesIcon'
   import ArrowBendUpLeftIcon from 'phosphor-svelte/lib/ArrowBendUpLeftIcon'
-  import EyeSlashIcon from 'phosphor-svelte/lib/EyeSlashIcon'
+  import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon'
   import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
   import { downloads } from '$lib/downloads/manager'
@@ -21,13 +21,13 @@
   import { useDeviceRuntime } from '../../device/context'
   import type { AttachedFile, BotEntry } from '../../api/types'
 
-  let { root, fileSessionId, entry, onquote, oncontext, onresolve }: {
+  let { root, fileSessionId, entry, onquote, oncontext, ontodo }: {
     /** Element containing the feed rows; events are delegated from it. */
     root: HTMLElement | undefined
     /** Session through which attached files are read. */
     fileSessionId: string | undefined
     entry: (id: string) => BotEntry | undefined
-    onresolve: (messageId: string) => void
+    ontodo: (messageId: string, open: boolean) => Promise<void>
     oncontext: (messageId: string) => void
     onquote: (quote: BotQuote) => void
   } = $props()
@@ -189,9 +189,12 @@
     oncontext(next.entry.id)
   }
 
-  function resolveTodo(next: Target) {
+  let pending = $state<string[]>([])
+  async function toggleTodo(next: Target) {
+    if (pending.includes(next.entry.id)) return
+    pending.push(next.entry.id)
     menuOpen = sheetOpen = false
-    onresolve(next.entry.id)
+    try { await ontodo(next.entry.id, !openTodo) } finally { pending = pending.filter(id => id !== next.entry.id) }
   }
 
   function download(next: Target) {
@@ -222,10 +225,9 @@
     else if (target?.element.isConnected && target.element.tabIndex >= 0) target.element.focus()
   }
 
-  const openTodo = $derived.by(() => {
-    const row = target && entry(target.entry.id)
-    return row && 'content' in row && row.todo?.state === 'open'
-  })
+  const row = $derived(target && entry(target.entry.id))
+  const todoMessage = $derived(row && 'content' in row && row.status === 'normal' ? row : null)
+  const openTodo = $derived(todoMessage?.todo?.state === 'open')
   const isMessage = $derived(target !== null && !target.file && 'content' in target.entry)
   // A whole message is quoted as a reply; a file keeps its quote label.
   const quoteLabel = $derived(target?.file ? (isImagePath(target.file.path) ? $t('bots.quoteImage') : $t('bots.quoteFile')) : $t('bots.reply'))
@@ -257,9 +259,9 @@
       {#if isMessage}
         <DropdownMenu.Item onSelect={() => void copy(current)}><CopyIcon />{$t('common.copy')}</DropdownMenu.Item>
         <DropdownMenu.Item onSelect={() => viewContext(current)}><TreeStructureIcon />{$t('bots.viewContext')}</DropdownMenu.Item>
-        {#if openTodo}
+        {#if todoMessage}
           <DropdownMenu.Separator />
-          <DropdownMenu.Item onSelect={() => resolveTodo(current)}><EyeSlashIcon />{$t('bots.ignore')}</DropdownMenu.Item>
+          <DropdownMenu.Item disabled={pending.includes(current.entry.id)} onSelect={() => toggleTodo(current)}><ListChecksIcon />{$t(openTodo ? 'bots.cancelTodo' : 'bots.markTodo')}</DropdownMenu.Item>
         {/if}
       {:else if current.file}
         <DropdownMenu.Item onSelect={() => download(current)}><DownloadSimpleIcon />{$t('files.download')}</DropdownMenu.Item>
@@ -285,9 +287,9 @@
         {#if isMessage}
           <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => void copy(current)}><CopyIcon class="size-5" />{$t('common.copy')}</button>
           <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => viewContext(current)}><TreeStructureIcon class="size-5" />{$t('bots.viewContext')}</button>
-          {#if openTodo}
+          {#if todoMessage}
             <Separator class="mx-2 my-1 data-[orientation=horizontal]:w-auto" />
-            <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => resolveTodo(current)}><EyeSlashIcon class="size-5" />{$t('bots.ignore')}</button>
+            <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" disabled={pending.includes(current.entry.id)} onclick={() => toggleTodo(current)}><ListChecksIcon class="size-5" />{$t(openTodo ? 'bots.cancelTodo' : 'bots.markTodo')}</button>
           {/if}
         {/if}
       </div>

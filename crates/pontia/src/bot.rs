@@ -68,6 +68,7 @@ pub(crate) async fn run(command: BotCommand, config: &AppConfig) -> Result<(), S
             json!({ "message_id": message_id, "related_to": related_to }),
             false,
         ),
+        BotTool::Todo(command) => ("todo", json!(command), true),
         BotTool::SendToUser(input) => ("send-to-user", json!(input), false),
     };
     let mut request = if grouped {

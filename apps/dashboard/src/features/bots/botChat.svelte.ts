@@ -1,4 +1,4 @@
-import { changeBotTodo } from "./botTodos.svelte";
+import { setBotTodo } from "./botTodos.svelte";
 import { onDestroy, onMount, tick } from "svelte";
 import { toast } from "svelte-sonner";
 import { BotTimeline } from "$lib/botTimeline.svelte";
@@ -186,16 +186,15 @@ export function createBotChat(botId: string) {
       : (timeline.bot?.name ?? "");
   }
 
-  async function changeTodo(id: string, action: "resolve" | "reopen") {
-    await changeBotTodo(
+  async function changeTodo(id: string, open: boolean) {
+    await setBotTodo(
       device,
       botId,
       id,
-      action,
+      open,
       (message) => timeline.message(message),
       () => timeline.refresh(),
     );
-    void device.queryClient.invalidateQueries({ queryKey: ["bot-message-context", botId] });
   }
 
   async function retry(id: string) {

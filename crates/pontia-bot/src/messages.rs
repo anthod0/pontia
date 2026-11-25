@@ -18,7 +18,10 @@ const MAX_RELATED: usize = 5;
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum Todo {
-    Open,
+    Open {
+        by: String,
+        at: String,
+    },
     Done {
         by: String,
         at: String,
@@ -28,7 +31,7 @@ pub enum Todo {
 }
 
 pub(crate) const MESSAGE_COLUMNS: &str = "m.*, (
-    SELECT json_object('state', state, 'by', resolved_by, 'at', resolved_at,
+    SELECT json_object('state', state, 'by', coalesce(resolved_by, opened_by), 'at', coalesce(resolved_at, opened_at),
                        'message_id', resolved_message_id)
     FROM bot_todos WHERE message_id = m.id) AS todo";
 
@@ -38,6 +41,49 @@ pub(crate) const MESSAGE_COLUMNS: &str = "m.*, (
 pub enum MessageKind {
     UserInput,
     BotReply,
+}
+
+impl MessageKind {
+    pub(crate) fn speaker(self) -> &'static str {
+        match self {
+            Self::UserInput => "User",
+            Self::BotReply => "Bot",
+        }
+    }
+}
+
+pub(crate) fn summary(kind: MessageKind, mut content: &str, limit: usize) -> String {
+    let mut files = String::new();
+    if kind == MessageKind::UserInput {
+        if content.starts_with("<user_quote ")
+            && let Some((_, body)) = content.split_once("</user_quote>\n")
+        {
+            content = body;
+        }
+        if content.starts_with("<user_uploads ")
+            && let Some((uploads, body)) = content.split_once("</user_uploads>")
+        {
+            content = body.trim_start();
+            if content.is_empty() {
+                files = uploads
+                    .lines()
+                    .filter_map(|line| {
+                        line.strip_suffix("</user_upload>")?
+                            .split_once('>')
+                            .map(|(_, name)| name)
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+            }
+        }
+    }
+    let body = if content.is_empty() { &files } else { content };
+    body.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(limit)
+        .collect()
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, sqlx::Type, PartialEq, Eq)]
@@ -160,11 +206,14 @@ impl MessageService {
             }
         }
         if reply.todo {
-            sqlx::query("INSERT INTO bot_todos(message_id, state) VALUES (?, 'open')")
+            let at = sqlx::query_scalar("INSERT INTO bot_todos(message_id, state, opened_by) VALUES (?, 'open', 'bot') RETURNING opened_at")
                 .bind(&message.id)
-                .execute(&mut *tx)
+                .fetch_one(&mut *tx)
                 .await?;
-            message.todo = Some(Todo::Open);
+            message.todo = Some(Todo::Open {
+                by: "bot".into(),
+                at,
+            });
         }
         sqlx::query("UPDATE bots SET awaiting_reply = 0 WHERE bot_id = ?")
             .bind(bot_id)
@@ -278,14 +327,21 @@ impl MessageService {
     }
 
     pub(crate) async fn fail(&self, message: &BotMessage) -> Result<BotMessage> {
-        Ok(sqlx::query_as(
+        let mut tx = self.pool.begin().await?;
+        let failed = sqlx::query_as(
             "UPDATE bot_messages SET status = 'failed'
              WHERE bot_id = ? AND id = ? RETURNING *",
         )
         .bind(&message.bot_id)
         .bind(&message.id)
-        .fetch_one(&self.pool)
-        .await?)
+        .fetch_one(&mut *tx)
+        .await?;
+        sqlx::query("DELETE FROM bot_todos WHERE message_id = ?")
+            .bind(&message.id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(failed)
     }
 }
 

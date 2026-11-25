@@ -26,7 +26,9 @@ struct HistoryMessage {
 struct OpenTodo {
     id: String,
     created_at: String,
-    summary: String,
+    kind: crate::messages::MessageKind,
+    opened_by: String,
+    content: String,
     total: i64,
 }
 
@@ -127,9 +129,9 @@ impl HandoffService {
         .fetch_all(&self.pool)
         .await?;
         let todos: Vec<OpenTodo> = sqlx::query_as(
-            "SELECT m.id, m.created_at, substr(m.content, 1, 160) AS summary, count(*) OVER () AS total
+            "SELECT m.id, t.opened_at AS created_at, m.kind, t.opened_by, m.content, count(*) OVER () AS total
              FROM bot_messages m JOIN bot_todos t ON t.message_id = m.id
-             WHERE m.bot_id = ? AND t.state = 'open' ORDER BY timeline_ms DESC, m.id DESC LIMIT 20",
+             WHERE m.bot_id = ? AND t.state = 'open' ORDER BY t.opened_at DESC, m.id DESC LIMIT 20",
         ).bind(bot_id).fetch_all(&self.pool).await?;
         let mut helpers: Vec<_> = helpers
             .iter()

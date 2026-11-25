@@ -60,21 +60,19 @@
           {#each entries as {bot, item, done, date} (bot.bot_id + ':' + item.id)}
             <li class="flex items-center gap-1 px-1 py-1">
               <span aria-hidden="true" class="mr-1.5 flex size-4 shrink-0 items-center text-muted-foreground">
-                {#if done.by === 'user'}<CheckCircleIcon class="size-4" />
+                {#if item.kind === 'user_input'}<CheckCircleIcon class="size-4" />
                 {:else}<BotAvatar shape={bot.avatar_shape} color={bot.avatar_color} class="size-4" />{/if}
               </span>
               <button type="button" class="min-w-0 flex-1 rounded-md py-1 text-left hover:text-primary focus-visible:outline-ring" onclick={() => onjump(bot, item)}>
                 <span class="line-clamp-2 text-sm leading-5 [overflow-wrap:anywhere]">{todoSummary(item)}</span>
                 <span class="text-xs text-muted-foreground">
-                  {#if showBot && done.by === 'user'}{bot.name} · {/if}
+                  {item.kind === 'user_input' ? $t('bots.you') : bot.name} · {#if showBot && item.kind === 'user_input' && done.by === 'user'}{bot.name} · {/if}
                   {done.by === 'user' ? $t('bots.resolvedByYou') : $t('bots.closedByBot', { name: bot.name })} ·
                   <time datetime={done.at} class="tabular-nums">{date.toLocaleTimeString($currentLocale, { hour: '2-digit', minute: '2-digit' })}</time>
                 </span>
               </button>
               <Button variant="ghost" size="icon-xs" class="text-muted-foreground touch-target:size-11" aria-label={$t('bots.context')} title={$t('bots.context')} onclick={() => oncontext(bot, item)}><TreeStructureIcon /></Button>
-              {#if done.by === 'user'}
                 <Button variant="ghost" size="xs" class="text-muted-foreground touch-target:min-h-11" onclick={() => onreopen(bot, item)}><ArrowUUpLeftIcon />{$t('bots.reopen')}</Button>
-              {/if}
             </li>
           {/each}
         </ul>

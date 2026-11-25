@@ -95,7 +95,7 @@ async fn closing_todos_is_atomic_scoped_and_links_the_explanation() {
 
 #[tokio::test]
 async fn user_todo_changes_notify_once_and_preserve_who_closed_it() {
-    use pontia_bot::messages::TodoAction::{Reopen, Resolve};
+    use pontia_bot::messages::TodoAction::{Mark, Resolve};
     let (_root, pool, _client, _control, service) = fixture().await;
     let bot = service
         .records()
@@ -103,7 +103,7 @@ async fn user_todo_changes_notify_once_and_preserve_who_closed_it() {
         .await
         .unwrap();
     let id = &bot.bot_id;
-    service.send(id, "Plan").await.unwrap();
+    let user = service.send(id, "Plan").await.unwrap().message;
     let session = service
         .records()
         .get(id)
@@ -120,6 +120,26 @@ async fn user_todo_changes_notify_once_and_preserve_who_closed_it() {
             resolve_todos,
         },
     };
+    let (marked, changed) = service
+        .session_todo(&session, &user.id, Mark)
+        .await
+        .unwrap();
+    assert!(changed && matches!(marked.todo, Some(Todo::Open {by,..}) if by == "bot"));
+    assert!(
+        !service
+            .session_todo(&session, &user.id, Mark)
+            .await
+            .unwrap()
+            .1
+    );
+    let (closed, changed) = service
+        .session_todo(&session, &user.id, Resolve)
+        .await
+        .unwrap();
+    assert!(
+        changed && matches!(closed.todo, Some(Todo::Done {by, message_id:None,..}) if by == "bot")
+    );
+    service.change_todo(id, &user.id, Mark).await.unwrap();
     let content = format!("One\n\t{}", "字".repeat(100));
     let todo = service
         .send_to_user(reply(content, true, vec![]))
@@ -145,9 +165,8 @@ async fn user_todo_changes_notify_once_and_preserve_who_closed_it() {
         .unwrap();
     assert_eq!(sent.already_resolved, [todo.as_str()]);
     for _ in 0..2 {
-        assert_eq!(
-            service.change_todo(id, &todo, Reopen).await.unwrap().todo,
-            Some(Todo::Open)
+        assert!(
+            matches!(service.change_todo(id, &todo, Mark).await.unwrap().todo, Some(Todo::Open {by,..}) if by == "user")
         );
     }
     assert!(
@@ -163,8 +182,8 @@ async fn user_todo_changes_notify_once_and_preserve_who_closed_it() {
         .await
         .unwrap();
     assert!(matches!(
-        service.change_todo(id, &todo, Reopen).await,
-        Err(pontia_core::Error::StateConflict(_))
+        service.change_todo(id, &todo, Mark).await.unwrap().todo,
+        Some(Todo::Open {by,..}) if by == "user"
     ));
     let persisted: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM bot_notifications WHERE bot_id = ? AND id LIKE 'todo:%'",

@@ -672,10 +672,23 @@ async fn failed_handoff_preserves_helper_failure_notice_and_never_replays_origin
             .await
             .is_err()
     );
+    let waiting = conversation
+        .chat(&id)
+        .await
+        .unwrap()
+        .messages
+        .into_iter()
+        .find(|message| message.content == "waiting user")
+        .unwrap();
+    conversation
+        .change_todo(&id, &waiting.id, pontia_bot::messages::TodoAction::Mark)
+        .await
+        .unwrap();
     release.send(()).unwrap();
     rotating.await.unwrap();
     let user = user.await.unwrap().message;
     assert_eq!(user.status, MessageStatus::Failed);
+    assert!(conversation.todos(&id).await.unwrap().open.is_empty());
     assert_eq!(reply.await.unwrap()["delivery"]["status"], "failed");
     let pending: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM bot_notifications WHERE delivered=0")

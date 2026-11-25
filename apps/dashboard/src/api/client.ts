@@ -148,16 +148,12 @@ export function createApi(device: DeviceRuntime) {
     return request(`${botPath(id)}/todos`, { signal });
   }
 
-  async function changeBotTodo(
-    id: string,
-    messageId: string,
-    action: "resolve" | "reopen",
-  ): Promise<BotMessage> {
+  async function setBotTodo(id: string, messageId: string, open: boolean): Promise<BotMessage> {
     return (
       await request<{ message: BotMessage }>(
-        `${botPath(id)}/todos/${encodeURIComponent(messageId)}/${action}`,
+        `${botPath(id)}/messages/${encodeURIComponent(messageId)}/todo`,
         {
-          method: "POST",
+          method: open ? "PUT" : "DELETE",
           retryNetworkErrors: false,
         },
       )
@@ -1014,7 +1010,7 @@ export function createApi(device: DeviceRuntime) {
     getBotMessageContext,
     searchBotMessages,
     getBotTodos,
-    changeBotTodo,
+    setBotTodo,
     saveBot,
     getBotDeletionBlockers,
     deleteBot,

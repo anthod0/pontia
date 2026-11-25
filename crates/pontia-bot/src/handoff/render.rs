@@ -230,12 +230,14 @@ pub(super) fn document(
         }
         for todo in todos {
             output.push_str(&record(
-                &format!("[{}] {}", todo.created_at, inline_data(&todo.id)),
-                &todo
-                    .summary
-                    .split_whitespace()
-                    .collect::<Vec<_>>()
-                    .join(" "),
+                &format!(
+                    "[{}] {} ({}, marked by {})",
+                    todo.created_at,
+                    inline_data(&todo.id),
+                    todo.kind.speaker(),
+                    todo.opened_by
+                ),
+                &crate::messages::summary(todo.kind, &todo.content, 160),
             ));
         }
     } else {
@@ -260,10 +262,11 @@ pub(super) fn document(
                 inline_data(&message.id)
             );
             if let Some(todo) = &message.todo {
-                metadata.push_str(match todo {
-                    crate::messages::Todo::Open => " [Todo: open]",
-                    crate::messages::Todo::Done { .. } => " [Todo: done]",
-                });
+                let (state, by) = match todo {
+                    crate::messages::Todo::Open { by, .. } => ("open", by),
+                    crate::messages::Todo::Done { by, .. } => ("done", by),
+                };
+                metadata.push_str(&format!(" [Todo: {state}, by {by}]"));
             }
             if !history.related_to.is_empty() {
                 let targets = history

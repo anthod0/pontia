@@ -8,13 +8,8 @@ import type { createBotDirectory } from "./botDirectory.svelte";
 export function createBotTodos(
   device: DeviceRuntime,
   directory: ReturnType<typeof createBotDirectory>,
-  includeRecentlyResolved = false,
 ) {
-  const bots = $derived(
-    (directory.bots ?? []).filter(
-      (_, i) => includeRecentlyResolved || (directory.summaries[i]?.open_todo_count ?? 0) > 0,
-    ),
-  );
+  const bots = $derived(directory.bots ?? []);
   const queries = createQueries(
     () => ({
       queries: bots.map((bot) => ({
@@ -32,23 +27,24 @@ export function createBotTodos(
     },
   };
 }
-export async function changeBotTodo(
+export async function setBotTodo(
   device: DeviceRuntime,
   botId: string,
   id: string,
-  action: "resolve" | "reopen",
+  open: boolean,
   updated?: (message: BotMessage) => void,
   failed?: () => void,
 ) {
   try {
-    const message = await device.api.changeBotTodo(botId, id, action);
+    const message = await device.api.setBotTodo(botId, id, open);
     updated?.(message);
-    if (action === "resolve" && message.todo?.state === "done" && message.todo.by === "user") {
-      toast.success(translate("bots.ignored"), {
+    void device.queryClient.invalidateQueries({ queryKey: ["bot-message-context", botId] });
+    if (!open && message.todo?.state === "done" && message.todo.by === "user") {
+      toast.success(translate("bots.todoCancelled"), {
         id: message.id,
         action: {
           label: translate("common.undo"),
-          onClick: () => void changeBotTodo(device, botId, id, "reopen", updated, failed),
+          onClick: () => void setBotTodo(device, botId, id, true, updated, failed),
         },
       });
     }

@@ -390,28 +390,52 @@ impl ConversationService {
         id: &str,
         action: TodoAction,
     ) -> Result<BotMessage> {
-        let (message, changed) = self.messages.change_todo(bot_id, id, action).await?;
+        let (message, changed, previous) = self
+            .messages
+            .change_todo(bot_id, id, action, "user")
+            .await?;
         if changed {
-            let verb = match action {
-                TodoAction::Resolve => "dismissed",
-                TodoAction::Reopen => "reopened",
+            let speaker = message.kind.speaker();
+            let description = match (action, previous) {
+                (TodoAction::Mark, Some(crate::messages::Todo::Done { by, .. })) => format!(
+                    "User reopened todo on {speaker} message {id} (previously closed by {by})"
+                ),
+                (TodoAction::Mark, _) => format!("User marked {speaker} message {id} as todo"),
+                (TodoAction::Resolve, _) => {
+                    format!("User cancelled todo on {speaker} message {id}")
+                }
             };
-            let summary: String = message
-                .content
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ")
-                .chars()
-                .take(80)
-                .collect();
+            let summary = crate::messages::summary(message.kind, &message.content, 80);
             let _ = self.notices.send(crate::system_notices::BotNotice {
                 bot_id: Some(bot_id.into()),
                 key: format!("todo:{id}"),
-                text: format!("User {verb} todo message {id}: \"{summary}\""),
+                text: format!("{description}: {summary:?}"),
             });
-            self.activity(bot_id).notify(ConversationUpdate::Changed);
+            self.activity(bot_id).notify(ConversationUpdate::Message {
+                message: message.clone(),
+            });
         }
         Ok(message)
+    }
+
+    pub async fn session_todo(
+        &self,
+        session_id: &str,
+        id: &str,
+        action: TodoAction,
+    ) -> Result<(BotMessage, bool)> {
+        let bot = self.require_bot(session_id).await?;
+        let (message, changed, _) = self
+            .messages
+            .change_todo(&bot.bot_id, id, action, "bot")
+            .await?;
+        if changed {
+            self.activity(&bot.bot_id)
+                .notify(ConversationUpdate::Message {
+                    message: message.clone(),
+                });
+        }
+        Ok((message, changed))
     }
 
     /// Saves a Dashboard edit of USER.md and tells every live Bot about the new

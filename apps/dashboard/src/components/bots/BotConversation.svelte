@@ -43,7 +43,7 @@
     onclick={(event: MouseEvent) => actions?.openMenu(id, event)}><DotsThreeIcon weight="bold" /></Button>
 {/snippet}
 
-    <BotMessageActions root={feedRoot} fileSessionId={timeline.fileLinkSession?.session_id} entry={id => timeline.entries.find(row => row.id === id)} bind:this={actions} onresolve={id => chat.changeTodo(id, 'resolve')} oncontext={id => oncontext(id)} onquote={quote => void chat.addQuote(quote)} />
+    <BotMessageActions root={feedRoot} fileSessionId={timeline.fileLinkSession?.session_id} entry={id => timeline.entries.find(row => row.id === id)} bind:this={actions} ontodo={chat.changeTodo} oncontext={id => oncontext(id)} onquote={quote => void chat.addQuote(quote)} />
     <BotMessageFeed bind:this={chat.feed} bind:root={feedRoot} {timeline} {bottomInset} typing={chat.typing} highlighted={chat.highlighted && !chat.highlightedPath && timeline.entries.some(row => row.id === chat.highlighted) ? chat.highlighted : null}>
       {#snippet row(entry)}
         {#if 'content' in entry}
@@ -51,7 +51,7 @@
           {@const parts = entry.kind === 'user_input' ? { ...parseUploadMessage(quoted.text), quote: quoted.quote } : { ...quoted, files: [] }}
           {@const fileSession = timeline.fileLinkSession?.session_id}
           <div class={['flex gap-1', entry.kind === 'user_input' ? 'justify-end' : 'justify-start']}>
-            {#if !mobile && entry.kind === 'user_input'}{@render menuButton(entry.id)}{/if}
+            {#if !mobile && entry.kind === 'user_input'}{@render menuButton(entry.id)}{#if entry.todo?.state === 'open'}{@render todoButton()}{/if}{/if}
             <div class="max-w-[90%] [.mobile-shell_&]:max-w-[86%] min-w-0 space-y-2">
               {#if parts.files.length}
                 <ul class={['flex flex-wrap justify-end gap-2', !parts.text && highlightableClass]} {...(!parts.text ? quotableProps : {})} data-user-message-uploads>
@@ -101,7 +101,7 @@
                 {#if mobile}{@render menuButton(entry.id)}{/if}
               </div>
             </div>
-            {#if !mobile && entry.todo?.state === 'open'}
+            {#if !mobile && entry.kind === 'bot_reply' && entry.todo?.state === 'open'}
               {@render todoButton()}
             {/if}
             {#if !mobile && entry.kind === 'bot_reply'}{@render menuButton(entry.id)}{/if}

@@ -8,10 +8,11 @@ pub struct TodoList {
     pub recently_resolved: Vec<BotMessage>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum TodoAction {
     Resolve,
-    Reopen,
+    Mark,
 }
 
 impl MessageService {
@@ -22,7 +23,7 @@ impl MessageService {
             JOIN bot_todos t ON t.message_id = m.id WHERE m.bot_id = ?"
         );
         let open = sqlx::query_as(&format!(
-            "{query} AND t.state = 'open' ORDER BY m.timeline_ms DESC, m.id DESC"
+            "{query} AND t.state = 'open' ORDER BY t.opened_at DESC, m.id DESC"
         ))
         .bind(bot_id)
         .fetch_all(&mut *tx)
@@ -45,36 +46,45 @@ impl MessageService {
         bot_id: &str,
         id: &str,
         action: TodoAction,
-    ) -> Result<(BotMessage, bool)> {
-        let update = match action {
-            TodoAction::Resolve => "UPDATE bot_todos SET state = 'done', resolved_by = 'user',
-                resolved_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE state = 'open'",
-            TodoAction::Reopen => "UPDATE bot_todos SET state = 'open', resolved_by = NULL,
-                resolved_at = NULL, resolved_message_id = NULL WHERE state = 'done' AND resolved_by = 'user'",
-        };
-        let mut tx = self.pool.begin().await?;
-        let changed = sqlx::query(&format!(
-            "{update} AND message_id = (SELECT id FROM bot_messages WHERE bot_id = ? AND id = ?)"
-        ))
-        .bind(bot_id)
-        .bind(id)
-        .execute(&mut *tx)
-        .await?
-        .rows_affected()
-            == 1;
-        let message: BotMessage = sqlx::query_as(&format!(
-            "SELECT {MESSAGE_COLUMNS} FROM bot_messages m JOIN bot_todos t ON t.message_id = m.id WHERE m.bot_id = ? AND m.id = ?"
-        )).bind(bot_id).bind(id).fetch_optional(&mut *tx).await?
-            .ok_or_else(|| Error::NotFound(format!("Todo {id} not found")))?;
-        if !changed
-            && matches!(action, TodoAction::Reopen)
-            && matches!(&message.todo, Some(Todo::Done { by, .. }) if by == "bot")
-        {
+        actor: &str,
+    ) -> Result<(BotMessage, bool, Option<Todo>)> {
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let query =
+            format!("SELECT {MESSAGE_COLUMNS} FROM bot_messages m WHERE m.bot_id = ? AND m.id = ?");
+        let mut message: BotMessage = sqlx::query_as(&query)
+            .bind(bot_id)
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("Bot message {id} not found")))?;
+        if message.status != super::MessageStatus::Normal {
             return Err(Error::StateConflict(
-                "A todo closed by the Bot cannot be reopened".into(),
+                "Retry the failed message first".into(),
             ));
         }
+        let previous = message.todo.clone();
+        let open = matches!(previous, Some(Todo::Open { .. }));
+        let changed = open != matches!(action, TodoAction::Mark);
+        if changed {
+            let update = match action {
+                TodoAction::Mark => "INSERT INTO bot_todos(opened_by,message_id,state) VALUES (?,?,'open')
+                    ON CONFLICT(message_id) DO UPDATE SET state='open', opened_by=excluded.opened_by,
+                    opened_at=excluded.opened_at, resolved_by=NULL, resolved_at=NULL, resolved_message_id=NULL",
+                TodoAction::Resolve => "UPDATE bot_todos SET state='done', resolved_by=?,
+                    resolved_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE message_id=?",
+            };
+            sqlx::query(update)
+                .bind(actor)
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
+            message = sqlx::query_as(&query)
+                .bind(bot_id)
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await?;
+        }
         tx.commit().await?;
-        Ok((message, changed))
+        Ok((message, changed, previous))
     }
 }
