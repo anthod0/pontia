@@ -70,6 +70,24 @@ test("recording accepts function keys and reserves Shift for reverse actions", (
   expect(recordError("switchWorkspace", { code: "KeyX", alt: true, shift: true })).toBeTruthy();
 });
 
+test("Bot shortcuts use their own scope and Shift to reverse direction", () => {
+  for (const id of ["switchBot", "switchBotPanelTab"] as const) {
+    const binding = registry[id].combo;
+    expect(activeOnPath(id, "/bots/a")).toBe(true);
+    expect(activeOnPath(id, "/chat/a")).toBe(false);
+    expect(matches(id, binding, eventCombo(keydown({ code: binding.code, altKey: true })))).toBe(
+      true,
+    );
+    expect(
+      matches(
+        id,
+        binding,
+        eventCombo(keydown({ code: binding.code, altKey: true, shiftKey: true })),
+      ),
+    ).toBe(true);
+  }
+});
+
 test("conflicts include shifted reverse actions and each position in overlapping scopes", () => {
   const conflict = (id: ShortcutId, code: string, shift: boolean, other: ShortcutId) =>
     overlaps(id, { code, alt: true, shift }, other, registry[other].combo);

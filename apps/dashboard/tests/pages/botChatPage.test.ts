@@ -7,6 +7,7 @@ import { VisibleObserver, mockFileInfo } from "../components/fileCardFixture";
 import BotChatPage from "../../src/pages/BotChatPage.svelte";
 import BotChatPreviewHarness from "./BotChatPreviewHarness.svelte";
 import type { BotUpdate } from "../../src/services/botChatStream";
+import ShortcutManager from "../../src/lib/components/shortcuts/ShortcutManager.svelte";
 
 const stream = vi.hoisted(() => ({ push: (_update: BotUpdate) => {} }));
 vi.mock("../../src/services/botChatStream", () => ({
@@ -517,6 +518,58 @@ test("the sidebar button shows the open todo count and reopens the tab last used
   render(BotChatPreviewHarness, { botId: bot.bot_id });
   await fireEvent.click(await screen.findByRole("button", { name: "Sidebar, 3 todos" }));
   expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute("aria-selected", "true");
+});
+
+test("Bot shortcuts move between Bots in directory order and wrap", async () => {
+  const bots = [bot, { ...bot, bot_id: "b", name: "Second" }];
+  vi.spyOn(testDevice.api, "listBots").mockResolvedValue(bots);
+  vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue({
+    bot,
+    entries: [],
+    next_before: null,
+    file_link_session: null,
+    open_todo_count: 0,
+    notice_session_id: null,
+    generation_notice: null,
+    status: { kind: "idle" },
+  });
+  history.replaceState({}, "", "/bots/a");
+  render(ShortcutManager);
+  render(BotChatPage, { botId: bot.bot_id });
+  await screen.findByRole("log");
+  await waitFor(() => expect(testDevice.api.listBots).toHaveBeenCalled());
+
+  await fireEvent.keyDown(window, { code: "KeyB", altKey: true });
+  await waitFor(() => expect(location.pathname).toBe("/dashboard/bots/b"));
+  history.replaceState({}, "", "/bots/a");
+  await fireEvent.keyDown(window, { code: "KeyB", altKey: true, shiftKey: true });
+  await waitFor(() => expect(location.pathname).toBe("/dashboard/bots/b"));
+});
+
+test("Bot panel shortcut opens the panel and cycles its tabs in both directions", async () => {
+  vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue({
+    bot,
+    entries: [],
+    next_before: null,
+    file_link_session: null,
+    open_todo_count: 0,
+    notice_session_id: null,
+    generation_notice: null,
+    status: { kind: "idle" },
+  });
+  history.replaceState({}, "", "/bots/a");
+  render(ShortcutManager);
+  render(BotChatPage, { botId: bot.bot_id });
+  await screen.findByRole("log");
+
+  await fireEvent.keyDown(window, { code: "KeyP", altKey: true });
+  await waitFor(() =>
+    expect(screen.getByRole("tab", { name: "Preview" })).toHaveAttribute("aria-selected", "true"),
+  );
+  await fireEvent.keyDown(window, { code: "KeyP", altKey: true, shiftKey: true });
+  await waitFor(() =>
+    expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute("aria-selected", "true"),
+  );
 });
 
 function emptyBotChat() {

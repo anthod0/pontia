@@ -16,6 +16,7 @@ const scopes = {
   input: pages.newChat | pages.session | pages.bot,
   newChat: pages.newChat,
   session: pages.session,
+  bot: pages.bot,
 };
 
 type Definition = {
@@ -50,6 +51,18 @@ const definitions = {
     label: "shortcuts.switchWorkspace",
     scope: "newChat",
     combo: alt("KeyW"),
+    shiftReverses: true,
+  },
+  switchBot: {
+    label: "shortcuts.switchBot",
+    scope: "bot",
+    combo: alt("KeyB"),
+    shiftReverses: true,
+  },
+  switchBotPanelTab: {
+    label: "shortcuts.switchBotPanelTab",
+    scope: "bot",
+    combo: alt("KeyP"),
     shiftReverses: true,
   },
 } satisfies Record<string, Definition>;

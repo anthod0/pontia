@@ -13,11 +13,25 @@
   import DesktopBotPanel from './DesktopBotPanel.svelte'
   import type { BotChatController } from '../../../features/bots/botChat.svelte'
   import BotConversation from '../../../components/bots/BotConversation.svelte'
+  import { createQuery } from '@tanstack/svelte-query'
+  import { useDeviceRuntime } from '../../../device/context'
+  import { registerShortcut } from '$lib/shortcuts/dispatch'
+  import { adjacentValue } from '$lib/shortcuts/sessionNavigation'
+  import { navigate } from '$lib/navigation'
   let {chat}: {chat:BotChatController} = $props()
+  const device = useDeviceRuntime()
+  const bots = createQuery(() => ({
+    queryKey: ['bots'],
+    queryFn: ({ signal }) => device.api.listBots(signal),
+  }), () => device.queryClient)
   const timeline = $derived(chat.timeline)
   let panel = $state<DesktopBotPanel>()
   provideLocalhostPreview(target => panel?.openPreview(target))
   provideFilePreviewNavigator({open: file => panel?.openFile(file)})
+  registerShortcut('switchBot', event => {
+    const next = adjacentValue((bots.data ?? []).map(bot => bot.bot_id), chat.botId, event.shiftKey ? -1 : 1)
+    if (next && next !== chat.botId) void navigate(`/bots/${encodeURIComponent(next)}`)
+  })
   // The feed stays usable after a failed refresh, so the error stays up until a refresh succeeds.
   $effect(() => {
     const message = timeline.bot ? timeline.refreshError : ''

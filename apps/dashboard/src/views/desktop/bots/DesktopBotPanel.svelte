@@ -39,6 +39,8 @@
   import { SidePanelRoute } from '$lib/sidePanelRoute.svelte'
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
   import { promptValueAfterEnter } from '$lib/promptEnterBehavior'
+  import { registerShortcut } from '$lib/shortcuts/dispatch'
+  import { adjacentValue } from '$lib/shortcuts/sessionNavigation'
 
   let { bot, count, fileSessionId, onjump, onquote, onreply, ontodochange }: {
     bot: Bot
@@ -60,6 +62,10 @@
   const device = useDeviceRuntime()
   // The Bot chat page's URL says whether the panel is open and on which tab.
   const panel = new SidePanelRoute<PanelTab>(botPanelTabs)
+  registerShortcut('switchBotPanelTab', event => {
+    const next = adjacentValue([...botPanelTabs], panel.tab, event.shiftKey ? -1 : 1) as PanelTab
+    void panel.show(next)
+  })
   let preview = $state.raw<LocalhostPreviewTarget | null>(null)
   let file = $state.raw<FilePreviewTarget | null>(null)
   // The panel lives as long as its Bot chat page, which is recreated for another Bot.
