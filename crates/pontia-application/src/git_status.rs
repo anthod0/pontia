@@ -12,7 +12,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{ExternalQueryService, WorkspaceGitStatusView, git::command::run_git_text};
+use crate::{
+    ExternalQueryService, WorkspaceGitStatusView,
+    git::command::{repo_root, run_git_text},
+};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct ParsedGitStatus {
@@ -198,10 +201,12 @@ async fn refresh_workspace_git_status_now(
 }
 
 async fn observe_git_status(workspace_path: &Path) -> Result<ParsedGitStatus> {
-    let repo_root = run_git_text(workspace_path, &["rev-parse", "--show-toplevel"]).await?;
+    let Some(repo_root) = repo_root(workspace_path).await? else {
+        return Ok(ParsedGitStatus::default());
+    };
     let status = run_git_text(workspace_path, &["status", "--porcelain=v2", "--branch"]).await?;
     let mut parsed = parse_porcelain_v2_status(&status)?;
-    parsed.repo_root = Some(repo_root.trim().to_string());
+    parsed.repo_root = Some(repo_root);
     Ok(parsed)
 }
 

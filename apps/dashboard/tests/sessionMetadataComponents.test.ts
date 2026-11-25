@@ -132,25 +132,27 @@ describe("session metadata component boundaries", () => {
   });
 });
 
-test.each([
-  {
-    failure: "domain error: fatal: not a git repository (or any of the parent directories): .git",
-    visible: false,
-  },
-  { failure: "domain error: fatal: not a git repository: broken-submodule", visible: true },
-])("git status displays $failure only for repository failures", async ({ failure, visible }) => {
-  const status = gitStatus({
-    repo_root: null,
-    branch: null,
-    upstream: null,
-    state: "error",
-    failure,
-  });
-  render(SessionMetadata, { props: metadataProps(status) });
-  await fireEvent.click(screen.getByRole("button", { name: /^Session details:/ }));
+test.each([null, "domain error: fatal: not a git repository: broken-submodule"])(
+  "shows the branch and any repository failure (%s)",
+  async (failure) => {
+    const status = gitStatus({
+      repo_root: null,
+      branch: null,
+      upstream: null,
+      state: failure ? "error" : "observed",
+      failure,
+    });
+    render(SessionMetadata, { props: metadataProps(status) });
+    await fireEvent.click(screen.getByRole("button", { name: /^Session details:/ }));
 
-  const dialog = await screen.findByRole("dialog", { name: "Session details" });
-  const gitField = within(dialog).getByLabelText(/^Git: /);
-  expect(gitField.textContent?.includes(failure)).toBe(visible);
-  expect(gitField.title.includes(failure)).toBe(visible);
-});
+    const dialog = await screen.findByRole("dialog", { name: "Session details" });
+    const gitField = within(dialog).getByLabelText(/^Git: /);
+    if (failure) {
+      expect(gitField).toHaveTextContent(failure);
+      expect(gitField.title).toContain(failure);
+    } else {
+      expect(gitField).toHaveTextContent("No branch");
+      expect(gitField.title).toBe("No branch");
+    }
+  },
+);

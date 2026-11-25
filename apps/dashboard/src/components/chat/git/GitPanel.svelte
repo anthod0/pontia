@@ -45,7 +45,8 @@
   let history = $state<GitHistory>()
 
   const outsideRepository = $derived(changes?.repo_root === null)
-  const branchesQuery = queries.createWorkspaceGitBranchesQuery(() => workspaceId, () => !outsideRepository && git.view === 'history' && (!git.commit || !!oncommit))
+  const canReadRepository = $derived(!outsideRepository && (!!changes || changesQuery.isError))
+  const branchesQuery = queries.createWorkspaceGitBranchesQuery(() => workspaceId, () => canReadRepository && git.view === 'history' && (!git.commit || !!oncommit))
   const branches = $derived(branchesQuery.data?.branches ?? [])
   const head = $derived(branchesQuery.data?.head ?? null)
   const ref = $derived(git.ref && branches.some(branch => branch.ref === git.ref) ? git.ref : head)
@@ -61,7 +62,7 @@
   function refresh() {
     void changesQuery.refetch()
     void queries.refreshWorkspaceGitStatus(workspaceId).catch(error => onstatuserror?.(error))
-    if (!outsideRepository && git.view === 'history') {
+    if (canReadRepository && git.view === 'history') {
       void branchesQuery.refetch()
       history?.refresh()
     }
@@ -120,15 +121,15 @@
 {/snippet}
 
 <div bind:this={element} tabindex="-1" class="flex h-full min-h-0 flex-1 flex-col outline-none">
-  {#if git.view === 'changes' && git.diff && !onopen}
+  {#if canReadRepository && git.view === 'changes' && git.diff && !onopen}
     {#key `${workspaceId}\0${changeKey(git.diff)}`}
       <GitDiffView {device} {workspaceId} file={git.diff} {change} onback={closeDiff} />
     {/key}
-  {:else if git.view === 'history' && git.commit && git.commitFile && !oncommit}
+  {:else if canReadRepository && git.view === 'history' && git.commit && git.commitFile && !oncommit}
     {#key `${workspaceId}\0${git.commit}\0${git.commitFile.path}`}
       <GitCommitDiffView {device} {workspaceId} sha={git.commit} file={git.commitFile} onback={closeCommitFile} />
     {/key}
-  {:else if git.view === 'history' && git.commit && !oncommit}
+  {:else if canReadRepository && git.view === 'history' && git.commit && !oncommit}
     {#key `${workspaceId}\0${git.commit}`}
       <GitCommitDetail {device} {workspaceId} sha={git.commit} onback={closeCommit}
         onopen={(file) => { element?.focus(); git.commitFile = { path: file.path, orig_path: file.orig_path } }} />

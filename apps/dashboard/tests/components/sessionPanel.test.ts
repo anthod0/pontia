@@ -398,9 +398,15 @@ test("shows a message for a Workspace outside a Git repository", async () => {
     total: 0,
     truncated: false,
   });
-  render(SessionPanelHarness);
-  await openTab("Git");
-  expect(await screen.findByText("Not a Git repository")).toBeTruthy();
+  let sessionPanel: SessionPanel | undefined;
+  render(SessionPanelHarness, { onpanel: (value: SessionPanel) => (sessionPanel = value) });
+  sessionPanel!.git.diff = { path: "src/lib.rs", group: "staged" };
+  const panel = await openTab("Git");
+  expect(await screen.findByText("Not a Git repository")).toBeVisible();
+  await fireEvent.click(within(panel).getByRole("tab", { name: "History" }));
+  expect(await screen.findByText("Not a Git repository")).toBeVisible();
+  expect(testDevice.api.getWorkspaceGitBranches).not.toHaveBeenCalled();
+  expect(testDevice.api.getWorkspaceGitDiff).not.toHaveBeenCalled();
 });
 
 test("shows a message for a Session without a Workspace", async () => {

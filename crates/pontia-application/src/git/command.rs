@@ -191,13 +191,15 @@ pub(crate) async fn run_git_text(dir: &Path, args: &[&str]) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-/// Resolves the top level of the work tree containing `dir`, or `None` outside a repository.
+/// Git queries are scoped to the Workspace's own .git directory or gitfile.
 pub(crate) async fn repo_root(dir: &Path) -> Result<Option<String>> {
-    match run_git_text(dir, &["rev-parse", "--show-toplevel"]).await {
-        Ok(root) => Ok(Some(root.trim_end_matches('\n').to_string())),
-        Err(Error::Domain(message)) if message.contains("not a git repository") => Ok(None),
-        Err(error) => Err(error),
+    match tokio::fs::symlink_metadata(dir.join(".git")).await {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+        Ok(_) => {}
     }
+    let root = run_git_text(dir, &["rev-parse", "--show-toplevel"]).await?;
+    Ok(Some(root.trim_end_matches('\n').to_string()))
 }
 
 #[cfg(test)]

@@ -9,7 +9,7 @@
   import { Badge } from '$lib/components/ui/badge/index.js'
   import type { SessionView, WorkspaceGitStatusView, WorkspaceView } from '../../api/types'
   import GitStatusInline from './GitStatusInline.svelte'
-  import { gitStatusAriaLabel, gitStatusTitle, isOutsideGitRepository, sessionContextUsageLabel, sessionHandleTitle, sessionWorkspacePath, sessionWorkspaceTitle } from './sessionMetadata'
+  import { gitStatusAriaLabel, gitStatusTitle, sessionContextUsageLabel, sessionHandleTitle, sessionWorkspacePath, sessionWorkspaceTitle } from './sessionMetadata'
 
   interface Props {
     session: SessionView
@@ -27,7 +27,7 @@
 </Badge>
 {#if gitStatus}
   <Badge
-    variant={gitStatus.state === 'error' && !isOutsideGitRepository(gitStatus) ? 'destructive' : 'outline'}
+    variant={gitStatus.state === 'error' ? 'destructive' : 'outline'}
     class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground"
     title={gitStatusTitle(session, gitStatus, gitStatusErrors, $t)}
     aria-label={gitStatusAriaLabel(gitStatus, $t)}

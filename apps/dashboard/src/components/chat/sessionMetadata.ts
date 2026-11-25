@@ -81,12 +81,8 @@ export function sessionWorkspacePath(
   );
 }
 
-export function isOutsideGitRepository(status: WorkspaceGitStatusView | undefined): boolean {
-  return (
-    status?.state === "error" &&
-    status.repo_root === null &&
-    status.failure?.startsWith("domain error: fatal: not a git repository (or any ") === true
-  );
+function isOutsideGitRepository(status: WorkspaceGitStatusView | undefined): boolean {
+  return status?.state === "observed" && status.repo_root === null;
 }
 
 export function gitStatusLabel(
@@ -152,8 +148,7 @@ export function gitStatusTitle(
   translate: Translator = defaultTranslate,
 ): string {
   const error = session.workspace_id ? gitStatusErrors[session.workspace_id] : null;
-  const failure = isOutsideGitRepository(status) ? null : status?.failure;
-  return failure ?? error ?? gitStatusAriaLabel(status, translate);
+  return status?.failure ?? error ?? gitStatusAriaLabel(status, translate);
 }
 
 export function gitStatusToneClass(status: WorkspaceGitStatusView | undefined): string {

@@ -120,11 +120,39 @@ async fn git_changes_reports_non_git_workspace() {
     fs::create_dir(root.path().join("notes")).unwrap();
     let (state, id, _pontia_home) = workspace_for(root.path(), "notes").await;
 
+    let base = format!("/api/v1/workspaces/{id}");
+    let (status, body) = post_empty(state.clone(), &format!("{base}/git-status/refresh")).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let status = &body["data"]["git_status"];
+    assert_eq!(status["state"], "observed");
+    assert!(status["failure"].is_null());
+    assert!(status["repo_root"].is_null());
+
     let (status, body) = get_json(state, &format!("/api/v1/workspaces/{id}/git/changes")).await;
 
     assert_eq!(status, StatusCode::OK, "{body}");
     assert!(body["data"]["changes"]["repo_root"].is_null());
     assert_eq!(body["data"]["changes"]["files"], json!([]));
+}
+
+#[tokio::test]
+async fn broken_git_directory_reports_errors() {
+    let root = tempfile::tempdir().unwrap();
+    fs::create_dir_all(root.path().join("app/.git")).unwrap();
+    let (state, id, _pontia_home) = workspace_for(root.path(), "app").await;
+    let base = format!("/api/v1/workspaces/{id}");
+
+    let (_, body) = post_empty(state.clone(), &format!("{base}/git-status/refresh")).await;
+    let status = &body["data"]["git_status"];
+    assert_eq!(status["state"], "error");
+    assert!(
+        status["failure"]
+            .as_str()
+            .unwrap()
+            .contains("not a git repository")
+    );
+    let (status, _) = get_json(state, &format!("{base}/git/changes")).await;
+    assert!(!status.is_success());
 }
 
 #[tokio::test]
