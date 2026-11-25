@@ -1,4 +1,11 @@
 <script lang="ts">
+	import BookOpenIcon from 'phosphor-svelte/lib/BookOpenIcon';
+	import CreditCardIcon from 'phosphor-svelte/lib/CreditCardIcon';
+	import DeviceMobileIcon from 'phosphor-svelte/lib/DeviceMobileIcon';
+	import GlobeIcon from 'phosphor-svelte/lib/GlobeIcon';
+	import HardDrivesIcon from 'phosphor-svelte/lib/HardDrivesIcon';
+	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
+
 	/**
 	 * A stand-in for the visitor's own app on localhost: the Atlas web app from the Bot stories.
 	 * It keeps its own light palette, as a real app would, and lays out for the viewport width it is given.
@@ -6,12 +13,12 @@
 	let { path, mobile, onnavigate }: { path: string; mobile: boolean; onnavigate: (path: string) => void } = $props();
 
 	const projects = [
-		{ name: 'Website', meta: 'Updated 2h ago', tone: '#458588' },
-		{ name: 'Billing', meta: 'Updated 5h ago', tone: '#d79921' },
-		{ name: 'Mobile app', meta: 'Updated yesterday', tone: '#b16286' },
-		{ name: 'Docs', meta: 'Updated yesterday', tone: '#689d6a' },
-		{ name: 'Infra', meta: 'Updated Nov 21', tone: '#98971a' },
-		{ name: 'Search', meta: 'Updated Nov 20', tone: '#7c6f64' }
+		{ name: 'Website', meta: 'Updated 2h ago', icon: GlobeIcon },
+		{ name: 'Billing', meta: 'Updated 5h ago', icon: CreditCardIcon },
+		{ name: 'Mobile app', meta: 'Updated yesterday', icon: DeviceMobileIcon },
+		{ name: 'Docs', meta: 'Updated yesterday', icon: BookOpenIcon },
+		{ name: 'Infra', meta: 'Updated Nov 21', icon: HardDrivesIcon },
+		{ name: 'Search', meta: 'Updated Nov 20', icon: MagnifyingGlassIcon }
 	];
 	const commands = [
 		{ label: 'Go to Projects', hint: 'G P', to: '/projects' },
@@ -72,7 +79,10 @@
 			<div class="title"><b>Projects</b><span class="primary">New project</span></div>
 			<div class="grid">
 				{#each projects as project}
-					<div class="card"><i style:background={project.tone}></i><b>{project.name}</b><span>{project.meta}</span></div>
+					<div class="card">
+						<project.icon class="project-icon" size={26} weight="duotone" aria-hidden="true" />
+						<b>{project.name}</b><span>{project.meta}</span>
+					</div>
 				{/each}
 			</div>
 			<p class="more">Showing 6 of 24 · <span class="link">Next page →</span></p>
@@ -118,7 +128,7 @@
 	.primary { padding: 7px 12px; border-radius: 7px; background: #407e81; color: #fff; font-size: 13px; font-weight: 500; }
 	.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 	.card { display: grid; gap: 4px; padding: 16px; border: 1px solid #ebe6da; border-radius: 10px; background: #fff; }
-	.card i { width: 26px; height: 26px; margin-bottom: 8px; border-radius: 7px; opacity: 0.85; }
+	.card :global(.project-icon) { margin-bottom: 8px; color: #407e81; }
 	.card b { color: #282828; font-weight: 600; }
 	.card span, .more { color: #928374; font-size: 12.5px; }
 	.more { margin-top: 16px; }
@@ -148,6 +158,6 @@
 	.mobile main { padding: 18px 16px; }
 	.mobile .grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
 	.mobile .card { grid-template-columns: auto 1fr; column-gap: 12px; padding: 12px; }
-	.mobile .card i { grid-row: span 2; margin: 0; }
+	.mobile .card :global(.project-icon) { grid-row: span 2; align-self: center; margin: 0; }
 	.mobile .menu { top: 64px; }
 </style>
