@@ -87,3 +87,13 @@ test("local Markdown keeps a loopback link as a direct new-tab link", () => {
   expect(link).toHaveAttribute("target", "_blank");
   expect(link.dispatchEvent(new MouseEvent("click", { cancelable: true }))).toBe(true);
 });
+
+test("Markdown images suppress the referrer", () => {
+  render(MessageResponse, {
+    props: { markdown: true, content: "![Diagram](https://example.com/diagram.png)" },
+  });
+  expect(screen.getByRole("img", { name: "Diagram" })).toHaveAttribute(
+    "referrerpolicy",
+    "no-referrer",
+  );
+});

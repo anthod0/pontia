@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { author, siteOrigin } from '$lib/site';
+	import { author, serializeJsonLd, siteOrigin } from '$lib/site';
 	import { onMount, type Snippet } from 'svelte';
 	import { page } from '$app/state';
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
@@ -56,7 +56,7 @@
 	<meta name="twitter:title" content={title} />
 	<meta name="twitter:description" content={description} />
 	<meta name="twitter:image" content={image} />
-	{@html `<script type="application/ld+json">${JSON.stringify(structuredData).replaceAll('<', '\\u003c')}</script>`}
+	{@html `<script type="application/ld+json">${serializeJsonLd(structuredData)}</script>`}
 </svelte:head>
 
 <LocaleLinks />

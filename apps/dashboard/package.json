@@ -75,6 +75,9 @@
     "vitest": "^4.1.7",
     "wrangler": "^4.142.0"
   },
+  "patchedDependencies": {
+    "@humanspeak/svelte-markdown@1.9.2": "patches/@humanspeak%2Fsvelte-markdown@1.9.2.patch"
+  },
   "trustedDependencies": [
     "@tailwindcss/oxide",
     "esbuild"

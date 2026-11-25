@@ -3,6 +3,7 @@ import { SignJWT, base64url } from "jose";
 import type { Database } from "../db";
 import { devices, edges } from "../db/schema";
 import { edgeApiOrigin } from "../edge-network";
+import { edgeIsAccessibleTo } from "./resources";
 import { isValidDeviceHandle } from "./device-handle";
 const LABEL = new TextEncoder().encode("pontia-e2e-capability-v1\0");
 
@@ -53,7 +54,9 @@ export async function connectDashboardDevice(
     })
     .from(devices)
     .innerJoin(edges, eq(devices.edgeId, edges.id))
-    .where(and(eq(devices.userId, userId), eq(devices.handle, deviceHandle)))
+    .where(
+      and(eq(devices.userId, userId), eq(devices.handle, deviceHandle), edgeIsAccessibleTo(userId)),
+    )
     .get();
   if (!device?.publicKey || !device.keyVersion) return null;
   const apiOrigin = edgeApiOrigin(device.tunnelUrl);

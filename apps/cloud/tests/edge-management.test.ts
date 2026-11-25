@@ -9,7 +9,7 @@ const ownerId = "0199791c-6600-7000-8000-000000000001";
 const otherUserId = "0199791c-6600-7000-8000-000000000002";
 const edgeId = "0199791c-6600-7000-8000-000000000003";
 
-async function insertEdgeResources() {
+async function insertEdgeResources(accessScope: "private" | "public" = "private") {
   await database.db.insert(users).values([{ id: ownerId }, { id: otherUserId }]);
   await database.db.insert(edges).values({
     id: edgeId,
@@ -18,11 +18,11 @@ async function insertEdgeResources() {
     dnsLabel: "brave-atlas",
     tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel",
     serviceCredentialHash: "hash",
-    accessScope: "public",
+    accessScope,
   });
   await database.db.insert(devices).values({
     id: "0199791c-6600-7000-8000-000000000004",
-    userId: otherUserId,
+    userId: accessScope === "public" ? otherUserId : ownerId,
     edgeId,
     handle: "remote-device",
     name: "Remote device",
@@ -91,4 +91,18 @@ test("an edge cannot be deleted by another user", async () => {
 
   expect(cleanupCalled).toBe(false);
   expect(await database.db.select().from(edges).where(eq(edges.id, edgeId))).toHaveLength(1);
+});
+
+test("an owner cannot remove a public edge or its resources", async () => {
+  await insertEdgeResources("public");
+  expect(
+    await removeOwnedEdge(database.db, ownerId, edgeId, {
+      async cleanupHostname() {
+        throw new Error("unexpected DNS cleanup");
+      },
+    }),
+  ).toEqual({ status: "not_found" });
+  expect(await database.db.select().from(edges)).toHaveLength(1);
+  expect(await database.db.select().from(devices)).toHaveLength(1);
+  expect(await database.db.select().from(edgeTickets)).toHaveLength(1);
 });

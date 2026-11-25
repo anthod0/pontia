@@ -6,3 +6,7 @@ export const author = {
   url: "https://x.com/anthod0",
   sameAs: ["https://x.com/anthod0", "https://github.com/anthod0"],
 };
+
+export function serializeJsonLd(data: object): string {
+  return JSON.stringify(data).replaceAll("<", "\\u003c");
+}

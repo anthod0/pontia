@@ -25,6 +25,7 @@ const callListDevicesOptions = listDevicesOptions as unknown as (
 ) => Promise<Response>;
 const callConnect = connect as unknown as (event: RequestEvent) => Promise<Response>;
 const callConnectOptions = connectOptions as unknown as (event: RequestEvent) => Promise<Response>;
+const callPreview = preview as unknown as (event: RequestEvent) => Promise<Response>;
 const callProfile = profile as unknown as (event: RequestEvent) => Promise<Response>;
 const callProfileOptions = profileOptions as unknown as (event: RequestEvent) => Promise<Response>;
 
@@ -324,10 +325,13 @@ test("connect does not reveal another user's handle", async () => {
   expect(await other.json()).toEqual(await missing.json());
 });
 
-test("connect follows the device's current binding after a public edge becomes private", async () => {
+test("connection and preview tokens follow the current edge access scope", async () => {
   const token = await seedDashboardFixtureAndLogin();
   const edgeId = "0195e7e2-1b22-7c33-9d44-123456789abc";
-  await database.db.update(edges).set({ accessScope: "public" }).where(eq(edges.id, edgeId));
+  await database.db
+    .update(edges)
+    .set({ accessScope: "public", previewEnabled: 1 })
+    .where(eq(edges.id, edgeId));
   await database.db.insert(devices).values({
     id: "0195e7d6-1b22-7c33-9d44-123456789abc",
     userId: ownerId,
@@ -337,15 +341,32 @@ test("connect follows the device's current binding after a public edge becomes p
     e2ePublicKey: Buffer.alloc(32, 7).toString("base64url"),
     e2eKeyVersion: 1,
   });
-  await database.db.update(edges).set({ accessScope: "private" }).where(eq(edges.id, edgeId));
-
-  const response = await callConnect(
-    event("/api/dashboard/devices/public-edge-device/connect", { origin: dashboardOrigin, token }),
-  );
-  expect(response.status).toBe(200);
-  expect((await response.json()) as { edge_api_origin: string }).toMatchObject({
+  const connectRequest = () =>
+    callConnect(
+      event("/api/dashboard/devices/public-edge-device/connect", {
+        origin: dashboardOrigin,
+        token,
+      }),
+    );
+  const previewRequest = () =>
+    callPreview(
+      event("/api/dashboard/devices/public-edge-device/preview-token", {
+        method: "POST",
+        origin: dashboardOrigin,
+        token,
+        body: { port: 5173 },
+      }),
+    );
+  const connected = await connectRequest();
+  expect(connected.status).toBe(200);
+  expect(await connected.json()).toMatchObject({
     edge_api_origin: "https://calm-arthur.edge.pontia.dev",
   });
+  expect((await previewRequest()).status).toBe(200);
+
+  await database.db.update(edges).set({ accessScope: "private" }).where(eq(edges.id, edgeId));
+  expect((await connectRequest()).status).toBe(404);
+  expect((await previewRequest()).status).toBe(404);
 });
 
 test("connect rejects invalid tunnel URLs", async () => {
@@ -450,9 +471,8 @@ test("connect and renewal do not require writable ticket storage", async () => {
 
 test("preview tokens bind a dashboard login to its ready device, edge, and port for four hours", async () => {
   const token = await seedDashboardFixtureAndLogin();
-  const call = preview as unknown as (e: RequestEvent) => Promise<Response>;
   const request = (body: unknown, handle = "office-mac", origin = dashboardOrigin) =>
-    call(
+    callPreview(
       event(`/api/dashboard/devices/${handle}/preview-token`, {
         method: "POST",
         origin,

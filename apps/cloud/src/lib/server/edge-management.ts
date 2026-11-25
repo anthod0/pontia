@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { Database } from "./db";
 import { devices, edges, edgeTickets } from "./db/schema";
 import { edgeHostname } from "./edge-network";
@@ -13,10 +13,15 @@ export async function removeOwnedEdge(
   edgeId: string,
   dns: EdgeDnsCleanup,
 ) {
+  const ownedPrivateEdge = and(
+    eq(edges.id, edgeId),
+    eq(edges.userId, userId),
+    eq(edges.accessScope, "private"),
+  );
   const edge = await db
-    .select({ id: edges.id, tunnelUrl: edges.tunnelUrl })
+    .select({ tunnelUrl: edges.tunnelUrl })
     .from(edges)
-    .where(and(eq(edges.id, edgeId), eq(edges.userId, userId)))
+    .where(ownedPrivateEdge)
     .get();
   if (!edge) return { status: "not_found" as const };
   const hostname = edgeHostname(edge.tunnelUrl);
@@ -24,16 +29,14 @@ export async function removeOwnedEdge(
 
   // Keep the database registration available for a retry when external DNS cleanup fails.
   await dns.cleanupHostname(hostname);
+  const removableId = db.select({ id: edges.id }).from(edges).where(ownedPrivateEdge);
   const [, , removed] = await db.batch([
-    db.delete(devices).where(eq(devices.edgeId, edge.id)).returning({ id: devices.id }),
+    db.delete(devices).where(inArray(devices.edgeId, removableId)).returning({ id: devices.id }),
     db
       .delete(edgeTickets)
-      .where(and(eq(edgeTickets.expectedEdgeId, edge.id), eq(edgeTickets.userId, userId)))
+      .where(and(inArray(edgeTickets.expectedEdgeId, removableId), eq(edgeTickets.userId, userId)))
       .returning({ id: edgeTickets.id }),
-    db
-      .delete(edges)
-      .where(and(eq(edges.id, edge.id), eq(edges.userId, userId)))
-      .returning({ id: edges.id }),
+    db.delete(edges).where(ownedPrivateEdge).returning({ id: edges.id }),
   ]);
   return { status: removed.length === 1 ? ("deleted" as const) : ("not_found" as const) };
 }

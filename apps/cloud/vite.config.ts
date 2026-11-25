@@ -48,9 +48,6 @@ export default defineConfig({
       prerender: {
         entries: ["*", ...Object.values(localeInfo).map(({ prefix }) => `/${prefix}` as const)],
       },
-      csrf: {
-        trustedOrigins: ["https://app.pontia.dev"],
-      },
     }),
   ],
 });

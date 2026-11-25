@@ -3,6 +3,7 @@ import { SignJWT } from "jose";
 import { edgeAuthority } from "../../edge-port";
 import type { Database } from "../db";
 import { devices, edges } from "../db/schema";
+import { edgeIsAccessibleTo } from "./resources";
 import { isValidDeviceHandle } from "./device-handle";
 import { capabilitySigningKey } from "./device-connect";
 
@@ -44,7 +45,9 @@ export async function issuePreviewToken(
       })
       .from(devices)
       .innerJoin(edges, eq(devices.edgeId, edges.id))
-      .where(and(eq(devices.userId, userId), eq(devices.handle, handle)))
+      .where(
+        and(eq(devices.userId, userId), eq(devices.handle, handle), edgeIsAccessibleTo(userId)),
+      )
       .get());
   if (!device) return { status: 404, body: { error: "device_not_found" } };
   if (!device.enabled || !env.PREVIEW_ZONE)

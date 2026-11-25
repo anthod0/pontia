@@ -1,0 +1,12 @@
+diff --git a/dist/renderers/Image.svelte b/dist/renderers/Image.svelte
+index 4507cd80e923883f657c62ae52e2eca0e06381a5..39b5340ff41d7b52e0b0aab88eaa55903bd37273 100644
+--- a/dist/renderers/Image.svelte
++++ b/dist/renderers/Image.svelte
+@@ -116,6 +116,7 @@ is displayed with reduced opacity and a grayscale filter.
+         bind:this={img}
+         use:tagAttempt={currentAttempt}
+         src={exposed ? currentAttempt.source : undefined}
++        referrerpolicy="no-referrer"
+         data-src={href}
+         {title}
+         alt={text}

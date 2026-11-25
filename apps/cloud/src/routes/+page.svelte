@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { author, siteOrigin } from '$lib/site';
+	import { author, serializeJsonLd, siteOrigin } from '$lib/site';
 	import WhereverSection from '$lib/components/WhereverSection.svelte';
 	import HeroSection from '$lib/components/HeroSection.svelte';
 	import RemoteSection from '$lib/components/RemoteSection.svelte';
@@ -49,7 +49,7 @@
 	<meta name="twitter:title" content={title} />
 	<meta name="twitter:description" content={description} />
 	<meta name="twitter:image" content={image} />
-	{@html `<script type="application/ld+json">${JSON.stringify(structuredData)}</script>`}
+	{@html `<script type="application/ld+json">${serializeJsonLd(structuredData)}</script>`}
 </svelte:head>
 
 <LocaleLinks />
