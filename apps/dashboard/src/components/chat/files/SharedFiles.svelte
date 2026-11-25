@@ -9,7 +9,7 @@
   import FilesIcon from 'phosphor-svelte/lib/FilesIcon'
   import ListIcon from 'phosphor-svelte/lib/ListIcon'
   import SquaresFourIcon from 'phosphor-svelte/lib/SquaresFourIcon'
-  import {useFilePreview} from '../filePreviewContext'
+  import { useFilePreview } from '../filePreviewContext'
   import FileBubble from './FileBubble.svelte'
   import FileList from './FileList.svelte'
   import ImageMosaic from './ImageMosaic.svelte'
@@ -65,10 +65,7 @@
   let viewerIndex = $state(0)
   let viewerOpen = $state(false)
   function enlarge(state: SharedFileState) {
-    if(preview?.allSharedFiles){
-      preview.open({device,sessionId,path:state.file.path})
-      return
-    }
+    preview?.rememberImage?.({ sessionId, path: state.file.path })
     const images = states.filter(other => other.image && (!other.missing || other === state))
     viewerFiles = images.map(other => other.file)
     viewerIndex = images.indexOf(state)

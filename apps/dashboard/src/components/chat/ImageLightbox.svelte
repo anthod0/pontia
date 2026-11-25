@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { Snippet } from 'svelte'
+  import { untrack, type Snippet } from 'svelte'
+  import { useMobileStack } from '$lib/mobile/overlayStack.svelte'
   import { t } from '$lib/i18n'
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import { Lightbox } from 'picola/svelte'
@@ -16,6 +17,13 @@
     /** Shown over the active image while its `src` is null, such as a loading or error state. */
     children?: Snippet
   } = $props()
+
+  const stack = useMobileStack()
+  $effect(() => {
+    if (!open || !stack) return
+    const id = untrack(() => stack.open({ dismiss: () => open = false }))
+    return () => stack.release(id)
+  })
 
   const active = $derived(images[index])
   const slides = $derived(images.map(image => ({ src: image.src ?? '', alt: image.name })))

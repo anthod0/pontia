@@ -5,10 +5,12 @@
   import { t } from '$lib/i18n'
   import { useMobileStack } from '$lib/mobile/overlayStack.svelte'
   import { chromeMetrics } from '$lib/mobile/chromeMetrics'
-  import { createRecentFiles, withRecentFile } from '$lib/botRecentFiles'
+  import { createRecentFiles, withRecentFile, type RecentFile } from '$lib/botRecentFiles'
   import { useDeviceRuntime } from '../../../device/context'
   import { provideFilePreviewNavigator, type FilePreviewTarget } from '../../../components/chat/filePreviewContext'
   import { isImagePath } from '$lib/downloads/localFilePath'
+  import { attachedFile } from '$lib/attachmentBlocks'
+  import SharedImageViewer from '../../../components/chat/SharedImageViewer.svelte'
   import FilePreviewPanel from '../../../components/chat/FilePreviewPanel.svelte'
   import BotConversation from '../../../components/bots/BotConversation.svelte'
   import BotChatSkeleton from '../../../components/bots/BotChatSkeleton.svelte'
@@ -32,6 +34,8 @@
     untrack(() => chat.botId),
   )
   let file = $state.raw<FilePreviewTarget>()
+  let image = $state.raw<RecentFile>()
+  let imageOpen = $state(false)
   let tab = $state<'files' | 'git'>('files')
   let dockHeight = $state(0)
   let menu = $state(false)
@@ -46,12 +50,20 @@
     contextId = id
     context = true
   }
+  function remember({ sessionId, path }: RecentFile) {
+    recent.current = withRecentFile(recent.current, { sessionId, path })
+  }
   function openFile(target: FilePreviewTarget) {
+    remember(target)
+    if (isImagePath(target.path)) {
+      image = target
+      imageOpen = true
+      return
+    }
     file = target
-    recent.current = withRecentFile(recent.current, { sessionId: target.sessionId, path: target.path })
     stack.open({ content: preview, title: target.path.split('/').at(-1) })
   }
-  provideFilePreviewNavigator({ open: openFile, allSharedFiles: true })
+  provideFilePreviewNavigator({ open: openFile, allSharedFiles: true, rememberImage: remember })
   function select(key: 'todos' | 'search' | 'files' | 'git') {
     if (key === 'todos') {
       todos = true
@@ -96,18 +108,11 @@
     aria-label={$t('chat.actions')}
     onclick={() => (menu = true)}><DotsThreeIcon /></button
   >{/snippet}
+{#if imageOpen && image}
+  <SharedImageViewer sessionId={image.sessionId} files={[attachedFile(image.path)]} bind:open={imageOpen} />
+{/if}
 {#snippet preview()}
-  {#if file}
-    {#if isImagePath(file.path)}
-      {#await device.previews.imageUrl(file.sessionId, file.path)}
-        <p role="status">{$t('files.loadingPreview')}</p>
-      {:then url}
-        {#if url}<img class="mx-auto max-h-full max-w-full object-contain" src={url} alt={file.path} />{:else}<p>
-            {$t('files.previewNotImage')}
-          </p>{/if}
-      {:catch failure}<p role="alert">{failure.message}</p>{/await}
-    {:else}<FilePreviewPanel target={file} onclose={() => stack.back()} />{/if}
-  {/if}
+  {#if file}<FilePreviewPanel target={file} onclose={() => stack.back()} />{/if}
 {/snippet}
 {#snippet files()}<MobileBotFilesGitScreen
     bind:tab

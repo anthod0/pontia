@@ -13,6 +13,7 @@ export type FilePreviewNavigator = {
   open(target: FilePreviewTarget): void;
   /** The Bot files screen also opens images and downloadable binary files. */
   allSharedFiles?: boolean;
+  rememberImage?(file: Pick<FilePreviewTarget, "sessionId" | "path">): void;
 };
 
 const key = Symbol("file-preview");
