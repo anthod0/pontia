@@ -111,7 +111,7 @@ export const stories: Story[] = [
     label: m.story_local_label,
     caption: m.story_local_caption,
     visual: "local",
-    steps: 2,
+    steps: 3,
   },
   {
     name: "Kai",
