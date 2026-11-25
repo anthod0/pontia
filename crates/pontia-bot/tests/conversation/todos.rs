@@ -194,3 +194,62 @@ async fn user_todo_changes_notify_once_and_preserve_who_closed_it() {
     .unwrap();
     assert_eq!(persisted, 0);
 }
+
+#[tokio::test]
+async fn only_delivered_quotes_resolve_the_target_todo_and_publish_it() {
+    use pontia_bot::messages::TodoAction::Mark;
+    let (_root, _pool, _client, _control, service) = fixture().await;
+    let bot = service
+        .records()
+        .create(bot_configuration("Planner", MODEL), Default::default())
+        .await
+        .unwrap();
+    let id = &bot.bot_id;
+    let target = service.send(id, "Approve?").await.unwrap().message;
+    let open = service.change_todo(id, &target.id, Mark).await.unwrap();
+    let quote = format!(
+        "<user_quote message_id=\"{}\" speaker=\"User\">Approve?</user_quote>",
+        target.id
+    );
+    let foreign = service
+        .records()
+        .create(bot_configuration("Other", MODEL), Default::default())
+        .await
+        .unwrap();
+    service
+        .send(&foreign.bot_id, &format!("{quote}\nYes"))
+        .await
+        .unwrap();
+    service.send(id, "Yes").await.unwrap();
+    let failed = service
+        .send(id, &format!("{quote}\nreject once"))
+        .await
+        .unwrap()
+        .message;
+    assert_eq!(failed.status, MessageStatus::Failed);
+    assert_eq!(service.todos(id).await.unwrap().open, [open]);
+    let mut updates = service.subscribe(id);
+    let retried = service.retry(id, &failed.id).await.unwrap().message;
+    assert_eq!(retried.status, MessageStatus::Normal);
+    let todos = service.todos(id).await.unwrap();
+    assert!(todos.open.is_empty());
+    let [done] = todos.recently_resolved.as_slice() else {
+        panic!("expected one resolved todo")
+    };
+    assert!(
+        matches!(&done.todo, Some(Todo::Done {by, message_id: Some(reply), ..}) if by == "user" && reply == &retried.id)
+    );
+    assert!(
+        std::iter::from_fn(|| updates.try_recv().ok()).any(
+            |update| matches!(update, ConversationUpdate::Message {message} if &message == done)
+        )
+    );
+    service
+        .send(id, &format!("{quote}\nConfirmed"))
+        .await
+        .unwrap();
+    assert_eq!(
+        service.todos(id).await.unwrap().recently_resolved,
+        std::slice::from_ref(done)
+    );
+}

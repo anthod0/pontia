@@ -68,6 +68,7 @@
     message={active.item}
     onsubmit={async (text, quote) => {
       const sent = await device.api.sendBotMessage(bot.bot_id, quotedMessage(quote, text))
+      if (sent.status === 'failed') throw new Error($t('bots.sendFailed'))
       toast.success($t('bots.replySent'), {
         action: { label: $t('bots.viewReply'), onClick: () => jump(bot, sent.id) },
       })

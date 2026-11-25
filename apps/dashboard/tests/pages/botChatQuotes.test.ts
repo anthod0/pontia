@@ -4,6 +4,7 @@ import userEventBase from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { testDevice } from "../deviceFixture";
 import type { Bot, BotEntry, BotMessage } from "../../src/api/types";
+import { openBotChatStream } from "../../src/services/botChatStream";
 import { ApiError } from "../../src/api/errors";
 import BotChatPage from "../../src/pages/BotChatPage.svelte";
 import { saveUploadRecord } from "../../src/lib/uploads/records";
@@ -16,7 +17,7 @@ const toast = vi.hoisted(() => ({
   dismiss: vi.fn(),
 }));
 vi.mock("svelte-sonner", () => ({ toast }));
-vi.mock("../../src/services/botChatStream", () => ({ openBotChatStream: () => () => {} }));
+vi.mock("../../src/services/botChatStream", () => ({ openBotChatStream: vi.fn(() => () => {}) }));
 
 const bot: Bot = {
   bot_id: "quotes",
@@ -708,13 +709,36 @@ test("replies to a todo from its own box with the same request as quoting it, le
   expect(screen.getByRole("button", { name: /^Remove quote: Other answer/ })).toBeInTheDocument();
 });
 
+test("moves a replied-to todo from pending to resolved on its message update", async () => {
+  serve([todo]);
+  const send = sent();
+  const item = await openTodos();
+  await fireEvent.click(item.getByRole("button", { name: "Reply" }));
+  await userEvent.type(item.getByRole("textbox"), "Approved{Enter}");
+  await waitFor(() => expect(send).toHaveBeenCalledWith(bot.bot_id, quotedTodo("Approved")));
+  const done: BotMessage = {
+    ...todo,
+    todo: { state: "done", by: "user", at: todo.created_at, message_id: id(99) },
+  };
+  vi.mocked(testDevice.api.getBotTodos).mockResolvedValue({ open: [], recently_resolved: [done] });
+  const [, , update] = vi.mocked(openBotChatStream).mock.lastCall!;
+  update({ type: "message", message: done });
+  const panel = within(screen.getByRole("complementary"));
+  expect(await panel.findByRole("tab", { name: "Pending 0" })).toBeVisible();
+  await fireEvent.click(panel.getByRole("tab", { name: "Resolved 1" }));
+  expect(await panel.findByText(/Resolved by you/)).toBeVisible();
+});
+
 test("keeps the reply text after a failed send, retries it from the toast, and closes with Escape", async () => {
   serve([todo]);
   let fail!: (error: Error) => void;
   const send = vi
     .spyOn(testDevice.api, "sendBotMessage")
     .mockImplementationOnce(() => new Promise((_resolve, reject) => (fail = reject)))
-    .mockRejectedValueOnce(new Error("still offline"));
+    .mockResolvedValueOnce({
+      ...message(99, "user_input", quotedTodo("Approved")),
+      status: "failed",
+    });
   const item = await openTodos();
   await fireEvent.click(item.getByRole("button", { name: "Reply" }));
   const box = item.getByRole("textbox", { name: "Message" });
@@ -739,6 +763,7 @@ test("keeps the reply text after a failed send, retries it from the toast, and c
   ]);
   await waitFor(() => expect(box).not.toHaveAttribute("readonly"));
 
+  expect(toast.error).toHaveBeenCalledWith("Message failed to send", expect.anything());
   box.focus();
   await userEvent.keyboard("{Escape}");
   expect(item.queryByRole("textbox")).not.toBeInTheDocument();

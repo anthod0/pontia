@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Replying to an open todo from the Todo list or quoting it in Bot chat moves it to Resolved when the reply is delivered.
+
 ## [0.9.2] - 2026-11-25
 
 ### Added

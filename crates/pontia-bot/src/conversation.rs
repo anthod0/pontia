@@ -545,6 +545,9 @@ impl ConversationService {
         drop(pending);
         match result {
             Ok(delivery) => {
+                if let Some(message) = self.messages.resolve_quoted_todo(&message).await? {
+                    activity.notify(ConversationUpdate::Message { message });
+                }
                 activity.notify(ConversationUpdate::Changed);
                 Ok(SentBotMessage { message, delivery })
             }

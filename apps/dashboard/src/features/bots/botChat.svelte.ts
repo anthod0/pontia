@@ -113,12 +113,12 @@ export function createBotChat(botId: string) {
   async function post(content: string, sentQuote: BotQuote | null) {
     toast.dismiss(actionToastId);
     feed?.followSend();
-    showDelivery(
-      await device.api.sendBotMessage(
-        botId,
-        sentQuote ? quotedMessage(sentQuote, content) : content,
-      ),
+    const message = await device.api.sendBotMessage(
+      botId,
+      sentQuote ? quotedMessage(sentQuote, content) : content,
     );
+    showDelivery(message);
+    if (sentQuote && message.status === "failed") throw new Error(translate("bots.sendFailed"));
   }
 
   let reloading = $state(false);

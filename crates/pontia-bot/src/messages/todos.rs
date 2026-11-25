@@ -41,6 +41,40 @@ impl MessageService {
         })
     }
 
+    pub(crate) async fn resolve_quoted_todo(
+        &self,
+        reply: &BotMessage,
+    ) -> Result<Option<BotMessage>> {
+        let Some(crate::quote::Target(target)) = crate::quote::user_input(&reply.content).1 else {
+            return Ok(None);
+        };
+        let mut tx = self.pool.begin().await?;
+        let updated = sqlx::query(
+            "UPDATE bot_todos SET state='done', resolved_by='user', resolved_message_id=?,
+                resolved_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+             WHERE state='open' AND message_id IN (SELECT id FROM bot_messages WHERE id=? AND bot_id=?)",
+        )
+        .bind(&reply.id)
+        .bind(&target)
+        .bind(&reply.bot_id)
+        .execute(&mut *tx)
+        .await?;
+        let message = if updated.rows_affected() == 1 {
+            Some(
+                sqlx::query_as(&format!(
+                    "SELECT {MESSAGE_COLUMNS} FROM bot_messages m WHERE m.id=?"
+                ))
+                .bind(target)
+                .fetch_one(&mut *tx)
+                .await?,
+            )
+        } else {
+            None
+        };
+        tx.commit().await?;
+        Ok(message)
+    }
+
     pub(crate) async fn change_todo(
         &self,
         bot_id: &str,
