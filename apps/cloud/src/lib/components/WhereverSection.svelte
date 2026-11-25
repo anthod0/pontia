@@ -37,16 +37,7 @@
 	const [progressPrefix, progressSuffix] = $derived(
 		(complete ? m.wherever_complete : m.wherever_progress)({ progress: marker }).split(marker),
 	);
-	function measureWord(el: HTMLElement) {
-		const track = el.parentElement!;
-		const measure = () => {
-			if (el === track.lastElementChild) track.style.width = el.offsetWidth + 'px';
-		};
-		measure();
-		const observer = new ResizeObserver(measure);
-		observer.observe(el);
-		return () => observer.disconnect();
-	}
+	let wordWidth = $state<number>();
 	let sessions = $state(devices.map(() => ({ state: 'running', task: 0, note: '', hop: false })));
 	let timers = new Set<ReturnType<typeof setTimeout>>();
 	let askTimer: ReturnType<typeof setTimeout>;
@@ -159,10 +150,10 @@
 <section bind:this={section} class="wherever page-width" aria-labelledby="wherever-title" {@attach reveal()}>
 	<h2 id="wherever-title" class="reveal">
 		{prefix}<button type="button" class="slot" aria-label={m.wherever_next({ place: word })}
-			><span class="slot-track"
+			><span class="slot-track" style:width={wordWidth ? wordWidth + 'px' : undefined}
+				><span class="word-size" aria-hidden="true" bind:offsetWidth={wordWidth}>{word}</span
 				>{#key word}<span
 						class="word"
-						{@attach measureWord}
 						class:accent={active >= 0 || celebrating}
 						in:fly={{
 							y: prefersReducedMotion.current ? 0 : '100%',

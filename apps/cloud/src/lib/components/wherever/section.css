@@ -11,9 +11,6 @@
   .passport.complete b {
     color: var(--primary);
   }
-  .word {
-    width: max-content;
-  }
   --grid-dot: #dedbd4;
   --frame: #282828;
   --frame-edge: #45433e;
@@ -80,7 +77,12 @@
   .slot:hover .slot-track {
     border-bottom-color: var(--primary);
   }
+  .word-size {
+    visibility: hidden;
+  }
+  .word-size,
   .word {
+    width: max-content;
     grid-area: 1/1;
     line-height: 1.2;
     white-space: nowrap;
