@@ -10,9 +10,10 @@
   import { todoSummary } from '$lib/botQuote'
   import type { Bot, BotMessage } from '../../api/types'
 
-  let { count, groups, pending, status, showBot = false, onjump, oncontext, onreopen }: {
+  let { count, groups, pending, heading, status, showBot = false, onjump, oncontext, onreopen }: {
     count: number
     groups: { bot: Bot; items: BotMessage[] }[]
+    heading?: Snippet
     pending: Snippet
     status?: Snippet
     showBot?: boolean
@@ -42,14 +43,27 @@
     if (date.toDateString() === yesterday.toDateString()) return $t('bots.yesterday')
     return date.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' })
   }
-  const segment = 'h-full min-h-0! flex-none rounded-full px-2.5 text-xs aria-selected:bg-card dark:aria-selected:bg-[#45403d] group-data-[variant=default]/tabs-list:aria-selected:shadow-sm'
+  const segment = $derived(['h-full min-h-0! flex-none rounded-full px-2.5 text-xs aria-selected:bg-card group-data-[variant=default]/tabs-list:aria-selected:shadow-sm',
+    !heading && 'dark:aria-selected:bg-[#45403d]',
+  ])
 </script>
 
-<Tabs.Root value="pending" class="min-w-0 gap-3">
+{#snippet segments()}
   <Tabs.List aria-label={$t('bots.todos')} class="self-start rounded-full p-0.5 h-[30px] pointer-coarse:h-9">
     <Tabs.Trigger value="pending" class={segment}>{$t('bots.pending')} <span class="text-muted-foreground tabular-nums">{count}</span></Tabs.Trigger>
     <Tabs.Trigger value="resolved" class={segment}>{$t('bots.resolved')} <span class="text-muted-foreground tabular-nums">{rows.length}</span></Tabs.Trigger>
   </Tabs.List>
+{/snippet}
+
+<Tabs.Root value="pending" class="min-w-0 gap-3">
+  {#if heading}
+    <div class="sticky top-0 z-10 flex flex-wrap items-center gap-3 mr-11 bg-popover py-2">
+      {@render heading()}
+      {@render segments()}
+    </div>
+  {:else}
+    {@render segments()}
+  {/if}
   <Tabs.Content value="pending">{@render pending()}</Tabs.Content>
   <Tabs.Content value="resolved">
     {@render status?.()}

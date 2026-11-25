@@ -24,6 +24,7 @@
   import MobileBotContextSheet from './MobileBotContextSheet.svelte'
   import MobileBotFilesGitScreen from './MobileBotFilesGitScreen.svelte'
   import MobileBotSearchScreen from './MobileBotSearchScreen.svelte'
+  import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon'
   import DotsThreeIcon from 'phosphor-svelte/lib/DotsThreeIcon'
   let { chat }: { chat: BotChatController } = $props()
   const timeline = $derived(chat.timeline)
@@ -79,7 +80,7 @@
   }
   onMount(() => {
     heading.set(title)
-    action.set(menuButton)
+    action.set(headerActions)
     return () => {
       heading.set(null)
       action.set(null)
@@ -107,11 +108,23 @@
       <strong class="truncate">{timeline.bot.name}</strong>
     </button>{/if}
 {/snippet}
-{#snippet menuButton()}<button
-    class="mobile-icon mobile-glass"
-    aria-label={$t('chat.actions')}
-    onclick={() => (menu = true)}><DotsThreeIcon /></button
-  >{/snippet}
+{#snippet headerActions()}
+  <div class="flex items-center gap-2">
+    {#if timeline.openTodoCount}
+      <button
+        class="mobile-icon mobile-glass relative"
+        aria-label={`${$t('bots.todos')} · ${timeline.openTodoCount}`}
+        onclick={() => (todos = true)}
+      >
+        <ListChecksIcon size={20} />
+        <span class="absolute -right-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary-solid px-1 text-[11px] font-semibold tabular-nums text-primary-foreground ring-2 ring-surface">{timeline.openTodoCount}</span>
+      </button>
+    {/if}
+    <button class="mobile-icon mobile-glass" aria-label={$t('chat.actions')} onclick={() => (menu = true)}>
+      <DotsThreeIcon />
+    </button>
+  </div>
+{/snippet}
 {#if imageOpen && image}
   <SharedImageViewer sessionId={image.sessionId} files={[attachedFile(image.path)]} bind:open={imageOpen} />
 {/if}
@@ -135,20 +148,14 @@
     <div
       bind:clientHeight={dockHeight}
       use:chromeMetrics={'--mobile-footer-h'}
-      class="bot-chat-dock pointer-events-none absolute inset-x-0 bottom-0 z-10 [&>div:not(:first-child)]:pointer-events-auto"
+      class="bot-chat-dock pointer-events-none absolute inset-x-0 bottom-0 z-10 [&>div]:pointer-events-auto"
     >
-      <div class="pointer-events-none flex items-center justify-between gap-1">
-        {#if timeline.status.kind !== 'idle'}
-          <p class="flex min-w-0 items-center gap-2 px-3 py-1 text-sm leading-5 text-muted-foreground" role="status">
-            <BotAvatar class="size-5 shrink-0" shape={timeline.bot.avatar_shape} color={timeline.bot.avatar_color} working />
-            <span class="shimmer truncate" style:--_highlight="var(--foreground)">{timeline.status.kind === 'working' ? timeline.status.title : $t('bots.processing')}</span>
-          </p>
-        {/if}
-        {#if timeline.openTodoCount}<button
-            class="mobile-glass pointer-events-auto ml-auto min-h-11 shrink-0 rounded-full px-4"
-            onclick={() => (todos = true)}>{$t('bots.todos')} · {timeline.openTodoCount}</button
-          >{/if}
-      </div>
+      {#if timeline.status.kind !== 'idle'}
+        <p class="flex min-w-0 items-center gap-2 px-3 py-1 text-sm leading-5 text-muted-foreground" role="status">
+          <BotAvatar class="size-5 shrink-0" shape={timeline.bot.avatar_shape} color={timeline.bot.avatar_color} working />
+          <span class="shimmer truncate" style:--_highlight="var(--foreground)">{timeline.status.kind === 'working' ? timeline.status.title : $t('bots.processing')}</span>
+        </p>
+      {/if}
       <ProfileHint {chat} name={timeline.bot.name} />
       <MobileMessageComposer
         bind:this={chat.composer}
