@@ -87,6 +87,8 @@ Com as atualizações automáticas ativadas, um Edge online também procura atua
 
 As atualizações automáticas são verificadas a cada dez minutos. Uma atualização já em andamento continua mesmo quando as verificações futuras são desativadas.
 
+Após uma atualização, Edges públicos e privados passam a usar `<label>.pontia.run` para prévias. O Pontia sincroniza o registro A curinga sem proxy com o endereço IPv4 do Edge e usa DNS-01 para emitir e renovar o certificado TLS curinga.
+
 ## Arquivos armazenados
 
 A instalação gerenciada usa:

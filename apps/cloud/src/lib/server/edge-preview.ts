@@ -23,7 +23,7 @@ export async function manageEdgePreview(event: RequestEvent, operation: "provisi
   if (!(await env.EDGE_DNS_RATE_LIMIT.limit({ key: principal.edgeId })).success)
     return json({ error: "rate_limited" }, { status: 429 });
   const edge = await db
-    .select({ url: edges.tunnelUrl, scope: edges.accessScope })
+    .select({ url: edges.tunnelUrl })
     .from(edges)
     .where(eq(edges.id, principal.edgeId))
     .get();
@@ -35,11 +35,11 @@ export async function manageEdgePreview(event: RequestEvent, operation: "provisi
       if (!(await probePreview(base, edge.url)))
         return json({ error: "preview_unreachable" }, { status: 422 });
       await db.update(edges).set({ previewEnabled: 1 }).where(eq(edges.id, principal.edgeId));
-    } else if (edge.scope === "private") {
+    } else {
       const dns = new CloudflareDnsProvider(env.CLOUDFLARE_DNS_TOKEN, env.CLOUDFLARE_DNS_ZONE_ID);
       await previewDns(env).ensureA(`*.${base}`, await dns.ipv4(control));
     }
-    return json({ preview_base_hostname: base, manage_certificate: edge.scope === "private" });
+    return json({ preview_base_hostname: base, manage_certificate: true });
   } catch {
     return json({ error: "service_unavailable" }, { status: 503 });
   }

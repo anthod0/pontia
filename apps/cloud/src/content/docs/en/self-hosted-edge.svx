@@ -87,6 +87,8 @@ With automatic updates enabled, an online Edge also checks for updates when Clou
 
 Automatic updates check every 10 minutes. An update already in progress continues when future checks are disabled.
 
+After an upgrade, public and private Edges automatically switch to `<label>.pontia.run` for previews. Pontia synchronizes the DNS-only wildcard A record with the Edge IPv4 address and uses DNS-01 to issue and renew the wildcard TLS certificate.
+
 ## Stored files
 
 The managed installation uses:

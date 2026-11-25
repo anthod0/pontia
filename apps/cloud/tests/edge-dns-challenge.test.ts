@@ -46,12 +46,12 @@ function event(body: unknown, token = credential, allowed = true, keys: string[]
   } as unknown as RequestEvent;
 }
 
-async function registered() {
+async function registered(accessScope: "private" | "public" = "private") {
   await database.db.insert(users).values({ id: "owner" });
   await database.db.insert(edges).values({
     id: edgeId,
     userId: "owner",
-    accessScope: "private",
+    accessScope,
     name: "Brave Atlas",
     dnsLabel: "brave-atlas",
     tunnelUrl: `wss://${hostname}:8443/tunnel`,
@@ -136,51 +136,78 @@ test("pending deployment can clean its own TXT but cannot bypass network verific
   ).toBe(401);
 });
 
-test("upgraded private edge provisions wildcard DNS, confirms TLS and cleans up its preview records", async () => {
-  await registered();
-  const base = "brave-atlas.pontia.run";
-  const records = new Map<
-    string,
-    { id: string; type: string; name: string; content: string; proxied?: boolean }
-  >();
-  let healthy = false;
-  mockProvider(async (input, init) => {
-    const url = new URL(String(input));
-    if (url.hostname === `probe.${base}`) {
-      expect(url.port).toBe("8443");
-      expect(url.pathname).toBe("/__pontia_preview_health");
-      expect(init?.redirect).toBe("manual");
-      return new Response(healthy ? "ok" : "bad");
+test.each(["public", "private"] as const)(
+  "upgraded %s edge provisions wildcard DNS and confirms TLS",
+  async (scope) => {
+    await registered(scope);
+    if (scope === "public") {
+      expect((await call(event({ operation: "publish", value }))).status).toBe(401);
     }
-    if (url.pathname.includes("/zones/zone/")) {
-      expect(url.searchParams.get("name")).toBe(hostname);
-      return Response.json({
-        success: true,
-        result: [{ id: "control", name: hostname, type: "A", content: "8.8.8.8" }],
+    const base = "brave-atlas.pontia.run";
+    const records = new Map<
+      string,
+      { id: string; type: string; name: string; content: string; proxied?: boolean }
+    >();
+    if (scope === "public") {
+      records.set("A", {
+        id: "A",
+        type: "A",
+        name: `*.${base}`,
+        content: "1.1.1.1",
+        proxied: true,
       });
     }
-    expect(url.pathname).toContain("/zones/preview-zone/");
-    if (init?.method === "POST") {
-      const body = JSON.parse(String(init.body));
-      records.set(body.type, { ...body, id: body.type });
-    } else if (init?.method === "DELETE") {
-      records.delete(url.pathname.split("/").at(-1)!);
+    let healthy = false;
+    mockProvider(async (input, init) => {
+      const url = new URL(String(input));
+      if (url.hostname === `probe.${base}`) {
+        expect(url.port).toBe("8443");
+        expect(url.pathname).toBe("/__pontia_preview_health");
+        expect(init?.redirect).toBe("manual");
+        return new Response(healthy ? "ok" : "bad");
+      }
+      if (url.pathname.includes("/zones/zone/")) {
+        expect(url.searchParams.get("name")).toBe(hostname);
+        return Response.json({
+          success: true,
+          result: [{ id: "control", name: hostname, type: "A", content: "8.8.8.8" }],
+        });
+      }
+      expect(url.pathname).toContain("/zones/preview-zone/");
+      if (init?.method === "POST" || init?.method === "PUT") {
+        const body = JSON.parse(String(init.body));
+        records.set(body.type, { ...body, id: body.type });
+      } else if (init?.method === "DELETE") {
+        records.delete(url.pathname.split("/").at(-1)!);
+      }
+      const matched = [...records.values()].filter(
+        (r) => r.name === url.searchParams.get("name") && r.type === url.searchParams.get("type"),
+      );
+      return Response.json({ success: true, result: matched });
+    });
+    for (let i = 0; i < 2; i++) {
+      const response = await manageEdgePreview(event({}), "provision");
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        preview_base_hostname: base,
+        manage_certificate: true,
+      });
     }
-    const matched = [...records.values()].filter(
-      (r) => r.name === url.searchParams.get("name") && r.type === url.searchParams.get("type"),
-    );
-    return Response.json({ success: true, result: matched });
-  });
-  for (let i = 0; i < 2; i++)
-    expect((await manageEdgePreview(event({}), "provision")).status).toBe(200);
-  expect(records.get("A")).toMatchObject({ name: `*.${base}`, content: "8.8.8.8", proxied: false });
-  expect((await call(event({ scope: "preview", operation: "publish", value }))).status).toBe(200);
-  expect(records.get("TXT")?.name).toBe(`_acme-challenge.${base}`);
-  expect((await manageEdgePreview(event({}), "confirm")).status).toBe(422);
-  expect((await database.db.select().from(edges).get())?.previewEnabled).toBe(0);
-  healthy = true;
-  expect((await manageEdgePreview(event({}), "confirm")).status).toBe(200);
-  expect((await database.db.select().from(edges).get())?.previewEnabled).toBe(1);
-  await new CloudflareDnsProvider("secret", "preview-zone", "pontia.run").cleanupHostname(base);
-  expect(records.size).toBe(0);
-});
+    expect(records.get("A")).toMatchObject({
+      name: `*.${base}`,
+      content: "8.8.8.8",
+      proxied: false,
+    });
+    expect((await call(event({ scope: "preview", operation: "publish", value }))).status).toBe(200);
+    expect(records.get("TXT")?.name).toBe(`_acme-challenge.${base}`);
+    expect((await manageEdgePreview(event({}), "confirm")).status).toBe(422);
+    expect((await database.db.select().from(edges).get())?.previewEnabled).toBe(0);
+    expect((await call(event({ scope: "preview", operation: "cleanup", value }))).status).toBe(200);
+    expect(records.has("TXT")).toBe(false);
+    healthy = true;
+    expect((await manageEdgePreview(event({}), "confirm")).status).toBe(200);
+    expect((await database.db.select().from(edges).get())?.previewEnabled).toBe(1);
+    await new CloudflareDnsProvider("secret", "preview-zone", "pontia.run").cleanupHostname(base);
+    expect(records.size).toBe(0);
+  },
+);

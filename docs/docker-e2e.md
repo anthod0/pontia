@@ -155,7 +155,7 @@ If you have a complete validation script, use this command to manage startup and
 
 ## Localhost preview
 
-To verify private Edge readiness with a wildcard certificate, run the confirmation test in a fresh instance. Cloud checks `probe.docker-e2e.pontia.run` before marking the Edge ready.
+To verify public and private Edge readiness with a wildcard certificate, run the confirmation test in a fresh instance. Cloud checks `probe.docker-e2e.pontia.run` before marking the Edge ready.
 
 ```bash
 ./scripts/docker-e2e --name probe run bash docker/e2e/test_preview_confirmation.sh

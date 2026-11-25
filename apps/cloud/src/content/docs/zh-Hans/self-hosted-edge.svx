@@ -87,6 +87,8 @@ sudo pontia-edge auto-update disable
 
 自动更新每十分钟检查一次。禁用后续检查时，已在进行中的更新会继续完成。
 
+升级后，公共和私有 Edge 会自动切换到预览域名 `<label>.pontia.run`。Pontia 将仅限 DNS 的通配 A 记录同步到 Edge 的 IPv4 地址，并通过 DNS-01 自动签发和续期通配 TLS 证书。
+
 ## 存储的文件
 
 托管安装使用以下文件：

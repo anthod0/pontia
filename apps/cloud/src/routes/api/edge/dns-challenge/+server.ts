@@ -44,7 +44,7 @@ export const POST: RequestHandler = async (event) => {
         .from(edges)
         .where(eq(edges.id, principal.edgeId))
         .get();
-      if (edge?.accessScope === "private") {
+      if (edge && (edge.accessScope === "private" || body.scope === "preview")) {
         edgeId = principal.edgeId;
         hostname = edgeHostname(edge.tunnelUrl);
       }

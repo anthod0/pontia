@@ -49,10 +49,14 @@ impl ServiceConfig {
             .strip_suffix(".edge.pontia.dev")
             .context("invalid control hostname")?;
         let expected = format!("{label}.pontia.run");
-        if let Some(base) = &config.preview_base_hostname {
-            anyhow::ensure!(base == &expected, "invalid preview base hostname");
-        }
+        let migrate = config
+            .preview_base_hostname
+            .as_ref()
+            .is_some_and(|base| base != &expected);
         config.preview_base_hostname = Some(expected);
+        if migrate {
+            config.save(path)?;
+        }
         Ok(config)
     }
 }
@@ -145,6 +149,27 @@ mod tests {
                 .unwrap()
                 .contains("cloud_origin")
         );
+    }
+
+    #[test]
+    fn loading_a_stale_preview_hostname_persists_the_derived_domain() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("config.json");
+        for stale in ["*.brave-atlas.p.pontia.dev", "other.pontia.run"] {
+            let mut expected = ServiceConfig {
+                hostname: "brave-atlas.edge.pontia.dev".into(),
+                port: 8443,
+                acme_challenge: AcmeChallenge::Dns01,
+                browser_dashboard_origin: "https://custom.example".into(),
+                preview_base_hostname: Some(stale.into()),
+            };
+            expected.save(&path).unwrap();
+            expected.preview_base_hostname = Some("brave-atlas.pontia.run".into());
+            assert_eq!(ServiceConfig::read(&path).unwrap(), expected);
+            let persisted: ServiceConfig =
+                serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+            assert_eq!(persisted, expected);
+        }
     }
 
     #[test]
