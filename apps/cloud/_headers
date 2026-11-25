@@ -1,0 +1,9 @@
+/agent-profile-templates.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=300
+  Content-Type: application/json; charset=utf-8
+
+/agent-profile-templates.md
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=300
+  Content-Type: text/markdown; charset=utf-8

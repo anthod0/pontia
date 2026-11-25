@@ -11,7 +11,7 @@ import PaletteIcon from "phosphor-svelte/lib/PaletteIcon";
 import FilmSlateIcon from "phosphor-svelte/lib/FilmSlateIcon";
 import RobotIcon from "phosphor-svelte/lib/RobotIcon";
 import TestTubeIcon from "phosphor-svelte/lib/TestTubeIcon";
-import builtInDocument from "./builtInTemplates.json";
+import builtInDocument from "$assets/agent-profile-templates.json";
 import type { AgentClientModels, AgentClientView } from "../../api/types";
 import type { AgentProfileDraft } from "./form";
 

@@ -1,7 +1,7 @@
 import tailwindcss from "@tailwindcss/vite";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vite";
+import { defineConfig, searchForWorkspaceRoot } from "vite";
 import { mdsvex } from "mdsvex";
 import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import { generateLlms } from "./scripts/generate-llms";
@@ -11,6 +11,7 @@ import { rehypeTableScroll } from "./scripts/rehype-table-scroll";
 import { localeAdapter } from "./scripts/locale-adapter";
 
 export default defineConfig({
+  server: { fs: { allow: [searchForWorkspaceRoot(process.cwd()), "../../assets"] } },
   plugins: [
     {
       name: "generate-llms",
@@ -22,6 +23,7 @@ export default defineConfig({
     paraglideVitePlugin({ project: "./project.inlang" }),
     tailwindcss(),
     sveltekit({
+      alias: { $assets: "../../assets" },
       extensions: [".svelte", ".svx"],
       preprocess: [
         mdsvex({

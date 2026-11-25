@@ -41,7 +41,7 @@ pub(super) enum BotTool {
     /// Send one complete reply to the user
     SendToUser(SendToUser),
     /// Manage shared Agent Profiles
-    #[command(subcommand)]
+    #[command(subcommand, after_help = super::profile::CREATE_HELP)]
     Profile(super::profile::ProfileCommand),
     /// Register an existing directory or change a Workspace description
     #[command(subcommand)]

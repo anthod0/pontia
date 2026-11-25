@@ -2,7 +2,7 @@ import adapter from "@sveltejs/adapter-static";
 import tailwindcss from "@tailwindcss/vite";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
-import { loadEnv } from "vite";
+import { loadEnv, searchForWorkspaceRoot } from "vite";
 import { configDefaults, defineConfig } from "vitest/config";
 import { mockApi } from "./mock/vitePlugin.ts";
 
@@ -33,6 +33,7 @@ export default defineConfig(({ mode }) => {
           assets: "public",
         },
         alias: {
+          $assets: "../../assets",
           "$dashboard-mode": publicDashboard ? "src/modes/public" : "src/modes/local",
         },
         adapter: adapter({
@@ -66,6 +67,7 @@ export default defineConfig(({ mode }) => {
       exclude: [...configDefaults.exclude, ...(publicDashboard ? [] : ["tests/public/**"])],
     },
     server: {
+      fs: { allow: [searchForWorkspaceRoot(process.cwd()), "../../assets"] },
       host: true,
       proxy: devBackend ? { "/api": { target: devBackend, changeOrigin: true } } : undefined,
     },

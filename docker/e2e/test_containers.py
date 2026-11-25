@@ -174,7 +174,7 @@ class ContainerSmokeTests(unittest.TestCase):
                     for _ in range(2):
                         migrated = run("migrations", "apply", *local)
                         assert migrated.returncode == 0, migrated.stdout + migrated.stderr
-                    seeded = run("execute", *local, "--file", "/app/e2e-seed.sql")
+                    seeded = run("execute", *local, "--file", "/src/apps/cloud/e2e-seed.sql")
                     assert seeded.returncode == 0, seeded.stdout + seeded.stderr
                     queried = run("execute", *local, "--json", "--command",
                                   "SELECT count(*) AS count FROM hero_name_heroes;")

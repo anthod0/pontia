@@ -2,9 +2,14 @@ use clap::{ArgGroup, Subcommand};
 use pontia_bot::conversation::profiles::ProfileClient;
 use serde::Serialize;
 
+pub(super) const CREATE_HELP: &str = "Run `pontia bot profile templates` before creating a Profile. Check available clients and models with `pontia bot profile clients` and `pontia bot profile models --client TYPE/KEY`. Customize the template for the user’s requirements and keep unspecified fields at their template defaults.";
+
 #[derive(Debug, Subcommand, Serialize)]
 #[serde(tag = "action", content = "input", rename_all = "snake_case")]
 pub(super) enum ProfileCommand {
+    /// Fetch recommended Agent Profile templates, using built-in templates when offline
+    #[serde(skip)]
+    Templates,
     /// List Profiles and their availability for new helpers
     List,
     /// Read a Profile, including its full system prompt
@@ -20,6 +25,7 @@ pub(super) enum ProfileCommand {
         client: ProfileClient,
     },
     /// Create a shared Agent Profile
+    #[command(after_help = CREATE_HELP)]
     Create {
         #[arg(long)]
         profile_id: String,

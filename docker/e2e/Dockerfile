@@ -62,6 +62,7 @@ FROM rust:1-bookworm AS rust-build
 ARG E2E_CAPABILITY_VERIFICATION_KEY
 WORKDIR /src
 COPY Cargo.toml Cargo.lock VERSION ./
+COPY assets ./assets
 COPY crates ./crates
 COPY scripts/build-dashboard-wasm ./scripts/build-dashboard-wasm
 RUN rustup target add wasm32-unknown-unknown
@@ -70,7 +71,7 @@ RUN rustup target add wasm32-unknown-unknown
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/src/target \
-    touch crates/pontia-storage-sqlite/migrations/*.sql \
+    touch crates/pontia-storage-sqlite/migrations/*.sql assets/agent-profile-templates.json \
     && test -n "$E2E_CAPABILITY_VERIFICATION_KEY" \
     && cargo build --locked --release -p pontia -p pontiad -p pontia-edge \
     && mkdir -p /out \
@@ -80,6 +81,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 FROM base AS dashboard-build
 WORKDIR /src/apps/dashboard
 COPY apps/dashboard ./
+COPY assets /src/assets
 COPY crates /src/crates
 COPY --from=rust-build /src/apps/dashboard/src/e2e-wasm ./src/e2e-wasm
 RUN bun install --frozen-lockfile \
@@ -87,11 +89,12 @@ RUN bun install --frozen-lockfile \
     && bun run build:public && cp -a dist /out/public
 
 FROM base AS cloud
-WORKDIR /app
+WORKDIR /src/apps/cloud
+COPY assets /src/assets
 COPY apps/cloud ./
 RUN bun install --frozen-lockfile && bun run build
 COPY docker/e2e/cloud-entrypoint /usr/local/bin/cloud-entrypoint
-COPY docker/e2e/cloud-seed.sql /app/e2e-seed.sql
+COPY docker/e2e/cloud-seed.sql /src/apps/cloud/e2e-seed.sql
 # The banner's npm update check can keep a socket alive after local D1 commands finish.
 ENV WRANGLER_HIDE_BANNER=true WRANGLER_SEND_METRICS=false CI=true
 ENTRYPOINT ["bash", "/usr/local/bin/cloud-entrypoint"]

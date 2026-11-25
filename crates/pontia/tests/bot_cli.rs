@@ -630,3 +630,39 @@ async fn profile_commands_send_grouped_actions_and_reject_incomplete_updates() {
     }
     assert!(f.requests.try_recv().is_err());
 }
+
+#[test]
+fn profile_templates_work_offline_without_a_session() {
+    let root = tempfile::tempdir().unwrap();
+    let cli = |args: &[&str]| {
+        let output = Command::new(env!("CARGO_BIN_EXE_pontia"))
+            .arg("bot")
+            .args(args)
+            .env("PONTIA_HOME", root.path())
+            .env_remove("PONTIA_SESSION_ID")
+            .env_remove("PONTIA_EXTERNAL_API_TOKEN")
+            .env("PONTIA_AUTH_ORIGIN", "https://127.0.0.1:1")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(output.stderr.is_empty());
+        String::from_utf8(output.stdout).unwrap()
+    };
+    assert!(cli(&["profile", "templates"]).starts_with("# Agent Profile Templates\n"));
+    for args in [
+        ["profile", "templates", "--json"],
+        ["--json", "profile", "templates"],
+    ] {
+        assert_eq!(
+            cli(&args),
+            include_str!("../../../assets/agent-profile-templates.json")
+        );
+    }
+    for args in [vec!["profile", "-h"], vec!["profile", "create", "-h"]] {
+        assert!(cli(&args).contains("pontia bot profile templates"));
+    }
+}

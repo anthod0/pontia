@@ -8,9 +8,8 @@ import {
   type ProfileTemplateText,
 } from "./templates";
 
-/** Published by uploading `apps/cloud/files/dashboard/agent-profile-templates/v1.json`. */
-export const publishedTemplatesUrl =
-  "https://files.pontia.dev/dashboard/agent-profile-templates/v1.json";
+/** Pontia Cloud publishes the shared catalog from `assets/agent-profile-templates.json`. */
+export const publishedTemplatesUrl = "https://pontia.dev/agent-profile-templates.json";
 export const templatesSchemaVersion = 1;
 
 const storageKey = "pontia.profileTemplates";

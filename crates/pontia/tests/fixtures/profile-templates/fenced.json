@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "templates": [
+    {
+      "id": "example",
+      "icon": "code",
+      "client_type": "codex",
+      "model": "example-model",
+      "use_yolo": false,
+      "text": {
+        "en": {
+          "name": "Example",
+          "description": "Review code.",
+          "system_prompt": "Read the example:\n````text\n# heading\n````"
+        }
+      }
+    }
+  ]
+}

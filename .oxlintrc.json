@@ -14,7 +14,7 @@
       "excludeFiles": [
         "apps/dashboard/src/modes/local/apiAccess.ts",
         "apps/dashboard/src/modes/public/remote-access/**",
-        // Loads published profile templates from files.pontia.dev, not from a device.
+        // Loads published profile templates from pontia.dev, not from a device.
         "apps/dashboard/src/pages/agentProfiles/publishedTemplates.ts",
         "apps/dashboard/src/service-worker.ts"
       ],

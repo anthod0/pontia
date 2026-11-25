@@ -37,7 +37,7 @@ services:
       - *preview-certificate
       - type: bind
         source: ${E2E_CONFIG}/cloud.dev.vars
-        target: /app/.dev.vars
+        target: /src/apps/cloud/.dev.vars
         read_only: true
         bind:
           create_host_path: false
@@ -49,7 +49,7 @@ services:
           create_host_path: false
       - type: bind
         source: ${E2E_STATE}/cloud-bootstrap.sql
-        target: /app/e2e-bootstrap.sql
+        target: /src/apps/cloud/e2e-bootstrap.sql
         read_only: true
         bind:
           create_host_path: false

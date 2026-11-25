@@ -1,6 +1,7 @@
 mod args;
 mod output;
 mod profile;
+mod profile_templates;
 
 use std::{env, time::Duration};
 
@@ -25,6 +26,16 @@ struct ApiError {
 }
 
 pub(crate) async fn run(command: BotCommand, config: &AppConfig) -> Result<(), String> {
+    if matches!(
+        command.command,
+        BotTool::Profile(profile::ProfileCommand::Templates)
+    ) {
+        print!(
+            "{}",
+            profile_templates::load(&config.auth_origin, command.json).await
+        );
+        return Ok(());
+    }
     let session_id = env::var("PONTIA_SESSION_ID")
         .ok()
         .filter(|id| !id.trim().is_empty())
