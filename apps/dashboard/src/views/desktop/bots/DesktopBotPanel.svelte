@@ -13,7 +13,7 @@
   import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon'
   import QuotesIcon from 'phosphor-svelte/lib/QuotesIcon'
   import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon'
-  import XIcon from 'phosphor-svelte/lib/XIcon'
+  import CaretDoubleRightIcon from 'phosphor-svelte/lib/CaretDoubleRightIcon'
   import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon'
   import SidebarSimpleIcon from 'phosphor-svelte/lib/SidebarSimpleIcon'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -237,7 +237,7 @@
         <Tabs.Trigger value="search" class="h-full px-2.5"><MagnifyingGlassIcon />{$t('bots.searchTab')}</Tabs.Trigger>
         <Tabs.Trigger value="git" class="h-full px-2.5"><GitBranchIcon />{$t('git.title')}</Tabs.Trigger>
       </Tabs.List>
-      <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11 pointer-coarse:size-11" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => { panel.current = false }}><XIcon /></Button>
+      <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11 pointer-coarse:size-11" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => { panel.current = false }}><CaretDoubleRightIcon /></Button>
     </header>
     <Tabs.Content value="preview" class="flex min-h-0 flex-col">
       <LocalhostPreviewPanel bind:target={preview} access={device.access} />

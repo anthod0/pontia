@@ -5,7 +5,7 @@
   import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
   import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon'
-  import XIcon from 'phosphor-svelte/lib/XIcon'
+  import CaretDoubleRightIcon from 'phosphor-svelte/lib/CaretDoubleRightIcon'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import * as Tabs from '$lib/components/ui/tabs/index.js'
@@ -48,7 +48,7 @@
         <Tabs.Trigger value="preview" class="h-full px-2.5"><GlobeIcon />{$t('preview.title')}</Tabs.Trigger>
         <Tabs.Trigger value="git" class="h-full px-2.5"><GitBranchIcon />{$t('git.title')}</Tabs.Trigger>
       </Tabs.List>
-      <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => panel.close()}><XIcon class="size-4 max-lg:size-5" /></Button>
+      <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => panel.close()}><CaretDoubleRightIcon class="size-4 max-lg:size-5" /></Button>
     </header>
     <Tabs.Content value="preview" class="flex min-h-0 flex-col">
       <LocalhostPreviewPanel bind:target={panel.preview} access={device.access} />
