@@ -38,7 +38,8 @@ async fn path_content(
 #[tokio::test]
 async fn path_download_reads_current_file_without_creating_events() {
     let app = fixture().await;
-    let path = app.workspace().path().join("报告 #1.txt");
+    let workspace = tempfile::tempdir().unwrap();
+    let path = workspace.path().join("报告 #1.txt");
     for bytes in [b"original".as_slice(), b"updated"] {
         std::fs::write(&path, bytes).unwrap();
         let response = path_content(&app, "s", &path, true).await;
@@ -76,7 +77,8 @@ async fn path_download_reads_current_file_without_creating_events() {
 async fn path_download_requires_authentication_session_and_absolute_regular_file_within_size_limit()
 {
     let app = fixture().await;
-    let path = app.workspace().path().join("report.txt");
+    let workspace = tempfile::tempdir().unwrap();
+    let path = workspace.path().join("report.txt");
     let file = std::fs::File::create(&path).unwrap();
     assert_eq!(
         path_content(&app, "s", &path, false).await.status(),
@@ -93,7 +95,7 @@ async fn path_download_requires_authentication_session_and_absolute_regular_file
         StatusCode::BAD_REQUEST
     );
     assert_eq!(
-        path_content(&app, "s", app.workspace().path(), true)
+        path_content(&app, "s", workspace.path(), true)
             .await
             .status(),
         StatusCode::NOT_FOUND
@@ -108,8 +110,9 @@ async fn path_download_requires_authentication_session_and_absolute_regular_file
 #[tokio::test]
 async fn path_download_resolves_symlinks_and_rejects_non_regular_files() {
     let app = fixture().await;
-    let target = app.workspace().path().join("target");
-    let path = app.workspace().path().join("link");
+    let workspace = tempfile::tempdir().unwrap();
+    let target = workspace.path().join("target");
+    let path = workspace.path().join("link");
     std::fs::write(&target, b"linked file").unwrap();
     std::os::unix::fs::symlink(&target, &path).unwrap();
     let response = path_content(&app, "s", &path, true).await;
@@ -118,7 +121,7 @@ async fn path_download_resolves_symlinks_and_rejects_non_regular_files() {
         response.into_body().collect().await.unwrap().to_bytes(),
         &b"linked file"[..]
     );
-    let socket_path = app.workspace().path().join("socket");
+    let socket_path = workspace.path().join("socket");
     let _socket = std::os::unix::net::UnixListener::bind(&socket_path).unwrap();
     assert_ne!(
         path_content(&app, "s", &socket_path, true).await.status(),
@@ -129,7 +132,8 @@ async fn path_download_resolves_symlinks_and_rejects_non_regular_files() {
 #[tokio::test]
 async fn path_download_types_only_recognized_images() {
     let app = fixture().await;
-    let path = app.workspace().path().join("图片.svg");
+    let workspace = tempfile::tempdir().unwrap();
+    let path = workspace.path().join("图片.svg");
     for (bytes, media_type) in [
         (b"\x89PNG\r\n\x1a\nimage".as_slice(), "image/png"),
         (b"<svg onload='alert(1)'/>", "application/octet-stream"),
@@ -144,7 +148,8 @@ async fn path_download_types_only_recognized_images() {
 #[tokio::test]
 async fn path_head_reports_size_and_type_without_a_body() {
     let app = fixture().await;
-    let path = app.workspace().path().join("chart.png");
+    let workspace = tempfile::tempdir().unwrap();
+    let path = workspace.path().join("chart.png");
     std::fs::write(&path, b"\x89PNG\r\n\x1a\nimage bytes").unwrap();
     let head = |path: std::path::PathBuf| {
         let mut url =
@@ -175,4 +180,15 @@ async fn path_head_reports_size_and_type_without_a_body() {
     );
     std::fs::remove_file(&path).unwrap();
     assert_eq!(head(path).await.unwrap().status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn path_download_forbids_configured_pontia_home() {
+    let app = fixture().await;
+    let file = app.pontia_home().path().join("private.txt");
+    std::fs::write(&file, b"private").unwrap();
+    assert_eq!(
+        path_content(&app, "s", &file, true).await.status(),
+        StatusCode::FORBIDDEN
+    );
 }

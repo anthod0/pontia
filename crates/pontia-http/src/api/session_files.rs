@@ -22,7 +22,7 @@ pub async fn path_file_content(
     Path(session_id): Path<String>,
     Query(query): Query<FileContentQuery>,
 ) -> Result<Response, ApiError> {
-    let content = SessionFileService::new(state.db())
+    let content = SessionFileService::new(state.db(), state.pontia_home().to_owned())
         .path_content(&session_id, query.path)
         .await;
     file_response(content)
@@ -31,6 +31,9 @@ pub async fn path_file_content(
 fn file_response(content: Result<FileContent, FileContentError>) -> Result<Response, ApiError> {
     let content = content.map_err(|e| match e {
         FileContentError::NotFound => ApiError::not_found(e.to_string()),
+        FileContentError::Forbidden => {
+            ApiError::custom(StatusCode::FORBIDDEN, "forbidden", e.to_string())
+        }
         FileContentError::PathChanged => {
             ApiError::custom(StatusCode::CONFLICT, "file_path_changed", e.to_string())
         }

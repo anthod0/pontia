@@ -12,6 +12,8 @@ pub const MAX_FILE_SIZE: u64 = 1 << 30;
 pub enum FileContentError {
     #[error("File no longer exists")]
     NotFound,
+    #[error("Access to this file is forbidden")]
+    Forbidden,
     #[error("File path has changed")]
     PathChanged,
     #[error("File exceeds the 1 GiB download limit")]
@@ -30,11 +32,12 @@ pub struct FileContent {
 #[derive(Clone)]
 pub struct SessionFileService {
     pool: SqlitePool,
+    pontia_home: PathBuf,
 }
 
 impl SessionFileService {
-    pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+    pub fn new(pool: SqlitePool, pontia_home: PathBuf) -> Self {
+        Self { pool, pontia_home }
     }
 
     async fn ensure_session(&self, session_id: &str) -> Result<()> {
@@ -59,22 +62,71 @@ impl SessionFileService {
         if !path.is_absolute() {
             return Err(Error::Domain("An absolute file path is required".into()).into());
         }
+        let pontia_home = self.pontia_home.clone();
         tokio::task::spawn_blocking(move || {
-            let name = path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .ok_or(FileContentError::NotFound)?
-                .to_owned();
-            let path = path.canonicalize().map_err(content_io_error)?;
-            read_content(&path, name)
+            read_content(&path, &pontia_home, std::env::home_dir().as_deref())
         })
         .await
         .map_err(|e| FileContentError::Internal(Error::Io(std::io::Error::other(e))))?
     }
 }
 
-fn read_content(path: &Path, name: String) -> std::result::Result<FileContent, FileContentError> {
-    let (file, media_type) = open_file(path).map_err(content_io_error)?;
+fn sensitive_path(path: &Path, pontia_home: &Path, home: Option<&Path>) -> bool {
+    let matches = |entry: &Path| {
+        path.starts_with(entry)
+            || entry
+                .canonicalize()
+                .is_ok_and(|resolved| path.starts_with(resolved))
+    };
+    matches(pontia_home)
+        || [
+            "/etc/shadow",
+            "/etc/gshadow",
+            "/etc/sudoers",
+            "/proc",
+            "/sys",
+        ]
+        .iter()
+        .any(|entry| matches(Path::new(entry)))
+        || home.is_some_and(|home| {
+            [
+                ".ssh",
+                ".gnupg",
+                ".aws",
+                ".kube",
+                ".docker",
+                ".azure",
+                ".config/gcloud",
+                ".config/gh",
+                ".npmrc",
+                ".netrc",
+                ".pypirc",
+                ".git-credentials",
+                "Library/Keychains",
+            ]
+            .iter()
+            .any(|entry| matches(&home.join(entry)))
+        })
+}
+
+fn read_content(
+    path: &Path,
+    pontia_home: &Path,
+    home: Option<&Path>,
+) -> std::result::Result<FileContent, FileContentError> {
+    let resolved = path.canonicalize().map_err(|error| match error.kind() {
+        std::io::ErrorKind::PermissionDenied => FileContentError::Forbidden,
+        _ => content_io_error(error),
+    })?;
+    if sensitive_path(&resolved, pontia_home, home) {
+        return Err(FileContentError::Forbidden);
+    }
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or(FileContentError::NotFound)?
+        .to_owned();
+    let (file, media_type) = open_file(&resolved).map_err(content_io_error)?;
     let size = file.metadata().map_err(content_io_error)?.len();
     if size > MAX_FILE_SIZE {
         return Err(FileContentError::TooLarge);
@@ -146,4 +198,100 @@ fn open_file(path: &Path) -> std::io::Result<(File, &'static str)> {
         "application/octet-stream"
     };
     Ok((file, media_type))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{fs, os::unix::fs::symlink};
+
+    #[test]
+    fn protects_credentials_and_keeps_preview_paths_readable() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("user");
+        let runtime = home.join(".pontia");
+        for relative in [
+            ".pontia/state/runtime.log",
+            ".ssh/id_ed25519",
+            ".gnupg/key",
+            ".aws/config",
+            ".kube/config",
+            ".docker/config.json",
+            ".azure/token",
+            ".config/gcloud/token",
+            ".config/gh/hosts.yml",
+            "Library/Keychains/login.keychain-db",
+            ".npmrc",
+            ".netrc",
+            ".pypirc",
+            ".git-credentials",
+        ] {
+            let path = home.join(relative);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, b"secret").unwrap();
+            assert!(
+                matches!(
+                    read_content(&path, &runtime, Some(&home)),
+                    Err(FileContentError::Forbidden)
+                ),
+                "{relative}"
+            );
+        }
+        for path in [
+            home.join("Pontia/report.md"),
+            home.join(".ssh-backup/report"),
+            root.path().join("ordinary"),
+        ] {
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, b"preview").unwrap();
+            let mut preview = read_content(&path, &runtime, Some(&home)).unwrap();
+            let mut bytes = Vec::new();
+            preview.file.read_to_end(&mut bytes).unwrap();
+            assert_eq!(bytes, b"preview");
+        }
+    }
+
+    #[test]
+    fn protects_system_paths() {
+        let runtime = tempfile::tempdir().unwrap();
+        for path in [
+            "/etc/shadow",
+            "/etc/gshadow",
+            "/etc/sudoers",
+            "/proc/cpuinfo",
+            "/sys/kernel/uevent_seqnum",
+        ] {
+            assert!(
+                sensitive_path(Path::new(path), runtime.path(), None),
+                "{path}"
+            );
+        }
+    }
+
+    #[test]
+    fn checks_resolved_paths_and_symlinked_sensitive_directories() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path();
+        let runtime = home.join(".pontia");
+        let keys = home.join("keys");
+        fs::create_dir(&keys).unwrap();
+        fs::write(keys.join("key"), b"secret").unwrap();
+        symlink(&keys, home.join(".ssh")).unwrap();
+        symlink(home.join(".ssh"), home.join("shortcut")).unwrap();
+        fs::create_dir(home.join("project")).unwrap();
+        for path in [
+            home.join("shortcut/key"),
+            home.join("project/../.ssh/key"),
+            keys.join("key"),
+        ] {
+            assert!(
+                matches!(
+                    read_content(&path, &runtime, Some(home)),
+                    Err(FileContentError::Forbidden)
+                ),
+                "{}",
+                path.display()
+            );
+        }
+    }
 }
