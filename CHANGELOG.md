@@ -7,9 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-11-25
+
+### Added
+
+- Review CLI credentials alongside browser sessions in Cloud settings and revoke individual credentials.
+- Use literal double braces such as `{{name}}` in Session instructions.
+
 ### Changed
 
 - Replying to an open todo from the Todo list or quoting it in Bot chat moves it to Resolved when the reply is delivered.
+- After you approve `pontia init` in your browser, the same tab opens the newly registered device. During onboarding, Pontia also shows when a device search finishes with no results.
+- Failed chat messages have a resend button beside them.
+- Remote localhost previews open on a dedicated `pontia.run` domain. Public and private Edges automatically update preview DNS records and TLS certificates on upgrade. Devices verify preview access and let you configure exceptions to the default port restrictions.
+- The Ivy homepage demo shows the updated Dashboard and describes file and dev server previews in chat.
+
+### Fixed
+
+- Claude Session history keeps completed Turns across context compaction. ACP Session history shows tool calls and their results, and live output keeps in-progress calls visible during long Turns.
+- Workspace file inspection stays within the Workspace. Pontia protects local runtime files and sockets and keeps Bot tool credentials scoped to their Sessions.
 
 ## [0.9.2] - 2026-11-25
 
@@ -1282,7 +1298,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.9.2...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.9.3...HEAD
+[0.9.3]: https://github.com/anthod0/pontia/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/anthod0/pontia/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/anthod0/pontia/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/anthod0/pontia/compare/v0.8.16...v0.9.0
