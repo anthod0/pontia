@@ -161,9 +161,14 @@
 
   let checkingDevices = $state(false);
 
-  async function checkDevices(): Promise<void> {
+  async function checkDevices(): Promise<boolean> {
     checkingDevices = true;
-    try { await connections?.refreshDevices(); } finally { checkingDevices = false; }
+    try {
+      await connections?.refreshDevices();
+      return $devices.length > 0;
+    } finally {
+      checkingDevices = false;
+    }
   }
 
   function retry(): void {

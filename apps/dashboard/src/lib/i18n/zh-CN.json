@@ -516,6 +516,7 @@
   "devices.initialize": "注册设备",
   "devices.initializeDescription": "在向导中选择 Agent 客户端并启用远程访问。在浏览器中登录，然后按提示完成设备注册。",
   "devices.openHere": "在这里打开",
+  "devices.noneFound": "暂未发现设备。请在终端中完成设置后再检查。",
   "devices.openDescription": "设置完成后，设备会显示在此 Dashboard 中，即可开始会话。",
   "account.title": "账号",
   "account.manage": "管理账号",

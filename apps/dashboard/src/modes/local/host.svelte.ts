@@ -51,6 +51,7 @@ export function createLocalHost(getRuntime: () => DeviceRuntime): DashboardHost 
     retryDevice: reconnect,
     async checkDevices() {
       reconnect();
+      return true;
     },
     openNewChat: () => void navigate("/"),
     openSettings: () => void navigate("/settings/common"),

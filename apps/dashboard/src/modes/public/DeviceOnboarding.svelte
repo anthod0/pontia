@@ -7,7 +7,7 @@
   import { Button } from '$lib/components/ui/button/index.js'
   import { copyText } from '$lib/copyText'
 
-  let { onCheck, checking }: { onCheck: () => void; checking: boolean } = $props()
+  let { onCheck, checking }: { onCheck: () => Promise<boolean>; checking: boolean } = $props()
 
   const steps = $derived([
     {
@@ -25,6 +25,14 @@
     },
   ])
   let copied = $state<number | null>(null)
+
+  let showEmptyHint = $state(false)
+
+  async function checkDevices(): Promise<void> {
+    showEmptyHint = false
+    const foundDevices = await onCheck()
+    showEmptyHint = !foundDevices
+  }
 
   async function copy(index: number, command: string): Promise<void> {
     if (!(await copyText(command))) return
@@ -65,10 +73,15 @@
                 </Button>
               </div>
             {:else if index === steps.length - 1}
-              <Button variant="outline" size="sm" onclick={onCheck} disabled={checking}>
+              <Button variant="outline" size="sm" onclick={checkDevices} disabled={checking}>
                 <ArrowClockwiseIcon class={checking ? 'animate-spin' : undefined} />
                 {checking ? $t('common.checking') : $t('devices.check')}
               </Button>
+              <div role="status" class="empty:hidden">
+                {#if showEmptyHint}
+                  <p class="text-xs text-muted-foreground motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-300">{$t('devices.noneFound')}</p>
+                {/if}
+              </div>
             {/if}
           </div>
         </li>

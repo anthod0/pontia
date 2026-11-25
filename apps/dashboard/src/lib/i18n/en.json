@@ -516,6 +516,7 @@
   "devices.initialize": "Register your device",
   "devices.initializeDescription": "Choose your agent clients in the wizard and enable remote access. Sign in through your browser and follow the prompts to register this device.",
   "devices.openHere": "Open it here",
+  "devices.noneFound": "No devices found yet. Finish setup in your terminal, then check again.",
   "devices.openDescription": "When setup finishes, your device appears in this Dashboard and you can start a session.",
   "account.title": "Account",
   "account.manage": "Manage account",

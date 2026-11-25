@@ -603,3 +603,25 @@ test("an account without devices shows setup steps and finds a newly registered 
     ).not.toBeInTheDocument(),
   );
 });
+
+test("manual checks show fresh feedback each time the device list is empty", async () => {
+  fixture.listed.splice(0);
+  render(MultiDeviceDashboardHarness);
+  const check = await screen.findByRole("button", { name: "Check for devices" });
+  const hint = "No devices found yet. Finish setup in your terminal, then check again.";
+  expect(screen.queryByText(hint)).not.toBeInTheDocument();
+
+  await fireEvent.click(check);
+  expect(await screen.findByText(hint)).toBeVisible();
+
+  const listing = { userId: "user-one", devices: [] };
+  const pending = Promise.withResolvers<typeof listing>();
+  vi.mocked(fixture.remote.listPublicDevices).mockReturnValueOnce(pending.promise);
+  await fireEvent.click(check);
+  expect(check).toBeDisabled();
+  expect(screen.queryByText(hint)).not.toBeInTheDocument();
+
+  pending.resolve(listing);
+  expect(await screen.findByText(hint)).toBeVisible();
+  expect(check).toBeEnabled();
+});

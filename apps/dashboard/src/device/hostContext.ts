@@ -27,7 +27,7 @@ export interface DashboardHost {
   selectDevice(handle: string, options?: { keepMobileTab?: boolean }): void;
   retryActiveOrRefresh(): void;
   retryDevice(handle: string): void;
-  checkDevices(): Promise<void>;
+  checkDevices(): Promise<boolean>;
   openNewChat(): void;
   openSettings(): void;
 }
