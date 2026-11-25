@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
   import { t } from '$lib/i18n'
+  import { page } from '$app/state'
   import { dashboardRelativePath } from '$lib/navigation'
   import { useDashboardHost } from '../../device/hostContext'
   import ComposerDeviceSelect from './ComposerDeviceSelect.svelte';
@@ -15,11 +16,16 @@
   import NewChatComposerPlaceholder from '../../components/chat/NewChatComposerPlaceholder.svelte';
   import DeviceProvider from '../../device/DeviceProvider.svelte';
   import DeviceOnboarding from './DeviceOnboarding.svelte';
+  import MobileBotChatSkeleton from '../../views/mobile/bots/MobileBotChatSkeleton.svelte';
   let { handle, children }: { handle?: string; children: Snippet } = $props()
   const host = useDashboardHost()
-  const device = $derived(host.activeDevice?.state === 'online' ? host.activeDevice.runtime : null)
   let currentLocation = $state(window.location.pathname);
   const currentPath = $derived(dashboardRelativePath(currentLocation));
+  // On phones the entry page and Bot chats open while the device connects: the entry page reopens the
+  // last Bot chat at once, and a Bot chat shows its saved messages read-only until the device is online.
+  const opensEarly = $derived(isMobileShell() && (currentPath === '/' || page.params.botId !== undefined))
+  const device = $derived(host.activeDevice?.state === 'online' || (opensEarly && host.activeDevice?.state === 'connecting')
+    ? host.activeDevice.runtime : null)
 </script>
 
 <svelte:window onpopstate={() => currentLocation = window.location.pathname} />
@@ -57,7 +63,9 @@
     <Button size="sm" variant="outline" href={host.signInUrl}>{$t('auth.signIn')}</Button>
   </div>
 {:else if host.statusView}
-  {#if currentPath === '/'}
+  {#if opensEarly && host.statusView.mood === 'loading'}
+    <MobileBotChatSkeleton />
+  {:else if currentPath === '/' && !isMobileShell()}
     <NewChatLayout status={host.statusView}>
       {#snippet action()}{@render statusAction()}{/snippet}
       <NewChatComposerPlaceholder {deviceSelector} />

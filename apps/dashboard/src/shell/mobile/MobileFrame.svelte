@@ -21,6 +21,7 @@
   import MobileHeader from './MobileHeader.svelte'
   import MobileOverlayHost from './MobileOverlayHost.svelte'
   import MobileTabBar from './MobileTabBar.svelte'
+  import MobileBotTitlePlaceholder from '../../views/mobile/bots/MobileBotTitlePlaceholder.svelte'
   import { tabs, parentTab } from './tabs'
 
   let { device, children }: { device?: DeviceRuntime; children: Snippet } = $props()
@@ -38,6 +39,9 @@
   const hasTabs = $derived(!!tab && !$keyboardOpen && !stack.layers.length)
   const section = $derived(settingsSections.find(section => section.path === path))
   const bot = $derived(directory?.bots?.find(bot => bot.bot_id === page.params.botId))
+  // The entry page usually reopens a Bot chat, so while loading it and a Bot chat hold the Bot title's place.
+  const titlePending = $derived((path === '/' || (page.params.botId !== undefined && !bot))
+    && host.statusView?.mood !== 'offline' && !host.loadError && !host.onboarding)
   const title = $derived(bot?.name ?? sessionTitle ?? $t(tab?.label ?? section?.label ?? (path === '/new' ? 'nav.newChat' : path.startsWith('/chat/') ? 'sessions.title' : 'mobile.chats')))
   afterNavigate(() => {
     scroller?.scrollTo({top: 0})
@@ -53,10 +57,12 @@
   })
 </script>
 
+{#snippet pendingTitle()}<MobileBotTitlePlaceholder />{/snippet}
+
 <div class="mobile-shell" data-tabs={hasTabs} data-keyboard={$keyboardOpen}>
   <div inert={stack.layers.some(layer => layer.content)} class="relative isolate flex h-full flex-col" use:edgeSwipeBack={!tab && path !== '/new' && !stack.layers.length ? back : undefined}>
     <div class="mobile-chrome" data-scrolled={scrolled} use:chromeMetrics={'--mobile-header-h'}>
-      <MobileHeader customTitle={$heading} {title} device={tab ? host.activeDevice : null} back={tab || path === '/' ? undefined : back}
+      <MobileHeader customTitle={$heading ?? (titlePending ? pendingTitle : null)} {title} device={tab ? host.activeDevice : null} back={tab ? undefined : back}
         modal={path === '/new'}
         switchDevice={tab && host.canSwitchDevice ? () => switchOpen = true : undefined} action={$action} />
       <MobileConnectionBanner />

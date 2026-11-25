@@ -6,7 +6,11 @@
   import MobileOverlayHost from '../../src/shell/mobile/MobileOverlayHost.svelte'
   import { provideMobileStack } from '$lib/mobile/overlayStack.svelte'
   import { createBotChat } from '../../src/features/bots/botChat.svelte'
-  let { botId }: { botId: string } = $props()
+  import { provideDashboardHost, type DashboardHost } from '../../src/device/hostContext'
+  import { createLocalHost } from '../../src/modes/local/host.svelte'
+  import { testDevice } from '../deviceFixture'
+  let { botId, host }: { botId: string; host?: DashboardHost } = $props()
+  provideDashboardHost(untrack(() => host) ?? createLocalHost(() => testDevice))
   const { title, action } = provideMobileHeader(() => {})
   const stack = provideMobileStack()
   const chat = createBotChat(untrack(() => botId))

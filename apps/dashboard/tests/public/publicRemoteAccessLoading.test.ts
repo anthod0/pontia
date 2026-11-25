@@ -34,6 +34,7 @@ vi.mock("../../src/modes/public/remote-access", async (importOriginal) => {
           edgeApiOrigin: "https://brave-silver-atlas.edge.pontia.dev",
         }),
         uploadStorageScope: async () => handle,
+        storageScope: handle,
         signal: controller.signal,
         dispose: () => controller.abort(),
       };

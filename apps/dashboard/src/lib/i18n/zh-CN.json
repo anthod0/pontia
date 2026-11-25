@@ -91,6 +91,7 @@
   "bots.executionFailed": "Bot 执行失败",
   "bots.sessionExited": "Bot Session 已退出",
   "bots.processing": "正在处理消息",
+  "bots.connectingReadOnly": "正在连接 {name}…当前显示本地记录",
   "bots.openTodos": "{count} 项待办",
   "bots.sidebarSetupDescription": "Bot 会替你开启和管理会话，并记住你的偏好。",
   "bots.replySent": "回复已发送",

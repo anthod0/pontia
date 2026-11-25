@@ -23,7 +23,7 @@ function openTab(path: string) {
 }
 
 beforeEach(() => {
-  goto.mockClear();
+  goto.mockReset();
   localStorage.clear();
   testDevice.queryClient.clear();
 });
@@ -42,28 +42,29 @@ test("a new tab on New Chat reopens the last Session chat", async () => {
   );
 });
 
-test("a new tab on a device's New Chat reopens that device's last Bot chat", async () => {
+test("a new tab on a device's New Chat reopens that device's last Bot chat before the device answers", () => {
   rememberLastPage("local", { kind: "bot", id: "pontia" });
-  vi.spyOn(testDevice.api, "listBots").mockResolvedValue([bot]);
+  vi.spyOn(testDevice.api, "listBots").mockReturnValue(new Promise(() => {}));
   openTab("/office-mac");
   render(DashboardEntryPage, { routeScope: "/office-mac" });
   expect(screen.getByRole("status", { name: "Loading conversation" })).toHaveAttribute(
     "data-bot-conversation-skeleton",
   );
-  await waitFor(() =>
-    expect(goto).toHaveBeenCalledWith("/office-mac/bots/pontia", { replaceState: true }),
-  );
+  expect(goto).toHaveBeenCalledWith("/office-mac/bots/pontia", { replaceState: true });
 });
 
-test("a deleted Bot or missing Session opens New Chat and is forgotten", async () => {
+test("a reopened Bot chat whose Bot was deleted returns to New Chat and is forgotten", async () => {
   rememberLastPage("local", { kind: "bot", id: "deleted" });
   vi.spyOn(testDevice.api, "listBots").mockResolvedValue([bot]);
+  goto.mockImplementation(async (path: string) => window.history.replaceState({}, "", path));
   openTab("/dashboard");
-  const first = render(DashboardEntryPage);
-  expect(await screen.findByText("New Chat")).toBeInTheDocument();
+  render(DashboardEntryPage);
+  expect(goto).toHaveBeenCalledWith("/dashboard/bots/deleted", { replaceState: true });
+  await waitFor(() => expect(goto).toHaveBeenLastCalledWith("/dashboard", { replaceState: true }));
   expect(savedPage()).toBeNull();
-  first.unmount();
+});
 
+test("a missing Session opens New Chat and is forgotten", async () => {
   rememberLastPage("local", { kind: "chat", id: "gone" });
   vi.spyOn(testDevice.api, "getSession").mockRejectedValue(notFound);
   openTab("/dashboard");

@@ -103,27 +103,41 @@ export function createRemoteConnection(
   const lifetime = new AbortController();
   const connection = mockCloudDevices.find((device) => device.handle === handle)?.connection;
 
-  async function connect(signal?: AbortSignal): Promise<void> {
-    const scoped = signal ? AbortSignal.any([lifetime.signal, signal]) : lifetime.signal;
-    if (connection === "connecting")
-      return new Promise((_, reject) => {
-        scoped.addEventListener("abort", () => reject(scoped.reason), { once: true });
-      });
-    await wait(CONNECT_DELAY_MS, scoped);
+  const storageScope = JSON.stringify([location.origin, "mock", handle]);
+  let established: Promise<void> | null = null;
+
+  async function establish(): Promise<void> {
+    if (connection === "connecting") await new Promise(() => {});
+    await wait(CONNECT_DELAY_MS, lifetime.signal);
     if (connection !== "online") throw new CloudRequestError("Device is offline.", 503);
   }
 
-  function e2eFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  // Like the real transport, requests wait for the one connection that `connect` establishes.
+  function connect(signal?: AbortSignal): Promise<void> {
+    established ??= establish();
+    const scoped = signal ? AbortSignal.any([lifetime.signal, signal]) : lifetime.signal;
+    return Promise.race([
+      established,
+      new Promise<never>((_, reject) => {
+        if (scoped.aborted) reject(scoped.reason);
+        scoped.addEventListener("abort", () => reject(scoped.reason), { once: true });
+      }),
+    ]);
+  }
+
+  async function e2eFetch(path: string, init: RequestInit = {}): Promise<Response> {
     const headers = new Headers(init.headers);
     headers.set(mockDeviceHeader, handle);
     const signal = init.signal ? AbortSignal.any([lifetime.signal, init.signal]) : lifetime.signal;
+    await connect(signal);
     return fetch(path, { ...init, headers, signal });
   }
 
   return {
     connect,
     e2eFetch,
-    uploadStorageScope: async () => JSON.stringify([location.origin, "mock", handle]),
+    uploadStorageScope: async () => storageScope,
+    storageScope,
     signal: lifetime.signal,
     dispose: () => lifetime.abort(),
   };

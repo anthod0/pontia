@@ -13,7 +13,9 @@
   import SharedImageViewer from '../../../components/chat/SharedImageViewer.svelte'
   import FilePreviewPanel from '../../../components/chat/FilePreviewPanel.svelte'
   import BotConversation from '../../../components/bots/BotConversation.svelte'
-  import BotChatSkeleton from '../../../components/bots/BotChatSkeleton.svelte'
+  import { useDashboardHost } from '../../../device/hostContext'
+  import MobileBotChatSkeleton from './MobileBotChatSkeleton.svelte'
+  import MobileBotTitlePlaceholder from './MobileBotTitlePlaceholder.svelte'
   import BotAvatar from '../../../components/bots/BotAvatar.svelte'
   import ProfileHint from '../../../components/bots/ProfileHint.svelte'
   import BotQuoteChip from '../../../components/bots/BotQuoteChip.svelte'
@@ -26,9 +28,13 @@
   import MobileBotSearchScreen from './MobileBotSearchScreen.svelte'
   import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon'
   import DotsThreeIcon from 'phosphor-svelte/lib/DotsThreeIcon'
+  import SpinnerGapIcon from 'phosphor-svelte/lib/SpinnerGapIcon'
   let { chat }: { chat: BotChatController } = $props()
   const timeline = $derived(chat.timeline)
   const device = useDeviceRuntime()
+  const host = useDashboardHost()
+  // Until a public device is online, the chat shows its saved messages and cannot send.
+  const connecting = $derived(host.mode === 'public' && host.activeDevice?.state === 'connecting')
   const stack = useMobileStack()!
   const { title: heading, action } = useMobileHeader()
   const recent = createRecentFiles(
@@ -106,7 +112,7 @@
     >
       <BotAvatar class="size-6" shape={timeline.bot.avatar_shape} color={timeline.bot.avatar_color} />
       <strong class="truncate">{timeline.bot.name}</strong>
-    </button>{/if}
+    </button>{:else if !timeline.refreshError}<MobileBotTitlePlaceholder />{/if}
 {/snippet}
 {#snippet headerActions()}
   <div class="flex items-center gap-2">
@@ -154,7 +160,12 @@
       use:chromeMetrics={'--mobile-footer-h'}
       class="bot-chat-dock pointer-events-none absolute inset-x-0 bottom-0 z-10 [&>div]:pointer-events-auto"
     >
-      {#if timeline.status.kind !== 'idle'}
+      {#if connecting}
+        <p class="flex min-w-0 items-center gap-2 px-3 py-1 text-sm leading-5 text-muted-foreground" role="status">
+          <SpinnerGapIcon class="size-4 shrink-0 animate-spin" aria-hidden="true" />
+          <span class="truncate">{$t('bots.connectingReadOnly', { name: host.activeDevice?.name ?? '' })}</span>
+        </p>
+      {:else if timeline.status.kind !== 'idle'}
         <p class="flex min-w-0 items-center gap-2 px-3 py-1 text-sm leading-5 text-muted-foreground" role="status">
           <BotAvatar class="size-5 shrink-0" shape={timeline.bot.avatar_shape} color={timeline.bot.avatar_color} working />
           <span class="shimmer truncate" style:--_highlight="var(--foreground)">{timeline.status.kind === 'working' ? timeline.status.title : $t('bots.processing')}</span>
@@ -169,12 +180,12 @@
         commands={[{ name: '/reload', description: $t('bots.reload'), run: chat.reload }]}
         prefix={chat.quote ? chip : undefined}
         onRemovePrefix={() => chat.setQuote(null)}
-        submitDisabled={!!chat.quote && !chat.draft.trim()}
+        submitDisabled={connecting || (!!chat.quote && !chat.draft.trim())}
         onSubmit={chat.send}
       />
     </div>
     <MobileBotMenuSheet bind:open={menu} bot={timeline.bot} onselect={select} onsaved={() => timeline.refresh(true)} />
     <MobileBotTodoSheet bind:open={todos} {chat} oncontext={viewContext} onjump={jump} />
     <MobileBotContextSheet bind:open={context} bot={timeline.bot} id={contextId} onjump={jump} />
-  {:else if !timeline.refreshError}<BotChatSkeleton />{/if}
+  {:else if !timeline.refreshError}<MobileBotChatSkeleton />{/if}
 </section>

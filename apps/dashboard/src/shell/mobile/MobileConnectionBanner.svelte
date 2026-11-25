@@ -1,3 +1,9 @@
+<script lang="ts" module>
+  import { SvelteSet } from 'svelte/reactivity'
+  // Devices online at some point since the page opened; until then a device is connecting, not disconnected.
+  const seenOnline = new SvelteSet<string>()
+</script>
+
 <script lang="ts">
   import { useDashboardHost } from '../../device/hostContext'
   import { readable } from 'svelte/store'
@@ -5,7 +11,11 @@
   const host = useDashboardHost()
   const stream = $derived(host.activeDevice?.runtime?.connection.sseStatus ?? readable(null))
   const offline = $derived(host.activeDevice?.state === 'offline')
-  const unhealthy = $derived(offline || host.connecting || $stream === 'error' || $stream === 'reconnecting' || $stream === 'connecting')
+  $effect(() => {
+    if (host.activeDevice?.state === 'online') seenOnline.add(host.activeDevice.handle)
+  })
+  const lost = $derived(!!host.activeDevice && seenOnline.has(host.activeDevice.handle))
+  const unhealthy = $derived(offline || (lost && (host.connecting || $stream === 'error' || $stream === 'reconnecting' || $stream === 'connecting')))
   let visible = $state(false)
   $effect(() => {
     if (!unhealthy) { visible = false; return }

@@ -123,22 +123,22 @@ export function createDeviceConnections(remote: RemoteAccess) {
       else offline(entry);
     });
     entry.connection = connection;
+    // The runtime exists while connecting, so pages can show saved data; its requests wait for the connection.
+    const access = createApiAccess(connection, (target, frame) =>
+      openPreview(entry, target, connection.signal, frame),
+    );
+    const runtime = new DeviceRuntime(connection.storageScope, access, entry.name);
+    entry.runtime = runtime;
+    entry.unsubscribe = runtime.connection.sseStatus.subscribe((status) => {
+      if (status !== "open") return;
+      entry.state = "online";
+      entry.retryDelay = 5000;
+      publish();
+    });
     publish();
     try {
       await connection.connect();
-      const id = await connection.uploadStorageScope();
       if (connection.signal.aborted) return;
-      const access = createApiAccess(connection, (target, frame) =>
-        openPreview(entry, target, connection.signal, frame),
-      );
-      const runtime = new DeviceRuntime(id, access, entry.name);
-      entry.runtime = runtime;
-      entry.unsubscribe = runtime.connection.sseStatus.subscribe((status) => {
-        if (status !== "open") return;
-        entry.state = "online";
-        entry.retryDelay = 5000;
-        publish();
-      });
       runtime.lifecycle.startDashboardRuntime(() => offline(entry));
     } catch (failure) {
       if (connection.signal.aborted) return;

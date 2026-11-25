@@ -8,6 +8,8 @@
   import BotSettingsForm from '../components/bots/BotSettingsForm.svelte'
   import PontiaMascot from '../components/chat/PontiaMascot.svelte'
   import BotChatSkeleton from '../components/bots/BotChatSkeleton.svelte'
+  import MobileBotChatSkeleton from '../views/mobile/bots/MobileBotChatSkeleton.svelte'
+  import { isMobileShell } from '$lib/hooks/shellMode.svelte'
 
   let { routeScope }: { routeScope?: string } = $props()
   const device = useDeviceRuntime()
@@ -24,7 +26,7 @@
 
 {#if !bots.isError && (bots.isPending || bots.data?.length)}
   <!-- The page opens the first Bot's chat, so it loads in that layout. -->
-  <BotChatSkeleton />
+  {#if isMobileShell()}<MobileBotChatSkeleton />{:else}<BotChatSkeleton />{/if}
 {:else}
 <section class="mx-auto flex min-h-[calc(100svh-5.5rem)] max-w-md flex-col justify-center gap-6 py-8 md:min-h-[calc(100svh-6.5rem)]">
   {#if bots.isError}

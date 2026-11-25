@@ -54,6 +54,25 @@ test("connects all devices concurrently and receives independent events", async 
   expect(fixture.connect).toHaveBeenCalledTimes(2);
 });
 
+test("a connecting device already has the runtime it keeps once online", async () => {
+  let finish!: () => void;
+  fixture.connect.mockImplementationOnce(
+    (handle) =>
+      new Promise((resolve) => {
+        finish = () => resolve(fixture.target(handle));
+      }),
+  );
+  await manager.refreshDevices();
+  await settle();
+  const runtime = device().runtime!;
+  expect(device().state).toBe("connecting");
+  expect(runtime.id).toBe("office-mac");
+  finish();
+  await settle();
+  expect(device().state).toBe("online");
+  expect(device().runtime).toBe(runtime);
+});
+
 test("a handshake alone is not online until its event stream opens", async () => {
   const original = fixture.request.getMockImplementation()!;
   let open!: () => void;

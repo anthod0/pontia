@@ -659,6 +659,55 @@ test("a device capacity rejection discards the saved session without replaying t
   expect(fetchMock.mock.calls.filter(([url]) => url.endsWith("/sessions"))).toHaveLength(2);
 });
 
+test.each([429, 502, 504])(
+  "a transient %s rejection fails only the request and keeps the device connected",
+  async (status) => {
+    const failed = vi.fn();
+    remote.dispose();
+    remote = createRemoteConnection({ handle, deviceId, edgeId: deviceId }, deviceId, failed);
+    const fetchMock = successfulConnectionFetch()
+      .mockResolvedValueOnce(new Response(null, { status }))
+      .mockResolvedValueOnce(cloudResponse())
+      .mockResolvedValueOnce(new Response("confirmation"))
+      .mockImplementation(async () => new Response("ciphertext"));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(remote.e2eFetch("/api/v1/workspaces")).rejects.toThrow(`(${status})`);
+    expect(await (await remote.e2eFetch("/api/v1/workspaces")).text()).toBe("ok");
+    expect(failed).not.toHaveBeenCalled();
+    // Only an exhausted session budget needs a new handshake.
+    expect(fetchMock.mock.calls.filter(([url]) => url.endsWith("/sessions"))).toHaveLength(
+      status === 429 ? 2 : 1,
+    );
+  },
+);
+
+test("a transient Cloud failure while reconnecting keeps the device connected", async () => {
+  const failed = vi.fn();
+  remote.dispose();
+  remote = createRemoteConnection({ handle, deviceId, edgeId: deviceId }, deviceId, failed);
+  vi.stubGlobal(
+    "fetch",
+    successfulConnectionFetch()
+      .mockResolvedValueOnce(new Response(null, { status: 429 }))
+      .mockResolvedValueOnce(new Response(null, { status: 502 })),
+  );
+  await expect(remote.e2eFetch("/api/v1/workspaces")).rejects.toThrow();
+  await expect(remote.e2eFetch("/api/v1/workspaces")).rejects.toThrow();
+  expect(failed).not.toHaveBeenCalled();
+});
+
+test("an unavailable device still reports the connection failure", async () => {
+  const failed = vi.fn();
+  remote.dispose();
+  remote = createRemoteConnection({ handle, deviceId, edgeId: deviceId }, deviceId, failed);
+  vi.stubGlobal(
+    "fetch",
+    successfulConnectionFetch().mockResolvedValueOnce(new Response(null, { status: 503 })),
+  );
+  await expect(remote.e2eFetch("/api/v1/workspaces")).rejects.toThrow();
+  expect(failed).toHaveBeenCalledOnce();
+});
+
 test("storage policy denial leaves live connections usable", async () => {
   const storage = vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
     throw new DOMException("Storage disabled", "SecurityError");

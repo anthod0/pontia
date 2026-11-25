@@ -5,7 +5,8 @@
   import MobileFrame from './MobileFrame.svelte'
   let { children }: { children: Snippet } = $props()
   const host = useDashboardHost()
-  const device = $derived(host.mode === 'local' || host.activeDevice?.state === 'online' ? host.activeDevice?.runtime : null)
+  // A connecting public device already has its runtime, so the frame stays mounted when it comes online.
+  const device = $derived(host.activeDevice?.runtime)
 </script>
 
 {#if device}

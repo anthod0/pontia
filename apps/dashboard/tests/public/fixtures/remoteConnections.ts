@@ -61,6 +61,7 @@ export function createRemoteAccessFixture() {
       return {
         connect: () => connect(handle, controller.signal),
         uploadStorageScope: async () => handle,
+        storageScope: handle,
         signal: controller.signal,
         e2eFetch: (path, init = {}) => {
           controller.signal.throwIfAborted();

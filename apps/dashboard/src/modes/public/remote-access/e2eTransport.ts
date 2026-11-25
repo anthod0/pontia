@@ -13,6 +13,15 @@ import {
 } from "./remoteAccess";
 import { connectionCache } from "./sessionCache";
 const CONTENT_TYPE = "application/pontia-e2e";
+// Rate limits, gateway failures and dropped networks pass: the next request retries over the same or a new session.
+const TRANSIENT_STATUSES = [429, 502, 504];
+
+function transientFailure(error: unknown): boolean {
+  return (
+    error instanceof TypeError ||
+    (error instanceof CloudRequestError && TRANSIENT_STATUSES.includes(error.status ?? 0))
+  );
+}
 let initialized: Promise<unknown> | null = null;
 
 // Edge strips JSON content types from device responses, so only its own rejection permits write replay.
@@ -43,6 +52,8 @@ export function createRemoteConnection(
   let establishing: Establishment | null = null;
   let generation = 0;
   const cache = connectionCache(userId, device);
+  // A connection reaches only the listed device, so its storage scope is known before it connects.
+  const scope = JSON.stringify([userId, device.deviceId]);
   let saved: string | null = null;
 
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -176,7 +187,7 @@ export function createRemoteConnection(
           sessionTarget = cached.target;
           admissionToken = cached.token;
           scheduleRefresh(cached.refreshAt);
-          storageScope = JSON.stringify([userId, cached.target.deviceId]);
+          storageScope = scope;
           return cached.target;
         }
       }
@@ -220,7 +231,7 @@ export function createRemoteConnection(
           session = handshake.confirm(bytes);
           sessionTarget = target;
           admissionToken = access.admissionToken;
-          storageScope = JSON.stringify([connection.userId, target.deviceId]);
+          storageScope = scope;
           saved = cache.save(target, admissionToken, encode(session.export()), access.refreshAt);
           scheduleRefresh(access.refreshAt);
           return target;
@@ -232,7 +243,7 @@ export function createRemoteConnection(
       }
     })()
       .catch((error: unknown) => {
-        if (!connectionSignal.aborted) onConnectionFailure?.(error);
+        if (!connectionSignal.aborted && !transientFailure(error)) onConnectionFailure?.(error);
         throw error;
       })
       .finally(() => {
@@ -394,7 +405,7 @@ export function createRemoteConnection(
           try {
             await refreshAccess();
           } catch (error) {
-            if (session === active) onConnectionFailure?.(error);
+            if (session === active && !transientFailure(error)) onConnectionFailure?.(error);
             throw error;
           }
         }
@@ -422,7 +433,7 @@ export function createRemoteConnection(
       if (session === active) {
         // The device's per-session request budget is exhausted with a 429.
         if ([401, 409, 429].includes(response.status)) invalidateE2eSession();
-        onConnectionFailure?.(error);
+        if (!TRANSIENT_STATUSES.includes(response.status)) onConnectionFailure?.(error);
       }
       throw error;
     }
@@ -461,6 +472,7 @@ export function createRemoteConnection(
       connectPublicDevice(signal ? AbortSignal.any([lifetime.signal, signal]) : lifetime.signal),
     e2eFetch,
     uploadStorageScope,
+    storageScope: scope,
     signal: lifetime.signal,
     dispose() {
       lifetime.abort();
