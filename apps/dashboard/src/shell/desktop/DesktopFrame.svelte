@@ -100,6 +100,15 @@
     :global(.file-preview-layout:has([data-docked-panel-open])) {
       --file-preview-open: 1;
     }
+    :global(.file-preview-layout:has([data-docked-panel-fullscreen]) > [data-slot="sidebar-inset"]) {
+      visibility: hidden;
+    }
+    /* The Bot panel is mounted inside the chat inset. */
+    :global(.file-preview-layout [data-docked-panel-fullscreen]) {
+      visibility: visible;
+      --file-preview-target-width: 100cqw;
+      width: var(--file-preview-target-width);
+    }
   }
   @media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
     :global(.file-preview-layout) {

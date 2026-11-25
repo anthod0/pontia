@@ -1,4 +1,8 @@
 <script lang="ts">
+  import CornersOutIcon from 'phosphor-svelte/lib/CornersOutIcon'
+  import CornersInIcon from 'phosphor-svelte/lib/CornersInIcon'
+  import { Button } from '$lib/components/ui/button/index.js'
+  import { t } from '$lib/i18n'
   import { Dialog } from 'bits-ui'
   import { tick, type Snippet } from 'svelte'
   import { IsMobile } from '$lib/hooks/is-mobile.svelte'
@@ -9,7 +13,7 @@
     'data-bot-chat-panel'?: boolean
     onkeydown?: (event: KeyboardEvent) => void
     tabindex?: number
-    children: Snippet
+    children: Snippet<[boolean, Snippet]>
     open: boolean
     close: () => void
     ref?: HTMLElement | null
@@ -17,6 +21,10 @@
   const mobile = new IsMobile(1024)
   let dock = $state<HTMLDivElement>()
   let renderDock = $state(false)
+  let fullscreen = $state(false)
+  $effect(() => {
+    if (!open || mobile.current) fullscreen = false
+  })
   let opener: Element | null
 
   // The shell animates the occupied width for both the panel and the chat beside it.
@@ -60,22 +68,31 @@
   })
 </script>
 
+{#snippet fullscreenButton()}
+  {#if !mobile.current}
+    {@const label = $t(fullscreen ? 'nav.restoreSplitView' : 'nav.expandPanel')}
+    <Button variant="ghost" size="icon-sm" class="rounded-full p-0 pointer-coarse:size-11" aria-label={label} title={label} onclick={() => fullscreen = !fullscreen}>
+      {#if fullscreen}<CornersInIcon />{:else}<CornersOutIcon />{/if}
+    </Button>
+  {/if}
+{/snippet}
+
 {#if mobile.current}
   <Dialog.Root {open} onOpenChange={next => { if (!next) close() }}>
     <Dialog.Portal>
       <Dialog.Overlay class="fixed inset-0 z-(--layer-panel) bg-overlay motion-safe:[animation-duration:200ms] motion-safe:data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:pointer-events-none motion-safe:data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
       <Dialog.Content bind:ref {...props} inert={!open} onCloseAutoFocus={restoreFocus} aria-modal="true" aria-labelledby={undefined} aria-describedby={undefined}
         class={panelClass + ' fixed right-0 top-(--visual-viewport-top) z-(--layer-panel) h-(--visual-viewport-height) w-full pb-[env(safe-area-inset-bottom)] motion-safe:[animation-duration:200ms] motion-safe:data-[state=open]:animate-in data-[state=open]:slide-in-from-right motion-safe:data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right'}>
-        {@render children()}
+        {@render children(false, fullscreenButton)}
       </Dialog.Content>
     </Dialog.Portal>
   </Dialog.Root>
 {:else}
-  <div bind:this={dock} data-docked-panel-open={open || undefined} inert={!open} aria-hidden={!open}
+  <div bind:this={dock} data-docked-panel-open={open || undefined} data-docked-panel-fullscreen={(open && fullscreen) || undefined} inert={!open} aria-hidden={!open}
     class="fixed inset-y-0 right-0 z-(--layer-panel) w-(--file-preview-width) overflow-hidden">
     {#if renderDock}
       <aside bind:this={ref} {...props} class={panelClass + ' relative h-full w-(--file-preview-target-width) shrink-0'}>
-        {@render children()}
+        {@render children(fullscreen, fullscreenButton)}
       </aside>
     {/if}
   </div>

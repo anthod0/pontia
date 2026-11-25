@@ -626,6 +626,8 @@
   "chat.sending": "正在发送消息",
   "common.close": "关闭",
   "nav.toggleSidebar": "切换侧栏",
+  "nav.expandPanel": "全屏展开侧栏",
+  "nav.restoreSplitView": "还原分栏",
   "nav.sidebar": "侧栏",
   "settings.language": "语言",
   "settings.browserLanguage": "跟随浏览器",

@@ -1,7 +1,7 @@
 <script lang="ts">
   import SidePanel from '$lib/components/ui/overlay/SidePanel.svelte'
   import { createQuery } from '@tanstack/svelte-query'
-  import { onMount, tick } from 'svelte'
+  import { onMount, tick, type Snippet } from 'svelte'
   import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon'
   import ArrowBendUpLeftIcon from 'phosphor-svelte/lib/ArrowBendUpLeftIcon'
   import EyeSlashIcon from 'phosphor-svelte/lib/EyeSlashIcon'
@@ -225,8 +225,8 @@
   </li>
 {/snippet}
 
-<SidePanel open={panel.current} close={() => panel.current = false} data-bot-chat-panel aria-label={$t('nav.sidebar')}>
-  <FilePreviewResizer />
+{#snippet panelContent(fullscreen: boolean, fullscreenButton: Snippet)}
+  {#if !fullscreen}<FilePreviewResizer />{/if}
   <Tabs.Root bind:value={() => tab.current, next => { tab.current = next as PanelTab }} class="min-h-0 flex-1 gap-0">
     <header class="flex h-12 shrink-0 items-center justify-between gap-1 border-b px-2">
       <Tabs.List variant="line" aria-label={$t('nav.sidebar')} class="h-full min-w-0 justify-start gap-0 overflow-x-auto pb-1.5">
@@ -237,7 +237,10 @@
         <Tabs.Trigger value="search" class="h-full px-2.5"><MagnifyingGlassIcon />{$t('bots.searchTab')}</Tabs.Trigger>
         <Tabs.Trigger value="git" class="h-full px-2.5"><GitBranchIcon />{$t('git.title')}</Tabs.Trigger>
       </Tabs.List>
-      <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11 pointer-coarse:size-11" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => { panel.current = false }}><CaretRightIcon /></Button>
+      <div class="flex shrink-0 items-center gap-1">
+        {@render fullscreenButton()}
+        <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11 pointer-coarse:size-11" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => { panel.current = false }}><CaretRightIcon /></Button>
+      </div>
     </header>
     <Tabs.Content value="preview" class="flex min-h-0 flex-col">
       <LocalhostPreviewPanel bind:target={preview} access={device.access} />
@@ -327,4 +330,6 @@
       </div>
     </Tabs.Content>
   </Tabs.Root>
-</SidePanel>
+{/snippet}
+
+<SidePanel open={panel.current} close={() => panel.current = false} data-bot-chat-panel aria-label={$t('nav.sidebar')} children={panelContent} />

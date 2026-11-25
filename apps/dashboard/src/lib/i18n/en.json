@@ -626,6 +626,8 @@
   "chat.sending": "Sending message",
   "common.close": "Close",
   "nav.toggleSidebar": "Toggle Sidebar",
+  "nav.expandPanel": "Expand panel",
+  "nav.restoreSplitView": "Restore split view",
   "nav.sidebar": "Sidebar",
   "settings.language": "Language",
   "settings.browserLanguage": "Follow browser",

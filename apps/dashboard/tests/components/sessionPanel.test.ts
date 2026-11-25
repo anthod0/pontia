@@ -199,6 +199,20 @@ test("the sidebar button opens the panel on Files and shows no change count", as
   expect(button).toHaveFocus();
 });
 
+test("restores the splitter on restore and after closing an expanded panel", async () => {
+  render(SessionPanelHarness);
+  const panel = within(await openTab("Files"));
+  const expand = () => fireEvent.click(panel.getByRole("button", { name: "Expand panel" }));
+  await expand();
+  expect(panel.queryByRole("separator")).toBeNull();
+  await fireEvent.click(panel.getByRole("button", { name: "Restore split view" }));
+  expect(panel.getByRole("separator")).toBeVisible();
+  await expand();
+  await fireEvent.click(panel.getByRole("button", { name: "Close" }));
+  await fireEvent.click(sidebarButton());
+  expect(within(sidePanel()).getByRole("separator")).toBeVisible();
+});
+
 test("returns to the latest localhost page after switching tabs and reopening the sidebar", async () => {
   let panel!: SessionPanel;
   render(SessionPanelHarness, { onpanel: (value) => (panel = value) });
@@ -334,6 +348,7 @@ test("phone history traverses the panel without leaving the session or changing 
   sidebarButton().focus();
   await fireEvent.click(sidebarButton());
   const dialog = await screen.findByRole("dialog", { name: "Sidebar" });
+  expect(within(dialog).queryByRole("button", { name: "Expand panel" })).toBeNull();
   const url = location.href;
   history.back();
   await waitFor(() => expect(dialog).not.toBeInTheDocument());
