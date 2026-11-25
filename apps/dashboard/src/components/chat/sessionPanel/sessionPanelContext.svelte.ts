@@ -1,7 +1,7 @@
 import { getContext, setContext, untrack } from "svelte";
 import type { LocalhostPreviewTarget } from "$lib/localhostPreview";
-import { SidePanelOpen } from "$lib/sidePanelOpen.svelte";
-import { PersistedState } from "$lib/storage";
+import { SidePanelRoute } from "$lib/sidePanelRoute.svelte";
+import type { PersistedState } from "$lib/storage";
 import type { RecentFile } from "$lib/botRecentFiles";
 import { createSessionRecentFiles, withSessionRecentFile } from "$lib/sessionRecentFiles";
 import type { DeviceRuntime } from "../../../device/runtime";
@@ -21,16 +21,11 @@ export type SessionPanelSource = {
 };
 
 /**
- * The session side panel stays open across Sessions and, on wide screens, across reloads.
- * It reopens on the tab last used.
+ * The session side panel. The session page's URL says whether it is open and on which tab;
+ * it reopens on the tab last used.
  */
 export class SessionPanel {
-  // The key comes from when the panel showed only Git; saved keys keep their names.
-  #open = new SidePanelOpen("pontia.gitPanelOpen");
-  #tab = new PersistedState<SessionPanelTab>("pontia.sessionPanelTab", "files", {
-    parse: (saved) => panelTabs.find((tab) => tab === saved),
-    stringify: (tab) => tab,
-  });
+  #route = new SidePanelRoute<SessionPanelTab>(panelTabs);
   mobileEntry?: { sessionId: string; tab: SessionPanelTab };
   source = $state.raw<SessionPanelSource | null>(null);
   /** The last Session shown, kept while the next session page loads. */
@@ -45,15 +40,15 @@ export class SessionPanel {
   focusPending = $state(false);
 
   get open(): boolean {
-    return this.#open.current;
+    return this.#route.open;
   }
 
   get tab(): SessionPanelTab {
-    return this.#tab.current;
+    return this.#route.tab;
   }
 
   set tab(tab: SessionPanelTab) {
-    this.#tab.current = tab;
+    this.#route.tab = tab;
   }
 
   /**
@@ -83,28 +78,23 @@ export class SessionPanel {
 
   toggle(): void {
     if (this.open) this.close();
-    else this.#show(true);
+    else this.#show(this.tab, true);
   }
 
   /** Opens the Git tab, or closes the panel when it already shows. */
   toggleGit(): void {
-    if (this.open && this.tab === "git") {
-      this.close();
-      return;
-    }
-    this.tab = "git";
-    this.#show(true);
+    if (this.open && this.tab === "git") this.close();
+    else this.#show("git", true);
   }
 
   close(): void {
-    this.#open.current = false;
+    void this.#route.close();
     this.focusPending = false;
   }
 
   openPreview(target: LocalhostPreviewTarget) {
     this.preview = { ...target };
-    this.tab = "preview";
-    this.#show(false);
+    this.#show("preview", false);
   }
 
   /** Previews a file in the Files tab. This is where local file links in the chat open. */
@@ -115,8 +105,7 @@ export class SessionPanel {
       path: target.path,
     });
     this.file = target;
-    this.tab = "files";
-    this.#show(false);
+    this.#show("files", false);
   }
 
   /** The files opened before on this device, across Sessions. */
@@ -130,8 +119,8 @@ export class SessionPanel {
     this.file = null;
   }
 
-  #show(focus: boolean): void {
-    this.#open.current = true;
+  #show(tab: SessionPanelTab, focus: boolean): void {
+    void this.#route.show(tab);
     // Only a mounted panel takes focus; a page still loading would take it later, unasked.
     this.focusPending = focus && this.source !== null;
   }

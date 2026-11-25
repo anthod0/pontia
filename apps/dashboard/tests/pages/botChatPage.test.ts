@@ -461,7 +461,7 @@ test("shows the files opened before in an empty Files tab and reopens one from t
   expect(await screen.findByText("No open file")).toBeVisible();
 });
 
-test("the sidebar button shows the open todo count and reopens the tab last used", async () => {
+test("the sidebar button shows the open todo count and reopens the tab last used on the page", async () => {
   localStorage.clear();
   vi.spyOn(testDevice.api, "getBotTodos").mockResolvedValue({ open: [], recently_resolved: [] });
   vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue({
@@ -486,67 +486,96 @@ test("the sidebar button shows the open todo count and reopens the tab last used
   await screen.findByText("No todos");
   await fireEvent.click(button);
   await waitFor(() => expect(screen.queryByRole("complementary")).not.toBeInTheDocument());
+  await fireEvent.click(button);
+  expect(screen.getByRole("tab", { name: /Todo/ })).toHaveAttribute("aria-selected", "true");
+  expect(await screen.findByText("No todos")).toBeVisible();
+  await fireEvent.click(button);
+  await waitFor(() => expect(button).toHaveAttribute("aria-pressed", "false"));
 
+  // Another Bot chat page starts on Files.
   first.unmount();
   render(BotChatPreviewHarness, { botId: bot.bot_id });
   await fireEvent.click(await screen.findByRole("button", { name: "Sidebar, 3 todos" }));
-  expect(screen.getByRole("tab", { name: /Todo/ })).toHaveAttribute("aria-selected", "true");
-  expect(await screen.findByText("No todos")).toBeVisible();
+  expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute("aria-selected", "true");
 });
 
-test("on wide screens the side panel stays open or closed across Bot chats and reloads", async () => {
-  localStorage.clear();
+function emptyBotChat() {
+  vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue({
+    bot,
+    entries: [],
+    next_before: null,
+    file_link_session: null,
+    open_todo_count: 0,
+    notice_session_id: null,
+    generation_notice: null,
+    status: { kind: "idle" },
+  });
+}
+
+test("on wide screens the URL keeps the side panel and its tab without adding history", async () => {
   vi.stubGlobal("matchMedia", (query: string) => ({
     matches: query === "(min-width: 1024px)",
     addEventListener() {},
     removeEventListener() {},
   }));
-  vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue({
-    bot,
-    entries: [],
-    next_before: null,
-    file_link_session: null,
-    open_todo_count: 0,
-    notice_session_id: null,
-    generation_notice: null,
-    status: { kind: "idle" },
-  });
+  emptyBotChat();
+  const entries = history.length;
   const first = render(BotChatPreviewHarness, { botId: bot.bot_id });
   await fireEvent.click(await screen.findByRole("button", { name: "Sidebar" }));
   expect(screen.getByRole("complementary", { name: "Sidebar" })).toBeVisible();
+  expect(location.search).toBe("?panel=files");
+  await fireEvent.click(screen.getByRole("tab", { name: "Search" }));
+  expect(location.search).toBe("?panel=search");
+  expect(history.length).toBe(entries);
+  expect(localStorage.length).toBe(0);
 
+  // A reload of the same URL reopens the panel on its tab.
   first.unmount();
-  expect(localStorage.getItem("pontia.botPanelOpen")).toBe("true");
-  const second = render(BotChatPreviewHarness, { botId: "b" });
-  expect(await screen.findByRole("complementary", { name: "Sidebar" })).toBeVisible();
-  await fireEvent.click(screen.getByRole("button", { name: "Close" }));
-
-  second.unmount();
   render(BotChatPreviewHarness, { botId: bot.bot_id });
-  const button = await screen.findByRole("button", { name: "Sidebar" });
-  expect(button).toHaveAttribute("aria-pressed", "false");
+  const panel = await screen.findByRole("complementary", { name: "Sidebar" });
+  expect(within(panel).getByRole("tab", { name: "Search" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await fireEvent.click(within(panel).getByRole("button", { name: "Close" }));
+  expect(location.search).toBe("");
+  expect(history.length).toBe(entries);
   expect(screen.queryByRole("complementary", { name: "Sidebar" })).not.toBeInTheDocument();
 });
 
-test("on phones the side panel starts closed and does not save its state", async () => {
-  localStorage.clear();
-  localStorage.setItem("pontia.botPanelOpen", "true");
-  vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue({
-    bot,
-    entries: [],
-    next_before: null,
-    file_link_session: null,
-    open_todo_count: 0,
-    notice_session_id: null,
-    generation_notice: null,
-    status: { kind: "idle" },
-  });
+test("an unknown tab in the URL opens the side panel on Files", async () => {
+  emptyBotChat();
+  history.replaceState({}, "", "?panel=unknown");
+  render(BotChatPreviewHarness, { botId: bot.bot_id });
+  const panel = await screen.findByRole("complementary", { name: "Sidebar" });
+  expect(within(panel).getByRole("tab", { name: "Files" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+});
+
+test("on narrower screens Back closes the side panel and closing it goes back", async () => {
+  emptyBotChat();
+  const url = location.href;
   render(BotChatPreviewHarness, { botId: bot.bot_id });
   const button = await screen.findByRole("button", { name: "Sidebar" });
   expect(screen.queryByRole("complementary", { name: "Sidebar" })).not.toBeInTheDocument();
 
   await fireEvent.click(button);
   expect(screen.getByRole("complementary", { name: "Sidebar" })).toBeVisible();
+  expect(location.search).toBe("?panel=files");
+  // Switching tabs replaces the entry the panel added, so one Back closes it.
+  await fireEvent.click(screen.getByRole("tab", { name: "Search" }));
+  expect(location.search).toBe("?panel=search");
+  history.back();
+  await waitFor(() => expect(button).toHaveAttribute("aria-pressed", "false"));
+  expect(location.href).toBe(url);
+
+  history.forward();
+  await waitFor(() => expect(button).toHaveAttribute("aria-pressed", "true"));
+  expect(screen.getByRole("tab", { name: "Search" })).toHaveAttribute("aria-selected", "true");
   await fireEvent.click(screen.getByRole("button", { name: "Close" }));
-  expect(localStorage.getItem("pontia.botPanelOpen")).toBe("true");
+  await waitFor(() => expect(button).toHaveAttribute("aria-pressed", "false"));
+  expect(location.href).toBe(url);
+  expect(localStorage.length).toBe(0);
 });

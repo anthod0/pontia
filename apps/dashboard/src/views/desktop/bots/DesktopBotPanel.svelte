@@ -35,8 +35,8 @@
   import BotGitTab from '../../../components/bots/BotGitTab.svelte'
   import RecentFileList from '../../../components/chat/files/RecentFileList.svelte'
   import { createRecentFiles, withRecentFile } from '$lib/botRecentFiles'
-  import { createPanelTab, type PanelTab } from '$lib/botPanelTab'
-  import { SidePanelOpen } from '$lib/sidePanelOpen.svelte'
+  import { botPanelTabs, type PanelTab } from '$lib/botPanelTab'
+  import { SidePanelRoute } from '$lib/sidePanelRoute.svelte'
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
   import { promptValueAfterEnter } from '$lib/promptEnterBehavior'
 
@@ -55,9 +55,8 @@
     return () => action?.set(null)
   })
   const device = useDeviceRuntime()
-  // The panel stays open or closed across Bot chats, like its tab.
-  const panel = new SidePanelOpen('pontia.botPanelOpen')
-  const tab = createPanelTab()
+  // The Bot chat page's URL says whether the panel is open and on which tab.
+  const panel = new SidePanelRoute<PanelTab>(botPanelTabs)
   let preview = $state.raw<LocalhostPreviewTarget | null>(null)
   let file = $state.raw<FilePreviewTarget | null>(null)
   // The panel lives as long as its Bot chat page, which is recreated for another Bot.
@@ -69,37 +68,33 @@
   const context = createQuery(() => ({
     queryKey: ['bot-message-context', bot.bot_id, selected],
     queryFn: ({ signal }) => device.api.getBotMessageContext(bot.bot_id, selected!, signal),
-    enabled: panel.current && tab.current === 'context' && selected !== null,
+    enabled: panel.open && panel.tab === 'context' && selected !== null,
   }), () => device.queryClient)
   const todos = createQuery(() => ({
     queryKey: ['bot-todos', bot.bot_id],
     queryFn: ({ signal }) => device.api.getBotTodos(bot.bot_id, signal),
-    enabled: panel.current && tab.current === 'todo',
+    enabled: panel.open && panel.tab === 'todo',
     staleTime: 0,
   }), () => device.queryClient)
 
   export function openPreview(target: LocalhostPreviewTarget) {
     preview = { ...target }
-    tab.current = 'preview'
-    panel.current = true
+    void panel.show('preview')
   }
 
   export function openFile(target: FilePreviewTarget) {
     file = target
     recentFiles.current = withRecentFile(recentFiles.current, { sessionId: target.sessionId, path: target.path })
-    tab.current = 'files'
-    panel.current = true
+    void panel.show('files')
   }
 
   export function viewContext(id: string) {
     selected = id
-    tab.current = 'context'
-    panel.current = true
+    void panel.show('context')
   }
 
   export function viewTodos() {
-    tab.current = 'todo'
-    panel.current = true
+    void panel.show('todo')
   }
 
   /** The whole message as plain text, so the Context tab never cuts it short. */
@@ -108,10 +103,8 @@
   }
 
   async function closeOverlay() {
-    if (!panel.wide && panel.current) {
-      const closed = new Promise<void>(resolve => window.addEventListener('popstate', () => resolve(), { once: true }))
-      panel.current = false
-      await closed
+    if (!panel.wide && panel.open) {
+      await panel.close()
       await tick()
     }
   }
@@ -180,8 +173,8 @@
 {/snippet}
 
 {#snippet sidebarButton()}
-  <Button variant="ghost" size="icon" class={['pointer-events-auto mr-3 relative size-8 rounded-full p-0 ring-1 ring-foreground/10', panel.current ? 'bg-muted text-heading' : 'bg-popover']}
-    aria-label={count > 0 ? $t('bots.sidebarWithTodos', { count }) : $t('nav.sidebar')} title={$t('nav.sidebar')} aria-pressed={panel.current} onclick={() => { panel.current = !panel.current }}>
+  <Button variant="ghost" size="icon" class={['pointer-events-auto mr-3 relative size-8 rounded-full p-0 ring-1 ring-foreground/10', panel.open ? 'bg-muted text-heading' : 'bg-popover']}
+    aria-label={count > 0 ? $t('bots.sidebarWithTodos', { count }) : $t('nav.sidebar')} title={$t('nav.sidebar')} aria-pressed={panel.open} onclick={() => { void (panel.open ? panel.close() : panel.show()) }}>
     <SidebarSimpleIcon class="size-4 -scale-x-100" />{@render badge(true)}
   </Button>
 {/snippet}
@@ -227,7 +220,7 @@
 
 {#snippet panelContent(fullscreen: boolean, fullscreenButton: Snippet)}
   {#if !fullscreen}<FilePreviewResizer />{/if}
-  <Tabs.Root bind:value={() => tab.current, next => { tab.current = next as PanelTab }} class="min-h-0 flex-1 gap-0">
+  <Tabs.Root bind:value={() => panel.tab, next => { panel.tab = next as PanelTab }} class="min-h-0 flex-1 gap-0">
     <header class="flex h-12 shrink-0 items-center justify-between gap-1 border-b px-2">
       <Tabs.List variant="line" aria-label={$t('nav.sidebar')} class="h-full min-w-0 justify-start gap-0 overflow-x-auto pb-1.5">
         <Tabs.Trigger value="files" class="h-full px-2.5"><FileTextIcon />{$t('files.title')}</Tabs.Trigger>
@@ -239,7 +232,7 @@
       </Tabs.List>
       <div class="flex shrink-0 items-center gap-1">
         {@render fullscreenButton()}
-        <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11 pointer-coarse:size-11" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => { panel.current = false }}><CaretRightIcon /></Button>
+        <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11 pointer-coarse:size-11" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => panel.close()}><CaretRightIcon /></Button>
       </div>
     </header>
     <Tabs.Content value="preview" class="flex min-h-0 flex-col">
@@ -295,10 +288,10 @@
       {/if}
     </Tabs.Content>
     <Tabs.Content value="search" class="flex min-h-0 flex-col">
-      <BotMessageSearch {bot} active={panel.current && tab.current === 'search'} bind:text={searchText} selected={searchSelected} onselect={jumpToResult} />
+      <BotMessageSearch {bot} active={panel.open && panel.tab === 'search'} bind:text={searchText} selected={searchSelected} onselect={jumpToResult} />
     </Tabs.Content>
     <Tabs.Content value="git" class="flex min-h-0 flex-col">
-      {#if tab.current === 'git'}<BotGitTab botId={bot.bot_id} />{/if}
+      {#if panel.tab === 'git'}<BotGitTab botId={bot.bot_id} />{/if}
     </Tabs.Content>
     <Tabs.Content value="todo" class="flex min-h-0 flex-col">
       <div class="min-h-0 flex-1 overflow-auto overscroll-contain p-3">
@@ -332,4 +325,4 @@
   </Tabs.Root>
 {/snippet}
 
-<SidePanel open={panel.current} close={() => panel.current = false} data-bot-chat-panel aria-label={$t('nav.sidebar')} children={panelContent} />
+<SidePanel open={panel.open} close={() => panel.close()} data-bot-chat-panel aria-label={$t('nav.sidebar')} children={panelContent} />

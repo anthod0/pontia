@@ -1,3 +1,4 @@
+import "../shallowRouting";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { testDevice } from "../deviceFixture";
@@ -225,10 +226,9 @@ test("points to Workspace settings when none is registered", async () => {
 });
 
 test("reads a saved Workspace only while the Git tab shows", async () => {
-  localStorage.setItem("pontia.botPanelTab", "search");
+  history.replaceState({}, "", "?panel=search");
   localStorage.setItem('pontia.botGitWorkspace:["local","a"]', "workspace-1");
   render(BotChatPreviewHarness, { botId: bot.bot_id });
-  await fireEvent.click(await screen.findByRole("button", { name: "Sidebar" }));
   await screen.findByRole("tab", { name: "Git" });
   expect(testDevice.api.listWorkspaces).not.toHaveBeenCalled();
   expect(testDevice.api.getWorkspaceGitChanges).not.toHaveBeenCalled();

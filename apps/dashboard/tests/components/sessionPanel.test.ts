@@ -326,30 +326,59 @@ test("resizes the panel with the keyboard and remembers the width", async () => 
   expect(localStorage.getItem("pontia.filePreviewWidth")).toBeNull();
 });
 
-test("on wide screens the panel stays open on the tab last used", async () => {
+test("on wide screens the URL keeps the panel open on its tab without adding history", async () => {
+  const entries = history.length;
   const first = render(SessionPanelHarness);
   await openTab("Git");
+  expect(location.search).toBe("?panel=git");
+  expect(history.length).toBe(entries);
+  expect(localStorage.length).toBe(0);
   first.unmount();
-  expect(localStorage.getItem("pontia.gitPanelOpen")).toBe("true");
-  expect(localStorage.getItem("pontia.sessionPanelTab")).toBe("git");
 
+  // A reload of the same URL reopens the panel on its tab.
   render(SessionPanelHarness);
   expect(within(sidePanel()).getByRole("tab", { name: "Git" })).toHaveAttribute(
     "aria-selected",
     "true",
   );
+  await fireEvent.click(within(sidePanel()).getByRole("button", { name: "Close" }));
+  expect(location.search).toBe("");
+  expect(history.length).toBe(entries);
 });
 
-test("phone history traverses the panel without leaving the session or changing desktop preferences", async () => {
-  localStorage.setItem("pontia.gitPanelOpen", "true");
+test("a session URL without the panel shows it closed", async () => {
+  const view = render(SessionPanelHarness);
+  await openTab("Git");
+  // Going to another session's URL does not carry the panel along.
+  history.pushState({}, "", location.pathname);
+  dispatchEvent(new PopStateEvent("popstate"));
+  await view.rerender({ sessionId: "session-2" });
+  await waitFor(() => expect(screen.queryByRole("complementary")).toBeNull());
+  expect(sidebarButton()).toHaveAttribute("aria-pressed", "false");
+  // The panel reopens on the tab last used.
+  await fireEvent.click(sidebarButton());
+  expect(location.search).toBe("?panel=git");
+});
+
+test("an unknown tab in the URL opens the panel on Files", () => {
+  history.replaceState({}, "", "?panel=unknown");
+  render(SessionPanelHarness);
+  expect(within(sidePanel()).getByRole("tab", { name: "Files" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+});
+
+test("phone history traverses the panel without leaving the session", async () => {
   wide = false;
   render(SessionPanelHarness);
   expect(screen.queryByRole("dialog")).toBeNull();
   sidebarButton().focus();
+  const url = location.href;
   await fireEvent.click(sidebarButton());
   const dialog = await screen.findByRole("dialog", { name: "Sidebar" });
+  expect(location.search).toBe("?panel=files");
   expect(within(dialog).queryByRole("button", { name: "Expand panel" })).toBeNull();
-  const url = location.href;
   history.back();
   await waitFor(() => expect(dialog).not.toBeInTheDocument());
   expect(location.href).toBe(url);
@@ -359,7 +388,6 @@ test("phone history traverses the panel without leaving the session or changing 
   await fireEvent.click(within(restored).getByRole("button", { name: "Close" }));
   await waitFor(() => expect(restored).not.toBeInTheDocument());
   expect(location.href).toBe(url);
-  expect(localStorage.getItem("pontia.gitPanelOpen")).toBe("true");
 });
 
 test("toggling Git opens the Git tab, then closes the panel", async () => {
