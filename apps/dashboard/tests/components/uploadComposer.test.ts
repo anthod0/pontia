@@ -130,6 +130,35 @@ test("uploads files pasted into the input", async () => {
   expect(send).toBeDisabled();
 });
 
+test("shows a pasted image as a thumbnail and releases it when the attachment is removed", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => new Promise(() => {})),
+  );
+  const create = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:thumbnail");
+  const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  try {
+    const draftId = crypto.randomUUID();
+    render(MessageComposer, { value: "", draftId, onSubmit: vi.fn() });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Add", exact: true })).toBeEnabled(),
+    );
+    const file = new File(["png"], "image.png", { type: "image/png" });
+    await fireEvent.paste(screen.getByRole("textbox"), { clipboardData: clipboard([file], []) });
+    expect(await screen.findByRole("img", { name: "image.png" })).toHaveAttribute(
+      "src",
+      "blob:thumbnail",
+    );
+    expect(create).toHaveBeenCalledTimes(1);
+    await fireEvent.click(screen.getByRole("button", { name: "Remove attachment image.png" }));
+    await waitFor(() => expect(revoke).toHaveBeenCalledWith("blob:thumbnail"));
+    expect(screen.queryByRole("img", { name: "image.png" })).not.toBeInTheDocument();
+  } finally {
+    create.mockRestore();
+    revoke.mockRestore();
+  }
+});
+
 test("uploads files dropped anywhere on the main panel, showing the overlay while they are dragged", async () => {
   vi.stubGlobal(
     "fetch",
