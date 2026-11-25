@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-11-25
+
+### Fixed
+
+- Antigravity Sessions accept the next message after steering interrupts a prompt.
+- The Dashboard shows an empty Git panel for Workspaces without Git metadata.
+- Edge certificate validation proceeds as soon as any of several regional public DNS resolvers sees the expected ACME TXT record.
+
 ## [0.9.3] - 2026-11-25
 
 ### Added
@@ -1298,7 +1306,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.9.3...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.9.4...HEAD
+[0.9.4]: https://github.com/anthod0/pontia/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/anthod0/pontia/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/anthod0/pontia/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/anthod0/pontia/compare/v0.9.0...v0.9.1
