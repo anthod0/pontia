@@ -129,7 +129,11 @@
   <SharedImageViewer sessionId={image.sessionId} files={[attachedFile(image.path)]} bind:open={imageOpen} />
 {/if}
 {#snippet preview()}
-  {#if file}<FilePreviewPanel target={file} onclose={() => stack.back()} />{/if}
+  {#if file}
+    <div class="flex h-full min-w-0 flex-col">
+      <FilePreviewPanel target={file} onclose={() => stack.back()} />
+    </div>
+  {/if}
 {/snippet}
 {#snippet files()}<MobileBotFilesGitScreen
     bind:tab
