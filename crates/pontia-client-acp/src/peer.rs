@@ -69,6 +69,7 @@ pub(crate) struct SessionState {
     pub replay: Option<crate::history::Replay>,
     pub history_error: Option<String>,
     pub steering_history_pending: bool,
+    pub steered_inputs: String,
     pub cwd: std::path::PathBuf,
 }
 
@@ -102,31 +103,7 @@ impl SessionState {
             };
             if let Err(error) = result {
                 self.history_error = Some(format!("ACP session/load failed: {error}"));
-            } else if self.history_error.is_none()
-                && !self
-                    .history
-                    .iter()
-                    .take_while(|m| {
-                        m.prompt
-                            .is_none_or(|i| !self.interjections.values().any(|v| v.prompt == i))
-                    })
-                    .enumerate()
-                    .all(|(index, known)| {
-                        replay.messages.get(index).is_some_and(|loaded| {
-                            loaded.role == known.role
-                                && (known
-                                    .tool
-                                    .as_ref()
-                                    .zip(loaded.tool.as_ref())
-                                    .is_some_and(|(a, b)| a.0 == b.0)
-                                    || loaded.text == known.text
-                                    || ((known.role == "assistant"
-                                        || self.steering_history_pending && known.role == "user")
-                                        && index + 1 == self.history.len()
-                                        && loaded.text.starts_with(&known.text)))
-                        })
-                    })
-            {
+            } else if self.history_error.is_none() && !self.preserves_history(&replay.messages) {
                 self.history_error =
                     Some("ACP replay did not preserve the known native message history".into());
             }
@@ -134,6 +111,7 @@ impl SessionState {
                 Err(Error::CapabilityUnavailable(reason))
             } else {
                 self.steering_history_pending = false;
+                self.steered_inputs.clear();
                 self.history = replay.messages;
                 self.checkpoints = replay.checkpoints;
                 self.checkpoints_need_replay = false;
@@ -142,6 +120,51 @@ impl SessionState {
             self.refresh_capabilities();
             result
         }
+    }
+
+    fn preserves_history(&self, replay: &[crate::history::Message]) -> bool {
+        let mut known = self.history.as_slice();
+        if !self.steered_inputs.is_empty()
+            && let Some(start) = known.iter().rposition(|message| message.role == "user")
+        {
+            // Antigravity rebuilds the interrupted prompt's output from completed
+            // steps. Its live tool updates have no stable position in that replay.
+            let Some(tail) = replay.get(start..) else {
+                return false;
+            };
+            let inputs = tail
+                .iter()
+                .filter(|m| m.role == "user")
+                .flat_map(|m| m.text.bytes());
+            if tail.first().is_none_or(|m| m.role != "user")
+                || !inputs.eq(known[start].text.bytes().chain(self.steered_inputs.bytes()))
+            {
+                return false;
+            }
+            known = &known[..start];
+        }
+        known
+            .iter()
+            .take_while(|m| {
+                m.prompt
+                    .is_none_or(|i| !self.interjections.values().any(|v| v.prompt == i))
+            })
+            .enumerate()
+            .all(|(index, known)| {
+                replay.get(index).is_some_and(|loaded| {
+                    loaded.role == known.role
+                        && (known
+                            .tool
+                            .as_ref()
+                            .zip(loaded.tool.as_ref())
+                            .is_some_and(|(a, b)| a.0 == b.0)
+                            || loaded.text == known.text
+                            || ((known.role == "assistant"
+                                || self.steering_history_pending && known.role == "user")
+                                && index + 1 == self.history.len()
+                                && loaded.text.starts_with(&known.text)))
+                })
+            })
     }
 
     pub fn promotion_pending(&self) -> bool {
@@ -313,6 +336,7 @@ impl Peer {
             replay: None,
             history_error: Some("ACP history has not been loaded".into()),
             steering_history_pending: false,
+            steered_inputs: String::new(),
             cwd: cwd.to_path_buf(),
         }));
         if !context.is_null() {

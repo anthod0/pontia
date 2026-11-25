@@ -206,6 +206,65 @@ async fn antigravity_finishes_the_running_turn_with_the_latest_prompt() {
 }
 
 #[tokio::test]
+async fn antigravity_replays_an_interrupted_prompt_before_the_next_input() {
+    let h = Harness::new(&[("ACP_ANTIGRAVITY", "1")]).await;
+    let session = h.create("antigravity").await.unwrap();
+    let turn = start(&h, &session).await;
+    assert_eq!(submit(&h, &session, "steer").await["turn_id"], turn);
+    h.release("release-1");
+    h.release("update-2");
+    h.release("release-2");
+    h.wait_turn(&session, &turn, "completed").await;
+
+    // The native replay represents the interrupted output as a completed tool.
+    let path = h.root.path().join("history.jsonl");
+    let transcript = std::fs::read_to_string(&path).unwrap();
+    let mut updates: Vec<Value> = transcript
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let assistant = updates
+        .iter_mut()
+        .find(|u| u["sessionUpdate"] == "agent_message_chunk")
+        .unwrap();
+    *assistant = json!({"sessionUpdate":"tool_call","toolCallId":"lookup","title":"Lookup","status":"completed"});
+    let replay = updates
+        .iter()
+        .map(Value::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
+    let steer = updates
+        .iter_mut()
+        .filter(|u| u["sessionUpdate"] == "user_message_chunk")
+        .nth(1)
+        .unwrap();
+    steer["content"]["text"] = json!("wrong input");
+    std::fs::write(
+        &path,
+        updates
+            .iter()
+            .map(Value::to_string)
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
+    .unwrap();
+    let turns = h.app.turn_commands();
+    let dispatch = || turns.create_and_dispatch_turn(&session, "end_turn".into(), json!({}));
+    assert!(matches!(
+        dispatch().await,
+        Err(Error::CapabilityUnavailable(_))
+    ));
+    assert_eq!(h.requests("session/prompt"), 2);
+
+    std::fs::write(path, replay).unwrap();
+    let next = dispatch().await.unwrap().unwrap();
+    h.release("update-3");
+    h.release("release-3");
+    h.wait_turn(&session, &next.turn_id, "completed").await;
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn prompt_required_keeps_unconsumed_steer_queued() {
     let h = Harness::new(&[
         ("ACP_STEERING", "1"),

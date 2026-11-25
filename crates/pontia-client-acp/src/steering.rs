@@ -99,6 +99,7 @@ pub(crate) async fn send(
         }
         // agy may finish streaming its previous answer before consuming this input.
         // Only session/load gives the native position of the injected message.
+        state.steered_inputs.push_str(input);
         state.steering_history_pending = true;
         state.refresh_capabilities();
         return Ok(InputReceipt {
