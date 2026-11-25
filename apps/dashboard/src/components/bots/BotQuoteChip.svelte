@@ -19,7 +19,7 @@
 
 <button
   type="button"
-  class="mr-1 inline-flex max-w-[min(45%,14rem)] items-center gap-1 rounded-md bg-primary/10 px-1.5 inset-ring inset-ring-primary/25 align-middle text-xs leading-5 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+  class="mr-1 inline-flex max-w-[min(32%,9rem)] items-center gap-0.5 rounded-md bg-primary/10 px-1 inset-ring inset-ring-primary/25 align-middle text-xs leading-5 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
   aria-label={$t('bots.removeQuote', { text })}
   title={`${speaker}: ${text}`}
   data-bot-pending-quote
