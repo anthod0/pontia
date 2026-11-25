@@ -326,6 +326,7 @@ function mockGitCommits(ref: string) {
     const parent = (index + offset + 2).toString(16).padStart(2, "0").repeat(20);
     return {
       sha,
+      pushed: ref.startsWith("refs/remotes/") || index >= 2,
       parents: subject.startsWith("Merge")
         ? [parent, "ff".repeat(20)]
         : subject === "Initial commit"

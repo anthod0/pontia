@@ -67,9 +67,10 @@ impl WorkspaceGitService {
         workspace_id: &str,
         ref_name: &str,
         skip: usize,
+        branch: Option<&str>,
     ) -> Result<GitCommitsView> {
         let repo_root = self.require_repo_root(workspace_id).await?;
-        history::commits(&repo_root, ref_name, skip).await
+        history::commits(&repo_root, ref_name, skip, branch).await
     }
 
     pub async fn commit(&self, workspace_id: &str, sha: &str) -> Result<GitCommitView> {

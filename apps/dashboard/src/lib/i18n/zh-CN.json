@@ -844,6 +844,8 @@
   "git.noCommits": "还没有提交",
   "git.noCommitsDescription": "当前分支还没有任何提交。",
   "git.commits": "提交",
+  "git.pushed": "已推送",
+  "git.unpushed": "未推送",
   "git.noSubject": "（无提交说明）",
   "git.merge": "合并",
   "git.backToHistory": "返回提交历史（Esc）",

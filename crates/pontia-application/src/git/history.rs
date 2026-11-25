@@ -43,6 +43,8 @@ pub struct GitCommitSummaryView {
     pub author_name: String,
     pub authored_at: String,
     pub subject: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pushed: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -152,8 +154,12 @@ pub(crate) async fn commits(
     repo_root: &Path,
     ref_name: &str,
     skip: usize,
+    branch: Option<&str>,
 ) -> Result<GitCommitsView> {
     validate_ref(ref_name)?;
+    if let Some(branch) = branch {
+        validate_ref(branch)?;
+    }
     let count = format!("--max-count={}", COMMIT_PAGE_SIZE + 1);
     let skip = format!("--skip={skip}");
     let output = run_git_text(
@@ -194,12 +200,59 @@ pub(crate) async fn commits(
                 author_name: author_name.to_string(),
                 authored_at: authored_at.to_string(),
                 subject: subject.to_string(),
+                pushed: None,
             })
         })
         .collect::<Result<Vec<_>>>()?;
     let has_more = commits.len() > COMMIT_PAGE_SIZE;
     commits.truncate(COMMIT_PAGE_SIZE);
+    mark_pushed(repo_root, branch.unwrap_or(ref_name), &mut commits).await?;
     Ok(GitCommitsView { commits, has_more })
+}
+
+async fn mark_pushed(
+    repo_root: &Path,
+    branch: &str,
+    commits: &mut [GitCommitSummaryView],
+) -> Result<()> {
+    if commits.is_empty() {
+        return Ok(());
+    }
+    let upstream = if let Some(name) = branch.strip_prefix("refs/heads/") {
+        format!("{name}@{{upstream}}")
+    } else if branch == DETACHED_HEAD {
+        "HEAD@{upstream}".to_string()
+    } else if branch.starts_with("refs/remotes/") {
+        branch.to_string()
+    } else {
+        return Ok(());
+    };
+    let upstream = run_git(
+        repo_root,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            "--end-of-options",
+            &upstream,
+        ],
+        128,
+        true,
+    )
+    .await?;
+    if upstream.stdout.is_empty() {
+        return Ok(());
+    }
+    let exclude = format!("^{}", String::from_utf8_lossy(&upstream.stdout).trim());
+    let mut args = vec!["rev-list", "--end-of-options", &exclude];
+    args.extend(commits.iter().map(|commit| commit.sha.as_str()));
+    args.push("--");
+    let output = run_git_text(repo_root, &args).await?;
+    let unpushed: std::collections::HashSet<_> = output.lines().collect();
+    for commit in commits {
+        commit.pushed = Some(!unpushed.contains(commit.sha.as_str()));
+    }
+    Ok(())
 }
 
 pub(crate) async fn commit(repo_root: &Path, sha: &str) -> Result<GitCommitView> {

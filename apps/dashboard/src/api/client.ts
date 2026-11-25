@@ -679,13 +679,14 @@ export function createApi(device: DeviceRuntime) {
     workspaceId: string,
     ref: string,
     skip: number,
-    options: ReadRequestOptions = {},
+    { branch, signal }: ReadRequestOptions & { branch?: string } = {},
   ): Promise<GitCommitsPage> {
     const params = new URLSearchParams({ ref, skip: String(skip) });
+    if (branch) params.set("branch", branch);
     return (
       await request<{ commits: GitCommitsPage }>(
         `/workspaces/${encodeURIComponent(workspaceId)}/git/commits?${params}`,
-        options,
+        { signal },
       )
     ).commits;
   }

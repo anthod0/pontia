@@ -61,6 +61,7 @@ pub struct GitCommitsQuery {
     ref_name: String,
     #[serde(default)]
     skip: usize,
+    branch: Option<String>,
 }
 
 pub async fn get_workspace_git_commits(
@@ -69,7 +70,12 @@ pub async fn get_workspace_git_commits(
     Query(query): Query<GitCommitsQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let commits = WorkspaceGitService::new(state.db())
-        .commits(&workspace_id, &query.ref_name, query.skip)
+        .commits(
+            &workspace_id,
+            &query.ref_name,
+            query.skip,
+            query.branch.as_deref(),
+        )
         .await?;
     Ok(ok(json!({ "commits": commits })))
 }

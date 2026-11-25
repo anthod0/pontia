@@ -375,6 +375,51 @@ async fn git_history_reads_branches_commits_and_commit_diffs() {
 }
 
 #[tokio::test]
+async fn git_history_marks_commits_against_the_selected_upstream() {
+    let root = tempfile::tempdir().unwrap();
+    let app = root.path().join("app");
+    repo_with_history(&app);
+    git(&app, &["remote", "add", "origin", "."]);
+    git(&app, &["update-ref", "refs/remotes/origin/main", "main~1"]);
+    git(&app, &["branch", "--set-upstream-to=origin/main", "main"]);
+    let (state, id, _home) = workspace_for(root.path(), "app").await;
+    let page = |query: String| {
+        let state = state.clone();
+        let uri = format!("/api/v1/workspaces/{id}/git/commits?ref={query}");
+        async move {
+            let (status, body) = get_json(state, &uri).await;
+            assert_eq!(status, StatusCode::OK, "{body}");
+            body["data"]["commits"]["commits"]
+                .as_array()
+                .unwrap()
+                .clone()
+        }
+    };
+
+    let main = page("HEAD".into()).await;
+    assert_eq!(main[0]["pushed"], false);
+    assert_eq!(main[1]["pushed"], true);
+    let tip = main[0]["sha"].as_str().unwrap();
+    let later = page(format!("{tip}&skip=1&branch=refs/heads/main")).await;
+    assert_eq!(later, main[1..]);
+
+    let feature = page("refs/heads/feature".into()).await;
+    assert!(feature.iter().all(|commit| commit.get("pushed").is_none()));
+    git(
+        &app,
+        &["branch", "--set-upstream-to=origin/main", "feature"],
+    );
+    let feature = page("refs/heads/feature".into()).await;
+    assert_eq!(feature[0]["pushed"], false);
+    assert_eq!(feature[1]["pushed"], true);
+    let remote = page("refs/remotes/origin/main".into()).await;
+    assert!(remote.iter().all(|commit| commit["pushed"] == true));
+
+    git(&app, &["update-ref", "-d", "refs/remotes/origin/main"]);
+    assert!(page("HEAD".into()).await[0].get("pushed").is_none());
+}
+
+#[tokio::test]
 async fn git_history_rejects_invalid_refs_and_commits() {
     let root = tempfile::tempdir().unwrap();
     let app = root.path().join("app");

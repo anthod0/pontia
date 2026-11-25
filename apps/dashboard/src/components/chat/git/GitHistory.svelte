@@ -75,19 +75,21 @@
   {:else}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div bind:this={list} class="relative px-2 pb-2 before:absolute before:top-[52px] before:bottom-[30px] before:left-[21px] before:w-px before:bg-border" onkeydown={(event) => moveRowFocus(event, list!)}>
-      {#each days as day, index (day.commits[0].sha)}
+      {#each days as day (day.commits[0].sha)}
         <h3 class="flex h-[30px] items-center pl-8 text-xs font-medium text-muted-foreground">{day.label}</h3>
         <ul aria-label={day.label}>
-          {#each day.commits as commit, i (commit.sha)}
+          {#each day.commits as commit (commit.sha)}
+            {@const unpushed = commit.pushed === false}
+            {@const status = commit.pushed === undefined ? undefined : $t(unpushed ? 'git.unpushed' : 'git.pushed')}
             <li>
               <button type="button" data-git-row={commit.sha} onclick={() => oncommit(commit.sha)}
                 class="group relative flex h-11 w-full min-w-0 items-center gap-2 rounded-lg pr-2 pl-8 text-left outline-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-primary/55 focus-visible:ring-inset">
-                <span aria-hidden="true" class={['absolute left-[9px] size-[9px] rounded-full border', !index && !i ? 'border-primary bg-primary ring-2 ring-primary/20' : commit.parents.length > 1 ? 'border-muted-foreground bg-background' : 'border-transparent bg-muted-foreground']}></span>
+                <span aria-hidden="true" class={['absolute left-[9px] size-[9px] rounded-full border border-current', unpushed ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground', commit.parents.length > 1 ? 'bg-background' : 'bg-current']}></span>
                 <span class="min-w-0 flex-1">
                   <span class="flex items-center gap-1.5 text-[13px]">{#if commit.parents.length > 1}<GitMergeIcon aria-label={$t('git.merge')} class="size-3.5 shrink-0 text-muted-foreground" />{/if}<span class="truncate">{commit.subject || $t('git.noSubject')}</span></span>
                   <span class="flex items-center gap-1 text-xs text-muted-foreground"><span class="truncate">{commit.author_name}</span> · <time class="shrink-0 tabular-nums" datetime={commit.authored_at} title={formatDateTime(commit.authored_at, $currentLocale)}>{time.format(new Date(commit.authored_at))}</time></span>
                 </span>
-                <span class="shrink-0 font-mono text-[11.5px] text-muted-foreground group-hover:text-foreground">{shortSha(commit.sha)}</span>
+                <span title={status} class={['shrink-0 font-mono text-[11.5px]', unpushed ? 'font-medium text-amber-700 dark:text-amber-400' : 'text-muted-foreground']}>{#if status}<span class="sr-only">{status} </span>{/if}{#if unpushed}<span aria-hidden="true">↑ </span>{/if}{shortSha(commit.sha)}</span>
               </button>
             </li>
           {/each}

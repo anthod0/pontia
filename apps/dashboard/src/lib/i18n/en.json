@@ -844,6 +844,8 @@
   "git.noCommits": "No commits yet",
   "git.noCommitsDescription": "The current branch has no commits.",
   "git.commits": "Commits",
+  "git.pushed": "Pushed",
+  "git.unpushed": "Unpushed",
   "git.noSubject": "(no message)",
   "git.merge": "merge",
   "git.backToHistory": "Back to history (Esc)",

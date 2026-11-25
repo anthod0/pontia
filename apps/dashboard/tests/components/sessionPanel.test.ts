@@ -454,7 +454,7 @@ test("reads a chosen branch's history and a commit's file diffs without checking
     "workspace-1",
     sha(1),
     2,
-    expect.anything(),
+    expect.objectContaining({ branch: "refs/heads/main" }),
   );
 
   // Choosing another branch reads its history; there is no checkout request to make.

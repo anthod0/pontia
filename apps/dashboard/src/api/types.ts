@@ -443,6 +443,7 @@ export interface GitBranchesView {
 }
 
 export interface GitCommitSummary {
+  pushed?: boolean;
   sha: string;
   parents: string[];
   author_name: string;

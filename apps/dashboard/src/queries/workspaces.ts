@@ -187,7 +187,7 @@ export function createWorkspaceQueries(device: DeviceRuntime) {
             workspaceId(),
             pageParam?.tip ?? ref()!,
             pageParam?.skip ?? 0,
-            { signal },
+            { signal, branch: pageParam ? ref()! : undefined },
           ),
         initialPageParam: null as { tip: string; skip: number } | null,
         getNextPageParam: (last, pages) =>
