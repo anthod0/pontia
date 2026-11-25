@@ -17,17 +17,16 @@ use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
-    path::Path,
     sync::Arc,
 };
 use tokio::sync::OnceCell;
 
 enum Snapshot {
-    Native(Vec<Value>),
-    File(
-        pontia_agent_control::client_contract::raw_transcripts::ResolvedAgentBinding,
-        Vec<String>,
+    Native(
+        Arc<crate::runtime::protocol::Connection>,
+        OnceCell<Vec<Value>>,
     ),
+    File(pontia_agent_control::client_contract::raw_transcripts::ResolvedAgentBinding),
 }
 
 pub(crate) struct CodexHistory {
@@ -53,53 +52,81 @@ impl CodexHistory {
     }
 
     async fn snapshot(&self, source: Option<HistorySource>) -> Result<&Snapshot> {
-        self.snapshot.get_or_try_init(|| async {
-            let runtime = self.runtime().await?;
-            let connection = match &runtime {
-                Some(runtime) => runtime.connection().await.ok(),
-                None => None,
-            };
-            if source != Some(HistorySource::File) {
-                if let Some(connection) = connection {
-                    let mut turns = Vec::new();
-                    let mut cursor = None;
-                    let mut seen = HashSet::new();
-                    loop {
-                        let mut params = json!({"threadId":self.binding.client_session_key,"limit":100,"sortDirection":"asc","itemsView":"full"});
-                        if let Some(cursor) = cursor { params["cursor"] = cursor; }
-                        let response = connection.call("thread/turns/list", params).await?;
-                        let page = response["data"].as_array().ok_or_else(|| Error::Domain("Codex turns/list has no data".into()))?;
-                        turns.extend(page.iter().cloned());
-                        let next = &response["nextCursor"];
-                        if next.is_null() { break; }
-                        if !seen.insert(next.to_string()) { return Err(Error::Domain("Codex repeated history cursor".into())); }
-                        cursor = Some(next.clone());
+        self.snapshot
+            .get_or_try_init(|| async {
+                let runtime = self.runtime().await?;
+                let connection = match &runtime {
+                    Some(runtime) => runtime.connection().await.ok(),
+                    None => None,
+                };
+                if source != Some(HistorySource::File) {
+                    if let Some(connection) = connection {
+                        return Ok(Snapshot::Native(connection, OnceCell::new()));
                     }
-                    return Ok(Snapshot::Native(turns));
+                    if source == Some(HistorySource::Native) {
+                        return Err(Error::CapabilityUnavailable(
+                            "source_unavailable: Codex app-server disconnected".into(),
+                        ));
+                    }
                 }
-                if source == Some(HistorySource::Native) {
-                    return Err(Error::CapabilityUnavailable("source_unavailable: Codex app-server disconnected".into()));
+                let home = match runtime {
+                    Some(runtime) => runtime.codex_home().to_path_buf(),
+                    None => match self.binding.client_session_file.as_deref() {
+                        Some(path) => files::rollout_home(path).to_owned(),
+                        None => crate::runtime::daemon::Endpoint::resolve()?.home,
+                    },
+                };
+                let path = files::current_path(
+                    &home,
+                    &self.binding.client_session_key,
+                    self.binding.client_session_file.as_deref(),
+                )
+                .await?;
+                let mut binding = self.binding.clone();
+                binding.client_session_file = Some(path);
+                let resolved = CodexRollout.resolve(&binding)?;
+                Ok(Snapshot::File(resolved))
+            })
+            .await
+    }
+
+    async fn native_turns<'a>(
+        &self,
+        connection: &crate::runtime::protocol::Connection,
+        turns: &'a OnceCell<Vec<Value>>,
+    ) -> Result<&'a Vec<Value>> {
+        turns
+            .get_or_try_init(|| async {
+                let mut turns = Vec::new();
+                let mut cursor = None;
+                let mut seen = HashSet::new();
+                loop {
+                    let mut params = json!({
+                        "threadId": self.binding.client_session_key,
+                        "limit": 100,
+                        "sortDirection": "asc",
+                        "itemsView": "full"
+                    });
+                    if let Some(cursor) = cursor {
+                        params["cursor"] = cursor;
+                    }
+                    let response = connection.call("thread/turns/list", params).await?;
+                    let page = response["data"]
+                        .as_array()
+                        .ok_or_else(|| Error::Domain("Codex turns/list has no data".into()))?;
+                    turns.extend(page.iter().cloned());
+                    let next = &response["nextCursor"];
+                    if next.is_null() {
+                        break;
+                    }
+                    if !seen.insert(next.to_string()) {
+                        return Err(Error::Domain("Codex repeated history cursor".into()));
+                    }
+                    cursor = Some(next.clone());
                 }
-            }
-            let home = match runtime {
-                Some(runtime) => runtime.codex_home().to_path_buf(),
-                None => match self.binding.client_session_file.as_deref().and_then(|path| path.ancestors().find(|ancestor| matches!(ancestor.file_name().and_then(|name| name.to_str()), Some("sessions" | "archived_sessions"))).and_then(Path::parent)) {
-                    Some(home) => home.to_path_buf(),
-                    None if self.binding.client_session_file.is_some() => self.binding.client_session_file.as_deref().and_then(Path::parent).expect("rollout parent").to_path_buf(),
-                    None => crate::runtime::daemon::Endpoint::resolve()?.home,
-                },
-            };
-            let path = files::current_path(&home, &self.binding.client_session_key, self.binding.client_session_file.as_deref()).await?;
-            let mut binding = self.binding.clone();
-            binding.client_session_file = Some(path);
-            let resolved = CodexRollout.resolve(&binding)?;
-            let mut turns = Vec::new();
-            for (_, record) in files::records(&resolved.path)? {
-                if let Some(id) = record.pointer("/payload/turn_id").and_then(Value::as_str)
-                    && !turns.iter().any(|turn| turn == id) { turns.push(id.to_owned()); }
-            }
-            Ok(Snapshot::File(resolved, turns))
-        }).await
+                Ok(turns)
+            })
+            .await
     }
 
     fn associations(&self, turns: &[SessionTimelineTurn]) -> Result<HashMap<String, String>> {
@@ -144,15 +171,19 @@ impl CodexHistory {
         }
         let file_history = Self::new(self.binding.clone(), self.pool.clone());
         let source = match file_history.snapshot(Some(HistorySource::File)).await {
-            Ok(Snapshot::File(source, _)) => source,
-            Ok(Snapshot::Native(_)) => unreachable!("file history was explicitly selected"),
+            Ok(Snapshot::File(source)) => source,
+            Ok(Snapshot::Native(..)) => unreachable!("file history was explicitly selected"),
             Err(Error::CapabilityUnavailable(_)) => return Ok(()),
             Err(error) => return Err(error.into()),
         };
-        let records = CodexRollout.read_session_timeline(SessionTimelineReadRequest {
+        let records = match CodexRollout.read_session_timeline(SessionTimelineReadRequest {
             source: source.clone(),
             selection,
-        })?;
+        }) {
+            Ok(records) => records,
+            Err(TurnTimelineReadError::Inner(Error::CapabilityUnavailable(_))) => return Ok(()),
+            Err(error) => return Err(error),
+        };
         let mut timestamps = HashMap::new();
         for entry in records.into_iter().filter(is_message) {
             timestamps
@@ -179,6 +210,19 @@ impl CodexHistory {
 }
 
 impl NativeHistory for CodexHistory {
+    fn requires_exact_cache_page(&self) -> bool {
+        true
+    }
+
+    fn cache_fingerprint(&self) -> Option<HistoryRead<'_, Option<String>>> {
+        Some(Box::pin(async {
+            match self.snapshot(None).await.ok()? {
+                Snapshot::File(rollout) => files::fingerprint(&rollout.path).ok(),
+                Snapshot::Native(..) => None,
+            }
+        }))
+    }
+
     fn select_timeline(
         &self,
         turns: Vec<SessionTimelineTurn>,
@@ -187,27 +231,36 @@ impl NativeHistory for CodexHistory {
         Box::pin(async move {
             let map = self.associations(&turns)?;
             let (source, ids) = match self.snapshot(source).await? {
-                Snapshot::Native(turns) => (
+                Snapshot::Native(connection, turns) => (
                     HistorySource::Native,
-                    turns
+                    self.native_turns(connection, turns)
+                        .await?
                         .iter()
                         .map(|turn| {
                             turn["id"]
                                 .as_str()
+                                .map(str::to_owned)
                                 .ok_or_else(|| Error::Domain("Codex Turn has no identity".into()))
                         })
                         .collect::<Result<Vec<_>>>()?,
                 ),
-                Snapshot::File(_, turns) => (
-                    HistorySource::File,
-                    turns.iter().map(String::as_str).collect(),
-                ),
+                Snapshot::File(source) => {
+                    let mut turns = Vec::new();
+                    for (_, record) in files::records(&source.path)? {
+                        if let Some(id) = record.pointer("/payload/turn_id").and_then(Value::as_str)
+                            && !turns.iter().any(|turn| turn == id)
+                        {
+                            turns.push(id.to_owned());
+                        }
+                    }
+                    (HistorySource::File, turns)
+                }
             };
             Ok(Some(HistorySelection {
                 source,
                 turn_ids: ids
                     .into_iter()
-                    .filter_map(|id| map.get(id).cloned())
+                    .filter_map(|id| map.get(&id).cloned())
                     .collect(),
             }))
         })
@@ -220,12 +273,13 @@ impl NativeHistory for CodexHistory {
         Box::pin(async move {
             let map = self.associations(&selection.turns)?;
             match self.snapshot(None).await? {
-                Snapshot::Native(turns) => {
+                Snapshot::Native(connection, turns) => {
+                    let turns = self.native_turns(connection, turns).await?;
                     let mut items = items::timeline(turns, &map, &selection.selected_turn_ids)?;
                     self.supplement_message_times(selection, &mut items).await?;
                     Ok(items)
                 }
-                Snapshot::File(source, _) => {
+                Snapshot::File(source) => {
                     CodexRollout.read_session_timeline(SessionTimelineReadRequest {
                         source: source.clone(),
                         selection,
@@ -241,13 +295,11 @@ impl NativeHistory for CodexHistory {
     ) -> HistoryRead<'_, std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError>> {
         Box::pin(async move {
             match self.snapshot(None).await? {
-                Snapshot::File(source, _) => {
-                    CodexRollout.read_turn_ranges(TurnTimelineReadRequest {
-                        source: source.clone(),
-                        ranges,
-                    })
-                }
-                Snapshot::Native(_) => {
+                Snapshot::File(source) => CodexRollout.read_turn_ranges(TurnTimelineReadRequest {
+                    source: source.clone(),
+                    ranges,
+                }),
+                Snapshot::Native(..) => {
                     self.read_session_timeline(SessionTimelineSelection {
                         selected_turn_ids: ranges
                             .iter()

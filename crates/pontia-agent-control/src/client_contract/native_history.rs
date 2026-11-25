@@ -21,6 +21,11 @@ pub type HistoryRead<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// A request-scoped native source. Implementations own source selection and snapshot reuse.
 pub trait NativeHistory: Send + Sync {
+    /// SDK-backed sources can validate their own snapshot. A missing fingerprint bypasses the cache.
+    fn cache_fingerprint(&self) -> Option<HistoryRead<'_, Option<String>>> {
+        None
+    }
+
     /// Some readers resolve order and ownership across Turn boundaries. Only a
     /// page read as one selection can reproduce their native result.
     fn requires_exact_cache_page(&self) -> bool {

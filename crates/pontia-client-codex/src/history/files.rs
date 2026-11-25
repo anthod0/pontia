@@ -108,29 +108,10 @@ fn find_rollout(directory: &Path, id: &str) -> Result<Option<PathBuf>> {
 }
 
 pub fn records(path: &Path) -> Result<Vec<(u64, Value)>> {
-    let home = path
-        .ancestors()
-        .find_map(|ancestor| {
-            matches!(
-                ancestor.file_name().and_then(|n| n.to_str()),
-                Some("sessions" | "archived_sessions")
-            )
-            .then(|| ancestor.parent())
-            .flatten()
-        })
-        .unwrap_or_else(|| path.parent().expect("rollout parent"));
-    let mut path = path.to_path_buf();
-    let mut end: Option<u64> = None;
-    let mut seen = HashSet::new();
     let mut segments = Vec::new();
-    loop {
-        if !seen.insert(path.clone()) {
-            return Err(Error::Domain("Cyclic Codex history_base".into()));
-        }
-        let meta = header(&path)?;
-        let base = &meta["payload"]["history_base"];
+    walk_segments(path, |path, end| {
         let mut segment = Vec::new();
-        let mut input = reader(&path)?;
+        let mut input = reader(path)?;
         let mut offset = 0;
         let mut line = String::new();
         loop {
@@ -152,6 +133,54 @@ pub fn records(path: &Path) -> Result<Vec<(u64, Value)>> {
             return Err(Error::Domain("Invalid Codex history_base cutoff".into()));
         }
         segments.push(segment);
+        Ok(())
+    })?;
+    Ok(segments
+        .into_iter()
+        .rev()
+        .flatten()
+        .enumerate()
+        .map(|(index, record)| (index as u64, record))
+        .collect())
+}
+
+pub fn fingerprint(path: &Path) -> Result<String> {
+    use std::os::unix::fs::MetadataExt;
+
+    let mut files = Vec::new();
+    walk_segments(path, |path, end| {
+        let meta = std::fs::metadata(path)?;
+        files.push((
+            path.to_owned(),
+            end,
+            meta.dev(),
+            meta.ino(),
+            meta.len(),
+            meta.mtime(),
+            meta.mtime_nsec(),
+            meta.ctime(),
+            meta.ctime_nsec(),
+        ));
+        Ok(())
+    })?;
+    Ok(serde_json::to_string(&files)?)
+}
+
+fn walk_segments(
+    path: &Path,
+    mut visit: impl FnMut(&Path, Option<u64>) -> Result<()>,
+) -> Result<()> {
+    let home = rollout_home(path);
+    let mut path = path.to_path_buf();
+    let mut end: Option<u64> = None;
+    let mut seen = HashSet::new();
+    loop {
+        if !seen.insert(path.clone()) {
+            return Err(Error::Domain("Cyclic Codex history_base".into()));
+        }
+        let meta = header(&path)?;
+        let base = &meta["payload"]["history_base"];
+        visit(&path, end)?;
         if base.is_null() {
             break;
         }
@@ -180,11 +209,18 @@ pub fn records(path: &Path) -> Result<Vec<(u64, Value)>> {
             .ok_or_else(|| unavailable(format!("Referenced Codex rollout {id} is missing")))?;
         end = Some(offset);
     }
-    Ok(segments
-        .into_iter()
-        .rev()
-        .flatten()
-        .enumerate()
-        .map(|(index, record)| (index as u64, record))
-        .collect())
+    Ok(())
+}
+
+pub fn rollout_home(path: &Path) -> &Path {
+    path.ancestors()
+        .find_map(|ancestor| {
+            matches!(
+                ancestor.file_name().and_then(|n| n.to_str()),
+                Some("sessions" | "archived_sessions")
+            )
+            .then(|| ancestor.parent())
+            .flatten()
+        })
+        .unwrap_or_else(|| path.parent().expect("rollout parent"))
 }

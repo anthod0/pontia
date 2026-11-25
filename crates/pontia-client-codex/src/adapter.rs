@@ -4,7 +4,7 @@ use crate::{
     runtime::{CodexRuntime, SubscriptionState},
 };
 use pontia_agent_control::client_contract::{
-    TimelineBoundaryBackend, TurnTimelineBackend, TurnTopologyBackend,
+    TimelineBoundaryBackend, TimelineCachePolicy, TurnTimelineBackend, TurnTopologyBackend,
 };
 use pontia_agent_control::{
     EventIngestService,
@@ -43,6 +43,16 @@ pub fn registration() -> ClientRegistration {
 
 struct CodexData;
 impl ClientData for CodexData {
+    fn timeline_cache_policy(&self) -> Option<TimelineCachePolicy> {
+        Some(TimelineCachePolicy {
+            render_version: 1,
+            read_while_online: true,
+            backfill_all_turns_on_miss: false,
+            supports_session_checkpoints: true,
+            preserve_pre_compaction: true,
+        })
+    }
+
     fn native_history(
         &self,
         binding: pontia_agent_control::client_contract::raw_transcripts::AgentBindingResolveRequest,

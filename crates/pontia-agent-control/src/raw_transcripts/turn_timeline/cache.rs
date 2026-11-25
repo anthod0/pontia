@@ -58,10 +58,20 @@ impl TurnTimelineService {
             drop(guard);
             return native().await;
         }
-        let validator = match data.timeline_cache_validator(&binding.into(), self.history_source) {
-            Ok(validator) => validator,
-            Err(error @ pontia_core::Error::CapabilityUnavailable(_)) => return Err(error.into()),
-            Err(_) => return native().await,
+        let validator = if let Some(probe) = history.cache_fingerprint() {
+            let Some(fingerprint) = probe.await else {
+                drop(guard);
+                return native().await;
+            };
+            Some(fingerprint)
+        } else {
+            match data.timeline_cache_validator(&binding.into(), self.history_source) {
+                Ok(validator) => validator,
+                Err(error @ pontia_core::Error::CapabilityUnavailable(_)) => {
+                    return Err(error.into());
+                }
+                Err(_) => return native().await,
+            }
         };
 
         let key = CacheKey {

@@ -404,3 +404,155 @@ async fn native_history_keeps_commands_and_multi_file_changes_with_their_results
     );
     f.shutdown().await;
 }
+
+#[tokio::test]
+async fn cached_file_page_tracks_the_current_rollout_and_its_compressed_prefix() {
+    let f = Fixture::new(turn(json!([])), vec![]).await;
+    let mut completed = f.server_state.turns.lock().await.clone();
+    completed[0]["status"] = json!("completed");
+    let runtime = CodexRuntime::existing(f.root.path()).await.unwrap();
+    CodexService::new(f.app.event_ingest_service())
+        .reconcile_turns(&f.session, &runtime, &completed)
+        .await
+        .unwrap();
+
+    let sessions = f.root.path().join("sessions");
+    std::fs::create_dir(&sessions).unwrap();
+    let prefix = sessions.join("rollout-base.jsonl.zst");
+    let rollout = sessions.join("rollout-thread.jsonl");
+    let write_prefix = |message: &str| {
+        let text = [
+            json!({"type":"session_meta","payload":{"id":"base"}}),
+            json!({"type":"turn_context","payload":{"turn_id":"native-turn"}}),
+            json!({"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"text":message}]}}),
+        ].iter().map(|record| format!("{record}\n")).collect::<String>();
+        std::fs::write(
+            &prefix,
+            zstd::stream::encode_all(text.as_bytes(), 1).unwrap(),
+        )
+        .unwrap();
+        text.len()
+    };
+    let cutoff = write_prefix("first");
+    let header = json!({"type":"session_meta","payload":{"id":"thread","history_base":{
+        "thread_id":"base","end_ordinal_exclusive":3,"end_byte_offset":cutoff
+    }}});
+    std::fs::write(&rollout, format!("{header}\n")).unwrap();
+    let index = sqlx::SqlitePool::connect_with(
+        sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(f.root.path().join("state_5.sqlite"))
+            .create_if_missing(true),
+    )
+    .await
+    .unwrap();
+    sqlx::query("CREATE TABLE threads(id TEXT, rollout_path TEXT)")
+        .execute(&index)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO threads VALUES ('thread',?)")
+        .bind(rollout.to_str().unwrap())
+        .execute(&index)
+        .await
+        .unwrap();
+
+    let first = page(&f, Some(HistorySource::File), None, 10).await;
+    assert_eq!(first.items[0].item.content_preview, "first");
+    let db = sqlx::SqlitePool::connect_with(
+        sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(f.root.path().join("cache/session-timeline.db")),
+    )
+    .await
+    .unwrap();
+    let row = || {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT rowid FROM cached_turns WHERE source_key='file/session'",
+        )
+        .fetch_one(&db)
+    };
+    let cached = row().await.unwrap();
+    assert_eq!(page(&f, Some(HistorySource::File), None, 10).await, first);
+    assert_eq!(row().await.unwrap(), cached);
+
+    sqlx::query("UPDATE cached_turns SET payload=x'ff' WHERE source_key='file/session'")
+        .execute(&db)
+        .await
+        .unwrap();
+    assert_eq!(page(&f, Some(HistorySource::File), None, 10).await, first);
+
+    assert_eq!(write_prefix("other"), cutoff);
+    assert_eq!(
+        page(&f, Some(HistorySource::File), None, 10).await.items[0]
+            .item
+            .content_preview,
+        "other"
+    );
+    std::fs::remove_file(prefix).unwrap();
+    let file = TurnTimelineService::new(f.app.event_ingest_service())
+        .with_history_source(Some(HistorySource::File));
+    assert!(matches!(
+        file.page(f.session.clone(), TurnTimelineDirection::Forward, None, 10)
+            .await,
+        Err(pontia_agent_control::TurnTimelineServiceError::SourceUnavailable)
+    ));
+    assert_eq!(
+        page(&f, None, None, 10).await.history_source,
+        Some(HistorySource::Native)
+    );
+    std::fs::remove_file(&rollout).unwrap();
+    assert!(matches!(
+        file.page(f.session.clone(), TurnTimelineDirection::Forward, None, 10)
+            .await,
+        Err(pontia_agent_control::TurnTimelineServiceError::SourceUnavailable)
+    ));
+    f.shutdown().await;
+}
+
+#[tokio::test]
+async fn cached_page_keeps_rollout_order_when_an_item_arrives_after_the_next_turn() {
+    let f = Fixture::new(turn(json!([])), vec![]).await;
+    let mut completed = f.server_state.turns.lock().await.clone();
+    completed[0]["status"] = json!("completed");
+    let mut second = completed[0].clone();
+    second["id"] = json!("second");
+    completed.push(second);
+    let runtime = CodexRuntime::existing(f.root.path()).await.unwrap();
+    CodexService::new(f.app.event_ingest_service())
+        .reconcile_turns(&f.session, &runtime, &completed)
+        .await
+        .unwrap();
+
+    let rollout = f.root.path().join("rollout.jsonl");
+    let mut records = vec![json!({"type":"session_meta","payload":{"id":"thread"}})];
+    for (id, text) in [
+        ("native-turn", "first"),
+        ("second", "second"),
+        ("native-turn", "late"),
+    ] {
+        records.push(json!({"type":"response_item","payload":{"type":"message","role":"assistant","turn_id":id,"content":[{"text":text}]}}));
+    }
+    std::fs::write(
+        &rollout,
+        records
+            .iter()
+            .map(|row| format!("{row}\n"))
+            .collect::<String>(),
+    )
+    .unwrap();
+    sqlx::query("UPDATE agent_bindings SET client_session_file=? WHERE session_id=?")
+        .bind(rollout.to_str().unwrap())
+        .bind(&f.session)
+        .execute(&f.app.db())
+        .await
+        .unwrap();
+    for _ in 0..2 {
+        let page = page(&f, Some(HistorySource::File), None, 10).await;
+        assert_eq!(
+            page.items
+                .iter()
+                .map(|i| i.item.content_preview.as_str())
+                .collect::<Vec<_>>(),
+            ["first", "second", "late"]
+        );
+    }
+    f.shutdown().await;
+}
