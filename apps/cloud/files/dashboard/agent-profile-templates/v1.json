@@ -8,7 +8,7 @@
       "client_key": "grok",
       "model": "grok-4.7",
       "reasoning_effort": "low",
-      "use_yolo": false,
+      "use_yolo": true,
       "text": {
         "en": {
           "name": "Researcher",
@@ -24,7 +24,7 @@
       "client_key": "antigravity",
       "model": "gemini-4-neon",
       "reasoning_effort": "medium",
-      "use_yolo": false,
+      "use_yolo": true,
       "text": {
         "en": {
           "name": "Copywriter",
@@ -40,7 +40,7 @@
       "client_key": "antigravity",
       "model": "gemini-4-neon",
       "reasoning_effort": "high",
-      "use_yolo": false,
+      "use_yolo": true,
       "text": {
         "en": {
           "name": "Architect",
@@ -55,7 +55,7 @@
       "client_type": "claude-agent",
       "model": "opus",
       "reasoning_effort": "high",
-      "use_yolo": false,
+      "use_yolo": true,
       "text": {
         "en": {
           "name": "Designer",
@@ -70,7 +70,7 @@
       "client_type": "codex",
       "model": "gpt-6.2-astra",
       "reasoning_effort": "medium",
-      "use_yolo": false,
+      "use_yolo": true,
       "text": {
         "en": {
           "name": "Coder",
@@ -85,7 +85,7 @@
       "client_type": "claude-agent",
       "model": "opus",
       "reasoning_effort": "high",
-      "use_yolo": false,
+      "use_yolo": true,
       "text": {
         "en": {
           "name": "Motion designer",
