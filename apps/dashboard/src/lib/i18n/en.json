@@ -605,7 +605,6 @@
   "chat.assistant": "Assistant",
   "compaction.earlierHistory": "Earlier content has been compacted. Only conversation history still available from the client is shown.",
   "compaction.completed": "Context compacted",
-  "files.uploadedPrefix": "Uploaded File:",
   "chat.editHistoricalMessage": "Edit historical message",
   "common.save": "Save",
   "chat.replyCopied": "Assistant reply copied",

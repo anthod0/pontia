@@ -6,7 +6,8 @@
   import RetryMessageButton from '../chat/RetryMessageButton.svelte'
   import SharedFiles from '../chat/files/SharedFiles.svelte'
   import { fileActionButton, fileActionClass, type FileActionLook } from '../chat/files/fileActionButton'
-  import SecretChip from '../chat/SecretChip.svelte'
+  import SentSecrets from '../chat/SentSecrets.svelte'
+  import UploadedFiles from '../chat/files/UploadedFiles.svelte'
   import { parseUploadMessage } from '$lib/uploads/message'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import DotsThreeIcon from 'phosphor-svelte/lib/DotsThreeIcon'
@@ -63,14 +64,10 @@
             {/if}
             <div class="max-w-[90%] [.mobile-shell_&]:max-w-[86%] min-w-0 space-y-2">
               {#if parts.secrets.length}
-        <ul class={['flex flex-wrap justify-end gap-2', !parts.text && highlightableClass]} {...(!parts.text ? quotableProps : {})} data-user-message-secrets>
-          {#each parts.secrets as secret}<li class="flex max-w-full items-center gap-1.5 rounded-md border bg-background px-2 py-1 text-xs"><SecretChip {secret}/></li>{/each}
-        </ul>
-      {/if}
-      {#if parts.files.length}
-                <ul class={['flex flex-wrap justify-end gap-2', !parts.text && highlightableClass]} {...(!parts.text ? quotableProps : {})} data-user-message-uploads>
-                  {#each parts.files as file}<li class="rounded-md border bg-background px-2 py-1 text-xs [overflow-wrap:anywhere]" title={file.path}>{$t('files.uploadedPrefix')} {file.name}</li>{/each}
-                </ul>
+                <SentSecrets secrets={parts.secrets} class={parts.text ? undefined : highlightableClass} {...(!parts.text ? quotableProps : {})} />
+              {/if}
+              {#if parts.files.length}
+                <UploadedFiles files={parts.files} class={parts.text ? undefined : highlightableClass} {...(!parts.text ? quotableProps : {})} />
               {/if}
               {#if entry.kind === 'bot_reply'}
                 {#each splitAttachments(entry.content) as part}
