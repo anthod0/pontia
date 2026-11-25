@@ -254,6 +254,51 @@ async fn helper_replies_and_system_notifications_process_until_answer_or_turn_en
 }
 
 #[tokio::test]
+async fn answered_bot_stays_busy_until_its_own_turn_ends_unless_a_helper_is_working() {
+    let (_root, pool, _client, control, conversation) = fixture().await;
+    let (id, session) = bot(&conversation).await;
+    start(&control, &session).await;
+    assert_eq!(
+        conversation.chat(&id).await.unwrap().status,
+        WorkStatus::Processing
+    );
+    answer(&conversation, &session).await;
+    assert_eq!(
+        conversation.chat(&id).await.unwrap().status,
+        WorkStatus::Busy
+    );
+    let page =
+        serde_json::to_value(conversation.timeline(&id, None, None, 50).await.unwrap()).unwrap();
+    assert_eq!(page["status"], json!({"kind":"busy"}));
+
+    let helpers = HelperService::new(control.clone(), conversation.clone());
+    let worker = helper(&helpers, &session).await;
+    start(&control, &worker).await;
+    sqlx::query("UPDATE sessions SET title='Task' WHERE session_id=?")
+        .bind(&worker)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        conversation.chat(&id).await.unwrap().status,
+        WorkStatus::Working {
+            title: "Task".into()
+        }
+    );
+    finish(&control, &worker, EventType::TurnCompleted).await;
+    assert_eq!(
+        conversation.chat(&id).await.unwrap().status,
+        WorkStatus::Busy
+    );
+
+    finish(&control, &session, EventType::TurnCompleted).await;
+    assert_eq!(
+        conversation.chat(&id).await.unwrap().status,
+        WorkStatus::Idle
+    );
+}
+
+#[tokio::test]
 async fn helper_creation_rejects_missing_or_blank_titles_without_creating_sessions() {
     let (_root, pool, _client, control, conversation) = fixture().await;
     let (_, session) = bot(&conversation).await;

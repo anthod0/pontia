@@ -3,6 +3,7 @@
   import { onMount, onDestroy } from 'svelte'
   import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
   import { t } from '$lib/i18n'
+  import { botWorkStatusLabel } from '$lib/i18n/status'
   import { navigate } from '$lib/navigation'
   import { useMobileStack } from '$lib/mobile/overlayStack.svelte'
   import BotSettingsForm from '../../components/bots/BotSettingsForm.svelte'
@@ -104,7 +105,7 @@
     <span class="min-w-0"
       ><strong class="block truncate">{bot.name}</strong>
       {#if status && status.kind !== 'idle'}<small class="text-primary"
-          >{status.kind === 'working' ? status.title : $t('bots.processing')}</small
+          >{botWorkStatusLabel(status, $t)}</small
         >{/if}</span
     >
   </button>

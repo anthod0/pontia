@@ -3,6 +3,7 @@
   import { page } from '$app/state'
   import { onMount, untrack } from 'svelte'
   import { t } from '$lib/i18n'
+  import { botWorkStatusLabel } from '$lib/i18n/status'
   import { useMobileStack } from '$lib/mobile/overlayStack.svelte'
   import { chromeMetrics } from '$lib/mobile/chromeMetrics'
   import { createRecentFiles, withRecentFile, type RecentFile } from '$lib/botRecentFiles'
@@ -168,7 +169,7 @@
       {:else if timeline.status.kind !== 'idle'}
         <p class="flex min-w-0 items-center gap-2 px-3 py-1 text-sm leading-5 text-muted-foreground" role="status">
           <BotAvatar class="size-5 shrink-0" shape={timeline.bot.avatar_shape} color={timeline.bot.avatar_color} working />
-          <span class="shimmer truncate" style:--_highlight="var(--foreground)">{timeline.status.kind === 'working' ? timeline.status.title : $t('bots.processing')}</span>
+          <span class="shimmer truncate" style:--_highlight="var(--foreground)">{botWorkStatusLabel(timeline.status, $t)}</span>
         </p>
       {/if}
       <ProfileHint {chat} name={timeline.bot.name} />

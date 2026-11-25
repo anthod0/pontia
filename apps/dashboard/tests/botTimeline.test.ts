@@ -134,12 +134,13 @@ test("orders mixed timestamps by UTC millisecond and binary ID", () => {
   expect([b, a].sort(compareBotEntries).map((row) => row.id)).toEqual(["Z", "a"]);
 });
 
-test("refreshes the chat and shared sidebar summary through processing, working, and idle", async () => {
+test("refreshes the chat and shared sidebar summary through processing, working, busy, and idle", async () => {
   const fetch = vi.spyOn(testDevice.api, "getBotMessages");
   const timeline = new BotTimeline(testDevice, "bot");
   const statuses: BotMessagePage["status"][] = [
     { kind: "processing" },
     { kind: "working", title: "Review changes" },
+    { kind: "busy" },
     { kind: "idle" },
   ];
   for (const status of statuses) {

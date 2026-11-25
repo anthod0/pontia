@@ -1,3 +1,4 @@
+import type { BotWorkStatus } from "../../api/types";
 import type { MessageKey, Translator } from "./index";
 
 const labels: Record<string, MessageKey> = {
@@ -35,4 +36,12 @@ const labels: Record<string, MessageKey> = {
 
 export function statusLabel(state: string, t: Translator): string {
   return labels[state] ? t(labels[state]) : state;
+}
+
+export function botWorkStatusLabel(
+  status: Exclude<BotWorkStatus, { kind: "idle" }>,
+  t: Translator,
+): string {
+  if (status.kind === "working") return status.title;
+  return t(status.kind === "busy" ? "bots.busy" : "bots.processing");
 }

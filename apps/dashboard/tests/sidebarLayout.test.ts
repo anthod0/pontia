@@ -441,7 +441,7 @@ test("sidebar loads the next page when the end of its session list scrolls into 
 });
 
 test("sidebar shows each Bot's work status and open todos", async () => {
-  const bots = ["Release Captain", "Reviewer", "Ops"].map((name, index) => ({
+  const bots = ["Release Captain", "Reviewer", "Ops", "Writer"].map((name, index) => ({
     bot_id: `bot-${index}`,
     name,
     description: null,
@@ -456,6 +456,7 @@ test("sidebar shows each Bot's work status and open todos", async () => {
     "bot-0": { status: { kind: "working", title: "Fix upload retry" }, open_todo_count: 2 },
     "bot-1": { status: { kind: "processing" }, open_todo_count: 0 },
     "bot-2": { status: { kind: "idle" }, open_todo_count: 0 },
+    "bot-3": { status: { kind: "busy" }, open_todo_count: 0 },
   };
   vi.spyOn(testDevice.api, "listBots").mockResolvedValue(bots);
   vi.spyOn(testDevice.api, "getBotMessages").mockImplementation(
@@ -481,6 +482,7 @@ test("sidebar shows each Bot's work status and open todos", async () => {
   ).toBeInTheDocument();
   expect(await within(row("Reviewer")).findByText("Working on your message")).toBeInTheDocument();
   expect(row("Ops")).toHaveAccessibleName("Ops");
+  expect(await within(row("Writer")).findByText("Still working")).toBeInTheDocument();
   expect(within(row("Reviewer")).queryByLabelText(/open todo/)).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /^bots$/i })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Create Bot" })).toBeInTheDocument();
@@ -1230,6 +1232,7 @@ test("sidebar refreshes every Bot status and todo count from live updates withou
   for (const next of [
     { kind: "processing" },
     { kind: "working", title: "Review" },
+    { kind: "busy" },
     { kind: "idle" },
   ] satisfies BotWorkStatus[]) {
     status = next;
@@ -1247,7 +1250,7 @@ test("sidebar refreshes every Bot status and todo count from live updates withou
       ).toBeInTheDocument(),
     );
   }
-  expect(row).toHaveAccessibleName("3 open todos second");
+  expect(row).toHaveAccessibleName("4 open todos second");
   view.unmount();
   expect(botStreams.has("second")).toBe(false);
   vi.restoreAllMocks();

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { toast } from 'svelte-sonner'
   import { t } from '$lib/i18n'
+  import { botWorkStatusLabel } from '$lib/i18n/status'
   import { Button } from '$lib/components/ui/button/index.js'
   import MessageComposer from '../../../components/chat/MessageComposer.svelte'
   import BotAvatar from '../../../components/bots/BotAvatar.svelte'
@@ -48,11 +49,11 @@
   <section class="mx-auto -mt-12 flex h-dvh max-w-3xl flex-col" aria-label={timeline.bot.name}>
     <BotConversation {chat} oncontext={id=>panel?.viewContext(id)} ontodos={()=>panel?.viewTodos()} />
     <div class="bot-chat-dock relative shrink-0 px-1 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
-      {#if timeline.status.kind === 'processing'}
+      {#if timeline.status.kind === 'processing' || timeline.status.kind === 'busy'}
         {#if !chat.typing}
           <p class="mb-2 flex items-start gap-2 px-2 text-sm leading-5 text-muted-foreground" role="status">
             <BotAvatar shape={timeline.bot.avatar_shape} color={timeline.bot.avatar_color} working class="size-5 shrink-0" />
-            <span class="shimmer min-w-0">{$t('bots.processing')}</span>
+            <span class="shimmer min-w-0">{botWorkStatusLabel(timeline.status, $t)}</span>
           </p>
         {/if}
       {:else if timeline.status.kind === 'working'}

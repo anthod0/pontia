@@ -11,7 +11,11 @@ use crate::{identity::BotRole, records::Bot};
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum WorkStatus {
     Processing,
-    Working { title: String },
+    Working {
+        title: String,
+    },
+    /// The Bot's own Session is still running after it has answered.
+    Busy,
     Idle,
 }
 
@@ -44,9 +48,23 @@ impl ConversationService {
                 crate::helpers::helper_role(session.role.as_deref()) == BotRole::Helper
             })
             .max_by(|a, b| (&a.created_at, &a.session_id).cmp(&(&b.created_at, &b.session_id)));
-        Ok(latest
-            .and_then(|session| session.title)
-            .map_or(WorkStatus::Idle, |title| WorkStatus::Working { title }))
+        if let Some(title) = latest.and_then(|session| session.title) {
+            return Ok(WorkStatus::Working { title });
+        }
+        let Some(current) = &bot.current_session_id else {
+            return Ok(WorkStatus::Idle);
+        };
+        let busy = !self
+            .control
+            .queries()
+            .busy_session_summaries(std::slice::from_ref(current))
+            .await?
+            .is_empty();
+        Ok(if busy {
+            WorkStatus::Busy
+        } else {
+            WorkStatus::Idle
+        })
     }
 
     async fn processing(&self, bot: &Bot, activity: &Activity) -> Result<bool> {

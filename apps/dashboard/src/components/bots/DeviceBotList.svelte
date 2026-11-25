@@ -4,6 +4,7 @@
   import { toast } from 'svelte-sonner'
   import { page } from '$app/state'
   import { t } from '$lib/i18n'
+  import { botWorkStatusLabel } from '$lib/i18n/status'
   import { dashboardPath, navigate } from '$lib/navigation'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
@@ -89,7 +90,7 @@
       {#each directory.bots ?? [] as bot, index (bot.bot_id)}
         {@const summary = directory.summaries[index]}
         {@const status = summary?.status}
-        {@const working = status?.kind === 'working' || status?.kind === 'processing'}
+        {@const working = !!status && status.kind !== 'idle'}
         {@const todos = summary?.open_todo_count ?? 0}
         {@const path = `/bots/${encodeURIComponent(bot.bot_id)}`}
         {@const active = page.params.botId === bot.bot_id && (handle === undefined || handle === page.params.handle)}
@@ -110,7 +111,7 @@
                 <span class="flex min-w-0 flex-1 flex-col gap-px group-data-[collapsible=icon]:sr-only">
                   <span class="truncate font-medium text-heading group-data-[active=true]/menu-button:font-semibold max-md:text-base">{bot.name}</span>
                   {#if working}
-                    <span class="truncate text-xs text-primary max-md:text-[13px]">{status.kind === 'working' ? status.title : $t('bots.processing')}</span>
+                    <span class="truncate text-xs text-primary max-md:text-[13px]">{botWorkStatusLabel(status, $t)}</span>
                   {/if}
                 </span>
               </a>

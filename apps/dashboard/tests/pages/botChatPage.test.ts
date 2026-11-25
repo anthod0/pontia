@@ -405,6 +405,26 @@ test("shows a scroll-down button away from the bottom of the Bot feed and follow
   );
 });
 
+test("shows that an answered Bot is still working until its session becomes idle", async () => {
+  const latest: BotMessagePage = {
+    bot,
+    entries: [],
+    next_before: null,
+    file_link_session: null,
+    open_todo_count: 0,
+    notice_session_id: null,
+    generation_notice: null,
+    status: { kind: "busy" },
+  };
+  const fetch = vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue(latest);
+  render(BotChatPage, { botId: bot.bot_id });
+
+  expect(await screen.findByText("Still working")).toBeInTheDocument();
+  fetch.mockResolvedValue({ ...latest, status: { kind: "idle" } });
+  stream.push({ type: "changed" });
+  await waitFor(() => expect(screen.queryByText("Still working")).not.toBeInTheDocument());
+});
+
 test("hides the scroll-down button at the bottom of the Bot feed", async () => {
   BottomObserver.instances = [];
   vi.stubGlobal("IntersectionObserver", BottomObserver);

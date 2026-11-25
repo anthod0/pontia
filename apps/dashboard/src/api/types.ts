@@ -44,6 +44,7 @@ export interface BotDeletionBlockers {
 export type BotWorkStatus =
   | { kind: "processing" }
   | { kind: "working"; title: string }
+  | { kind: "busy" }
   | { kind: "idle" };
 
 // What the sidebar shows for each Bot, taken from its latest message page.

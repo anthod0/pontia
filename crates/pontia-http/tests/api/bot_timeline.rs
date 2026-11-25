@@ -248,6 +248,11 @@ async fn work_status_is_independent_of_message_pagination() {
     let legacy = get_json(app.state.clone(), "/api/v1/bots/a").await.1;
     assert_eq!(legacy["data"]["messages"].as_array().unwrap().len(), 61);
     assert_eq!(legacy["data"]["status"], json!({"kind":"processing"}));
+    sqlx::query("UPDATE bots SET awaiting_reply=0 WHERE bot_id='a'")
+        .execute(&app.db)
+        .await
+        .unwrap();
+    assert_eq!(page(&app, &[]).await["status"], json!({"kind":"busy"}));
     use pontia_core::domain::{EventSource, EventType, ReportedEvent};
     app.state
         .control()
