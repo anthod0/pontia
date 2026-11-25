@@ -4,7 +4,7 @@ import { getContext, setContext } from "svelte";
 export type FileDropTarget = {
   /** Why the composer cannot take files right now, or null when it can. */
   readonly unavailableReason: string | null;
-  /** The input box the drop overlay stops above. */
+  /** The input box the drop mask stops above and the drop prompt aligns with. */
   readonly element: HTMLElement | null;
   add(files: File[]): void;
 };
