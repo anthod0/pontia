@@ -2,9 +2,10 @@ use super::TurnTimelineService;
 use crate::{
     AgentBinding,
     client_contract::{native_history::NativeHistory, raw_transcripts::*},
-    timeline_cache::{Backfill, CacheKey, page_turn, source_key},
+    timeline_cache::{Backfill, CacheKey, PageTurn, page_turn, source_key},
 };
 use pontia_storage_sqlite::models::turns::TurnRow;
+use sha2::{Digest, Sha256};
 
 impl TurnTimelineService {
     pub(super) async fn cached_read<F>(
@@ -46,18 +47,23 @@ impl TurnTimelineService {
             .map(|i| page_turn(turns, *i, checkpoints))
             .collect();
         let source = source_key(self.history_source, checkpoints);
-        let _guard = store
+        let guard = store
             .flight(&binding.session_id, source_key(self.history_source, false))
             .await;
+        let Ok((generation, revision, exited)) = store.revision(&binding.session_id).await else {
+            return native().await;
+        };
+        let exact = history.requires_exact_cache_page();
+        if exact && ((!exited && !policy.read_while_online) || page.is_none()) {
+            drop(guard);
+            return native().await;
+        }
         let validator = match data.timeline_cache_validator(&binding.into(), self.history_source) {
             Ok(validator) => validator,
             Err(error @ pontia_core::Error::CapabilityUnavailable(_)) => return Err(error.into()),
             Err(_) => return native().await,
         };
 
-        let Ok((generation, revision, exited)) = store.revision(&binding.session_id).await else {
-            return native().await;
-        };
         let key = CacheKey {
             generation: if policy.preserve_pre_compaction {
                 generation
@@ -70,11 +76,23 @@ impl TurnTimelineService {
             version: policy.render_version,
             validator,
         };
+        let signature = exact.then(|| selection_signature(turns, &indexes));
+        let exact_page = signature.as_deref().map(|signature| PageTurn {
+            id: selected.first().map_or("", |turn| &turn.turn_id),
+            head: Some(signature),
+            tail: None,
+            previous_tail: None,
+            next_turn: None,
+        });
+        let lookup = exact_page
+            .as_ref()
+            .map(std::slice::from_ref)
+            .or(page.as_deref());
         if (exited || policy.read_while_online)
-            && let Some(page) = page
+            && let Some(page) = lookup
             && !page.is_empty()
         {
-            match store.read(&key, &page).await {
+            match store.read(&key, page).await {
                 Ok(Some(items)) => return Ok(items),
                 Ok(None) => (),
                 Err(error) => tracing::warn!(%error,"timeline cache read failed"),
@@ -87,6 +105,12 @@ impl TurnTimelineService {
                 time::OffsetDateTime::now_utc().unix_timestamp(),
             )
             .await;
+        if let Some(page) = exact_page {
+            if let Err(error) = store.write_exact_page(&key, &page, &result).await {
+                tracing::warn!(%error, "timeline page cache write failed");
+            }
+            return Ok(result);
+        }
         let fill = Backfill {
             store,
             key,
@@ -101,4 +125,18 @@ impl TurnTimelineService {
         }
         Ok(result)
     }
+}
+
+// A checkpoint can change ownership when an unselected Turn boundary moves.
+fn selection_signature(turns: &[TurnRow], indexes: &[usize]) -> String {
+    let mut hash = Sha256::new();
+    serde_json::to_writer(&mut hash, indexes).expect("serializable indexes");
+    for turn in turns {
+        serde_json::to_writer(
+            &mut hash,
+            &(&turn.turn_id, &turn.head_cursor, &turn.tail_cursor),
+        )
+        .expect("serializable boundaries");
+    }
+    format!("{:x}", hash.finalize())
 }

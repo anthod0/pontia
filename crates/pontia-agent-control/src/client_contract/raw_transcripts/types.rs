@@ -103,7 +103,7 @@ impl From<Error> for TurnTimelineReadError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TurnTimelineItem {
     pub turn_id: Option<String>,
     #[serde(flatten)]

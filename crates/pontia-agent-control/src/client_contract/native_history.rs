@@ -21,6 +21,12 @@ pub type HistoryRead<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// A request-scoped native source. Implementations own source selection and snapshot reuse.
 pub trait NativeHistory: Send + Sync {
+    /// Some readers resolve order and ownership across Turn boundaries. Only a
+    /// page read as one selection can reproduce their native result.
+    fn requires_exact_cache_page(&self) -> bool {
+        false
+    }
+
     fn select_timeline(
         &self,
         _turns: Vec<super::raw_transcripts::SessionTimelineTurn>,

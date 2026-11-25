@@ -1,7 +1,7 @@
 use crate::launch::PiLauncher;
 use crate::raw_transcripts::{PiAgentBindingResolver, PiTimelineAdapter};
 use pontia_agent_control::client_contract::{
-    TimelineBoundaryBackend, TurnTimelineBackend, TurnTopologyBackend,
+    TimelineBoundaryBackend, TimelineCachePolicy, TurnTimelineBackend, TurnTopologyBackend,
 };
 use pontia_agent_control::clients::{
     BranchTargetRequest, ClientData, ClientRegistration, NativeEventEvidence,
@@ -41,6 +41,39 @@ pub fn registration(tui_command: Option<String>) -> ClientRegistration {
 
 struct PiData;
 impl ClientData for PiData {
+    fn timeline_cache_policy(&self) -> Option<TimelineCachePolicy> {
+        Some(TimelineCachePolicy {
+            render_version: 1,
+            read_while_online: false,
+            backfill_all_turns_on_miss: false,
+            supports_session_checkpoints: true,
+            preserve_pre_compaction: false,
+        })
+    }
+
+    fn timeline_cache_validator(
+        &self,
+        binding: &pontia_agent_control::client_contract::raw_transcripts::AgentBindingResolveRequest,
+        _source: Option<pontia_agent_control::client_contract::native_history::HistorySource>,
+    ) -> Result<Option<String>> {
+        use std::os::unix::fs::MetadataExt;
+        let path = binding.client_session_file.as_ref().ok_or_else(|| {
+            Error::CapabilityUnavailable("source_unavailable: missing Pi session file".into())
+        })?;
+        let file = std::fs::File::open(path).map_err(|error| {
+            Error::CapabilityUnavailable(format!("source_unavailable: {}: {error}", path.display()))
+        })?;
+        let meta = file.metadata()?;
+        Ok(Some(serde_json::to_string(&(
+            path,
+            meta.dev(),
+            meta.ino(),
+            meta.len(),
+            meta.ctime(),
+            meta.ctime_nsec(),
+        ))?))
+    }
+
     fn normalize_payload(&self, kind: EventType, data: Value) -> Result<Value> {
         crate::facts::normalize_payload(kind, data)
     }

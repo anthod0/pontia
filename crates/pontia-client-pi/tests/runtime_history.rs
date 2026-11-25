@@ -1437,3 +1437,100 @@ async fn offline_empty_first_turn_is_empty_but_explicit_missing_anchors_are_reje
         Err(TurnTimelineReadError::InvalidRange { .. })
     ));
 }
+
+#[tokio::test]
+async fn exited_session_cache_preserves_pages_and_requires_the_current_file() {
+    use pontia_agent_control::{
+        TurnTimelineDirection, TurnTimelineService, TurnTimelineServiceError,
+    };
+
+    let f = Fixture::new().await;
+    let path = f.binding.client_session_file.as_ref().unwrap();
+    let records = [
+        json!({"type": "session", "id": "native", "version": 3}),
+        entry("one", None, "user"),
+        checkpoint("gap", Some("one")),
+        entry("two", Some("gap"), "user"),
+    ];
+    let file = records.iter().map(|r| format!("{r}\n")).collect::<String>();
+    std::fs::write(path, &file).unwrap();
+    for (id, head, tail) in [("a", None, "one"), ("b", Some("gap"), "two")] {
+        sqlx::query("INSERT INTO turns(turn_id,session_id,state,head_cursor,tail_cursor,topology_status) VALUES (?,'session','completed',?,?,'root')")
+            .bind(id).bind(f.cursor(head)).bind(f.cursor(Some(tail))).execute(&f.state.db()).await.unwrap();
+    }
+    sqlx::query("UPDATE sessions SET state='exited' WHERE session_id='session'")
+        .execute(&f.state.db())
+        .await
+        .unwrap();
+
+    let history = TurnTimelineService::new(f.state.event_ingest_service());
+    let page = |limit| {
+        history.page(
+            "session".into(),
+            TurnTimelineDirection::Forward,
+            None,
+            limit,
+        )
+    };
+    let native = page(2).await.unwrap();
+    assert_eq!(
+        native
+            .items
+            .iter()
+            .map(|i| i.turn_id.as_deref())
+            .collect::<Vec<_>>(),
+        [Some("a"), None, Some("b")]
+    );
+    assert_eq!(page(2).await.unwrap(), native);
+    let narrow = page(1).await.unwrap();
+    assert_eq!(narrow.items.len(), 1);
+    assert_eq!(page(2).await.unwrap(), native);
+
+    // Put a distinguishable, well-formed page in the disposable cache so a
+    // second native read cannot satisfy the hit assertion.
+    let db = sqlx::SqlitePool::connect_with(
+        sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(f._root.path().join("cache/session-timeline.db")),
+    )
+    .await
+    .unwrap();
+    let mut marker = native.items.clone();
+    marker[0].item.content_preview = "cached page".into();
+    assert_eq!(sqlx::query("UPDATE cached_turns SET encoding=2,payload=? WHERE session_id='session' AND source_key='default/session'")
+        .bind(serde_json::to_vec(&marker).unwrap()).execute(&db).await.unwrap().rows_affected(), 1);
+    assert_eq!(page(2).await.unwrap().items, marker);
+    let tree = history
+        .tree_history("session".into(), Some("a".into()), 1)
+        .await
+        .unwrap();
+    assert_eq!(tree.groups[0].items, native.items[..1]);
+
+    std::fs::write(
+        path,
+        file.replace("\"content\":\"one\"", "\"content\":\"edited on disk\""),
+    )
+    .unwrap();
+    let edited = page(2).await.unwrap();
+    assert_eq!(edited.items[0].item.content_preview, "edited on disk");
+    std::fs::remove_file(path).unwrap();
+    assert!(matches!(
+        page(2).await,
+        Err(TurnTimelineServiceError::SourceUnavailable)
+    ));
+
+    assert!(matches!(
+        history
+            .tree_history("session".into(), Some("a".into()), 1)
+            .await,
+        Err(TurnTimelineServiceError::SourceUnavailable)
+    ));
+
+    // A resumed session can have unflushed entries before its file exists.
+    sqlx::query("UPDATE sessions SET state='idle' WHERE session_id='session'")
+        .execute(&f.state.db())
+        .await
+        .unwrap();
+    let (calls, _daemon) = f.serve(records[1..].to_vec(), 128).await;
+    assert_eq!(page(2).await.unwrap(), native);
+    assert!(calls.load(Ordering::SeqCst) > 0);
+}

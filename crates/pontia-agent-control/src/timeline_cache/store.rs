@@ -122,7 +122,6 @@ impl TimelineCache {
         turn: &PageTurn<'_>,
         items: &[TurnTimelineItem],
     ) -> Result<()> {
-        let id = &key.binding.session_id;
         let owned: Vec<_> = items
             .iter()
             .filter(|i| i.turn_id.is_some())
@@ -133,10 +132,36 @@ impl TimelineCache {
             None => entry.item.kind == "context_compaction",
         });
         let (encoding, payload) = codec::encode(&owned)?;
-        if !valid || payload.len() > 8 * 1024 * 1024 {
+        if !valid {
             self.discard(key, turn.id).await?;
             return Ok(());
         }
+        self.persist(key, turn, encoding, payload, items).await
+    }
+
+    pub(crate) async fn write_exact_page(
+        &self,
+        key: &CacheKey<'_>,
+        page: &PageTurn<'_>,
+        items: &[TurnTimelineItem],
+    ) -> Result<()> {
+        let (encoding, payload) = codec::encode(items)?;
+        self.persist(key, page, EXACT_PAGE_ENCODING + encoding, payload, &[])
+            .await
+    }
+
+    async fn persist(
+        &self,
+        key: &CacheKey<'_>,
+        turn: &PageTurn<'_>,
+        encoding: i64,
+        payload: Vec<u8>,
+        items: &[TurnTimelineItem],
+    ) -> Result<()> {
+        if payload.len() > 8 * 1024 * 1024 {
+            return self.discard(key, turn.id).await;
+        }
+        let id = &key.binding.session_id;
         let mut tx = self.db().await?.begin_with("BEGIN IMMEDIATE").await?;
         sqlx::query("DELETE FROM cached_sources WHERE session_id=? AND source_key=? AND (binding_id!=? OR native_key!=? OR format_version!=? OR render_version!=? OR (generation=? AND validator IS NOT ?))")
             .bind(id).bind(key.source).bind(&key.binding.id).bind(&key.binding.client_session_key).bind(FORMAT_VERSION).bind(key.version).bind(key.generation).bind(&key.validator).execute(&mut *tx).await?;
@@ -187,12 +212,17 @@ impl TimelineCache {
     }
 }
 
+const EXACT_PAGE_ENCODING: i64 = 2;
+
 fn decode_page(
     turn: &str,
     encoding: i64,
     payload: &[u8],
     checkpoints: &str,
 ) -> Result<Vec<TurnTimelineItem>> {
+    if encoding >= EXACT_PAGE_ENCODING {
+        return codec::decode(encoding - EXACT_PAGE_ENCODING, payload);
+    }
     let mut entries: Vec<_> = codec::decode(encoding, payload)?
         .into_iter()
         .map(|item| TurnTimelineItem {

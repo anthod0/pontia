@@ -357,6 +357,10 @@ impl PiHistory {
     }
 }
 impl NativeHistory for PiHistory {
+    fn requires_exact_cache_page(&self) -> bool {
+        true
+    }
+
     fn read_session_timeline(
         &self,
         selection: SessionTimelineSelection,
