@@ -230,6 +230,8 @@ test("workspace selection filters recent sessions but keeps global pins and does
   const older = chatSession("first-older", "exited", "2026-05-14T01:00:00Z");
   const pinned = {
     ...chatSession("second-pinned", "exited", "2026-05-14T01:00:00Z", "2026-05-14T02:00:00Z"),
+    client_type: "acp",
+    acp: { agent_id: "antigravity" },
     workspace_id: "workspace-2",
   };
   mocks.sessions.set([first, second]);

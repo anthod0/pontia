@@ -108,8 +108,19 @@ beforeEach(() => {
 });
 
 test("shows active sessions before the list and removes active duplicates", async () => {
-  const active = session({ session_id: "active", title: "Active session", state: "busy" });
-  const recent = session({ session_id: "recent", title: "Recent session", state: "exited" });
+  const active = session({
+    session_id: "active",
+    client_type: "codex",
+    title: "Active session",
+    state: "busy",
+  });
+  const recent = session({
+    session_id: "recent",
+    client_type: "acp",
+    acp: { agent_id: "grok" },
+    title: "Recent session",
+    state: "exited",
+  });
   mocks.active.set([active]);
   mocks.list.set([active, recent]);
 

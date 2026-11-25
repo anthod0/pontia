@@ -25,6 +25,7 @@
   import { createSessionList } from '../../features/sessions/sessionList.svelte'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import { sessionStateDotClass } from '$lib/sessionState'
+  import ClientIcon from '../chat/ClientIcon.svelte'
   import RenameSessionDialog from '../chat/RenameSessionDialog.svelte'
   import type { SessionView } from '../../api/types'
   const device = useDeviceRuntime();
@@ -162,8 +163,10 @@
 
 {#snippet sessionMenuItem(session: SessionView, actionKey: string)}
   {@const contextMenu = sessionContextMenu?.actionKey === actionKey ? sessionContextMenu : null}
+  {@const acpAgentId = (session.acp as { agent_id?: string } | undefined)?.agent_id}
   <Sidebar.MenuItem>
     <Sidebar.MenuButton class="touch-target:group-has-data-[sidebar=menu-action]/menu-item:pr-16 touch-target:h-11" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session, $t)} · ${statusLabel(session.state, $t)}`} onclick={() => openSession(session.session_id)} oncontextmenu={(event) => openSessionContextMenu(event, actionKey)}>
+      <ClientIcon clientType={session.client_type} {acpAgentId} />
       {#if session.pinned_at}
         <PushPinIcon class="size-3.5 shrink-0" aria-label={$t('sessions.pinnedSession')} />
       {/if}
