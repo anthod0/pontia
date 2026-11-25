@@ -20,6 +20,11 @@
   let invalidAddress = $state<string | null>(null)
   let navigation = $state(0)
 
+  function isDashboardPort(port: number) {
+    const dashboardPort = location.port || (location.protocol === 'https:' ? '443' : '80')
+    return port === Number(dashboardPort) || port === Number(import.meta.env.VITE_DEV_BACKEND_PORT)
+  }
+
   function navigate(current: LocalhostPreviewTarget) {
     const url = URL.parse(address, current.rawHref)
     const next = parseLocalhostPreviewTarget(url?.href)
@@ -41,7 +46,11 @@
   }
 </script>
 
-{#if target}
+{#if target && !access.openLocalhostPreview && isDashboardPort(target.port)}
+  <Empty.Root class="min-h-0 p-8">
+    <Empty.Description role="alert">{$t('preview.selfPort', {port: target.port})}</Empty.Description>
+  </Empty.Root>
+{:else if target}
   {@const current = target}
   <div class="flex h-12 shrink-0 items-center gap-1 border-b px-2">
     <form class="min-w-0 flex-1" onsubmit={(event) => { event.preventDefault(); navigate(current) }}>

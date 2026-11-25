@@ -33,14 +33,15 @@ test("an attached text file opens in the file preview panel", async () => {
 test.each(["demo.html", "demo.HTM"])(
   "opens %s in a sandbox and switches to source",
   async (name) => {
-    const html = "<button onclick='this.textContent = 42'>Click</button>";
+    const html =
+      "<img src='https://example.com/logo.png'><button onclick='this.textContent = 42'>Click</button>";
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(html)));
     render(SharedFilePreviewHarness, { paths: [`/tmp/${name}`] });
     await fireEvent.click(screen.getByRole("button", { name: `Preview ${name}` }));
     const panel = within(screen.getByRole("complementary"));
     const frame = await panel.findByTitle(`Preview ${name}`);
     expect(frame).toBeInstanceOf(HTMLIFrameElement);
-    expect(frame).toHaveAttribute("sandbox", "allow-scripts allow-forms allow-modals");
+    expect(frame).toHaveAttribute("sandbox", "allow-scripts allow-forms");
     expect(frame).toHaveAttribute("srcdoc", html);
 
     await fireEvent.click(panel.getByRole("tab", { name: "Source" }));

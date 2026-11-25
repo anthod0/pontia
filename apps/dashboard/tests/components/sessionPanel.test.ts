@@ -202,8 +202,8 @@ test("the sidebar button opens the panel on Files and shows no change count", as
 test("returns to the latest localhost page after switching tabs and reopening the sidebar", async () => {
   let panel!: SessionPanel;
   render(SessionPanelHarness, { onpanel: (value) => (panel = value) });
-  const url = "http://localhost:3000/report?q=1#total";
-  panel.openPreview({ port: 3000, redirect: "/report?q=1#total", rawHref: url });
+  const url = "http://localhost:4173/report?q=1#total";
+  panel.openPreview({ port: 4173, redirect: "/report?q=1#total", rawHref: url });
   expect(await screen.findByTitle("Open preview")).toHaveAttribute("src", url);
 
   const address = screen.getByRole("textbox", { name: "Preview address" });
@@ -215,7 +215,7 @@ test("returns to the latest localhost page after switching tabs and reopening th
   await fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
   expect(await screen.findByTitle("Open preview")).toHaveAttribute(
     "src",
-    "http://localhost:3000/latest",
+    "http://localhost:4173/latest",
   );
 });
 

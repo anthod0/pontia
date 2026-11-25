@@ -21,6 +21,8 @@ export default defineConfig(({ mode }) => {
   // `just dev` points the Local Dashboard at a running pontiad; otherwise the mock API serves it.
   const devBackend = publicDashboard ? undefined : process.env.PONTIA_DEV_BACKEND?.trim();
 
+  const backendUrl = devBackend ? new URL(devBackend) : undefined;
+
   return {
     plugins: [
       ...(process.env.VITEST || devBackend ? [] : [mockApi({ publicDashboard })]),
@@ -49,6 +51,9 @@ export default defineConfig(({ mode }) => {
       }),
     ],
     define: {
+      "import.meta.env.VITE_DEV_BACKEND_PORT": JSON.stringify(
+        backendUrl ? backendUrl.port || (backendUrl.protocol === "https:" ? "443" : "80") : "",
+      ),
       "import.meta.env.VITE_DASHBOARD_MODE": JSON.stringify(dashboardMode),
     },
     resolve: {

@@ -8,6 +8,7 @@
   "mobile.switched": "已切换到 {name}",
   "preview.title": "预览",
   "preview.noneOpen": "点击对话中的本地链接，即可在此预览。",
+  "preview.selfPort": "端口 {port} 用于 Dashboard 或 pontiad。请选择应用所在端口的链接进行预览。",
   "preview.address": "预览地址",
   "preview.mobile": "手机视口",
   "preview.newTab": "在新标签页打开",

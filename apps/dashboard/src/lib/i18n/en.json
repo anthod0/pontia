@@ -8,6 +8,7 @@
   "mobile.switched": "Switched to {name}",
   "preview.title": "Preview",
   "preview.noneOpen": "Open a localhost link in the chat to preview it here.",
+  "preview.selfPort": "Port {port} serves the Dashboard or pontiad. Select a link to your app’s port to preview it here.",
   "preview.address": "Preview address",
   "preview.mobile": "Mobile viewport",
   "preview.newTab": "Open in new tab",
