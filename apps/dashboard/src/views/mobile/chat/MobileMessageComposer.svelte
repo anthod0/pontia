@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { FilePickerFileView } from '../../../api/types'
-  import FileMentionEditor from '$lib/components/file-picker/FileMentionEditor.svelte'
+  import ChatCommandInput from '../../../components/chat/ChatCommandInput.svelte'
   import { t } from '$lib/i18n'
   import { useMobileStack } from '$lib/mobile/overlayStack.svelte'
   import { createComposer } from '../../../features/chat/composer.svelte'
@@ -61,13 +61,13 @@
     },
   })
   const mentionIdentities = new Map<string, FilePickerFileView>()
-  let mentionEditor = $state<FileMentionEditor>()
-  let input = $state<HTMLTextAreaElement>()
+  const placeholder = $derived(workspaceId !== undefined ? $t('chat.taskPlaceholder') : $t('bots.message'))
+  let inlineInput = $state<ChatCommandInput>()
+  let expandedInput = $state<ChatCommandInput>()
   let picker = $state<UploadAttachments>()
   let height = $state(0)
   export function focusInput() {
-    if (mentionEditor) mentionEditor.focusEnd()
-    else input?.focus()
+    (expanded ? expandedInput : inlineInput)?.focusEnd()
   }
   export function submit() {
     return controller.submit()
@@ -85,25 +85,20 @@
 
 {#snippet editor()}
   <div class="flex h-full flex-col gap-2">
-    {#if workspaceId !== undefined}
-      <div class="min-h-0 flex-1 overflow-auto" onpastecapture={paste}>
-        <FileMentionEditor
-          bind:value
-          {workspaceId}
-          {mentionIdentities}
-          autofocus
-          placeholder={$t('chat.taskPlaceholder')}
-          class="min-h-32 p-3 text-base"
-        />
-      </div>
-    {:else}
-      <textarea
-        onpaste={paste}
+    <div class="min-h-0 flex-1 overflow-auto [&_[role=listbox]]:static" onpastecapture={paste}>
+      <ChatCommandInput
+        bind:this={expandedInput}
         bind:value
-        aria-label={$t('bots.message')}
-        class="min-h-0 w-full flex-1 resize-none rounded-xl border p-3 text-base"
-        {@attach (node) => node.focus()}></textarea>
-    {/if}
+        {workspaceId}
+        {mentionIdentities}
+        {commands}
+        onCommand={controller.executeCommand}
+        commandSide="bottom"
+        autofocus
+        {placeholder}
+        class="min-h-32 max-h-none p-3 text-base"
+      />
+    </div>
     <button
       class="min-h-11"
       disabled={controller.cannotSubmit}
@@ -126,30 +121,19 @@
     onmousedown={holdFocus}
     onclick={() => picker?.choose()}><PlusIcon class="size-4" /></button
   >
-  {#if workspaceId !== undefined}
-    <div class="min-w-0 flex-1" bind:clientHeight={height} onpastecapture={paste}>
-      <FileMentionEditor
-        bind:this={mentionEditor}
-        {mentionIdentities}
-        bind:value
-        {autofocus}
-        {workspaceId}
-        placeholder={$t('chat.taskPlaceholder')}
-        class="max-h-36 overflow-auto px-1 py-2 text-base"
-      />
-    </div>
-  {:else}
-    <textarea
-      onpaste={paste}
-      bind:this={input}
+  <div class="min-w-0 flex-1 [&_[role=listbox]]:max-w-full" bind:clientHeight={height} onpastecapture={paste}>
+    <ChatCommandInput
+      bind:this={inlineInput}
       bind:value
-      bind:clientHeight={height}
-      rows="1"
-      aria-label={$t('bots.message')}
-      placeholder={$t('bots.message')}
-      class="my-2 min-w-0 flex-1 resize-none bg-transparent text-base leading-6 outline-none [field-sizing:content] max-h-36"
-    ></textarea>
-  {/if}
+      {workspaceId}
+      {mentionIdentities}
+      {commands}
+      onCommand={controller.executeCommand}
+      {autofocus}
+      {placeholder}
+      class="max-h-36 px-1 py-2.5 text-base leading-6"
+    />
+  </div>
   {#if height > 72}<button
       class="mobile-icon"
       aria-label={$t('chat.expandComposer')}

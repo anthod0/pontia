@@ -264,6 +264,7 @@
     const nextPlaceholder = placeholder
     const editor = editorState.editor
     if (!editor) return
+    editor.view.dom.setAttribute('aria-label', nextPlaceholder)
     editor.view.dom.setAttribute('aria-placeholder', nextPlaceholder)
     editor.view.dom.setAttribute('placeholder', nextPlaceholder)
     editor.view.dispatch(editor.state.tr)
