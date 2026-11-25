@@ -121,6 +121,19 @@ impl TurnTimelineService {
             if let Some(binding) = &binding
                 && let Some(history) = self.native_history(binding).await
             {
+                if all_turns.is_empty() {
+                    return self
+                        .cached_read(
+                            binding,
+                            all_turns,
+                            selected,
+                            history.as_ref(),
+                            false,
+                            || history.read_ranges(Vec::new()),
+                        )
+                        .await
+                        .map_err(classify_reader_error);
+                }
                 return history
                     .read_ranges(Vec::new())
                     .await
@@ -134,7 +147,7 @@ impl TurnTimelineService {
                     .ok_or(TurnTimelineServiceError::CapabilityUnavailable)?;
                 let source = backend
                     .resolver
-                    .resolve(&super::binding_resolve_request(&binding))
+                    .resolve(&(&binding).into())
                     .map_err(classify_adapter_error)?;
                 return backend
                     .reader
@@ -185,8 +198,15 @@ impl TurnTimelineService {
             let ranges = self
                 .selected_ranges(session_id, all_turns, selected)
                 .await?;
-            let items = history
-                .read_ranges(ranges)
+            let items = self
+                .cached_read(
+                    &binding,
+                    all_turns,
+                    selected,
+                    history.as_ref(),
+                    false,
+                    || history.read_ranges(ranges),
+                )
                 .await
                 .map_err(classify_reader_error)?;
             if !binding.discovered {
@@ -207,10 +227,7 @@ impl TurnTimelineService {
             .clients
             .timeline(&binding.client_type)
             .ok_or(TurnTimelineServiceError::CapabilityUnavailable)?;
-        let source = match backend
-            .resolver
-            .resolve(&super::binding_resolve_request(&binding))
-        {
+        let source = match backend.resolver.resolve(&(&binding).into()) {
             Ok(source) => source,
             Err(error) => {
                 let error = classify_adapter_error(error);

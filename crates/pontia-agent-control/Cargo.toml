@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+zstd = "0.14.3"
 async-stream = "0.3"
 tokio-stream = "0.1"
 sha2 = "0.10"

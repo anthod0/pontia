@@ -62,6 +62,7 @@ pub(crate) struct SessionState {
     pub promoted: Option<String>,
     pub compaction: Option<crate::compaction::Pending>,
     pub checkpoints: Vec<crate::compaction::Checkpoint>,
+    pub checkpoints_need_replay: bool,
     pub closing: bool,
     pub permissions: HashMap<String, crate::interactions::Permission>,
     pub history: Vec<crate::history::Message>,
@@ -135,6 +136,7 @@ impl SessionState {
                 self.steering_history_pending = false;
                 self.history = replay.messages;
                 self.checkpoints = replay.checkpoints;
+                self.checkpoints_need_replay = false;
                 Ok(())
             };
             self.refresh_capabilities();
@@ -304,6 +306,7 @@ impl Peer {
             closing: false,
             model_windows: Default::default(),
             checkpoints: Vec::new(),
+            checkpoints_need_replay: false,
             compaction: None,
             permissions: HashMap::new(),
             history: Vec::new(),
@@ -536,6 +539,9 @@ impl Peer {
     }
 
     pub async fn close_session(&self, native: SessionId) -> Result<()> {
+        if let Some(writer) = self.events.timeline_cache_writer() {
+            writer.flush(&self.session, None).await;
+        }
         let request = self
             .connection
             .prepare_request(CloseSessionRequest::new(native));
@@ -795,7 +801,12 @@ impl Peer {
                     if result.is_ok() && !state.interjections.is_empty() {
                         result = peer.reconcile_interjections(&mut state).await;
                     }
+                    let loaded = result.is_ok();
+                    drop(state);
                     let _ = send.send(result);
+                    if loaded && let Some(writer) = peer.events.timeline_cache_writer() {
+                        tokio::spawn(async move { writer.flush(&peer.session, None).await });
+                    }
                 };
                 // Verification sends another request on this connection. Let its reader
                 // dispatch that response while replay keeps new prompts fenced.

@@ -471,6 +471,24 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
     assert_eq!(detail["session"]["state"], "exited");
     assert_eq!(detail["session"]["capabilities"]["accept_task"], false);
     std::fs::write(root.path().join("wrong-replay"), "").unwrap();
+    assert_eq!(
+        get(&app, &format!("{path}/turns/timeline?direction=backward")).await,
+        history
+    );
+    let cache = connect_sqlite(&format!(
+        "sqlite://{}",
+        app.control()
+            .pontia_home()
+            .join("cache/session-timeline.db")
+            .display()
+    ))
+    .await
+    .unwrap();
+    sqlx::query("DELETE FROM cached_sessions WHERE session_id=?")
+        .bind(session)
+        .execute(&cache)
+        .await
+        .unwrap();
     let (status, error) = call(
         &app,
         "GET",

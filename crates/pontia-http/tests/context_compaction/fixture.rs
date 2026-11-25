@@ -112,6 +112,7 @@ impl ClientControlChannel for Channel {
 }
 
 pub struct Fixture {
+    pub reads: Arc<std::sync::atomic::AtomicUsize>,
     pub state: AppState,
     pub channel: Arc<Channel>,
     pub root: tempfile::TempDir,
@@ -127,7 +128,11 @@ impl Fixture {
         let mut registration = test_registration();
         registration.spec = spec;
         registration.in_process = None;
-        registration.data = Some(Arc::new(super::history::History { rpc: rpc_history }));
+        let reads = Arc::default();
+        registration.data = Some(Arc::new(super::history::History {
+            rpc: rpc_history,
+            reads: Arc::clone(&reads),
+        }));
         let mut clients = ClientRegistry::default();
         clients.register(registration);
         let state = AppState::builder(
@@ -140,6 +145,7 @@ impl Fixture {
         Self {
             state,
             channel: Arc::default(),
+            reads,
             root,
         }
     }

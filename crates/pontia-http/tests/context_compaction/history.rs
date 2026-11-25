@@ -15,12 +15,28 @@ use pontia_core::{
     domain::{DomainEvent, EventType},
 };
 use serde_json::Value;
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 
 pub struct History {
     pub rpc: bool,
+    pub reads: Arc<AtomicUsize>,
 }
 impl ClientData for History {
+    fn timeline_cache_policy(
+        &self,
+    ) -> Option<pontia_agent_control::client_contract::TimelineCachePolicy> {
+        self.rpc
+            .then_some(pontia_agent_control::client_contract::TimelineCachePolicy {
+                render_version: 1,
+                backfill_all_turns_on_miss: true,
+                read_while_online: true,
+                supports_session_checkpoints: true,
+                preserve_pre_compaction: true,
+            })
+    }
     fn normalize_payload(&self, _: EventType, data: Value) -> Result<Value> {
         Ok(data)
     }
@@ -32,7 +48,8 @@ impl ClientData for History {
         _: AgentBindingResolveRequest,
         _: Option<ClientControlService>,
     ) -> Option<Arc<dyn NativeHistory>> {
-        self.rpc.then(|| Arc::new(Reader) as Arc<dyn NativeHistory>)
+        self.rpc
+            .then(|| Arc::new(NativeReader(self.reads.clone())) as Arc<dyn NativeHistory>)
     }
     fn timeline(&self) -> TurnTimelineBackend {
         TurnTimelineBackend {
@@ -145,17 +162,20 @@ impl TurnTimelineReader for Reader {
             .collect())
     }
 }
-impl NativeHistory for Reader {
+struct NativeReader(Arc<AtomicUsize>);
+impl NativeHistory for NativeReader {
     fn read_session_timeline(
         &self,
         selection: SessionTimelineSelection,
     ) -> HistoryRead<'_, std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError>> {
+        self.0.fetch_add(1, Ordering::Relaxed);
         Box::pin(async move { Ok(selected(selection)) })
     }
     fn read_ranges(
         &self,
         ranges: Vec<TurnTimelineRange>,
     ) -> HistoryRead<'_, std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError>> {
+        self.0.fetch_add(1, Ordering::Relaxed);
         Box::pin(async move {
             Ok(ranges
                 .into_iter()
@@ -314,4 +334,93 @@ async fn compaction_history_does_not_follow_the_event_capability_and_unsupported
         .await;
     assert_eq!(status, axum::http::StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(body["error"]["code"], "timeline_capability_unavailable");
+}
+
+#[tokio::test]
+async fn online_cache_preserves_page_and_tree_contracts_and_checks_the_native_source() {
+    use pontia_agent_control::{
+        TurnTimelineDirection, TurnTimelineService, TurnTimelineServiceError,
+    };
+    let f = Fixture::new(&SPEC, true).await;
+    f.seed().await;
+    turns(&f).await;
+    let db = f.state.db();
+    let file = f.root.path().join("native.log");
+    std::fs::write(&file, "source").unwrap();
+    sqlx::query("UPDATE agent_bindings SET client_session_file=?")
+        .bind(file.to_str().unwrap())
+        .execute(&db)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE sessions SET current_turn_id='turn_b'")
+        .execute(&db)
+        .await
+        .unwrap();
+    let service = TurnTimelineService::new(f.state.control().event_ingest_service());
+    let page = || {
+        service.page(
+            "session".into(),
+            TurnTimelineDirection::Forward,
+            Some("turn_b".into()),
+            1,
+        )
+    };
+    let first = page().await.unwrap();
+    let reads = || f.reads.load(Ordering::Relaxed);
+    let after_fill = reads();
+    assert!(after_fill > 0);
+    let second = page().await.unwrap();
+    assert_eq!(
+        second
+            .items
+            .iter()
+            .map(|i| i.item.item_id.as_str())
+            .collect::<Vec<_>>(),
+        ["gap", "b", "inside-b", "tail"]
+    );
+    assert_eq!(first, second);
+    let messages = service
+        .messages(
+            serde_json::from_value(
+                serde_json::json!({"session_id":"session","turn_id":"turn_b","limit":1}),
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(messages.items, first.items);
+    assert_eq!(reads(), after_fill);
+    let tree = service
+        .tree_history("session".into(), Some("turn_b".into()), 1)
+        .await
+        .unwrap();
+    let after_tree = reads();
+    assert_eq!(tree.groups[0].items[0].item.item_id, "turn_b");
+    let updates = service.tree_updates("session".into(), None).await.unwrap();
+    assert_eq!(tree.groups, updates.groups);
+    assert_eq!(reads(), after_tree);
+    sqlx::query("UPDATE turns SET tail_cursor='changed' WHERE turn_id='turn_b'")
+        .execute(&db)
+        .await
+        .unwrap();
+    assert_eq!(page().await.unwrap(), first);
+    assert!(reads() > after_tree);
+
+    sqlx::query("UPDATE turns SET state='running',tail_cursor=NULL WHERE turn_id='turn_b'")
+        .execute(&db)
+        .await
+        .unwrap();
+    let _ = page().await.unwrap();
+    let active_reads = reads();
+    let _ = page().await.unwrap();
+    assert!(reads() > active_reads);
+    sqlx::query("UPDATE turns SET state='completed',tail_cursor='changed' WHERE turn_id='turn_b'")
+        .execute(&db)
+        .await
+        .unwrap();
+    std::fs::remove_file(file).unwrap();
+    assert!(matches!(
+        page().await,
+        Err(TurnTimelineServiceError::SourceUnavailable)
+    ));
 }

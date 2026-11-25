@@ -37,6 +37,24 @@ async fn manual_compaction_survives_reattachment_and_replays_one_checkpoint() {
     })
     .await
     .unwrap();
+    // Relay facts can arrive before the recovered peer has exposed checkpoint history.
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let session = h
+                .app
+                .queries()
+                .get_session(&session)
+                .await
+                .unwrap()
+                .unwrap();
+            if session.capabilities.compaction_history {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("checkpoint history is available after reattachment");
     let payload: String = sqlx::query_scalar("SELECT payload FROM events WHERE session_id=? AND event_type='session.compaction_completed'")
         .bind(&session).fetch_one(&h.app.db()).await.unwrap();
     let payload: Value = serde_json::from_str(&payload).unwrap();

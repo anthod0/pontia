@@ -357,6 +357,11 @@ impl SessionCommandService {
             return Err(Error::NotFound(format!("session {session_id} not found")));
         }
 
+        if let Some(cache) = &self.event_ingest.cache {
+            cache
+                .touch(session_id, time::OffsetDateTime::now_utc().unix_timestamp())
+                .await;
+        }
         let query = &self.queries;
         let session = query
             .get_session(session_id)

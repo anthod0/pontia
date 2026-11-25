@@ -1,3 +1,4 @@
+mod cache;
 mod history_recovery;
 mod messages;
 mod page;
@@ -123,10 +124,7 @@ impl TurnTimelineService {
         self.history
             .get_or_init(|| async {
                 self.clients.data(&binding.client_type).and_then(|data| {
-                    data.native_history(
-                        binding_resolve_request(binding),
-                        self.events.history_control(),
-                    )
+                    data.native_history(binding.into(), self.events.history_control())
                 })
             })
             .await
@@ -141,17 +139,5 @@ impl TurnTimelineService {
             events,
             history: Default::default(),
         }
-    }
-}
-
-fn binding_resolve_request(
-    binding: &crate::AgentBinding,
-) -> crate::client_contract::raw_transcripts::AgentBindingResolveRequest {
-    crate::client_contract::raw_transcripts::AgentBindingResolveRequest {
-        id: binding.id.clone(),
-        session_id: binding.session_id.clone(),
-        client_type: binding.client_type.clone(),
-        client_session_key: binding.client_session_key.clone(),
-        client_session_file: binding.client_session_file.clone().map(Into::into),
     }
 }

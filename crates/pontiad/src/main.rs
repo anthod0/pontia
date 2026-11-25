@@ -36,6 +36,8 @@ async fn main() -> Result<()> {
         .clients()
         .start_services(app_state.control().clone(), ClientServicePhase::Transport)
         .await?;
+    let cache_control = app_state.control().clone();
+    tokio::spawn(async move { cache_control.run_timeline_cache_cleanup().await });
     let inbox = app_state.control().inbox_commands();
     let client_control = app_state.control().client_control();
     let runtime_observer = app_state.control().runtime_observer();

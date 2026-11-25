@@ -32,6 +32,7 @@ pub struct EventIngestService {
     pool: SqlitePool,
     clients: crate::clients::ClientRegistry,
     effects: PostCommitEffects,
+    pub(crate) cache: Option<crate::timeline_cache::TimelineCache>,
 }
 
 impl EventIngestService {
@@ -73,6 +74,7 @@ impl EventIngestService {
         Self {
             pool,
             clients,
+            cache: None,
             effects,
         }
     }
@@ -82,6 +84,7 @@ impl EventIngestService {
         Self {
             pool,
             clients: Default::default(),
+            cache: None,
             effects: PostCommitEffects::default(),
         }
     }
@@ -290,7 +293,33 @@ impl EventIngestService {
             commit::CommitOutcome::Skipped => Ok(None),
             commit::CommitOutcome::Duplicate { result, .. } => Ok(Some(result)),
             commit::CommitOutcome::Committed { result, events } => {
+                if let (Some(cache), Some(event)) = (&self.cache, events.last())
+                    && self
+                        .clients
+                        .data(&event.client_type)
+                        .and_then(|data| data.timeline_cache_policy())
+                        .is_some()
+                {
+                    cache
+                        .touch(
+                            &event.session_id,
+                            time::OffsetDateTime::now_utc().unix_timestamp(),
+                        )
+                        .await;
+                }
                 for event in events {
+                    if event.event_type
+                        == pontia_core::domain::EventType::SessionCompactionCompleted
+                        && let Some(cache) = &self.cache
+                        && self
+                            .clients
+                            .data(&event.client_type)
+                            .and_then(|data| data.timeline_cache_policy())
+                            .is_some_and(|policy| policy.preserve_pre_compaction)
+                        && let Err(error) = cache.record_compaction(&event).await
+                    {
+                        tracing::warn!(%error,"timeline compaction marker write failed");
+                    }
                     self.effects
                         .apply(&self.pool, self.clients.clone(), &event)
                         .await?;

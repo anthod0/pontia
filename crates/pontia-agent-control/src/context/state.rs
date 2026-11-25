@@ -61,7 +61,7 @@ impl AgentControl {
     pub(super) fn from_builder(mut builder: AgentControlBuilder) -> Self {
         builder.client_control = builder.client_control.with_clients(builder.clients.clone());
         let scheduler = crate::inbox::InboxScheduler::default();
-        let ingest = crate::EventIngestService::new(
+        let mut ingest = crate::EventIngestService::new(
             builder.db.clone(),
             builder.clients.clone(),
             crate::ingestion::PostCommitEffects::new(
@@ -72,6 +72,10 @@ impl AgentControl {
                 scheduler.clone(),
             ),
         );
+        ingest.cache = Some(crate::timeline_cache::TimelineCache::new(
+            builder.db.clone(),
+            &builder.pontia_home,
+        ));
         let queries = crate::ControlQueryService::new(builder.db.clone())
             .with_clients(builder.clients.clone())
             .with_control(builder.client_control.clone());
@@ -146,6 +150,12 @@ impl AgentControl {
 
     pub fn clients(&self) -> crate::clients::ClientRegistry {
         self.inner.integrations.clients.clone()
+    }
+
+    pub async fn run_timeline_cache_cleanup(&self) {
+        if let Some(cache) = self.event_ingest_service().cache {
+            cache.run(self.shutdown().subscribe()).await;
+        }
     }
 
     pub fn db(&self) -> SqlitePool {

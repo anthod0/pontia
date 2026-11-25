@@ -373,6 +373,20 @@ impl Harness {
         .unwrap_or_else(|_| panic!("Session did not recover: wire={:?}", self.wire()));
     }
 
+    async fn evict_history_cache(&self, session: &str) {
+        let db = connect_sqlite(&format!(
+            "sqlite://{}",
+            self.root.path().join("cache/session-timeline.db").display()
+        ))
+        .await
+        .unwrap();
+        sqlx::query("DELETE FROM cached_sessions WHERE session_id=?")
+            .bind(session)
+            .execute(&db)
+            .await
+            .unwrap();
+    }
+
     async fn history(
         &self,
         session: &str,
@@ -2519,5 +2533,98 @@ async fn terminal_session_rejects_the_relay_and_discards_its_offline_result() {
         )
     });
     assert_eq!(h.events(&session, "turn.completed").await, 0);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn exited_pages_survive_restart_and_share_one_native_replay_after_cache_loss() {
+    check_exited_pages(&[], "first").await;
+    check_exited_pages(&[("ACP_COMPACT", "1")], "grok").await;
+}
+
+async fn check_exited_pages(flags: &[(&str, &str)], agent: &str) {
+    let mut h = Harness::new(flags).await;
+    let session = h.create(agent).await.unwrap();
+    let mut ids = Vec::new();
+    for i in 1..=2 {
+        let turn = h
+            .app
+            .turn_commands()
+            .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+            .await
+            .unwrap()
+            .unwrap();
+        h.release(&format!("update-{i}"));
+        h.release(&format!("release-{i}"));
+        h.wait_turn(&session, &turn.turn_id, "completed").await;
+        ids.push(turn.turn_id);
+    }
+    assert!(
+        h.app
+            .session_commands()
+            .exit_if_idle(&session)
+            .await
+            .unwrap()
+    );
+    h.restart().await;
+    let service = pontia_agent_control::TurnTimelineService::new(h.app.event_ingest_service());
+    let page = |anchor: String| {
+        service.page(
+            session.clone(),
+            pontia_agent_control::TurnTimelineDirection::Forward,
+            Some(anchor),
+            1,
+        )
+    };
+    let starts = h.requests("initialize");
+    let first = page(ids[0].clone()).await.unwrap();
+    let second = page(ids[1].clone()).await.unwrap();
+    assert_eq!(first.next_turn_id.as_deref(), Some(ids[1].as_str()));
+    for (response, id) in [(&first, &ids[0]), (&second, &ids[1])] {
+        assert_eq!(response.items.len(), 2);
+        assert_eq!(response.items[1].turn_id.as_ref(), Some(id));
+        assert_eq!(response.items[1].item.content_preview, "streamed answer");
+    }
+    assert_eq!(h.requests("initialize"), starts);
+
+    let db = connect_sqlite(&format!(
+        "sqlite://{}",
+        h.root.path().join("cache/session-timeline.db").display()
+    ))
+    .await
+    .unwrap();
+    sqlx::query("UPDATE cached_turns SET payload=X'FF'")
+        .execute(&db)
+        .await
+        .unwrap();
+    let (again, concurrent) = tokio::join!(page(ids[0].clone()), page(ids[0].clone()));
+    assert_eq!(again.unwrap(), first);
+    assert_eq!(concurrent.unwrap(), first);
+    assert_eq!(page(ids[1].clone()).await.unwrap(), second);
+    assert_eq!(h.requests("initialize"), starts + 1);
+
+    sqlx::query("DELETE FROM cached_sessions")
+        .execute(&db)
+        .await
+        .unwrap();
+    h.release("load-fail");
+    assert!(h.history(&session).await.is_err());
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn confirmed_empty_exited_session_is_served_without_native_replay() {
+    let h = Harness::new(&[]).await;
+    let session = h.create("first").await.unwrap();
+    assert!(
+        h.app
+            .session_commands()
+            .exit_if_idle(&session)
+            .await
+            .unwrap()
+    );
+    let starts = h.requests("initialize");
+    assert!(h.history(&session).await.unwrap().items.is_empty());
+    assert_eq!(h.requests("initialize"), starts);
     h.stop().await;
 }

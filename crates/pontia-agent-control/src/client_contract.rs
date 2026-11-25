@@ -21,6 +21,7 @@ mod setup;
 pub use channel::{ClientControlChannel, ClientControlOperation};
 pub use data::{
     BranchTargetRequest, ClientData, ClientLaunchRequest, ClientLauncher, NativeEventEvidence,
+    ResidentTimeline, TimelineCachePolicy,
 };
 pub use service::{ClientService, ClientServicePhase, PreparedServiceShutdown};
 pub use session::{

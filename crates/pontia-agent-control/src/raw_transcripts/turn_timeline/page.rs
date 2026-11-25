@@ -13,8 +13,8 @@ impl TurnTimelineService {
         anchor_turn_id: Option<String>,
         limit: usize,
     ) -> Result<TurnTimelinePage, TurnTimelineServiceError> {
-        let scoped = self.request_scope();
-        let service = &scoped;
+        let mut scoped = self.request_scope();
+        let service = &mut scoped;
         if ControlQueryService::new(service.pool.clone())
             .get_session(&session_id)
             .await?
@@ -64,6 +64,7 @@ impl TurnTimelineService {
                 .filter_map(|id| by_id.remove(&id))
                 .collect();
         }
+        service.history_source = history_source;
         if turns.is_empty() {
             if anchor_turn_id.is_some() {
                 return Err(TurnTimelineServiceError::TurnNotFound);

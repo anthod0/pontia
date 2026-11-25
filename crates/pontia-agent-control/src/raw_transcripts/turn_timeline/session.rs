@@ -44,10 +44,11 @@ impl TurnTimelineService {
             selected_turn_ids: selected.iter().map(|turn| turn.turn_id.clone()).collect(),
         };
         let items = if let Some(history) = self.native_history(&binding).await {
-            history
-                .read_session_timeline(selection)
-                .await
-                .map_err(classify_reader_error)?
+            self.cached_read(&binding, turns, selected, history.as_ref(), true, || {
+                history.read_session_timeline(selection)
+            })
+            .await
+            .map_err(classify_reader_error)?
         } else {
             let backend = self
                 .clients
@@ -55,7 +56,7 @@ impl TurnTimelineService {
                 .ok_or(TurnTimelineServiceError::CapabilityUnavailable)?;
             let source = backend
                 .resolver
-                .resolve(&super::binding_resolve_request(&binding))
+                .resolve(&(&binding).into())
                 .map_err(classify_adapter_error)?;
             backend
                 .reader

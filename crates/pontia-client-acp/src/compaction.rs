@@ -57,8 +57,11 @@ pub(crate) async fn request(peer: &Peer, operation: String) -> Result<()> {
 }
 
 impl Peer {
-    pub(crate) async fn finish_compaction(&self, operation: &str) -> Result<()> {
-        let mut state = self.state.lock().await;
+    pub(crate) async fn finish_compaction(
+        &self,
+        state: &mut SessionState,
+        operation: &str,
+    ) -> Result<()> {
         if state
             .compaction
             .as_ref()
@@ -66,12 +69,13 @@ impl Peer {
         {
             state.compaction = None;
             state.refresh_capabilities();
-            self.remember(&state, None).await?;
+            self.remember(state, None).await?;
         }
         Ok(())
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct Checkpoint {
     pub offset: usize,
     pub id: String,

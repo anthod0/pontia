@@ -183,6 +183,12 @@ impl Peer {
                 tokens_before,
                 tokens_after,
             } => {
+                // A reader observing the committed fact must also see the finished native operation.
+                let mut state = self.state.lock().await;
+                if state.agent.compaction == Some(crate::CompactionProtocol::Grok) {
+                    // Grok delivers checkpoint identity and time only during replay.
+                    state.checkpoints_need_replay = true;
+                }
                 fact(
                     events,
                     session,
@@ -195,7 +201,7 @@ impl Peer {
                 )
                 .await?;
                 if manual {
-                    self.finish_compaction(&operation).await?;
+                    self.finish_compaction(&mut state, &operation).await?;
                 }
             }
             Observation::CompactionFailed {
@@ -204,11 +210,12 @@ impl Peer {
                 aborted,
                 message,
             } => {
+                let mut state = self.state.lock().await;
                 fact(events, session, runtime, None, EventType::SessionCompactionFailed,
                     format!("acp:compaction_failed:{operation}"),
                     json!({"operation_id":operation,"trigger":if manual {"manual"} else {"unknown"},"aborted":aborted,"error_message":message})).await?;
                 if manual {
-                    self.finish_compaction(&operation).await?;
+                    self.finish_compaction(&mut state, &operation).await?;
                 }
             }
             Observation::Usage { used, size } => {
@@ -368,6 +375,10 @@ impl Peer {
             state.refresh_capabilities();
             drop(state);
             crate::interactions::expire(&self.interactions, session, permissions, None).await?;
+        }
+        if let Some(writer) = events.timeline_cache_writer() {
+            let session = session.clone();
+            tokio::spawn(async move { writer.flush(&session, Some(&turn)).await });
         }
         Ok(())
     }

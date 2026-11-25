@@ -144,6 +144,7 @@ async fn antigravity_restores_its_nested_prompt_on_every_load() {
         .await
         .unwrap();
     h.wait_session_state(&session, "exited").await;
+    h.evict_history_cache(&session).await;
     let loads = h.requests("session/load");
     h.history(&session).await.unwrap();
     assert!(h.requests("session/load") > loads);
@@ -346,6 +347,7 @@ async fn exercise_yolo_session(h: &Harness, agent: &str) {
         .terminate_session(&session)
         .await
         .unwrap();
+    h.evict_history_cache(&session).await;
     h.history(&session).await.unwrap();
     h.app
         .session_commands()

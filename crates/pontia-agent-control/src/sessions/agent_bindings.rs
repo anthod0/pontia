@@ -25,6 +25,18 @@ pub struct AgentBinding {
     pub discovered: bool,
 }
 
+impl From<&AgentBinding> for crate::client_contract::raw_transcripts::AgentBindingResolveRequest {
+    fn from(binding: &AgentBinding) -> Self {
+        Self {
+            id: binding.id.clone(),
+            session_id: binding.session_id.clone(),
+            client_type: binding.client_type.clone(),
+            client_session_key: binding.client_session_key.clone(),
+            client_session_file: binding.client_session_file.clone().map(Into::into),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpsertAgentBindingRequest {
     pub session_id: String,

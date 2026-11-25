@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use pontia_agent_control::{
     client_contract::{
-        ClientData, NativeEventEvidence, TimelineBoundaryBackend, TurnTimelineBackend,
-        TurnTopologyBackend,
+        ClientData, NativeEventEvidence, ResidentTimeline, TimelineBoundaryBackend,
+        TimelineCachePolicy, TurnTimelineBackend, TurnTopologyBackend,
         history::{RecoveredTurnHistory, TurnHistoryCandidate},
         native_history::{HistoryRead, NativeHistory},
         raw_transcripts::*,
@@ -226,6 +226,30 @@ fn index(binding: &AgentBindingResolveRequest, value: &str) -> Result<Anchor> {
 }
 
 impl ClientData for AcpAdapter {
+    fn timeline_cache_policy(&self) -> Option<TimelineCachePolicy> {
+        Some(TimelineCachePolicy {
+            render_version: 1,
+            read_while_online: false,
+            backfill_all_turns_on_miss: true,
+            supports_session_checkpoints: true,
+            preserve_pre_compaction: false,
+        })
+    }
+    fn resident_history(&self, binding: AgentBindingResolveRequest) -> Option<ResidentTimeline> {
+        let [agent, _] = crate::identity::decode(&binding.client_session_key).ok()?;
+        let definition = self.config.definition(&agent).ok()?;
+        Some(ResidentTimeline {
+            session_checkpoints: definition.compaction.is_some()
+                && definition.capabilities.compaction_history,
+            history: Arc::new(AcpHistory {
+                adapter: self.clone(),
+                binding,
+                resident: true,
+                snapshot: Default::default(),
+            }),
+        })
+    }
+
     fn normalize_payload(&self, _kind: EventType, data: Value) -> Result<Value> {
         Ok(data)
     }
@@ -285,6 +309,8 @@ impl ClientData for AcpAdapter {
     ) -> Option<Arc<dyn NativeHistory>> {
         Some(Arc::new(AcpHistory {
             adapter: self.clone(),
+            resident: false,
+            snapshot: Default::default(),
             binding,
         }))
     }
@@ -330,33 +356,62 @@ impl ClientData for AcpAdapter {
     }
 }
 
+struct Snapshot {
+    messages: Vec<Message>,
+    checkpoints: Vec<crate::compaction::Checkpoint>,
+    checkpoints_complete: bool,
+}
+
 struct AcpHistory {
+    resident: bool,
+    snapshot: tokio::sync::OnceCell<Snapshot>,
     adapter: AcpAdapter,
     binding: AgentBindingResolveRequest,
 }
 impl AcpHistory {
     async fn read_snapshot<T>(
         &self,
+        session_checkpoints: bool,
         read: impl FnOnce(
             &[Message],
             &[crate::compaction::Checkpoint],
         ) -> std::result::Result<T, TurnTimelineReadError>,
     ) -> std::result::Result<T, TurnTimelineReadError> {
-        let peer = self
-            .adapter
-            .peers
-            .lock()
-            .await
-            .get(&self.binding.session_id)
-            .cloned();
-        if let Some(peer) = peer
-            && peer.state.lock().await.current
-        {
-            let state = self.live_snapshot(&peer).await?;
-            return read(&state.history, &state.checkpoints);
+        let snapshot = self
+            .snapshot
+            .get_or_try_init(|| async {
+                let peer = self
+                    .adapter
+                    .peers
+                    .lock()
+                    .await
+                    .get(&self.binding.session_id)
+                    .cloned();
+                if let Some(peer) = peer
+                    && peer.state.lock().await.current
+                {
+                    let state = self.live_snapshot(&peer).await?;
+                    return Ok::<_, Error>(Snapshot {
+                        messages: state.history.clone(),
+                        checkpoints: state.checkpoints.clone(),
+                        checkpoints_complete: !state.checkpoints_need_replay,
+                    });
+                }
+                if self.resident {
+                    return Err(unavailable());
+                }
+                let replay = exited::load(&self.adapter, &self.binding).await?;
+                Ok(Snapshot {
+                    messages: replay.messages,
+                    checkpoints: replay.checkpoints,
+                    checkpoints_complete: true,
+                })
+            })
+            .await?;
+        if self.resident && session_checkpoints && !snapshot.checkpoints_complete {
+            return Err(unavailable().into());
         }
-        let replay = exited::load(&self.adapter, &self.binding).await?;
-        read(&replay.messages, &replay.checkpoints)
+        read(&snapshot.messages, &snapshot.checkpoints)
     }
 
     async fn live_snapshot(
@@ -372,7 +427,9 @@ impl AcpHistory {
             return Err(unavailable());
         }
         drop(state);
-        peer.load().await?;
+        if !self.resident {
+            peer.load().await?;
+        }
         let state = peer.state.clone().lock_owned().await;
         if !state.current || state.history_error.is_some() || state.replay.is_some() {
             return Err(unavailable());
@@ -413,7 +470,7 @@ impl NativeHistory for AcpHistory {
         &self,
         selection: SessionTimelineSelection,
     ) -> HistoryRead<'_, std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError>> {
-        Box::pin(self.read_snapshot(move |messages, checkpoints| {
+        Box::pin(self.read_snapshot(true, move |messages, checkpoints| {
             let mut items = Vec::new();
             for (number, turn) in selection.turns.iter().enumerate() {
                 if !selection.selected_turn_ids.contains(&turn.turn_id) {
@@ -457,7 +514,7 @@ impl NativeHistory for AcpHistory {
         &self,
         ranges: Vec<TurnTimelineRange>,
     ) -> HistoryRead<'_, std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError>> {
-        Box::pin(self.read_snapshot(move |messages, _| {
+        Box::pin(self.read_snapshot(false, move |messages, _| {
             let mut items = Vec::new();
             if ranges.is_empty() {
                 return render(messages, 0, user_bytes(messages), None, None).map_err(Into::into);
