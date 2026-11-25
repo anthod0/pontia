@@ -6,6 +6,7 @@
   import ArchiveIcon from 'phosphor-svelte/lib/ArchiveIcon'
   import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon'
   import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
+  import ClockCounterClockwiseIcon from 'phosphor-svelte/lib/ClockCounterClockwiseIcon'
   import DotsThreeVerticalIcon from 'phosphor-svelte/lib/DotsThreeVerticalIcon'
   import FunnelIcon from 'phosphor-svelte/lib/FunnelIcon'
   import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon'
@@ -327,20 +328,17 @@
           {/each}
         {:else if !overviewQuery.error}
           <Sidebar.MenuItem>
-            <div class="px-2 py-1 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">
+            <p class="px-2 py-1.5 text-[12.5px] leading-5 text-muted-foreground">
               {$sessionScope === 'active' ? $t('sessions.noActive') : $t('sessions.noRecent')}
-            </div>
+            </p>
           </Sidebar.MenuItem>
         {/if}
         {#if hasClosedSessions}
           <Sidebar.MenuItem>
-            <button
-              type="button"
-              class="w-full rounded-md px-2 py-1 text-left text-xs text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
-              onclick={() => sessionScope.set('all')}
-            >
-              {$t('sessions.showClosed')}
-            </button>
+            <Sidebar.MenuButton class="text-[12.5px] text-muted-foreground touch-target:h-11" onclick={() => sessionScope.set('all')}>
+              <ClockCounterClockwiseIcon class="size-3.5 shrink-0" />
+              <span>{$t('sessions.showClosed')}</span>
+            </Sidebar.MenuButton>
           </Sidebar.MenuItem>
         {/if}
         {#if overviewQuery.isFetchingNextPage}
