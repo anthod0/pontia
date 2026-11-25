@@ -107,6 +107,7 @@ pub struct HelperService {
     control: AgentControl,
     conversation: ConversationService,
     reconciliation: Arc<Mutex<()>>,
+    delivery_backoff: Arc<std::sync::Mutex<notifications::Backoff>>,
 }
 
 impl HelperService {
@@ -115,6 +116,7 @@ impl HelperService {
             control,
             conversation,
             reconciliation: Arc::default(),
+            delivery_backoff: Arc::default(),
         }
     }
 

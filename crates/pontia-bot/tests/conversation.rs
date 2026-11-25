@@ -1193,6 +1193,65 @@ async fn reliable_helper_failures_are_durable_and_event_replay_does_not_duplicat
     assert_eq!(notices, 2);
 }
 
+#[tokio::test]
+async fn failed_notification_delivery_waits_for_backoff_instead_of_retrying_immediately() {
+    let (_root, pool, client, control, conversation) = fixture().await;
+    let helpers = HelperService::new(control.clone(), conversation.clone());
+    let (_, session) = bot(&conversation).await;
+    let helper = helper(&helpers, &session).await;
+    *client.blocked.lock().unwrap() = Some(session.clone());
+    finish(&control, &helper, EventType::TurnFailed).await;
+    let snapshot = control
+        .queries()
+        .session_snapshot(&helper)
+        .await
+        .unwrap()
+        .unwrap();
+    let turns = control.queries().list_turns(&helper).await.unwrap();
+    report(
+        &control.event_ingest_service(),
+        &helper,
+        &snapshot.runtimes[0].runtime_id,
+        &turns.last().unwrap().turn_id,
+        EventType::TurnFailed,
+    )
+    .await;
+    let attempts = || {
+        client
+            .inputs
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|input| {
+                input.session_id == session
+                    && input.input.starts_with("Source: System Notification\n")
+            })
+            .count()
+    };
+    helpers.reconcile().await.unwrap();
+    assert_eq!(attempts(), 1);
+    *client.blocked.lock().unwrap() = None;
+    for _ in 0..3 {
+        helpers.reconcile().await.unwrap();
+    }
+    assert_eq!(attempts(), 1);
+    let pending: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM bot_notifications WHERE delivered = 0")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(pending, 1);
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    helpers.reconcile().await.unwrap();
+    assert_eq!(attempts(), 2);
+    let pending: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM bot_notifications WHERE delivered = 0")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(pending, 0);
+}
+
 #[path = "conversation/system_notices.rs"]
 mod system_notices;
 
