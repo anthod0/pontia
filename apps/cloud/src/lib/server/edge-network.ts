@@ -1,17 +1,34 @@
+import { base64url, SignJWT } from "jose";
 import {
   DnsProviderError,
   readDnsProviderResponse,
   type DnsOperation,
 } from "./cloudflare-dns-errors";
 import { isEdgePort, edgeAuthority } from "../edge-port";
+import { capabilitySigningKey } from "./remote-access/device-connect";
+
 const EDGE_ZONE = "edge.pontia.dev";
-const CHALLENGE_PREFIX = "/.well-known/pontia-edge-address/";
 const PROBE_TIMEOUT_MS = 5_000;
 const MAX_PROBE_BYTES = 128;
-const MAX_PROBE_RESPONSE_BYTES = 4_096;
 const HEALTH_RESPONSE = "ok";
+const DOH_ENDPOINT = "https://cloudflare-dns.com/dns-query";
 const RELEASE_VERSION =
   /^\d+\.\d+\.\d+(?:-[\da-z-]+(?:\.[\da-z-]+)*)?(?:\+[\da-z-]+(?:\.[\da-z-]+)*)?$/i;
+const DNS_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const TOP_LEVEL_LABEL = /^(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59}[a-z0-9])$/;
+// Local, private, and special-use names (RFC 6761, RFC 6762, RFC 8375, RFC 9476).
+const RESERVED_TOP_LEVEL_LABELS = new Set([
+  "localhost",
+  "local",
+  "internal",
+  "arpa",
+  "localdomain",
+  "invalid",
+  "onion",
+  "alt",
+]);
+const OWNERSHIP_KEY_LABEL = "pontia-edge-ownership-key-v1\0";
+const OWNERSHIP_PROOF_LABEL = "pontia-edge-ownership-v1\0";
 
 export type EdgeNetworkIdentity = {
   tunnelUrl: string;
@@ -21,26 +38,20 @@ export type EdgeHealth =
   | { status: "healthy"; version: string | null; updateNonce?: string }
   | { status: "unreachable" };
 
-export interface DnsProvider {
-  ensureA(hostname: string, address: string): Promise<void>;
-  publishTxt(hostname: string, value: string): Promise<void>;
-}
-
-type TcpSocket = {
-  readable: ReadableStream<Uint8Array>;
-  writable: WritableStream<Uint8Array>;
-  opened: Promise<unknown>;
-  close(): Promise<void>;
-};
-
-export type EdgeNetworkDependencies = {
-  randomBytes(length: number): Uint8Array;
-  connect(address: { hostname: string; port: number }): TcpSocket;
-  dns: DnsProvider;
-  preview?: { zone: string; dns: DnsProvider };
-};
-
 type HttpFetcher = (input: string, init: RequestInit) => Promise<Response>;
+
+/** A canonical lowercase public DNS name with at least two labels and no IP literal. */
+export function isValidEdgeHostname(value: unknown): value is string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 253) return false;
+  const labels = value.split(".");
+  const topLevel = labels.at(-1) ?? "";
+  return (
+    labels.length >= 2 &&
+    labels.every((label) => DNS_LABEL.test(label)) &&
+    TOP_LEVEL_LABEL.test(topLevel) &&
+    !RESERVED_TOP_LEVEL_LABELS.has(topLevel)
+  );
+}
 
 export function edgeHostname(tunnelUrl: string): string | null {
   let parsed: URL;
@@ -56,14 +67,11 @@ export function edgeHostname(tunnelUrl: string): string | null {
     !isEdgePort(Number(parsed.port || 443)) ||
     parsed.pathname !== "/tunnel" ||
     parsed.search !== "" ||
-    parsed.hash !== ""
+    parsed.hash !== "" ||
+    !isValidEdgeHostname(parsed.hostname)
   ) {
     return null;
   }
-  const suffix = `.${EDGE_ZONE}`;
-  if (!parsed.hostname.endsWith(suffix)) return null;
-  const label = parsed.hostname.slice(0, -suffix.length);
-  if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label) || label.length > 63) return null;
   return parsed.hostname;
 }
 
@@ -73,6 +81,27 @@ export function edgeApiOrigin(tunnelUrl: string): string | null {
   const authority = edgeAuthority(hostname, Number(new URL(tunnelUrl).port || 443));
   if (tunnelUrl !== `wss://${authority}/tunnel`) return null;
   return `https://${authority}`;
+}
+
+/** The Pontia-managed control hostname that Cloud may write DNS records for. */
+export function managedEdgeHostname(edge: {
+  dnsLabel: string | null;
+  tunnelUrl: string;
+}): string | null {
+  if (edge.dnsLabel === null || !DNS_LABEL.test(edge.dnsLabel)) return null;
+  const hostname = `${edge.dnsLabel}.${EDGE_ZONE}`;
+  return edgeHostname(edge.tunnelUrl) === hostname ? hostname : null;
+}
+
+/** Existing edges whose DNS records Pontia manages; unset or empty allows nobody. */
+export function isLegacyEdgeDnsOwner(env: App.Platform["env"], userId: string): boolean {
+  const raw = env.LEGACY_EDGE_DNS_OWNER_IDS;
+  if (!raw) return false;
+  return raw
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean)
+    .includes(userId);
 }
 
 export function isGlobalUnicastIpv4(value: string): boolean {
@@ -101,6 +130,185 @@ export function isGlobalUnicastIpv4(value: string): boolean {
   );
 }
 
+function ipv6Segments(value: string): number[] | null {
+  if (!/^[0-9a-f:]+$/i.test(value) || value.split("::").length > 2) return null;
+  const [head, tail] = value.includes("::") ? value.split("::") : [value, undefined];
+  const parse = (part: string) => (part === "" ? [] : part.split(":"));
+  const left = parse(head);
+  const right = tail === undefined ? [] : parse(tail);
+  const missing = 8 - left.length - right.length;
+  if (tail === undefined ? missing !== 0 : missing < 1) return null;
+  const groups = [...left, ...Array<string>(tail === undefined ? 0 : missing).fill("0"), ...right];
+  if (groups.some((group) => !/^[0-9a-f]{1,4}$/i.test(group))) return null;
+  return groups.map((group) => Number.parseInt(group, 16));
+}
+
+/** Allocated global unicast space (2000::/3) without special-purpose or address-embedding blocks. */
+export function isGlobalUnicastIpv6(value: string): boolean {
+  const segments = ipv6Segments(value);
+  if (!segments) return false;
+  const [a, b] = segments;
+  return (
+    (a & 0xe000) === 0x2000 &&
+    !(a === 0x2001 && b < 0x0200) &&
+    !(a === 0x2001 && b === 0x0db8) &&
+    a !== 0x2002 &&
+    !(a === 0x3fff && b < 0x1000)
+  );
+}
+
+export function isGlobalUnicastIp(value: string): boolean {
+  return value.includes(":") ? isGlobalUnicastIpv6(value) : isGlobalUnicastIpv4(value);
+}
+
+export type PublicDnsResult = "public" | "non_public";
+
+/** Requires at least one A/AAAA answer and only public unicast addresses. */
+export async function resolvesToPublicAddresses(
+  hostname: string,
+  fetcher: HttpFetcher,
+): Promise<PublicDnsResult> {
+  const answers = await Promise.all(
+    (["A", "AAAA"] as const).map(async (type) => {
+      const response = await fetcher(
+        `${DOH_ENDPOINT}?name=${encodeURIComponent(hostname)}&type=${type}`,
+        {
+          method: "GET",
+          redirect: "error",
+          signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+          headers: { Accept: "application/dns-json" },
+        },
+      );
+      if (response.status !== 200) throw new Error("DNS-over-HTTPS lookup failed");
+      const body = JSON.parse(await boundedText(response, 65_536)) as unknown;
+      if (typeof body !== "object" || body === null || !("Status" in body)) {
+        throw new Error("invalid DNS-over-HTTPS response");
+      }
+      const { Status: status, Answer: answer } = body as { Status: unknown; Answer?: unknown };
+      // NXDOMAIN is an empty answer; other failures must not be read as "no records".
+      if (status === 3) return [];
+      if (status !== 0) throw new Error("DNS-over-HTTPS lookup failed");
+      if (answer === undefined) return [];
+      if (!Array.isArray(answer)) throw new Error("invalid DNS-over-HTTPS response");
+      const recordType = type === "A" ? 1 : 28;
+      return answer
+        .filter((record) => (record as { type?: unknown }).type === recordType)
+        .map((record) => (record as { data?: unknown }).data);
+    }),
+  );
+  const addresses = answers.flat();
+  return addresses.length > 0 &&
+    addresses.every((address) => typeof address === "string" && isGlobalUnicastIp(address))
+    ? "public"
+    : "non_public";
+}
+
+function concat(...parts: Uint8Array[]) {
+  const output = new Uint8Array(parts.reduce((size, part) => size + part.byteLength, 0));
+  let offset = 0;
+  for (const part of parts) {
+    output.set(part, offset);
+    offset += part.byteLength;
+  }
+  return output;
+}
+
+function buffer(value: Uint8Array): ArrayBuffer {
+  return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
+}
+
+async function ownershipKey(credentialSecret: string) {
+  const encoder = new TextEncoder();
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    buffer(concat(encoder.encode(OWNERSHIP_KEY_LABEL), base64url.decode(credentialSecret))),
+  );
+  return crypto.subtle.importKey("raw", digest, { name: "HMAC", hash: "SHA-256" }, false, [
+    "verify",
+  ]);
+}
+
+export function ownershipMessage(edgeId: string, hostname: string, port: number, nonce: string) {
+  return new TextEncoder().encode(
+    `${OWNERSHIP_PROOF_LABEL}${edgeId}\0${hostname}\0${port}\0${nonce}`,
+  );
+}
+
+/** Constant-time check of the edge's HMAC proof over this challenge. */
+export async function verifyOwnershipProof(
+  credentialSecret: string,
+  message: Uint8Array,
+  proof: string,
+): Promise<boolean> {
+  if (!/^[A-Za-z0-9_-]{43}$/.test(proof)) return false;
+  let signature: Uint8Array;
+  try {
+    signature = base64url.decode(proof);
+  } catch {
+    return false;
+  }
+  if (signature.byteLength !== 32 || base64url.encode(signature) !== proof) return false;
+  return crypto.subtle.verify(
+    "HMAC",
+    await ownershipKey(credentialSecret),
+    buffer(signature),
+    buffer(message),
+  );
+}
+
+export type OwnershipChallenge = {
+  edgeId: string;
+  hostname: string;
+  port: number;
+  credentialSecret: string;
+};
+
+/** Asks the endpoint to prove it holds this edge's service credential over WebPKI HTTPS. */
+export async function verifyEdgeOwnership(
+  challenge: OwnershipChallenge,
+  signingKey: string,
+  fetcher: HttpFetcher,
+  randomBytes: (length: number) => Uint8Array = (length) =>
+    crypto.getRandomValues(new Uint8Array(length)),
+): Promise<boolean> {
+  const { edgeId, hostname, port, credentialSecret } = challenge;
+  if (!isValidEdgeHostname(hostname) || !isEdgePort(port)) return false;
+  const bytes = randomBytes(32);
+  if (bytes.length !== 32) throw new Error("nonce generator returned the wrong length");
+  const nonce = base64url.encode(bytes);
+  const now = Math.floor(Date.now() / 1000);
+  const token = await new SignJWT({ host: hostname, port })
+    .setProtectedHeader({ alg: "EdDSA", typ: "pontia-edge-ownership+jwt" })
+    .setAudience(edgeId)
+    .setJti(nonce)
+    .setIssuedAt(now)
+    .setExpirationTime(now + 60)
+    .sign(await capabilitySigningKey(signingKey));
+  try {
+    const response = await fetcher(
+      `https://${edgeAuthority(hostname, port)}/__pontia/verify-ownership`,
+      {
+        method: "GET",
+        redirect: "manual",
+        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+        headers: { Authorization: `Bearer ${token}`, Accept: "text/plain" },
+      },
+    );
+    if (response.status !== 200) {
+      await response.body?.cancel();
+      return false;
+    }
+    const proof = await boundedText(response, MAX_PROBE_BYTES);
+    return await verifyOwnershipProof(
+      credentialSecret,
+      ownershipMessage(edgeId, hostname, port, nonce),
+      proof,
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function boundedText(response: Response, maximum: number) {
   const declared = response.headers.get("content-length");
   if (declared !== null && Number(declared) > maximum) throw new Error("response too large");
@@ -125,106 +333,6 @@ async function boundedText(response: Response, maximum: number) {
     offset += chunk.byteLength;
   }
   return new TextDecoder().decode(bytes);
-}
-
-function nonce(randomBytes: (length: number) => Uint8Array) {
-  const bytes = randomBytes(32);
-  if (bytes.length !== 32) throw new Error("nonce generator returned the wrong length");
-  return btoa(String.fromCharCode(...bytes))
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .replace(/=+$/, "");
-}
-
-async function readSocket(socket: TcpSocket, maximum: number) {
-  const reader = socket.readable.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > maximum) throw new Error("response too large");
-    chunks.push(value);
-  }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder().decode(bytes);
-}
-
-async function probeIpv4(
-  candidateIpv4: string,
-  challenge: string,
-  connect: EdgeNetworkDependencies["connect"],
-  port: number,
-) {
-  const socket = connect({ hostname: candidateIpv4, port });
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const probe = (async () => {
-      await socket.opened;
-      const writer = socket.writable.getWriter();
-      await writer.write(
-        new TextEncoder().encode(
-          `GET ${CHALLENGE_PREFIX}${challenge} HTTP/1.1\r\nHost: ${port === 80 ? candidateIpv4 : `${candidateIpv4}:${port}`}\r\nAccept: text/plain\r\nConnection: close\r\n\r\n`,
-        ),
-      );
-      writer.releaseLock();
-      return readSocket(socket, MAX_PROBE_RESPONSE_BYTES);
-    })();
-    const response = await Promise.race([
-      probe,
-      new Promise<never>((_, reject) => {
-        timeout = setTimeout(() => reject(new Error("probe timed out")), PROBE_TIMEOUT_MS);
-      }),
-    ]);
-    const separator = response.indexOf("\r\n\r\n");
-    if (separator < 0) return false;
-    const headers = response.slice(0, separator);
-    const body = response.slice(separator + 4);
-    return /^HTTP\/1\.[01] 200(?: |$)/.test(headers.split("\r\n", 1)[0]) && body === challenge;
-  } finally {
-    if (timeout !== undefined) clearTimeout(timeout);
-    await socket.close().catch(() => undefined);
-  }
-}
-
-export async function configureEdgeNetwork(
-  identity: EdgeNetworkIdentity,
-  candidateIpv4: string,
-  dependencies: EdgeNetworkDependencies,
-  port = 80,
-  dnsChallenge?: string,
-) {
-  const hostname = edgeHostname(identity.tunnelUrl);
-  if (
-    !hostname ||
-    !isEdgePort(port) ||
-    !isGlobalUnicastIpv4(candidateIpv4) ||
-    (dnsChallenge !== undefined && !validDnsChallenge(dnsChallenge))
-  )
-    return { status: "invalid" as const };
-
-  const challenge = nonce(dependencies.randomBytes);
-  try {
-    if (!(await probeIpv4(candidateIpv4, challenge, dependencies.connect, port))) {
-      return { status: "unreachable" as const };
-    }
-  } catch {
-    return { status: "unreachable" as const };
-  }
-
-  await dependencies.dns.ensureA(hostname, candidateIpv4);
-  if (dependencies.preview) {
-    const { zone, dns } = dependencies.preview;
-    await dns.ensureA(`*.${previewBase(hostname, zone)}`, candidateIpv4);
-  }
-  if (dnsChallenge !== undefined) await dependencies.dns.publishTxt(hostname, dnsChallenge);
-  return { status: "configured" as const, hostname };
 }
 
 export async function probeEdgeHealth(
@@ -265,7 +373,7 @@ export function validDnsChallenge(value: unknown): value is string {
   return typeof value === "string" && /^[A-Za-z0-9_-]{43}$/.test(value);
 }
 
-export class CloudflareDnsProvider implements DnsProvider {
+export class CloudflareDnsProvider {
   constructor(
     private readonly token: string,
     private readonly zoneId: string,
@@ -294,10 +402,7 @@ export class CloudflareDnsProvider implements DnsProvider {
 
   private managedHostname(hostname: string) {
     const suffix = `.${this.domain}`;
-    return (
-      hostname.endsWith(suffix) &&
-      edgeHostname(`wss://${hostname.slice(0, -suffix.length)}.${EDGE_ZONE}/tunnel`) !== null
-    );
+    return hostname.endsWith(suffix) && DNS_LABEL.test(hostname.slice(0, -suffix.length));
   }
 
   private async matchingTxt(hostname: string, value: string) {
@@ -462,8 +567,8 @@ export function previewDns(env: App.Platform["env"]) {
   );
 }
 
-export function previewBase(controlHostname: string, zone: string) {
-  return `${controlHostname.split(".")[0]}.${zone}`;
+export function previewBase(dnsLabel: string, zone: string) {
+  return `${dnsLabel}.${zone}`;
 }
 
 export async function probePreview(base: string, tunnelUrl: string) {

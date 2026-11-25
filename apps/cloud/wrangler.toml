@@ -42,14 +42,15 @@ required = [
   "E2E_CAPABILITY_VERIFICATION_KEY",
   "E2E_REGISTRATION_PROOF_PRIVATE_KEY",
   "E2E_REGISTRATION_PROOF_PUBLIC_KEY",
+  "LEGACY_EDGE_DNS_OWNER_IDS",
 ]
 
 [[ratelimits]]
-name = "EDGE_NETWORK_RATE_LIMIT"
+name = "EDGE_CONFIRM_RATE_LIMIT"
 namespace_id = "1001"
 
 [ratelimits.simple]
-limit = 3
+limit = 20
 period = 60
 
 [[ratelimits]]
@@ -58,6 +59,14 @@ namespace_id = "1002"
 
 [ratelimits.simple]
 limit = 10
+period = 60
+
+[[ratelimits]]
+name = "EDGE_HEALTH_RATE_LIMIT"
+namespace_id = "1003"
+
+[ratelimits.simple]
+limit = 12
 period = 60
 
 [assets]

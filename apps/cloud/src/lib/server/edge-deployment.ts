@@ -1,41 +1,35 @@
 import { isEdgePort, edgeAuthority } from "../edge-port";
-import { and, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, like, ne, or, sql } from "drizzle-orm";
 import { v7 as uuidv7 } from "uuid";
 import { sha256Base64url } from "./crypto";
 import type { Database } from "./db";
 import { edgeTickets, edges } from "./db/schema";
+import { edgeHostname, isValidEdgeHostname } from "./edge-network";
 import { issueEdgeTicket, parseEdgeTicket, type EdgeTicketDependencies } from "./edge-tickets";
-import { generateHeroName, isHeroName } from "./hero-name";
 import { parseEdgeCredential } from "./remote-access/resources";
 import { isUuidV7 } from "./uuid";
 
 const DEPLOYMENT_LIFETIME_MS = 60 * 60 * 1000;
-const MAX_NAME_ATTEMPTS = 32;
 const databaseTimestamp = sql<string>`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
 
-type DeploymentPayload = { name: string };
+type DeploymentPayload = { hostname: string };
 
 export type DeploymentDependencies = EdgeTicketDependencies & {
   edgeId(): string;
-  heroName(db: Database): Promise<string>;
 };
 
 const defaultDependencies: DeploymentDependencies = {
   now: () => new Date(),
   randomBytes: (length) => crypto.getRandomValues(new Uint8Array(length)),
   edgeId: uuidv7,
-  heroName: generateHeroName,
 };
 
-export async function decodeDeploymentPayload(
-  db: Database,
-  value: unknown,
-): Promise<DeploymentPayload | null> {
+export function decodeDeploymentPayload(value: unknown): DeploymentPayload | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const keys = Object.keys(value);
-  if (keys.length !== 1 || keys[0] !== "name") return null;
-  const name = (value as Record<string, unknown>).name;
-  return typeof name === "string" && (await isHeroName(db, name)) ? { name } : null;
+  if (keys.length !== 1 || keys[0] !== "hostname") return null;
+  const hostname = (value as Record<string, unknown>).hostname;
+  return isValidEdgeHostname(hostname) ? { hostname } : null;
 }
 
 function shellQuote(value: string) {
@@ -46,36 +40,40 @@ export function deploymentCommand(edgeId: string, ticket: string) {
   return `curl -fsSL ${shellQuote("https://get.pontia.dev/install-edge.sh")} | sudo sh &&\nsudo pontia-edge init \\\n  --edge-id ${shellQuote(edgeId)} \\\n  --ticket ${shellQuote(ticket)}`;
 }
 
-async function unusedHeroName(db: Database, dependencies: DeploymentDependencies) {
-  for (let attempt = 0; attempt < MAX_NAME_ATTEMPTS; attempt += 1) {
-    const name = await dependencies.heroName(db);
-    if (!(await isHeroName(db, name))) {
-      throw new Error("Hero name generator returned an invalid name");
-    }
-    const payload = JSON.stringify({ name });
-    const [edge, ticket] = await Promise.all([
-      db.select({ id: edges.id }).from(edges).where(eq(edges.dnsLabel, name)).get(),
-      db
-        .select({ id: edgeTickets.id })
-        .from(edgeTickets)
-        .where(and(eq(edgeTickets.purpose, "edge_deployment"), eq(edgeTickets.payload, payload)))
-        .get(),
-    ]);
-    if (!edge && !ticket) return name;
-  }
-  throw new Error("Unable to allocate an edge name");
+function tunnelUrl(hostname: string, port: number) {
+  return `wss://${edgeAuthority(hostname, port)}/tunnel`;
 }
+
+/** Any registered endpoint on this hostname, regardless of its port. */
+function registeredHostname(hostname: string) {
+  return or(
+    eq(edges.tunnelUrl, tunnelUrl(hostname, 443)),
+    like(edges.tunnelUrl, `wss://${hostname}:%/tunnel`),
+  );
+}
+
+export type DeploymentIssue =
+  | { status: "invalid" }
+  | { status: "conflict" }
+  | {
+      status: "issued";
+      deployment: { edgeId: string; hostname: string; expiresAt: string; command: string };
+    };
 
 export async function issueEdgeDeployment(
   db: Database,
   userId: string,
+  hostname: string,
   dependencies: DeploymentDependencies = defaultDependencies,
-) {
+): Promise<DeploymentIssue> {
+  if (!isValidEdgeHostname(hostname)) return { status: "invalid" };
+  if (await db.select({ id: edges.id }).from(edges).where(registeredHostname(hostname)).get()) {
+    return { status: "conflict" };
+  }
   const edgeId = dependencies.edgeId();
   if (!isUuidV7(edgeId) || edgeId !== edgeId.toLowerCase()) {
     throw new Error("Edge ID generator returned an invalid UUID v7");
   }
-  const name = await unusedHeroName(db, dependencies);
   const expiresAt = new Date(dependencies.now().getTime() + DEPLOYMENT_LIFETIME_MS);
   const ticket = await issueEdgeTicket(
     db,
@@ -83,17 +81,20 @@ export async function issueEdgeDeployment(
       purpose: "edge_deployment",
       userId,
       expectedEdgeId: edgeId,
-      payload: { name },
+      payload: { hostname },
       expiresAt,
-      decodePayload: (value) => decodeDeploymentPayload(db, value),
+      decodePayload: decodeDeploymentPayload,
     },
     dependencies,
   );
   return {
-    edgeId,
-    name,
-    expiresAt: expiresAt.toISOString(),
-    command: deploymentCommand(edgeId, ticket),
+    status: "issued",
+    deployment: {
+      edgeId,
+      hostname,
+      expiresAt: expiresAt.toISOString(),
+      command: deploymentCommand(edgeId, ticket),
+    },
   };
 }
 
@@ -103,12 +104,12 @@ type DeploymentAuthorization = {
   ticketId: number;
   ticketSecretHash: string;
   userId: string;
-  identity: DeploymentIdentity;
+  hostname: string;
+  edgeId: string;
+  credentialSecret: string;
   payload: string;
   serviceCredentialHash: string;
 };
-
-type StoredEdge = Awaited<ReturnType<typeof storedEdge>>;
 
 function storedEdge(db: Database, edgeId: string) {
   return db
@@ -116,7 +117,6 @@ function storedEdge(db: Database, edgeId: string) {
       edgeId: edges.id,
       userId: edges.userId,
       name: edges.name,
-      dnsLabel: edges.dnsLabel,
       tunnelUrl: edges.tunnelUrl,
       accessScope: edges.accessScope,
       serviceCredentialHash: edges.serviceCredentialHash,
@@ -126,36 +126,32 @@ function storedEdge(db: Database, edgeId: string) {
     .get();
 }
 
-function matchesDeployment(edge: StoredEdge, deployment: DeploymentAuthorization) {
-  return (
-    edge !== undefined &&
-    edge.edgeId === deployment.identity.edgeId &&
-    edge.userId === deployment.userId &&
-    edge.dnsLabel === deployment.identity.name &&
-    edge.accessScope === "private" &&
-    edge.serviceCredentialHash === deployment.serviceCredentialHash
-  );
-}
-
 async function completedDeployment(db: Database, deployment: DeploymentAuthorization) {
   const [edge, ticket] = await Promise.all([
-    storedEdge(db, deployment.identity.edgeId),
+    storedEdge(db, deployment.edgeId),
     db
       .select({ consumedAt: edgeTickets.consumedAt })
       .from(edgeTickets)
       .where(eq(edgeTickets.id, deployment.ticketId))
       .get(),
   ]);
-  return ticket?.consumedAt && matchesDeployment(edge, deployment) && edge
-    ? { edgeId: edge.edgeId, name: edge.name, tunnelUrl: edge.tunnelUrl }
-    : null;
+  if (
+    !ticket?.consumedAt ||
+    !edge ||
+    edge.userId !== deployment.userId ||
+    edge.accessScope !== "private" ||
+    edge.serviceCredentialHash !== deployment.serviceCredentialHash ||
+    edgeHostname(edge.tunnelUrl) !== deployment.hostname
+  ) {
+    return null;
+  }
+  return { edgeId: edge.edgeId, name: edge.name, tunnelUrl: edge.tunnelUrl };
 }
 
 async function deploymentAuthorization(
   db: Database,
   ticketValue: string,
   credentialValue: string,
-  includeConsumed: boolean,
 ): Promise<{ deployment: DeploymentAuthorization; consumed: boolean } | null> {
   const ticket = parseEdgeTicket(ticketValue);
   const credential = parseEdgeCredential(credentialValue);
@@ -166,9 +162,9 @@ async function deploymentAuthorization(
     .select({
       id: edgeTickets.id,
       userId: edgeTickets.userId,
-      expectedEdgeId: edgeTickets.expectedEdgeId,
       payload: edgeTickets.payload,
       consumedAt: edgeTickets.consumedAt,
+      expired: sql<number>`${edgeTickets.expiresAt} <= ${databaseTimestamp}`,
     })
     .from(edgeTickets)
     .where(
@@ -176,45 +172,35 @@ async function deploymentAuthorization(
         eq(edgeTickets.secretHash, ticketSecretHash),
         eq(edgeTickets.purpose, "edge_deployment"),
         eq(edgeTickets.expectedEdgeId, credential.edgeId),
-        includeConsumed ? undefined : isNull(edgeTickets.consumedAt),
-        includeConsumed ? undefined : gt(edgeTickets.expiresAt, databaseTimestamp),
       ),
     )
     .get();
   if (!candidate) return null;
+  const consumed = candidate.consumedAt !== null;
+  // An unconsumed ticket is usable only until it expires; a consumed one stays a retry record.
+  if (!consumed && candidate.expired) return null;
 
   let payload: DeploymentPayload | null;
   try {
-    payload = await decodeDeploymentPayload(db, JSON.parse(candidate.payload));
+    payload = decodeDeploymentPayload(JSON.parse(candidate.payload));
   } catch {
     payload = null;
   }
   if (!payload) return null;
 
   return {
-    consumed: candidate.consumedAt !== null,
+    consumed,
     deployment: {
       ticketId: candidate.id,
       ticketSecretHash,
       userId: candidate.userId,
-      identity: {
-        edgeId: credential.edgeId,
-        name: payload.name,
-        tunnelUrl: `wss://${payload.name}.edge.pontia.dev/tunnel`,
-      },
+      hostname: payload.hostname,
+      edgeId: credential.edgeId,
+      credentialSecret: credential.secret,
       payload: candidate.payload,
       serviceCredentialHash: await sha256Base64url(credential.secret),
     },
   };
-}
-
-export async function authorizeEdgeDeployment(
-  db: Database,
-  ticketValue: string,
-  credentialValue: string,
-): Promise<DeploymentIdentity | null> {
-  const authorized = await deploymentAuthorization(db, ticketValue, credentialValue, false);
-  return authorized?.deployment.identity ?? null;
 }
 
 export async function enrollEdge(
@@ -224,57 +210,82 @@ export async function enrollEdge(
 ): Promise<
   { status: "authorized" | "existing"; edge: DeploymentIdentity } | { status: "invalid" }
 > {
-  const authorized = await deploymentAuthorization(db, ticketValue, credentialValue, true);
+  const authorized = await deploymentAuthorization(db, ticketValue, credentialValue);
   if (!authorized) return { status: "invalid" };
-  if (authorized.consumed) {
-    const existing = await completedDeployment(db, authorized.deployment);
-    return existing ? { status: "existing", edge: existing } : { status: "invalid" };
+  const { deployment } = authorized;
+  if (!authorized.consumed) {
+    return {
+      status: "authorized",
+      edge: {
+        edgeId: deployment.edgeId,
+        name: deployment.hostname,
+        tunnelUrl: tunnelUrl(deployment.hostname, 443),
+      },
+    };
   }
-  const active = await authorizeEdgeDeployment(db, ticketValue, credentialValue);
-  if (active) return { status: "authorized", edge: active };
-  const existing = await completedDeployment(db, authorized.deployment);
+  const existing = await completedDeployment(db, deployment);
   return existing ? { status: "existing", edge: existing } : { status: "invalid" };
 }
 
+export type OwnershipVerification = "verified" | "non_public_ip" | "failed" | "rate_limited";
+
+export type OwnershipCandidate = {
+  edgeId: string;
+  hostname: string;
+  port: number;
+  credentialSecret: string;
+};
+
 export type ConfirmationResult =
   | { status: "created" | "existing"; edge: DeploymentIdentity }
-  | { status: "invalid" }
-  | { status: "unhealthy"; edge: DeploymentIdentity };
+  | { status: "invalid" | "conflict" }
+  | { status: Exclude<OwnershipVerification, "verified">; edge: DeploymentIdentity };
 
 export async function confirmEdgeDeployment(
   db: Database,
   ticketValue: string,
   credentialValue: string,
-  verifyHealth: (identity: DeploymentIdentity) => Promise<boolean>,
+  verifyOwnership: (candidate: OwnershipCandidate) => Promise<OwnershipVerification>,
   port = 443,
 ): Promise<ConfirmationResult> {
   if (!isEdgePort(port)) return { status: "invalid" };
-  const authorized = await deploymentAuthorization(db, ticketValue, credentialValue, true);
+  const authorized = await deploymentAuthorization(db, ticketValue, credentialValue);
   if (!authorized) return { status: "invalid" };
   const { deployment } = authorized;
-  if (authorized.consumed) {
-    const existing = await completedDeployment(db, deployment);
-    return existing ? { status: "existing", edge: existing } : { status: "invalid" };
-  }
-
-  const existing = await storedEdge(db, deployment.identity.edgeId);
-  if (existing) {
+  const identity = {
+    edgeId: deployment.edgeId,
+    name: deployment.hostname,
+    tunnelUrl: tunnelUrl(deployment.hostname, port),
+  };
+  const existing = async (): Promise<ConfirmationResult> => {
     const completed = await completedDeployment(db, deployment);
-    return completed ? { status: "existing", edge: completed } : { status: "invalid" };
-  }
+    return completed?.tunnelUrl === identity.tunnelUrl
+      ? { status: "existing", edge: completed }
+      : { status: "invalid" };
+  };
+  if (authorized.consumed || (await storedEdge(db, deployment.edgeId))) return existing();
 
-  const active = await authorizeEdgeDeployment(db, ticketValue, credentialValue);
-  if (!active) return { status: "invalid" };
-  active.tunnelUrl = `wss://${edgeAuthority(`${active.name}.edge.pontia.dev`, port)}/tunnel`;
-  deployment.identity.tunnelUrl = active.tunnelUrl;
-  if (!(await verifyHealth(active))) return { status: "unhealthy", edge: active };
+  const occupied = await db
+    .select({ id: edges.id })
+    .from(edges)
+    .where(and(eq(edges.tunnelUrl, identity.tunnelUrl), ne(edges.id, deployment.edgeId)))
+    .get();
+  if (occupied) return { status: "conflict" };
+
+  const verification = await verifyOwnership({
+    edgeId: deployment.edgeId,
+    hostname: deployment.hostname,
+    port,
+    credentialSecret: deployment.credentialSecret,
+  });
+  if (verification !== "verified") return { status: verification, edge: identity };
 
   const condition = and(
     eq(edgeTickets.id, deployment.ticketId),
     eq(edgeTickets.secretHash, deployment.ticketSecretHash),
     eq(edgeTickets.purpose, "edge_deployment"),
     eq(edgeTickets.userId, deployment.userId),
-    eq(edgeTickets.expectedEdgeId, deployment.identity.edgeId),
+    eq(edgeTickets.expectedEdgeId, deployment.edgeId),
     eq(edgeTickets.payload, deployment.payload),
     isNull(edgeTickets.consumedAt),
     gt(edgeTickets.expiresAt, databaseTimestamp),
@@ -286,12 +297,13 @@ export async function confirmEdgeDeployment(
         .select(
           db
             .select({
-              id: sql<string>`${deployment.identity.edgeId}`.as("id"),
+              id: sql<string>`${deployment.edgeId}`.as("id"),
               userId: edgeTickets.userId,
               accessScope: sql<"private">`'private'`.as("access_scope"),
-              name: sql<string>`${deployment.identity.name}`.as("name"),
-              dnsLabel: sql<string>`${deployment.identity.name}`.as("dns_label"),
-              tunnelUrl: sql<string>`${deployment.identity.tunnelUrl}`.as("tunnel_url"),
+              name: sql<string>`${deployment.hostname}`.as("name"),
+              previewEnabled: sql<number>`0`.as("preview_enabled"),
+              dnsLabel: sql<null>`NULL`.as("dns_label"),
+              tunnelUrl: sql<string>`${identity.tunnelUrl}`.as("tunnel_url"),
               serviceCredentialHash: sql<string>`${deployment.serviceCredentialHash}`.as(
                 "service_credential_hash",
               ),
@@ -315,6 +327,5 @@ export async function confirmEdgeDeployment(
     // The batch rolls back on failure; an identical concurrent request may have won the race.
   }
 
-  const completed = await completedDeployment(db, deployment);
-  return completed ? { status: "existing", edge: completed } : { status: "invalid" };
+  return existing();
 }

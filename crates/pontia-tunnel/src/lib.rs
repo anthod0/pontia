@@ -1,4 +1,5 @@
 mod client;
+pub mod endpoint;
 mod preview_token;
 pub use preview_token::PreviewTokenVerifier;
 pub mod protocol;

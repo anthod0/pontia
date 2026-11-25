@@ -22,6 +22,9 @@ const loadEdgeHealth = getEdgeHealth as unknown as (event: RequestEvent) => Prom
 
 afterEach(() => mock.restore());
 
+const healthLimits: string[] = [];
+let healthAllowed = true;
+
 async function authenticatedEvent(userId: string): Promise<RequestEvent> {
   const secret = "test-signing-secret-with-at-least-32-bytes";
   const loginId = "0199791c-6600-7000-8000-000000000010";
@@ -39,10 +42,24 @@ async function authenticatedEvent(userId: string): Promise<RequestEvent> {
         AUTH_ORIGIN: "https://pontia.example",
         DB: database.binding,
         JWT_SECRET: secret,
+        EDGE_HEALTH_RATE_LIMIT: {
+          async limit({ key }: { key: string }) {
+            healthLimits.push(key);
+            return { success: healthAllowed };
+          },
+        },
       },
     },
     url: new URL("https://pontia.example/settings/edges"),
   } as unknown as RequestEvent;
+}
+
+function deploymentRequest(event: RequestEvent, hostname: string) {
+  event.request = new Request("https://pontia.example/settings/edges/deploy", {
+    method: "POST",
+    body: new URLSearchParams({ hostname }),
+  });
+  return event;
 }
 
 test("the edge list requires sign-in", async () => {
@@ -146,29 +163,55 @@ test("the health endpoint checks only edges visible to the signed-in user", asyn
       tunnelUrl: "wss://private-edge.edge.pontia.dev/tunnel",
       serviceCredentialHash: "secret-hash",
     },
+    {
+      id: "edge-custom",
+      userId: ownerId,
+      name: "relay.example.com",
+      tunnelUrl: "wss://relay.example.com:8443/tunnel",
+      serviceCredentialHash: "secret-hash",
+    },
   ]);
   const requested: string[] = [];
   spyOn(globalThis, "fetch").mockImplementation((async (input) => {
     const url = String(input);
     requested.push(url);
-    return url.includes("owned-edge")
+    return url.includes("owned-edge") || url.includes("relay.example.com")
       ? new Response("ok", { headers: { "Pontia-Edge-Version": "1.2.3-rc.1+build" } })
       : new Response("unavailable", { status: 503 });
   }) as typeof fetch);
 
+  healthLimits.length = 0;
   const response = await loadEdgeHealth(event);
 
   expect(response.status).toBe(200);
   expect((await response.json()) as unknown).toEqual({
     edges: {
       "edge-owned": { status: "healthy", version: "1.2.3-rc.1+build" },
+      "edge-custom": { status: "healthy", version: "1.2.3-rc.1+build" },
       "edge-public": { status: "unreachable" },
     },
   });
   expect(requested.sort()).toEqual([
     "https://owned-edge.edge.pontia.dev/healthz",
     "https://public-edge.edge.pontia.dev/healthz",
+    "https://relay.example.com:8443/healthz",
   ]);
+  expect(healthLimits).toEqual([ownerId]);
+});
+
+test("the health endpoint is rate limited per user before probing", async () => {
+  const event = await authenticatedEvent(ownerId);
+  spyOn(globalThis, "fetch").mockImplementation((async () => {
+    throw new Error("rate-limited checks must not probe edges");
+  }) as unknown as typeof fetch);
+  healthAllowed = false;
+  try {
+    const response = await loadEdgeHealth(event);
+    expect(response.status).toBe(429);
+    expect((await response.json()) as unknown).toEqual({ error: "rate_limited" });
+  } finally {
+    healthAllowed = true;
+  }
 });
 
 test("the health endpoint requires sign-in", async () => {
@@ -196,6 +239,22 @@ test("an owner can rename an edge without changing its DNS label", async () => {
   });
 
   expect(await renameEdge(event)).toEqual({ success: "edge_renamed" });
+  const longName = `${"a".repeat(63)}.${"b".repeat(63)}.${"c".repeat(63)}.${"d".repeat(61)}`;
+  event.request = new Request(event.url, {
+    method: "POST",
+    body: new URLSearchParams({ edge_id: edgeId, name: longName }),
+  });
+  expect(await renameEdge(event)).toEqual({ success: "edge_renamed" });
+  event.request = new Request(event.url, {
+    method: "POST",
+    body: new URLSearchParams({ edge_id: edgeId, name: `${longName}x` }),
+  });
+  expect(await renameEdge(event)).toMatchObject({ status: 400 });
+  event.request = new Request(event.url, {
+    method: "POST",
+    body: new URLSearchParams({ edge_id: edgeId, name: "  Home server  " }),
+  });
+  await renameEdge(event);
   expect(
     await database.db
       .select({ name: edges.name, dnsLabel: edges.dnsLabel })
@@ -227,46 +286,67 @@ test("an issued access JWT remains usable until it expires", async () => {
   const login = await issueLogin(database.db, loginId, secret);
   await database.db.delete(authSessions).where(eq(authSessions.id, loginId));
 
-  const result = (await issueDeployment({
-    cookies: { get: (name: string) => (name === "__Host-_at" ? login.token : undefined) },
-    platform: {
-      env: {
-        AUTH_ORIGIN: "https://pontia.example",
-        DB: database.binding,
-        JWT_SECRET: secret,
-      },
-    },
-    url: new URL("https://pontia.example/settings/edges/deploy"),
-  } as unknown as RequestEvent)) as { deployment: { command: string } };
+  const result = (await issueDeployment(
+    deploymentRequest(
+      {
+        cookies: { get: (name: string) => (name === "__Host-_at" ? login.token : undefined) },
+        platform: {
+          env: {
+            AUTH_ORIGIN: "https://pontia.example",
+            DB: database.binding,
+            JWT_SECRET: secret,
+          },
+        },
+        url: new URL("https://pontia.example/settings/edges/deploy"),
+      } as unknown as RequestEvent,
+      "edge.example.com",
+    ),
+  )) as { deployment: { command: string } };
 
   expect(result.deployment.command).toContain("sudo pontia-edge init");
   expect(result.deployment.command).not.toContain("--agree-to-lets-encrypt-subscriber-agreement");
 });
 
-test("an authenticated user can issue an edge deployment", async () => {
-  const userId = "0199791c-6600-7000-8000-000000000003";
-  const loginId = "0199791c-6600-7000-8000-000000000004";
-  const secret = "test-signing-secret-with-at-least-32-bytes";
-  await database.db.insert(users).values({ id: userId });
-  await database.db.insert(authSessions).values({
-    id: loginId,
-    userId,
-    expiresAt: "2099-01-01T00:00:00.000Z",
-  });
-  const login = await issueLogin(database.db, loginId, secret);
+test("an authenticated user issues a deployment for a normalized hostname they enter", async () => {
+  const event = await authenticatedEvent(ownerId);
+  const result = (await issueDeployment(deploymentRequest(event, "  Edge.Example.COM  "))) as {
+    deployment: { hostname: string; command: string };
+  };
 
-  const result = (await issueDeployment({
-    cookies: { get: (name: string) => (name === "__Host-_at" ? login.token : undefined) },
-    platform: {
-      env: {
-        AUTH_ORIGIN: "https://pontia.example",
-        DB: database.binding,
-        JWT_SECRET: secret,
-      },
-    },
-    url: new URL("https://pontia.example/settings/edges"),
-  } as unknown as RequestEvent)) as { deployment: { command: string } };
-
+  expect(result.deployment.hostname).toBe("edge.example.com");
   expect(result.deployment.command).toContain("sudo pontia-edge init");
+  expect(result.deployment.command).not.toContain("--port");
+  expect(result.deployment.command).not.toContain("--acme-challenge");
   expect(result.deployment.command).not.toContain("--agree-to-lets-encrypt-subscriber-agreement");
+});
+
+test("Pontia domains can be entered like any other domain", async () => {
+  const event = await authenticatedEvent(ownerId);
+  for (const hostname of ["sg.edge.pontia.dev", "relay.pontia.run"]) {
+    const result = (await issueDeployment(deploymentRequest(event, hostname))) as {
+      deployment: { hostname: string };
+    };
+    expect(result.deployment.hostname).toBe(hostname);
+  }
+});
+
+test("invalid and already registered hostnames are rejected with the entered value", async () => {
+  const event = await authenticatedEvent(ownerId);
+  for (const hostname of ["", "localhost", "10.0.0.1", "nas.local", "https://edge.example.com"]) {
+    expect(await issueDeployment(deploymentRequest(event, hostname))).toMatchObject({
+      status: 400,
+      data: { hostname: hostname.trim().toLowerCase() },
+    });
+  }
+  await database.db.insert(edges).values({
+    id: "edge-existing",
+    userId: ownerId,
+    name: "Existing",
+    tunnelUrl: "wss://edge.example.com/tunnel",
+    serviceCredentialHash: "secret-hash",
+  });
+  expect(await issueDeployment(deploymentRequest(event, "edge.example.com"))).toMatchObject({
+    status: 409,
+    data: { hostname: "edge.example.com" },
+  });
 });

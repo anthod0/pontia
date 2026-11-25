@@ -1,11 +1,19 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
+import { base64url, generateKeyPair, jwtVerify } from "jose";
 import {
   CloudflareDnsProvider,
-  configureEdgeNetwork,
+  edgeApiOrigin,
   edgeHostname,
+  isGlobalUnicastIp,
   isGlobalUnicastIpv4,
+  isLegacyEdgeDnsOwner,
+  isValidEdgeHostname,
+  managedEdgeHostname,
+  ownershipMessage,
   probeEdgeHealth,
-  type DnsProvider,
+  resolvesToPublicAddresses,
+  verifyEdgeOwnership,
+  verifyOwnershipProof,
 } from "../src/lib/server/edge-network";
 
 afterEach(() => mock.restore());
@@ -21,48 +29,118 @@ const identity = {
   tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel",
 };
 
-function httpResponse(body: string, status = "200 OK") {
-  return `HTTP/1.1 ${status}\r\nContent-Length: ${new TextEncoder().encode(body).byteLength}\r\nConnection: close\r\n\r\n${body}`;
-}
-
-function socketResponse(response: string, request?: (value: string) => void) {
-  let written = "";
-  return {
-    opened: Promise.resolve({}),
-    readable: new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(new TextEncoder().encode(response));
-        controller.close();
-      },
-    }),
-    writable: new WritableStream<Uint8Array>({
-      write(chunk) {
-        written += new TextDecoder().decode(chunk);
-        request?.(written);
-      },
-      close() {
-        throw new Error("closing the writer discards the response");
-      },
-    }),
-    async close() {},
-  };
-}
-
-test("extracts only a canonical assigned edge hostname", () => {
-  expect(edgeHostname(identity.tunnelUrl)).toBe("brave-atlas.edge.pontia.dev");
-  for (const invalid of [
-    "ws://brave-atlas.edge.pontia.dev/tunnel",
-    "wss://brave-atlas.edge.pontia.dev:25/tunnel",
-    "wss://brave-atlas.edge.pontia.dev/other",
-    "wss://two.parts.edge.pontia.dev/tunnel",
-    "wss://brave-atlas.edge.pontia.dev/tunnel?q=1",
-    "wss://attacker.example/tunnel",
+test("accepts any public DNS name, including Pontia domains", () => {
+  for (const hostname of [
+    "edge.example.com",
+    "a.b.c.example.co.uk",
+    "xn--bcher-kva.example",
+    "edge.xn--p1ai",
+    "1.example.com",
+    "pontia.dev",
+    "app.pontia.dev",
+    "brave-atlas.edge.pontia.dev",
+    "two.parts.edge.pontia.dev",
+    "pontia.run",
+    "relay.pontia.run",
+    "edge.example.test",
   ]) {
-    expect(edgeHostname(invalid)).toBeNull();
+    expect(isValidEdgeHostname(hostname)).toBeTrue();
   }
 });
 
-test("accepts only global-unicast IPv4 candidates", () => {
+test("rejects IP literals, single labels, and local or special-use names", () => {
+  for (const hostname of [
+    "",
+    "example",
+    "localhost",
+    "edge.localhost",
+    "printer.local",
+    "service.internal",
+    "1.0.0.127.in-addr.arpa",
+    "router.home.arpa",
+    "host.localdomain",
+    "site.invalid",
+    "hidden.onion",
+    "name.alt",
+    "127.0.0.1",
+    "8.8.8.8",
+    "0x7f.1",
+    "::1",
+    "[2001:db8::1]",
+    "example.123",
+    "Edge.Example.com",
+    "edge.example.com.",
+    " edge.example.com",
+    "-edge.example.com",
+    "edge-.example.com",
+    "edge..example.com",
+    "edge_1.example.com",
+    "edge.example.c",
+    "edge.xn--a",
+    `${"a".repeat(64)}.example`,
+    `${"a.".repeat(124)}example`,
+    42,
+    null,
+  ]) {
+    expect(isValidEdgeHostname(hostname)).toBeFalse();
+  }
+});
+
+test("extracts only canonical tunnel URLs for public hostnames", () => {
+  expect(edgeHostname(identity.tunnelUrl)).toBe("brave-atlas.edge.pontia.dev");
+  expect(edgeHostname("wss://edge.example.com:8443/tunnel")).toBe("edge.example.com");
+  expect(edgeApiOrigin("wss://edge.example.com:8443/tunnel")).toBe("https://edge.example.com:8443");
+  expect(edgeApiOrigin("wss://two.parts.edge.pontia.dev/tunnel")).toBe(
+    "https://two.parts.edge.pontia.dev",
+  );
+  for (const invalid of [
+    "ws://edge.example.com/tunnel",
+    "wss://edge.example.com:25/tunnel",
+    "wss://edge.example.com/other",
+    "wss://edge.example.com/tunnel?q=1",
+    "wss://127.0.0.1/tunnel",
+    "wss://[2001:db8::1]/tunnel",
+    "wss://localhost/tunnel",
+    "wss://nas.local/tunnel",
+    "wss://intranet/tunnel",
+  ]) {
+    expect(edgeHostname(invalid)).toBeNull();
+    expect(edgeApiOrigin(invalid)).toBeNull();
+  }
+  expect(edgeApiOrigin("wss://edge.example.com:443/tunnel")).toBeNull();
+});
+
+test("only a labeled edge on its single-label managed hostname has Cloud-managed DNS", () => {
+  expect(
+    managedEdgeHostname({ dnsLabel: "sg", tunnelUrl: "wss://sg.edge.pontia.dev/tunnel" }),
+  ).toBe("sg.edge.pontia.dev");
+  expect(
+    managedEdgeHostname({ dnsLabel: "sg", tunnelUrl: "wss://sg.edge.pontia.dev:8443/tunnel" }),
+  ).toBe("sg.edge.pontia.dev");
+  for (const edge of [
+    { dnsLabel: null, tunnelUrl: "wss://sg.edge.pontia.dev/tunnel" },
+    { dnsLabel: "sg", tunnelUrl: "wss://other.edge.pontia.dev/tunnel" },
+    { dnsLabel: "sg", tunnelUrl: "wss://sg.example.com/tunnel" },
+    { dnsLabel: "a.sg", tunnelUrl: "wss://a.sg.edge.pontia.dev/tunnel" },
+    { dnsLabel: null, tunnelUrl: "wss://edge.example.com/tunnel" },
+  ]) {
+    expect(managedEdgeHostname(edge)).toBeNull();
+  }
+});
+
+test("legacy DNS ownership is an explicit comma-separated allowlist", () => {
+  const env = (value?: string) =>
+    ({ LEGACY_EDGE_DNS_OWNER_IDS: value }) as unknown as App.Platform["env"];
+  expect(isLegacyEdgeDnsOwner(env(undefined), "owner")).toBeFalse();
+  expect(isLegacyEdgeDnsOwner(env(""), "owner")).toBeFalse();
+  expect(isLegacyEdgeDnsOwner(env(" , "), "")).toBeFalse();
+  expect(isLegacyEdgeDnsOwner(env("other"), "owner")).toBeFalse();
+  expect(isLegacyEdgeDnsOwner(env("owner-2"), "owner")).toBeFalse();
+  expect(isLegacyEdgeDnsOwner(env("owner"), "owner")).toBeTrue();
+  expect(isLegacyEdgeDnsOwner(env(" other , owner "), "owner")).toBeTrue();
+});
+
+test("accepts only global-unicast IPv4 addresses", () => {
   expect(isGlobalUnicastIpv4("8.8.8.8")).toBeTrue();
   expect(isGlobalUnicastIpv4("192.0.0.9")).toBeTrue();
   expect(isGlobalUnicastIpv4("192.0.0.10")).toBeTrue();
@@ -84,60 +162,174 @@ test("accepts only global-unicast IPv4 candidates", () => {
   }
 });
 
-test("verifies address control before creating an idempotent A record", async () => {
-  const calls: string[] = [];
-  const dns: DnsProvider = {
-    async publishTxt() {
-      throw new Error("HTTP-01 must not publish TXT");
-    },
-    async ensureA(hostname, address) {
-      calls.push(`${hostname}=${address}`);
-    },
-  };
-  const result = await configureEdgeNetwork(identity, "8.8.8.8", {
-    randomBytes: () => new Uint8Array(32).fill(7),
-    connect: (address) => {
-      calls.push(`${address.hostname}:${address.port}`);
-      const challenge = "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc";
-      return socketResponse(httpResponse(challenge), (request) => calls.push(request));
-    },
-    dns,
-    preview: { zone: "pontia.run", dns },
-  });
-  expect(result).toEqual({ status: "configured", hostname: "brave-atlas.edge.pontia.dev" });
-  expect(calls[0]).toBe("8.8.8.8:80");
-  expect(calls[1]).toStartWith(
-    "GET /.well-known/pontia-edge-address/BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc HTTP/1.1\r\n",
-  );
-  expect(calls[1]).toContain("\r\nHost: 8.8.8.8\r\n");
-  expect(calls.slice(2)).toEqual([
-    "brave-atlas.edge.pontia.dev=8.8.8.8",
-    "*.brave-atlas.pontia.run=8.8.8.8",
-  ]);
+test("accepts only allocated global-unicast IPv6 addresses", () => {
+  for (const address of ["2606:4700:4700::1111", "2a00:1450:4001:80b::200e", "2400:cb00::1"]) {
+    expect(isGlobalUnicastIp(address)).toBeTrue();
+  }
+  for (const address of [
+    "::",
+    "::1",
+    "::ffff:8.8.8.8",
+    "64:ff9b::808:808",
+    "100::1",
+    "2001::1",
+    "2001:db8::1",
+    "2002:c000:201::1",
+    "3fff::1",
+    "fc00::1",
+    "fd12:3456::1",
+    "fe80::1",
+    "fec0::1",
+    "ff02::1",
+    "2606:4700::1::1",
+    "2606:4700:4700:0:0:0:0:1111:1",
+    "2606:4700:4700::11111",
+  ]) {
+    expect(isGlobalUnicastIp(address)).toBeFalse();
+  }
 });
 
-test("does not touch DNS when the TCP probe has a bad status, mismatches, or is too large", async () => {
-  for (const response of [
-    httpResponse("wrong"),
-    httpResponse("redirect", "302 Found"),
-    httpResponse("x".repeat(4_097)),
-  ]) {
-    let dnsCalls = 0;
-    const result = await configureEdgeNetwork(identity, "8.8.8.8", {
-      randomBytes: () => new Uint8Array(32).fill(9),
-      connect: () => socketResponse(response),
-      dns: {
-        async publishTxt() {
-          throw new Error("unverified candidates must not publish TXT");
-        },
-        async ensureA() {
-          dnsCalls += 1;
-        },
-      },
-    });
-    expect(result.status).toBe("unreachable");
-    expect(dnsCalls).toBe(0);
+type DnsAnswers = Partial<Record<"A" | "AAAA", { Status?: number; Answer?: unknown[] }>>;
+
+function dnsAnswers(records: DnsAnswers) {
+  const requests: Array<[string, RequestInit]> = [];
+  const fetcher = async (input: string, init: RequestInit) => {
+    requests.push([input, init]);
+    const url = new URL(input);
+    const answer = records[url.searchParams.get("type") as "A" | "AAAA"] ?? { Status: 0 };
+    return Response.json({ Status: 0, ...answer });
+  };
+  return { requests, fetcher };
+}
+
+test("DNS-over-HTTPS preflight requires public A or AAAA answers only", async () => {
+  const publicV4 = dnsAnswers({
+    A: {
+      Answer: [
+        { type: 5, data: "edge.cdn.example." },
+        { type: 1, data: "8.8.8.8" },
+      ],
+    },
+  });
+  expect(await resolvesToPublicAddresses("edge.example.com", publicV4.fetcher)).toBe("public");
+  expect(publicV4.requests.map(([url]) => url).sort()).toEqual([
+    "https://cloudflare-dns.com/dns-query?name=edge.example.com&type=A",
+    "https://cloudflare-dns.com/dns-query?name=edge.example.com&type=AAAA",
+  ]);
+  expect(publicV4.requests.every(([, init]) => init.redirect === "error")).toBeTrue();
+  expect(
+    await resolvesToPublicAddresses(
+      "edge.example.com",
+      dnsAnswers({ AAAA: { Answer: [{ type: 28, data: "2606:4700:4700::1111" }] } }).fetcher,
+    ),
+  ).toBe("public");
+  for (const records of [
+    {},
+    { A: { Status: 3 }, AAAA: { Status: 3 } },
+    { A: { Answer: [{ type: 1, data: "10.0.0.8" }] } },
+    {
+      A: { Answer: [{ type: 1, data: "8.8.8.8" }] },
+      AAAA: { Answer: [{ type: 28, data: "::1" }] },
+    },
+    { AAAA: { Answer: [{ type: 28, data: "fd00::1" }] } },
+  ] as DnsAnswers[]) {
+    expect(await resolvesToPublicAddresses("edge.example.com", dnsAnswers(records).fetcher)).toBe(
+      "non_public",
+    );
   }
+  await expect(
+    resolvesToPublicAddresses("edge.example.com", dnsAnswers({ A: { Status: 2 } }).fetcher),
+  ).rejects.toThrow();
+  await expect(
+    resolvesToPublicAddresses("edge.example.com", async () => new Response("", { status: 502 })),
+  ).rejects.toThrow();
+});
+
+// crates/pontia-edge/src/ownership.rs computes the same vector.
+const credentialSecret = base64url.encode(new Uint8Array(32).fill(42));
+const vector = {
+  edgeId: "0199791c-6600-7000-8000-000000000001",
+  hostname: "edge.example.com",
+  port: 443,
+  nonce: "A".repeat(43),
+  proof: "G8PT0z2_FUc1KfPw8pFPg35CeSoVicv3je5l1O_UAyo",
+};
+
+test("ownership proof matches the edge implementation and binds every value", async () => {
+  const message = ownershipMessage(vector.edgeId, vector.hostname, vector.port, vector.nonce);
+  expect(await verifyOwnershipProof(credentialSecret, message, vector.proof)).toBeTrue();
+  for (const [secret, other] of [
+    [base64url.encode(new Uint8Array(32).fill(43)), message],
+    [credentialSecret, ownershipMessage(vector.edgeId, "other.example.com", 443, vector.nonce)],
+    [credentialSecret, ownershipMessage(vector.edgeId, vector.hostname, 8443, vector.nonce)],
+    [credentialSecret, ownershipMessage(vector.edgeId, vector.hostname, 443, "B".repeat(43))],
+  ] as const) {
+    expect(await verifyOwnershipProof(secret, other, vector.proof)).toBeFalse();
+  }
+  for (const proof of [
+    "",
+    "ok",
+    `${vector.proof}=`,
+    `${vector.proof.slice(0, 42)}B`,
+    "A".repeat(44),
+  ]) {
+    expect(await verifyOwnershipProof(credentialSecret, message, proof)).toBeFalse();
+  }
+});
+
+test("ownership verification signs a bound challenge and accepts only the edge's proof", async () => {
+  const { privateKey, publicKey } = await generateKeyPair("EdDSA", { extractable: true });
+  const signingKey = base64url.encode(
+    new Uint8Array(await crypto.subtle.exportKey("pkcs8", privateKey)),
+  );
+  const challenge = { ...vector, credentialSecret };
+  let request: [string, RequestInit] | undefined;
+  const verify = (response: () => Response, port = 443) =>
+    verifyEdgeOwnership(
+      { ...challenge, port },
+      signingKey,
+      async (input, init) => {
+        request = [input, init];
+        return response();
+      },
+      () => new Uint8Array(32),
+    );
+
+  expect(await verify(() => new Response(vector.proof))).toBeTrue();
+  const [url, init] = request!;
+  expect(url).toBe("https://edge.example.com/__pontia/verify-ownership");
+  expect(init.redirect).toBe("manual");
+  const token = new Headers(init.headers).get("authorization")!.slice("Bearer ".length);
+  const { payload } = await jwtVerify(token, publicKey, {
+    audience: vector.edgeId,
+    typ: "pontia-edge-ownership+jwt",
+    algorithms: ["EdDSA"],
+  });
+  expect(payload).toMatchObject({ jti: vector.nonce, host: vector.hostname, port: 443 });
+  expect(payload.exp! - payload.iat!).toBe(60);
+
+  await verify(() => new Response("wrong"), 8443);
+  expect(request![0]).toBe("https://edge.example.com:8443/__pontia/verify-ownership");
+  for (const response of [
+    () => new Response("ok"),
+    () => new Response("wrong"),
+    () => new Response(vector.proof, { status: 302, headers: { Location: "http://10.0.0.1/" } }),
+    () => new Response(vector.proof, { status: 401 }),
+    () => new Response(vector.proof.repeat(4)),
+    () => {
+      throw new TypeError("certificate verification failed");
+    },
+  ]) {
+    expect(await verify(response)).toBeFalse();
+  }
+  // The proof is bound to the port the challenge was issued for.
+  expect(await verify(() => new Response(vector.proof), 8443)).toBeFalse();
+  request = undefined;
+  expect(
+    await verifyEdgeOwnership({ ...challenge, hostname: "localhost" }, signingKey, async () => {
+      throw new Error("must not be called");
+    }),
+  ).toBeFalse();
 });
 
 test("health verification requires trusted HTTPS and the fixed response", async () => {
@@ -287,4 +479,19 @@ test("Cloudflare DNS adapter updates only the exact A record", async () => {
   expect(requests[1][0]).toEndWith("/dns_records/record");
   expect(requests[1][1].method).toBe("PUT");
   expect(requests[1][1].body).toContain('"proxied":false');
+});
+
+test("health checks never contact non-public tunnel hosts", async () => {
+  for (const tunnelUrl of [
+    "wss://127.0.0.1/tunnel",
+    "wss://[::1]/tunnel",
+    "wss://localhost/tunnel",
+    "wss://metadata.internal/tunnel",
+  ]) {
+    expect(
+      await probeEdgeHealth({ tunnelUrl }, async () => {
+        throw new Error("must not be called");
+      }),
+    ).toEqual({ status: "unreachable" });
+  }
 });

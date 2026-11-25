@@ -1,10 +1,10 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { Database } from "./db";
 import { devices, edges, edgeTickets } from "./db/schema";
-import { edgeHostname } from "./edge-network";
+import { managedEdgeHostname } from "./edge-network";
 
 export type EdgeDnsCleanup = {
-  cleanupHostname(hostname: string): Promise<void>;
+  cleanupHostname(hostname: string, dnsLabel: string): Promise<void>;
 };
 
 export async function removeOwnedEdge(
@@ -12,6 +12,7 @@ export async function removeOwnedEdge(
   userId: string,
   edgeId: string,
   dns: EdgeDnsCleanup,
+  managesDns: boolean,
 ) {
   const ownedPrivateEdge = and(
     eq(edges.id, edgeId),
@@ -19,16 +20,18 @@ export async function removeOwnedEdge(
     eq(edges.accessScope, "private"),
   );
   const edge = await db
-    .select({ tunnelUrl: edges.tunnelUrl })
+    .select({ tunnelUrl: edges.tunnelUrl, dnsLabel: edges.dnsLabel })
     .from(edges)
     .where(ownedPrivateEdge)
     .get();
   if (!edge) return { status: "not_found" as const };
-  const hostname = edgeHostname(edge.tunnelUrl);
-  if (!hostname) return { status: "invalid_edge" as const };
-
-  // Keep the database registration available for a retry when external DNS cleanup fails.
-  await dns.cleanupHostname(hostname);
+  // Only edges under the managed zone have Cloud-owned DNS records.
+  if (edge.dnsLabel !== null && managesDns) {
+    const hostname = managedEdgeHostname(edge);
+    if (!hostname) return { status: "invalid_edge" as const };
+    // Keep the database registration available for a retry when external DNS cleanup fails.
+    await dns.cleanupHostname(hostname, edge.dnsLabel);
+  }
   const removableId = db.select({ id: edges.id }).from(edges).where(ownedPrivateEdge);
   const [, , removed] = await db.batch([
     db.delete(devices).where(inArray(devices.edgeId, removableId)).returning({ id: devices.id }),

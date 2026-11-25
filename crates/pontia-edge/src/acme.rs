@@ -21,19 +21,18 @@ use crate::{
 pub struct CloudDnsChallenges<'a> {
     pub client: &'a HttpCloudClient,
     pub credential: &'a str,
-    pub ticket: Option<&'a str>,
     pub preview: bool,
 }
 
 impl CloudDnsChallenges<'_> {
     async fn change(&self, operation: DnsOperation, value: &str) -> Result<()> {
         self.client
-            .dns_challenge(self.credential, self.ticket, operation, self.preview, value)
+            .dns_challenge(self.credential, operation, self.preview, value)
             .await
     }
 }
 
-pub async fn complete_dns_and_save(
+async fn complete_dns_and_save(
     order: PreparedDnsOrder,
     hostname: &str,
     tls_path: &Path,
@@ -76,7 +75,7 @@ pub async fn issue_http_and_save(
     output: &mut (impl Write + ?Sized),
 ) -> Result<()> {
     let listener = if shared.is_none() {
-        Some(ChallengeServer::start_acme("0.0.0.0:80".parse().unwrap()).await?)
+        Some(ChallengeServer::start_acme(80).await?)
     } else {
         None
     };
@@ -92,34 +91,23 @@ pub async fn issue_http_and_save(
     result
 }
 
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    Default,
-    Eq,
-    PartialEq,
-    serde::Deserialize,
-    serde::Serialize,
-    clap::ValueEnum,
-)]
+/// New edges use HTTP-01; DNS-01 keeps renewing edges registered under the managed zone.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum AcmeChallenge {
     #[default]
     #[serde(rename = "http-01")]
-    #[value(name = "http-01")]
     Http01,
     #[serde(rename = "dns-01")]
-    #[value(name = "dns-01")]
     Dns01,
 }
 
-pub struct PreparedDnsOrder {
+struct PreparedDnsOrder {
     order: Order,
-    pub value: Option<String>,
+    value: Option<String>,
 }
 
 impl PreparedDnsOrder {
-    pub async fn complete(
+    async fn complete(
         self,
         hostname: &str,
         output: &mut (impl Write + ?Sized),
@@ -249,7 +237,7 @@ impl InstantAcmeIssuer {
         }
     }
 
-    pub async fn prepare_dns(&self, hostname: &str) -> Result<PreparedDnsOrder> {
+    async fn prepare_dns(&self, hostname: &str) -> Result<PreparedDnsOrder> {
         tokio::time::timeout(Duration::from_secs(60), async {
             prepare_dns_order(self.account().await?, hostname).await
         })

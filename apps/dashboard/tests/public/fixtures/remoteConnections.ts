@@ -19,7 +19,7 @@ export function createRemoteAccessFixture() {
   const target = (handle: string) => ({
     handle,
     deviceId: handle,
-    edgeApiOrigin: "https://same.edge.pontia.dev",
+    edgeApiOrigin: "https://edge.example.com",
   });
   const connect = vi.fn(async (handle: string, _signal: AbortSignal) => target(handle));
   const request = vi.fn(async (handle: string, path: string, init: RequestInit) => {

@@ -94,7 +94,6 @@ COPY assets /src/assets
 COPY apps/cloud ./
 RUN bun install --frozen-lockfile && bun run build
 COPY docker/e2e/cloud-entrypoint /usr/local/bin/cloud-entrypoint
-COPY docker/e2e/cloud-seed.sql /src/apps/cloud/e2e-seed.sql
 # The banner's npm update check can keep a socket alive after local D1 commands finish.
 ENV WRANGLER_HIDE_BANNER=true WRANGLER_SEND_METRICS=false CI=true
 ENTRYPOINT ["bash", "/usr/local/bin/cloud-entrypoint"]

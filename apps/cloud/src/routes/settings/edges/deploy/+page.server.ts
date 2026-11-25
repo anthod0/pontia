@@ -14,12 +14,23 @@ export const actions: Actions = {
   default: async (event) => {
     const user = await currentLogin(event);
     if (!user) return fail(401, { error: m.deploy_error_sign_in() });
+    const value = (await event.request.formData()).get("hostname");
+    const hostname = typeof value === "string" ? value.trim().toLowerCase() : "";
     try {
-      return {
-        deployment: await issueEdgeDeployment(database(environment(event).DB), user.user_id),
-      };
+      const result = await issueEdgeDeployment(
+        database(environment(event).DB),
+        user.user_id,
+        hostname,
+      );
+      if (result.status === "invalid") {
+        return fail(400, { hostname, error: m.deploy_error_hostname_invalid() });
+      }
+      if (result.status === "conflict") {
+        return fail(409, { hostname, error: m.deploy_error_hostname_taken() });
+      }
+      return { deployment: result.deployment };
     } catch {
-      return fail(503, { error: m.deploy_error_unavailable() });
+      return fail(503, { hostname, error: m.deploy_error_unavailable() });
     }
   },
 };

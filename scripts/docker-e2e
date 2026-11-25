@@ -97,10 +97,15 @@ def initialize(state):
             "CLOUDFLARE_DNS_TOKEN": "disabled-in-local-e2e",
             "CLOUDFLARE_DNS_ZONE_ID": "disabled-in-local-e2e",
             "CLOUDFLARE_PREVIEW_DNS_ZONE_ID": "disabled-in-local-e2e",
+            # The lab's public edge keeps the Pontia-managed DNS and preview flow.
+            "LEGACY_EDGE_DNS_OWNER_IDS": EDGE_OWNER_ID,
         }
         write_private(state / "cloud.dev.vars", "".join(
             f"{key}={json.dumps(value)}\n" for key, value in values.items()
         ))
+    elif "LEGACY_EDGE_DNS_OWNER_IDS" not in variables(state / "cloud.dev.vars"):
+        path = state / "cloud.dev.vars"
+        write_private(path, path.read_text() + f"LEGACY_EDGE_DNS_OWNER_IDS={json.dumps(EDGE_OWNER_ID)}\n")
 
 
 def variables(path):
@@ -141,6 +146,8 @@ def check(state):
         "CLOUDFLARE_DNS_TOKEN", "CLOUDFLARE_DNS_ZONE_ID",
     )):
         raise ValueError("Public DNS credentials are not permitted in this environment")
+    if values.get("LEGACY_EDGE_DNS_OWNER_IDS") != EDGE_OWNER_ID:
+        raise ValueError("LEGACY_EDGE_DNS_OWNER_IDS must name the lab edge owner; run scripts/docker-e2e init")
     hosts = ["pontia.dev", "app.pontia.dev", EDGE_HOST]
     check_certificates(state, hosts)
 
@@ -350,6 +357,7 @@ def prepare_edge(state, config):
         "port": 443,
         "acme_challenge": "http-01",
         "browser_dashboard_origin": "https://app.pontia.dev",
+        "preview_base_hostname": f"{EDGE_NAME}.pontia.run",
     }) + "\n")
 
     write_private(state / "edge/tls.pem",

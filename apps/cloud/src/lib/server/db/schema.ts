@@ -33,12 +33,12 @@ export const edges = sqliteTable(
       .notNull()
       .default("private"),
     name: text().notNull(),
-    previewEnabled: integer("preview_enabled").notNull().default(0),
-    dnsLabel: text("dns_label").notNull(),
+    dnsLabel: text("dns_label"),
     tunnelUrl: text("tunnel_url").notNull(),
     serviceCredentialHash: text("service_credential_hash").notNull(),
     createdAt: text("created_at").notNull().default(timestamp),
     updatedAt: text("updated_at").notNull().default(timestamp),
+    previewEnabled: integer("preview_enabled").notNull().default(0),
   },
   (table) => [
     primaryKey({ columns: [table.id] }),
@@ -48,23 +48,11 @@ export const edges = sqliteTable(
     uniqueIndex("idx_edges_tunnel_url").on(table.tunnelUrl),
     check("edges_preview_enabled_check", sql`${table.previewEnabled} IN (0, 1)`),
     check("edges_access_scope_check", sql`${table.accessScope} IN ('private', 'public')`),
+    check(
+      "edges_preview_dns_label_check",
+      sql`${table.previewEnabled} = 0 OR ${table.dnsLabel} IS NOT NULL`,
+    ),
   ],
-);
-
-export const heroNameModifiers = sqliteTable(
-  "hero_name_modifiers",
-  {
-    word: text().notNull(),
-  },
-  (table) => [primaryKey({ columns: [table.word] })],
-);
-
-export const heroNameHeroes = sqliteTable(
-  "hero_name_heroes",
-  {
-    word: text().notNull(),
-  },
-  (table) => [primaryKey({ columns: [table.word] })],
 );
 
 export const devices = sqliteTable(

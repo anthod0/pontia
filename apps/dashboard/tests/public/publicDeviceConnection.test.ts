@@ -544,7 +544,7 @@ test.each(["json", "version", "target", "session"])("replaces a corrupt %s cache
   const key = localStorage.key(0)!;
   const saved = JSON.parse(localStorage.getItem(key)!);
   if (kind === "version") saved.version = 99;
-  if (kind === "target") saved.target.edgeApiOrigin = "https://attacker.example";
+  if (kind === "target") saved.target.edgeApiOrigin = "https://app.pontia.dev";
   if (kind === "session")
     mocks.restore.mockImplementationOnce(() => {
       throw new Error("invalid snapshot");

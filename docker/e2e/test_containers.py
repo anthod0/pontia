@@ -174,12 +174,10 @@ class ContainerSmokeTests(unittest.TestCase):
                     for _ in range(2):
                         migrated = run("migrations", "apply", *local)
                         assert migrated.returncode == 0, migrated.stdout + migrated.stderr
-                    seeded = run("execute", *local, "--file", "/src/apps/cloud/e2e-seed.sql")
-                    assert seeded.returncode == 0, seeded.stdout + seeded.stderr
                     queried = run("execute", *local, "--json", "--command",
-                                  "SELECT count(*) AS count FROM hero_name_heroes;")
+                                  "SELECT count(*) AS count FROM edges;")
                     assert queried.returncode == 0, queried.stdout + queried.stderr
-                    assert json.loads(queried.stdout)[0]["results"][0]["count"] > 0
+                    assert json.loads(queried.stdout)[0]["results"][0]["count"] == 0
                     invalid = run("execute", *local, "--command", "SELECT * FROM missing_table;")
                     assert invalid.returncode != 0
                 finally:
@@ -265,21 +263,12 @@ class ContainerSmokeTests(unittest.TestCase):
                 "--cookie", f"__Host-_rt={login['value']}", "https://pontia.dev/settings/account",
             ).stdout
             self.assertEqual(account, b"200")
-            vocabulary = compose(
-                "exec", "-T", "cloud", "./node_modules/.bin/wrangler", "d1", "execute", "DB",
-                "--local", "--persist-to", "/state", "--json", "--command",
-                "SELECT (SELECT count(*) FROM hero_name_modifiers) AS modifiers, "
-                "(SELECT count(*) FROM hero_name_heroes) AS heroes;",
-            )
-            counts = json.loads(vocabulary.stdout)[0]["results"][0]
-            self.assertGreater(counts["modifiers"], 0)
-            self.assertGreater(counts["heroes"], 0)
             with self.assertRaises(subprocess.CalledProcessError):
                 compose("exec", "-T", "device", "codex", "login", "status")
             compose("exec", "-T", "device", "touch", "/home/e2e/workspace/discard-me")
             compose("exec", "-T", "cloud", "./node_modules/.bin/wrangler", "d1", "execute", "DB",
                     "--local", "--persist-to", "/state", "--command",
-                    "INSERT INTO hero_name_modifiers (word) VALUES ('discard-me');")
+                    "INSERT INTO users (id) VALUES ('discard-me');")
             # Stopping Cloud must leave its domain pinned, not resolve production.
             compose("stop", "cloud")
             hosts = compose("exec", "-T", "device", "getent", "hosts", "pontia.dev").stdout
@@ -337,7 +326,7 @@ class ContainerSmokeTests(unittest.TestCase):
             compose("exec", "-T", "device", "test", "!", "-e", "/run/claude-proxy/auth/kv.db")
             fresh = compose("exec", "-T", "cloud", "./node_modules/.bin/wrangler", "d1", "execute", "DB",
                             "--local", "--persist-to", "/state", "--json", "--command",
-                            "SELECT count(*) AS count FROM hero_name_modifiers WHERE word='discard-me';")
+                            "SELECT count(*) AS count FROM users WHERE id='discard-me';")
             self.assertEqual(json.loads(fresh.stdout)[0]["results"][0]["count"], 0)
         finally:
             for lab in (first, second):

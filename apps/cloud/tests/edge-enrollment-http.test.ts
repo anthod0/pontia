@@ -42,10 +42,15 @@ async function ticket() {
     now: () => new Date("2099-01-01T00:00:00.000Z"),
     randomBytes: () => new Uint8Array(32).fill(51),
     edgeId: () => edgeId,
-    heroName: async () => "silent-orion",
   };
-  const deployment = await issueEdgeDeployment(database.db, "user-http", dependencies);
-  const match = /--ticket '(pet_v1_[A-Za-z0-9_-]{43})'/.exec(deployment.command);
+  const result = await issueEdgeDeployment(
+    database.db,
+    "user-http",
+    "silent-orion.example.com",
+    dependencies,
+  );
+  if (result.status !== "issued") throw new Error("Expected deployment");
+  const match = /--ticket '(pet_v1_[A-Za-z0-9_-]{43})'/.exec(result.deployment.command);
   if (!match) throw new Error("Expected ticket");
   return match[1];
 }
@@ -85,15 +90,15 @@ test("edge enrollment requires HTTPS and accepts only ticket and credential", as
   expect(response.status).toBe(200);
   expect((await response.json()) as Record<string, string>).toEqual({
     edge_id: edgeId,
-    name: "silent-orion",
-    tunnel_url: "wss://silent-orion.edge.pontia.dev/tunnel",
+    name: "silent-orion.example.com",
+    tunnel_url: "wss://silent-orion.example.com/tunnel",
   });
   expect(calls).toContainEqual([
     {
       event: "edge_enrollment_succeeded",
       stage: "enrollment",
       edge_id: edgeId,
-      hostname: "silent-orion.edge.pontia.dev",
+      hostname: "silent-orion.example.com",
     },
   ]);
   expect(JSON.stringify(calls)).not.toContain(deploymentTicket);

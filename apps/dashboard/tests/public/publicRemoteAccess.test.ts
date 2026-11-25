@@ -128,10 +128,40 @@ test("custom port survives connection discovery", async () => {
 });
 
 test.each([
+  "https://edge.example.com",
+  "https://edge.example.com:8443",
+  "https://xn--bcher-kva.example",
+  "https://one.two.edge.pontia.dev",
+  "https://dev.pontia.dev",
+  "https://relay.pontia.run",
+  "https://pontia.run",
+])("accepts the self-hosted edge origin %s", async (origin) => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => json({ ...connection, edge_api_origin: origin })),
+  );
+  const result = await requestPublicDeviceConnection(handle, browserPublicKey);
+  expect(result.target.edgeApiOrigin).toBe(origin);
+});
+
+test.each([
   { device_handle: "other-device" },
   { device_id: deviceId.toUpperCase() },
-  { edge_api_origin: "https://attacker.example" },
-  { edge_api_origin: "https://one.two.edge.pontia.dev" },
+  { edge_api_origin: "https://pontia.dev" },
+  { edge_api_origin: "https://app.pontia.dev" },
+  { edge_api_origin: "https://app.pontia.dev:8443" },
+  { edge_api_origin: "http://edge.example.com" },
+  { edge_api_origin: "https://edge.example.com:25" },
+  { edge_api_origin: "https://edge.example.com:6000" },
+  { edge_api_origin: "https://203.0.113.10" },
+  { edge_api_origin: "https://[2001:db8::1]" },
+  { edge_api_origin: "https://localhost" },
+  { edge_api_origin: "https://edge.localhost" },
+  { edge_api_origin: "https://printer.local" },
+  { edge_api_origin: "https://service.internal" },
+  { edge_api_origin: "https://router.home.arpa" },
+  { edge_api_origin: "https://intranet" },
+  { edge_api_origin: "https://Edge.Example.com" },
   { edge_api_origin: `${edgeApiOrigin}/api` },
   { edge_api_origin: "https://user@brave-silver-atlas.edge.pontia.dev" },
   { redirect: "https://attacker.example" },

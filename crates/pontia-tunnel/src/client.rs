@@ -27,7 +27,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
-    DeviceRequestHandler, Error, Result, protocol,
+    DeviceRequestHandler, Error, Result, endpoint, protocol,
     transport::{DeviceSocket, serve_device},
 };
 
@@ -46,6 +46,7 @@ pub struct RemoteClient {
     http: Client,
     connector: Connector,
     handler: DeviceRequestHandler,
+    public_endpoints_only: bool,
 }
 
 #[derive(Deserialize)]
@@ -104,16 +105,20 @@ impl RemoteClient {
                 .map_err(|_| Error::Protocol("invalid TLS versions"))?
                 .with_root_certificates(roots)
                 .with_no_client_auth();
-        Self::with_clients(
+        let mut client = Self::with_clients(
             cloud_origin,
             device_id,
             pontia_home,
             http,
             Connector::Rustls(Arc::new(tls)),
             handler,
-        )
+        )?;
+        client.public_endpoints_only = true;
+        Ok(client)
     }
 
+    /// Uses caller-provided HTTP and TLS clients. The caller owns the trust roots and
+    /// network reachability, so tunnel URLs are checked for shape but may name any host.
     pub fn with_clients(
         cloud_origin: &str,
         device_id: Uuid,
@@ -143,6 +148,7 @@ impl RemoteClient {
             http,
             connector,
             handler,
+            public_endpoints_only: false,
         })
     }
 
@@ -213,7 +219,7 @@ impl RemoteClient {
             TicketReply::Candidates { candidates } => candidates,
         };
         let mut reachable: Vec<_> = stream::iter(candidates)
-            .map(|candidate| probe_latency(&self.http, candidate))
+            .map(|candidate| probe_latency(&self.http, candidate, self.public_endpoints_only))
             .buffer_unordered(8)
             .filter_map(std::future::ready)
             .collect()
@@ -278,7 +284,7 @@ impl RemoteClient {
         if !valid_ticket(&response.ticket) || expires_at <= OffsetDateTime::now_utc() {
             return Err(AttemptError::Temporary("invalid ticket response"));
         }
-        let tunnel_url = validate_tunnel_url(&response.tunnel_url)
+        let tunnel_url = validate_tunnel_url(&response.tunnel_url, self.public_endpoints_only)
             .map_err(|_| AttemptError::Temporary("invalid ticket response"))?;
         self.connection(&tunnel_url, &response.ticket).await
     }
@@ -331,8 +337,12 @@ impl RemoteClient {
     }
 }
 
-async fn probe_latency(http: &Client, candidate: Candidate) -> Option<(Duration, Uuid)> {
-    let mut url = validate_tunnel_url(&candidate.tunnel_url).ok()?;
+async fn probe_latency(
+    http: &Client,
+    candidate: Candidate,
+    public_endpoints_only: bool,
+) -> Option<(Duration, Uuid)> {
+    let mut url = validate_tunnel_url(&candidate.tunnel_url, public_endpoints_only).ok()?;
     url.set_scheme("https").ok()?;
     url.set_path("/healthz");
     let started = Instant::now();
@@ -425,10 +435,16 @@ fn valid_ticket(value: &str) -> bool {
         .is_ok_and(|decoded| decoded.len() == 32 && URL_SAFE_NO_PAD.encode(decoded) == secret)
 }
 
-fn validate_tunnel_url(value: &str) -> Result<Url> {
+fn validate_tunnel_url(value: &str, public_endpoints_only: bool) -> Result<Url> {
     let url = Url::parse(value).map_err(|_| Error::Protocol("invalid tunnel URL"))?;
+    let public_host = match url.host() {
+        Some(url::Host::Domain(hostname)) => endpoint::is_public_hostname(hostname),
+        Some(_) => false,
+        None => return Err(Error::Protocol("tunnel URL has no host")),
+    };
     if url.scheme() != "wss"
-        || url.host_str().is_none()
+        || (public_endpoints_only && !public_host)
+        || !endpoint::is_safe_port(url.port().unwrap_or(443))
         || url.path() != "/tunnel"
         || !url.username().is_empty()
         || url.password().is_some()
@@ -436,7 +452,7 @@ fn validate_tunnel_url(value: &str) -> Result<Url> {
         || url.fragment().is_some()
     {
         return Err(Error::Protocol(
-            "tunnel URL must be wss://host[:port]/tunnel",
+            "tunnel URL must be wss://public-hostname[:safe-port]/tunnel",
         ));
     }
     Ok(url)
@@ -481,19 +497,51 @@ mod tests {
 
     #[test]
     fn tunnel_url_accepts_only_the_wss_tunnel_endpoint() {
-        assert!(validate_tunnel_url("wss://edge.example/tunnel").is_ok());
-        let custom = validate_tunnel_url("wss://edge.example:8443/tunnel").unwrap();
-        assert_eq!(custom.port(), Some(8443));
-        assert_eq!(custom.as_str(), "wss://edge.example:8443/tunnel");
-        for value in [
-            "ws://edge.example/tunnel",
-            "wss://user:secret@edge.example/tunnel",
-            "wss://edge.example/other",
-            "wss://edge.example/tunnel?ticket=secret",
-            "wss://edge.example/tunnel#fragment",
-        ] {
-            assert!(validate_tunnel_url(value).is_err(), "{value}");
+        for public_only in [true, false] {
+            assert!(validate_tunnel_url("wss://edge.example/tunnel", public_only).is_ok());
+            let custom =
+                validate_tunnel_url("wss://edge.example:8443/tunnel", public_only).unwrap();
+            assert_eq!(custom.port(), Some(8443));
+            assert_eq!(custom.as_str(), "wss://edge.example:8443/tunnel");
+            for value in [
+                "ws://edge.example/tunnel",
+                "wss://user:secret@edge.example/tunnel",
+                "wss://edge.example/other",
+                "wss://edge.example/tunnel?ticket=secret",
+                "wss://edge.example/tunnel#fragment",
+                "wss://edge.example:25/tunnel",
+                "wss://edge.example:6000/tunnel",
+            ] {
+                assert!(validate_tunnel_url(value, public_only).is_err(), "{value}");
+            }
         }
+    }
+
+    #[test]
+    fn public_tunnel_urls_require_a_public_hostname() {
+        for value in [
+            "wss://edge.example.com/tunnel",
+            "wss://Edge.Example.com:8443/tunnel",
+            "wss://sg.edge.pontia.dev/tunnel",
+            "wss://pontia.dev/tunnel",
+            "wss://edge.pontia.run/tunnel",
+        ] {
+            assert!(validate_tunnel_url(value, true).is_ok(), "{value}");
+        }
+        for value in [
+            "wss://127.0.0.1/tunnel",
+            "wss://[::1]/tunnel",
+            "wss://localhost/tunnel",
+            "wss://edge.localhost/tunnel",
+            "wss://printer.local/tunnel",
+            "wss://service.internal/tunnel",
+            "wss://router.home.arpa/tunnel",
+            "wss://intranet/tunnel",
+        ] {
+            assert!(validate_tunnel_url(value, true).is_err(), "{value}");
+        }
+        // Caller-provided clients own their network and may use loopback test endpoints.
+        assert!(validate_tunnel_url("wss://127.0.0.1:8443/tunnel", false).is_ok());
     }
 
     #[tokio::test]

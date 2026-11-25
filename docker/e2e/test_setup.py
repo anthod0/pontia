@@ -36,27 +36,6 @@ def openssl(*args):
     return subprocess.run(["openssl", *map(str, args)], check=True, capture_output=True).stdout
 
 
-class ReferenceDataTests(unittest.TestCase):
-    def test_seed_is_repeatable_preserves_words_and_creates_no_auth_resources(self):
-        db = sqlite3.connect(":memory:")
-        self.addCleanup(db.close)
-        for migration in sorted((ROOT / "apps/cloud/migrations").glob("*/migration.sql")):
-            db.executescript(migration.read_text())
-        db.execute("INSERT INTO hero_name_modifiers (word) VALUES ('custom')")
-        seed = (ROOT / "docker/e2e/cloud-seed.sql").read_text()
-        db.executescript(seed)
-        before = {table: db.execute(f"SELECT word FROM {table} ORDER BY word").fetchall()
-                  for table in ("hero_name_modifiers", "hero_name_heroes")}
-        self.assertGreater(len(before["hero_name_modifiers"]), 1)
-        self.assertGreater(len(before["hero_name_heroes"]), 0)
-        db.executescript(seed)
-        for table, words in before.items():
-            self.assertEqual(db.execute(f"SELECT word FROM {table} ORDER BY word").fetchall(), words)
-        self.assertIn(("custom",), before["hero_name_modifiers"])
-        for table in ("users", "edges", "edge_tickets", "devices"):
-            self.assertEqual(db.execute(f"SELECT count(*) FROM {table}").fetchone()[0], 0)
-
-
 class SetupTests(unittest.TestCase):
     def setUp(self):
         self.sandbox = tempfile.TemporaryDirectory(prefix="pontia-docker-e2e-test-")
@@ -165,6 +144,22 @@ class SetupTests(unittest.TestCase):
             ).stdout
             self.assertEqual(public[-32:], base64.urlsafe_b64decode(first[public_key] + "=="))
 
+    def test_lab_edge_owner_keeps_managed_dns_and_previews(self):
+        path = self.state / "cloud.dev.vars"
+        self.assertEqual(setup.variables(path)["LEGACY_EDGE_DNS_OWNER_IDS"], setup.EDGE_OWNER_ID)
+        # Existing environments gain the allowlist without regenerating their keys.
+        lines = [line for line in path.read_text().splitlines(keepends=True)
+                 if not line.startswith("LEGACY_EDGE_DNS_OWNER_IDS=")]
+        path.write_text("".join(lines))
+        with self.assertRaises(ValueError):
+            setup.check(self.state)
+        signing_key = setup.variables(path)["E2E_CAPABILITY_SIGNING_KEY"]
+        setup.initialize(self.state)
+        values = setup.variables(path)
+        self.assertEqual(values["LEGACY_EDGE_DNS_OWNER_IDS"], setup.EDGE_OWNER_ID)
+        self.assertEqual(values["E2E_CAPABILITY_SIGNING_KEY"], signing_key)
+        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
     def test_preflight_forbids_public_dns_credentials(self):
         path = self.state / "cloud.dev.vars"
         path.write_text(path.read_text().replace('CLOUDFLARE_DNS_TOKEN="disabled-in-local-e2e"',
@@ -200,6 +195,8 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(db.execute("SELECT count(*) FROM edges").fetchone()[0], 1)
         self.assertEqual(row[:3], ("01900000-0000-7000-8000-000000000001", "public",
                                   "wss://docker-e2e.edge.pontia.dev/tunnel"))
+        config = json.loads((self.state / "edge/config.json").read_text())
+        self.assertEqual(config["preview_base_hostname"], "docker-e2e.pontia.run")
         credential = (self.state / "edge/credential").read_text().strip()
         secret = credential.removeprefix(f"pec_v1_{row[0]}_")
         self.assertEqual(len(base64.urlsafe_b64decode(secret + "=")), 32)

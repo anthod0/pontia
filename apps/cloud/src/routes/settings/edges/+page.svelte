@@ -125,7 +125,7 @@
                         name="name"
                         aria-label={m.edges_name_label()}
                         value={edge.name}
-                        maxlength={100}
+                        maxlength={253}
                         required
                       />
                       <Dialog.Footer>
@@ -217,14 +217,9 @@
     </ParaglideMessage>
   </p>
 
-  <form class="deployment-form" method="POST" action={localizeHref("/settings/edges/deploy")}>
-    <Button type="submit">{m.edges_deploy_generate()}</Button>
-    <p class="agreement">
-      <ParaglideMessage message={m.edges_deploy_agreement}>
-        {#snippet agreement({ children })}<a href="https://letsencrypt.org/repository/" target="_blank" rel="noreferrer">{@render children?.()}</a>{/snippet}
-      </ParaglideMessage>
-    </p>
-  </form>
+  <div class="deployment-action">
+    <Button href={localizeHref("/settings/edges/deploy")} class="button">{m.edges_deploy_start()}</Button>
+  </div>
 </section>
 
 <style>
@@ -235,8 +230,7 @@
     margin-bottom: 8px;
     font-size: 18px;
   }
-  section > p,
-  .agreement {
+  section > p {
     color: var(--muted-foreground);
     font-size: 14px;
     line-height: 1.7;
@@ -252,21 +246,8 @@
     white-space: nowrap;
     border: 0;
   }
-  .deployment-form {
-    display: flex;
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 12px;
+  .deployment-action {
     margin-top: 20px;
-  }
-  .agreement {
-    max-width: 620px;
-    margin: 0;
-  }
-  .agreement a {
-    color: var(--primary);
-    text-decoration: underline;
-    text-underline-offset: 3px;
   }
   code {
     border-radius: 4px;

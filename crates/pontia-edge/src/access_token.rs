@@ -65,6 +65,30 @@ impl AccessTokenVerifier {
         (claims.exp - claims.iat <= 60).then_some(claims.jti)
     }
 
+    /// Returns the nonce of a fresh Cloud ownership challenge for this edge endpoint.
+    pub(crate) fn ownership_nonce(&self, token: &str, hostname: &str, port: u16) -> Option<String> {
+        #[derive(Deserialize)]
+        struct Ownership {
+            #[serde(rename = "aud")]
+            _audience: Uuid,
+            jti: String,
+            host: String,
+            port: u16,
+            iat: u64,
+            exp: u64,
+        }
+        let claims: Ownership = self.claims(token, "pontia-edge-ownership+jwt")?;
+        remaining_lifetime(claims.iat, claims.exp)?;
+        let nonce = URL_SAFE_NO_PAD.decode(&claims.jti).ok()?;
+        (claims.exp - claims.iat <= 60
+            && claims.host == hostname
+            && claims.port == port
+            && claims.jti.len() == 43
+            && nonce.len() == 32
+            && URL_SAFE_NO_PAD.encode(&nonce) == claims.jti)
+            .then_some(claims.jti)
+    }
+
     pub(crate) fn authenticate(&self, token: &str) -> Option<Uuid> {
         let claims: Claims = self.claims(token, "JWT")?;
         remaining_lifetime(claims.iat, claims.exp)?;

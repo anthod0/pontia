@@ -13,37 +13,33 @@
 
 - x86_64 或 ARM64 架构；
 - 以 systemd 作为系统服务管理器；
-- 一个服务器可以绑定并接收流量的公网 IPv4 地址；
+- 一个公网 IP 地址，以及一个由你掌控的域名，例如 `edge.example.com`；
+- 可从公网访问的入站 TCP 80 和 443 端口；
 - 出站 HTTPS 和 DNS 访问；
 - `curl`、`grep`、`install`、`mktemp`、`mv`、`openssl`、`rm`、`sed`、`sha256sum` 和 `tar`；
 - 支持 Ed25519 验证的 OpenSSL。
 
-`pontia-edge` 仅支持 Linux。
+## 准备域名
 
-## 选择网络模式
+为 Edge 选择一个域名或子域名，例如 `edge.example.com`。在你的 DNS 服务商处创建 A 记录、AAAA 记录或两者，将其指向服务器的公网 IP 地址。
 
-默认部署在公网 443 端口上提供 HTTPS 和 WSS，并使用 HTTP-01 证书验证。在初始化和证书续期期间，公网 80 端口也必须能访问到服务器。
-
-如果 80 或 443 端口不可用，请在 [Edge 设置](/settings/edges)中选择替代部署方式。它使用一个浏览器允许的自定义 HTTPS/WSS 端口（推荐 8443）和 DNS-01 证书验证。请在主机防火墙和服务商防火墙中开放所选端口。
-
-Pontia Cloud 会在 `edge.pontia.dev` 下为 Edge 分配主机名，并自动配置其 DNS 记录。
+Edge 在 443 端口上提供 HTTPS 和 WSS，并在 80 端口上通过 HTTP-01 获取 Let's Encrypt 证书。请在主机防火墙和服务商防火墙中放行入站 TCP 80 和 443 端口。如需使用其他浏览器允许的端口（例如 8443），请在 `pontia-edge init` 命令中加上 `--port 8443` 并开放该端口；证书的签发和续期继续通过 80 端口完成。
 
 ## 从 Cloud 部署
 
 [打开 Edge 设置](/settings/edges)，按提示登录。然后：
 
-1. 选择**生成部署命令**。
-2. 选择默认端口模式或替代端口模式。
+1. 选择**部署 Edge**。
+2. 输入你的域名，然后选择**生成部署命令**。
 3. 复制一次性命令，并在公网 Linux 服务器上运行。
 
-该命令包含一个短期有效的部署票据。请妥善保密，并在 Cloud 显示的过期时间之前运行。初始化过程会：
+该命令包含一个绑定到你的域名的短期部署票据。请妥善保密，并在 Cloud 显示的过期时间之前运行。初始化过程会：
 
 - 下载并验证已签名的 `pontia-edge` 版本；
-- 检测并证明对服务器公网 IPv4 地址的控制权；
-- 通过 Pontia Cloud 配置分配的 DNS 名称；
-- 获取 Let's Encrypt 证书；
+- 检查你的域名是否解析到公网 IP 地址；
+- 为你的域名获取 Let's Encrypt 证书；
 - 安装并启动 `pontia-edge.service`；
-- 等待 Cloud 验证公网 HTTPS 健康检查端点；
+- 等待 Cloud 通过 HTTPS 确认这台服务器持有该域名对应的 Edge 凭据；
 - 启用稳定版本的自动检查。
 
 部署成功的 Edge 会出现在 [Edge 设置](/settings/edges)的**你的 Edge** 下，并显示为正常状态。
@@ -87,7 +83,7 @@ sudo pontia-edge auto-update disable
 
 自动更新每十分钟检查一次。禁用后续检查时，已在进行中的更新会继续完成。
 
-升级后，公共和私有 Edge 会自动切换到预览域名 `<label>.pontia.run`。Pontia 将仅限 DNS 的通配 A 记录同步到 Edge 的 IPv4 地址，并通过 DNS-01 自动签发和续期通配 TLS 证书。
+Edge 每小时检查一次证书，并在剩余有效期不足三分之一时自动续期。
 
 ## 存储的文件
 
@@ -106,6 +102,6 @@ sudo pontia-edge auto-update disable
 
 ## 删除 Edge
 
-在 Cloud 中删除自托管 Edge 会永久移除其注册及关联的设备。服务器上的安装需要单独处理：先迁移或停用受影响的设备，然后停止服务并从服务器上删除其文件。
+在 Cloud 中删除自托管 Edge 会永久移除其注册及关联的设备。域名的 DNS 记录保留在你的 DNS 服务商处，你可以在那里更新或删除。服务器上的安装需要单独处理：先迁移或停用受影响的设备，然后停止服务并从服务器上删除其文件。
 
 删除 Edge 前，可在每台受影响的设备上运行 `pontia remote edit`，选择另一个 Edge。

@@ -1,6 +1,7 @@
 use std::{fs, path::Path};
 
 use anyhow::{Context, Result};
+use pontia_tunnel::endpoint::is_public_hostname;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 
@@ -37,26 +38,22 @@ impl ServiceConfig {
     }
 
     pub fn read(path: &Path) -> Result<Self> {
-        let mut config: Self = serde_json::from_slice(
+        let config: Self = serde_json::from_slice(
             &fs::read(path).with_context(|| format!("failed to read {}", path.display()))?,
         )
         .context("edge service config is invalid")?;
         validate_edge_port(config.port).map_err(anyhow::Error::msg)?;
-        hostname_from_tunnel_url(&format!("wss://{}/tunnel", config.hostname))?;
-        validate_browser_origin(&config.browser_dashboard_origin)?;
-        let label = config
-            .hostname
-            .strip_suffix(".edge.pontia.dev")
-            .context("invalid control hostname")?;
-        let expected = format!("{label}.pontia.run");
-        let migrate = config
-            .preview_base_hostname
-            .as_ref()
-            .is_some_and(|base| base != &expected);
-        config.preview_base_hostname = Some(expected);
-        if migrate {
-            config.save(path)?;
+        anyhow::ensure!(
+            is_public_hostname(&config.hostname),
+            "configured edge hostname is not a public DNS name"
+        );
+        if let Some(base) = &config.preview_base_hostname {
+            anyhow::ensure!(
+                is_public_hostname(base),
+                "configured preview hostname is not a public DNS name"
+            );
         }
+        validate_browser_origin(&config.browser_dashboard_origin)?;
         Ok(config)
     }
 }
@@ -89,19 +86,9 @@ pub fn hostname_from_tunnel_url(tunnel_url: &str) -> Result<String> {
             && url.fragment().is_none(),
         "Cloud returned a non-canonical tunnel URL"
     );
-    let hostname = url.host_str().context("tunnel URL has no hostname")?;
-    let label = hostname
-        .strip_suffix(".edge.pontia.dev")
-        .context("tunnel URL is outside the managed edge zone")?;
+    let hostname = url.domain().context("tunnel URL has no DNS hostname")?;
     anyhow::ensure!(
-        !label.is_empty()
-            && label.len() <= 63
-            && !label.contains('.')
-            && !label.starts_with('-')
-            && !label.ends_with('-')
-            && label
-                .bytes()
-                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-'),
+        is_public_hostname(hostname) && url.as_str() == tunnel_url,
         "tunnel URL has an invalid edge hostname"
     );
     Ok(hostname.to_owned())
@@ -112,34 +99,44 @@ mod tests {
     use super::*;
 
     #[test]
-    fn endpoint_configuration_survives_restart_for_all_four_combinations() {
+    fn endpoint_configuration_survives_restart() {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("config.json");
-        for port in [443, 8443] {
-            for acme_challenge in [AcmeChallenge::Http01, AcmeChallenge::Dns01] {
-                let config = ServiceConfig {
-                    hostname: "brave-atlas.edge.pontia.dev".to_owned(),
-                    port,
-                    acme_challenge,
-                    browser_dashboard_origin: default_dashboard_origin(),
-                    preview_base_hostname: Some("brave-atlas.pontia.run".into()),
-                };
-                config.save(&path).unwrap();
-                assert_eq!(ServiceConfig::read(&path).unwrap(), config);
-            }
+        for (hostname, port, acme_challenge, preview) in [
+            ("edge.example.com", 443, AcmeChallenge::Http01, None),
+            ("edge.example.com", 8443, AcmeChallenge::Http01, None),
+            (
+                "sg.edge.pontia.dev",
+                8443,
+                AcmeChallenge::Dns01,
+                Some("sg.pontia.run"),
+            ),
+        ] {
+            let config = ServiceConfig {
+                hostname: hostname.to_owned(),
+                port,
+                acme_challenge,
+                browser_dashboard_origin: default_dashboard_origin(),
+                preview_base_hostname: preview.map(str::to_owned),
+            };
+            config.save(&path).unwrap();
+            assert_eq!(ServiceConfig::read(&path).unwrap(), config);
         }
-        std::fs::write(&path, br#"{"hostname":"brave-atlas.edge.pontia.dev"}"#).unwrap();
+        std::fs::write(&path, br#"{"hostname":"edge.example.com"}"#).unwrap();
         let config = ServiceConfig::read(&path).unwrap();
-        assert_eq!(
-            config.preview_base_hostname.as_deref(),
-            Some("brave-atlas.pontia.run")
-        );
+        assert_eq!(config.preview_base_hostname, None);
         assert_eq!(config.port, 443);
         assert_eq!(config.acme_challenge, AcmeChallenge::Http01);
+        config.save(&path).unwrap();
+        assert!(
+            !std::fs::read_to_string(&path)
+                .unwrap()
+                .contains("preview_base_hostname")
+        );
 
         std::fs::write(
             &path,
-            br#"{"cloud_origin":"https://old.example","hostname":"brave-atlas.edge.pontia.dev"}"#,
+            br#"{"cloud_origin":"https://old.example","hostname":"edge.example.com"}"#,
         )
         .unwrap();
         let config = ServiceConfig::read(&path).unwrap();
@@ -152,44 +149,61 @@ mod tests {
     }
 
     #[test]
-    fn loading_a_stale_preview_hostname_persists_the_derived_domain() {
+    fn existing_managed_edges_keep_dns_renewal_and_their_explicit_preview_hostname() {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("config.json");
-        for stale in ["*.brave-atlas.p.pontia.dev", "other.pontia.run"] {
-            let mut expected = ServiceConfig {
-                hostname: "brave-atlas.edge.pontia.dev".into(),
-                port: 8443,
-                acme_challenge: AcmeChallenge::Dns01,
-                browser_dashboard_origin: "https://custom.example".into(),
-                preview_base_hostname: Some(stale.into()),
-            };
-            expected.save(&path).unwrap();
-            expected.preview_base_hostname = Some("brave-atlas.pontia.run".into());
-            assert_eq!(ServiceConfig::read(&path).unwrap(), expected);
-            let persisted: ServiceConfig =
-                serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-            assert_eq!(persisted, expected);
+        let stored = br#"{"hostname":"cn.edge.pontia.dev","port":8443,"acme_challenge":"dns-01","browser_dashboard_origin":"https://app.pontia.dev","preview_base_hostname":"cn.pontia.run"}"#;
+        std::fs::write(&path, stored).unwrap();
+
+        let config = ServiceConfig::read(&path).unwrap();
+
+        assert_eq!(config.acme_challenge, AcmeChallenge::Dns01);
+        assert_eq!(
+            config.preview_base_hostname.as_deref(),
+            Some("cn.pontia.run")
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), stored);
+    }
+
+    #[test]
+    fn rejects_non_public_configured_hostnames() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("config.json");
+        for config in [
+            r#"{"hostname":"localhost"}"#,
+            r#"{"hostname":"127.0.0.1"}"#,
+            r#"{"hostname":"edge.internal"}"#,
+            r#"{"hostname":"edge.example.com","preview_base_hostname":"preview.local"}"#,
+        ] {
+            std::fs::write(&path, config).unwrap();
+            assert!(ServiceConfig::read(&path).is_err(), "accepted {config}");
         }
     }
 
     #[test]
-    fn accepts_only_the_managed_canonical_tunnel_url() {
-        assert_eq!(
-            hostname_from_tunnel_url("wss://brave-silver-atlas.edge.pontia.dev/tunnel").unwrap(),
-            "brave-silver-atlas.edge.pontia.dev"
-        );
-        assert_eq!(
-            hostname_from_tunnel_url("wss://brave-silver-atlas.edge.pontia.dev:8443/tunnel")
-                .unwrap(),
-            "brave-silver-atlas.edge.pontia.dev"
-        );
+    fn accepts_canonical_tunnel_urls_for_public_hostnames() {
+        for (url, hostname) in [
+            ("wss://edge.example.com/tunnel", "edge.example.com"),
+            ("wss://edge.example.com:8443/tunnel", "edge.example.com"),
+            (
+                "wss://brave-atlas.edge.pontia.dev/tunnel",
+                "brave-atlas.edge.pontia.dev",
+            ),
+            ("wss://relay.pontia.run/tunnel", "relay.pontia.run"),
+        ] {
+            assert_eq!(hostname_from_tunnel_url(url).unwrap(), hostname);
+        }
         for invalid in [
-            "wss://brave-silver-atlas.edge.pontia.dev:25/tunnel",
-            "ws://brave-silver-atlas.edge.pontia.dev/tunnel",
-            "wss://two.parts.edge.pontia.dev/tunnel",
-            "wss://brave-silver-atlas.edge.pontia.dev/other",
-            "wss://brave-silver-atlas.edge.pontia.dev/tunnel?q=1",
-            "wss://example.com/tunnel",
+            "wss://edge.example.com:25/tunnel",
+            "wss://edge.example.com:443/tunnel",
+            "wss://Edge.example.com/tunnel",
+            "ws://edge.example.com/tunnel",
+            "wss://edge.example.com/other",
+            "wss://edge.example.com/tunnel?q=1",
+            "wss://127.0.0.1/tunnel",
+            "wss://[2001:db8::1]/tunnel",
+            "wss://localhost/tunnel",
+            "wss://edge.local/tunnel",
         ] {
             assert!(
                 hostname_from_tunnel_url(invalid).is_err(),

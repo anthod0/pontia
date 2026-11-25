@@ -3,6 +3,7 @@ pub mod acme;
 mod acme_dns;
 pub use access_token::AccessTokenVerifier;
 mod browser_http;
+pub mod certificate;
 pub mod challenge;
 pub mod config;
 mod connection;
@@ -12,6 +13,7 @@ mod files;
 pub mod network;
 mod notify_update;
 mod online;
+mod ownership;
 pub mod pending_init;
 pub mod port;
 mod preview;
@@ -23,7 +25,8 @@ use std::{sync::Arc, time::Duration};
 
 use axum::{
     Router,
-    extract::DefaultBodyLimit,
+    extract::{DefaultBodyLimit, State},
+    http::HeaderMap,
     middleware,
     routing::{get, post},
 };
@@ -84,9 +87,18 @@ impl Edge {
     }
 
     pub fn router(&self, hostname: &str, port: u16, preview_base: Option<&str>) -> Router {
+        let ownership_host = hostname.to_owned();
         let control = Router::new()
             .route("/healthz", get(notify_update::health))
             .route("/__pontia/notify-update", post(notify_update::notify))
+            .route(
+                "/__pontia/verify-ownership",
+                get(
+                    move |State(edge): State<Edge>, headers: HeaderMap| async move {
+                        ownership::verify(edge, headers, &ownership_host, port).await
+                    },
+                ),
+            )
             .route("/tunnel", get(connection::upgrade))
             .merge(
                 Router::new()

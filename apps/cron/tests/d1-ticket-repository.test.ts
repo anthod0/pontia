@@ -37,10 +37,6 @@ beforeAll(async () => {
   });
   db = (await runtime.getD1Database("DB")) as unknown as D1Database;
   await db.batch([
-    db.prepare(`CREATE TABLE edges (
-      id TEXT PRIMARY KEY NOT NULL,
-      dns_label TEXT NOT NULL
-    )`),
     db.prepare(`CREATE TABLE edge_tickets (
       id INTEGER PRIMARY KEY NOT NULL,
       purpose TEXT NOT NULL,
@@ -66,66 +62,34 @@ afterAll(async () => {
   }
 });
 
-test("D1 repository applies the inclusive expiration boundary and ownership checks", async () => {
+test("D1 repository applies the inclusive expiration boundary", async () => {
+  const insert = db.prepare(
+    `INSERT INTO edge_tickets (id, purpose, expected_edge_id, payload, expires_at, consumed_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, NULL)`,
+  );
   await db.batch([
     db.prepare("DELETE FROM edge_tickets"),
-    db.prepare("DELETE FROM edges"),
-    db
-      .prepare(
-        `INSERT INTO edge_tickets
-       (id, purpose, expected_edge_id, payload, expires_at, consumed_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, NULL)`,
-      )
-      .bind(
-        1,
-        "edge_deployment",
-        "edge-old",
-        JSON.stringify({ name: "brave-silver-atlas" }),
-        "2099-01-01T01:00:00.000Z",
-      ),
-    db
-      .prepare(
-        `INSERT INTO edge_tickets
-       (id, purpose, expected_edge_id, payload, expires_at, consumed_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, NULL)`,
-      )
-      .bind(
-        2,
-        "edge_deployment",
-        "edge-new",
-        '{ "name": "brave-silver-atlas" }',
-        "2099-01-01T02:00:00.000Z",
-      ),
-  ]);
-  const repository = new D1TicketRepository(db);
-  const expired = await repository.expiredTickets("2099-01-01T01:00:00.000Z");
-
-  expect(expired.map(({ id }) => id)).toEqual([1]);
-  expect(
-    await repository.deploymentOwnership(
-      expired[0]!,
-      "brave-silver-atlas",
+    insert.bind(
+      1,
+      "edge_deployment",
+      "edge-old",
+      '{"hostname":"edge.example.com"}',
       "2099-01-01T01:00:00.000Z",
     ),
-  ).toEqual({
-    currentTicketExists: true,
-    registeredEdgeExists: false,
-    otherDeploymentTicketExists: true,
-  });
+    insert.bind(2, "device_tunnel", "edge-old", "{}", "2099-01-01T00:30:00.000Z"),
+    insert.bind(
+      3,
+      "edge_deployment",
+      "edge-new",
+      '{"hostname":"edge.example.com"}',
+      "2099-01-01T02:00:00.000Z",
+    ),
+  ]);
+  const repository = new D1TicketRepository(db);
+  const deadline = "2099-01-01T01:00:00.000Z";
 
-  await db
-    .prepare("INSERT INTO edges (id, dns_label) VALUES (?1, ?2)")
-    .bind("edge-formal", "brave-silver-atlas")
-    .run();
-  expect(
-    (
-      await repository.deploymentOwnership(
-        expired[0]!,
-        "brave-silver-atlas",
-        "2099-01-01T01:00:00.000Z",
-      )
-    ).registeredEdgeExists,
-  ).toBe(true);
-  expect(await repository.deleteExpiredTicket(1, "2099-01-01T01:00:00.000Z")).toBe(true);
-  expect(await repository.deleteExpiredTicket(2, "2099-01-01T01:00:00.000Z")).toBe(false);
+  expect(await repository.expiredTickets(deadline)).toEqual([{ id: 2 }, { id: 1 }]);
+  expect(await repository.deleteExpiredTicket(1, deadline)).toBe(true);
+  expect(await repository.deleteExpiredTicket(1, deadline)).toBe(false);
+  expect(await repository.deleteExpiredTicket(3, deadline)).toBe(false);
 });

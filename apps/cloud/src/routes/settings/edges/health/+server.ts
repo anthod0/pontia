@@ -9,8 +9,12 @@ import type { RequestHandler } from "./$types";
 export const GET: RequestHandler = async (event) => {
   const user = await currentLogin(event);
   if (!user) return json({ error: "authentication_required" }, { status: 401 });
+  const env = environment(event);
+  if (!(await env.EDGE_HEALTH_RATE_LIMIT.limit({ key: user.user_id })).success) {
+    return json({ error: "rate_limited" }, { status: 429 });
+  }
 
-  const visibleEdges = await database(environment(event).DB)
+  const visibleEdges = await database(env.DB)
     .select({ id: edges.id, tunnelUrl: edges.tunnelUrl })
     .from(edges)
     .where(or(eq(edges.userId, user.user_id), eq(edges.accessScope, "public")));

@@ -35,16 +35,9 @@ pub trait EnrollmentClient {
 }
 
 #[allow(async_fn_in_trait)]
-pub trait EdgeNetworkClient {
-    async fn configure_network(
-        &self,
-        ticket: &str,
-        credential: &str,
-        candidate_ipv4: &str,
-        port: u16,
-        dns_challenge: Option<&str>,
-    ) -> Result<String>;
-    async fn verify_health(&self, ticket: &str, credential: &str, port: u16) -> Result<String>;
+pub trait EdgeConfirmationClient {
+    /// Asks Cloud to verify domain ownership over HTTPS and register the edge.
+    async fn confirm(&self, ticket: &str, credential: &str, port: u16) -> Result<String>;
 }
 
 #[derive(Clone, Copy, Serialize)]
@@ -119,7 +112,6 @@ impl HttpCloudClient {
     pub async fn dns_challenge(
         &self,
         credential: &str,
-        ticket: Option<&str>,
         operation: DnsOperation,
         preview: bool,
         value: &str,
@@ -127,9 +119,6 @@ impl HttpCloudClient {
         let mut body = serde_json::json!({ "operation": operation, "value": value });
         if preview {
             body["scope"] = "preview".into();
-        }
-        if let Some(ticket) = ticket {
-            body["ticket"] = ticket.into();
         }
         let response = self
             .client
@@ -141,10 +130,6 @@ impl HttpCloudClient {
             .context("failed to request DNS challenge operation")?;
         Self::require_ok(response, "Cloud rejected DNS challenge operation").await?;
         Ok(())
-    }
-
-    pub fn origin(&self) -> &Url {
-        &self.origin
     }
 
     fn endpoint(&self, path: &str) -> Result<Url> {
@@ -170,17 +155,7 @@ struct EnrollmentRequest<'a> {
 }
 
 #[derive(Serialize)]
-struct NetworkRequest<'a> {
-    ticket: &'a str,
-    service_credential: &'a str,
-    candidate_ipv4: &'a str,
-    port: u16,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    dns_challenge: Option<&'a str>,
-}
-
-#[derive(Serialize)]
-struct HealthRequest<'a> {
+struct ConfirmationRequest<'a> {
     ticket: &'a str,
     service_credential: &'a str,
     port: u16,
@@ -274,55 +249,24 @@ impl EnrollmentClient for HttpCloudClient {
     }
 }
 
-impl EdgeNetworkClient for HttpCloudClient {
-    async fn configure_network(
-        &self,
-        ticket: &str,
-        credential: &str,
-        candidate_ipv4: &str,
-        port: u16,
-        dns_challenge: Option<&str>,
-    ) -> Result<String> {
+impl EdgeConfirmationClient for HttpCloudClient {
+    async fn confirm(&self, ticket: &str, credential: &str, port: u16) -> Result<String> {
         let response = self
             .client
-            .post(self.endpoint("api/edge/network/configure")?)
-            .json(&NetworkRequest {
-                ticket,
-                service_credential: credential,
-                candidate_ipv4,
-                port,
-                dns_challenge,
-            })
-            .send()
-            .await
-            .context("failed to request edge network configuration")?;
-        let response =
-            Self::require_ok(response, "Cloud rejected edge network configuration").await?;
-        Ok(response
-            .json::<HostnameResponse>()
-            .await
-            .context("Cloud returned an invalid network configuration response")?
-            .hostname)
-    }
-
-    async fn verify_health(&self, ticket: &str, credential: &str, port: u16) -> Result<String> {
-        let response = self
-            .client
-            .post(self.endpoint("api/edge/network/health")?)
-            .json(&HealthRequest {
+            .post(self.endpoint("api/edge/confirm")?)
+            .json(&ConfirmationRequest {
                 ticket,
                 service_credential: credential,
                 port,
             })
             .send()
             .await
-            .context("failed to request public edge health verification")?;
-        let response =
-            Self::require_ok(response, "Cloud could not verify public edge health").await?;
+            .context("failed to request edge registration confirmation")?;
+        let response = Self::require_ok(response, "Cloud could not confirm the edge").await?;
         Ok(response
             .json::<HostnameResponse>()
             .await
-            .context("Cloud returned an invalid health response")?
+            .context("Cloud returned an invalid confirmation response")?
             .hostname)
     }
 }
@@ -410,8 +354,8 @@ mod tests {
     fn identity(id: &str) -> EdgeIdentity {
         EdgeIdentity {
             edge_id: Uuid::parse_str(id).unwrap(),
-            name: "brave-silver-atlas".to_owned(),
-            tunnel_url: "wss://brave-silver-atlas.edge.pontia.dev/tunnel".to_owned(),
+            name: "edge.example.com".to_owned(),
+            tunnel_url: "wss://edge.example.com/tunnel".to_owned(),
         }
     }
 
@@ -438,7 +382,7 @@ mod tests {
             return Err(StatusCode::UNAUTHORIZED);
         }
         Ok(Json(
-            json!({ "edge_id": FIRST_ID, "name": "brave-silver-atlas", "tunnel_url": "wss://brave-silver-atlas.edge.pontia.dev/tunnel" }),
+            json!({ "edge_id": FIRST_ID, "name": "edge.example.com", "tunnel_url": "wss://edge.example.com/tunnel" }),
         ))
     }
 
@@ -459,33 +403,32 @@ mod tests {
             .unwrap()
             .push((ticket.to_owned(), credential.to_owned()));
         Ok(Json(
-            json!({ "edge_id": FIRST_ID, "name": "brave-silver-atlas", "tunnel_url": "wss://brave-silver-atlas.edge.pontia.dev/tunnel" }),
+            json!({ "edge_id": FIRST_ID, "name": "edge.example.com", "tunnel_url": "wss://edge.example.com/tunnel" }),
         ))
     }
 
-    async fn reject_network(Json(body): Json<Value>) -> (StatusCode, Json<Value>) {
-        match body.get("candidate_ipv4").and_then(Value::as_str) {
-            Some("1.1.1.1") => (
-                StatusCode::UNAUTHORIZED,
-                Json(json!({ "error": "invalid_deployment_authorization" })),
-            ),
-            Some("9.9.9.9") => (
+    async fn confirm(Json(body): Json<Value>) -> axum::response::Response {
+        use axum::response::IntoResponse;
+        assert_eq!(body["ticket"], "deployment-ticket");
+        assert_eq!(body["service_credential"], "service-credential");
+        let error = |status, code| (status, Json(json!({ "error": code }))).into_response();
+        match body["port"].as_u64() {
+            Some(443) => Json(json!({
+                "edge_id": FIRST_ID,
+                "hostname": "edge.example.com",
+                "tunnel_url": "wss://edge.example.com/tunnel",
+            }))
+            .into_response(),
+            Some(8443) => error(StatusCode::UNAUTHORIZED, "invalid_deployment_authorization"),
+            Some(8444) => error(StatusCode::UNPROCESSABLE_ENTITY, "non_public_ip"),
+            Some(8445) => error(
                 StatusCode::UNPROCESSABLE_ENTITY,
-                Json(json!({ "error": "address_verification_failed" })),
+                "ownership_verification_failed",
             ),
-            Some("8.8.4.4") => (
-                StatusCode::TOO_MANY_REQUESTS,
-                Json(json!({ "error": "rate_limited" })),
-            ),
-            _ => (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({ "error": "service_unavailable" })),
-            ),
+            Some(8446) => error(StatusCode::CONFLICT, "endpoint_already_registered"),
+            Some(8447) => error(StatusCode::TOO_MANY_REQUESTS, "rate_limited"),
+            _ => (StatusCode::BAD_GATEWAY, "upstream secret response").into_response(),
         }
-    }
-
-    async fn reject_health() -> (StatusCode, &'static str) {
-        (StatusCode::BAD_GATEWAY, "upstream secret response")
     }
 
     #[tokio::test]
@@ -610,8 +553,7 @@ mod tests {
         let router = Router::new()
             .route("/api/edge/me", get(get_identity))
             .route("/api/edge/enroll", post(enroll))
-            .route("/api/edge/network/configure", post(reject_network))
-            .route("/api/edge/network/health", post(reject_health))
+            .route("/api/edge/confirm", post(confirm))
             .with_state(log.clone());
         let handle = Handle::new();
         let task = tokio::spawn(
@@ -647,27 +589,38 @@ mod tests {
                 "service-credential".to_owned()
             )]
         );
-        for (address, expected) in [
+        assert_eq!(
+            client
+                .confirm("deployment-ticket", "service-credential", 443)
+                .await
+                .unwrap(),
+            "edge.example.com"
+        );
+        for (port, expected) in [
             (
-                "1.1.1.1",
-                "Cloud rejected edge network configuration (HTTP 401 Unauthorized, error: invalid_deployment_authorization)",
+                8443,
+                "Cloud could not confirm the edge (HTTP 401 Unauthorized, error: invalid_deployment_authorization)",
             ),
             (
-                "9.9.9.9",
-                "Cloud rejected edge network configuration (HTTP 422 Unprocessable Entity, error: address_verification_failed)",
+                8444,
+                "Cloud could not confirm the edge (HTTP 422 Unprocessable Entity, error: non_public_ip)",
             ),
             (
-                "8.8.4.4",
-                "Cloud rejected edge network configuration (HTTP 429 Too Many Requests, error: rate_limited)",
+                8445,
+                "Cloud could not confirm the edge (HTTP 422 Unprocessable Entity, error: ownership_verification_failed)",
             ),
             (
-                "8.8.8.8",
-                "Cloud rejected edge network configuration (HTTP 503 Service Unavailable, error: service_unavailable)",
+                8446,
+                "Cloud could not confirm the edge (HTTP 409 Conflict, error: endpoint_already_registered)",
+            ),
+            (
+                8447,
+                "Cloud could not confirm the edge (HTTP 429 Too Many Requests, error: rate_limited)",
             ),
         ] {
             assert_eq!(
                 client
-                    .configure_network("deployment-ticket", "service-credential", address, 80, None)
+                    .confirm("deployment-ticket", "service-credential", port)
                     .await
                     .unwrap_err()
                     .to_string(),
@@ -675,13 +628,13 @@ mod tests {
             );
         }
         let unknown = client
-            .verify_health("deployment-ticket", "service-credential", 443)
+            .confirm("deployment-ticket", "service-credential", 9443)
             .await
             .unwrap_err()
             .to_string();
         assert_eq!(
             unknown,
-            "Cloud could not verify public edge health (HTTP 502 Bad Gateway, error: unknown_cloud_error)"
+            "Cloud could not confirm the edge (HTTP 502 Bad Gateway, error: unknown_cloud_error)"
         );
         assert!(!unknown.contains("upstream secret response"));
 

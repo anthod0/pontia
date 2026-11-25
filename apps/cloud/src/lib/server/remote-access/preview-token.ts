@@ -50,7 +50,7 @@ export async function issuePreviewToken(
       )
       .get());
   if (!device) return { status: 404, body: { error: "device_not_found" } };
-  if (!device.enabled || !env.PREVIEW_ZONE)
+  if (!device.enabled || !device.label || !env.PREVIEW_ZONE)
     return { status: 409, body: { error: "edge_preview_unavailable" } };
   const hostname = `${port}-${device.id.replaceAll("-", "")}.${device.label}.${env.PREVIEW_ZONE}`;
   const now = Math.floor(Date.now() / 1000);

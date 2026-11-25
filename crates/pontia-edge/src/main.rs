@@ -1,6 +1,6 @@
 use std::{
     io::{BufReader, Write},
-    net::{Ipv4Addr, SocketAddr},
+    net::SocketAddr,
     path::Path,
     time::{Duration, SystemTime},
 };
@@ -12,13 +12,15 @@ use pontia_edge::{
     AccessTokenVerifier, BrowserOrigins, ConnectionLimits, Edge, TicketRedeemer,
     acme::{
         ACCOUNT_PATH, AcmeChallenge, CloudDnsChallenges, InstantAcmeIssuer, TLS_PATH,
-        complete_dns_and_save, issue_dns_and_save, issue_http_and_save,
+        issue_dns_and_save, issue_http_and_save,
     },
-    challenge::ChallengeServer,
+    certificate,
     config::{CLOUD_ORIGIN, CONFIG_PATH, ServiceConfig, hostname_from_tunnel_url},
     credential::{CREDENTIAL_PATH, ensure_managed_directory, ensure_root, read_edge_credential},
-    enrollment::{EdgeNetworkClient, HttpCloudClient, InitializationResult, initialize_and_enroll},
-    network::{discover_public_ipv4, system_dns_resolver},
+    enrollment::{
+        EdgeConfirmationClient, HttpCloudClient, InitializationResult, initialize_and_enroll,
+    },
+    network::{bind_listener, public_addresses},
     pending_init::{self, PENDING_INIT_PATH, PendingInit},
     port::{parse_edge_port, tunnel_url},
     systemd::{Systemd, UNIT_DIRECTORY, UNIT_PATH},
@@ -35,10 +37,10 @@ use uuid::Uuid;
 mod auto_update;
 mod update;
 
-const DNS_WAIT_TIMEOUT: Duration = Duration::from_secs(300);
-const HEALTH_WAIT_ATTEMPTS: usize = 30;
+const CONFIRMATION_ATTEMPTS: usize = 30;
 const RETRY_DELAY: Duration = Duration::from_secs(5);
-const RENEW_AFTER: Duration = Duration::from_secs(50 * 24 * 60 * 60);
+const FIRST_RENEWAL_CHECK: Duration = Duration::from_secs(60);
+const RENEWAL_CHECK_INTERVAL: Duration = Duration::from_secs(60 * 60);
 
 #[derive(Parser)]
 #[command(
@@ -53,7 +55,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Initialize this edge, configure its public endpoint, and install its service.
+    /// Initialize this edge for its domain, obtain a certificate, and install its service.
     Init(InitArgs),
     /// Retry the last incomplete initialization.
     Retry,
@@ -78,12 +80,9 @@ struct InitArgs {
     ticket: String,
     #[arg(long, hide = true)]
     acme_staging: bool,
-    /// Public HTTPS/WSS port (recommended alternative: 8443). Also used for IP verification.
+    /// Public HTTPS/WSS port (default 443). Certificate validation also uses public port 80.
     #[arg(long, value_parser = parse_edge_port)]
     port: Option<u16>,
-    /// ACME validation method. HTTP-01 always requires public port 80.
-    #[arg(long, value_enum, default_value = "http-01")]
-    acme_challenge: AcmeChallenge,
 }
 
 #[tokio::main]
@@ -114,7 +113,6 @@ impl From<InitArgs> for PendingInit {
             ticket: args.ticket,
             acme_staging: args.acme_staging,
             port: args.port,
-            acme_challenge: args.acme_challenge,
         }
     }
 }
@@ -180,125 +178,67 @@ async fn init_with_output<W: Write + ?Sized>(args: PendingInit, output: &mut W) 
     let expected_config = ServiceConfig {
         hostname: hostname.clone(),
         port: args.port.unwrap_or(443),
-        acme_challenge: args.acme_challenge,
+        acme_challenge: AcmeChallenge::Http01,
         browser_dashboard_origin: "https://app.pontia.dev".to_owned(),
-        preview_base_hostname: Some(format!(
-            "{}.pontia.run",
-            hostname.split('.').next().unwrap()
-        )),
+        preview_base_hostname: None,
     };
     let credential = read_edge_credential(CREDENTIAL_PATH.as_ref())?;
     let systemd = Systemd::default();
+    let endpoint = tunnel_url(&hostname, expected_config.port);
 
     if already_registered {
         anyhow::ensure!(
-            identity.tunnel_url == tunnel_url(&hostname, expected_config.port),
+            identity.tunnel_url == endpoint,
             "registered edge endpoint does not match the pending initialization"
         );
         status(
             output,
-            &format!(
-                "Edge {} is already registered; completing local setup.",
-                identity.name
-            ),
+            &format!("Edge {hostname} is already registered; completing local setup."),
         )?;
         anyhow::ensure!(
             saved_certificate_is_usable(Path::new(TLS_PATH), &hostname).await,
             "registered edge TLS certificate is missing or invalid"
         );
-        expected_config.save(Path::new(CONFIG_PATH))?;
-        systemd.install_and_start(Path::new(UNIT_PATH)).await?;
-        wait_for_health(
-            &client,
-            &args.ticket,
-            &credential.value,
-            (&hostname, expected_config.port),
-            output,
-            HEALTH_WAIT_ATTEMPTS,
-            RETRY_DELAY,
-        )
-        .await?;
-        systemd
-            .enable_auto_update(Path::new(UNIT_DIRECTORY))
-            .await?;
+    } else {
+        status(output, &format!("Deployment authorized for {hostname}."))?;
+        if expected_config.port != 80 {
+            status(
+                output,
+                "Let's Encrypt HTTP-01 validation requires public TCP port 80 to reach this server.",
+            )?;
+        }
+        status(output, &format!("Checking public DNS for {hostname}..."))?;
+        let addresses = public_addresses(&hostname).await.with_context(|| {
+            format!(
+                "point an A or AAAA record for {hostname} to this server's public IP address, then run `sudo pontia-edge retry`"
+            )
+        })?;
         status(
             output,
             &format!(
-                "Edge {} is available at {}.",
-                identity.name, identity.tunnel_url
+                "{hostname} resolves to {}.",
+                addresses
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ),
         )?;
-        status(
-            output,
-            "Manage this Edge at https://pontia.dev/settings/edges",
-        )?;
-        return Ok(());
-    }
-
-    status(
-        output,
-        &format!("Deployment authorized for {} ({hostname}).", identity.name),
-    )?;
-    status(output, "Detecting the public IPv4 address...")?;
-    let candidate_ipv4 = discover_public_ipv4(client.origin()).await?;
-    status(output, &format!("Public IPv4 address: {candidate_ipv4}"))?;
-
-    let reusable_certificate = existing_certificate_matches(&expected_config).await;
-    let probe_port = args.port.unwrap_or(80);
-    status(
-        output,
-        &format!("Starting the IP challenge server on 0.0.0.0:{probe_port}..."),
-    )?;
-    let challenge_server =
-        ChallengeServer::start(SocketAddr::from((Ipv4Addr::UNSPECIFIED, probe_port))).await?;
-    let issuer = if args.acme_staging {
-        InstantAcmeIssuer::staging(ACCOUNT_PATH)
-    } else {
-        InstantAcmeIssuer::production(ACCOUNT_PATH)
-    };
-    let dns_order = if !reusable_certificate && args.acme_challenge == AcmeChallenge::Dns01 {
-        Some(issuer.prepare_dns(&hostname).await?)
-    } else {
-        None
-    };
-    let dns_value = dns_order.as_ref().and_then(|order| order.value.clone());
-
-    status(output, &format!("Configuring DNS for {hostname}..."))?;
-    let configured_hostname = client
-        .configure_network(
-            &args.ticket,
-            &credential.value,
-            &candidate_ipv4.to_string(),
-            probe_port,
-            dns_value.as_deref(),
-        )
-        .await?;
-    anyhow::ensure!(
-        configured_hostname == hostname,
-        "Cloud configured a different hostname: expected {hostname}, received {configured_hostname}"
-    );
-    // The temporary plaintext listener belongs only to IP verification.
-    challenge_server.stop().await?;
-    status(output, "DNS configuration accepted by Pontia Cloud.")?;
-
-    if !reusable_certificate {
-        status(
-            output,
-            &format!("Requesting a TLS certificate for {hostname} from Let's Encrypt..."),
-        )?;
-        if let Some(order) = dns_order {
-            let dns = CloudDnsChallenges {
-                client: &client,
-                credential: &credential.value,
-                ticket: Some(&args.ticket),
-                preview: false,
-            };
-            complete_dns_and_save(order, &hostname, Path::new(TLS_PATH), &dns, output).await?;
+        if reusable_certificate(Path::new(TLS_PATH), &hostname).await {
+            status(output, "Reusing the saved TLS certificate.")?;
         } else {
-            wait_for_dns(&hostname, candidate_ipv4, output).await?;
+            status(
+                output,
+                &format!("Requesting a TLS certificate for {hostname} from Let's Encrypt..."),
+            )?;
+            let issuer = if args.acme_staging {
+                InstantAcmeIssuer::staging(ACCOUNT_PATH)
+            } else {
+                InstantAcmeIssuer::production(ACCOUNT_PATH)
+            };
             issue_http_and_save(&issuer, &hostname, Path::new(TLS_PATH), None, output).await?;
+            status(output, "TLS certificate issued and saved.")?;
         }
-        status(output, "TLS certificate issued and saved.")?;
     }
 
     status(output, "Saving edge configuration...")?;
@@ -306,13 +246,14 @@ async fn init_with_output<W: Write + ?Sized>(args: PendingInit, output: &mut W) 
     status(output, "Installing and starting the pontia-edge service...")?;
     systemd.install_and_start(Path::new(UNIT_PATH)).await?;
     status(output, "pontia-edge service started.")?;
-    wait_for_health(
+    wait_for_confirmation(
         &client,
         &args.ticket,
         &credential.value,
-        (&hostname, expected_config.port),
+        &hostname,
+        expected_config.port,
         output,
-        HEALTH_WAIT_ATTEMPTS,
+        CONFIRMATION_ATTEMPTS,
         RETRY_DELAY,
     )
     .await?;
@@ -322,11 +263,7 @@ async fn init_with_output<W: Write + ?Sized>(args: PendingInit, output: &mut W) 
         .await?;
     status(
         output,
-        &format!(
-            "Edge {} is available at {}.",
-            identity.name,
-            tunnel_url(&hostname, expected_config.port)
-        ),
+        &format!("Edge {hostname} is available at {endpoint}."),
     )?;
     status(
         output,
@@ -342,9 +279,10 @@ fn status(output: &mut (impl Write + ?Sized), message: &str) -> Result<()> {
         .context("failed to flush deployment progress")
 }
 
-async fn existing_certificate_matches(expected: &ServiceConfig) -> bool {
-    ServiceConfig::read(Path::new(CONFIG_PATH)).ok().as_ref() == Some(expected)
-        && saved_certificate_is_usable(Path::new(TLS_PATH), &expected.hostname).await
+/// A saved certificate is reused only while it is trusted and outside its renewal window.
+async fn reusable_certificate(path: &Path, hostname: &str) -> bool {
+    !certificate::needs_renewal(path, SystemTime::now())
+        && saved_certificate_is_usable(path, hostname).await
 }
 
 async fn saved_certificate_is_usable(path: &Path, hostname: &str) -> bool {
@@ -383,75 +321,13 @@ fn certificate_matches_hostname(path: &Path, hostname: &str) -> bool {
         .is_ok()
 }
 
-async fn wait_for_dns(
-    hostname: &str,
-    candidate: Ipv4Addr,
-    output: &mut (impl Write + ?Sized),
-) -> Result<()> {
-    status(
-        output,
-        &format!(
-            "Waiting for {hostname} to resolve to {candidate} using system DNS (up to 5 minutes)..."
-        ),
-    )?;
-    let resolver = system_dns_resolver()?;
-    let name = format!("{hostname}.");
-    let started = tokio::time::Instant::now();
-    let deadline = started + DNS_WAIT_TIMEOUT;
-    let mut reports =
-        tokio::time::interval_at(started + Duration::from_secs(15), Duration::from_secs(15));
-    reports.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    let mut next_query = started;
-    let mut last_observation = "no DNS response received".to_owned();
-    loop {
-        let query_at = next_query;
-        let query = async {
-            tokio::time::sleep_until(query_at).await;
-            tokio::time::timeout(Duration::from_secs(5), resolver.ipv4_lookup(name.as_str())).await
-        };
-        tokio::pin!(query);
-        let result = loop {
-            tokio::select! {
-                biased;
-                _ = tokio::time::sleep_until(deadline) => {
-                    anyhow::bail!("assigned hostname did not resolve to the verified IPv4 address within 5 minutes; last DNS check: {last_observation}");
-                }
-                result = &mut query => break result,
-                _ = reports.tick() => {
-                    status(output, &format!("Still waiting for DNS after {} seconds; last check: {last_observation}.", started.elapsed().as_secs()))?;
-                }
-            }
-        };
-        match result {
-            Ok(Ok(addresses)) if addresses.iter().any(|address| address.0 == candidate) => {
-                status(
-                    output,
-                    &format!("DNS now resolves {hostname} to {candidate}."),
-                )?;
-                return Ok(());
-            }
-            Ok(Ok(addresses)) => {
-                last_observation = format!(
-                    "resolved to {} instead of {candidate}",
-                    addresses
-                        .iter()
-                        .map(ToString::to_string)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                );
-            }
-            Ok(Err(error)) => last_observation = format!("system DNS lookup failed: {error}"),
-            Err(_) => last_observation = "system DNS lookup timed out after 5 seconds".to_owned(),
-        }
-        next_query = tokio::time::Instant::now() + RETRY_DELAY;
-    }
-}
-
-async fn wait_for_health<C: EdgeNetworkClient>(
+#[allow(clippy::too_many_arguments)]
+async fn wait_for_confirmation<C: EdgeConfirmationClient>(
     client: &C,
     ticket: &str,
     credential: &str,
-    endpoint: (&str, u16),
+    hostname: &str,
+    port: u16,
     output: &mut (impl Write + ?Sized),
     attempts: usize,
     retry_delay: Duration,
@@ -459,16 +335,15 @@ async fn wait_for_health<C: EdgeNetworkClient>(
     status(
         output,
         &format!(
-            "Waiting for Pontia Cloud to verify the public HTTPS endpoint (up to {})...",
+            "Waiting for Pontia Cloud to verify domain ownership over HTTPS (up to {})...",
             format_duration(retry_delay * attempts as u32)
         ),
     )?;
-    let (hostname, port) = endpoint;
-    let mut last_observation = "no health response received".to_owned();
+    let mut last_observation = "no confirmation response received".to_owned();
     for attempt in 1..=attempts {
-        match client.verify_health(ticket, credential, port).await {
+        match client.confirm(ticket, credential, port).await {
             Ok(value) if value == hostname => {
-                status(output, "Public HTTPS health verification succeeded.")?;
+                status(output, "Pontia Cloud verified and registered this edge.")?;
                 return Ok(());
             }
             Ok(value) => {
@@ -481,15 +356,13 @@ async fn wait_for_health<C: EdgeNetworkClient>(
             status(
                 output,
                 &format!(
-                    "Still waiting for HTTPS health verification after {}; last check: {last_observation}.",
+                    "Still waiting for ownership verification after {}; last check: {last_observation}.",
                     format_duration(retry_delay * attempt as u32)
                 ),
             )?;
         }
     }
-    anyhow::bail!(
-        "Cloud could not verify the public HTTPS health endpoint; last health check: {last_observation}"
-    )
+    anyhow::bail!("Cloud could not verify this edge over HTTPS; last check: {last_observation}")
 }
 
 fn format_duration(duration: Duration) -> String {
@@ -515,24 +388,26 @@ async fn serve() -> Result<()> {
     let access_tokens = AccessTokenVerifier::embedded(credential.edge_id)?;
     let service_credential = credential.value;
     let tls = RustlsConfig::from_pem_file(TLS_PATH, TLS_PATH).await?;
-    let base = config
-        .preview_base_hostname
-        .clone()
-        .context("missing preview hostname")?;
-    let resolver = EdgeCertResolver::new(&base, tls.clone());
-    let preview_path = Path::new("/etc/pontia/edge/preview-tls.pem");
-    if preview_path.exists()
-        && let Err(error) = resolver.load_preview(preview_path).await
-    {
-        tracing::warn!(%error,"could not load preview certificate");
-    }
-    let server_tls = resolver.server();
-    let preview = tokio::spawn(maintain_preview(
-        base,
-        service_credential.clone(),
-        resolver,
-        preview_path,
-    ));
+    let (server_tls, preview) = match config.preview_base_hostname.clone() {
+        Some(base) => {
+            let resolver = EdgeCertResolver::new(&base, tls.clone());
+            let preview_path = Path::new("/etc/pontia/edge/preview-tls.pem");
+            if preview_path.exists()
+                && let Err(error) = resolver.load_preview(preview_path).await
+            {
+                tracing::warn!(%error,"could not load preview certificate");
+            }
+            let server_tls = resolver.server();
+            let preview = tokio::spawn(maintain_preview(
+                base,
+                service_credential.clone(),
+                resolver,
+                preview_path,
+            ));
+            (server_tls, Some(preview))
+        }
+        None => (tls.clone(), None),
+    };
     let origins = BrowserOrigins {
         dashboard: config.browser_dashboard_origin.clone(),
     };
@@ -550,7 +425,8 @@ async fn serve() -> Result<()> {
         signal_edge.shutdown();
         signal_handle.graceful_shutdown(Some(Duration::from_secs(5)));
     });
-    let address = SocketAddr::from(([0, 0, 0, 0], config.port));
+    let listener = bind_listener(config.port)?;
+    let address = listener.local_addr()?;
     let shared_acme = (config.port == 80 && config.acme_challenge == AcmeChallenge::Http01)
         .then(pontia_edge::challenge::ChallengeResponses::default);
     let router = edge.router(
@@ -566,13 +442,13 @@ async fn serve() -> Result<()> {
     ));
     tracing::info!(%address, "starting edge");
     let result = if let Some(responses) = shared_acme {
-        axum_server::bind(address)
+        axum_server::from_tcp(listener)?
             .acceptor(AcmeAcceptor::new(server_tls, responses))
             .handle(handle)
             .serve(router.into_make_service())
             .await
     } else {
-        axum_server::bind_rustls(address, server_tls)
+        axum_server::from_tcp_rustls(listener, server_tls)?
             .handle(handle)
             .serve(router.into_make_service())
             .await
@@ -580,7 +456,9 @@ async fn serve() -> Result<()> {
     edge.shutdown();
     signal.abort();
     renewal.abort();
-    preview.abort();
+    if let Some(preview) = preview {
+        preview.abort();
+    }
     result?;
     Ok(())
 }
@@ -596,13 +474,12 @@ async fn maintain_preview(
             let client = HttpCloudClient::new(CLOUD_ORIGIN)?;
             let managed = client.provision_preview(&credential, &base).await?;
             if managed
-                && (certificate_needs_renewal(path)
+                && (certificate::needs_renewal(path, SystemTime::now())
                     || !saved_certificate_is_usable(path, &format!("probe.{base}")).await)
             {
                 let dns = CloudDnsChallenges {
                     client: &client,
                     credential: &credential,
-                    ticket: None,
                     preview: true,
                 };
                 issue_dns_and_save(
@@ -637,57 +514,58 @@ async fn renew_certificates(
     tls: RustlsConfig,
     shared_acme: Option<pontia_edge::challenge::ChallengeResponses>,
 ) {
+    tokio::time::sleep(FIRST_RENEWAL_CHECK).await;
     loop {
-        tokio::time::sleep(Duration::from_secs(24 * 60 * 60)).await;
-        if !certificate_needs_renewal(Path::new(TLS_PATH)) {
-            continue;
-        }
-        let issuer = InstantAcmeIssuer::production(ACCOUNT_PATH);
-        let result = async {
-            if config.acme_challenge == AcmeChallenge::Dns01 {
-                let client = HttpCloudClient::new(CLOUD_ORIGIN)?;
-                let dns = CloudDnsChallenges {
-                    client: &client,
-                    credential: &credential,
-                    ticket: None,
-                    preview: false,
-                };
-                issue_dns_and_save(
-                    &issuer,
-                    &config.hostname,
-                    Path::new(TLS_PATH),
-                    &dns,
-                    &mut std::io::stdout(),
-                )
-                .await?;
+        if certificate::needs_renewal(Path::new(TLS_PATH), SystemTime::now()) {
+            let result = renew_certificate(&config, &credential, &tls, shared_acme.clone()).await;
+            if let Err(error) = result {
+                tracing::error!(%error, "certificate renewal failed");
             } else {
-                issue_http_and_save(
-                    &issuer,
-                    &config.hostname,
-                    Path::new(TLS_PATH),
-                    shared_acme.clone(),
-                    &mut std::io::stdout(),
-                )
-                .await?;
+                tracing::info!(hostname = %config.hostname, "certificate renewed");
             }
-            tls.reload_from_pem_file(TLS_PATH, TLS_PATH).await?;
-            Result::<()>::Ok(())
         }
-        .await;
-        if let Err(error) = result {
-            tracing::error!(%error, "certificate renewal failed");
-        } else {
-            tracing::info!(hostname = %config.hostname, "certificate renewed");
-        }
+        tokio::time::sleep(RENEWAL_CHECK_INTERVAL).await;
     }
 }
 
-fn certificate_needs_renewal(path: &Path) -> bool {
-    std::fs::metadata(path)
-        .and_then(|metadata| metadata.modified())
-        .ok()
-        .and_then(|modified| SystemTime::now().duration_since(modified).ok())
-        .is_none_or(|age| age >= RENEW_AFTER)
+async fn renew_certificate(
+    config: &ServiceConfig,
+    credential: &str,
+    tls: &RustlsConfig,
+    shared_acme: Option<pontia_edge::challenge::ChallengeResponses>,
+) -> Result<()> {
+    let issuer = InstantAcmeIssuer::production(ACCOUNT_PATH);
+    match config.acme_challenge {
+        AcmeChallenge::Http01 => {
+            issue_http_and_save(
+                &issuer,
+                &config.hostname,
+                Path::new(TLS_PATH),
+                shared_acme,
+                &mut std::io::stdout(),
+            )
+            .await?
+        }
+        // Edges registered under the managed zone keep renewing through Cloud DNS.
+        AcmeChallenge::Dns01 => {
+            let client = HttpCloudClient::new(CLOUD_ORIGIN)?;
+            let dns = CloudDnsChallenges {
+                client: &client,
+                credential,
+                preview: false,
+            };
+            issue_dns_and_save(
+                &issuer,
+                &config.hostname,
+                Path::new(TLS_PATH),
+                &dns,
+                &mut std::io::stdout(),
+            )
+            .await?
+        }
+    }
+    tls.reload_from_pem_file(TLS_PATH, TLS_PATH).await?;
+    Ok(())
 }
 
 struct ShutdownSignals {
@@ -826,40 +704,25 @@ mod tests {
         assert_signal_cancels_initialization(rustix::process::Signal::TERM, false).await;
     }
 
-    struct FailingHealthClient;
+    struct FailingConfirmationClient;
 
-    impl EdgeNetworkClient for FailingHealthClient {
-        async fn configure_network(
-            &self,
-            _ticket: &str,
-            _credential: &str,
-            _candidate_ipv4: &str,
-            _port: u16,
-            _dns_challenge: Option<&str>,
-        ) -> Result<String> {
-            unreachable!()
-        }
-
-        async fn verify_health(
-            &self,
-            _ticket: &str,
-            _credential: &str,
-            _port: u16,
-        ) -> Result<String> {
+    impl EdgeConfirmationClient for FailingConfirmationClient {
+        async fn confirm(&self, _ticket: &str, _credential: &str, _port: u16) -> Result<String> {
             anyhow::bail!(
-                "Cloud could not verify public edge health (HTTP 502 Bad Gateway, error: health_verification_failed)"
+                "Cloud could not confirm the edge (HTTP 422 Unprocessable Entity, error: ownership_verification_failed)"
             )
         }
     }
 
     #[tokio::test]
-    async fn health_timeout_reports_progress_and_the_last_cloud_error() {
+    async fn confirmation_timeout_reports_progress_and_the_last_cloud_error() {
         let mut output = Vec::new();
-        let error = wait_for_health(
-            &FailingHealthClient,
+        let error = wait_for_confirmation(
+            &FailingConfirmationClient,
             "secret-ticket",
             "secret-credential",
-            ("brave-silver-atlas.edge.pontia.dev", 443),
+            "edge.example.com",
+            443,
             &mut output,
             1,
             Duration::ZERO,
@@ -869,9 +732,9 @@ mod tests {
         .to_string();
         let output = String::from_utf8(output).unwrap();
 
-        assert!(output.contains("Waiting for Pontia Cloud to verify"));
-        assert!(error.contains("HTTP 502 Bad Gateway"));
-        assert!(error.contains("health_verification_failed"));
+        assert!(output.contains("Waiting for Pontia Cloud to verify domain ownership"));
+        assert!(error.contains("HTTP 422 Unprocessable Entity"));
+        assert!(error.contains("ownership_verification_failed"));
         assert!(!output.contains("secret-ticket"));
         assert!(!output.contains("secret-credential"));
         assert!(!error.contains("secret-ticket"));
@@ -947,32 +810,28 @@ mod tests {
         assert_eq!(format_duration(Duration::from_secs(300)), "5 minutes");
     }
 
-    #[test]
-    fn rejects_an_untrusted_certificate_even_for_the_assigned_hostname() {
+    #[tokio::test]
+    async fn untrusted_or_expiring_certificates_are_not_reused() {
         let test_root = tempfile::tempdir().unwrap();
         let path = test_root.path().join("tls.pem");
-        let rcgen::CertifiedKey { cert, signing_key } = rcgen::generate_simple_self_signed(vec![
-            "brave-silver-atlas.edge.pontia.dev".to_owned(),
-        ])
-        .unwrap();
+        let rcgen::CertifiedKey { cert, signing_key } =
+            rcgen::generate_simple_self_signed(vec!["edge.example.com".to_owned()]).unwrap();
         std::fs::write(
             &path,
             format!("{}{}", cert.pem(), signing_key.serialize_pem()),
         )
         .unwrap();
 
-        assert!(!certificate_matches_hostname(
-            &path,
-            "brave-silver-atlas.edge.pontia.dev"
-        ));
-        assert!(!certificate_matches_hostname(
-            &path,
-            "silent-crimson-orion.edge.pontia.dev"
-        ));
+        assert!(!certificate_matches_hostname(&path, "edge.example.com"));
+        assert!(!certificate_matches_hostname(&path, "other.example.com"));
+        assert!(!reusable_certificate(&path, "edge.example.com").await);
+        assert!(
+            !reusable_certificate(&test_root.path().join("missing.pem"), "edge.example.com").await
+        );
     }
 
     #[test]
-    fn endpoint_port_and_acme_method_are_independent_cli_options() {
+    fn init_accepts_only_an_optional_port_and_always_uses_http_validation() {
         let base = [
             "pontia-edge",
             "init",
@@ -981,28 +840,14 @@ mod tests {
             "--ticket",
             "ticket",
         ];
-        for (extra, port, method) in [
-            (vec![], None, AcmeChallenge::Http01),
-            (vec!["--port", "8443"], Some(8443), AcmeChallenge::Http01),
-            (
-                vec!["--acme-challenge", "dns-01"],
-                None,
-                AcmeChallenge::Dns01,
-            ),
-            (
-                vec!["--port", "8443", "--acme-challenge", "dns-01"],
-                Some(8443),
-                AcmeChallenge::Dns01,
-            ),
-        ] {
+        for (extra, port) in [(vec![], None), (vec!["--port", "8443"], Some(8443))] {
             let cli = Cli::try_parse_from(base.into_iter().chain(extra)).unwrap();
             let Some(Command::Init(args)) = cli.command else {
                 panic!("expected init")
             };
             assert_eq!(args.port, port);
-            assert_eq!(args.acme_challenge, method);
         }
-        for method in ["dns", "http", "DNS-01", "HTTP-01", "tls-alpn-01"] {
+        for method in ["dns-01", "http-01"] {
             assert!(
                 Cli::try_parse_from(base.into_iter().chain(["--acme-challenge", method])).is_err()
             );

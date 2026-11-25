@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
-import { removeOwnedEdge } from "../src/lib/server/edge-management";
+import { removeOwnedEdge, type EdgeDnsCleanup } from "../src/lib/server/edge-management";
 import { devices, edges, edgeTickets, users } from "../src/lib/server/db/schema";
 import { testDatabase } from "./database";
 
@@ -9,14 +9,19 @@ const ownerId = "0199791c-6600-7000-8000-000000000001";
 const otherUserId = "0199791c-6600-7000-8000-000000000002";
 const edgeId = "0199791c-6600-7000-8000-000000000003";
 
-async function insertEdgeResources(accessScope: "private" | "public" = "private") {
+const managed = { dnsLabel: "brave-atlas", tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel" };
+const selfHosted = { dnsLabel: null, tunnelUrl: "wss://edge.example.com/tunnel" };
+
+async function insertEdgeResources(
+  accessScope: "private" | "public" = "private",
+  endpoint: { dnsLabel: string | null; tunnelUrl: string } = managed,
+) {
   await database.db.insert(users).values([{ id: ownerId }, { id: otherUserId }]);
   await database.db.insert(edges).values({
     id: edgeId,
     userId: ownerId,
     name: "Brave Atlas",
-    dnsLabel: "brave-atlas",
-    tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel",
+    ...endpoint,
     serviceCredentialHash: "hash",
     accessScope,
   });
@@ -37,35 +42,78 @@ async function insertEdgeResources(accessScope: "private" | "public" = "private"
   });
 }
 
-test("deleting an owned edge cleans DNS and removes its dependent Cloud resources", async () => {
-  await insertEdgeResources();
-  const cleaned: string[] = [];
+const noDns: EdgeDnsCleanup = {
+  async cleanupHostname() {
+    throw new Error("unexpected DNS cleanup");
+  },
+};
 
-  expect(
-    await removeOwnedEdge(database.db, ownerId, edgeId, {
-      async cleanupHostname(hostname) {
-        cleaned.push(hostname);
-      },
-    }),
-  ).toEqual({ status: "deleted" });
-
-  expect(cleaned).toEqual(["brave-atlas.edge.pontia.dev"]);
+async function expectRemoved() {
   expect(await database.db.select().from(edges).where(eq(edges.id, edgeId))).toEqual([]);
   expect(await database.db.select().from(devices).where(eq(devices.edgeId, edgeId))).toEqual([]);
   expect(
     await database.db.select().from(edgeTickets).where(eq(edgeTickets.expectedEdgeId, edgeId)),
   ).toEqual([]);
+}
+
+test("deleting a managed edge of a legacy DNS owner cleans DNS and removes its resources", async () => {
+  await insertEdgeResources();
+  const cleaned: string[][] = [];
+
+  expect(
+    await removeOwnedEdge(
+      database.db,
+      ownerId,
+      edgeId,
+      {
+        async cleanupHostname(hostname, dnsLabel) {
+          cleaned.push([hostname, dnsLabel]);
+        },
+      },
+      true,
+    ),
+  ).toEqual({ status: "deleted" });
+
+  expect(cleaned).toEqual([["brave-atlas.edge.pontia.dev", "brave-atlas"]]);
+  await expectRemoved();
+});
+
+test("deleting a self-hosted edge on its own domain never touches DNS", async () => {
+  for (const managesDns of [true, false]) {
+    await database.db.delete(devices);
+    await database.db.delete(edges);
+    await database.db.delete(users);
+    await insertEdgeResources("private", selfHosted);
+    expect(await removeOwnedEdge(database.db, ownerId, edgeId, noDns, managesDns)).toEqual({
+      status: "deleted",
+    });
+    await expectRemoved();
+  }
+});
+
+test("a labeled edge outside the legacy DNS allowlist is removed without DNS cleanup", async () => {
+  await insertEdgeResources();
+  expect(await removeOwnedEdge(database.db, ownerId, edgeId, noDns, false)).toEqual({
+    status: "deleted",
+  });
+  await expectRemoved();
 });
 
 test("a DNS cleanup failure keeps the edge and dependent resources available for retry", async () => {
   await insertEdgeResources();
 
   await expect(
-    removeOwnedEdge(database.db, ownerId, edgeId, {
-      async cleanupHostname() {
-        throw new Error("provider unavailable");
+    removeOwnedEdge(
+      database.db,
+      ownerId,
+      edgeId,
+      {
+        async cleanupHostname() {
+          throw new Error("provider unavailable");
+        },
       },
-    }),
+      true,
+    ),
   ).rejects.toThrow("provider unavailable");
 
   expect(await database.db.select().from(edges).where(eq(edges.id, edgeId))).toHaveLength(1);
@@ -79,29 +127,19 @@ test("a DNS cleanup failure keeps the edge and dependent resources available for
 
 test("an edge cannot be deleted by another user", async () => {
   await insertEdgeResources();
-  let cleanupCalled = false;
 
-  expect(
-    await removeOwnedEdge(database.db, otherUserId, edgeId, {
-      async cleanupHostname() {
-        cleanupCalled = true;
-      },
-    }),
-  ).toEqual({ status: "not_found" });
+  expect(await removeOwnedEdge(database.db, otherUserId, edgeId, noDns, true)).toEqual({
+    status: "not_found",
+  });
 
-  expect(cleanupCalled).toBe(false);
   expect(await database.db.select().from(edges).where(eq(edges.id, edgeId))).toHaveLength(1);
 });
 
 test("an owner cannot remove a public edge or its resources", async () => {
   await insertEdgeResources("public");
-  expect(
-    await removeOwnedEdge(database.db, ownerId, edgeId, {
-      async cleanupHostname() {
-        throw new Error("unexpected DNS cleanup");
-      },
-    }),
-  ).toEqual({ status: "not_found" });
+  expect(await removeOwnedEdge(database.db, ownerId, edgeId, noDns, true)).toEqual({
+    status: "not_found",
+  });
   expect(await database.db.select().from(edges)).toHaveLength(1);
   expect(await database.db.select().from(devices)).toHaveLength(1);
   expect(await database.db.select().from(edgeTickets)).toHaveLength(1);

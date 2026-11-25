@@ -13,37 +13,33 @@ Use a public Linux server with:
 
 - x86_64 or ARM64 architecture;
 - systemd as the system service manager;
-- a public IPv4 address that the server can bind and receive traffic on;
+- a public IP address and a domain name you control, such as `edge.example.com`;
+- inbound TCP ports 80 and 443;
 - outbound HTTPS and DNS access;
 - `curl`, `grep`, `install`, `mktemp`, `mv`, `openssl`, `rm`, `sed`, `sha256sum`, and `tar`;
 - OpenSSL with Ed25519 verification support.
 
-`pontia-edge` is supported only on Linux.
+## Prepare your domain
 
-## Choose a network mode
+Choose a domain or subdomain for the Edge, such as `edge.example.com`. At your DNS provider, create an A record, an AAAA record, or both that point it to the server's public IP address.
 
-The default deployment serves HTTPS and WSS on public port 443 and uses HTTP-01 certificate validation. Public port 80 must also reach the server during initialization and certificate renewal.
-
-If port 80 or 443 is unavailable, choose the alternative deployment in [Edge settings](/settings/edges). It uses a browser-safe custom HTTPS/WSS port—8443 is recommended—and DNS-01 certificate validation. Open the selected port in the host and provider firewalls.
-
-Pontia Cloud assigns the Edge hostname under `edge.pontia.dev` and configures its DNS record automatically.
+The Edge serves HTTPS and WSS on port 443 and obtains its Let's Encrypt certificate through HTTP-01 on port 80. Allow inbound TCP ports 80 and 443 in the host and provider firewalls. To serve on another browser-safe port, such as 8443, add `--port 8443` to the `pontia-edge init` command and open that port; port 80 continues to handle certificate issuance and renewal.
 
 ## Deploy from Cloud
 
 [Open Edge settings](/settings/edges), signing in when prompted. Then:
 
-1. Select **Generate deployment command**.
-2. Choose the default or alternative port mode.
+1. Select **Deploy an edge**.
+2. Enter your domain name and select **Generate deployment command**.
 3. Copy the one-time command and run it on the public Linux server.
 
-The command contains a short-lived deployment ticket. Keep it private and run it before the expiry shown by Cloud. Initialization:
+The command contains a short-lived deployment ticket bound to your domain. Keep it private and run it before the expiry shown by Cloud. Initialization:
 
 - downloads and verifies the signed `pontia-edge` release;
-- detects and proves control of the server's public IPv4 address;
-- configures the assigned DNS name through Pontia Cloud;
-- obtains a Let's Encrypt certificate;
+- checks that your domain resolves to a public IP address;
+- obtains a Let's Encrypt certificate for your domain;
 - installs and starts `pontia-edge.service`;
-- waits for Cloud to verify the public HTTPS health endpoint;
+- waits for Cloud to confirm over HTTPS that this server holds the Edge credential for your domain;
 - enables automatic stable-release checks.
 
 A successful Edge appears under **Your edges** in [Edge settings](/settings/edges) with a healthy status.
@@ -87,7 +83,7 @@ With automatic updates enabled, an online Edge also checks for updates when Clou
 
 Automatic updates check every 10 minutes. An update already in progress continues when future checks are disabled.
 
-After an upgrade, public and private Edges automatically switch to `<label>.pontia.run` for previews. Pontia synchronizes the DNS-only wildcard A record with the Edge IPv4 address and uses DNS-01 to issue and renew the wildcard TLS certificate.
+The Edge checks its certificate every hour and renews it automatically once a third of its validity remains.
 
 ## Stored files
 
@@ -106,6 +102,6 @@ Keep `/etc/pontia/edge` private and backed up according to your server policy.
 
 ## Delete an Edge
 
-Deleting a self-hosted Edge in Cloud permanently removes its registration and associated devices. The server installation is managed separately: move or disable the affected devices, then stop the service and remove its files from the server.
+Deleting a self-hosted Edge in Cloud permanently removes its registration and associated devices. The DNS records for your domain stay at your DNS provider, where you can update or remove them. The server installation is managed separately: move or disable the affected devices, then stop the service and remove its files from the server.
 
 Before deleting an Edge, use `pontia remote edit` on each affected device to select another Edge.

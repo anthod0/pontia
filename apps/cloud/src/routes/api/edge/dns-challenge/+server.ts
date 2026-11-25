@@ -2,10 +2,10 @@ import { json } from "@sveltejs/kit";
 import { eq } from "drizzle-orm";
 import { environment } from "$lib/server/auth/http";
 import { edges } from "$lib/server/db/schema";
-import { authorizeEdgeDeployment } from "$lib/server/edge-deployment";
 import {
   CloudflareDnsProvider,
-  edgeHostname,
+  isLegacyEdgeDnsOwner,
+  managedEdgeHostname,
   previewBase,
   previewDns,
   validDnsChallenge,
@@ -25,11 +25,10 @@ export const POST: RequestHandler = async (event) => {
       return json({ error: "invalid_dns_challenge" }, { status: 400 });
     const body = input as Record<string, unknown>;
     if (
-      Object.keys(body).some((key) => !["operation", "value", "ticket", "scope"].includes(key)) ||
+      Object.keys(body).some((key) => !["operation", "value", "scope"].includes(key)) ||
       (body.operation !== "publish" && body.operation !== "cleanup") ||
       (body.scope !== undefined && body.scope !== "control" && body.scope !== "preview") ||
-      !validDnsChallenge(body.value) ||
-      (body.ticket !== undefined && typeof body.ticket !== "string")
+      !validDnsChallenge(body.value)
     ) {
       return json({ error: "invalid_dns_challenge" }, { status: 400 });
     }
@@ -38,36 +37,28 @@ export const POST: RequestHandler = async (event) => {
     if (!credential) return json({ error: "invalid_edge_credentials" }, { status: 401 });
     const db = remoteDatabase(event);
     const principal = await authenticateEdgeCredential(db, credential);
-    if (principal) {
-      const edge = await db
-        .select({ tunnelUrl: edges.tunnelUrl, accessScope: edges.accessScope })
-        .from(edges)
-        .where(eq(edges.id, principal.edgeId))
-        .get();
-      if (edge && (edge.accessScope === "private" || body.scope === "preview")) {
-        edgeId = principal.edgeId;
-        hostname = edgeHostname(edge.tunnelUrl);
-      }
-    } else if (
-      body.scope !== "preview" &&
-      typeof body.ticket === "string" &&
-      operation === "cleanup"
-    ) {
-      // Initial publication only occurs after the network API has verified IP:port.
-      const identity = await authorizeEdgeDeployment(db, body.ticket, credential);
-      if (identity) {
-        edgeId = identity.edgeId;
-        hostname = edgeHostname(identity.tunnelUrl);
-      }
-    }
-    if (!edgeId || !hostname) return json({ error: "invalid_edge_credentials" }, { status: 401 });
+    if (!principal) return json({ error: "invalid_edge_credentials" }, { status: 401 });
+    edgeId = principal.edgeId;
+    const edge = await db
+      .select({ userId: edges.userId, dnsLabel: edges.dnsLabel, tunnelUrl: edges.tunnelUrl })
+      .from(edges)
+      .where(eq(edges.id, principal.edgeId))
+      .get();
+    if (!edge) return json({ error: "invalid_edge_credentials" }, { status: 401 });
     const env = environment(event);
+    if (!isLegacyEdgeDnsOwner(env, edge.userId)) {
+      return json({ error: "forbidden" }, { status: 403 });
+    }
+    hostname = managedEdgeHostname(edge);
+    if (!hostname || edge.dnsLabel === null) {
+      return json({ error: "invalid_edge" }, { status: 409 });
+    }
+    if (body.scope === "preview" && !env.PREVIEW_ZONE) {
+      return json({ error: "edge_preview_unavailable" }, { status: 409 });
+    }
     if (!(await env.EDGE_DNS_RATE_LIMIT.limit({ key: edgeId })).success)
       return json({ error: "rate_limited" }, { status: 429 });
-    if (body.scope === "preview") {
-      if (!env.PREVIEW_ZONE) return json({ error: "edge_preview_unavailable" }, { status: 409 });
-      hostname = previewBase(hostname, env.PREVIEW_ZONE);
-    }
+    if (body.scope === "preview") hostname = previewBase(edge.dnsLabel, env.PREVIEW_ZONE!);
     const dns =
       body.scope === "preview"
         ? previewDns(env)

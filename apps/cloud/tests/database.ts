@@ -4,16 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { Miniflare } from "miniflare";
 import { database, type Database } from "../src/lib/server/db";
-import {
-  devices,
-  edges,
-  heroNameHeroes,
-  heroNameModifiers,
-  users,
-} from "../src/lib/server/db/schema";
-
-const TEST_HERO_NAME_MODIFIERS = ["brave", "calm", "silent"];
-const TEST_HERO_NAME_HEROES = ["arthur", "atlas", "orion"];
+import { devices, edges, users } from "../src/lib/server/db/schema";
 
 export function testDatabase() {
   let binding: D1Database;
@@ -71,8 +62,6 @@ export function testDatabase() {
       );
     }
     db = database(binding);
-    await db.insert(heroNameModifiers).values(TEST_HERO_NAME_MODIFIERS.map((word) => ({ word })));
-    await db.insert(heroNameHeroes).values(TEST_HERO_NAME_HEROES.map((word) => ({ word })));
   }, 30_000);
   beforeEach(async () => {
     await db.delete(devices);

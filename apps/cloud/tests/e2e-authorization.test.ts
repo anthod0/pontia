@@ -3,6 +3,7 @@ import { base64url } from "jose";
 import { devices, edges, users } from "../src/lib/server/db/schema";
 import { connectDashboardDevice } from "../src/lib/server/remote-access/device-connect";
 import { verifyDeviceKeyProof } from "../src/lib/server/remote-access/device-key-proof";
+import { issuePreviewToken } from "../src/lib/server/remote-access/preview-token";
 import { testDatabase } from "./database";
 
 const database = testDatabase();
@@ -131,4 +132,42 @@ test("registration proof requires possession of the submitted X25519 private key
       cloudPrivate,
     ),
   ).toBe(false);
+});
+
+test("a self-hosted edge on its own domain receives connections but no previews", async () => {
+  const keys = await capabilityKeys();
+  await database.db.insert(users).values({ id: "user-owner" });
+  await database.db.insert(edges).values({
+    id: "0195e7b9-91c2-73d4-a560-2f78b90c1235",
+    userId: "user-owner",
+    name: "relay.example.com",
+    tunnelUrl: "wss://relay.example.com:8443/tunnel",
+    serviceCredentialHash: "hash",
+  });
+  await database.db.insert(devices).values({
+    id: deviceId,
+    userId: "user-owner",
+    edgeId: "0195e7b9-91c2-73d4-a560-2f78b90c1235",
+    handle,
+    name: "Office",
+    e2ePublicKey: base64url.encode(new Uint8Array(32).fill(7)),
+    e2eKeyVersion: 3,
+  });
+
+  const access = await connectDashboardDevice(
+    database.db,
+    "user-owner",
+    handle,
+    null,
+    keys.privateKey,
+  );
+  expect(access?.edge_api_origin).toBe("https://relay.example.com:8443");
+  const env = {
+    PREVIEW_ZONE: "pontia.run",
+    E2E_CAPABILITY_SIGNING_KEY: keys.privateKey,
+  } as unknown as App.Platform["env"];
+  expect(await issuePreviewToken(database.db, "user-owner", handle, 5173, env)).toEqual({
+    status: 409,
+    body: { error: "edge_preview_unavailable" },
+  });
 });

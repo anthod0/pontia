@@ -13,37 +13,33 @@ Use um servidor Linux público com:
 
 - arquitetura x86_64 ou ARM64;
 - systemd como gerenciador de serviços do sistema;
-- um endereço IPv4 público ao qual o servidor possa se vincular e pelo qual receba tráfego;
+- um endereço IP público e um nome de domínio que você controla, como `edge.example.com`;
+- portas TCP 80 e 443 de entrada;
 - acesso de saída a HTTPS e DNS;
 - `curl`, `grep`, `install`, `mktemp`, `mv`, `openssl`, `rm`, `sed`, `sha256sum` e `tar`;
 - OpenSSL com suporte à verificação Ed25519.
 
-O `pontia-edge` é compatível apenas com Linux.
+## Prepare o seu domínio
 
-## Escolha um modo de rede
+Escolha um domínio ou subdomínio para o Edge, como `edge.example.com`. No seu provedor de DNS, crie um registro A, um registro AAAA ou ambos apontando para o endereço IP público do servidor.
 
-A implantação padrão serve HTTPS e WSS na porta pública 443 e usa validação de certificado HTTP-01. A porta pública 80 também precisa alcançar o servidor durante a inicialização e a renovação do certificado.
-
-Se a porta 80 ou 443 não estiver disponível, escolha a implantação alternativa nas [configurações de Edges](/settings/edges). Ela usa uma porta HTTPS/WSS personalizada que os navegadores aceitam (recomendamos a 8443) e validação de certificado DNS-01. Abra a porta selecionada nos firewalls do host e do provedor.
-
-O Pontia Cloud atribui o hostname do Edge sob `edge.pontia.dev` e configura o registro DNS automaticamente.
+O Edge serve HTTPS e WSS na porta 443 e obtém o certificado do Let's Encrypt por HTTP-01 na porta 80. Libere as portas TCP 80 e 443 de entrada nos firewalls do host e do provedor. Para servir em outra porta aceita pelos navegadores, como a 8443, adicione `--port 8443` ao comando `pontia-edge init` e abra essa porta; a porta 80 continua cuidando da emissão e da renovação do certificado.
 
 ## Implantar pelo Cloud
 
 [Abra as configurações de Edges](/settings/edges), fazendo login quando solicitado. Depois:
 
-1. Selecione **Gerar comando de implantação**.
-2. Escolha o modo de porta padrão ou alternativo.
+1. Selecione **Implantar um Edge**.
+2. Informe o seu nome de domínio e selecione **Gerar comando de implantação**.
 3. Copie o comando de uso único e execute-o no servidor Linux público.
 
-O comando contém um ticket de implantação de curta duração. Mantenha-o em sigilo e execute-o antes do prazo de expiração mostrado pelo Cloud. A inicialização:
+O comando contém um ticket de implantação de curta duração vinculado ao seu domínio. Mantenha-o em sigilo e execute-o antes do prazo de expiração mostrado pelo Cloud. A inicialização:
 
 - baixa e verifica a release assinada do `pontia-edge`;
-- detecta e comprova o controle do endereço IPv4 público do servidor;
-- configura o nome DNS atribuído por meio do Pontia Cloud;
-- obtém um certificado do Let's Encrypt;
+- confirma que o seu domínio resolve para um endereço IP público;
+- obtém um certificado do Let's Encrypt para o seu domínio;
 - instala e inicia o `pontia-edge.service`;
-- espera o Cloud verificar o endpoint público de saúde via HTTPS;
+- espera o Cloud confirmar via HTTPS que este servidor tem a credencial do Edge para o seu domínio;
 - ativa as verificações automáticas de releases estáveis.
 
 Um Edge implantado com sucesso aparece em **Seus Edges** nas [configurações de Edges](/settings/edges) com status saudável.
@@ -87,7 +83,7 @@ Com as atualizações automáticas ativadas, um Edge online também procura atua
 
 As atualizações automáticas são verificadas a cada dez minutos. Uma atualização já em andamento continua mesmo quando as verificações futuras são desativadas.
 
-Após uma atualização, Edges públicos e privados passam a usar `<label>.pontia.run` para prévias. O Pontia sincroniza o registro A curinga sem proxy com o endereço IPv4 do Edge e usa DNS-01 para emitir e renovar o certificado TLS curinga.
+O Edge verifica o certificado a cada hora e o renova automaticamente quando resta um terço da validade.
 
 ## Arquivos armazenados
 
@@ -106,6 +102,6 @@ Mantenha `/etc/pontia/edge` com acesso restrito e com backup de acordo com a pol
 
 ## Excluir um Edge
 
-Excluir um Edge auto-hospedado no Cloud remove permanentemente o registro dele e os dispositivos associados. A instalação no servidor é gerenciada separadamente: mova ou desative os dispositivos afetados e depois pare o serviço e remova os arquivos dele do servidor.
+Excluir um Edge auto-hospedado no Cloud remove permanentemente o registro dele e os dispositivos associados. Os registros DNS do seu domínio continuam no seu provedor de DNS, onde você pode atualizá-los ou removê-los. A instalação no servidor é gerenciada separadamente: mova ou desative os dispositivos afetados e depois pare o serviço e remova os arquivos dele do servidor.
 
 Antes de excluir um Edge, execute `pontia remote edit` em cada dispositivo afetado para selecionar outro Edge.

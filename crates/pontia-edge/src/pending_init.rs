@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{acme::AcmeChallenge, files::atomic_write, port::validate_edge_port};
+use crate::{files::atomic_write, port::validate_edge_port};
 
 pub const PENDING_INIT_PATH: &str = "/etc/pontia/edge/pending-init.json";
 
@@ -15,7 +15,6 @@ pub struct PendingInit {
     pub ticket: String,
     pub acme_staging: bool,
     pub port: Option<u16>,
-    pub acme_challenge: AcmeChallenge,
 }
 
 impl PendingInit {
@@ -66,7 +65,6 @@ mod tests {
             ticket: "pet_v1_secret".to_owned(),
             acme_staging: true,
             port: Some(8443),
-            acme_challenge: AcmeChallenge::Dns01,
         }
     }
 
@@ -96,6 +94,19 @@ mod tests {
         replacement.save(&path).unwrap();
 
         assert!(PendingInit::read(&path).unwrap() == replacement);
+    }
+
+    #[test]
+    fn rejects_the_removed_acme_challenge_field() {
+        let test_root = tempfile::tempdir().unwrap();
+        let path = test_root.path().join("pending-init.json");
+        fs::write(
+            &path,
+            br#"{"edge_id":"0199791c-6600-7000-8000-000000000001","ticket":"pet_v1_secret","acme_staging":false,"port":null,"acme_challenge":"dns-01"}"#,
+        )
+        .unwrap();
+
+        assert!(PendingInit::read(&path).is_err());
     }
 
     #[test]

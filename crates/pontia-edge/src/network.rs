@@ -1,12 +1,12 @@
 use std::{
-    net::{IpAddr, Ipv4Addr},
+    io,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener},
     time::Duration,
 };
 
 use anyhow::{Context, Result};
-use hickory_resolver::TokioResolver;
-use reqwest::{Client, Url};
-use serde::Deserialize;
+use hickory_resolver::{TokioResolver, config::LookupIpStrategy};
+use socket2::{Domain, Protocol, Socket, Type};
 
 /// Use the DNS servers configured by the OS, without pinning an external provider.
 pub fn system_dns_resolver() -> Result<TokioResolver> {
@@ -18,11 +18,19 @@ pub fn system_dns_resolver() -> Result<TokioResolver> {
     builder.options_mut().use_hosts_file = hickory_resolver::config::ResolveHosts::Never;
     builder.options_mut().timeout = Duration::from_secs(5);
     builder.options_mut().attempts = 1;
+    builder.options_mut().ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
     Ok(builder.build())
 }
 
-pub fn is_global_unicast(address: Ipv4Addr) -> bool {
-    let [a, b, c, _] = address.octets();
+pub fn is_global_unicast(address: IpAddr) -> bool {
+    match address {
+        IpAddr::V4(address) => is_global_unicast_ipv4(address),
+        IpAddr::V6(address) => is_global_unicast_ipv6(address),
+    }
+}
+
+fn is_global_unicast_ipv4(address: Ipv4Addr) -> bool {
+    let [a, b, c, d] = address.octets();
     !(a == 0
         || a == 10
         || a == 127
@@ -30,7 +38,7 @@ pub fn is_global_unicast(address: Ipv4Addr) -> bool {
         || (a == 100 && (64..=127).contains(&b))
         || (a == 169 && b == 254)
         || (a == 172 && (16..=31).contains(&b))
-        || (a == 192 && b == 0 && c == 0 && address.octets()[3] != 9 && address.octets()[3] != 10)
+        || (a == 192 && b == 0 && c == 0 && d != 9 && d != 10)
         || (a == 192 && b == 0 && c == 2)
         || (a == 192 && b == 88 && c == 99)
         || (a == 192 && b == 168)
@@ -39,107 +47,87 @@ pub fn is_global_unicast(address: Ipv4Addr) -> bool {
         || (a == 203 && b == 0 && c == 113))
 }
 
-/// Discover the public egress address; Cloud's subsequent challenge verifies ingress.
-pub async fn discover_public_ipv4(cloud_origin: &Url) -> Result<Ipv4Addr> {
-    #[derive(Deserialize)]
-    struct AddressResponse {
-        ipv4: Ipv4Addr,
-    }
+/// Allocated global unicast space (2000::/3) without special-purpose or address-embedding blocks.
+fn is_global_unicast_ipv6(address: Ipv6Addr) -> bool {
+    let [a, b, ..] = address.segments();
+    a & 0xe000 == 0x2000
+        && !(a == 0x2001 && b < 0x0200)
+        && !(a == 0x2001 && b == 0x0db8)
+        && a != 0x2002
+        && !(a == 0x3fff && b < 0x1000)
+}
 
-    let client = Client::builder()
-        .local_address(IpAddr::V4(Ipv4Addr::UNSPECIFIED))
-        .no_proxy()
-        .redirect(reqwest::redirect::Policy::none())
-        .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(30))
-        .build()
-        .context("failed to create IPv4 discovery client")?;
-    let response = client
-        .get(cloud_origin.join("api/edge/network/address")?)
-        .send()
-        .await
-        .context("failed to discover public IPv4 address through Cloud")?;
+/// Checks the public DNS records for an edge hostname before requesting a certificate.
+pub async fn public_addresses(hostname: &str) -> Result<Vec<IpAddr>> {
+    let resolver = system_dns_resolver()?;
+    let lookup = tokio::time::timeout(
+        Duration::from_secs(10),
+        resolver.lookup_ip(format!("{hostname}.")),
+    )
+    .await
+    .with_context(|| format!("system DNS lookup for {hostname} timed out"))?
+    .with_context(|| format!("{hostname} has no A or AAAA record in public DNS"))?;
+    let addresses: Vec<IpAddr> = lookup.iter().collect();
     anyhow::ensure!(
-        response.status() == reqwest::StatusCode::OK,
-        "Cloud IPv4 discovery failed (HTTP {})",
-        response.status()
+        !addresses.is_empty(),
+        "{hostname} has no A or AAAA record in public DNS"
     );
-    let address = response
-        .json::<AddressResponse>()
-        .await
-        .context("Cloud returned an invalid IPv4 discovery response")?
-        .ipv4;
     anyhow::ensure!(
-        is_global_unicast(address),
-        "Cloud returned a non-global IPv4 address"
+        addresses.iter().copied().any(is_global_unicast),
+        "{hostname} resolves only to non-public addresses ({})",
+        addresses
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ")
     );
-    Ok(address)
+    Ok(addresses)
+}
+
+/// Listens on IPv4 and IPv6, or on IPv4 only when the host has no IPv6 support.
+pub fn bind_listener(port: u16) -> Result<TcpListener> {
+    let listener = match bind_socket(SocketAddr::from((Ipv6Addr::UNSPECIFIED, port))) {
+        Err(error) if ipv6_unavailable(&error) => {
+            bind_socket(SocketAddr::from((Ipv4Addr::UNSPECIFIED, port)))
+        }
+        result => result,
+    };
+    listener.with_context(|| format!("failed to listen on port {port}"))
+}
+
+fn bind_socket(address: SocketAddr) -> io::Result<TcpListener> {
+    let socket = Socket::new(
+        Domain::for_address(address),
+        Type::STREAM,
+        Some(Protocol::TCP),
+    )?;
+    if address.is_ipv6() {
+        socket.set_only_v6(false)?;
+    }
+    socket.set_reuse_address(true)?;
+    socket.bind(&address.into())?;
+    socket.listen(1024)?;
+    socket.set_nonblocking(true)?;
+    Ok(socket.into())
+}
+
+fn ipv6_unavailable(error: &io::Error) -> bool {
+    matches!(
+        error.raw_os_error(),
+        Some(code) if code == rustix::io::Errno::AFNOSUPPORT.raw_os_error()
+            || code == rustix::io::Errno::ADDRNOTAVAIL.raw_os_error()
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    async fn discovery_response(status: axum::http::StatusCode, body: &str) -> Result<Ipv4Addr> {
-        use axum::{Router, routing::get};
-
-        let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
-            .await
-            .unwrap();
-        let origin = Url::parse(&format!("http://{}/", listener.local_addr().unwrap())).unwrap();
-        let body = body.to_owned();
-        let router = Router::new().route(
-            "/api/edge/network/address",
-            get(move || async move { (status, [("content-type", "application/json")], body) }),
-        );
-        let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
-        let result = discover_public_ipv4(&origin).await;
-        server.abort();
-        let _ = server.await;
-        result
-    }
-
-    #[tokio::test]
-    async fn discovers_public_address_not_bound_to_local_interface() {
-        let address = discovery_response(axum::http::StatusCode::OK, r#"{"ipv4":"154.8.220.61"}"#)
-            .await
-            .unwrap();
-        assert_eq!(address, "154.8.220.61".parse::<Ipv4Addr>().unwrap());
-    }
-
-    #[tokio::test]
-    async fn rejects_invalid_discovery_responses() {
-        for body in [
-            r#"{"ipv4":"10.2.0.10"}"#,
-            r#"{"ipv4":"2606:4700::1111"}"#,
-            r#"{"ipv4":"invalid"}"#,
-            r#"{}"#,
-            "not json",
-        ] {
-            assert!(
-                discovery_response(axum::http::StatusCode::OK, body)
-                    .await
-                    .is_err()
-            );
-        }
-        for status in [
-            axum::http::StatusCode::FOUND,
-            axum::http::StatusCode::BAD_REQUEST,
-            axum::http::StatusCode::SERVICE_UNAVAILABLE,
-        ] {
-            assert!(
-                discovery_response(status, r#"{"ipv4":"154.8.220.61"}"#)
-                    .await
-                    .is_err()
-            );
-        }
-    }
-
     #[test]
     fn rejects_non_global_ipv4_ranges() {
-        assert!(is_global_unicast("8.8.8.8".parse().unwrap()));
-        assert!(is_global_unicast("192.0.0.9".parse().unwrap()));
-        assert!(is_global_unicast("192.0.0.10".parse().unwrap()));
+        for address in ["8.8.8.8", "192.0.0.9", "192.0.0.10", "154.8.220.61"] {
+            assert!(is_global_unicast(address.parse().unwrap()), "{address}");
+        }
         for address in [
             "0.1.2.3",
             "10.0.0.1",
@@ -153,11 +141,55 @@ mod tests {
             "198.51.100.1",
             "203.0.113.1",
             "224.0.0.1",
+            "255.255.255.255",
         ] {
             assert!(
                 !is_global_unicast(address.parse().unwrap()),
                 "accepted {address}"
             );
         }
+    }
+
+    #[test]
+    fn accepts_only_allocated_global_ipv6_unicast() {
+        for address in [
+            "2606:4700:4700::1111",
+            "2a00:1450:4001::200e",
+            "2400:cb00::1",
+        ] {
+            assert!(is_global_unicast(address.parse().unwrap()), "{address}");
+        }
+        for address in [
+            "::",
+            "::1",
+            "::ffff:8.8.8.8",
+            "64:ff9b::808:808",
+            "100::1",
+            "2001::1",
+            "2001:db8::1",
+            "2002:c000:0201::1",
+            "3fff::1",
+            "fc00::1",
+            "fd12:3456::1",
+            "fe80::1",
+            "fec0::1",
+            "ff02::1",
+        ] {
+            assert!(
+                !is_global_unicast(address.parse().unwrap()),
+                "accepted {address}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn listener_accepts_ipv4_clients_on_the_shared_socket() {
+        let listener = tokio::net::TcpListener::from_std(bind_listener(0).unwrap()).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let accept = tokio::spawn(async move { listener.accept().await.map(|_| ()) });
+        tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .unwrap();
+        accept.await.unwrap().unwrap();
     }
 }

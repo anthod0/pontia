@@ -105,7 +105,7 @@ impl Accept<TcpStream, Router> for AcmeAcceptor {
                 let (stream, service) = tls.accept(stream, service).await?;
                 Ok((Box::new(stream) as Self::Stream, service))
             } else if read != 0 && challenges.is_active().await {
-                Ok((Box::new(stream) as Self::Stream, router(challenges, false)))
+                Ok((Box::new(stream) as Self::Stream, router(challenges)))
             } else {
                 Err(io::Error::new(
                     io::ErrorKind::InvalidData,

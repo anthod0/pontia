@@ -117,7 +117,7 @@ fn save_credential(path: &Path, credential: &str) -> Result<()> {
     result
 }
 
-fn parse_credential(value: &str) -> Option<(Uuid, [u8; 32])> {
+pub(crate) fn parse_credential(value: &str) -> Option<(Uuid, [u8; 32])> {
     let remainder = value.strip_prefix("pec_v1_")?;
     let (edge_id_text, secret) = remainder.split_once('_')?;
     if secret.len() != 43 {

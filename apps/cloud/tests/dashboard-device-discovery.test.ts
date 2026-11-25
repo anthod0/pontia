@@ -377,7 +377,7 @@ test("connect rejects invalid tunnel URLs", async () => {
     userId: ownerId,
     name: "Invalid edge",
     dnsLabel: "invalid-edge",
-    tunnelUrl: "wss://attacker.example/tunnel",
+    tunnelUrl: "wss://127.0.0.1/tunnel",
     serviceCredentialHash: "invalid-hash",
   });
   await database.db.insert(devices).values({

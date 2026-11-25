@@ -4,7 +4,6 @@ import { base64url } from "jose";
 import { sha256Base64url } from "../src/lib/server/crypto";
 import { edges, users } from "../src/lib/server/db/schema";
 import { CloudflareDnsProvider } from "../src/lib/server/edge-network";
-import { issueEdgeDeployment } from "../src/lib/server/edge-deployment";
 import { POST } from "../src/routes/api/edge/dns-challenge/+server";
 import { manageEdgePreview } from "../src/lib/server/edge-preview";
 import { testDatabase } from "./database";
@@ -19,7 +18,13 @@ const hostname = "brave-atlas.edge.pontia.dev";
 const value = "x".repeat(43);
 afterEach(() => mock.restore());
 
-function event(body: unknown, token = credential, allowed = true, keys: string[] = []) {
+function event(
+  body: unknown,
+  token = credential,
+  allowed = true,
+  keys: string[] = [],
+  owners: string | null = "other-owner, owner",
+) {
   const url = new URL("https://pontia.example/api/edge/dns-challenge");
   return {
     url,
@@ -32,6 +37,7 @@ function event(body: unknown, token = credential, allowed = true, keys: string[]
       env: {
         DB: database.binding,
         PREVIEW_ZONE: "pontia.run",
+        ...(owners === null ? {} : { LEGACY_EDGE_DNS_OWNER_IDS: owners }),
         CLOUDFLARE_PREVIEW_DNS_ZONE_ID: "preview-zone",
         CLOUDFLARE_DNS_TOKEN: "provider-secret",
         CLOUDFLARE_DNS_ZONE_ID: "zone",
@@ -46,16 +52,27 @@ function event(body: unknown, token = credential, allowed = true, keys: string[]
   } as unknown as RequestEvent;
 }
 
-async function registered(accessScope: "private" | "public" = "private") {
+async function registered(
+  accessScope: "private" | "public" = "private",
+  endpoint: { dnsLabel: string | null; tunnelUrl: string } = {
+    dnsLabel: "brave-atlas",
+    tunnelUrl: `wss://${hostname}:8443/tunnel`,
+  },
+) {
   await database.db.insert(users).values({ id: "owner" });
   await database.db.insert(edges).values({
     id: edgeId,
     userId: "owner",
     accessScope,
     name: "Brave Atlas",
-    dnsLabel: "brave-atlas",
-    tunnelUrl: `wss://${hostname}:8443/tunnel`,
+    ...endpoint,
     serviceCredentialHash: await sha256Base64url(secret),
+  });
+}
+
+function unexpectedProvider() {
+  mockProvider(async () => {
+    throw new Error("Cloudflare DNS must not be called");
   });
 }
 
@@ -112,23 +129,20 @@ test("renewal authenticates before edge-ID rate limiting and derives its own TXT
   expect((await call(event({ operation: "cleanup", value }))).status).toBe(200);
 });
 
-test("pending deployment can clean its own TXT but cannot bypass network verification to publish", async () => {
-  await database.db.insert(users).values({ id: "owner" });
-  const deployment = await issueEdgeDeployment(database.db, "owner", {
-    now: () => new Date("2099-01-01"),
-    randomBytes: () => new Uint8Array(32).fill(32),
-    edgeId: () => edgeId,
-    heroName: async () => "brave-atlas",
-  });
-  const ticket = /--ticket '(pet_v1_[A-Za-z0-9_-]{43})'/.exec(deployment.command)![1];
-  mockProvider(async () => Response.json({ success: true, result: [] }));
-  expect((await call(event({ operation: "publish", value, ticket }))).status).toBe(401);
-  expect((await call(event({ operation: "cleanup", value, ticket }))).status).toBe(200);
+test("DNS challenges no longer accept deployment tickets", async () => {
+  await registered();
+  unexpectedProvider();
+  for (const operation of ["publish", "cleanup"]) {
+    const response = await call(event({ operation, value, ticket: "pet_v1_ticket" }));
+    expect(response.status).toBe(400);
+    expect((await response.json()) as unknown).toEqual({ error: "invalid_dns_challenge" });
+  }
+  // An unregistered credential is rejected even with a cleanup-only request.
   expect(
     (
       await call(
         event(
-          { operation: "cleanup", value, ticket },
+          { operation: "cleanup", value },
           credential.replace(edgeId, "0199791c-6600-7000-8000-000000000002"),
         ),
       )
@@ -136,13 +150,77 @@ test("pending deployment can clean its own TXT but cannot bypass network verific
   ).toBe(401);
 });
 
+test.each([
+  ["unset", null],
+  ["empty", ""],
+  ["blank entries", " , "],
+  ["another owner", "other-owner"],
+] as const)(
+  "edges outside the legacy DNS owner allowlist (%s) cannot use Cloud DNS or previews",
+  async (_case, owners) => {
+    await registered();
+    unexpectedProvider();
+    const keys: string[] = [];
+    for (const scope of [undefined, "preview"]) {
+      const response = await call(
+        event({ operation: "publish", value, scope }, credential, true, keys, owners),
+      );
+      expect(response.status).toBe(403);
+      expect((await response.json()) as unknown).toEqual({ error: "forbidden" });
+    }
+    for (const operation of ["provision", "confirm"] as const) {
+      const response = await manageEdgePreview(
+        event({}, credential, true, keys, owners),
+        operation,
+      );
+      expect(response.status).toBe(403);
+    }
+    expect(keys).toEqual([]);
+    expect((await database.db.select().from(edges).get())?.previewEnabled).toBe(0);
+  },
+);
+
+test("self-hosted edges on their own domains have no Cloud DNS or preview", async () => {
+  await registered("private", { dnsLabel: null, tunnelUrl: "wss://edge.example.com/tunnel" });
+  unexpectedProvider();
+  for (const scope of [undefined, "preview"]) {
+    const response = await call(event({ operation: "publish", value, scope }));
+    expect(response.status).toBe(409);
+    expect((await response.json()) as unknown).toEqual({ error: "invalid_edge" });
+  }
+  for (const operation of ["provision", "confirm"] as const) {
+    expect((await manageEdgePreview(event({}), operation)).status).toBe(409);
+  }
+});
+
+test.each(["public", "private"] as const)(
+  "a legacy owner's %s edge renews its control certificate through Cloud DNS",
+  async (scope) => {
+    await registered(scope);
+    const names: string[] = [];
+    mockProvider(async (input, init) => {
+      if (init?.method === "POST") names.push(JSON.parse(String(init.body)).name);
+      return Response.json({ success: true, result: [] });
+    });
+    expect((await call(event({ operation: "publish", value }))).status).toBe(200);
+    expect(names).toEqual([`_acme-challenge.${hostname}`]);
+  },
+);
+
+test("a label that does not match the managed control hostname is rejected", async () => {
+  await registered("private", {
+    dnsLabel: "brave-atlas",
+    tunnelUrl: "wss://edge.example.com/tunnel",
+  });
+  unexpectedProvider();
+  expect((await call(event({ operation: "publish", value }))).status).toBe(409);
+  expect((await manageEdgePreview(event({}), "provision")).status).toBe(409);
+});
+
 test.each(["public", "private"] as const)(
   "upgraded %s edge provisions wildcard DNS and confirms TLS",
   async (scope) => {
     await registered(scope);
-    if (scope === "public") {
-      expect((await call(event({ operation: "publish", value }))).status).toBe(401);
-    }
     const base = "brave-atlas.pontia.run";
     const records = new Map<
       string,

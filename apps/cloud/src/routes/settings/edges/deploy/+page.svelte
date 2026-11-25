@@ -1,19 +1,14 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
+  import { ParaglideMessage } from "@inlang/paraglide-js-svelte";
   import { addCodeCopyButtons } from "$lib/code-copy";
-  import { deploymentModeCommand } from "$lib/edge-deployment-command";
   import "$lib/styles/article.css";
   import { m } from "$lib/paraglide/messages";
   import { getLocale, localizeHref } from "$lib/paraglide/runtime";
   import type { ActionData } from "./$types";
 
   let { form }: { form: ActionData } = $props();
-  let mode = $state<"default" | "custom">("default");
-  let port = $state<number | undefined>(8443);
-  let command = $derived(
-    form?.deployment ? deploymentModeCommand(form.deployment.command, mode, port) : null,
-  );
 </script>
 
 <svelte:head>
@@ -23,66 +18,61 @@
 
 <h1>{m.edges_deploy_heading()}</h1>
 
-  {#if form?.error}
-    <p class="auth-error" role="alert">{form.error}</p>
-  {/if}
+{#if form?.deployment}
+  <section aria-labelledby="deployment-hostname">
+    <h2 id="deployment-hostname">{form.deployment.hostname}</h2>
+    <p>{m.deploy_run()}</p>
+    <p>{m.deploy_expires({ time: new Date(form.deployment.expiresAt).toLocaleString(getLocale()) })}</p>
+    <div class="article-content" {@attach addCodeCopyButtons}>
+      <pre><code>{form.deployment.command}</code></pre>
+    </div>
 
-  {#if form?.deployment}
-    <section aria-labelledby="deployment-name">
-      <h2 id="deployment-name">{form.deployment.name}</h2>
-      <p>{m.deploy_run()}</p>
-      <p>{m.deploy_expires({ time: new Date(form.deployment.expiresAt).toLocaleString(getLocale()) })}</p>
-      <div id="custom-port-options">
-        {#if mode === "custom"}
-          <h3 id="custom-port-label">{m.deploy_custom_port()}</h3>
-          <div class="port-field">
-            <Input
-              id="edge-port"
-              aria-labelledby="custom-port-label"
-              type="number"
-              min={1}
-              max={65535}
-              step={1}
-              bind:value={port}
-              aria-invalid={command === null}
-            />
-          </div>
-        {/if}
+    <div class="retry-help">
+      <h3>{m.deploy_retry_heading()}</h3>
+      <p>{m.deploy_retry_text()}</p>
+      <div class="article-content" {@attach addCodeCopyButtons}>
+        <pre><code>sudo pontia-edge retry</code></pre>
       </div>
+    </div>
+    <p class="another-link"><a href={localizeHref("/settings/edges/deploy")}>{m.deploy_another()}</a></p>
+  </section>
+{:else}
+  <p class="intro">{m.edges_deploy_text()}</p>
+  <ul class="requirements">
+    <li>{m.deploy_dns_requirement()}</li>
+    <li>{m.deploy_port_requirement()}</li>
+  </ul>
 
-      {#if command}
-        <div class="article-content" {@attach addCodeCopyButtons}>
-          <pre><code>{command}</code></pre>
-        </div>
-      {:else}
-        <p class="auth-error" role="alert">
-          {m.deploy_port_invalid()}
-        </p>
-      {/if}
-      <div class="alternative-action">
-        <Button
-          type="button"
-          variant="link"
-          class="alternative-toggle"
-          aria-expanded={mode === "custom"}
-          aria-controls="custom-port-options"
-          onclick={() => (mode = mode === "default" ? "custom" : "default")}
-        >
-          {mode === "custom" ? m.deploy_restore_default() : m.deploy_use_alternative()}
-        </Button>
-      </div>
-
-      <div class="retry-help">
-        <h3>{m.deploy_retry_heading()}</h3>
-        <p>{m.deploy_retry_text()}</p>
-        <div class="article-content" {@attach addCodeCopyButtons}>
-          <pre><code>sudo pontia-edge retry</code></pre>
-        </div>
-      </div>
-    </section>
-  {:else if !form?.error}
-    <p>{m.deploy_empty()}</p>
-  {/if}
+  <form class="deployment-form" method="POST">
+    <label for="edge-hostname">{m.deploy_hostname_label()}</label>
+    <div class="hostname-field">
+      <Input
+        id="edge-hostname"
+        name="hostname"
+        type="text"
+        inputmode="url"
+        autocomplete="off"
+        autocapitalize="none"
+        spellcheck={false}
+        placeholder="edge.example.com"
+        maxlength={253}
+        value={form && "hostname" in form ? form.hostname : ""}
+        aria-invalid={form?.error ? true : undefined}
+        aria-describedby={form?.error ? "deployment-error" : undefined}
+        required
+      />
+    </div>
+    {#if form?.error}
+      <p id="deployment-error" class="auth-error" role="alert">{form.error}</p>
+    {/if}
+    <Button type="submit" class="button">{m.edges_deploy_generate()}</Button>
+    <p class="agreement">
+      <ParaglideMessage message={m.edges_deploy_agreement}>
+        {#snippet agreement({ children })}<a href="https://letsencrypt.org/repository/" target="_blank" rel="noreferrer">{@render children?.()}</a>{/snippet}
+      </ParaglideMessage>
+    </p>
+  </form>
+{/if}
 
 <p class="back-link"><a href={localizeHref("/settings/edges")}>{m.deploy_back()}</a></p>
 
@@ -98,6 +88,7 @@
   h2 {
     font-size: 18px;
     margin-bottom: 8px;
+    overflow-wrap: anywhere;
   }
 
   h3 {
@@ -106,32 +97,56 @@
     margin-top: 20px;
   }
 
-  .alternative-action {
-    margin-top: 12px;
-  }
-
-  .alternative-action :global(.alternative-toggle) {
-    width: auto;
-    max-width: 100%;
-    height: auto;
-    padding: 0;
+  .intro,
+  .requirements,
+  .agreement,
+  .retry-help p {
     color: var(--muted-foreground);
-    white-space: normal;
-    text-align: left;
+    font-size: 14px;
+    line-height: 1.7;
   }
 
-  .port-field {
-    display: grid;
-    gap: 8px;
-    max-width: 240px;
+  .requirements {
+    margin-top: 8px;
+    padding-left: 20px;
+    list-style: disc;
+  }
+
+  .deployment-form {
+    display: flex;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  .deployment-form label {
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .hostname-field {
+    width: 100%;
+    max-width: 420px;
+  }
+
+  .agreement {
+    max-width: 620px;
+    margin: 0;
+  }
+
+  .agreement a {
+    color: var(--primary);
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
 
   .retry-help {
     margin-top: 28px;
   }
 
-  .retry-help p {
-    color: var(--muted-foreground);
+  .another-link {
+    margin-top: 20px;
     font-size: 14px;
   }
 </style>

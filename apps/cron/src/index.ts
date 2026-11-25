@@ -1,9 +1,4 @@
-import {
-  cleanupExpiredEdgeTickets,
-  type CleanupLogger,
-  type DnsProvider,
-  type TicketRepository,
-} from "./cleanup";
+import { cleanupExpiredEdgeTickets, type CleanupLogger, type TicketRepository } from "./cleanup";
 import { CloudflareDnsProvider } from "./cloudflare-dns";
 import { D1TicketRepository } from "./d1-ticket-repository";
 
@@ -17,7 +12,7 @@ export interface Env {
 type ScheduledDependencies = {
   now(): Date;
   repository(env: Env): TicketRepository;
-  dns(env: Env): DnsProvider & { cleanupExpiredTxt(now: Date): Promise<number> };
+  dns(env: Env): { cleanupExpiredTxt(now: Date): Promise<number> };
   logger: CleanupLogger;
 };
 
@@ -40,9 +35,9 @@ const defaultDependencies: ScheduledDependencies = {
 
 export function createScheduledHandler(dependencies: ScheduledDependencies) {
   return async (_controller: ScheduledController, env: Env) => {
-    const dns = dependencies.dns(env);
     try {
-      const deleted = await dns.cleanupExpiredTxt(dependencies.now());
+      // Edges renewing through DNS-01 can leave stale ACME TXT records behind.
+      const deleted = await dependencies.dns(env).cleanupExpiredTxt(dependencies.now());
       dependencies.logger.info({ event: "edge_acme_txt_cleanup", deleted });
     } catch {
       dependencies.logger.error({ event: "edge_acme_txt_cleanup_failed" });
@@ -50,7 +45,6 @@ export function createScheduledHandler(dependencies: ScheduledDependencies) {
     await cleanupExpiredEdgeTickets(
       dependencies.now(),
       dependencies.repository(env),
-      dns,
       dependencies.logger,
     );
   };

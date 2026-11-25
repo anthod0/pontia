@@ -28,6 +28,10 @@ struct RedeemResponse {
 }
 
 impl TicketRedeemer {
+    pub(crate) fn service_credential(&self) -> &str {
+        &self.service_credential
+    }
+
     pub fn new(cloud_origin: &str, service_credential: String) -> anyhow::Result<Self> {
         let client = Client::builder().timeout(REDEEM_TIMEOUT).build()?;
         Self::with_client(cloud_origin, service_credential, client)

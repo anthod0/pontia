@@ -4,7 +4,7 @@
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Frame-Options: DENY
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; connect-src 'self' https://pontia.dev https://*.edge.pontia.dev:* wss://*.edge.pontia.dev:*; frame-src 'self' http: https: blob:; form-action 'self' https://*.pontia.run:*; object-src 'none'; base-uri 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; connect-src 'self' https:; frame-src 'self' http: https: blob:; form-action 'self' https://*.pontia.run:*; object-src 'none'; base-uri 'none'; frame-ancestors 'none'
 
 /file-preview.htm
   ! Content-Security-Policy

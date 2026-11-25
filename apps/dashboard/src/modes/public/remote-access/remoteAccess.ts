@@ -1,9 +1,14 @@
 import { isValidDeviceHandle } from "../../../lib/deviceHandle";
+import { isEdgePort, isPublicHostname } from "./edgeEndpoint";
 
 const CLOUD_ORIGIN = "https://pontia.dev";
 const PUBLIC_DASHBOARD_ORIGIN = "https://app.pontia.dev";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const EDGE_HOST = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.edge\.pontia\.dev$/;
+// Admission tokens must never be sent back to Cloud or to this Dashboard.
+const NON_EDGE_HOSTS = new Set([
+  new URL(CLOUD_ORIGIN).hostname,
+  new URL(PUBLIC_DASHBOARD_ORIGIN).hostname,
+]);
 
 export type PublicDevice = {
   handle: string;
@@ -87,7 +92,9 @@ function parseEdgeOrigin(value: unknown): string {
     url.pathname !== "/" ||
     url.search ||
     url.hash ||
-    !EDGE_HOST.test(url.hostname)
+    !isPublicHostname(url.hostname) ||
+    NON_EDGE_HOSTS.has(url.hostname) ||
+    !isEdgePort(Number(url.port || 443))
   ) {
     throw new CloudRequestError("Cloud returned an invalid device target.");
   }

@@ -2909,11 +2909,13 @@ dependencies = [
  "pontia-version",
  "rcgen",
  "reqwest",
+ "ring",
  "rustix",
  "rustls",
  "rustls-pemfile",
  "serde",
  "serde_json",
+ "socket2",
  "tempfile",
  "time",
  "tokio",
@@ -2925,6 +2927,7 @@ dependencies = [
  "tungstenite 0.29.0",
  "uuid",
  "webpki-roots 1.0.7",
+ "x509-parser",
 ]
 
 [[package]]

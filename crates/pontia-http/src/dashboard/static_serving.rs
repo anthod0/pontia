@@ -10,18 +10,20 @@ use super::ResolvedDashboard;
 
 pub(crate) async fn security_headers(mut response: Response) -> Response {
     let headers = response.headers_mut();
-    headers.entry(header::CONTENT_SECURITY_POLICY).or_insert(HeaderValue::from_static(concat!(
-        "default-src 'self'; ",
-        "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; ",
-        "style-src 'self' 'unsafe-inline'; ",
-        "img-src 'self' https: data: blob:; ",
-        "connect-src 'self' https://pontia.dev https://*.edge.pontia.dev:* wss://*.edge.pontia.dev:*; ",
-        "frame-src 'self' http: https: blob:; ",
-        "form-action 'self' https://*.pontia.run:*; ",
-        "object-src 'none'; ",
-        "base-uri 'none'; ",
-        "frame-ancestors 'none'",
-    )));
+    headers
+        .entry(header::CONTENT_SECURITY_POLICY)
+        .or_insert(HeaderValue::from_static(concat!(
+            "default-src 'self'; ",
+            "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; ",
+            "style-src 'self' 'unsafe-inline'; ",
+            "img-src 'self' https: data: blob:; ",
+            "connect-src 'self' https:; ",
+            "frame-src 'self' http: https: blob:; ",
+            "form-action 'self' https://*.pontia.run:*; ",
+            "object-src 'none'; ",
+            "base-uri 'none'; ",
+            "frame-ancestors 'none'",
+        )));
     headers
         .entry(header::X_FRAME_OPTIONS)
         .or_insert(HeaderValue::from_static("DENY"));

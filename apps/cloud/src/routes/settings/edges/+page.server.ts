@@ -6,7 +6,12 @@ import { m } from "$lib/paraglide/messages";
 import { localizeHref } from "$lib/paraglide/runtime";
 import { edges } from "$lib/server/db/schema";
 import { removeOwnedEdge } from "$lib/server/edge-management";
-import { previewBase, previewDns, CloudflareDnsProvider } from "$lib/server/edge-network";
+import {
+  CloudflareDnsProvider,
+  isLegacyEdgeDnsOwner,
+  previewBase,
+  previewDns,
+} from "$lib/server/edge-network";
 import type { Actions, PageServerLoad } from "./$types";
 
 async function activeUser(event: Pick<RequestEvent, "platform" | "cookies">) {
@@ -55,7 +60,7 @@ export const actions: Actions = {
     }
     const name = nameValue.trim();
     // oxlint-disable-next-line no-control-regex -- Names must reject control characters.
-    if (!name || name.length > 100 || /[\u0000-\u001f\u007f-\u009f]/.test(name)) {
+    if (!name || name.length > 253 || /[\u0000-\u001f\u007f-\u009f]/.test(name)) {
       return fail(400, { error: m.edges_error_name_invalid() });
     }
     const renamed = await authenticated.db
@@ -75,17 +80,24 @@ export const actions: Actions = {
       return fail(400, { error: m.edges_error_select_delete() });
     }
     try {
-      const result = await removeOwnedEdge(authenticated.db, authenticated.user.user_id, edgeId, {
-        async cleanupHostname(hostname) {
-          const env = authenticated.env;
-          if (env.PREVIEW_ZONE)
-            await previewDns(env).cleanupHostname(previewBase(hostname, env.PREVIEW_ZONE));
-          await new CloudflareDnsProvider(
-            env.CLOUDFLARE_DNS_TOKEN,
-            env.CLOUDFLARE_DNS_ZONE_ID,
-          ).cleanupHostname(hostname);
+      const env = authenticated.env;
+      const userId = authenticated.user.user_id;
+      const result = await removeOwnedEdge(
+        authenticated.db,
+        userId,
+        edgeId,
+        {
+          async cleanupHostname(hostname, dnsLabel) {
+            if (env.PREVIEW_ZONE)
+              await previewDns(env).cleanupHostname(previewBase(dnsLabel, env.PREVIEW_ZONE));
+            await new CloudflareDnsProvider(
+              env.CLOUDFLARE_DNS_TOKEN,
+              env.CLOUDFLARE_DNS_ZONE_ID,
+            ).cleanupHostname(hostname);
+          },
         },
-      });
+        isLegacyEdgeDnsOwner(env, userId),
+      );
       if (result.status === "not_found") return fail(404, { error: m.edges_error_not_found() });
       if (result.status === "invalid_edge") {
         return fail(409, { error: m.edges_error_invalid_network() });

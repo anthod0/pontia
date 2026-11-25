@@ -35,14 +35,16 @@ CREATE TABLE `edges` (
 	`user_id` text NOT NULL,
 	`access_scope` text DEFAULT 'private' NOT NULL,
 	`name` text NOT NULL,
-	`dns_label` text NOT NULL,
+	`dns_label` text,
 	`tunnel_url` text NOT NULL,
 	`service_credential_hash` text NOT NULL,
 	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	`updated_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
-	`preview_enabled` integer DEFAULT 0 NOT NULL CONSTRAINT "edges_preview_enabled_check" CHECK("preview_enabled" IN (0, 1)),
+	`preview_enabled` integer DEFAULT 0 NOT NULL,
 	CONSTRAINT `fk_edges_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
-	CONSTRAINT "edges_access_scope_check" CHECK("access_scope" IN ('private', 'public'))
+	CONSTRAINT "edges_access_scope_check" CHECK("access_scope" IN ('private', 'public')),
+	CONSTRAINT "edges_preview_enabled_check" CHECK("preview_enabled" IN (0, 1)),
+	CONSTRAINT "edges_preview_dns_label_check" CHECK("preview_enabled" = 0 OR "dns_label" IS NOT NULL)
 );
 
 CREATE TABLE `devices` (
@@ -93,14 +95,6 @@ CREATE TABLE `edge_tickets` (
 	CONSTRAINT `fk_edge_tickets_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
 	CONSTRAINT "edge_tickets_purpose_check" CHECK("purpose" IN ('edge_deployment', 'device_tunnel', 'browser_admission')),
 	CONSTRAINT "edge_tickets_payload_json_check" CHECK(json_valid("payload"))
-);
-
-CREATE TABLE `hero_name_heroes` (
-	`word` text PRIMARY KEY NOT NULL
-);
-
-CREATE TABLE `hero_name_modifiers` (
-	`word` text PRIMARY KEY NOT NULL
 );
 
 CREATE TABLE `users` (
