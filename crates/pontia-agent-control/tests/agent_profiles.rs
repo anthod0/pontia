@@ -79,7 +79,7 @@ async fn fixture() -> (
 }
 
 #[tokio::test]
-async fn updating_only_the_model_does_not_publish_a_profile_notice() {
+async fn updating_only_the_model_publishes_a_profile_notice() {
     let changes = pontia_agent_control::ControlChanges::default();
     let mut events = changes.subscribe();
     let (service, _, _) = fixture_with_changes(changes).await;
@@ -92,8 +92,16 @@ async fn updating_only_the_model_does_not_publish_a_profile_notice() {
     updated.model = Some("new-model".into());
     service.update("reviewer", updated, None).await.unwrap();
     assert_eq!(
-        events.try_recv(),
-        Err(tokio::sync::broadcast::error::TryRecvError::Empty)
+        events.try_recv().unwrap(),
+        pontia_agent_control::ControlChange::AgentProfileUpdated {
+            source_session_id: None,
+            profile_id: "reviewer".into(),
+            description: None,
+            client_type: Some("generic".into()),
+            client_key: Some("default".into()),
+            model: Some("new-model".into()),
+            reasoning_effort: None,
+        }
     );
 }
 
