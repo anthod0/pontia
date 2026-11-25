@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-11-26
+
+### Added
+
+- Search files and images shared in a Bot chat by name.
+- Manage Codex, Kiro, and Grok subscription login from Agent Client settings.
+- Self-hosted Edges can use custom domains after proving HTTPS ownership.
+
+### Changed
+
+- Chat composers show pending and sent files, images, and secrets as compact attachment tiles and cards, with a smaller drag-and-drop prompt.
+- Agent Client settings use a two-pane layout, and desktop Session lists show each configured Client's name and icon.
+- Dashboard side-panel state is reflected in the page URL, mobile navigation can open saved Bot messages while connecting, and Bot chats include navigation shortcuts.
+- Bots remain visibly active until their Session becomes idle, and built-in Agent Profile descriptions are shorter.
+
+### Fixed
+
+- ACP Session history remains readable across replays and Session transitions, including Antigravity replays with a still-running step.
+- Messages waiting for an unusable Bot Session are redelivered once through a replacement Session.
+- Failed Bot notifications back off before retrying.
+- Optional legacy Edge DNS owner configuration loads correctly.
+
 ## [0.9.4] - 2026-11-25
 
 ### Fixed
@@ -1306,7 +1328,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.9.4...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.9.5...HEAD
+[0.9.5]: https://github.com/anthod0/pontia/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/anthod0/pontia/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/anthod0/pontia/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/anthod0/pontia/compare/v0.9.1...v0.9.2
