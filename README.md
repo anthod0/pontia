@@ -1,8 +1,11 @@
-# Pontia
+<div align="center">
+  <img src="assets/brand/logo-idle.svg" width="64" alt="Pontia">
+  <h1>Pontia</h1>
+</div>
 
 Pontia gives you a Lead Bot that coordinates coding agents on your own machines from a desktop or mobile browser.
 
-[Quick start](#quick-start) · [Dashboard](https://app.pontia.dev) · [简体中文](README.zh-CN.md)
+[pontia.dev](https://pontia.dev) · [Quick start](#quick-start) · [Dashboard](https://app.pontia.dev) · [简体中文](README.zh-CN.md)
 
 ![Lead Bot chat with two helpers, a delivered report and pending decisions](https://files.pontia.dev/cloud/lead-desk-2640-f11325427ccd.webp)
 
@@ -33,13 +36,21 @@ Pontia gives you a Lead Bot that coordinates coding agents on your own machines 
 
 ## Screenshots
 
-**Todo** — Review a helper’s question and send your decision.
+**1. TODO** — Answer a question from your Bot in the sidebar.
 
-![Todo queue with a trail-naming decision awaiting a reply](https://files.pontia.dev/cloud/helper-decisions-2640-303231730ebb.webp)
+![Juniper asks which trail name to print, with a reply drafted below](https://files.pontia.dev/cloud/sidebar-todo-1120-91689148538f.webp)
 
-**Memory** — Look up a decision from an earlier session.
+**2. Context** — Follow the messages behind a decision.
 
-![Memory search showing a past trail decision](https://files.pontia.dev/cloud/shared-memory-2640-36fb6dde6684.webp)
+![The original trail question, survey findings and selected naming decision](https://files.pontia.dev/cloud/sidebar-context-1120-9e2bed519e8c.webp)
+
+**3. Preview** — Open a local dev server alongside the chat.
+
+![The local Luma field guide showing the Cedar Spur route](https://files.pontia.dev/cloud/sidebar-preview-1120-dc9f6355c8d9.webp)
+
+**4. Git** — Review staged, unstaged and untracked files in a workspace.
+
+![Git changes on main grouped by staging status](https://files.pontia.dev/cloud/sidebar-git-1120-bf16b149ad76.webp)
 
 ## Documentation
 

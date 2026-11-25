@@ -1,8 +1,11 @@
-# Pontia
+<div align="center">
+  <img src="assets/brand/logo-idle.svg" width="64" alt="Pontia">
+  <h1>Pontia</h1>
+</div>
 
 Pontia 让你从电脑或手机浏览器给 Lead Bot 派任务，由它协调开发机上的编程助手一起完成。
 
-[快速开始](#快速开始) · [打开控制台](https://app.pontia.dev) · [English](README.md)
+[pontia.dev](https://pontia.dev) · [快速开始](#快速开始) · [打开控制台](https://app.pontia.dev) · [English](README.md)
 
 ![Lead Bot 对话中显示两名 Helper 的分工、交回的报告和待确认的问题](https://files.pontia.dev/cloud/lead-desk-2640-f11325427ccd.webp)
 
@@ -33,13 +36,21 @@ Pontia 让你从电脑或手机浏览器给 Lead Bot 派任务，由它协调开
 
 ## 界面截图
 
-**待办决策**：查看 Helper 提出的问题，直接回复你的决定。
+**1. TODO** — 直接在侧栏回复待确认的问题。
 
-![Todo 队列中，一项路线命名问题正在等待回复](https://files.pontia.dev/cloud/helper-decisions-2640-303231730ebb.webp)
+![Juniper 询问地图上应使用哪个地名，下方是正在编辑的回复](https://files.pontia.dev/cloud/sidebar-todo-1120-91689148538f.webp)
 
-**共享记忆**：查找之前的会话里做过的决定。
+**2. Context** — 查看一项决定的来龙去脉。
 
-![记忆搜索结果中显示了之前的路线决策记录](https://files.pontia.dev/cloud/shared-memory-2640-36fb6dde6684.webp)
+![最初的路线问题、调查结果，以及当前选中的命名决策](https://files.pontia.dev/cloud/sidebar-context-1120-9e2bed519e8c.webp)
+
+**3. Preview** — 在聊天侧栏打开本地开发服务。
+
+![本地运行的 Luma 指南展示 Cedar Spur 路线](https://files.pontia.dev/cloud/sidebar-preview-1120-dc9f6355c8d9.webp)
+
+**4. Git** — 查看工作区中已暂存、未暂存和未跟踪的文件。
+
+![Git 侧栏按暂存状态展示 main 分支上的文件改动](https://files.pontia.dev/cloud/sidebar-git-1120-bf16b149ad76.webp)
 
 ## 文档
 
