@@ -106,6 +106,10 @@ export interface AgentClientView {
     status: "detected" | "not_detected" | "unknown";
     detail: string | null;
   };
+  setup: {
+    status: "initialized" | "required" | "not_required" | "unknown";
+    detail?: string;
+  };
   setup_command: string | null;
   version: string | null;
   version_checked_at: string | null;

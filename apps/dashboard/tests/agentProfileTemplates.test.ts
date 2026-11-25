@@ -37,6 +37,7 @@ function client(
     short_id: client_type,
     enabled,
     detection: { status: detected ? "detected" : "not_detected", detail: null },
+    setup: { status: "not_required" },
     setup_command: null,
     version: null,
     version_checked_at: null,

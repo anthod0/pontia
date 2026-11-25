@@ -2,94 +2,104 @@
   import { useMobileHeader } from '../../../shell/mobile/header'
   import { t } from '$lib/i18n'
   import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
+  import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
-  import ProhibitIcon from 'phosphor-svelte/lib/ProhibitIcon'
   import ClientIcon from '../../../components/chat/ClientIcon.svelte'
   import { Button } from '$lib/components/ui/button/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
-  import * as Alert from '$lib/components/ui/alert/index.js'
-  import { createAgentClients } from '../../../features/settings/agentClients.svelte'
-  import ClientDetail from '../../../components/settings/ClientDetail.svelte'
-  import * as Sheet from '$lib/components/ui/sheet'
-  import BottomSheet from '$lib/components/ui/overlay/BottomSheet.svelte'
+  import * as Item from '$lib/components/ui/item/index.js'
+  import { clientStatus, createAgentClients } from '../../../features/settings/agentClients.svelte'
+  import ClientSettingsGroups from '../../../components/settings/ClientSettingsGroups.svelte'
+  import ClientStatus from '../../../components/settings/ClientStatus.svelte'
   import { useMobileStack } from '$lib/mobile/overlayStack.svelte'
   const settings = createAgentClients()
   const stack = useMobileStack()!
   const { action } = useMobileHeader()
-  let outputOpen = $state(false)
   $effect(() => {
     action.set(refresh)
     return () => action.set(null)
   })
 </script>
 
-{#if settings.error}
-  <Alert.Root variant="destructive">
-    <WarningCircleIcon class="size-4" />
-    <Alert.Description>{settings.error}</Alert.Description>
-  </Alert.Root>
+{#if settings.error && !settings.loadFailed}
+  <p role="alert" class="mb-4 flex items-center gap-2 text-[13px] text-destructive">
+    <WarningCircleIcon class="size-4 shrink-0" />{settings.error}
+  </p>
 {/if}
 
 {#if settings.loading}
-  <div role="status" aria-label={$t('clients.loading')} class="grid gap-4">
-    <Skeleton class="h-64 w-full" /><Skeleton class="h-96 w-full" />
+  <div role="status" aria-label={$t('clients.loading')}>
+    {#each Array(4) as _, index (index)}
+      <div class="flex min-h-14 items-center gap-3 py-2.5">
+        <Skeleton class="size-5" />
+        <div class="space-y-1.5"><Skeleton class="h-3.5 w-30" /><Skeleton class="h-2.5 w-20" /></div>
+      </div>
+    {/each}
+  </div>
+{:else if settings.loadFailed}
+  <div role="alert" class="flex items-center gap-2 text-[13px] text-destructive">
+    <WarningCircleIcon class="size-4 shrink-0" />
+    <span class="min-w-0 flex-1">{settings.error}</span>
+    <Button variant="ghost" class="-mr-3 h-9 px-3 text-sm" onclick={settings.refresh}>{$t('common.retry')}</Button>
   </div>
 {:else}
-  <div class="grid items-start gap-4">
-    <nav aria-label={$t('clients.title')} class="space-y-0.5">
-      {#each settings.clients as client (client.id)}
-        <button
-          type="button"
-          class="flex w-full items-center gap-2.5 rounded-md min-h-12 px-3 py-2 text-left text-sm transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60 {settings
-            .selected?.id === client.id
-            ? 'bg-muted font-medium text-heading'
-            : client.detection.status !== 'not_detected' && client.enabled
-              ? 'text-foreground'
-              : 'text-muted-foreground'}"
-          aria-current={settings.selected?.id === client.id ? 'true' : undefined}
-          disabled={settings.saving || settings.startingSetup}
-          onclick={() => {
-            settings.select(client)
-            stack.open({ title: client.name, content: detail })
-          }}
-        >
-          <ClientIcon
-            clientType={client.client_type}
-            acpAgentId={client.client_key}
-            class="size-4 {client.detection.status !== 'not_detected' && client.enabled
-              ? 'text-foreground'
-              : 'opacity-50'}"
-          />
-          <span class="min-w-0 flex-1">
-            <span class="block truncate">{client.name}</span>
-            <span class="block text-xs font-normal text-muted-foreground"
-              >{$t(`clients.detection.${client.detection.status}`)}</span
-            >
-          </span>
-          {#if !client.enabled}<ProhibitIcon
-              class="size-3.5 shrink-0 text-muted-foreground"
-              aria-label={$t('common.disabled')}
-            />{/if}
-        </button>
-      {:else}
-        <p class="px-3 py-2 text-sm text-muted-foreground">{$t('clients.empty')}</p>
-      {/each}
-    </nav>
-  </div>
+  <p class="mb-6 text-[13px] leading-[1.45] text-muted-foreground">{$t('clients.pageDescription')}</p>
+  <nav aria-label={$t('clients.title')}>
+    {#each settings.groups as [detection, list] (detection)}
+      <section class="mb-7">
+        <h2 class="mb-0.5 text-[13px] leading-[18px] font-medium text-muted-foreground">
+          {$t(`clients.group.${detection}`, { count: list.length })}
+        </h2>
+        <Item.Group class="gap-0">
+          {#each list as client, index (client.id)}
+            {#if index > 0}<Item.Separator
+                class="my-0 ml-8 bg-foreground/6 data-[orientation=horizontal]:w-[calc(100%-2rem)] dark:bg-foreground/7"
+              />{/if}
+            <Item.Root class="-mx-3 min-h-14 w-auto flex-nowrap gap-3 px-3 py-2.5 active:bg-muted">
+              {#snippet child({ props })}
+                <button
+                  {...props}
+                  type="button"
+                  onclick={() => {
+                    settings.select(client)
+                    stack.open({ title: client.name, content: detail })
+                  }}
+                >
+                  <Item.Media>
+                    <ClientIcon
+                      clientType={client.client_type}
+                      acpAgentId={client.client_key}
+                      class="size-5 {detection === 'not_detected' ? 'opacity-50' : ''}"
+                    />
+                  </Item.Media>
+                  <Item.Content class="min-w-0 gap-0.5 text-left">
+                    <Item.Title class="text-[15px] text-heading">{client.name}</Item.Title>
+                    <ClientStatus class="text-[13px]" status={clientStatus(client, settings.operationFor(client))} />
+                  </Item.Content>
+                  <CaretRightIcon class="size-4 shrink-0 text-muted-foreground" />
+                </button>
+              {/snippet}
+            </Item.Root>
+          {/each}
+        </Item.Group>
+      </section>
+    {:else}
+      <p class="py-2 text-sm text-muted-foreground">{$t('clients.empty')}</p>
+    {/each}
+  </nav>
 {/if}
 {#snippet refresh()}<Button
     size="icon"
     variant="ghost"
     aria-label={$t('common.refresh')}
-    disabled={settings.busy || settings.loading}
-    onclick={() => settings.perform(settings.refresh)}><ArrowClockwiseIcon /></Button
+    disabled={settings.refreshing || settings.loading}
+    onclick={settings.refresh}
+    ><ArrowClockwiseIcon class={settings.refreshing ? 'animate-spin' : undefined} /></Button
   >{/snippet}
-{#snippet detail()}{#if settings.error}<p role="alert" class="mb-3 text-destructive">
+{#snippet detail()}{#if settings.error}<p role="alert" class="mb-3 text-[13px] text-destructive">
       {settings.error}
-    </p>{/if}<ClientDetail {settings} viewOutput={() => (outputOpen = true)} />{/snippet}
-<Sheet.Root bind:open={outputOpen}
-  ><BottomSheet dismiss={() => (outputOpen = false)} aria-describedby={undefined}
-    ><Sheet.Title>{$t('clients.setupOutput')}</Sheet.Title>
-    <pre class="overflow-auto whitespace-pre-wrap p-3 text-xs">{settings.selectedSetup?.output}</pre></BottomSheet
-  ></Sheet.Root
->
+    </p>{/if}{#if settings.selected}<ClientSettingsGroups
+      {settings}
+      client={settings.selected}
+      mobile
+    />{/if}{/snippet}

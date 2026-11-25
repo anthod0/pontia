@@ -353,7 +353,23 @@ function agentClient(
     client_key: clientKey,
     name,
     short_id: clientType === "acp" ? clientKey : clientType,
-    detection: { status: "detected", detail: null },
+    detection: {
+      status: "detected",
+      detail:
+        clientType === "claude-agent"
+          ? "SDK host: /home/dev/.local/bin/claude"
+          : `/home/dev/.local/bin/${clientType === "acp" ? clientKey : clientType}`,
+    },
+    setup:
+      clientType === "acp"
+        ? { status: "not_required" }
+        : clientType === "codex"
+          ? {
+              status: "required",
+              detail:
+                "Missing Codex daemon startup command in /home/dev/.config/systemd/user/codex-app-server.service",
+            }
+          : { status: "initialized" },
     setup_command:
       clientType === "acp"
         ? null

@@ -605,6 +605,7 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
       const client = findAgentClient(device, type, key);
       if (!client.setup_command) throw new Error("Setup is unavailable for this client");
       client.enabled = true;
+      client.setup = { status: "initialized" };
       device.data.clientSetup = {
         id: crypto.randomUUID(),
         client_type: type,

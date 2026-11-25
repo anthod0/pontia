@@ -9,6 +9,7 @@ import type { AgentClientView } from "../src/api/types";
 
 const api = vi.hoisted(() => ({
   listAgentClients: vi.fn(),
+  listAgentProfiles: vi.fn(),
   patchAgentClient: vi.fn(),
   resetAgentClient: vi.fn(),
   setupAgentClient: vi.fn(),
@@ -31,6 +32,7 @@ const peer = (key: string): AgentClientView => ({
   name: key,
   enabled: true,
   detection: { status: "unknown", detail: null },
+  setup: { status: "not_required" },
   setup_command: null,
   version: null,
   version_checked_at: null,
@@ -40,10 +42,12 @@ const peer = (key: string): AgentClientView => ({
 });
 
 const pi = { ...peer("pi"), client_type: "pi", client_key: "default" };
+const nav = () => screen.getByRole("navigation", { name: "Agent clients" });
 
 beforeEach(() => {
   vi.resetAllMocks();
   api.getAgentClientSetup.mockResolvedValue(null);
+  api.listAgentProfiles.mockResolvedValue([]);
   api.listAgentClients.mockResolvedValue([peer("grok"), pi]);
 });
 
@@ -58,7 +62,9 @@ test("a client shows its settings without a configuration editor or internal rec
   const user = userEvent.setup();
   render(AgentClientsPage);
   await user.click(await screen.findByRole("button", { name: /pi/ }));
-  expect(screen.getByRole("switch", { name: "Enabled" })).toBeEnabled();
+  expect(screen.getByRole("switch", { name: "Enable pi" })).toBeEnabled();
+  expect(screen.getByText("Not found on this device. Install it, then refresh.")).toBeVisible();
+  expect(screen.queryByText("Version")).toBeNull();
   expect(screen.queryByRole("textbox")).toBeNull();
   expect(screen.queryByText("Effective configuration")).toBeNull();
   expect(screen.queryByText(/Database record/)).toBeNull();
@@ -66,15 +72,65 @@ test("a client shows its settings without a configuration editor or internal rec
   expect(screen.queryByText("opaque-pi")).toBeNull();
 });
 
+test("the first client is selected and the list shows one status per client, detected clients first", async () => {
+  api.listAgentClients.mockResolvedValue([
+    { ...peer("kiro"), name: "Kiro", detection: { status: "not_detected", detail: null } },
+    {
+      ...pi,
+      name: "Codex",
+      client_type: "codex",
+      detection: { status: "detected", detail: "/usr/bin/codex" },
+      setup: { status: "required", detail: "Missing daemon" },
+      setup_command: "pontia setup codex",
+    },
+    {
+      ...peer("grok"),
+      name: "Grok",
+      detection: { status: "detected", detail: null },
+      enabled: false,
+    },
+    { ...peer("ag"), name: "Antigravity", detection: { status: "detected", detail: null } },
+  ]);
+  render(AgentClientsPage);
+  expect(await screen.findByRole("heading", { name: "Codex" })).toBeVisible();
+  const items = within(nav()).getAllByRole("button");
+  expect(items.map((item) => item.textContent?.replace(/\s+/g, " ").trim())).toEqual([
+    "Codex Needs initialization",
+    "Grok Disabled",
+    "Antigravity Enabled",
+    "Kiro Not detected",
+  ]);
+  expect(nav()).toHaveTextContent("Detected · 3");
+  expect(nav()).toHaveTextContent("Not detected · 1");
+  expect(items[0]).toHaveAttribute("aria-current", "true");
+  expect(screen.getByText("Needs initialization: Missing daemon")).toBeVisible();
+  expect(screen.getByText("pontia setup codex")).toBeVisible();
+  expect(screen.getByText("/usr/bin/codex")).toBeVisible();
+});
+
 test("a client shows its detected version only when one is recorded", async () => {
   api.listAgentClients.mockResolvedValue([{ ...pi, name: "Pi", version: "0.70.2" }, peer("grok")]);
   const user = userEvent.setup();
   render(AgentClientsPage);
   await user.click(await screen.findByRole("button", { name: /^Pi/ }));
-  expect(screen.getByText("Version 0.70.2")).toBeInTheDocument();
-  expect(screen.getByRole("navigation", { name: "Agent clients" })).not.toHaveTextContent("0.70.2");
+  expect(screen.getByText("0.70.2")).toBeInTheDocument();
+  expect(nav()).not.toHaveTextContent("0.70.2");
   await user.click(screen.getByRole("button", { name: /grok/ }));
-  expect(screen.queryByText(/^Version/)).toBeNull();
+  expect(screen.queryByText("0.70.2")).toBeNull();
+});
+
+test("default model and parameters link to Agent profiles with the client's profile count", async () => {
+  api.listAgentProfiles.mockResolvedValue([
+    { profile_id: "a", client_type: "pi", client_key: "default" },
+    { profile_id: "b", client_type: "pi", client_key: "default" },
+    { profile_id: "c", client_type: "acp", client_key: "grok" },
+  ]);
+  const user = userEvent.setup();
+  render(AgentClientsPage);
+  await user.click(await screen.findByRole("button", { name: /^pi/ }));
+  const link = await screen.findByRole("link", { name: /Default model and parameters/ });
+  await waitFor(() => expect(link).toHaveTextContent("2 profiles"));
+  expect(link).toHaveAttribute("href", expect.stringMatching(/\/settings\/agent-profiles$/));
 });
 
 test("disable sends only the enabled setting and reset removes the entire selected record", async () => {
@@ -82,14 +138,14 @@ test("disable sends only the enabled setting and reset removes the entire select
   api.patchAgentClient.mockImplementation(async (target, patch) => ({ ...target, ...patch }));
   render(AgentClientsPage);
   await user.click(await screen.findByRole("button", { name: /pi/ }));
-  await user.click(screen.getByRole("switch", { name: "Enabled" }));
+  await user.click(screen.getByRole("switch", { name: "Enable pi" }));
   await waitFor(() =>
     expect(api.patchAgentClient).toHaveBeenCalledWith(
       expect.objectContaining({ client_key: "default" }),
       { enabled: false },
     ),
   );
-  expect(screen.getByRole("switch", { name: "Enabled" })).not.toBeChecked();
+  expect(screen.getByRole("switch", { name: "Enable pi" })).not.toBeChecked();
   await user.click(screen.getByRole("button", { name: "Restore default" }));
   const dialog = screen.getByRole("alertdialog");
   await user.click(within(dialog).getByRole("button", { name: "Restore default" }));
@@ -105,8 +161,19 @@ test("a failed toggle shows the error", async () => {
   api.patchAgentClient.mockRejectedValue(new Error("Rejected"));
   render(AgentClientsPage);
   await user.click(await screen.findByRole("button", { name: /pi/ }));
-  await user.click(screen.getByRole("switch", { name: "Enabled" }));
+  await user.click(screen.getByRole("switch", { name: "Enable pi" }));
   expect(await screen.findByText("Rejected")).toBeInTheDocument();
+});
+
+test("a failed load shows the error with a retry", async () => {
+  const user = userEvent.setup();
+  api.listAgentClients.mockRejectedValueOnce(new Error("Device is offline"));
+  render(AgentClientsPage);
+  const alert = await screen.findByRole("alert");
+  expect(alert).toHaveTextContent("Device is offline");
+  await user.click(within(alert).getByRole("button", { name: "Retry" }));
+  expect(await screen.findByRole("button", { name: /grok/ })).toBeVisible();
+  expect(screen.queryByRole("alert")).toBeNull();
 });
 
 test("Grok can be enabled and reset", async () => {
@@ -115,7 +182,8 @@ test("Grok can be enabled and reset", async () => {
   await user.click(await screen.findByRole("button", { name: /grok/ }));
   expect(screen.queryByRole("button", { name: "Add custom client" })).toBeNull();
   expect(screen.queryByRole("textbox")).toBeNull();
-  expect(screen.getByRole("switch", { name: "Enabled" })).toBeEnabled();
+  expect(screen.queryByText("Pontia integration")).toBeNull();
+  expect(screen.getByRole("switch", { name: "Enable grok" })).toBeEnabled();
   await user.click(screen.getByRole("button", { name: "Restore default" }));
   await user.click(
     within(screen.getByRole("alertdialog")).getByRole("button", { name: "Restore default" }),
@@ -133,6 +201,7 @@ const setupClient = (): AgentClientView => ({
   name: "Pi",
   enabled: false,
   detection: { status: "unknown", detail: null },
+  setup: { status: "required", detail: "Missing extension" },
   setup_command: "pontia setup pi",
 });
 const operation = (status: "running" | "succeeded" | "failed") => ({
@@ -153,12 +222,31 @@ test("setup enables the selected client", async () => {
   await user.click(screen.getByRole("button", { name: "Initialize" }));
   expect(api.setupAgentClient).toHaveBeenCalledWith(setupClient());
   expect(screen.getByRole("button", { name: "Initializing…" })).toBeDisabled();
-  api.listAgentClients.mockResolvedValue([{ ...setupClient(), enabled: true }]);
+  expect(within(nav()).getByRole("button", { name: /^Pi/ })).toHaveTextContent("Initializing…");
+  api.listAgentClients.mockResolvedValue([
+    { ...setupClient(), enabled: true, setup: { status: "initialized" } },
+  ]);
   api.getAgentClientSetup.mockResolvedValue(operation("succeeded"));
-  await waitFor(() => expect(screen.getByRole("switch", { name: "Enabled" })).toBeChecked(), {
+  await waitFor(() => expect(screen.getByRole("switch", { name: "Enable Pi" })).toBeChecked(), {
     timeout: 4000,
   });
-  expect(screen.getByRole("button", { name: "Initialize" })).toBeEnabled();
+  expect(screen.getByText("Initialization completed. The client is enabled.")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Reinitialize" })).toBeEnabled();
+  await user.click(screen.getByRole("button", { name: "View output" }));
+  expect(within(screen.getByRole("dialog")).getByText("Setup output")).toBeVisible();
+});
+
+test("other clients stay selectable while setup runs, but cannot start another setup", async () => {
+  const user = userEvent.setup();
+  const other = { ...setupClient(), id: "other", client_type: "codex", name: "Codex" };
+  api.listAgentClients.mockResolvedValue([setupClient(), other]);
+  api.getAgentClientSetup.mockResolvedValue(operation("running"));
+  render(AgentClientsPage);
+  await waitFor(() => expect(screen.getByRole("button", { name: "Initializing…" })).toBeDisabled());
+  await user.click(within(nav()).getByRole("button", { name: /^Codex/ }));
+  expect(screen.getByRole("heading", { name: "Codex" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Initialize" })).toBeDisabled();
+  expect(within(nav()).getByRole("button", { name: /^Pi/ })).toHaveTextContent("Initializing…");
 });
 
 test("a reopened page recovers a running setup across a temporary disconnect and permits retry after failure", async () => {
@@ -172,11 +260,15 @@ test("a reopened page recovers a running setup across a temporary disconnect and
   render(AgentClientsPage);
   await user.click(await screen.findByRole("button", { name: /^Pi/ }));
   await waitFor(() => expect(screen.getByRole("button", { name: "Initializing…" })).toBeDisabled());
-  await waitFor(() => expect(screen.getByRole("button", { name: "Initialize" })).toBeEnabled(), {
+  await waitFor(() => expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled(), {
     timeout: 6000,
   });
-  expect(screen.getByRole("switch", { name: "Enabled" })).not.toBeChecked();
-  await user.click(screen.getByRole("button", { name: "Initialize" }));
+  expect(screen.getByText("Initialization failed: Process exited with 1")).toBeVisible();
+  expect(within(nav()).getByRole("button", { name: /^Pi/ })).toHaveTextContent(
+    "Initialization failed",
+  );
+  expect(screen.getByRole("switch", { name: "Enable Pi" })).not.toBeChecked();
+  await user.click(screen.getByRole("button", { name: "Retry" }));
   expect(api.setupAgentClient).toHaveBeenCalledTimes(1);
 });
 
@@ -187,7 +279,7 @@ test("phones refresh from the top bar and return from a client with its back but
   await user.click(await screen.findByRole("button", { name: "Refresh" }));
   await waitFor(() => expect(api.listAgentClients).toHaveBeenCalledTimes(2));
   await user.click(await screen.findByRole("button", { name: /^grok/ }));
-  expect(screen.getByRole("switch", { name: "Enabled" })).toBeChecked();
+  expect(screen.getByRole("switch", { name: "Enable grok" })).toBeChecked();
   await user.click(
     within(screen.getAllByRole("banner").at(-1)!).getByRole("button", { name: "Back" }),
   );
