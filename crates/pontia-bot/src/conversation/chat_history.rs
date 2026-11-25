@@ -1,5 +1,5 @@
 use super::{BotRole, ConversationService};
-use crate::messages::{BotMessage, SearchPage};
+use crate::messages::{BotMessage, SearchPage, SearchType};
 use pontia_agent_control::queries::TimePage;
 use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -40,7 +40,7 @@ impl ConversationService {
                 limit,
             } => Ok(ChatResult::Search(
                 self.messages
-                    .search(&bot_id, &keyword, before.as_deref(), limit)
+                    .search(&bot_id, &keyword, SearchType::All, before.as_deref(), limit)
                     .await?,
             )),
             ChatQuery::Context { message_id, radius } => {

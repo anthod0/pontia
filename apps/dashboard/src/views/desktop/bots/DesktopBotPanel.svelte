@@ -22,7 +22,7 @@
   import { t } from '$lib/i18n'
   import MessageTime from '$lib/components/MessageTime.svelte'
   import { entryQuote, entryText, parseQuotedMessage, plainText, todoSummary, withoutLinks, type BotQuote } from '$lib/botQuote'
-  import type { Bot, BotMessage } from '../../../api/types'
+  import type { Bot, BotMessage, BotSearchType } from '../../../api/types'
   import { useDeviceRuntime } from '../../../device/context'
   import type { LocalhostPreviewTarget } from '$lib/localhostPreview'
   import type { FilePreviewTarget } from '../../../components/chat/filePreviewContext'
@@ -40,11 +40,14 @@
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
   import { promptValueAfterEnter } from '$lib/promptEnterBehavior'
 
-  let { bot, count, onjump, onquote, onreply, ontodochange }: {
+  let { bot, count, fileSessionId, onjump, onquote, onreply, ontodochange }: {
     bot: Bot
     count: number
+    /** The Session that reads the Bot's shared files. */
+    fileSessionId: string | null
     ontodochange: (id: string, open: boolean) => void
-    onjump: (id: string) => Promise<void>
+    /** Scrolls to a message; `path` names its shared file to highlight. */
+    onjump: (id: string, path?: string | null) => Promise<void>
     onquote: (quote: BotQuote) => Promise<void>
     /** Sends `text` quoting `quote`; `retry` resubmits the reply box and returns false when it cannot. */
     onreply: (quote: BotQuote, text: string, retry: () => boolean) => Promise<boolean>
@@ -64,6 +67,7 @@
   const recentFiles = createRecentFiles(device.id, bot.bot_id)
   let selected = $state<string | null>(null)
   let searchText = $state('')
+  let searchFilter = $state<BotSearchType>('all')
   let searchSelected = $state<string | null>(null)
   const context = createQuery(() => ({
     queryKey: ['bot-message-context', bot.bot_id, selected],
@@ -109,14 +113,14 @@
     }
   }
 
-  async function jump(id: string) {
+  async function jump(id: string, path: string | null = null) {
     await closeOverlay()
-    await onjump(id)
+    await onjump(id, path)
   }
 
-  function jumpToResult(id: string) {
+  function jumpToResult(id: string, path: string | null) {
     searchSelected = id
-    void jump(id)
+    void jump(id, path)
   }
 
   async function quoteTodo(message: BotMessage) {
@@ -288,7 +292,7 @@
       {/if}
     </Tabs.Content>
     <Tabs.Content value="search" class="flex min-h-0 flex-col">
-      <BotMessageSearch {bot} active={panel.open && panel.tab === 'search'} bind:text={searchText} selected={searchSelected} onselect={jumpToResult} />
+      <BotMessageSearch {bot} active={panel.open && panel.tab === 'search'} bind:text={searchText} bind:filter={searchFilter} {fileSessionId} selected={searchSelected} onselect={jumpToResult} />
     </Tabs.Content>
     <Tabs.Content value="git" class="flex min-h-0 flex-col">
       {#if panel.tab === 'git'}<BotGitTab botId={bot.bot_id} />{/if}

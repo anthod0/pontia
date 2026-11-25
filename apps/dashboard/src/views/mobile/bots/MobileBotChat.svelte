@@ -50,9 +50,9 @@
   let todos = $state(false)
   let context = $state(false)
   let contextId = $state('')
-  function jump(id: string) {
-    if (stack.layers.length) stack.back(() => jump(id))
-    else void chat.jumpTo(id)
+  function jump(id: string, path: string | null = null) {
+    if (stack.layers.length) stack.back(() => jump(id, path))
+    else void chat.jumpTo(id, path)
   }
   function viewContext(id: string) {
     contextId = id
@@ -147,7 +147,7 @@
     {recent}
     onopen={(item) => openFile({ device, ...item })}
   />{/snippet}
-{#snippet search()}{#if timeline.bot}<MobileBotSearchScreen bot={timeline.bot} onselect={jump} />{/if}{/snippet}
+{#snippet search()}{#if timeline.bot}<MobileBotSearchScreen bot={timeline.bot} fileSessionId={timeline.fileLinkSession?.session_id ?? null} onselect={jump} />{/if}{/snippet}
 <section class="mobile-bot-chat relative flex h-full min-h-0 flex-col">
   {#if timeline.refreshError}<div role="alert">
       {timeline.refreshError}

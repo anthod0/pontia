@@ -158,7 +158,10 @@ pub async fn timeline(
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SearchQuery {
+    #[serde(default)]
     q: String,
+    #[serde(default, rename = "type")]
+    kind: pontia_bot::messages::SearchType,
     before: Option<String>,
     limit: Option<u32>,
 }
@@ -174,6 +177,7 @@ pub async fn search(
         .search_messages(
             &bot_id,
             &query.q,
+            query.kind,
             query.before.as_deref(),
             query.limit.unwrap_or(20),
         )

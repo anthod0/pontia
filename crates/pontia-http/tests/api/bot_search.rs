@@ -348,3 +348,192 @@ async fn chat_reads_require_a_live_retrieval_credential_and_grant_no_write_permi
         StatusCode::FORBIDDEN
     );
 }
+
+async fn insert(app: &TestApp, id: &str, kind: &str, time: &str, content: &str) {
+    sqlx::query("INSERT INTO bot_messages(bot_id,id,kind,created_at,content) VALUES ('a',?,?,?,?)")
+        .bind(id)
+        .bind(kind)
+        .bind(time)
+        .bind(content)
+        .execute(&app.db)
+        .await
+        .unwrap();
+}
+
+async fn file_fixture() -> TestApp {
+    let app = fixture().await;
+    let uploads = "<user_uploads note=\"Temporary files; copy any you need into the workspace.\">";
+    for (id, kind, time, content) in [
+        (
+            "u1",
+            "user_input",
+            "2026-11-21T00:00:01Z",
+            format!(
+                "{uploads}\n<user_upload path=\"/up/1/R&amp;D.pdf\">R&amp;D.pdf</user_upload>\n\
+                 <user_upload path=\"/up/2/screen.PNG\">screen.PNG</user_upload>\n</user_uploads>\n\
+                 <user_secrets note=\"Secret files.\">\n<user_secret path=\"/s/key.png\">k***</user_secret>\n</user_secrets>\nsee these"
+            ),
+        ),
+        (
+            "r1",
+            "bot_reply",
+            "2026-11-21T00:00:02Z",
+            "Report: [report](/out/report.md#L2) ![chart](/out/chart.webp) `[x](/out/inline.md)`\n\
+             ```attachments\n/out/chart.webp\n/out/data.csv\n```"
+                .to_owned(),
+        ),
+        (
+            "r2",
+            "bot_reply",
+            "2026-11-21T00:00:03Z",
+            "See [docs](https://example.com/a.png) and [rel](docs/b.md)\n```text\n[code](/in/code.png)\n```".to_owned(),
+        ),
+    ] {
+        insert(&app, id, kind, time, &content).await;
+    }
+    app
+}
+
+async fn hits(
+    app: &TestApp,
+    query: &[(&str, &str)],
+) -> Vec<(String, Vec<(String, String, String, String)>)> {
+    let (status, body) = search(app, "a", query).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    body["data"]["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|message| {
+            let files = message["attachments"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|file| {
+                    let text = |key: &str| file[key].as_str().unwrap().to_owned();
+                    (
+                        text("source"),
+                        text("media_kind"),
+                        text("path"),
+                        text("name"),
+                    )
+                })
+                .collect();
+            (message["id"].as_str().unwrap().to_owned(), files)
+        })
+        .collect()
+}
+
+fn hit(
+    id: &str,
+    files: &[(&str, &str, &str, &str)],
+) -> (String, Vec<(String, String, String, String)>) {
+    (
+        id.to_owned(),
+        files
+            .iter()
+            .map(|&(source, kind, path, name)| {
+                (source.into(), kind.into(), path.into(), name.into())
+            })
+            .collect(),
+    )
+}
+
+#[tokio::test]
+async fn file_and_image_searches_list_separate_attachments_without_a_query() {
+    let app = file_fixture().await;
+    let files = vec![
+        hit(
+            "r1",
+            &[
+                ("attachment_block", "file", "/out/data.csv", "data.csv"),
+                ("markdown_link", "file", "/out/report.md", "report.md"),
+            ],
+        ),
+        hit("u1", &[("user_upload", "file", "/up/1/R&D.pdf", "R&D.pdf")]),
+    ];
+    assert_eq!(hits(&app, &[("type", "file")]).await, files);
+    assert_eq!(hits(&app, &[("type", "file"), ("q", " ")]).await, files);
+    assert_eq!(
+        hits(&app, &[("type", "image")]).await,
+        [
+            hit(
+                "r1",
+                &[("attachment_block", "image", "/out/chart.webp", "chart.webp")]
+            ),
+            hit(
+                "u1",
+                &[("user_upload", "image", "/up/2/screen.PNG", "screen.PNG")]
+            ),
+        ]
+    );
+    let (status, body) = search(&app, "a", &[("q", "report")]).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"]["messages"][0]["id"], "r1");
+    assert!(body["data"]["messages"][0].get("attachments").is_none());
+}
+
+#[tokio::test]
+async fn file_searches_match_decoded_names_and_paths() {
+    let app = file_fixture().await;
+    assert_eq!(
+        hits(&app, &[("type", "file"), ("q", "r&d")]).await,
+        [hit(
+            "u1",
+            &[("user_upload", "file", "/up/1/R&D.pdf", "R&D.pdf")]
+        )]
+    );
+    assert_eq!(
+        hits(&app, &[("type", "image"), ("q", "/OUT/")]).await,
+        [hit(
+            "r1",
+            &[("attachment_block", "image", "/out/chart.webp", "chart.webp")]
+        )]
+    );
+    // Message text and secrets are not file names.
+    for (kind, q) in [
+        ("file", "see these"),
+        ("image", "key"),
+        ("file", "inline"),
+        ("image", "code"),
+    ] {
+        assert!(
+            hits(&app, &[("type", kind), ("q", q)]).await.is_empty(),
+            "{kind} {q}"
+        );
+    }
+    assert_eq!(
+        search(&app, "a", &[("type", "video")]).await.0,
+        StatusCode::BAD_REQUEST
+    );
+}
+
+#[tokio::test]
+async fn file_searches_page_past_candidates_without_matches() {
+    let app = file_fixture().await;
+    for index in 0..250 {
+        insert(
+            &app,
+            &format!("img{index:03}"),
+            "bot_reply",
+            &format!("2026-11-22T00:{:02}:{:02}Z", index / 60, index % 60),
+            &format!("![shot](/out/{index}.png)"),
+        )
+        .await;
+    }
+    let (status, body) = search(&app, "a", &[("type", "file"), ("limit", "1")]).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["data"]["messages"][0]["id"], "r1");
+    assert_eq!(body["data"]["next_before"], "r1");
+    let (_, body) = search(
+        &app,
+        "a",
+        &[("type", "file"), ("limit", "1"), ("before", "r1")],
+    )
+    .await;
+    assert_eq!(body["data"]["messages"][0]["id"], "u1");
+    assert!(body["data"]["next_before"].is_null());
+    let (_, body) = search(&app, "a", &[("type", "image"), ("limit", "100")]).await;
+    assert_eq!(body["data"]["messages"].as_array().unwrap().len(), 100);
+    assert_eq!(body["data"]["next_before"], "img150");
+}

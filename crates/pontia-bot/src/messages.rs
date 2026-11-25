@@ -1,7 +1,9 @@
+mod attachments;
+pub use attachments::{Attachment, AttachmentSource, MediaKind};
 mod links;
 pub use links::MessageLinks;
 mod search;
-pub use search::SearchPage;
+pub use search::{SearchHit, SearchPage, SearchType};
 mod todos;
 pub use todos::{TodoAction, TodoList};
 

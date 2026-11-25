@@ -12,6 +12,7 @@ import type {
   BotMessagePage,
   BotMessageContext,
   BotMessageSearchPage,
+  BotSearchType,
   BotClient,
   BotConfiguration,
   BotDeletionBlockers,
@@ -133,10 +134,10 @@ export function createApi(device: DeviceRuntime) {
 
   function searchBotMessages(
     id: string,
-    page: { q: string; before?: string },
+    page: { q: string; type: BotSearchType; before?: string },
     signal?: AbortSignal,
   ): Promise<BotMessageSearchPage> {
-    const query = new URLSearchParams({ q: page.q });
+    const query = new URLSearchParams({ q: page.q, type: page.type });
     if (page.before) query.set("before", page.before);
     return request(`${botPath(id)}/messages/search?${query}`, { signal });
   }

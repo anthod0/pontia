@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { searchSnippet } from "../../src/lib/botSearch";
+import { markMatches, searchSnippet } from "../../src/lib/botSearch";
 import type { BotMessage } from "../../src/api/types";
 
 const message = (kind: BotMessage["kind"], content: string): BotMessage => ({
@@ -54,4 +54,19 @@ test("shows an uploaded file's path when only the path matches", () => {
   expect(marked(searchSnippet(message("user_input", content), "报告"))).toBe(
     "/uploads/[报告]/a.pdf",
   );
+});
+
+test("shows a reply's local link path when only the path matches", () => {
+  const content = "See [the report](/work/out/report.md#L3) and ![chart](</work/my plots/a.png>)";
+  expect(marked(searchSnippet(message("bot_reply", content), "out/rep"))).toBe(
+    "/work/[out/rep]ort.md",
+  );
+  expect(marked(searchSnippet(message("bot_reply", content), "my plots"))).toBe(
+    "/work/[my plots]/a.png",
+  );
+});
+
+test("marks every match in a whole file name", () => {
+  expect(marked(markMatches("Report-report.md", "REPORT"))).toBe("[Report]-[report].md");
+  expect(marked(markMatches("report.md", " "))).toBe("report.md");
 });

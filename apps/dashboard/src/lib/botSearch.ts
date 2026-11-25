@@ -2,6 +2,7 @@ import type { BotMessage } from "../api/types";
 import { messageText, parseQuotedMessage, plainLine } from "./botQuote";
 import { attachedPaths } from "./attachmentBlocks";
 import { parseUploadMessage } from "./uploads/message";
+import { resolveLocalFileLink } from "./downloads/localFilePath";
 
 export type SnippetPart = { text: string; match: boolean };
 
@@ -16,9 +17,16 @@ function fold(text: string): string {
   return text.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
 }
 
+/** Absolute local paths of a reply's Markdown links and images. */
+function linkedPaths(content: string): string[] {
+  return [...content.matchAll(/\]\(\s*(?:<([^>\n]+)>|([^)\s]+))/g)].flatMap(
+    ([, angled, href]) => resolveLocalFileLink(angled ?? href)?.path ?? [],
+  );
+}
+
 /**
  * The first readable part of a message that contains `query`, as shown in the chat:
- * its text, then its quote, then its file paths. Falls back to the stored content
+ * its text, then its quote, then its file and link paths. Falls back to the stored content
  * when the match is only in markup.
  */
 function matchedText(message: BotMessage, needle: string): string {
@@ -30,7 +38,7 @@ function matchedText(message: BotMessage, needle: string): string {
     message.kind === "bot_reply" ? text.replace(/!?\[([^\]]+)\]\([^)]+\)/g, "$1") : text,
     plainLine(quote?.kind === "message" ? quote.text : (quote?.name ?? "")),
     ...(message.kind === "bot_reply"
-      ? attachedPaths(message.content)
+      ? [...attachedPaths(message.content), ...linkedPaths(message.content)]
       : [
           ...(parts?.files.flatMap((file) => [file.name, file.path]) ?? []),
           ...(parts?.secrets.flatMap((secret) => [secret.label ?? "", secret.masked]) ?? []),
@@ -47,10 +55,20 @@ export function searchSnippet(message: BotMessage, query: string): SnippetPart[]
   const needle = fold(query.trim());
   const text = matchedText(message, needle);
   if (!needle) return [{ text, match: false }];
-  const lower = fold(text);
-  const first = lower.indexOf(needle);
+  const first = fold(text).indexOf(needle);
   const start = first > context ? first - context : 0;
-  const parts: SnippetPart[] = start > 0 ? [{ text: "…", match: false }] : [];
+  return [...(start > 0 ? [{ text: "…", match: false }] : []), ...marks(text, needle, start)];
+}
+
+/** The whole text with every match of `query` marked. */
+export function markMatches(text: string, query: string): SnippetPart[] {
+  const needle = fold(query.trim());
+  return needle ? marks(text, needle, 0) : [{ text, match: false }];
+}
+
+function marks(text: string, needle: string, start: number): SnippetPart[] {
+  const lower = fold(text);
+  const parts: SnippetPart[] = [];
   let index = start;
   while (index < text.length) {
     const found = lower.indexOf(needle, index);

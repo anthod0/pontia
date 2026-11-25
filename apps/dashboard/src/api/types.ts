@@ -71,8 +71,23 @@ export interface BotMessageContext {
   truncated: boolean;
 }
 
+export type BotSearchType = "all" | "file" | "image";
+
+/** A file a Bot chat message refers to, read from the message text. */
+export interface BotMessageAttachment {
+  source: "user_upload" | "attachment_block" | "markdown_link";
+  media_kind: "file" | "image";
+  path: string;
+  name: string;
+}
+
+export interface BotSearchHit extends BotMessage {
+  /** The matching files of the message, for file and image searches. */
+  attachments?: BotMessageAttachment[];
+}
+
 export interface BotMessageSearchPage {
-  messages: BotMessage[];
+  messages: BotSearchHit[];
   next_before: string | null;
 }
 
