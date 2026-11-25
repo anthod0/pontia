@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/svelte";
+import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeEach, expect, test, vi } from "vitest";
 import SessionChatPage from "../../src/pages/SessionChatPage.svelte";
 import type { SessionConsoleDetail } from "../../src/stores/sessions";
@@ -254,3 +254,18 @@ test.each(["session.ready", "turn.started", "turn.completed"])(
     expect(mocks.refreshSessionTimeline).not.toHaveBeenCalled();
   },
 );
+
+test("retry loads history immediately when refreshed detail restores the capability", async () => {
+  render(SessionChatPage);
+  const retry = await screen.findByRole("button", { name: /retry/i });
+  mocks.loadedSessions = [
+    session({ capabilities: { timeline: true, context_usage: "unsupported" } }),
+  ];
+  await fireEvent.click(retry);
+  await waitFor(() =>
+    expect(mocks.loadSessionTimeline).toHaveBeenCalledWith(
+      "session-1",
+      expect.objectContaining({ mode: "rebuild" }),
+    ),
+  );
+});

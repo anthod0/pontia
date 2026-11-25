@@ -15,13 +15,10 @@ impl TurnTimelineService {
     ) -> Result<TurnTimelinePage, TurnTimelineServiceError> {
         let mut scoped = self.request_scope();
         let service = &mut scoped;
-        if ControlQueryService::new(service.pool.clone())
+        let session = ControlQueryService::new(service.pool.clone())
             .get_session(&session_id)
             .await?
-            .is_none()
-        {
-            return Err(TurnTimelineServiceError::SessionNotFound);
-        }
+            .ok_or(TurnTimelineServiceError::SessionNotFound)?;
 
         service.try_recover_history(&session_id).await;
         let mut turns = SqliteTurnRepository::new(service.pool.clone())
@@ -31,6 +28,15 @@ impl TurnTimelineService {
         let binding = crate::AgentBindingService::new(service.pool.clone())
             .binding_for_session(&session_id)
             .await?;
+        if binding.is_none()
+            && service
+                .clients
+                .data(&session.client_type)
+                .is_some_and(|data| data.timeline_uses_lifecycle_anchors())
+            && matches!(session.state.as_str(), "starting" | "created")
+        {
+            return Err(TurnTimelineServiceError::Pending);
+        }
         if service.require_source && binding.is_none() {
             return Err(TurnTimelineServiceError::SourceUnavailable);
         }

@@ -116,8 +116,9 @@ pub(crate) async fn restore(
         }
     }
     // Native history is reloaded when idle; reattachment never reloads or resends an active prompt.
-    state.history_error =
-        Some("ACP history requires a fresh session/load after reattachment".into());
+    state.history_error = Some(crate::history::HistoryIssue::Pending(
+        "ACP history requires a fresh session/load after reattachment",
+    ));
     state.refresh_capabilities();
     Ok(())
 }

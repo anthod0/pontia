@@ -169,13 +169,22 @@ async fn live_event(body: &mut Body) -> Value {
     .expect("live SSE event")
 }
 
-async fn expect_live_updates(body: &mut Body, expected: Vec<Value>) {
-    let mut received = Vec::new();
-    while !expected.iter().all(|update| received.contains(update)) {
+async fn expect_live_updates(body: &mut Body, expected: Vec<Value>) -> Vec<Value> {
+    let mut received = Vec::<Value>::new();
+    while !expected.iter().all(|expected| {
+        received.iter().any(|update| {
+            expected
+                .as_object()
+                .unwrap()
+                .iter()
+                .all(|(key, value)| update.get(key) == Some(value))
+        })
+    }) {
         let event = live_event(body).await;
         assert_eq!(event["type"], "updates");
         received.extend(event["updates"].as_array().unwrap().iter().cloned());
     }
+    received
 }
 
 #[tokio::test]
@@ -273,10 +282,16 @@ async fn acp_tools_use_existing_http_snapshot_updates_reconnect_and_closed_event
     )
     .await;
     std::fs::write(root.path().join("live-1-1"), "").unwrap();
-    expect_live_updates(&mut stream, vec![
+    let updates = expect_live_updates(&mut stream, vec![
         json!({"type":"tool_output_updated","call_id":"native-call","text":"ab","truncated":false}),
-        json!({"type":"assistant_text_delta","item_id":"response","delta":"body"}),
+        json!({"type":"assistant_text_delta","delta":"body"}),
     ]).await;
+    let delta_id = updates
+        .iter()
+        .find(|update| update["type"] == "assistant_text_delta" && update["delta"] == "body")
+        .unwrap()["item_id"]
+        .as_str()
+        .unwrap();
     drop(stream);
     let mut stream = live_stream(&app, session).await;
     let recovered = live_event(&mut stream).await;
@@ -284,6 +299,7 @@ async fn acp_tools_use_existing_http_snapshot_updates_reconnect_and_closed_event
     assert_eq!(recovered["items"].as_array().unwrap().len(), 2);
     assert_eq!(recovered["items"][0]["output"]["text"], "ab");
     assert_eq!(recovered["items"][1]["text"], "body");
+    assert_eq!(recovered["items"][1]["item_id"], delta_id);
     std::fs::write(root.path().join("live-1-2"), "").unwrap();
     expect_live_updates(&mut stream, vec![
         json!({"type":"tool_status_updated","call_id":"native-call","status":{"phase":"ended","outcome":"failed"}}),
@@ -470,7 +486,7 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
     let detail = get(&app, &path).await;
     assert_eq!(detail["session"]["state"], "exited");
     assert_eq!(detail["session"]["capabilities"]["accept_task"], false);
-    std::fs::write(root.path().join("wrong-replay"), "").unwrap();
+    std::fs::rename(&workspace_path, root.path().join("removed-project")).unwrap();
     assert_eq!(
         get(&app, &format!("{path}/turns/timeline?direction=backward")).await,
         history
@@ -496,8 +512,11 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
         Value::Null,
     )
     .await;
-    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
-    assert_eq!(error["error"]["code"], "timeline_source_unavailable");
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(
+        error["error"]["code"],
+        "timeline_working_directory_unavailable"
+    );
 
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM session_runtimes WHERE session_id=?")

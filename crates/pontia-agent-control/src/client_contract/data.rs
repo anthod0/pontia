@@ -35,6 +35,11 @@ pub struct ResidentTimeline {
 
 /// Native parsing operates on opaque client evidence; business identity stays with services.
 pub trait ClientData: Send + Sync {
+    /// History support precedes setup. Native binding and Turn heads arrive with lifecycle facts.
+    fn timeline_uses_lifecycle_anchors(&self) -> bool {
+        false
+    }
+
     /// Render format of terminal Turns eligible for persistent timeline caching.
     fn timeline_cache_policy(&self) -> Option<TimelineCachePolicy> {
         None

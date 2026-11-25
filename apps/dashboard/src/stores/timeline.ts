@@ -231,12 +231,16 @@ export function createTimeline(device: DeviceRuntime) {
   const cachedHistoryCursorSessions = new Set<string>();
 
   function resetTimelineState(sessionId = ""): void {
+    invalidateTimelineRequests(sessionId);
+    timelineState.set(emptyState(sessionId));
+  }
+
+  function invalidateTimelineRequests(sessionId: string): void {
     timelineGeneration += 1;
     if (activeTimelineSessionId)
       device.timelineQueries.cancelTimelineRequests(activeTimelineSessionId);
     if (pendingRetry) clearTimeout(pendingRetry);
     pendingRetry = null;
-    timelineState.set(emptyState(sessionId));
     if (sessionId) {
       cachedRefreshCursorSessions.delete(sessionId);
       cachedHistoryCursorSessions.delete(sessionId);
@@ -333,6 +337,7 @@ export function createTimeline(device: DeviceRuntime) {
         return "range_unavailable";
       case "turn_timeline_invalid":
         return "range_invalid";
+      case "timeline_source_retryable":
       case "timeline_pending":
         return "pending";
       case "timeline_source_identity_mismatch":
@@ -348,7 +353,7 @@ export function createTimeline(device: DeviceRuntime) {
   }
 
   function isPendingHistory(error: unknown): boolean {
-    return error instanceof ApiError && error.code === "timeline_pending";
+    return errorStatus(error) === "pending";
   }
 
   function applyTimelineError(
@@ -401,7 +406,14 @@ export function createTimeline(device: DeviceRuntime) {
 
     const mode = options.mode ?? "rebuild";
     if (mode === "rebuild") {
-      resetTimelineState(sessionId);
+      const previous = get(timelineState);
+      invalidateTimelineRequests(sessionId);
+      if (
+        previous.sessionId !== sessionId ||
+        previous.mode !== (options.topology ? "tree" : "linear")
+      ) {
+        timelineState.set(emptyState(sessionId));
+      }
     }
     const current = get(timelineState);
     const sameSession = current.sessionId === sessionId;

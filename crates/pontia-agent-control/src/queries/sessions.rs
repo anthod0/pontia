@@ -113,6 +113,11 @@ impl ControlQueryService {
                 .requires_session_runtime()
         {
             return Ok(SessionCapabilities {
+                timeline: capabilities.timeline
+                    && self
+                        .clients
+                        .data(client_type)
+                        .is_some_and(|data| data.timeline_uses_lifecycle_anchors()),
                 compaction_events: capabilities.compaction_events,
                 compaction_history: capabilities.compaction_history,
                 ..SessionCapabilities::default()
@@ -187,11 +192,6 @@ fn timeline_unavailable_reason(error: pontia_core::Error) -> String {
             code: "timeline_source_identity_mismatch",
             ..
         } => "Native history belongs to a different session.",
-        Error::CapabilityUnavailable(message)
-            if message == "ACP history requires a fresh session/load after reattachment" =>
-        {
-            "Pontia reconnected to this session. History will reload after the current turn ends."
-        }
         Error::CapabilityUnavailable(message) if message.contains("source_unavailable:") => {
             "Native history is not available on disk yet. Retry when the source is available."
         }
@@ -211,9 +211,10 @@ mod tests {
 
     #[test]
     fn pending_history_reload_has_a_distinct_reason_from_invalid_history() {
-        let reattached = Error::CapabilityUnavailable(
-            "ACP history requires a fresh session/load after reattachment".into(),
-        );
+        let reattached = Error::Conflict {
+            code: "timeline_pending",
+            message: "Waiting for native history".into(),
+        };
         let invalid = Error::CapabilityUnavailable("invalid history format".into());
 
         assert_ne!(

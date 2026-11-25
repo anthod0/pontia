@@ -409,7 +409,7 @@ for line in sys.stdin:
             wait_for("release-close")
         if os.environ.get("ACP_DROP_CLOSE") == "1":
             os._exit(0)
-        if os.environ.get("ACP_CLOSE_FAIL") == "1":
+        if os.environ.get("ACP_CLOSE_FAIL") == "1" or (root / "close-fail").exists():
             send({"id": request["id"], "error": {"code": -32603, "message": "Close failed"}})
         else:
             response(request, {})

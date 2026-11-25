@@ -369,6 +369,7 @@ impl Peer {
         .await?;
         let mut state = self.state.lock().await;
         if state.active.as_ref().is_some_and(|p| p.turn == turn) {
+            state.history_dirty = true;
             state.active = None;
             self.remember(&state, None).await?;
             let permissions = std::mem::take(&mut state.permissions);

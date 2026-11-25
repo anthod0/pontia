@@ -862,8 +862,14 @@ test("pending native history retries after disk persistence without switching se
     status: "ready",
     items: [expect.objectContaining({ content_preview: "persisted answer" })],
   });
-  mocks.getTurnTimeline.mockRejectedValueOnce(new ApiError("Pending", "timeline_pending", 503));
+  mocks.getTurnTimeline.mockRejectedValueOnce(
+    new ApiError("Load failed", "timeline_source_retryable", 409),
+  );
   await loadSessionTimeline("sess-1");
+  expect(get(timelineState)).toMatchObject({
+    status: "pending",
+    items: [expect.objectContaining({ content_preview: "persisted answer" })],
+  });
   resetTimelineState("sess-2");
   await vi.advanceTimersByTimeAsync(2000);
   expect(get(timelineState)).toMatchObject({ sessionId: "sess-2", status: "idle", items: [] });

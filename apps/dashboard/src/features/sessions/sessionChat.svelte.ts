@@ -817,7 +817,12 @@ export function createSessionChat(routeSessionId: () => string | null) {
         return;
       }
       if (!sessionSupportsTimeline(currentSelectedSession())) {
-        void loadSessionDetail(selectedSessionId, { showLoading: false });
+        const id = selectedSessionId;
+        void loadSessionDetail(id, { showLoading: false }).then(() => {
+          if (selectedSessionId === id && sessionSupportsTimeline(currentSelectedSession())) {
+            void refreshSessionTimeline(id);
+          }
+        });
         return;
       }
       if (isTerminalTurnEvent(streamEvent.event.type) && streamEvent.event.turn_id) {
@@ -958,14 +963,6 @@ export function createSessionChat(routeSessionId: () => string | null) {
     const generation = ++selectedSessionLoadGeneration;
     historyObserverEnabled = false;
     const knownSession = currentSelectedSession();
-    if (knownSession && !sessionSupportsTimeline(knownSession)) {
-      initialChatScrollPending = false;
-      transcriptResolving = false;
-      resetTimelineState(sessionId);
-      await loadSessionDetail(sessionId);
-      return;
-    }
-
     const knownTopology = knownSession ? knownSession.capabilities.topology === true : null;
     const detailPromise = loadSessionDetail(sessionId);
     try {

@@ -362,7 +362,8 @@ impl Harness {
                         .unwrap()
                         .unwrap()
                         .capabilities
-                        .timeline
+                        .stream_output
+                    && self.history(session).await.is_ok()
                 {
                     break;
                 }
@@ -586,6 +587,11 @@ async fn capabilities_remain_unavailable_until_session_setup_finishes() {
         .unwrap();
     assert!(!before.capabilities.accept_task);
     assert!(!before.capabilities.stream_output);
+    assert!(before.capabilities.timeline);
+    assert!(matches!(
+        h.history(&session).await,
+        Err(pontia_agent_control::TurnTimelineServiceError::Pending)
+    ));
     assert_eq!(h.events(&session, "session.ready").await, 0);
     h.release("release-new");
     creating.await.unwrap().unwrap();
@@ -626,6 +632,10 @@ async fn unknown_extension_update_cannot_invent_started_or_break_the_connection(
     .await
     .unwrap();
     assert_eq!(h.events(&session, "turn.started").await, 0);
+    assert!(matches!(
+        h.history(&session).await,
+        Err(pontia_agent_control::TurnTimelineServiceError::Pending)
+    ));
     h.release("release-1");
     h.wait_turn(&session, &turn.turn_id, "completed").await;
     assert!(
@@ -637,6 +647,14 @@ async fn unknown_extension_update_cannot_invent_started_or_break_the_connection(
             .unwrap()
             .capabilities
             .accept_task
+    );
+    sqlx::query("UPDATE turns SET head_cursor=NULL WHERE turn_id=?")
+        .bind(&turn.turn_id)
+        .execute(&h.app.db())
+        .await
+        .unwrap();
+    assert!(
+        matches!(h.history(&session).await, Err(pontia_agent_control::TurnTimelineServiceError::TurnUnavailable { turn_id }) if turn_id == turn.turn_id)
     );
     h.stop().await;
 }
@@ -1874,7 +1892,6 @@ async fn lost_prompt_reconnect_expires_permissions_without_replay_or_terminal_fa
 
 #[tokio::test]
 async fn backpressured_prompt_writes_do_not_report_a_live_history_source_as_unavailable() {
-    use pontia_agent_control::client_contract::raw_transcripts::AgentBindingResolveRequest;
     let h = Harness::new(&[("ACP_PAUSE_INPUT_AFTER_LOAD", "1")]).await;
     let session = h.create("first").await.unwrap();
     assert!(
@@ -1887,18 +1904,6 @@ async fn backpressured_prompt_writes_do_not_report_a_live_history_source_as_unav
             .capabilities
             .timeline
     );
-    let binding = pontia_agent_control::AgentBindingService::new(h.app.db())
-        .binding_for_session(&session)
-        .await
-        .unwrap()
-        .unwrap();
-    let request = AgentBindingResolveRequest {
-        id: binding.id,
-        session_id: session.clone(),
-        client_type: binding.client_type,
-        client_session_key: binding.client_session_key,
-        client_session_file: None,
-    };
     tokio::time::timeout(Duration::from_secs(5), async {
         while !h.root.path().join("input-paused").exists() {
             tokio::time::sleep(Duration::from_millis(5)).await;
@@ -1923,19 +1928,11 @@ async fn backpressured_prompt_writes_do_not_report_a_live_history_source_as_unav
                 .await
         }
     });
-    let clients = h.app.clients();
-    let data = clients.data("acp").unwrap();
-    // The peer cannot drain its pipe until explicitly released. Probe through
-    // the public data contract while the large prompt write is backpressured.
-    for _ in 0..64 {
-        if let Some(result) = data.probe_timeline(false, &request) {
-            assert!(
-                result.is_ok(),
-                "a busy lock must not diagnose a failed history source: {result:?}"
-            );
-        }
-        tokio::time::sleep(Duration::from_millis(1)).await;
-    }
+    let detail = tokio::spawn({
+        let app = h.app.clone();
+        let session = session.clone();
+        async move { app.queries().get_session(&session).await.unwrap().unwrap() }
+    });
     assert_eq!(h.requests("session/prompt"), 0);
     h.release("resume-input");
     tokio::time::timeout(Duration::from_secs(5), submission)
@@ -1944,13 +1941,7 @@ async fn backpressured_prompt_writes_do_not_report_a_live_history_source_as_unav
         .unwrap()
         .unwrap();
     h.wait_requests("session/prompt", 1).await;
-    let view = h
-        .app
-        .queries()
-        .get_session(&session)
-        .await
-        .unwrap()
-        .unwrap();
+    let view = detail.await.unwrap();
     assert!(view.capabilities.timeline);
     assert!(view.timeline_unavailable_reason.is_none());
     h.stop().await;
@@ -1979,8 +1970,8 @@ async fn failed_history_load_is_not_empty_success_and_can_be_reprobed() {
         .await
         .unwrap()
         .unwrap();
-    assert!(!failed.capabilities.timeline);
-    assert!(failed.timeline_unavailable_reason.is_some());
+    assert!(failed.capabilities.timeline);
+    assert!(failed.timeline_unavailable_reason.is_none());
     std::fs::remove_file(h.root.path().join("load-fail")).unwrap();
     let restored = h.history(&session).await.unwrap();
     assert_eq!(restored.items.len(), 2);
@@ -1990,21 +1981,27 @@ async fn failed_history_load_is_not_empty_success_and_can_be_reprobed() {
 
 #[tokio::test]
 async fn empty_history_is_distinct_from_a_failed_or_unassociated_replay() {
-    let h = Harness::new(&[]).await;
+    let mut h = Harness::new(&[]).await;
     let session = h.create("first").await.unwrap();
     assert!(h.history(&session).await.unwrap().items.is_empty());
     for marker in ["load-fail", "orphan-replay"] {
+        let loads = h.requests("session/load");
         h.release(marker);
-        assert!(h.history(&session).await.is_err());
-        let view = h
-            .app
-            .queries()
-            .get_session(&session)
-            .await
-            .unwrap()
-            .unwrap();
-        assert!(!view.capabilities.timeline);
-        assert!(view.timeline_unavailable_reason.is_some());
+        h.restart().await;
+        h.wait_requests("session/load", loads + 1).await;
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                match h.history(&session).await {
+                    Err(pontia_agent_control::TurnTimelineServiceError::Pending) => {
+                        tokio::task::yield_now().await
+                    }
+                    Err(_) => break,
+                    Ok(page) => panic!("invalid replay returned {page:?}"),
+                }
+            }
+        })
+        .await
+        .unwrap();
         std::fs::remove_file(h.root.path().join(marker)).unwrap();
         assert!(h.history(&session).await.unwrap().items.is_empty());
     }
@@ -2035,8 +2032,8 @@ async fn replay_for_another_native_session_is_unavailable_not_empty_history() {
         .await
         .unwrap()
         .unwrap();
-    assert!(!view.capabilities.timeline);
-    assert!(view.timeline_unavailable_reason.is_some());
+    assert!(view.capabilities.timeline);
+    assert!(view.timeline_unavailable_reason.is_none());
     assert_eq!(h.events(&session, "turn.started").await, 1);
     assert_eq!(h.events(&session, "turn.completed").await, 1);
     h.stop().await;
@@ -2079,7 +2076,7 @@ async fn shutdown_during_recovery_cancels_held_load_and_leaves_identity_and_life
         .unwrap()
         .unwrap();
     assert!(!view.capabilities.accept_task);
-    assert!(!view.capabilities.timeline);
+    assert!(view.capabilities.timeline);
     assert_eq!(view.runtimes.len(), 1);
     assert_eq!(h.requests("session/new"), 1);
     assert_eq!(h.events(&session, "session.exited").await, 0);
@@ -2130,9 +2127,11 @@ async fn rechunked_history_preserves_no_output_prompt_boundaries_across_restart(
 
 #[tokio::test]
 async fn cancelling_a_history_reader_does_not_strand_replay_or_misclassify_late_history() {
-    let h = Harness::new(&[]).await;
+    let mut h = Harness::new(&[]).await;
     let session = h.create("first").await.unwrap();
     h.release("hold-load");
+    h.restart().await;
+    h.wait_requests("session/load", 2).await;
     let app = h.app.clone();
     let read_session = session.clone();
     let read = tokio::spawn(async move {
@@ -2156,9 +2155,22 @@ async fn cancelling_a_history_reader_does_not_strand_replay_or_misclassify_late_
     assert_eq!(h.requests("session/close"), 0);
     read.abort();
     assert!(read.await.unwrap_err().is_cancelled());
-    h.release("release-load");
-    h.wait_ready(&session, 1).await;
+    assert!(matches!(
+        h.history(&session).await,
+        Err(pontia_agent_control::TurnTimelineServiceError::Pending)
+    ));
+    assert_eq!(h.requests("session/load"), 2);
+    let ((), read) = tokio::join!(
+        async {
+            tokio::task::yield_now().await;
+            h.release("release-load");
+        },
+        h.history(&session)
+    );
+    assert!(read.unwrap().items.is_empty());
+    h.wait_ready(&session, 2).await;
     assert!(h.history(&session).await.unwrap().items.is_empty());
+    assert_eq!(h.requests("session/load"), 2);
     let turn = h
         .app
         .turn_commands()
@@ -2185,7 +2197,7 @@ async fn a_stalled_peer_does_not_block_other_session_recovery_or_shutdown() {
     assert!(!h.app.session_commands().exit_if_idle(&first).await.unwrap());
     let stalled = h.app.queries().get_session(&first).await.unwrap().unwrap();
     assert!(!stalled.capabilities.accept_task);
-    assert!(!stalled.capabilities.timeline);
+    assert!(stalled.capabilities.timeline);
     assert_eq!(h.events(&first, "session.ready").await, 1);
     assert_eq!(h.requests("session/new"), 2);
     h.stop().await;
@@ -2252,8 +2264,8 @@ async fn recovery_rejects_missing_native_session_or_downgraded_capabilities_with
             .unwrap()
             .unwrap();
         assert!(!failed.capabilities.accept_task);
-        assert!(!failed.capabilities.timeline);
-        assert!(failed.timeline_unavailable_reason.is_some());
+        assert!(failed.capabilities.timeline);
+        assert!(failed.timeline_unavailable_reason.is_none());
         assert_eq!(failed.runtimes.len(), 1);
         let after = pontia_agent_control::AgentBindingService::new(h.app.db())
             .binding_for_session(&session)
@@ -2347,6 +2359,10 @@ async fn active_prompt_survives_daemon_restart_without_replay_and_releases_the_n
     })
     .await
     .unwrap();
+    assert!(matches!(
+        h.history(&session).await,
+        Err(pontia_agent_control::TurnTimelineServiceError::Pending)
+    ));
     assert_eq!(h.requests("initialize"), 1);
     assert_eq!(h.requests("session/load"), 1);
     assert_eq!(h.requests("session/prompt"), 1);
@@ -2597,6 +2613,7 @@ async fn check_exited_pages(flags: &[(&str, &str)], agent: &str) {
         .execute(&db)
         .await
         .unwrap();
+    h.release("close-fail");
     let (again, concurrent) = tokio::join!(page(ids[0].clone()), page(ids[0].clone()));
     assert_eq!(again.unwrap(), first);
     assert_eq!(concurrent.unwrap(), first);

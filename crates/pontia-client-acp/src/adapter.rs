@@ -390,7 +390,16 @@ impl ClientSession for AcpAdapter {
                         || !state.interjections.is_empty())
             };
             if reload {
-                peer.load().await?;
+                peer.load().await.map_err(|error| match error {
+                    Error::Conflict {
+                        code:
+                            "timeline_history_invalid"
+                            | "timeline_source_identity_mismatch"
+                            | "timeline_source_retryable",
+                        message,
+                    } => Error::CapabilityUnavailable(message),
+                    error => error,
+                })?;
             }
             let mut state = peer.state.lock().await;
             if let Some(profile) = peer.policy.profile
@@ -643,41 +652,33 @@ impl ClientSession for AcpAdapter {
         Box::pin(async move {
             // ACP has no capability flag for usage reports. The persisted observation
             // remains evidence of support even when the peer is disconnected.
-            let usage_observed = match self.pool.get() {
-                Some(pool) => {
-                    sqlx::query_scalar::<_, Option<String>>(
-                        "SELECT json_extract(metadata, '$.context_usage.confidence') FROM sessions WHERE session_id = ?",
-                    )
-                    .bind(session)
-                    .fetch_optional(pool)
-                    .await?.flatten()
-                }
+            let (agent_id, usage) = match self.pool.get() {
+                Some(pool) => sqlx::query_as::<_, (Option<String>, Option<String>)>(
+                    "SELECT json_extract(metadata, '$.acp_agent_id'), json_extract(metadata, '$.context_usage.confidence') FROM sessions WHERE session_id = ?",
+                ).bind(session).fetch_optional(pool).await?.unwrap_or_default(),
+                None => Default::default(),
+            };
+            let peer = self.peer(session).await.ok();
+            let state = match &peer {
+                Some(peer) => Some(peer.state.lock().await),
                 None => None,
             };
-            let Ok(peer) = self.peer(session).await else {
-                return Ok(capabilities::effective(
-                    None,
-                    usage_observed.as_deref(),
-                    implementation,
-                ));
-            };
-            let retry_history = {
-                let state = peer.state.lock().await;
-                state.current
-                    && state.ready
-                    && state.history_error.is_some()
-                    && state.active.is_none()
-                    && state.replay.is_none()
-            };
-            if retry_history {
-                let _ = peer.load().await;
-            }
-            let state = peer.state.lock().await;
-            Ok(capabilities::effective(
-                state.capabilities.as_ref(),
-                usage_observed.as_deref(),
+            let mut caps = capabilities::effective(
+                state.as_ref().and_then(|state| state.capabilities.as_ref()),
+                usage.as_deref(),
                 implementation,
-            ))
+            );
+            if let Some(bounds) = state.as_ref().map(|state| &state.agent.capabilities) {
+                caps.timeline = bounds.timeline;
+                caps.compaction_history = bounds.compaction_history;
+            } else if let Some(id) = agent_id
+                && let Ok(definition) = self.config.definition(&id)
+            {
+                let bounds = AgentBounds::of(&id, Some(definition)).capabilities;
+                caps.timeline = bounds.timeline;
+                caps.compaction_history = bounds.compaction_history;
+            }
+            Ok(caps)
         })
     }
 

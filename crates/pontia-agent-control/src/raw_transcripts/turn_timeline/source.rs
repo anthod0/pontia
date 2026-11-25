@@ -10,22 +10,26 @@ use super::{TurnHistoryIssue, TurnTimelineGroup, TurnTimelineService, TurnTimeli
 use crate::{AgentBindingService, ControlQueryService};
 
 impl TurnTimelineService {
-    pub(super) async fn selected_ranges(
+    pub(super) fn selected_ranges(
         &self,
-        session_id: &str,
+        active_turn_id: Option<&str>,
         all_turns: &[TurnRow],
         selected: &[&TurnRow],
+        client_type: &str,
     ) -> Result<Vec<TurnTimelineRange>, TurnTimelineServiceError> {
-        let active_turn_id = SqliteTurnRepository::new(self.pool.clone())
-            .active_turn(session_id)
-            .await?
-            .map(|turn| turn.turn_id);
+        let lifecycle_anchors = self
+            .clients
+            .data(client_type)
+            .is_some_and(|data| data.timeline_uses_lifecycle_anchors());
         let newest_turn_id = all_turns.last().map(|turn| turn.turn_id.as_str());
         let mut ranges = Vec::new();
         for turn in selected {
-            let active = active_turn_id.as_deref() == Some(turn.turn_id.as_str())
+            let active = active_turn_id == Some(turn.turn_id.as_str())
                 && newest_turn_id == Some(turn.turn_id.as_str())
                 && turn.state.parse::<TurnState>()?.is_active();
+            if lifecycle_anchors && active && turn.state == "queued" && turn.head_cursor.is_none() {
+                return Err(TurnTimelineServiceError::Pending);
+            }
             let head = turn.head_cursor.clone().ok_or_else(|| {
                 TurnTimelineServiceError::TurnUnavailable {
                     turn_id: turn.turn_id.clone(),
@@ -170,34 +174,38 @@ impl TurnTimelineService {
             .await?
             .map(|turn| turn.turn_id);
         let newest_turn_id = all_turns.last().map(|turn| turn.turn_id.as_str());
-        if !self
+        let native_identity = self
             .clients
             .spec(&session.client_type)
-            .is_some_and(|spec| spec.adapter.native_turn_identity)
-        {
+            .is_some_and(|spec| spec.adapter.native_turn_identity);
+        let ranges = if native_identity {
+            None
+        } else {
             if !session.capabilities.timeline {
                 return Err(TurnTimelineServiceError::CapabilityUnavailable);
             }
-            for turn in selected {
-                let active = active_turn_id.as_deref() == Some(turn.turn_id.as_str())
-                    && newest_turn_id == Some(turn.turn_id.as_str())
-                    && turn.state.parse::<TurnState>()?.is_active();
-                if turn.head_cursor.is_none() || (!active && turn.tail_cursor.is_none()) {
-                    return Err(TurnTimelineServiceError::TurnUnavailable {
-                        turn_id: turn.turn_id.clone(),
-                    });
-                }
-            }
-        }
+            Some(self.selected_ranges(
+                active_turn_id.as_deref(),
+                all_turns,
+                selected,
+                &session.client_type,
+            )?)
+        };
         let binding_service = AgentBindingService::new(self.pool.clone());
         let binding = binding_service
             .binding_for_session(session_id)
             .await?
             .ok_or(TurnTimelineServiceError::CapabilityUnavailable)?;
         if let Some(history) = self.native_history(&binding).await {
-            let ranges = self
-                .selected_ranges(session_id, all_turns, selected)
-                .await?;
+            let ranges = match ranges {
+                Some(ranges) => ranges,
+                None => self.selected_ranges(
+                    active_turn_id.as_deref(),
+                    all_turns,
+                    selected,
+                    &session.client_type,
+                )?,
+            };
             let items = self
                 .cached_read(
                     &binding,
@@ -214,10 +222,7 @@ impl TurnTimelineService {
             }
             return Ok(items);
         }
-        let source_pending = !self
-            .clients
-            .spec(&binding.client_type)
-            .is_some_and(|spec| spec.adapter.native_turn_identity)
+        let source_pending = !native_identity
             && !binding.discovered
             && all_turns.len() == 1
             && selected.len() == 1

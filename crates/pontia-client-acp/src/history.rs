@@ -66,6 +66,45 @@ pub(crate) fn unavailable() -> Error {
     )
 }
 
+#[derive(Clone)]
+pub(crate) enum HistoryIssue {
+    Pending(&'static str),
+    LoadFailed(String),
+    Invalid(&'static str),
+    IdentityMismatch,
+}
+
+impl From<HistoryIssue> for Error {
+    fn from(issue: HistoryIssue) -> Self {
+        match issue {
+            HistoryIssue::Pending(reason) => pending(reason),
+            HistoryIssue::LoadFailed(message) => Error::Conflict {
+                code: "timeline_source_retryable",
+                message,
+            },
+            HistoryIssue::Invalid(reason) => Error::Conflict {
+                code: "timeline_history_invalid",
+                message: reason.into(),
+            },
+            HistoryIssue::IdentityMismatch => identity_error(),
+        }
+    }
+}
+
+pub(crate) fn pending(message: &str) -> Error {
+    Error::Conflict {
+        code: "timeline_pending",
+        message: message.into(),
+    }
+}
+
+pub(crate) fn identity_error() -> Error {
+    Error::Conflict {
+        code: "timeline_source_identity_mismatch",
+        message: "ACP native Session identity changed".into(),
+    }
+}
+
 // Cursors measure UTF-8 bytes in the native user-text stream, not chunks or
 // guessed rounds. Rechunking and prompts with no Agent output preserve offsets.
 pub(crate) fn collect(
@@ -296,6 +335,10 @@ fn index(binding: &AgentBindingResolveRequest, value: &str) -> Result<Anchor> {
 }
 
 impl ClientData for AcpAdapter {
+    fn timeline_uses_lifecycle_anchors(&self) -> bool {
+        true
+    }
+
     fn timeline_cache_policy(&self) -> Option<TimelineCachePolicy> {
         Some(TimelineCachePolicy {
             render_version: 2,
@@ -332,45 +375,6 @@ impl ClientData for AcpAdapter {
             entry_anchor: anchor.map(|value| value.to_string()),
             topology: None,
         }
-    }
-    fn probe_timeline(
-        &self,
-        exited: bool,
-        binding: &AgentBindingResolveRequest,
-    ) -> Option<Result<()>> {
-        if exited {
-            return Some(
-                crate::identity::decode(&binding.client_session_key)
-                    .and_then(|[agent, _]| self.config.definition(&agent).map(|_| ())),
-            );
-        }
-        // Contention is not evidence of source failure. The application has
-        // already awaited our dynamic capabilities; keep that observation when
-        // a synchronous probe cannot obtain a newer one without blocking.
-        let peers = self.peers.try_lock().ok()?;
-        let Some(peer) = peers.get(&binding.session_id) else {
-            return Some(Err(unavailable()));
-        };
-        let state = peer.state.try_lock().ok()?;
-        Some((|| {
-            let identity = crate::identity::decode(&binding.client_session_key)?;
-            if !state.current
-                || !state.ready
-                || state.native.as_ref().map(ToString::to_string).as_deref() != Some(&identity[1])
-            {
-                return Err(unavailable());
-            }
-            if let Some(reason) = &state.history_error {
-                return Err(Error::CapabilityUnavailable(reason.clone()));
-            }
-            if state.replay.is_some() {
-                return Err(Error::Conflict {
-                    code: "timeline_pending",
-                    message: "ACP replay in progress".into(),
-                });
-            }
-            Ok(())
-        })())
     }
     fn native_history(
         &self,
@@ -478,8 +482,8 @@ impl AcpHistory {
                 })
             })
             .await?;
-        if self.resident && session_checkpoints && !snapshot.checkpoints_complete {
-            return Err(unavailable().into());
+        if session_checkpoints && !snapshot.checkpoints_complete {
+            return Err(pending("Waiting for native compaction checkpoints").into());
         }
         read(&snapshot.messages, &snapshot.checkpoints)
     }
@@ -490,19 +494,26 @@ impl AcpHistory {
     ) -> Result<tokio::sync::OwnedMutexGuard<crate::peer::SessionState>> {
         let state = peer.state.lock().await;
         let identity = crate::identity::decode(&self.binding.client_session_key)?;
-        if !state.current
-            || !state.ready
+        if !state.current || !state.ready || state.closing && !self.resident {
+            return Err(pending("Waiting for ACP session initialization"));
+        }
+        if state.agent.id != identity[0]
             || state.native.as_ref().map(ToString::to_string).as_deref() != Some(&identity[1])
         {
-            return Err(unavailable());
+            return Err(identity_error());
         }
         drop(state);
         if !self.resident {
-            peer.load().await?;
+            tokio::time::timeout(std::time::Duration::from_secs(1), peer.load())
+                .await
+                .map_err(|_| pending("Waiting for ACP session replay"))??;
         }
         let state = peer.state.clone().lock_owned().await;
-        if !state.current || state.history_error.is_some() || state.replay.is_some() {
-            return Err(unavailable());
+        if !state.current || state.replay.is_some() {
+            return Err(pending("Waiting for ACP session replay"));
+        }
+        if let Some(issue) = &state.history_error {
+            return Err(issue.clone().into());
         }
         if state.steering_history_pending || !state.interjections.is_empty() {
             return Err(Error::Conflict {
@@ -521,11 +532,16 @@ impl AcpHistory {
         messages: &[Message],
     ) -> std::result::Result<(usize, usize), TurnTimelineReadError> {
         let total = user_bytes(messages);
-        let start = index(&self.binding, head)?.offset(messages)?;
-        let end = tail
-            .map(|tail| index(&self.binding, tail)?.offset(messages))
-            .transpose()?
-            .unwrap_or(total);
+        let offset = |cursor: &str| {
+            index(&self.binding, cursor)
+                .and_then(|anchor| anchor.offset(messages))
+                .map_err(|_| TurnTimelineReadError::InvalidRange {
+                    turn_id: turn_id.into(),
+                    message: "Invalid ACP history cursor".into(),
+                })
+        };
+        let start = offset(head)?;
+        let end = tail.map(offset).transpose()?.unwrap_or(total);
         if start > end || end > total {
             return Err(TurnTimelineReadError::InvalidRange {
                 turn_id: turn_id.into(),

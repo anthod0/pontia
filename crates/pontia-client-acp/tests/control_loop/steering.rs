@@ -60,6 +60,23 @@ async fn finish_queued(h: &Harness, session: &str, turn: &str, message: &Value) 
     assert!(!h.wire().iter().any(|item| item["overlap"] == true));
 }
 
+async fn expect_pending_history(h: &Harness, session: &str) {
+    assert!(
+        h.app
+            .queries()
+            .get_session(session)
+            .await
+            .unwrap()
+            .unwrap()
+            .capabilities
+            .timeline
+    );
+    assert!(matches!(
+        h.history(session).await,
+        Err(pontia_agent_control::TurnTimelineServiceError::Pending)
+    ));
+}
+
 #[tokio::test]
 async fn unsupported_steer_silently_waits_in_inbox_until_idle() {
     let h = Harness::new(&[]).await;
@@ -183,6 +200,7 @@ async fn antigravity_finishes_the_running_turn_with_the_latest_prompt() {
     let message = submit(&h, &session, "steer").await;
     assert_eq!(message["turn_id"], turn);
     assert_eq!(message["state"], "dispatched");
+    expect_pending_history(&h, &session).await;
     h.release("release-1");
     h.release("update-2");
     h.restart().await;
@@ -445,6 +463,7 @@ async fn native_interjections_keep_distinct_inputs_in_wire_and_replay_order() {
         })
         .await
         .unwrap();
+        expect_pending_history(&h, &session).await;
         if mode == "receipt-first" {
             h.restart().await;
         }
@@ -584,6 +603,7 @@ async fn kiro_injects_into_the_running_turn_and_filters_live_and_replayed_notes(
             .count(),
         1
     );
+    expect_pending_history(&h, &session).await;
     h.release("release-1");
     h.wait_turn(&session, &turn, "completed").await;
     let history = h.history(&session).await.unwrap();

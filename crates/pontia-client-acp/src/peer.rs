@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Weak},
 };
 
-use crate::AcpLaunch;
+use crate::{AcpLaunch, history::HistoryIssue};
 use agent_client_protocol::{
     Agent, ByteStreams, JsonRpcRequest,
     schema::ProtocolVersion,
@@ -67,11 +67,15 @@ pub(crate) struct SessionState {
     pub permissions: HashMap<String, crate::interactions::Permission>,
     pub history: Vec<crate::history::Message>,
     pub replay: Option<crate::history::Replay>,
-    pub history_error: Option<String>,
+    pub history_error: Option<HistoryIssue>,
+    pub history_dirty: bool,
+    load_waiters: Option<tokio::sync::broadcast::WeakSender<LoadResult>>,
     pub steering_history_pending: bool,
     pub steered_inputs: String,
     pub cwd: std::path::PathBuf,
 }
+
+type LoadResult = std::result::Result<(), (&'static str, String)>;
 
 pub(crate) type Peers = Arc<Mutex<HashMap<String, Arc<Peer>>>>;
 
@@ -83,6 +87,14 @@ pub(crate) struct PeerOwner {
 }
 
 impl SessionState {
+    pub fn needs_history_load(&self) -> bool {
+        self.history_dirty
+            || self.history_error.is_some()
+            || self.checkpoints_need_replay
+            || self.steering_history_pending
+            || !self.interjections.is_empty()
+    }
+
     fn finish_load(
         &mut self,
         result: std::result::Result<LoadSessionResponse, agent_client_protocol::Error>,
@@ -102,14 +114,18 @@ impl SessionState {
                 Err(error) => Err(protocol_error(error)),
             };
             if let Err(error) = result {
-                self.history_error = Some(format!("ACP session/load failed: {error}"));
+                self.history_error = Some(HistoryIssue::LoadFailed(format!(
+                    "ACP session/load failed: {error}"
+                )));
             } else if self.history_error.is_none() && !self.preserves_history(&replay.messages) {
-                self.history_error =
-                    Some("ACP replay did not preserve the known native message history".into());
+                self.history_error = Some(HistoryIssue::Invalid(
+                    "ACP replay did not preserve the known native message history",
+                ));
             }
-            let result = if let Some(reason) = self.history_error.clone() {
-                Err(Error::CapabilityUnavailable(reason))
+            let result = if let Some(issue) = self.history_error.clone() {
+                Err(issue.into())
             } else {
+                self.history_dirty = false;
                 self.steering_history_pending = false;
                 self.steered_inputs.clear();
                 self.history = replay.messages;
@@ -181,8 +197,6 @@ impl SessionState {
                 has_native: self.native.is_some(),
                 closing: self.closing,
                 active: self.active.is_some(),
-                history_ok: self.history_error.is_none()
-                    && (!self.steering_history_pending || self.active.is_none()),
                 replaying: self.replay.is_some(),
                 blocked: self.blocked || self.compaction.is_some() || self.promotion_pending(),
             },
@@ -333,8 +347,10 @@ impl Peer {
             compaction: None,
             permissions: HashMap::new(),
             history: Vec::new(),
+            history_dirty: true,
+            load_waiters: None,
             replay: None,
-            history_error: Some("ACP history has not been loaded".into()),
+            history_error: Some(HistoryIssue::Pending("ACP history has not been loaded")),
             steering_history_pending: false,
             steered_inputs: String::new(),
             cwd: cwd.to_path_buf(),
@@ -474,6 +490,13 @@ impl Peer {
             cleanup_relay.rpc.close();
             bridge.abort();
             let _ = bridge.await;
+            let flush = {
+                let state = task_state.lock().await;
+                state.current && state.ready && !state.closing && state.replay.is_none()
+            };
+            if flush && let Some(writer) = events.timeline_cache_writer() {
+                writer.flush(&session, None).await;
+            }
             let (permissions, recover) = {
                 let mut state = task_state.lock().await;
                 let recover =
@@ -747,19 +770,35 @@ impl Peer {
     }
 
     pub async fn load(self: &Arc<Self>) -> Result<()> {
-        let (native, cwd, system_prompt, meta) = {
+        let (native, cwd, system_prompt, meta, waiters) = {
             let mut state = self.state.lock().await;
             if !state.current || state.closing {
-                return Err(crate::history::unavailable());
+                return Err(crate::history::pending(
+                    "Waiting for ACP session transition",
+                ));
             }
-            if state.active.is_some() || state.promoted.is_some() || state.compaction.is_some() {
+            if let Some(waiters) = state
+                .load_waiters
+                .as_ref()
+                .and_then(|flight| flight.upgrade())
+            {
+                let mut result = waiters.subscribe();
+                drop(waiters);
+                drop(state);
+                return result
+                    .recv()
+                    .await
+                    .map_err(|_| {
+                        Error::ControlUnknown("ACP replay ended without a response".into())
+                    })?
+                    .map_err(|(code, message)| Error::Conflict { code, message });
+            }
+            if state.active.is_some()
+                || state.promoted.is_some()
+                || state.compaction.is_some()
+                || !state.needs_history_load()
+            {
                 return Ok(());
-            }
-            if state.replay.is_some() {
-                return Err(Error::Conflict {
-                    code: "timeline_pending",
-                    message: "ACP history replay is in progress".into(),
-                });
             }
             let native = state
                 .native
@@ -787,11 +826,18 @@ impl Peer {
                     meta
                 }
             };
-            state.checkpoints.clear();
+            let waiters = tokio::sync::broadcast::channel(1).0;
+            state.load_waiters = Some(waiters.downgrade());
             state.replay = Some(Default::default());
             state.history_error = None;
             state.refresh_capabilities();
-            (native, state.cwd.clone(), state.system_prompt.clone(), meta)
+            (
+                native,
+                state.cwd.clone(),
+                state.system_prompt.clone(),
+                meta,
+                waiters,
+            )
         };
         let mut load = LoadSessionRequest::new(native.clone(), cwd);
         load.meta = (!meta.is_empty()).then_some(meta);
@@ -816,6 +862,9 @@ impl Peer {
                             state.current = false;
                             state.refresh_capabilities();
                         }
+                        let _ =
+                            waiters.send(Err(("timeline_history_load_failed", error.to_string())));
+                        drop(waiters);
                         let _ = send.send(Err(error));
                         let _ = peer.terminate().await;
                         return;
@@ -825,6 +874,12 @@ impl Peer {
                     if result.is_ok() && !state.interjections.is_empty() {
                         result = peer.reconcile_interjections(&mut state).await;
                     }
+                    state.load_waiters = None;
+                    let shared = result.as_ref().map(|_| ()).map_err(|error| match error {
+                        Error::Conflict { code, message } => (*code, message.clone()),
+                        error => ("timeline_source_retryable", error.to_string()),
+                    });
+                    let _ = waiters.send(shared);
                     let loaded = result.is_ok();
                     drop(state);
                     let _ = send.send(result);
@@ -914,8 +969,7 @@ async fn update(
     }
     if state.native.as_ref() != Some(&notification.session_id) {
         if state.replay.is_some() {
-            state.history_error =
-                Some("ACP replay returned a different native Session identity".into());
+            state.history_error = Some(HistoryIssue::IdentityMismatch);
         }
         return Ok(());
     }
@@ -942,9 +996,9 @@ async fn update(
     let SessionState { replay, agent, .. } = &mut *state;
     if let Some(replay) = replay {
         if replay.update(agent, update).is_err() {
-            state.history_error = Some(
-                "ACP history replay contains unsupported or unassociated message content".into(),
-            );
+            state.history_error = Some(HistoryIssue::Invalid(
+                "ACP history replay contains unsupported or unassociated message content",
+            ));
         }
         return Ok(());
     }

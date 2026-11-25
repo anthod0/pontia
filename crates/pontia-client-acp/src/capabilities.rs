@@ -4,7 +4,8 @@ use pontia_core::{Error, Result, client_capabilities::AgentClientCapabilities};
 use crate::{ACP_MAX_CAPABILITIES, AcpAgentDefinition};
 
 pub(crate) struct AgentBounds {
-    capabilities: AgentClientCapabilities,
+    pub id: String,
+    pub capabilities: AgentClientCapabilities,
     pub compaction: Option<crate::CompactionProtocol>,
     pub prompt_steering: bool,
     pub kiro: bool,
@@ -27,6 +28,7 @@ impl AgentBounds {
             caps.compaction_history = false;
         }
         Self {
+            id: agent_id.to_owned(),
             compaction,
             capabilities: caps,
             kiro: agent_id == "kiro",
@@ -102,7 +104,6 @@ pub(crate) struct Live {
     pub has_native: bool,
     pub closing: bool,
     pub active: bool,
-    pub history_ok: bool,
     pub replaying: bool,
     pub blocked: bool,
 }
@@ -121,8 +122,6 @@ pub(crate) fn live(
         caps.interrupt &= state.active;
         caps.manual_compaction &=
             negotiated.compact_command && !state.active && !state.blocked && !state.replaying;
-        caps.compaction_history &= state.history_ok && !state.replaying;
-        caps.timeline &= state.history_ok && !state.replaying;
         caps.accept_task &= !state.replaying && !state.blocked;
         caps
     })
@@ -161,7 +160,6 @@ mod tests {
             has_native: true,
             closing: false,
             active: false,
-            history_ok: true,
             replaying: false,
             blocked: false,
         }
@@ -227,18 +225,10 @@ mod tests {
             ),
             (
                 Live {
-                    history_ok: false,
-                    ..idle()
-                },
-                false,
-                true,
-            ),
-            (
-                Live {
                     replaying: true,
                     ..idle()
                 },
-                false,
+                true,
                 false,
             ),
         ] {

@@ -23,7 +23,17 @@ impl TurnTimelineService {
         if !session.capabilities.compaction_history {
             return self.read_selected_turns(session_id, turns, selected).await;
         }
-        self.selected_ranges(session_id, turns, selected).await?;
+        let active = pontia_storage_sqlite::repositories::turns::SqliteTurnRepository::new(
+            self.pool.clone(),
+        )
+        .active_turn(session_id)
+        .await?;
+        self.selected_ranges(
+            active.as_ref().map(|turn| turn.turn_id.as_str()),
+            turns,
+            selected,
+            &session.client_type,
+        )?;
         let bindings = AgentBindingService::new(self.pool.clone());
         let Some(binding) = bindings.binding_for_session(session_id).await? else {
             return if turns.is_empty() {

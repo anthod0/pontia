@@ -67,6 +67,7 @@ impl Peer {
             .as_ref()
             .is_some_and(|pending| pending.operation == operation)
         {
+            state.history_dirty = true;
             state.compaction = None;
             state.refresh_capabilities();
             self.remember(state, None).await?;
