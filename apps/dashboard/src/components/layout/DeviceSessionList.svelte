@@ -19,7 +19,6 @@
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import * as Tooltip from '$lib/components/ui/tooltip/index.js'
   import ShortcutKeys from '$lib/components/shortcuts/ShortcutKeys.svelte'
-  import { chatShortcuts } from '$lib/shortcuts/definitions'
   import { cn } from '$lib/utils.js'
   import { openContextMenu, type MenuAnchor } from '$lib/contextMenu'
   import { createSessionList } from '../../features/sessions/sessionList.svelte'
@@ -259,7 +258,7 @@
           </Tooltip.Trigger>
           <Tooltip.Content side="bottom">
             {$t('nav.newChat')}
-            <ShortcutKeys keys={chatShortcuts.newChat.keys} aria-hidden="true" />
+            <ShortcutKeys shortcutId="newChat" aria-hidden="true" />
           </Tooltip.Content>
         </Tooltip.Root>
         <button

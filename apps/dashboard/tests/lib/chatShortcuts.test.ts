@@ -1,5 +1,14 @@
 import { describe, expect, test } from "vitest";
-import { matchChatShortcut } from "../../src/lib/shortcuts/definitions";
+import {
+  activeOnPath,
+  eventCombo,
+  ignoredEvent,
+  matches,
+  overlaps,
+  recordError,
+  registry,
+  type ShortcutId,
+} from "../../src/lib/shortcuts/registry";
 import { formatShortcutKeys } from "../../src/lib/shortcuts/format";
 import {
   adjacentSessionId,
@@ -12,75 +21,63 @@ function keydown(init: KeyboardEventInit): KeyboardEvent {
   return new KeyboardEvent("keydown", init);
 }
 
-describe("matchChatShortcut", () => {
-  test("matches letter shortcuts by physical key", () => {
-    expect(matchChatShortcut(keydown({ altKey: true, code: "KeyJ", key: "j" }))).toEqual({
-      action: "nextChat",
-    });
-    expect(matchChatShortcut(keydown({ altKey: true, code: "KeyK", key: "k" }))).toEqual({
-      action: "previousChat",
-    });
-    expect(matchChatShortcut(keydown({ altKey: true, code: "KeyN", key: "n" }))).toEqual({
-      action: "newChat",
-    });
-    expect(matchChatShortcut(keydown({ altKey: true, code: "KeyL", key: "l" }))).toEqual({
-      action: "focusInput",
-    });
-    expect(matchChatShortcut(keydown({ altKey: true, code: "KeyM", key: "µ" }))).toEqual({
-      action: "previousDevice",
-    });
-    expect(matchChatShortcut(keydown({ altKey: true, code: "KeyG", key: "©" }))).toEqual({
-      action: "toggleGit",
-    });
-    expect(
-      matchChatShortcut(keydown({ altKey: true, shiftKey: true, code: "KeyM", key: "M" })),
-    ).toBeNull();
-  });
+test.each([
+  ["nextChat", "KeyJ"],
+  ["previousChat", "KeyK"],
+  ["newChat", "KeyN"],
+  ["focusInput", "KeyL"],
+  ["previousDevice", "KeyM"],
+  ["toggleGit", "KeyG"],
+  ["openChatByPosition", "Digit2"],
+] as const)("matches %s by physical key with exactly Alt", (id, code) => {
+  const combo = registry[id].combo;
+  expect(matches(id, combo, eventCombo(keydown({ code, key: "∆", altKey: true })))).toBe(true);
+  expect(matches(id, combo, eventCombo(keydown({ code, altKey: true, shiftKey: true })))).toBe(
+    false,
+  );
+});
 
-  test("matches switch shortcuts, with Shift reversing the direction", () => {
+test("matches the platform primary modifier and rejects extra modifiers", () => {
+  const binding = registry.toggleSidebar.combo;
+  for (const apple of [true, false]) {
+    const init = { code: "KeyB", metaKey: apple, ctrlKey: !apple };
+    expect(matches("toggleSidebar", binding, eventCombo(keydown(init), apple))).toBe(true);
     expect(
-      matchChatShortcut(keydown({ altKey: true, shiftKey: true, code: "KeyC", key: "C" })),
-    ).toEqual({ action: "switchAgentClient", direction: -1 });
-    expect(matchChatShortcut(keydown({ altKey: true, code: "KeyW", key: "∑" }))).toEqual({
-      action: "switchWorkspace",
-      direction: 1,
-    });
-  });
+      matches("toggleSidebar", binding, eventCombo(keydown({ ...init, shiftKey: true }), apple)),
+    ).toBe(false);
+    expect(matches("toggleSidebar", binding, eventCombo(keydown(init), !apple))).toBe(false);
+  }
+});
 
-  test("matches macOS Option+letter, which reports a symbol in key", () => {
-    expect(matchChatShortcut(keydown({ altKey: true, code: "KeyJ", key: "∆" }))).toEqual({
-      action: "nextChat",
-    });
-    expect(matchChatShortcut(keydown({ altKey: true, code: "Digit2", key: "™" }))).toEqual({
-      action: "openChatByPosition",
-      position: "2",
-    });
-  });
+test("ignores composition and consumed events", () => {
+  const consumed = keydown({ cancelable: true });
+  consumed.preventDefault();
+  for (const event of [consumed, keydown({ isComposing: true }), keydown({ keyCode: 229 })])
+    expect(ignoredEvent(event)).toBe(true);
+});
 
-  test("matches the help shortcut", () => {
-    expect(
-      matchChatShortcut(keydown({ altKey: true, shiftKey: true, code: "Slash", key: "?" })),
-    ).toEqual({
-      action: "showHelp",
-    });
-  });
+test.each(["KeyW", "KeyT", "KeyN", "KeyQ", "KeyR", "KeyL", "Digit1", "Digit9", "Tab"])(
+  "rejects reserved Mod+%s",
+  (code) => {
+    expect(recordError("newChat", { code, mod: true })).toBeTruthy();
+  },
+);
 
-  test("ignores other modifiers, digit 0, and IME composition", () => {
-    expect(matchChatShortcut(keydown({ code: "KeyJ", key: "j" }))).toBeNull();
-    expect(
-      matchChatShortcut(keydown({ altKey: true, ctrlKey: true, code: "KeyJ", key: "j" })),
-    ).toBeNull();
-    expect(
-      matchChatShortcut(keydown({ altKey: true, metaKey: true, code: "KeyJ", key: "j" })),
-    ).toBeNull();
-    expect(
-      matchChatShortcut(keydown({ altKey: true, shiftKey: true, code: "KeyJ", key: "J" })),
-    ).toBeNull();
-    expect(matchChatShortcut(keydown({ altKey: true, code: "Digit0", key: "0" }))).toBeNull();
-    expect(
-      matchChatShortcut(keydown({ altKey: true, isComposing: true, code: "KeyJ", key: "j" })),
-    ).toBeNull();
-  });
+test("recording accepts function keys and reserves Shift for reverse actions", () => {
+  for (const code of ["ControlLeft", "Escape", "Tab", "KeyA", "F5", "F13"])
+    expect(recordError("newChat", { code })).toBeTruthy();
+  expect(recordError("newChat", { code: "F12" })).toBeNull();
+  expect(recordError("switchWorkspace", { code: "KeyX", alt: true, shift: true })).toBeTruthy();
+});
+
+test("conflicts include shifted reverse actions and each position in overlapping scopes", () => {
+  const conflict = (id: ShortcutId, code: string, shift: boolean, other: ShortcutId) =>
+    overlaps(id, { code, alt: true, shift }, other, registry[other].combo);
+  expect(conflict("newChat", "KeyC", true, "switchAgentClient")).toBe(true);
+  expect(conflict("toggleGit", "KeyC", true, "switchAgentClient")).toBe(false);
+  expect(conflict("switchWorkspace", "Digit9", false, "openChatByPosition")).toBe(true);
+  expect(conflict("newChat", "Digit0", false, "openChatByPosition")).toBe(false);
+  expect(activeOnPath("showHelp", "/settings/common")).toBe(true);
 });
 
 describe("formatShortcutKeys", () => {

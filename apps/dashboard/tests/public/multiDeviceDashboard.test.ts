@@ -625,3 +625,18 @@ test("manual checks show fresh feedback each time the device list is empty", asy
   expect(await screen.findByText(hint)).toBeVisible();
   expect(check).toBeEnabled();
 });
+
+test("device-independent shortcut settings link back to the active device's settings", async () => {
+  window.history.replaceState({}, "", "/settings/shortcuts");
+  render(MultiDeviceDashboardHarness);
+  await screen.findByRole("button", {
+    name: "Change shortcut for Switch back to the previous device",
+  });
+  const common = await sidebar().findByRole("link", { name: "Common" });
+  expect(common).toHaveAttribute("href", "/office-mac/settings/common");
+  await userEvent.click(common);
+  await waitFor(() => expect(location.pathname).toBe("/office-mac/settings/common"));
+  await fireEvent.keyDown(window, { code: "Slash", altKey: true, shiftKey: true });
+  await userEvent.click(screen.getByRole("link", { name: "Customize shortcuts" }));
+  await waitFor(() => expect(location.pathname).toBe("/office-mac/settings/shortcuts"));
+});

@@ -32,7 +32,7 @@
 </div>
 <h2 class="mb-2 text-sm font-medium text-muted-foreground">{$t('settings.title')}</h2>
 <nav class="divide-y overflow-hidden rounded-2xl border bg-card px-3" aria-label={$t('settings.sections')}>
-  {#each settingsSections as section (section.path)}
+  {#each settingsSections.filter(section => !section.desktopOnly) as section (section.path)}
     <button class="mobile-row" onclick={() => navigate(section.path)}
       ><section.icon />{$t(section.label)}<CaretRightIcon class="ml-auto text-muted-foreground" /></button
     >

@@ -1,3 +1,4 @@
+import ShortcutManager from "../../../src/lib/components/shortcuts/ShortcutManager.svelte";
 import { mocks, session, turn, workspace } from "./fixtures";
 import { testDevice } from "../../deviceFixture";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
@@ -222,6 +223,7 @@ test("switching clients clears the selected startup model", async () => {
     default_model: null,
   });
   try {
+    render(ShortcutManager);
     render(NewChatPage);
     await user.click(await screen.findByRole("button", { name: "Client default model" }));
     await user.click(await screen.findByLabelText("Pi model"));

@@ -34,7 +34,9 @@
   {/if}
 {/snippet}
 
-{#if device}
+{#if currentPath === '/settings/shortcuts'}
+  {@render children()}
+{:else if device}
   {#key device}
     <DeviceProvider {device}>
       {#if handle && currentPath === '/new' && !isMobileShell()}

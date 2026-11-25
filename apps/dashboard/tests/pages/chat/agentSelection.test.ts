@@ -1,3 +1,4 @@
+import ShortcutManager from "../../../src/lib/components/shortcuts/ShortcutManager.svelte";
 import { mocks, session, turn, workspace } from "./fixtures";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
@@ -69,6 +70,7 @@ test("Alt+C and Alt+W switch the agent client and workspace, with Shift going ba
     workspace({ workspace_id: "ws-1", name: "first" }),
     workspace({ workspace_id: "ws-2", name: "second" }),
   ]);
+  render(ShortcutManager);
   render(NewChatPage);
   const clientSelect = await screen.findByLabelText("Agent client");
   await waitFor(() => expect(clientSelect).toHaveTextContent("Pi"));
@@ -118,6 +120,7 @@ test.each([false, true])(
     ]);
     mocks.createSession.mockResolvedValue({ session: session(), initial_turn: turn() });
     const user = userEvent.setup();
+    render(ShortcutManager);
     render(NewChatPage);
     await user.click(await screen.findByRole("button", { name: "Fast" }));
     await user.click(await screen.findByLabelText("Deep"));

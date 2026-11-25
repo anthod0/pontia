@@ -6,8 +6,7 @@
   import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
-  import { chatShortcuts } from '$lib/shortcuts/definitions'
-  import { formatShortcutKeys } from '$lib/shortcuts/format'
+  import { shortcuts } from '$lib/shortcuts/store.svelte'
   import type { HostDevice } from '../../device/hostContext'
   import { deviceStateDotClass, deviceStateLabel } from '../../components/devices/deviceState'
 
@@ -51,7 +50,7 @@
       {#if previous}
         <Sidebar.MenuAction
           aria-label={$t('devices.switchBack', { name: previous.name })}
-          title={$t('devices.switchBackTitle', { name: previous.name, state: $t(deviceStateLabel[previous.state]), keys: formatShortcutKeys(chatShortcuts.previousDevice.keys) })}
+          title={shortcuts.label('previousDevice') ? $t('devices.switchBackTitle', { name: previous.name, state: $t(deviceStateLabel[previous.state]), keys: shortcuts.label('previousDevice') }) : $t('devices.switchBack', { name: previous.name })}
           onclick={() => onSelect(previous.handle)}
         >
           <ArrowsLeftRightIcon />

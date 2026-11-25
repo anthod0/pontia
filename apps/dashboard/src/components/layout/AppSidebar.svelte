@@ -9,17 +9,17 @@
   import { navigate } from '$lib/navigation'
   import { returnToLastPage } from '$lib/lastPage'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
-  import { chatShortcuts } from '$lib/shortcuts/definitions'
-  import { formatShortcutKeys } from '$lib/shortcuts/format'
+  import { shortcuts } from '$lib/shortcuts/store.svelte'
   import DeviceSessionList from './DeviceSessionList.svelte'
   import DeviceBotList from '../bots/DeviceBotList.svelte'
   import { isSettingsPath, isSettingsSectionActive, settingsSections } from '../settings/sections'
 
-  let { groups, deviceSwitcher, onNewChat = () => void navigate('/'), onSettings = () => void navigate('/settings/common'), settingsDisabled = false }: {
+  let { groups, deviceSwitcher, onNewChat = () => void navigate('/'), onSettings = () => void navigate('/settings/common'), settingsDisabled = false, settingsScope }: {
     groups?: Snippet
     deviceSwitcher?: Snippet
     onNewChat?: () => void
     onSettings?: () => void
+    settingsScope?: string
     settingsDisabled?: boolean
   } = $props()
   let currentPath = $state(dashboardRelativePath())
@@ -33,7 +33,8 @@
 
   function openSection(event: MouseEvent, path: string): void {
     event.preventDefault()
-    void navigate(path)
+    if (settingsScope) void navigate(path, undefined, { scope: settingsScope })
+    else void navigate(path)
   }
 </script>
 
@@ -76,12 +77,12 @@
         <Sidebar.GroupLabel class="h-8 px-2">{$t('settings.title')}</Sidebar.GroupLabel>
         <Sidebar.GroupContent>
           <Sidebar.Menu aria-label={$t('settings.sections')}>
-            {#each settingsSections as section (section.path)}
+            {#each settingsSections.filter(section => !settingsDisabled || section.path === '/settings/shortcuts') as section (section.path)}
               {@const active = isSettingsSectionActive(section, currentPath)}
               <Sidebar.MenuItem>
                 <Sidebar.MenuButton isActive={active} tooltipContent={$t(section.label)}>
                   {#snippet child({ props })}
-                    <a {...props} href={dashboardPath(section.path)} aria-current={active ? 'page' : undefined} onclick={(event) => openSection(event, section.path)}>
+                    <a {...props} href={settingsScope ? settingsScope + section.path : dashboardPath(section.path)} aria-current={active ? 'page' : undefined} onclick={(event) => openSection(event, section.path)}>
                       <section.icon />
                       <span>{$t(section.label)}</span>
                     </a>
@@ -114,7 +115,7 @@
         <Sidebar.MenuAction
           class="peer-data-[size=default]/menu-button:top-2 hidden md:flex"
           aria-label={$t('shortcuts.title')}
-          title={$t('shortcuts.withKeys', { keys: formatShortcutKeys(chatShortcuts.showHelp.keys) })}
+          title={shortcuts.label('showHelp') ? $t('shortcuts.withKeys', { keys: shortcuts.label('showHelp') }) : $t('shortcuts.title')}
           onclick={() => document.dispatchEvent(new CustomEvent('pontia:open-chat-shortcuts'))}
         >
           <QuestionIcon />

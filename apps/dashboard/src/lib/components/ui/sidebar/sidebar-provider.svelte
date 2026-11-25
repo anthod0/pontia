@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { registerShortcut } from "$lib/shortcuts/dispatch";
 	import * as Tooltip from "$lib/components/ui/tooltip/index.js";
 	import { cn, type WithElementRef } from "$lib/utils.js";
 	import type { HTMLAttributes } from "svelte/elements";
@@ -33,9 +34,8 @@
 			document.cookie = `${SIDEBAR_COOKIE_NAME}=${open}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
 		},
 	});
+	registerShortcut("toggleSidebar", sidebar.toggle);
 </script>
-
-<svelte:window onkeydown={sidebar.handleShortcutKeydown} />
 
 <Tooltip.Provider delayDuration={0}>
 	<div

@@ -34,7 +34,3 @@ export function sessionIdFromChatPath(relativePath: string): string | null {
   const match = relativePath.match(/^\/chat\/([^/?#]+)/);
   return match ? decodeURIComponent(match[1]) : null;
 }
-
-export function isChatRoute(relativePath: string): boolean {
-  return relativePath === "/" || relativePath.startsWith("/chat/");
-}

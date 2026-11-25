@@ -1,7 +1,6 @@
-import type { ShortcutKey } from "./definitions";
-
 const appleKeySymbols: Record<string, string> = {
   Mod: "⌘",
+  Ctrl: "⌃",
   Alt: "⌥",
   Shift: "⇧",
 };
@@ -17,7 +16,7 @@ export function isApplePlatform(): boolean {
   return /mac|iphone|ipad|ipod/i.test(platform);
 }
 
-export function formatShortcutKeys(keys: ShortcutKey[], apple = isApplePlatform()): string {
+export function formatShortcutKeys(keys: string[], apple = isApplePlatform()): string {
   if (apple) return keys.map((key) => appleKeySymbols[key] ?? key).join("");
   return keys.map((key) => otherKeyLabels[key] ?? key).join("+");
 }

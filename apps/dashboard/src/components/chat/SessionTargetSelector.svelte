@@ -6,7 +6,7 @@
   import type { SessionCreationOption, WorkspaceView } from '../../api/types'
   import { workspaceTitle } from './sessionMetadata'
   import ClientIcon from './ClientIcon.svelte'
-  import { matchChatShortcut } from '$lib/shortcuts/definitions'
+  import { registerShortcut } from '$lib/shortcuts/dispatch'
   import { adjacentValue } from '$lib/shortcuts/sessionNavigation'
   import { targetLabelClass, targetSegmentClass, targetToolbarClass } from './targetSegment'
 
@@ -40,19 +40,13 @@
   const clientSelectDisabled = $derived(!fixedWorkspace && (disabled || !creationOptions.length))
   const workspaceSelectDisabled = $derived(fixedWorkspace || disabled || workspacesLoading || !workspaces.length)
 
-  function handleKeydown(event: KeyboardEvent): void {
-    const shortcut = matchChatShortcut(event)
-    if (shortcut?.action === 'switchAgentClient' && !clientSelectDisabled) {
-      event.preventDefault()
-      creationOptionId = adjacentValue(creationOptions.map((option) => option.id), creationOptionId, shortcut.direction) ?? creationOptionId
-    } else if (shortcut?.action === 'switchWorkspace' && !workspaceSelectDisabled) {
-      event.preventDefault()
-      workspaceId = adjacentValue(workspaces.map((workspace) => workspace.workspace_id), workspaceId, shortcut.direction) ?? workspaceId
-    }
-  }
+  registerShortcut('switchAgentClient', event => {
+    if (!clientSelectDisabled) creationOptionId = adjacentValue(creationOptions.map(option => option.id), creationOptionId, event.shiftKey ? -1 : 1) ?? creationOptionId
+  })
+  registerShortcut('switchWorkspace', event => {
+    if (!workspaceSelectDisabled) workspaceId = adjacentValue(workspaces.map(workspace => workspace.workspace_id), workspaceId, event.shiftKey ? -1 : 1) ?? workspaceId
+  })
 </script>
-
-<svelte:window onkeydown={handleKeydown} />
 
 {#if fixedWorkspace}
   <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 px-1 text-sm text-muted-foreground sm:text-base">

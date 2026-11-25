@@ -1,5 +1,6 @@
 import type { MessageKey } from "$lib/i18n";
 import type { Component } from "svelte";
+import KeyboardIcon from "phosphor-svelte/lib/KeyboardIcon";
 import BooksIcon from "phosphor-svelte/lib/BooksIcon";
 import FolderIcon from "phosphor-svelte/lib/FolderIcon";
 import ScrollIcon from "phosphor-svelte/lib/ScrollIcon";
@@ -7,6 +8,7 @@ import SlidersHorizontalIcon from "phosphor-svelte/lib/SlidersHorizontalIcon";
 import TerminalIcon from "phosphor-svelte/lib/TerminalIcon";
 
 export type SettingsSection = {
+  desktopOnly?: boolean;
   label: MessageKey;
   path: string;
   match: string[];
@@ -19,6 +21,13 @@ export const settingsSections: SettingsSection[] = [
     path: "/settings/common",
     icon: SlidersHorizontalIcon,
     match: ["/settings/common"],
+  },
+  {
+    label: "settings.shortcuts",
+    path: "/settings/shortcuts",
+    match: ["/settings/shortcuts"],
+    icon: KeyboardIcon,
+    desktopOnly: true,
   },
   {
     label: "settings.agentClients",

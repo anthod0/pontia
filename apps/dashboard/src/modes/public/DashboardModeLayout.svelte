@@ -7,7 +7,6 @@
   import { tabs } from '../../shell/mobile/tabs'
   import { returnToLastPage } from '$lib/lastPage';
   import { PersistedState, textSerializer } from '$lib/storage';
-  import { matchChatShortcut } from '$lib/shortcuts/definitions';
   import type { DeviceStatusView } from "../../components/devices/DeviceStatus.svelte";
   import DashboardContent from "./DashboardContent.svelte";
   import AppShell from '../../shell/AppShell.svelte';
@@ -131,14 +130,6 @@
     void navigate('/', undefined, { scope: `/${target}` });
   }
 
-  function handleDeviceShortcut(event: KeyboardEvent): void {
-    if (!previous || matchChatShortcut(event)?.action !== 'previousDevice') return;
-    event.preventDefault();
-    // Holding the key would bounce between the two devices.
-    if (event.repeat) return;
-    selectDevice(previous.handle);
-  }
-
   function openNewChat(): void {
     void navigate('/', undefined, { scope: activeHandle ? `/${activeHandle}` : '' });
   }
@@ -186,7 +177,7 @@
   });
 </script>
 
-<svelte:window onkeydown={handleDeviceShortcut} onfocus={() => connections?.focus()} ononline={() => connections?.focus()} />
+<svelte:window onfocus={() => connections?.focus()} ononline={() => connections?.focus()} />
 <svelte:document onvisibilitychange={() => {
   if (document.visibilityState === 'visible') connections?.focus();
 }} />

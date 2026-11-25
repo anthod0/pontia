@@ -13,12 +13,20 @@
   import ChatShortcuts from '../../components/chat/ChatShortcuts.svelte';
   import ConnectionNotice from '../../components/layout/ConnectionNotice.svelte';
   import * as Sidebar from '$lib/components/ui/sidebar/index.js';
+  import ShortcutManager from '$lib/components/shortcuts/ShortcutManager.svelte'
+  import ShortcutHelp from '$lib/components/shortcuts/ShortcutHelp.svelte'
+  import { registerShortcut } from '$lib/shortcuts/dispatch'
   let { children }: { children: Snippet } = $props()
   const host = useDashboardHost()
+  if (host.mode === 'public') registerShortcut('previousDevice', event => {
+    if (!event.repeat && host.previousDevice) host.selectDevice(host.previousDevice.handle)
+  })
   const active = $derived(host.activeDevice)
   const device = $derived(active?.state === 'online' ? active.runtime : null)
 </script>
 
+<ShortcutManager />
+<ShortcutHelp scope={host.routeScope} />
 <DesktopFrame>
   {#snippet sidebar()}
     {#if host.mode === 'local'}
@@ -27,7 +35,7 @@
       <AppSidebar onNewChat={host.openNewChat} onSettings={host.openSettings} />
     {:else}
       <AppSidebar onNewChat={host.openNewChat}
-        settingsDisabled={!host.routeScope}
+        settingsDisabled={!host.routeScope} settingsScope={host.routeScope}
         onSettings={host.openSettings}>
         {#snippet deviceSwitcher()}
           {#if host.canSwitchDevice}

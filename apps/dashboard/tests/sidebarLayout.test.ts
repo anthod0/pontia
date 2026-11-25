@@ -978,7 +978,7 @@ test("chat shortcuts move down and up the active sessions in sidebar order", asy
   expect(mocks.navigate).toHaveBeenLastCalledWith("/chat/session-top");
 });
 
-test.each(["/dashboard", "/dashboard/bots/test-bot"])(
+test.each(["/dashboard", "/dashboard/bots/test-bot", "/dashboard/settings/common"])(
   "chat help shortcut opens a kbd shortcut reference dialog on %s",
   async (path) => {
     window.history.pushState({}, "", path);
@@ -1251,4 +1251,14 @@ test("sidebar refreshes every Bot status and todo count from live updates withou
   view.unmount();
   expect(botStreams.has("second")).toBe(false);
   vi.restoreAllMocks();
+});
+
+test.each([
+  ["/dashboard", "KeyG"],
+  ["/dashboard/chat/current", "KeyC"],
+  ["/dashboard/chat/current", "KeyW"],
+])("consumes unused chat control keys on %s for %s", async (path, code) => {
+  window.history.pushState({}, "", path);
+  render(AppShellHost);
+  expect(await fireEvent.keyDown(window, { code, altKey: true })).toBe(false);
 });
