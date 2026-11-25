@@ -292,6 +292,7 @@
 	</div>
 	<p class="guide reveal" style="--i:4">
 		{m.wherever_guide()} <a href={localizeHref('/docs/getting-started')}>{m.setup_guide()}</a>
+		<span aria-hidden="true">·</span> <a href={localizeHref('/docs/faq')}>{m.docs_faq()}</a>
 	</p>
 	<p class="sr-only" aria-live="polite">{announcement}</p>
 </section>

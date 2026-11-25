@@ -54,7 +54,7 @@
     <p class="copy-feedback" aria-live="polite">
       {copyStatus === "copied" ? m.copied_to_clipboard() : copyStatus === "error" ? m.account_copy_failed() : ""}
     </p>
-    <Button href={localizeHref("/docs/getting-started")} class="button">{m.faq_getting_started_link()}</Button>
+    <Button href={localizeHref("/docs/getting-started")} class="button">{m.docs_getting_started()}</Button>
   </section>
 {/if}
 

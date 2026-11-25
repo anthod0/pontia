@@ -34,7 +34,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding-block: 120px 104px;
+    padding-block: 96px 104px;
     text-align: center;
   }
   h2 {
@@ -1023,6 +1023,6 @@
 
 @media (max-width: 700px) {
   .wherever {
-    padding-block: 72px;
+    padding-block: 44px 72px;
   }
 }

@@ -22,7 +22,8 @@
 		{ name: 'Claude Code', logo: '/client-logos/claude-code.svg' },
 		{ name: 'Grok Build', logo: '/client-logos/grok-build.svg' },
 		{ name: 'Google Antigravity', logo: '/client-logos/google-antigravity.svg' },
-		{ name: 'Kiro', logo: '/client-logos/kiro.svg' }
+		{ name: 'Kiro', logo: '/client-logos/kiro.svg' },
+		{ name: 'Pi', logo: '/client-logos/pi.svg' }
 	];
 	const WORK_MS = 1400;
 
@@ -226,6 +227,7 @@
 	.group-clients:hover .client:nth-child(3) { transition-delay: 60ms; }
 	.group-clients:hover .client:nth-child(4) { transition-delay: 90ms; }
 	.group-clients:hover .client:nth-child(5) { transition-delay: 120ms; }
+	.group-clients:hover .client:nth-child(6) { transition-delay: 150ms; }
 	.client img.dark-logo { display: none; }
 	:global(.dark) .client img.light-logo { display: none; }
 	:global(.dark) .client img.dark-logo { display: block; }

@@ -4,7 +4,6 @@
 	import HeroSection from '$lib/components/HeroSection.svelte';
 	import RemoteSection from '$lib/components/RemoteSection.svelte';
 	import BotStorySection from '$lib/components/BotStorySection.svelte';
-	import HomeFaq from '$lib/components/HomeFaq.svelte';
 	import OpenSourceSection from '$lib/components/OpenSourceSection.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
@@ -65,8 +64,6 @@
 	<BotStorySection />
 	<RemoteSection />
 	<OpenSourceSection />
-	<HomeFaq />
-
 	<WhereverSection />
 </main>
 
