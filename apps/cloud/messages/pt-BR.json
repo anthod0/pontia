@@ -336,7 +336,7 @@
   "edges_delete_title": "Excluir {name}?",
   "edges_delete_text": "Isso remove permanentemente o registro do Edge e os dispositivos associados.",
   "edges_delete_confirm": "Excluir Edge",
-  "edges_none": "Você ainda não implantou nenhum Edge. Gere um comando abaixo para começar.",
+  "edges_none": "Implante um Edge para começar.",
   "edges_public": "Edges públicos",
   "edges_public_none": "Nenhum Edge público disponível.",
   "edges_deploy_heading": "Implantar um Edge auto-hospedado",

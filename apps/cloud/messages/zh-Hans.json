@@ -336,7 +336,7 @@
   "edges_delete_title": "删除 {name}？",
   "edges_delete_text": "这将永久移除该 Edge 注册及其关联的设备。",
   "edges_delete_confirm": "删除 Edge",
-  "edges_none": "你还没有部署任何 Edge。在下方生成命令即可开始。",
+  "edges_none": "部署一个 Edge 即可开始使用。",
   "edges_public": "公共 Edge",
   "edges_public_none": "没有可用的公共 Edge。",
   "edges_deploy_heading": "部署自托管 Edge",

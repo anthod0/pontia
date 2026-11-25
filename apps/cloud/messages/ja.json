@@ -336,7 +336,7 @@
   "edges_delete_title": "{name} を削除しますか？",
   "edges_delete_text": "Edge の登録と関連するデバイスが完全に削除されます。",
   "edges_delete_confirm": "Edge を削除",
-  "edges_none": "まだ Edge をデプロイしていません。下でコマンドを生成して始めましょう。",
+  "edges_none": "Edge をデプロイして始めましょう。",
   "edges_public": "公開 Edge",
   "edges_public_none": "利用できる公開 Edge はありません。",
   "edges_deploy_heading": "セルフホストの Edge をデプロイ",

@@ -115,9 +115,9 @@ Pontia はプッシュ通知を送りません。[Codex と Pi のスマート�
 | | Tailscale | Cloudflare Tunnel（`cloudflared`） | Pontia Edge |
 | --- | --- | --- | --- |
 | ホストの接続 | UDP 上の WireGuard。直接の経路が使えない場合は HTTPS 経由の DERP リレー | ポート 7844 で Cloudflare へ外向きに接続。まず UDP 上の QUIC、次に TCP 上の HTTP/2 | ポート 443 または 8443 で Edge への外向きの TLS WebSocket をひとつ |
-| ホストがサーバーを見つける方法 | Tailscale の調整サーバー | DNS の SRV レコード `_v2-origintunneld._tcp.argotunnel.com` | `edge.pontia.dev` 配下の通常の DNS 名 |
+| ホストがサーバーを見つける方法 | Tailscale の調整サーバー | DNS の SRV レコード `_v2-origintunneld._tcp.argotunnel.com` | 自分で管理するドメインの通常の DNS 名 |
 | スマートフォン | Tailscale アプリ。スマートフォンでひとつしかない VPN 枠を使います | HTTPS 経由のブラウザーまたはアプリ | HTTPS 経由のブラウザー |
-| プロキシのルール | `100.64.0.0/10` を TUN のルーティングから、`ts.net` を fake-IP DNS から除外 | ポート 7844 で Cloudflare のトンネルのアドレスをルーティングし、SRV の名前解決を機能させ、SNI で宛先を上書きしない | `pontia.dev` のドメインルールをひとつ |
+| プロキシのルール | `100.64.0.0/10` を TUN のルーティングから、`ts.net` を fake-IP DNS から除外 | ポート 7844 で Cloudflare のトンネルのアドレスをルーティングし、SRV の名前解決を機能させ、SNI で宛先を上書きしない | `app.pontia.dev` と Edge ドメインのルール |
 
 **Tailscale** は、TUN モードの Clash や sing-box とルートや DNS を奪い合います。また、スマートフォンでは他の VPN アプリと同時に動かせません。[Tailscale と Cloudflare Tunnel の比較](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)で対処法を説明しています。
 
@@ -128,17 +128,18 @@ Pontia はプッシュ通知を送りません。[Codex と Pi のスマート�
 - トンネルの接続では `HTTP_PROXY` や `HTTPS_PROXY` を読みません（[cloudflared#1076](https://github.com/cloudflare/cloudflared/issues/1076)）。そのため、プロキシは TUN モードで通信を捕捉する必要があります。
 - TLS ハンドシェイクでは `h2.cftunnel.com` という名前を使いますが、この名前にはアドレスレコードがありません。TLS の名前をスニッフィングし、元の IP アドレスではなくその名前に接続するプロキシでは失敗します。
 
-**Pontia の Edge** は、どちらの方向でも通常の HTTPS を使います。ホストは Edge に TLS 接続をひとつ張り、ブラウザーは app.pontia.dev と Edge に HTTPS リクエストを送ります。TUN モードのプロキシは、これを他の Web サイトと同じようにルーティングします。Edge の名前は、モデルプロバイダーのドメインとは別に、Edge サーバーへ直接解決されます。そのため、ひとつのルールで Pontia の通信の出口を決め、Codex の OpenAI への通信は別のルールに従わせることができます。mihomo または Clash では次のようにします。
+**Pontia の Edge** は、どちらの方向でも通常の HTTPS を使います。ホストは Edge に TLS 接続をひとつ張り、ブラウザーは app.pontia.dev と Edge に HTTPS リクエストを送ります。TUN モードのプロキシは、これを他の Web サイトと同じようにルーティングします。Edge ドメインは、モデルプロバイダーのドメインとは別に、Edge サーバーへ直接解決されます。そのため、Pontia の通信に専用のルールを設定し、Codex の OpenAI への通信は別のルールに従わせることができます。mihomo または Clash では、`edge.example.com` を自分の Edge ドメインに置き換えます。
 
 ```yaml
 rules:
-  - DOMAIN-SUFFIX,pontia.dev,DIRECT
+  - DOMAIN,app.pontia.dev,DIRECT
+  - DOMAIN,edge.example.com,DIRECT
 ```
 
 sing-box では、TUN inbound でスニッフィングを有効にしたうえで次のようにします。
 
 ```json
-{ "domain_suffix": ["pontia.dev"], "action": "route", "outbound": "direct" }
+{ "domain": ["app.pontia.dev", "edge.example.com"], "action": "route", "outbound": "direct" }
 ```
 
 プロキシ経由のほうが Edge に到達しやすい場合は、`DIRECT` の代わりにプロキシの outbound を使ってください。
@@ -149,7 +150,7 @@ sing-box では、TUN inbound でスニッフィングを有効にしたうえ�
 
 **プッシュ通知は必要ですか？** Claude Code Remote Control、ChatGPT アプリ、T3 Code、Happy は通知を送ります。Pontia や SSH では、ntfy などのサービスにプッシュするフックを追加してください。
 
-**ホストやスマートフォンですでにプロキシや VPN を使っていますか？** Pontia に必要なのは HTTPS とドメインルールひとつだけです。T3 Connect には、ホストでのポート 7844 と正常に機能する SRV の名前解決が必要です。Tailscale には、ルートと DNS の除外設定、そしてスマートフォンの VPN 枠が必要です。
+**ホストやスマートフォンですでにプロキシや VPN を使っていますか？** Pontia に必要なのは HTTPS と、app.pontia.dev および Edge ドメインのルールだけです。T3 Connect には、ホストでのポート 7844 と正常に機能する SRV の名前解決が必要です。Tailscale には、ルートと DNS の除外設定、そしてスマートフォンの VPN 枠が必要です。
 
 **プロダクトアナリティクスを送信するツールはどれですか？** T3 Code と Happy はデフォルトでプロダクトアナリティクスを送信し、オフにすることもできます。Pontia は送信しません。
 

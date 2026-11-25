@@ -115,9 +115,9 @@ A maioria dos controles remotos que funcionam com uma máquina auto-hospedada us
 | | Tailscale | Cloudflare Tunnel (`cloudflared`) | Pontia Edge |
 | --- | --- | --- | --- |
 | Conexão do host | WireGuard sobre UDP, com relays DERP via HTTPS quando um caminho direto falha | Saída para a Cloudflare na porta 7844, primeiro QUIC sobre UDP, depois HTTP/2 sobre TCP | Um WebSocket TLS de saída para o Edge na porta 443 ou 8443 |
-| Como o host encontra o servidor | Servidor de coordenação do Tailscale | Um registro DNS SRV, `_v2-origintunneld._tcp.argotunnel.com` | Um nome DNS comum sob `edge.pontia.dev` |
+| Como o host encontra o servidor | Servidor de coordenação do Tailscale | Um registro DNS SRV, `_v2-origintunneld._tcp.argotunnel.com` | Um nome DNS comum em um domínio que você controla |
 | Celular | O app do Tailscale, que ocupa o único slot de VPN do celular | Um navegador ou app via HTTPS | Um navegador via HTTPS |
-| Regras de proxy | Excluir `100.64.0.0/10` do roteamento TUN e `ts.net` do DNS fake-IP | Rotear os endereços de túnel da Cloudflare na porta 7844, manter as consultas SRV funcionando e não sobrescrever o destino pelo SNI | Uma regra de domínio para `pontia.dev` |
+| Regras de proxy | Excluir `100.64.0.0/10` do roteamento TUN e `ts.net` do DNS fake-IP | Rotear os endereços de túnel da Cloudflare na porta 7844, manter as consultas SRV funcionando e não sobrescrever o destino pelo SNI | Regras de domínio para `app.pontia.dev` e para o domínio do seu Edge |
 
 O **Tailscale** disputa rotas e DNS com o Clash e o sing-box no modo TUN, e no celular não pode rodar junto com outro app de VPN. [Tailscale vs Cloudflare Tunnel](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents) mostra as correções.
 
@@ -128,17 +128,18 @@ O **Cloudflare Tunnel** não precisa de VPN no celular, mas o `cloudflared` no h
 - Ele não lê `HTTP_PROXY` nem `HTTPS_PROXY` para conexões de túnel ([cloudflared#1076](https://github.com/cloudflare/cloudflared/issues/1076)), então um proxy precisa capturar o tráfego dele no modo TUN.
 - O handshake TLS dele usa o nome `h2.cftunnel.com`, que não tem registro de endereço. Um proxy que inspeciona o nome TLS e se conecta a ele em vez do endereço IP original falha.
 
-O **Edge do Pontia** usa HTTPS comum nas duas direções. O host faz uma conexão TLS com o Edge, e o navegador faz requisições HTTPS para app.pontia.dev e para o Edge. Um proxy em modo TUN roteia isso como qualquer outro site. Os nomes dos Edges resolvem diretamente para o servidor do Edge, separados dos domínios do seu provedor de modelos, então uma regra decide como o tráfego do Pontia sai enquanto o tráfego do Codex para a OpenAI segue a própria regra. No mihomo ou no Clash:
+O **Edge do Pontia** usa HTTPS comum nas duas direções. O host faz uma conexão TLS com o Edge, e o navegador faz requisições HTTPS para app.pontia.dev e para o Edge. Um proxy em modo TUN roteia isso como qualquer outro site. O domínio do seu Edge resolve diretamente para o servidor do Edge, separado dos domínios do seu provedor de modelos, então regras dedicadas podem decidir como o tráfego do Pontia sai enquanto o tráfego do Codex para a OpenAI segue a própria regra. No mihomo ou no Clash, substitua `edge.example.com` pelo domínio do seu Edge:
 
 ```yaml
 rules:
-  - DOMAIN-SUFFIX,pontia.dev,DIRECT
+  - DOMAIN,app.pontia.dev,DIRECT
+  - DOMAIN,edge.example.com,DIRECT
 ```
 
 No sing-box, com sniffing ativado na entrada TUN:
 
 ```json
-{ "domain_suffix": ["pontia.dev"], "action": "route", "outbound": "direct" }
+{ "domain": ["app.pontia.dev", "edge.example.com"], "action": "route", "outbound": "direct" }
 ```
 
 Use a saída do seu proxy em vez de `DIRECT` se for mais fácil alcançar o Edge por ela.
@@ -149,7 +150,7 @@ Use a saída do seu proxy em vez de `DIRECT` se for mais fácil alcançar o Edge
 
 **Você precisa de notificações push?** Claude Code Remote Control, o app do ChatGPT, T3 Code e Happy enviam notificações. Com o Pontia ou SSH, adicione um hook que envie para um serviço como o ntfy.
 
-**O host ou o celular já roda um proxy ou VPN?** O Pontia precisa apenas de HTTPS e de uma regra de domínio. O T3 Connect precisa da porta 7844 e de consultas SRV funcionando no host. O Tailscale precisa de exclusões de rota e DNS, além do slot de VPN do celular.
+**O host ou o celular já roda um proxy ou VPN?** O Pontia precisa apenas de HTTPS e de regras para app.pontia.dev e para o domínio do seu Edge. O T3 Connect precisa da porta 7844 e de consultas SRV funcionando no host. O Tailscale precisa de exclusões de rota e DNS, além do slot de VPN do celular.
 
 **Quais ferramentas enviam analytics de produto?** T3 Code e Happy enviam analytics de produto por padrão e permitem desativá-los. O Pontia não envia nenhum.
 

@@ -115,9 +115,9 @@ Pontia 不发送推送通知。[Codex 和 Pi 的手机通知](/blog/coding-agent
 | | Tailscale | Cloudflare Tunnel（`cloudflared`） | Pontia Edge |
 | --- | --- | --- | --- |
 | 主机连接 | 基于 UDP 的 WireGuard，直连失败时通过 HTTPS 使用 DERP 中继 | 通过端口 7844 向外连接 Cloudflare，优先使用基于 UDP 的 QUIC，然后是基于 TCP 的 HTTP/2 | 一条通过 443 或 8443 端口连接 Edge 的出站 TLS WebSocket |
-| 主机如何找到服务器 | Tailscale 的协调服务器 | DNS SRV 记录 `_v2-origintunneld._tcp.argotunnel.com` | `edge.pontia.dev` 下的普通 DNS 名称 |
+| 主机如何找到服务器 | Tailscale 的协调服务器 | DNS SRV 记录 `_v2-origintunneld._tcp.argotunnel.com` | 你拥有控制权的域名下的普通 DNS 名称 |
 | 手机 | Tailscale 应用，会占用手机唯一的 VPN 槽位 | 通过 HTTPS 访问的浏览器或应用 | 通过 HTTPS 访问的浏览器 |
-| 代理规则 | 将 `100.64.0.0/10` 排除在 TUN 路由之外，并将 `ts.net` 排除在 fake-IP DNS 之外 | 路由 Cloudflare 隧道地址的 7844 端口，确保 SRV 查询正常，并且不要按 SNI 覆盖目标地址 | 一条针对 `pontia.dev` 的域名规则 |
+| 代理规则 | 将 `100.64.0.0/10` 排除在 TUN 路由之外，并将 `ts.net` 排除在 fake-IP DNS 之外 | 路由 Cloudflare 隧道地址的 7844 端口，确保 SRV 查询正常，并且不要按 SNI 覆盖目标地址 | 针对 `app.pontia.dev` 和你的 Edge 域名的规则 |
 
 **Tailscale** 在 TUN 模式下会与 Clash 和 sing-box 争夺路由和 DNS，在手机上也无法与其他 VPN 应用同时运行。[Tailscale 与 Cloudflare Tunnel 对比](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)详细介绍了解决方法。
 
@@ -128,17 +128,18 @@ Pontia 不发送推送通知。[Codex 和 Pi 的手机通知](/blog/coding-agent
 - 它的隧道连接不读取 `HTTP_PROXY` 或 `HTTPS_PROXY`（[cloudflared#1076](https://github.com/cloudflare/cloudflared/issues/1076)），因此代理必须在 TUN 模式下捕获它的流量。
 - 它的 TLS 握手使用名称 `h2.cftunnel.com`，而该名称没有地址记录。如果代理嗅探 TLS 名称并连接到该名称而不是原始 IP 地址，连接就会失败。
 
-**Pontia Edge** 在两个方向上都使用普通 HTTPS。主机与 Edge 建立一条 TLS 连接，浏览器向 app.pontia.dev 和 Edge 发出 HTTPS 请求。TUN 模式的代理会像对待任何其他网站一样路由这些流量。Edge 名称直接解析到 Edge 服务器，与模型提供商的域名相互独立，因此一条规则就能决定 Pontia 流量如何出站，而 Codex 的 OpenAI 流量遵循它自己的规则。在 mihomo 或 Clash 中：
+**Pontia Edge** 在两个方向上都使用普通 HTTPS。主机与 Edge 建立一条 TLS 连接，浏览器向 app.pontia.dev 和 Edge 发出 HTTPS 请求。TUN 模式的代理会像对待任何其他网站一样路由这些流量。你的 Edge 域名直接解析到 Edge 服务器，与模型提供商的域名相互独立，因此可以用专用规则决定 Pontia 流量如何出站，而 Codex 的 OpenAI 流量遵循它自己的规则。在 mihomo 或 Clash 中，请将 `edge.example.com` 替换为你的 Edge 域名：
 
 ```yaml
 rules:
-  - DOMAIN-SUFFIX,pontia.dev,DIRECT
+  - DOMAIN,app.pontia.dev,DIRECT
+  - DOMAIN,edge.example.com,DIRECT
 ```
 
 在 sing-box 中，在 TUN 入站上启用嗅探后：
 
 ```json
-{ "domain_suffix": ["pontia.dev"], "action": "route", "outbound": "direct" }
+{ "domain": ["app.pontia.dev", "edge.example.com"], "action": "route", "outbound": "direct" }
 ```
 
 如果通过代理出站更容易访问 Edge，请用你的代理出站替换 `DIRECT`。
@@ -149,7 +150,7 @@ rules:
 
 **你需要推送通知吗？** Claude Code Remote Control、ChatGPT 应用、T3 Code 和 Happy 都会发送推送通知。使用 Pontia 或 SSH 时，可以添加一个 hook，推送到 ntfy 等服务。
 
-**主机或手机是否已经在运行代理或 VPN？** Pontia 只需要 HTTPS 和一条域名规则。T3 Connect 需要主机上的 7844 端口和正常的 SRV 查询。Tailscale 需要路由和 DNS 排除规则，还要占用手机的 VPN 槽位。
+**主机或手机是否已经在运行代理或 VPN？** Pontia 只需要 HTTPS，以及针对 app.pontia.dev 和你的 Edge 域名的规则。T3 Connect 需要主机上的 7844 端口和正常的 SRV 查询。Tailscale 需要路由和 DNS 排除规则，还要占用手机的 VPN 槽位。
 
 **哪些工具会发送产品分析数据？** T3 Code 和 Happy 默认发送产品分析数据，并允许你关闭。Pontia 不发送任何数据。
 

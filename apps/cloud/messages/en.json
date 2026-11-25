@@ -336,7 +336,7 @@
   "edges_delete_title": "Delete {name}?",
   "edges_delete_text": "This permanently removes the edge registration and associated devices.",
   "edges_delete_confirm": "Delete edge",
-  "edges_none": "You haven't deployed any edges yet. Generate a command below to get started.",
+  "edges_none": "Deploy an edge to get started.",
   "edges_public": "Public edges",
   "edges_public_none": "No public edges are available.",
   "edges_deploy_heading": "Deploy a self-hosted edge",

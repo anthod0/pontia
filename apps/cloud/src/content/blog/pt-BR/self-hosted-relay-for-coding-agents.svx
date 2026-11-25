@@ -99,7 +99,7 @@ O servidor auto-hospedado do Happy vai além: ele tira os registros de conta e o
 
 ### Implantar um Edge do Pontia
 
-Você precisa de um servidor Linux público com systemd, um endereço IPv4 público e as portas 80 e 443 ou uma porta HTTPS personalizada, 8443 por padrão, com certificados DNS-01. Gere um comando de uso único nas [Configurações de Edges](/settings/edges) e execute-o no servidor. Ele instala uma release assinada do `pontia-edge`, obtém um certificado Let's Encrypt para um hostname em `edge.pontia.dev` e inicia o serviço. Depois, selecione o Edge ao registrar um dispositivo. [Auto-hospedar um Edge](/docs/self-hosted-edge) tem os detalhes.
+Você precisa de um servidor Linux público com systemd, um endereço IP público, um nome de domínio que você controla e as portas TCP 80 e 443 abertas para conexões de entrada. Aponte o domínio para o servidor, selecione **Implantar um Edge** nas [Configurações de Edges](/settings/edges), informe o domínio e execute o comando de uso único no servidor. Ele instala uma release assinada do `pontia-edge`, obtém um certificado Let's Encrypt para o seu domínio e inicia o serviço. Depois, selecione o Edge ao registrar um dispositivo. [Auto-hospedar um Edge](/docs/self-hosted-edge) tem os detalhes.
 
 ## Perguntas a fazer sobre qualquer controle remoto
 

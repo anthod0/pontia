@@ -99,7 +99,7 @@ Happy's self-hosted server goes further: it moves the account records and encryp
 
 ### Deploying a Pontia Edge
 
-You need a public Linux server with systemd, a public IPv4 address, and either ports 80 and 443 or one custom HTTPS port, 8443 by default, with DNS-01 certificates. Generate a one-time command in [Edge settings](/settings/edges) and run it on the server. It installs a signed `pontia-edge` release, gets a Let's Encrypt certificate for a hostname under `edge.pontia.dev`, and starts the service. Then select the Edge when you register a device. [Self-host an Edge](/docs/self-hosted-edge) has the details.
+You need a public Linux server with systemd, a public IP address, a domain name you control, and inbound TCP ports 80 and 443. Point the domain at the server, then select **Deploy an edge** in [Edge settings](/settings/edges), enter the domain, and run the one-time command on the server. It installs a signed `pontia-edge` release, obtains a Let's Encrypt certificate for your domain, and starts the service. Then select the Edge when you register a device. [Self-host an Edge](/docs/self-hosted-edge) has the details.
 
 ## Questions to ask any remote
 
