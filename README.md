@@ -48,7 +48,11 @@ Pontia gives you a Lead Bot that coordinates coding agents on your own machines 
 
 ![The local Luma field guide showing the Cedar Spur route](https://files.pontia.dev/cloud/sidebar-preview-1120-dc9f6355c8d9.webp)
 
-**4. Git** — Review staged, unstaged and untracked files in a workspace.
+**4. Files** — Open a CSV file from chat to review it as a table.
+
+![Trail survey table showing Cedar Spur on the trail sign and North Fork in the survey](https://files.pontia.dev/cloud/sidebar-files-1120-a0085ef90962.webp)
+
+**5. Git** — Review staged, unstaged and untracked files in a workspace.
 
 ![Git changes on main grouped by staging status](https://files.pontia.dev/cloud/sidebar-git-1120-bf16b149ad76.webp)
 

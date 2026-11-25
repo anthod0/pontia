@@ -48,7 +48,11 @@ Pontia 让你从电脑或手机浏览器给 Lead Bot 派任务，由它协调开
 
 ![本地运行的 Luma 指南展示 Cedar Spur 路线](https://files.pontia.dev/cloud/sidebar-preview-1120-dc9f6355c8d9.webp)
 
-**4. Git** — 查看工作区中已暂存、未暂存和未跟踪的文件。
+**4. Files** — 从聊天中打开 CSV 文件，以表格形式查看内容。
+
+![路线调查表显示，12 号路口的路牌写着 Cedar Spur，调查记录中则是 North Fork](https://files.pontia.dev/cloud/sidebar-files-1120-a0085ef90962.webp)
+
+**5. Git** — 查看工作区中已暂存、未暂存和未跟踪的文件。
 
 ![Git 侧栏按暂存状态展示 main 分支上的文件改动](https://files.pontia.dev/cloud/sidebar-git-1120-bf16b149ad76.webp)
 
