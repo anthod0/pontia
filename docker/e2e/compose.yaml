@@ -32,6 +32,7 @@ services:
     init: true
     environment:
       NODE_EXTRA_CA_CERTS: /run/preview-cert.pem
+      LEGACY_EDGE_DNS_OWNER_IDS: ${E2E_LEGACY_EDGE_DNS_OWNER_IDS:?Use scripts/docker-e2e}
     extra_hosts: *local-hosts
     volumes:
       - *preview-certificate

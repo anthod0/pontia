@@ -21,7 +21,7 @@ declare global {
         CLOUDFLARE_PREVIEW_DNS_ZONE_ID: string;
         CLOUDFLARE_DNS_TOKEN: string;
         CLOUDFLARE_DNS_ZONE_ID: string;
-        LEGACY_EDGE_DNS_OWNER_IDS: string;
+        LEGACY_EDGE_DNS_OWNER_IDS?: string;
         EDGE_CONFIRM_RATE_LIMIT: RateLimit;
         EDGE_DNS_RATE_LIMIT: RateLimit;
         EDGE_HEALTH_RATE_LIMIT: RateLimit;

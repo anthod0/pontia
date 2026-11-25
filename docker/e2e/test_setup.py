@@ -73,10 +73,13 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(api_key.stat().st_mode & 0o777, 0o600)
         api_key.write_text("fixture-key")
         original = (self.state / "cloud.dev.vars").read_bytes()
+        original_vars = (self.state / "cloud.vars").read_bytes()
         setup.initialize(self.state)
         self.assertEqual(api_key.read_text(), "fixture-key")
         self.assertEqual((self.state / "cloud.dev.vars").read_bytes(), original)
+        self.assertEqual((self.state / "cloud.vars").read_bytes(), original_vars)
         self.assertEqual((self.state / "cloud.dev.vars").stat().st_mode & 0o777, 0o600)
+        self.assertEqual((self.state / "cloud.vars").stat().st_mode & 0o777, 0o600)
 
     def test_saved_browser_credentials_keep_only_agent_client_logins(self):
         cookie_path = self.root / "Cookies"
@@ -145,19 +148,19 @@ class SetupTests(unittest.TestCase):
             self.assertEqual(public[-32:], base64.urlsafe_b64decode(first[public_key] + "=="))
 
     def test_lab_edge_owner_keeps_managed_dns_and_previews(self):
-        path = self.state / "cloud.dev.vars"
+        path = self.state / "cloud.vars"
         self.assertEqual(setup.variables(path)["LEGACY_EDGE_DNS_OWNER_IDS"], setup.EDGE_OWNER_ID)
-        # Existing environments gain the allowlist without regenerating their keys.
-        lines = [line for line in path.read_text().splitlines(keepends=True)
-                 if not line.startswith("LEGACY_EDGE_DNS_OWNER_IDS=")]
-        path.write_text("".join(lines))
-        with self.assertRaises(ValueError):
-            setup.check(self.state)
-        signing_key = setup.variables(path)["E2E_CAPABILITY_SIGNING_KEY"]
+        # Existing environments move the allowlist out of Wrangler's secret file.
+        path.unlink()
+        secrets_path = self.state / "cloud.dev.vars"
+        secrets_path.write_text(secrets_path.read_text()
+                                + f'LEGACY_EDGE_DNS_OWNER_IDS="{setup.EDGE_OWNER_ID}"\n')
+        signing_key = setup.variables(secrets_path)["E2E_CAPABILITY_SIGNING_KEY"]
         setup.initialize(self.state)
         values = setup.variables(path)
         self.assertEqual(values["LEGACY_EDGE_DNS_OWNER_IDS"], setup.EDGE_OWNER_ID)
-        self.assertEqual(values["E2E_CAPABILITY_SIGNING_KEY"], signing_key)
+        self.assertNotIn("LEGACY_EDGE_DNS_OWNER_IDS", setup.variables(secrets_path))
+        self.assertEqual(setup.variables(secrets_path)["E2E_CAPABILITY_SIGNING_KEY"], signing_key)
         self.assertEqual(path.stat().st_mode & 0o777, 0o600)
 
     def test_preflight_forbids_public_dns_credentials(self):
