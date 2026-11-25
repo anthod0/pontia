@@ -7,25 +7,38 @@ use axum::{
     http::{Request, StatusCode, Uri, Version},
     response::{IntoResponse, Response},
 };
+use ed25519_dalek::VerifyingKey;
 use hyper::client::conn::http1;
 use hyper_util::rt::TokioIo;
 use pontia_config::PreviewConfig;
 use pontia_tunnel::protocol::{HeaderDirection, TunnelRoute, preview_headers};
+use pontia_tunnel::{PreviewTokenVerifier, protocol::PREVIEW_TOKEN_HEADER};
 use std::time::Duration;
 use tokio::{sync::watch, time::timeout};
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct LocalPreviewProxy {
     bound_port: u16,
     config: PreviewConfig,
+    device_id: Uuid,
+    verifier: PreviewTokenVerifier,
     shutdown: watch::Receiver<bool>,
 }
 
 impl LocalPreviewProxy {
-    pub fn new(bound_port: u16, config: PreviewConfig, shutdown: watch::Receiver<bool>) -> Self {
+    pub fn new(
+        bound_port: u16,
+        config: PreviewConfig,
+        device_id: Uuid,
+        cloud_key: VerifyingKey,
+        shutdown: watch::Receiver<bool>,
+    ) -> Self {
         Self {
             bound_port,
             config,
+            device_id,
+            verifier: PreviewTokenVerifier::new(cloud_key.as_bytes(), None),
             shutdown,
         }
     }
@@ -43,6 +56,16 @@ impl LocalPreviewProxy {
             }
             None => return StatusCode::NOT_FOUND.into_response(),
         };
+        let mut tokens = request.headers().get_all(PREVIEW_TOKEN_HEADER).iter();
+        if tokens
+            .next()
+            .and_then(|v| v.to_str().ok())
+            .and_then(|token| self.verifier.verify(token, self.device_id, port))
+            .is_none()
+            || tokens.next().is_some()
+        {
+            return StatusCode::UNAUTHORIZED.into_response();
+        }
         if !self.config.enabled
             || loopback::forbidden(port, self.bound_port, &self.config.allowed_ports)
         {

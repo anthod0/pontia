@@ -52,11 +52,11 @@ def main():
             input=prepared.stdout, timeout=180)
     log = execute("device", "cat", "/tmp/preview-requests.jsonl", stdout=subprocess.PIPE)
     requests = [json.loads(line) for line in log.stdout.splitlines()]
-    assert all(not row["previewCookie"] for row in requests)
+    assert all(not row["previewCookie"] and not row["previewToken"] for row in requests)
     for family in ("127.0.0.1", "::1"):
         paths = {row["path"] for row in requests if row["hostname"] == family and row["appCookie"]}
         assert {"/redirect", "/after", "/events", "/ack", "/hmr"} <= paths
-        print(f"PASS device log {family}: application cookie received, preview cookie absent")
+        print(f"PASS device log {family}: application cookie received, preview credentials absent")
 
 
 if __name__ == "__main__":

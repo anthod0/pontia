@@ -1,5 +1,6 @@
 use axum::http::{HeaderMap, HeaderName, Method, Uri};
 
+pub const PREVIEW_TOKEN_HEADER: &str = "x-pontia-preview-token";
 pub const SUBPROTOCOL: &str = "pontia-tunnel-h2-v1";
 pub const MAX_WEBSOCKET_MESSAGE_BYTES: usize = 64 * 1024;
 pub const ADAPTER_BUFFER_BYTES: usize = 64 * 1024;
@@ -152,8 +153,10 @@ fn filter_headers(
             trusted
                 && matches!(
                     (direction, key),
-                    (HeaderDirection::Request, "x-pontia-preview-host")
-                        | (HeaderDirection::Response, "x-pontia-preview-error")
+                    (
+                        HeaderDirection::Request,
+                        "x-pontia-preview-host" | PREVIEW_TOKEN_HEADER
+                    ) | (HeaderDirection::Response, "x-pontia-preview-error")
                 )
         } else if matches!(route, TunnelRoute::PreviewWs { .. }) {
             key == "sec-websocket-protocol"
@@ -261,6 +264,7 @@ mod tests {
             ("trailer", "etag"),
             ("x-pontia-fake", "1"),
             ("x-pontia-preview-host", "host"),
+            (PREVIEW_TOKEN_HEADER, "signed"),
             ("x-pontia-preview-error", "error"),
             ("set-cookie", "a=1"),
             ("set-cookie", "b=2"),
@@ -282,7 +286,8 @@ mod tests {
         headers.insert("cookie", "app=1".parse().unwrap());
         headers.insert("authorization", "secret".parse().unwrap());
         let request = tunnel_headers(&headers, ws, HeaderDirection::Request);
-        assert_eq!(request.len(), 3);
+        assert_eq!(request.len(), 4);
+        assert_eq!(request[PREVIEW_TOKEN_HEADER], "signed");
         assert_eq!(request["sec-websocket-protocol"], "vite-hmr");
         assert_eq!(request["cookie"], "app=1");
         assert_eq!(request["x-pontia-preview-host"], "host");

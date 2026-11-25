@@ -233,11 +233,14 @@ async fn binds_jwts_to_purpose_device_port_edge_and_lifetime() {
 async fn proxies_control_named_paths_streams_and_app_cookies() {
     let p = Preview::start().await;
     let host = p.host.clone();
+    let token = signed_jwt(TYP, &p.claims, &[5; 32]);
     let _device = p
         .server
         .device(p.device, move |req| {
             let host = host.clone();
+            let token = token.clone();
             async move {
+                assert_eq!(req.headers()["x-pontia-preview-token"], token);
                 assert_eq!(req.headers()["x-pontia-preview-host"], host);
                 assert_eq!(req.headers()[header::COOKIE], "app=one; theme=dark");
                 if req.uri().path() == "/preview/v1/http/5173/events" {
@@ -285,6 +288,7 @@ async fn proxies_control_named_paths_streams_and_app_cookies() {
         .request(Method::POST, "/e2e/v1/requests?q=1")
         .header(header::COOKIE, &cookies)
         .header("x-pontia-preview-host", "spoof.test")
+        .header("x-pontia-preview-token", "spoof")
         .body(body.clone())
         .send()
         .await
@@ -414,34 +418,39 @@ async fn websocket_requires_one_same_origin_header_before_routing_to_device() {
 async fn websocket_waits_for_device_and_relays_negotiated_messages() {
     let p = Preview::start().await;
     let cookie = p.cookie().await;
+    let token = signed_jwt(TYP, &p.claims, &[5; 32]);
     let _device = p
         .server
-        .device(p.device, |req| async move {
-            assert_eq!(req.method(), Method::POST);
-            assert_eq!(
-                req.headers()[header::ORIGIN].to_str().unwrap(),
-                format!(
-                    "https://{}",
-                    req.headers()["x-pontia-preview-host"].to_str().unwrap()
-                )
-            );
-            assert!(!req.headers().contains_key(header::COOKIE));
-            if req.uri().path().ends_with("/deny") {
-                return Response::builder().status(403).body(Body::empty()).unwrap();
-            }
-            if req.uri().path().ends_with("/oversized") {
-                let oversized_header = Bytes::from_static(&[2, 1, 0, 0, 1]);
-                return Response::builder()
+        .device(p.device, move |req| {
+            let token = token.clone();
+            async move {
+                assert_eq!(req.headers()["x-pontia-preview-token"], token);
+                assert_eq!(req.method(), Method::POST);
+                assert_eq!(
+                    req.headers()[header::ORIGIN].to_str().unwrap(),
+                    format!(
+                        "https://{}",
+                        req.headers()["x-pontia-preview-host"].to_str().unwrap()
+                    )
+                );
+                assert!(!req.headers().contains_key(header::COOKIE));
+                if req.uri().path().ends_with("/deny") {
+                    return Response::builder().status(403).body(Body::empty()).unwrap();
+                }
+                if req.uri().path().ends_with("/oversized") {
+                    let oversized_header = Bytes::from_static(&[2, 1, 0, 0, 1]);
+                    return Response::builder()
+                        .header(header::SEC_WEBSOCKET_PROTOCOL, "vite-hmr")
+                        .body(Body::from(oversized_header))
+                        .unwrap();
+                }
+                assert_eq!(req.uri().path(), "/preview/v1/ws/5173/hmr");
+                assert_eq!(req.headers()[header::SEC_WEBSOCKET_PROTOCOL], "vite-hmr");
+                Response::builder()
                     .header(header::SEC_WEBSOCKET_PROTOCOL, "vite-hmr")
-                    .body(Body::from(oversized_header))
-                    .unwrap();
+                    .body(req.into_body())
+                    .unwrap()
             }
-            assert_eq!(req.uri().path(), "/preview/v1/ws/5173/hmr");
-            assert_eq!(req.headers()[header::SEC_WEBSOCKET_PROTOCOL], "vite-hmr");
-            Response::builder()
-                .header(header::SEC_WEBSOCKET_PROTOCOL, "vite-hmr")
-                .body(req.into_body())
-                .unwrap()
         })
         .await;
     for path in ["/deny", "/oversized", "/hmr"] {

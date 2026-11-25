@@ -16,7 +16,7 @@ use pontia_tunnel::{
 use tower::ServiceExt;
 use uuid::Uuid;
 
-use crate::{Edge, access_token::PreviewTokenVerifier};
+use crate::Edge;
 
 #[derive(Clone, Copy)]
 struct Target {
@@ -199,18 +199,18 @@ async fn relay(edge: &Edge, target: Target, auth: Authority, mut req: Request) -
             .get(header::ACCEPT)
             .and_then(|v| v.to_str().ok())
             .is_some_and(|v| v.contains("text/html"));
-    if auth::strip_cookie(req.headers_mut())
-        .and_then(|v| {
-            PreviewTokenVerifier(&edge.access_tokens).verify(&v, target.device, target.port)
-        })
-        .is_none()
-    {
+    let Some(token) = auth::strip_cookie(req.headers_mut()).filter(|token| {
+        edge.access_tokens
+            .preview
+            .verify(token, target.device, target.port)
+            .is_some()
+    }) else {
         return error(
             StatusCode::UNAUTHORIZED,
             navigation,
             "Reopen this preview from the Dashboard to renew your session.",
         );
-    }
+    };
     let Some(connection) = edge.online.connection(target.device) else {
         return error(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -233,6 +233,9 @@ async fn relay(edge: &Edge, target: Target, auth: Authority, mut req: Request) -
         return StatusCode::BAD_REQUEST.into_response();
     };
     let mut forwarded = preview_headers(&parts.headers, route, HeaderDirection::Request);
+    let mut token = header::HeaderValue::from_str(&token).expect("verified compact JWT");
+    token.set_sensitive(true);
+    forwarded.insert(pontia_tunnel::protocol::PREVIEW_TOKEN_HEADER, token);
     forwarded.remove(header::HOST);
     forwarded.insert("x-pontia-preview-host", auth.as_str().parse().unwrap());
     let result = if is_ws {

@@ -12,13 +12,16 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use bytes::{Bytes, BytesMut};
+use ed25519_dalek::{Signer, SigningKey};
 use futures_util::{StreamExt, stream};
 use pontia_config::PreviewConfig;
 use pontia_tunnel::{
     DeviceRequestHandler, TunnelConnection, WsTunnelFrame, connect_edge, serve_device,
 };
 use pontiad::LocalPreviewProxy;
+use serde_json::{Value, json};
 use tokio::{
     net::TcpListener,
     sync::{mpsc, watch},
@@ -26,7 +29,10 @@ use tokio::{
     time::timeout,
 };
 use tokio_stream::wrappers::ReceiverStream;
+use uuid::Uuid;
 
+const DEVICE: Uuid = Uuid::from_u128(0x0195e7c11b227c339d44123456789abc);
+const CLOUD_SEED: [u8; 32] = [5; 32];
 const HOST: &str = "5173-0195e7c11b227c339d44123456789abc.test.pontia.run:8443";
 const V4: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
 const V6: IpAddr = IpAddr::V6(Ipv6Addr::LOCALHOST);
@@ -62,7 +68,13 @@ impl Tunnel {
             .await
             .unwrap();
         let (shutdown, stop) = watch::channel(false);
-        let proxy = LocalPreviewProxy::new(bound_port, config, stop.clone());
+        let proxy = LocalPreviewProxy::new(
+            bound_port,
+            config,
+            DEVICE,
+            SigningKey::from_bytes(&CLOUD_SEED).verifying_key(),
+            stop.clone(),
+        );
         let handler = DeviceRequestHandler::new(move |req| {
             let proxy = proxy.clone();
             async move {
@@ -89,6 +101,20 @@ impl Tunnel {
     }
 }
 
+fn claims(port: u16) -> Value {
+    let now = time::OffsetDateTime::now_utc().unix_timestamp();
+    json!({"aud": Uuid::now_v7(), "sub": Uuid::now_v7(), "purpose": "localhost_preview",
+        "did": DEVICE, "port": port, "iat": now, "exp": now + 14400})
+}
+
+fn sign(claims: &Value, seed: &[u8; 32]) -> String {
+    let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"EdDSA","typ":"pontia-preview+jwt"}"#);
+    let payload = URL_SAFE_NO_PAD.encode(serde_json::to_vec(claims).unwrap());
+    let input = format!("{header}.{payload}");
+    let signature = SigningKey::from_bytes(seed).sign(input.as_bytes());
+    format!("{input}.{}", URL_SAFE_NO_PAD.encode(signature.to_bytes()))
+}
+
 fn request(method: Method, kind: &str, port: u16, path: &str) -> Builder {
     Request::builder()
         .method(method)
@@ -96,6 +122,49 @@ fn request(method: Method, kind: &str, port: u16, path: &str) -> Builder {
             "https://pontia-device/preview/v1/{kind}/{port}{path}"
         ))
         .header("x-pontia-preview-host", HOST)
+        .header("x-pontia-preview-token", sign(&claims(port), &CLOUD_SEED))
+}
+
+#[tokio::test]
+async fn rejects_unauthorized_preview_requests_before_connecting_to_loopback() {
+    let listener = TcpListener::bind((V4, 0)).await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let tunnel = Tunnel::start(0).await;
+    let valid = claims(port);
+    let mut invalid = vec![None, Some(sign(&valid, &[8; 32]))];
+    for (field, value) in [
+        ("did", json!(Uuid::now_v7())),
+        ("port", json!(port - 1)),
+        ("purpose", json!("device_access")),
+        ("exp", valid["iat"].clone()),
+    ] {
+        let mut altered = valid.clone();
+        altered[field] = value;
+        invalid.push(Some(sign(&altered, &CLOUD_SEED)));
+    }
+    for token in invalid {
+        for kind in ["http", "ws"] {
+            let mut req = request(Method::POST, kind, port, "/")
+                .body(Body::empty())
+                .unwrap();
+            req.headers_mut().remove("x-pontia-preview-token");
+            if let Some(value) = &token {
+                req.headers_mut()
+                    .insert("x-pontia-preview-token", value.parse().unwrap());
+            }
+            let check = async {
+                if kind == "http" {
+                    tunnel.connection.request_preview_http(req).await
+                } else {
+                    tunnel.connection.open_preview_ws(req).await
+                }
+            };
+            tokio::select! {
+                reply = check => assert_eq!(reply.unwrap().status(), StatusCode::UNAUTHORIZED),
+                _ = listener.accept() => panic!("unauthorized preview reached loopback"),
+            }
+        }
+    }
 }
 
 #[tokio::test]
@@ -104,6 +173,7 @@ async fn forwards_methods_query_and_headers_on_both_loopback_families() {
     for ip in [V4, V6] {
         let app = Router::new().fallback(|req: Request<Body>| async move {
             let h = req.headers();
+            assert!(!h.contains_key("x-pontia-preview-token"));
             let local = format!("http://{}", h["host"].to_str().unwrap());
             assert_eq!(h["origin"], local);
             assert_eq!(h["referer"], format!("{local}/page?q=1"));
@@ -363,6 +433,7 @@ async fn websocket_negotiates_vite_protocol_and_transfers_messages_in_both_direc
                 headers["origin"],
                 format!("http://{}", headers["host"].to_str().unwrap())
             );
+            assert!(!headers.contains_key("x-pontia-preview-token"));
             assert_eq!(headers["cookie"], "app=test");
             ws.protocols(["vite-hmr"])
                 .on_upgrade(|mut socket| async move {

@@ -15,7 +15,10 @@ struct StoredIdentity {
     capability_verification_key: String,
 }
 
-pub fn load(home: &Path, expected_device_id: Uuid) -> Result<DeviceSessions, String> {
+pub fn load(
+    home: &Path,
+    expected_device_id: Uuid,
+) -> Result<(DeviceSessions, VerifyingKey), String> {
     let path = home.join("e2e-identity.json");
     let bytes = fs::read(&path).map_err(|error| {
         format!(
@@ -56,5 +59,5 @@ pub fn load(home: &Path, expected_device_id: Uuid) -> Result<DeviceSessions, Str
             path.display()
         )
     })?;
-    Ok(DeviceSessions::new(identity, trusted))
+    Ok((DeviceSessions::new(identity, trusted), trusted))
 }

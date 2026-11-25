@@ -92,12 +92,10 @@ async fn main() -> Result<()> {
                     message: "must be a UUIDv7".to_string(),
                 });
             }
-            let sessions =
-                e2e_identity::load(&config.pontia_home, device_id).map_err(|message| {
-                    pontia_core::error::Error::InvalidConfig {
-                        key: "remote.device_id",
-                        message,
-                    }
+            let (sessions, cloud_key) = e2e_identity::load(&config.pontia_home, device_id)
+                .map_err(|message| pontia_core::error::Error::InvalidConfig {
+                    key: "remote.device_id",
+                    message,
                 })?;
             let ingress = http_entrypoints.e2e_tunnel(sessions);
             let maintenance = ingress.clone();
@@ -113,6 +111,8 @@ async fn main() -> Result<()> {
             let preview = pontiad::LocalPreviewProxy::new(
                 bound_addr.port(),
                 config.preview,
+                device_id,
+                cloud_key,
                 cleanup_shutdown.subscribe(),
             );
             let handler = pontia_tunnel::DeviceRequestHandler::new(move |request| {

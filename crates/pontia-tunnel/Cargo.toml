@@ -10,6 +10,7 @@ base64 = "0.22"
 bytes = "1"
 futures-util = { version = "0.3", features = ["sink"] }
 getrandom = { version = "0.3", features = ["std"] }
+jsonwebtoken = { version = "9", default-features = false }
 http-body = "1"
 hyper = { version = "1", features = ["client", "server", "http2"] }
 hyper-util = { version = "0.1", features = ["tokio"] }

@@ -1,5 +1,5 @@
 use super::{Target, error};
-use crate::{Edge, access_token::PreviewTokenVerifier, browser_http::exact_origin};
+use crate::{Edge, browser_http::exact_origin};
 use axum::{
     Form,
     extract::{DefaultBodyLimit, FromRequest, Request},
@@ -31,8 +31,10 @@ pub(super) async fn exchange(edge: &Edge, target: Target, mut req: Request) -> R
         Err(err) if err.status() == StatusCode::PAYLOAD_TOO_LARGE => return failure(err.status()),
         Err(_) => return failure(StatusCode::BAD_REQUEST),
     };
-    let Some(age) =
-        PreviewTokenVerifier(&edge.access_tokens).verify(&form.token, target.device, target.port)
+    let Some(age) = edge
+        .access_tokens
+        .preview
+        .verify(&form.token, target.device, target.port)
     else {
         return failure(StatusCode::UNAUTHORIZED);
     };

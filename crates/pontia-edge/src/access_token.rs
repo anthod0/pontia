@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct AccessTokenVerifier {
+    pub(crate) preview: pontia_tunnel::PreviewTokenVerifier,
     key: DecodingKey,
     validation: Validation,
 }
@@ -39,6 +40,7 @@ impl AccessTokenVerifier {
         validation.set_required_spec_claims(&["aud", "exp"]);
         validation.leeway = 0;
         Ok(Self {
+            preview: pontia_tunnel::PreviewTokenVerifier::new(&bytes, Some(edge_id)),
             key: DecodingKey::from_ed_der(&bytes),
             validation,
         })
@@ -74,37 +76,6 @@ impl AccessTokenVerifier {
 fn remaining_lifetime(iat: u64, exp: u64) -> Option<u64> {
     let now = get_current_timestamp();
     (iat <= now && now < exp && exp - iat <= 4 * 3600).then(|| exp - now)
-}
-
-pub(crate) struct PreviewTokenVerifier<'a>(pub &'a AccessTokenVerifier);
-
-#[derive(Deserialize)]
-struct PreviewClaims {
-    // Require a single audience. Validation compares it to this edge ID.
-    #[serde(rename = "aud")]
-    _audience: Uuid,
-    did: Uuid,
-    sub: Uuid,
-    port: u16,
-    purpose: String,
-    iat: u64,
-    exp: u64,
-}
-
-impl PreviewTokenVerifier<'_> {
-    pub fn verify(&self, token: &str, device: Uuid, port: u16) -> Option<u64> {
-        let claims: PreviewClaims = self.0.claims(token, "pontia-preview+jwt")?;
-        if claims.purpose != "localhost_preview"
-            || claims.did != device
-            || device.get_version_num() != 7
-            || claims.port != port
-            || port == 0
-            || claims.sub.is_nil()
-        {
-            return None;
-        }
-        remaining_lifetime(claims.iat, claims.exp)
-    }
 }
 
 #[cfg(test)]

@@ -8,9 +8,10 @@ for (const [hostname, port] of [["127.0.0.1", 5173], ["::1", 5174]]) {
       const path = new URL(request.url).pathname;
       const cookies = request.headers.get("cookie") ?? "";
       const previewCookie = cookies.includes("__Host-pontia_preview");
+      const previewToken = request.headers.has("x-pontia-preview-token");
       const appCookie = cookies.split(/;\s*/).includes("app_cookie=present");
-      console.log(JSON.stringify({ hostname, path, previewCookie, appCookie }));
-      if (request.headers.get("host") !== authority || previewCookie) {
+      console.log(JSON.stringify({ hostname, path, previewCookie, previewToken, appCookie }));
+      if (request.headers.get("host") !== authority || previewCookie || previewToken) {
         return new Response("Unexpected host or preview credential", { status: 400 });
       }
       if (path === "/page") {
