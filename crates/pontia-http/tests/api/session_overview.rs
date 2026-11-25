@@ -70,6 +70,28 @@ fn ids(group: &Value) -> Vec<&str> {
 }
 
 #[tokio::test]
+async fn get_session_redacts_legacy_codex_environment() {
+    let app = TestApp::builder().in_memory_db().build().await;
+    let metadata = serde_json::json!({
+        "model":"test-model",
+        "codex_environment":{"PONTIA_BOT_TOOL_TOKEN":"fixture-secret"},
+        "PONTIA_BOT_TOOL_TOKEN":"fixture-secret"
+    });
+    sqlx::query("INSERT INTO sessions(session_id,client_type,state,metadata) VALUES ('legacy','codex','exited',?)")
+        .bind(metadata.to_string())
+        .execute(&app.db)
+        .await
+        .unwrap();
+    let (status, body) = get(app.state, "/api/v1/sessions/legacy").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body["data"]["session"]["metadata"],
+        serde_json::json!({"model":"test-model"})
+    );
+    assert!(!body.to_string().contains("fixture-secret"));
+}
+
+#[tokio::test]
 async fn overview_returns_only_requested_overlapping_groups_with_their_defined_ordering() {
     let app = fixture().await;
 

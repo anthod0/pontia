@@ -39,10 +39,21 @@ async fn first_input_resume_and_fork_have_the_bound_session_environment() {
     f.session(native, "busy").await;
     f.complete(native).await;
     f.session(native, "idle").await;
+    sqlx::query("UPDATE sessions SET runtime_environment=?,metadata=json_set(metadata,'$.codex_environment',json(?)) WHERE session_id=?")
+        .bind(json!({"PONTIA_BOT_TOOL_TOKEN":"runtime-token"}).to_string())
+        .bind(json!({"PONTIA_BOT_TOOL_TOKEN":"stale-token"}).to_string())
+        .bind(&session)
+        .execute(&f.app.db())
+        .await
+        .unwrap();
     rpc(&mut cli, "thread/resume", json!({"threadId":native})).await;
     assert_eq!(
         f.threads.lock().await[native].config["shell_environment_policy"]["set"]["PONTIA_SESSION_ID"],
         session
+    );
+    assert_eq!(
+        f.threads.lock().await[native].config["shell_environment_policy"]["set"]["PONTIA_BOT_TOOL_TOKEN"],
+        "runtime-token"
     );
     let fork = rpc(&mut cli, "thread/fork", json!({"threadId":native})).await;
     let child = fork["result"]["thread"]["id"].as_str().unwrap();

@@ -70,12 +70,10 @@ impl CodexService {
         cwd: &Path,
         model: Option<&str>,
         reasoning_effort: Option<&str>,
-        environment: &std::collections::BTreeMap<String, String>,
     ) -> Result<()> {
         let root = root.canonicalize()?;
-        sqlx::query("UPDATE sessions SET metadata=json_set(CASE WHEN json_type(metadata)='object' THEN metadata ELSE '{}' END,'$.codex_control_root',?,'$.codex_environment',json(?),'$.codex_launch_cwd',?,'$.codex_launch_model',?,'$.codex_launch_reasoning_effort',?) WHERE session_id=?")
+        sqlx::query("UPDATE sessions SET metadata=json_set(CASE WHEN json_type(metadata)='object' THEN metadata ELSE '{}' END,'$.codex_control_root',?,'$.codex_launch_cwd',?,'$.codex_launch_model',?,'$.codex_launch_reasoning_effort',?) WHERE session_id=?")
             .bind(root.display().to_string())
-            .bind(serde_json::to_string(environment)?)
             .bind(cwd.display().to_string())
             .bind(model)
             .bind(reasoning_effort)

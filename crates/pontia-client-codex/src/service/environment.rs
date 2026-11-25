@@ -49,16 +49,12 @@ impl CodexService {
             }
             result => result?,
         };
-        let stored: Option<String> = sqlx::query_scalar(
-            "SELECT json_extract(metadata,'$.codex_environment') FROM sessions WHERE session_id=?",
-        )
-        .bind(session)
-        .fetch_one(&self.pool)
-        .await?;
-        let environment: BTreeMap<String, String> = stored
-            .map(|value| serde_json::from_str(&value))
-            .transpose()?
-            .unwrap_or_default();
+        let stored: String =
+            sqlx::query_scalar("SELECT runtime_environment FROM sessions WHERE session_id=?")
+                .bind(session)
+                .fetch_one(&self.pool)
+                .await?;
+        let environment = serde_json::from_str(&stored)?;
         let mut config = environment_config(session, &response["config"], environment)?;
         if mode == SessionMode::Restricted {
             disable_mcp_servers(&mut config, &response)?;

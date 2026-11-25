@@ -64,7 +64,11 @@ pub struct SessionView {
 }
 
 pub(crate) fn row_to_view(row: SessionRow) -> Result<SessionView> {
-    let metadata: Value = serde_json::from_str(&row.metadata)?;
+    let mut metadata: Value = serde_json::from_str(&row.metadata)?;
+    if let Some(object) = metadata.as_object_mut() {
+        object.remove("codex_environment");
+        object.remove("PONTIA_BOT_TOOL_TOKEN");
+    }
     let context_usage = metadata
         .get("context_usage")
         .cloned()

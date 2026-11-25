@@ -193,13 +193,11 @@ pub(super) async fn prepare(
             set_override(&mut requested, key, value.clone());
         }
     }
-    let stored: Option<String> = sqlx::query_scalar(
-        "SELECT json_extract(metadata,'$.codex_environment') FROM sessions WHERE session_id=?",
-    )
-    .bind(&session)
-    .fetch_optional(&state.db())
-    .await?
-    .flatten();
+    let stored: Option<String> =
+        sqlx::query_scalar("SELECT runtime_environment FROM sessions WHERE session_id=?")
+            .bind(&session)
+            .fetch_optional(&state.db())
+            .await?;
     let mut environment: BTreeMap<String, String> = effective["shell_environment_policy"]["set"]
         .as_object()
         .map(|value| serde_json::from_value(json!(value)))

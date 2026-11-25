@@ -32,6 +32,15 @@ impl Fixture {
     }
 
     async fn create(system_instructions: Option<&str>, mode: &str, effort: Option<&str>) -> Self {
+        Self::create_with_request(system_instructions, mode, effort, |_| {}).await
+    }
+
+    async fn create_with_request(
+        system_instructions: Option<&str>,
+        mode: &str,
+        effort: Option<&str>,
+        configure: impl FnOnce(&mut CreateSessionRequest),
+    ) -> Self {
         let root = tempfile::tempdir().unwrap();
         let socket = root.path().join("app-server.sock");
         let listener = UnixListener::bind(&socket).unwrap();
@@ -185,14 +194,19 @@ impl Fixture {
         let app = AgentControl::builder(pool, root.path().into())
             .clients(clients)
             .build();
+        let mut request = serde_json::from_value(json!({
+            "client_type":"codex",
+            "workspace":root.path(),
+            "system_instructions":system_instructions,
+            "include_standalone_session_instructions":true,
+            "mode":mode,
+            "reasoning_effort":effort
+        }))
+        .unwrap();
+        configure(&mut request);
         let created = app
             .session_commands()
-            .create_session(
-                serde_json::from_value::<CreateSessionRequest>(
-                    json!({"client_type":"codex","workspace":root.path(),"system_instructions":system_instructions,"include_standalone_session_instructions":true,"mode":mode,"reasoning_effort":effort}),
-                )
-                .unwrap(),
-            )
+            .create_session(request)
             .await
             .unwrap();
         let session = created.session_id().unwrap().to_owned();
@@ -507,25 +521,28 @@ async fn start_and_resume_preserve_environment_filters_and_override_session_iden
             json!({"shell_environment_policy.filters":{"PATH":"include","PROBE_KEEP":"include","PROBE_DROP":"exclude","PONTIA_SESSION_ID":"include"}}),
         ),
     ] {
-        let fixture = Fixture::new().await;
+        let fixture = Fixture::create_with_request(None, "default", None, |request| {
+            request.model = Some("model-two".into());
+            request.runtime_environment = [
+                (
+                    "PONTIA_SESSION_ID".into(),
+                    "wrong-configured-session".into(),
+                ),
+                ("PROBE_KEEP".into(), "keep".into()),
+                ("PONTIA_BOT_TOOL_TOKEN".into(), "fixture-token".into()),
+            ]
+            .into();
+        })
+        .await;
         *fixture.configuration.lock().await = json!({"shell_environment_policy":policy});
-        let mut environment = std::collections::BTreeMap::new();
-        environment.insert(
-            "PONTIA_SESSION_ID".into(),
-            "wrong-configured-session".into(),
-        );
-        environment.insert("PROBE_KEEP".into(), "keep".into());
-        super::CodexService::new(fixture.app.event_ingest_service())
-            .provision(
-                &fixture.session,
-                fixture.root.path(),
-                fixture.root.path(),
-                Some("model-two"),
-                None,
-                &environment,
-            )
-            .await
-            .unwrap();
+        let metadata: String =
+            sqlx::query_scalar("SELECT metadata FROM sessions WHERE session_id=?")
+                .bind(&fixture.session)
+                .fetch_one(&fixture.app.db())
+                .await
+                .unwrap();
+        assert!(!metadata.contains("codex_environment"));
+        assert!(!metadata.contains("fixture-token"));
         fixture.dispatch_first_input().await;
         assert_eq!(
             fixture.thread_requests.lock().await[0]["params"]["model"],
@@ -548,8 +565,7 @@ async fn start_and_resume_preserve_environment_filters_and_override_session_iden
         let mut expected = expected_filter;
         expected["developer_instructions"] =
             json!(pontia_agent_control::standalone_session_instructions());
-        expected["shell_environment_policy.set"] =
-            json!({"PROBE_KEEP":"keep","PONTIA_SESSION_ID":fixture.session});
+        expected["shell_environment_policy.set"] = json!({"PROBE_KEEP":"keep","PONTIA_SESSION_ID":fixture.session,"PONTIA_BOT_TOOL_TOKEN":"fixture-token"});
         for request in requests.iter() {
             assert_eq!(request["params"]["config"], expected);
         }
