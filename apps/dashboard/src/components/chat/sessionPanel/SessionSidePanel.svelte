@@ -1,7 +1,6 @@
 <script lang="ts">
   import SidePanel from '$lib/components/ui/overlay/SidePanel.svelte'
-  import { t, number } from '$lib/i18n'
-  import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
+  import { t } from '$lib/i18n'
   import GlobeIcon from 'phosphor-svelte/lib/GlobeIcon'
   import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
@@ -75,15 +74,9 @@
       {#if panel.tab === 'git' && source.workspaceId}
         {#key source.workspaceId}
           <GitPanel bind:this={git} {device} workspaceId={source.workspaceId} git={panel.git} hint={$t('git.keyboardHint')}>
-            {#snippet header({ changes, refresh, fetching })}
-              <div class="flex h-12 shrink-0 items-center gap-2 border-b pr-2 pl-4">
+            {#snippet workspaceHeading()}
                 <FolderIcon class="size-4 shrink-0 text-muted-foreground" />
                 <span class="min-w-0 flex-1 truncate text-sm font-medium text-heading" title={workspace?.canonical_path}>{workspace ? workspaceTitle(workspace) : ''}</span>
-                {#if changes?.repo_root}<span class="text-xs text-muted-foreground tabular-nums" title={$t('git.changeCount', { count: changes.total })}>{$number(changes.total)}</span>{/if}
-                <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11" disabled={fetching} onclick={refresh} aria-label={$t('common.refresh')} title={$t('common.refresh')}>
-                  <ArrowClockwiseIcon class={['size-4 max-lg:size-5', fetching && 'animate-spin']} />
-                </Button>
-              </div>
             {/snippet}
           </GitPanel>
         {/key}

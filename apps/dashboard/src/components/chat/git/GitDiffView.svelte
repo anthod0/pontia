@@ -1,12 +1,11 @@
 <script lang="ts">
   import { t } from '$lib/i18n'
-  import { Badge } from '$lib/components/ui/badge/index.js'
   import type { DeviceRuntime } from '../../../device/runtime'
   import type { GitChangedFile } from '../../../api/types'
   import type { GitDiffTarget } from '../../../queries/workspaces'
   import GitDiffContent from './GitDiffContent.svelte'
   import GitDiffHeader from './GitDiffHeader.svelte'
-  import { countDiffLines, gitChangeGroups } from './gitChanges'
+  import { gitStatusTone, countDiffLines, gitChangeGroups } from './gitChanges'
 
   /** The diff of one uncommitted file. */
   let { device, workspaceId, file, change, onback }: {
@@ -30,6 +29,9 @@
 
 <GitDiffHeader path={file.path} origPath={file.orig_path} backLabel={$t('git.backToChanges')} fetching={diffQuery.isFetching}
   {additions} {deletions} {onback} onrefresh={() => diffQuery.refetch()}>
-  {#snippet badge()}<Badge variant="outline" class={['font-normal', group.tone]}>{$t(group.label)}</Badge>{/snippet}
+  {#snippet context()}
+    {#if change}<span class={gitStatusTone(change.status)}>{change.status}</span>{/if}
+    <span>{$t(group.label)}</span>
+  {/snippet}
 </GitDiffHeader>
 <GitDiffContent path={file.path} {diff} error={diffQuery.isError ? diffQuery.error : null} onretry={() => diffQuery.refetch()} />

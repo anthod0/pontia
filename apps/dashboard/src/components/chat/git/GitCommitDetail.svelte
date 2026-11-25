@@ -94,11 +94,11 @@
           {@const parts = splitChangePath(file.path)}
           <li>
             <button type="button" data-git-row={file.path} onclick={() => onopen(file)}
-              class="flex h-[30px] w-full min-w-0 items-center gap-2 rounded-md pr-2 pl-2.5 text-left text-[13px] outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring max-lg:h-10"
+              class="flex h-[30px] w-full min-w-0 items-center gap-2 rounded-lg pr-2 pl-[22px] text-left text-[13px] outline-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-primary/55 focus-visible:ring-inset max-lg:h-11"
               title={file.orig_path ? `${file.orig_path} → ${file.path}` : file.path}
               aria-label={file.path}>
               <span class={['w-3.5 shrink-0 text-center font-mono text-[11px] font-medium', gitStatusTone(file.status)]} aria-hidden="true">{file.status}</span>
-              <span class={['max-w-[60%] shrink-0 truncate', file.status === 'D' && 'text-muted-foreground line-through']}>{parts.name}</span>
+              <span class={['max-w-[60%] shrink-0 truncate', file.status === 'D' && 'text-muted-foreground']}>{parts.name}</span>
               <span class="min-w-0 flex-1 truncate text-left text-xs text-muted-foreground" dir="rtl"><bdi>{changeDirLabel(file)}</bdi></span>
               <span class="flex shrink-0 gap-1.5 font-mono text-[11px] tabular-nums">
                 {#if file.binary}<span class="text-muted-foreground">{$t('git.binary')}</span>

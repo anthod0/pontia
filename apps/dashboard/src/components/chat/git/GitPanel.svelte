@@ -1,10 +1,8 @@
 <script lang="ts">
-  import { onDestroy, type Snippet } from 'svelte'
-  import { t } from '$lib/i18n'
+  import { onMount, type Snippet } from 'svelte'
+  import { number, t } from '$lib/i18n'
   import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
-  import ClockIcon from 'phosphor-svelte/lib/ClockIcon'
-  import CloudArrowUpIcon from 'phosphor-svelte/lib/CloudArrowUpIcon'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
   import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
@@ -14,29 +12,25 @@
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import * as Tabs from '$lib/components/ui/tabs/index.js'
   import type { DeviceRuntime } from '../../../device/runtime'
-  import type { GitChangesView } from '../../../api/types'
+  import type { GitChangedFile } from '../../../api/types'
   import GitChangeList from './GitChangeList.svelte'
   import GitCommitDetail from './GitCommitDetail.svelte'
   import GitCommitDiffView from './GitCommitDiffView.svelte'
   import GitDiffView from './GitDiffView.svelte'
+  import GitBranchPicker from './GitBranchPicker.svelte'
   import GitHistory from './GitHistory.svelte'
   import { changeKey, focusRow, sameChange } from './gitChanges'
   import type { GitPanelState, GitView } from './gitPanelState.svelte'
 
-  /** The header above the lists, given the loaded changes and a refresh action. */
-  type Header = Snippet<[{ changes: GitChangesView | undefined; refresh: () => void; fetching: boolean }]>
-
-  /**
-   * One Workspace's Git tab: its uncommitted changes or a branch's commit history, and the diff,
-   * commit or commit file opened from them. It only reads the repository.
-   */
-  let { device, workspaceId, git, hint, header }: {
+  let { device, workspaceId, git, hint, workspaceHeading, onopen, oncommit, onstatuserror }: {
     device: DeviceRuntime
     workspaceId: string
     git: GitPanelState
-    /** The keyboard hint in the footer. */
-    hint: string
-    header: Header
+    hint?: string
+    workspaceHeading?: Snippet
+    onopen?: (file: GitChangedFile) => void
+    oncommit?: (sha: string) => void
+    onstatuserror?: (error: Error) => void
   } = $props()
 
   // The parent recreates this view for each device and Workspace.
@@ -50,16 +44,27 @@
   let element = $state<HTMLElement>()
   let history = $state<GitHistory>()
 
-  // The header summary comes from the status projection, which the page keeps fresh.
+  const outsideRepository = $derived(changes?.repo_root === null)
+  const branchesQuery = queries.createWorkspaceGitBranchesQuery(() => workspaceId, () => !outsideRepository && git.view === 'history' && (!git.commit || !!oncommit))
+  const branches = $derived(branchesQuery.data?.branches ?? [])
+  const head = $derived(branchesQuery.data?.head ?? null)
+  const ref = $derived(git.ref && branches.some(branch => branch.ref === git.ref) ? git.ref : head)
   let now = $state(Date.now())
-  const clock = setInterval(() => { now = Date.now() }, 1000)
-  onDestroy(() => clearInterval(clock))
-  const updatedSeconds = $derived(changesQuery.dataUpdatedAt ? Math.max(0, Math.round((now - changesQuery.dataUpdatedAt) / 1000)) : null)
+  onMount(() => {
+    const timer = setInterval(() => { now = Date.now() }, 60_000)
+    return () => clearInterval(timer)
+  })
+  const minutes = $derived(Math.max(0, Math.floor((now - changesQuery.dataUpdatedAt) / 60_000)))
+  const fetching = $derived(changesQuery.isFetching || (git.view === 'history' && (branchesQuery.isFetching || !!history?.fetching())))
+  const segment = 'rounded-full px-3 text-xs aria-selected:bg-card dark:aria-selected:bg-[#45403d] group-data-[variant=default]/tabs-list:aria-selected:shadow-sm'
 
   function refresh() {
     void changesQuery.refetch()
-    void queries.refreshWorkspaceGitStatus(workspaceId).catch(() => {})
-    if (git.view === 'history') history?.refresh()
+    void queries.refreshWorkspaceGitStatus(workspaceId).catch(error => onstatuserror?.(error))
+    if (!outsideRepository && git.view === 'history') {
+      void branchesQuery.refetch()
+      history?.refresh()
+    }
   }
 
   /** Esc steps back one level: from a diff to its list, or from a commit to the history. The parent forwards keys from the element that holds focus. */
@@ -70,6 +75,18 @@
     if (git.commitFile) closeCommitFile()
     else if (git.commit) closeCommit()
     else closeDiff()
+  }
+
+  function openChange(item: GitChangedFile) {
+    if (onopen) return onopen(item)
+    element?.focus()
+    git.diff = { path: item.path, orig_path: item.orig_path, group: item.group }
+  }
+
+  function openCommit(sha: string) {
+    if (oncommit) return oncommit(sha)
+    element?.focus()
+    git.openCommit(sha)
   }
 
   // Each step back returns focus to the row it was opened from.
@@ -92,85 +109,86 @@
   }
 </script>
 
-<div bind:this={element} class="flex min-h-0 flex-1 flex-col">
-  {#if git.view === 'changes' && git.diff}
+{#snippet notRepository()}
+  <Empty.Root class="min-h-0 p-8">
+    <Empty.Header>
+      <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><FolderIcon class="size-6" /></Empty.Media>
+      <Empty.Title>{$t('git.notRepository')}</Empty.Title>
+      <Empty.Description>{$t('git.notRepositoryDescription')}</Empty.Description>
+    </Empty.Header>
+  </Empty.Root>
+{/snippet}
+
+<div bind:this={element} tabindex="-1" class="flex h-full min-h-0 flex-1 flex-col outline-none">
+  {#if git.view === 'changes' && git.diff && !onopen}
     {#key `${workspaceId}\0${changeKey(git.diff)}`}
       <GitDiffView {device} {workspaceId} file={git.diff} {change} onback={closeDiff} />
     {/key}
-  {:else if git.view === 'history' && git.commit && git.commitFile}
+  {:else if git.view === 'history' && git.commit && git.commitFile && !oncommit}
     {#key `${workspaceId}\0${git.commit}\0${git.commitFile.path}`}
       <GitCommitDiffView {device} {workspaceId} sha={git.commit} file={git.commitFile} onback={closeCommitFile} />
     {/key}
-  {:else if git.view === 'history' && git.commit}
+  {:else if git.view === 'history' && git.commit && !oncommit}
     {#key `${workspaceId}\0${git.commit}`}
       <GitCommitDetail {device} {workspaceId} sha={git.commit} onback={closeCommit}
-        onopen={(file) => { git.commitFile = { path: file.path, orig_path: file.orig_path } }} />
+        onopen={(file) => { element?.focus(); git.commitFile = { path: file.path, orig_path: file.orig_path } }} />
     {/key}
   {:else}
-    {@render header({ changes, refresh, fetching: changesQuery.isFetching || (git.view === 'history' && !!history?.fetching()) })}
-
-    {#if changesQuery.isError && !changes}
-      <Alert.Root variant="destructive" class="m-3 w-auto">
-        <WarningCircleIcon />
-        <Alert.Title>{$t('git.readFailed')}</Alert.Title>
-        <Alert.Description>
-          <span class="font-mono text-xs break-words text-foreground">{changesQuery.error.message}</span>
-          <Button variant="outline" size="sm" class="mt-2" onclick={refresh}><ArrowClockwiseIcon data-icon="inline-start" />{$t('common.retry')}</Button>
-        </Alert.Description>
-      </Alert.Root>
-    {:else if !changes}
-      <div role="status" aria-label={$t('common.loading')}>
-        <div class="space-y-1.5 border-b px-4 py-3">
-          <Skeleton class="h-3.5 w-[46%]" />
-          <Skeleton class="h-3 w-[70%]" />
+    <Tabs.Root bind:value={() => git.view, (next) => { git.view = next as GitView }} class="min-h-0 flex-1 gap-0">
+      <header class="grid shrink-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-2 border-b py-2 pr-2 pl-4 max-lg:grid-cols-[minmax(0,1fr)_auto] max-lg:gap-y-1 max-lg:px-2">
+        {#if workspaceHeading}<div class="flex min-w-0 items-center gap-2 max-lg:col-span-2">{@render workspaceHeading()}</div>{/if}
+        <Tabs.List aria-label={$t('git.views')} class="h-[30px] shrink-0 rounded-full p-0.5 group-data-horizontal/tabs:h-[30px] max-lg:order-last max-lg:col-span-2 max-lg:h-10 max-lg:w-full max-lg:group-data-horizontal/tabs:h-10">
+          <Tabs.Trigger value="changes" class={segment}>{$t('git.changesView')}{#if changes?.repo_root}<span class="text-muted-foreground tabular-nums" title={$t('git.changeCount', { count: changes.total })}>{$number(changes.total)}</span>{/if}</Tabs.Trigger>
+          <Tabs.Trigger value="history" class={segment}>{$t('git.historyView')}</Tabs.Trigger>
+        </Tabs.List>
+        <Button variant="ghost" size="icon-sm" class="rounded-full p-0 size-8 max-lg:order-2 max-lg:size-11" disabled={fetching} onclick={refresh} aria-label={$t('common.refresh')} title={$t('common.refresh')}>
+          <ArrowClockwiseIcon class={['size-4', fetching && 'animate-spin']} />
+        </Button>
+        <div class="col-span-3 flex h-6 min-w-0 items-center gap-1.5 text-xs text-muted-foreground max-lg:order-1 max-lg:col-span-1 max-lg:h-11">
+          {#if !outsideRepository && git.view === 'history' && branchesQuery.data && (branches.length || ref)}
+            <GitBranchPicker {branches} {head} {ref} onchoose={(next) => git.chooseRef(next)} />
+          {:else if status?.repo_root}
+            <GitBranchIcon class="size-3.5 shrink-0" />
+            <span class="truncate font-mono font-medium text-foreground">{status.branch ?? $t('git.detachedHead')}</span>
+            {#if status.ahead}<span class="shrink-0 font-mono text-primary" title={$t('git.ahead', { count: status.ahead })}>↑{status.ahead}</span>{/if}
+            {#if status.behind}<span class="shrink-0 font-mono text-interrupted" title={$t('git.behind', { count: status.behind })}>↓{status.behind}</span>{/if}
+            <span aria-hidden="true">·</span><span class="min-w-0 truncate font-mono">{status.upstream ?? $t('git.noUpstream')}</span>
+          {/if}
+          {#if changesQuery.dataUpdatedAt}<time class="ml-auto shrink-0 tabular-nums" datetime={new Date(changesQuery.dataUpdatedAt).toISOString()}>{$t('git.updatedMinutesAgo', { count: minutes })}</time>{/if}
         </div>
-        <div class="p-3">
-          {#each [60, 80, 52, 74, 66, 40, 70] as width, index (index)}
-            <div class="flex h-[30px] items-center gap-2.5 px-2"><Skeleton class="h-3 w-3" /><Skeleton class="h-3" style="width: {width}%" /></div>
-          {/each}
-        </div>
-      </div>
-    {:else if !changes.repo_root}
-      <Empty.Root class="min-h-0 p-8">
-        <Empty.Header>
-          <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><FolderIcon class="size-6" /></Empty.Media>
-          <Empty.Title>{$t('git.notRepository')}</Empty.Title>
-          <Empty.Description>{$t('git.notRepositoryDescription')}</Empty.Description>
-        </Empty.Header>
-      </Empty.Root>
-    {:else}
-      <Tabs.Root bind:value={() => git.view, (next) => { git.view = next as GitView }} class="min-h-0 flex-1 gap-0">
-        <div class="shrink-0 border-b px-3 py-2">
-          <Tabs.List class="w-full max-lg:h-10" aria-label={$t('git.views')}>
-            <Tabs.Trigger value="changes">{$t('git.changesView')}</Tabs.Trigger>
-            <Tabs.Trigger value="history">{$t('git.historyView')}</Tabs.Trigger>
-          </Tabs.List>
-        </div>
-        <Tabs.Content value="changes" class="flex min-h-0 flex-col">
-          <div class="min-h-0 flex-1 overflow-auto overscroll-contain">
-            <div class="border-b px-4 py-3">
-              <div class="flex min-w-0 items-center gap-2 text-sm">
-                <GitBranchIcon class="size-4 shrink-0 text-muted-foreground" />
-                <span class="min-w-0 truncate font-mono text-[13px] font-medium text-heading">{status?.branch ?? $t('git.noBranch')}</span>
-                {#if status?.upstream}
-                  <span class="flex shrink-0 gap-1.5 font-mono text-xs">
-                    {#if status.ahead}<span class="text-primary" title={$t('git.ahead', { count: status.ahead })}>↑{status.ahead}</span>{/if}
-                    {#if status.behind}<span class="text-interrupted" title={$t('git.behind', { count: status.behind })}>↓{status.behind}</span>{/if}
-                    {#if !status.ahead && !status.behind}<span class="text-muted-foreground">{$t('git.synced')}</span>{/if}
-                  </span>
-                {/if}
-              </div>
-              <div class="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                <CloudArrowUpIcon class="size-3.5 shrink-0" />
-                {#if status?.upstream}<span class="min-w-0 truncate font-mono">{status.upstream}</span>
-                {:else}<span>{$t('git.noUpstream')}</span>{/if}
-              </div>
+      </header>
+      <Tabs.Content value="changes" class="flex min-h-0 flex-col">
+        {#if changesQuery.isError && !changes}
+          <Alert.Root variant="destructive" class="m-3 w-auto">
+            <WarningCircleIcon />
+            <Alert.Title>{$t('git.readFailed')}</Alert.Title>
+            <Alert.Description>
+              <span class="font-mono text-xs break-words text-foreground">{changesQuery.error.message}</span>
+              <Button variant="outline" size="sm" class="mt-2" onclick={refresh}><ArrowClockwiseIcon data-icon="inline-start" />{$t('common.retry')}</Button>
+            </Alert.Description>
+          </Alert.Root>
+        {:else if !changes}
+          <div role="status" aria-label={$t('common.loading')}>
+            <div class="space-y-1.5 border-b px-4 py-3">
+              <Skeleton class="h-3.5 w-[46%]" />
+              <Skeleton class="h-3 w-[70%]" />
             </div>
+            <div class="p-3">
+              {#each [60, 80, 52, 74, 66, 40, 70] as width, index (index)}
+                <div class="flex h-[30px] items-center gap-2.5 px-2"><Skeleton class="h-3 w-3" /><Skeleton class="h-3" style="width: {width}%" /></div>
+              {/each}
+            </div>
+          </div>
+        {:else if !changes.repo_root}
+          {#if git.view === 'changes'}{@render notRepository()}{/if}
+        {:else}
+          <div class="min-h-0 flex-1 overflow-auto overscroll-contain">
             {#if changes.files.length}
-              <GitChangeList files={changes.files} onopen={(item) => { git.diff = { path: item.path, orig_path: item.orig_path, group: item.group } }} />
+              <GitChangeList files={changes.files} onopen={openChange} />
               {#if changes.truncated}
                 <p class="px-4 pb-4 text-center text-xs text-muted-foreground">{$t('git.listTruncated', { shown: changes.files.length, total: changes.total })}</p>
               {/if}
+              {#if hint}<p class="px-4 py-2 text-xs text-muted-foreground max-lg:hidden">{hint}</p>{/if}
             {:else}
               <Empty.Root class="min-h-0 p-8">
                 <Empty.Header>
@@ -181,18 +199,24 @@
               </Empty.Root>
             {/if}
           </div>
-          <footer class="flex h-9 shrink-0 items-center gap-1.5 border-t px-4 text-xs text-muted-foreground">
-            <ClockIcon class="size-3.5" />
-            <span>{updatedSeconds === null ? '' : $t('git.updatedSecondsAgo', { count: updatedSeconds })}</span>
-            <span class="flex-1"></span>
-            <span class="max-lg:hidden">{hint}</span>
-          </footer>
-        </Tabs.Content>
-        <Tabs.Content value="history" class="flex min-h-0 flex-col">
-          <!-- History is read only while it shows. -->
-          {#if git.view === 'history'}<GitHistory bind:this={history} {device} {workspaceId} {git} />{/if}
-        </Tabs.Content>
-      </Tabs.Root>
-    {/if}
+        {/if}
+      </Tabs.Content>
+      <Tabs.Content value="history" class="flex min-h-0 flex-col">
+        <!-- History is read only while it shows. -->
+        {#if git.view === 'history'}
+          {#if outsideRepository}
+            {@render notRepository()}
+          {:else if branchesQuery.isError}
+            <Alert.Root variant="destructive" class="m-3 w-auto"><WarningCircleIcon /><Alert.Title>{$t('git.branchesFailed')}</Alert.Title>
+              <Alert.Description>{branchesQuery.error.message}<Button variant="outline" size="sm" onclick={refresh}>{$t('common.retry')}</Button></Alert.Description>
+            </Alert.Root>
+          {:else if !branchesQuery.data}
+            <div role="status" aria-label={$t('common.loading')} class="p-4"><Skeleton class="h-4 w-2/3" /></div>
+          {:else}
+            <GitHistory bind:this={history} {device} {workspaceId} {ref} oncommit={openCommit} />
+          {/if}
+        {/if}
+      </Tabs.Content>
+    </Tabs.Root>
   {/if}
 </div>

@@ -227,7 +227,7 @@ test("lists changes by group in panel order with line counts", async () => {
   const headings = within(panel)
     .getAllByRole("button", { expanded: true })
     .map((element) => element.textContent?.replace(/\s+/g, " ").trim());
-  expect(headings).toEqual(["! Conflicted 1", "+ Staged 2", "~ Unstaged 1", "? Untracked 1"]);
+  expect(headings).toEqual(["Conflicted 1", "Staged 2", "Unstaged 1", "Untracked 1"]);
 
   const lib = within(panel).getByRole("button", { name: "Staged: src/lib.rs" });
   expect(lib.textContent).toContain("+3");
@@ -415,6 +415,17 @@ test("keeps what the Git tab opened when the same Workspace attaches again", () 
   expect(panel!.git.ref).toBeNull();
   expect(panel!.git.commit).toBeNull();
   expect(panel!.git.view).toBe("history");
+});
+
+test("opens history when the changes request fails", async () => {
+  vi.mocked(testDevice.api.getWorkspaceGitChanges).mockRejectedValue(
+    new Error("Cannot read changes"),
+  );
+  render(SessionPanelHarness);
+  const panel = await openTab("Git");
+  await within(panel).findByRole("alert");
+  await fireEvent.click(within(panel).getByRole("tab", { name: "History" }));
+  await within(panel).findByRole("button", { name: /add history view/ });
 });
 
 test("reads a chosen branch's history and a commit's file diffs without checking out", async () => {

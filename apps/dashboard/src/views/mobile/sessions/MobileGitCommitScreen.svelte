@@ -2,6 +2,7 @@
   import { useSessionPanel } from '../../../components/chat/sessionPanel/sessionPanelContext.svelte'
   import { useMobileStack } from '$lib/mobile/overlayStack.svelte'
   import type { DeviceRuntime } from '../../../device/runtime'
+  import { splitChangePath, changeDirLabel, shortSha } from '../../../components/chat/git/gitChanges'
   import GitCommitDetail from '../../../components/chat/git/GitCommitDetail.svelte'
   import MobileGitDiffScreen from './MobileGitDiffScreen.svelte'
   let { device, workspaceId, sha }: { device: DeviceRuntime; workspaceId: string; sha: string } = $props()
@@ -17,7 +18,10 @@
     {sha}
     onopen={(next) => {
       git.commitFile = next
-      stack.open({ dismiss: () => (git.commitFile = null), content: diff, title: next.path })
+      stack.open({
+        dismiss: () => (git.commitFile = null), content: diff, title: splitChangePath(next.path).name,
+        subtitle: [next.status, shortSha(sha), changeDirLabel(next)].filter(Boolean).join(' · '),
+      })
     }}
   />
 </div>

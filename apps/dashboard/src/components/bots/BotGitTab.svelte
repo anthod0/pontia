@@ -1,6 +1,5 @@
 <script lang="ts">
   import ResponsiveSelect from '$lib/components/ui/overlay/ResponsiveSelect.svelte'
-  import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
   import FolderSimpleIcon from 'phosphor-svelte/lib/FolderSimpleIcon'
   import GearIcon from 'phosphor-svelte/lib/GearIcon'
@@ -8,7 +7,7 @@
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
-  import { t, number } from '$lib/i18n'
+  import { t } from '$lib/i18n'
   import { navigate } from '$lib/navigation'
   import { createGitWorkspace } from '$lib/botGitWorkspace'
   import type { WorkspaceView } from '../../api/types'
@@ -59,22 +58,16 @@
   {#if workspace}
     {#key `${device.id}\0${workspace.workspace_id}`}
       <GitPanel bind:this={view} {device} workspaceId={workspace.workspace_id} {git} hint={$t('bots.gitKeyboardHint')}>
-        {#snippet header({ changes, refresh, fetching })}
-          <div class="flex h-12 shrink-0 items-center gap-1 border-b px-2">
+        {#snippet workspaceHeading()}
             <ResponsiveSelect value={workspace.workspace_id} onValueChange={choose}
-              label={$t('bots.gitWorkspace', { name: workspaceTitle(workspace) })} triggerClass="h-9 min-w-0 flex-1 border-0 px-2 hover:bg-muted" title={workspace.canonical_path} align="start" contentClass="w-72" itemClass="py-2" disabledOption={unavailable}
+              label={$t('bots.gitWorkspace', { name: workspaceTitle(workspace) })} triggerClass="h-8 min-w-0 max-w-full rounded-full border-0 shadow-none px-2 hover:bg-muted" title={workspace.canonical_path} align="start" contentClass="w-72" itemClass="py-2" disabledOption={unavailable}
               options={workspaces} keyOf={item => item.workspace_id} labelOf={item => workspaceTitle(item)}>
               {#snippet trigger()}
                 <FolderIcon class="size-4 text-muted-foreground" />
                 <span class="min-w-0 flex-1 truncate text-left font-medium text-heading">{workspaceTitle(workspace)}</span>
-                {#if changes?.repo_root}<span class="text-xs text-muted-foreground tabular-nums" title={$t('git.changeCount', { count: changes.total })}>{$number(changes.total)}</span>{/if}
               {/snippet}
               {#snippet option(item)}{@render workspaceLabel(item)}{/snippet}
             </ResponsiveSelect>
-            <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11" disabled={fetching} onclick={refresh} aria-label={$t('common.refresh')} title={$t('common.refresh')}>
-              <ArrowClockwiseIcon class={['size-4 max-lg:size-5', fetching && 'animate-spin']} />
-            </Button>
-          </div>
         {/snippet}
       </GitPanel>
     {/key}

@@ -161,10 +161,11 @@ export function createWorkspaceQueries(device: DeviceRuntime) {
     );
   }
 
-  function createWorkspaceGitBranchesQuery(workspaceId: () => string) {
+  function createWorkspaceGitBranchesQuery(workspaceId: () => string, enabled: () => boolean) {
     return createQuery(
       () => ({
         queryKey: workspaceKeys.gitBranches(workspaceId()),
+        enabled: enabled(),
         queryFn: ({ signal }) => device.api.getWorkspaceGitBranches(workspaceId(), { signal }),
         staleTime: 0,
       }),

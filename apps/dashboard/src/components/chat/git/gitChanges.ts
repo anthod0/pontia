@@ -1,17 +1,15 @@
 import type { GitChangedFile, GitChangeGroup, GitDiffLine } from "../../../api/types";
 import type { MessageKey } from "$lib/i18n";
 
-/** Group order, symbol and color, matching the composer's git summary. */
+/** Display order for change groups. */
 export const gitChangeGroups: {
   group: GitChangeGroup;
   label: MessageKey;
-  symbol: string;
-  tone: string;
 }[] = [
-  { group: "conflicted", label: "git.conflicted", symbol: "!", tone: "text-destructive" },
-  { group: "staged", label: "git.staged", symbol: "+", tone: "text-success" },
-  { group: "unstaged", label: "git.unstaged", symbol: "~", tone: "text-warning" },
-  { group: "untracked", label: "git.untracked", symbol: "?", tone: "text-aqua" },
+  { group: "conflicted", label: "git.conflicted" },
+  { group: "staged", label: "git.staged" },
+  { group: "unstaged", label: "git.unstaged" },
+  { group: "untracked", label: "git.untracked" },
 ];
 
 const statusTones: Record<string, string> = {
