@@ -1,8 +1,9 @@
 <script lang="ts">
   import KeyIcon from 'phosphor-svelte/lib/KeyIcon'
   import type { SecretFile } from '$lib/uploads/message'
-  let {secret}: {secret: Omit<SecretFile, 'path'>} = $props()
+  let {secret, failed = false}: {secret: Omit<SecretFile, 'path'>; failed?: boolean} = $props()
 </script>
-<KeyIcon class="size-3.5 shrink-0"/>
-{#if secret.label}<span class="min-w-0 max-w-64 truncate">{secret.label}</span>{/if}
-<code class="min-w-0 truncate rounded-md bg-foreground/5 px-1.5 py-0.5">{secret.masked}</code>
+<div class={['flex size-full flex-col items-center justify-center gap-1', failed ? 'text-destructive' : 'text-muted-foreground']}>
+  <KeyIcon class="size-6" />
+  <span class={['max-w-full truncate px-1.5 text-[10px] font-semibold leading-none', !secret.label && 'uppercase tracking-wide']}>{secret.label ?? 'Key'}</span>
+</div>

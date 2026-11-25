@@ -86,7 +86,8 @@
     return item.error ? `${$t('files.uploadFailed')}: ${item.error}` : $t('files.uploadFailed')
   }
   function tooltip(item: UploadItem) {
-    return `${displayName(item)}\n${statusText(item)}${item.secret ? '' : ` · ${formatSize(item.size)}`}`
+    if (item.secret) return `${[item.secret.label, item.secret.masked].filter(Boolean).join(' · ')}\n${statusText(item)}`
+    return `${displayName(item)}\n${statusText(item)} · ${formatSize(item.size)}`
   }
   function retry(item: UploadItem) {
     if (item.secret || item.file || (item.record && item.status === 'failed')) void draft.retry(item)
@@ -116,10 +117,10 @@
       {@const kind = fileKindOf(item.name)}
       {@const thumbnail = thumbnails[item.id]}
       {@const failed = item.status === 'failed'}
-      <li class={['relative h-16 shrink-0', item.secret ? 'max-w-64' : 'w-16']} title={tooltip(item)}>
+      <li class="relative size-16 shrink-0" title={tooltip(item)}>
         <div class={['relative size-full overflow-hidden rounded-xl', failed ? 'bg-destructive/10' : 'bg-muted']}>
           {#if item.secret}
-            <div class="flex h-full items-center gap-1.5 px-3 text-xs"><SecretChip secret={item.secret} /></div>
+            <SecretChip secret={item.secret} {failed} />
           {:else if thumbnail}
             <img src={thumbnail} alt={item.name} class="size-full object-cover" draggable="false" />
           {:else}
