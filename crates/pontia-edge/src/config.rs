@@ -48,7 +48,7 @@ impl ServiceConfig {
             .hostname
             .strip_suffix(".edge.pontia.dev")
             .context("invalid control hostname")?;
-        let expected = format!("{label}.p.pontia.dev");
+        let expected = format!("{label}.pontia.run");
         if let Some(base) = &config.preview_base_hostname {
             anyhow::ensure!(base == &expected, "invalid preview base hostname");
         }
@@ -118,7 +118,7 @@ mod tests {
                     port,
                     acme_challenge,
                     browser_dashboard_origin: default_dashboard_origin(),
-                    preview_base_hostname: Some("brave-atlas.p.pontia.dev".into()),
+                    preview_base_hostname: Some("brave-atlas.pontia.run".into()),
                 };
                 config.save(&path).unwrap();
                 assert_eq!(ServiceConfig::read(&path).unwrap(), config);
@@ -128,7 +128,7 @@ mod tests {
         let config = ServiceConfig::read(&path).unwrap();
         assert_eq!(
             config.preview_base_hostname.as_deref(),
-            Some("brave-atlas.p.pontia.dev")
+            Some("brave-atlas.pontia.run")
         );
         assert_eq!(config.port, 443);
         assert_eq!(config.acme_challenge, AcmeChallenge::Http01);

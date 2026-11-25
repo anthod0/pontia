@@ -155,7 +155,7 @@ If you have a complete validation script, use this command to manage startup and
 
 ## Localhost preview
 
-To verify private Edge readiness with a wildcard certificate, run the confirmation test in a fresh instance. Cloud checks `probe.docker-e2e.p.pontia.dev` before marking the Edge ready.
+To verify private Edge readiness with a wildcard certificate, run the confirmation test in a fresh instance. Cloud checks `probe.docker-e2e.pontia.run` before marking the Edge ready.
 
 ```bash
 ./scripts/docker-e2e --name probe run bash docker/e2e/test_preview_confirmation.sh
@@ -167,7 +167,7 @@ With the test OpenAI key configured, run the preview checks from a fresh instanc
 ./scripts/docker-e2e --name preview run python3 docker/e2e/test_localhost_preview.py
 ```
 
-The container browser approves device registration, opens the result file from a real Claude Code Session, and follows its localhost links. The checks cover IPv4 and IPv6 HTTP, streaming events, WebSockets, redirects, preview cookie isolation, and error pages.
+The container browser approves device registration, opens the result file from a real Claude Code Session, and follows its localhost links. The checks cover IPv4 and IPv6 HTTP, streaming events, WebSockets, redirects, and error pages. They also verify that the Dashboard iframe and the standalone preview tab use separate cookie partitions. A local application that relies on same-site cookies can be opened in the standalone tab.
 
 ## Validation scope
 

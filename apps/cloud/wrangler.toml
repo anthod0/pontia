@@ -24,7 +24,7 @@ head_sampling_rate = 1
 persist = true
 
 [vars]
-PREVIEW_ZONE = "p.pontia.dev"
+PREVIEW_ZONE = "pontia.run"
 AUTH_ORIGIN = "https://pontia.dev"
 
 [secrets]
@@ -37,6 +37,7 @@ required = [
   "OAUTH_COOKIE_SECRET",
   "CLOUDFLARE_DNS_TOKEN",
   "CLOUDFLARE_DNS_ZONE_ID",
+  "CLOUDFLARE_PREVIEW_DNS_ZONE_ID",
   "E2E_CAPABILITY_SIGNING_KEY",
   "E2E_CAPABILITY_VERIFICATION_KEY",
   "E2E_REGISTRATION_PROOF_PRIVATE_KEY",

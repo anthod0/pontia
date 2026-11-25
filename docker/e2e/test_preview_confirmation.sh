@@ -17,7 +17,7 @@ scripts/docker-e2e compose exec -T edge sh -ec '
   printf "Authorization: Bearer %s\n" "$credential" |
     curl --fail-with-body --silent --show-error --header @- \
       --request POST https://pontia.dev/api/edge/preview/confirm
-' | jq -e '.preview_base_hostname == "docker-e2e.p.pontia.dev" and .manage_certificate == true'
+' | jq -e '.preview_base_hostname == "docker-e2e.pontia.run" and .manage_certificate == true'
 
 edge_state "SELECT preview_enabled FROM edges WHERE dns_label='docker-e2e'" |
   jq -e '. == [{"preview_enabled": 1}]'

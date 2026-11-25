@@ -39,7 +39,7 @@ nss_db="$HOME/.pki/nssdb"
 mkdir -p "$nss_db"
 if [[ ! -f "$nss_db/cert9.db" ]]; then certutil -N --empty-password -d "sql:$nss_db"; fi
 certutil -A -d "sql:$nss_db" -n pontia-preview -t 'P,,' -i /run/preview-cert.pem
-dbus-run-session -- chromium --host-resolver-rules="MAP *.docker-e2e.p.pontia.dev $E2E_EDGE_IP" --no-sandbox --no-first-run \
+dbus-run-session -- chromium --host-resolver-rules="MAP *.docker-e2e.pontia.run $E2E_EDGE_IP" --no-sandbox --no-first-run \
   --profile-directory=Default \
   --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 \
   --disable-background-networking --password-store=basic \

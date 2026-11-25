@@ -18,7 +18,7 @@ await dashboard.locator("[data-file-preview-content]").getByText(marker, { exact
 
 async function openPreview(port, status) {
   const path = "/page?a=1#sec";
-  const origin = `https://${port}-${device.replaceAll("-", "")}.docker-e2e.p.pontia.dev`;
+  const origin = `https://${port}-${device.replaceAll("-", "")}.docker-e2e.pontia.run`;
   const [response, exchange] = await Promise.all([
     context.waitForEvent("response", r => r.url().split("#")[0] === origin + "/page?a=1"),
     context.waitForEvent("response", r => r.url() === origin + "/__pontia_auth"),
@@ -104,7 +104,9 @@ async function checkErrorPage(page) {
 for (const [port, family] of [[5173, "127.0.0.1"], [5174, "::1"]]) {
   const page = await openPreview(port, 200);
   assert.ok(await page.evaluate(() => document.cookie === "app_cookie=present"), "Unexpected script-visible cookies");
-  const cookie = (await context.cookies(page.url())).find(c => c.name === "__Host-pontia_preview");
+  const credentials = (await context.cookies(page.url())).filter(c => c.name === "__Host-pontia_preview");
+  const cookie = credentials.find(c => c.partitionKey === "https://pontia.run");
+  assert.ok(credentials.some(c => c.partitionKey === "https://pontia.dev"));
   assert.ok(cookie?.httpOnly && cookie.secure && cookie.domain === new URL(page.url()).hostname);
   const remaining = cookie.expires - Date.now() / 1000;
   assert.ok(remaining > 4 * 3600 - 60 && remaining <= 4 * 3600);

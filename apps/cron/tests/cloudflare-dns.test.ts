@@ -25,7 +25,7 @@ test("DNS lookup accepts only the exact canonical A record", async () => {
     requests.push({ url: input.toString(), init: (init as RequestInit | undefined) ?? {} });
     return response({ success: true, result: [{ id: "record/id", name: hostname, type: "A" }] });
   });
-  const provider = new CloudflareDnsProvider("secret-token", "zone/id");
+  const provider = new CloudflareDnsProvider("secret-token", "zone/id", "preview-zone");
 
   await expect(provider.findA(hostname)).resolves.toEqual({ id: "record/id", hostname });
   expect(requests[0]?.url).toBe(
@@ -40,7 +40,7 @@ test("DNS lookup accepts only the exact canonical A record", async () => {
 test("DNS lookup treats absence as success and rejects ambiguous responses", async () => {
   let body: unknown = { success: true, result: [] };
   mockGlobalFetch(async () => response(body));
-  const provider = new CloudflareDnsProvider("token", "zone");
+  const provider = new CloudflareDnsProvider("token", "zone", "preview-zone");
   await expect(provider.findA(hostname)).resolves.toBeNull();
 
   for (body of [
@@ -64,7 +64,7 @@ test("DNS failures expose safe operation, status, and provider metadata", async 
       403,
     );
   mockGlobalFetch(() => behavior());
-  const provider = new CloudflareDnsProvider("secret-token", "zone");
+  const provider = new CloudflareDnsProvider("secret-token", "zone", "preview-zone");
   try {
     await provider.findA(hostname);
     throw new Error("expected provider error");
@@ -101,7 +101,7 @@ test("DNS deletion targets the previously looked-up record ID and is idempotent"
     return response({ success: true });
   };
   mockGlobalFetch((input) => behavior(input));
-  const provider = new CloudflareDnsProvider("token", "zone");
+  const provider = new CloudflareDnsProvider("token", "zone", "preview-zone");
   await provider.deleteA({ id: "record/id", hostname });
   expect(urls).toEqual([
     "https://api.cloudflare.com./client/v4/zones/zone/dns_records/record%2Fid",

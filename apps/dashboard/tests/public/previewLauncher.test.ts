@@ -7,7 +7,7 @@ import { requestPreviewToken } from "../../src/modes/public/remote-access/remote
 
 const device = { handle: "studio", deviceId: "01234567-89ab-cdef-0123-456789abcdef" };
 const href = "http://localhost:5173/page?q=1#part";
-const origin = "https://5173-0123456789abcdef0123456789abcdef.private-edge.p.pontia.dev:8443";
+const origin = "https://5173-0123456789abcdef0123456789abcdef.private-edge.pontia.run:8443";
 const response = { preview_origin: origin, token: "secret", expires_at: 1000 };
 const signal = new AbortController().signal;
 afterEach(() => {
@@ -130,7 +130,7 @@ test.each([
   { preview_origin: origin + "?query" },
   { preview_origin: origin + "#fragment" },
   { preview_origin: origin.replace("private-edge", "nested.edge") },
-  { preview_origin: origin.replace("pontia.dev", "pontia.dev.example") },
+  { preview_origin: origin.replace("pontia.run", "pontia.run.example") },
   { preview_origin: origin.replace("//", "//user@") },
   { token: "" },
   { expires_at: 1.5 },

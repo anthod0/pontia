@@ -125,7 +125,7 @@ async function cleanupDeployment(
   const initialOwnership = await repository.deploymentOwnership(ticket, name, deadline);
   if (!(await deploymentIsUnowned(initialOwnership, ticket, deadline, repository, summary))) return;
 
-  for (const hostname of [hostnameFor(name), `*.${name}.p.pontia.dev`]) {
+  for (const hostname of [hostnameFor(name), `*.${name}.pontia.run`]) {
     const record = await dns.findA(hostname);
     const ownership = await repository.deploymentOwnership(ticket, name, deadline);
     if (!(await deploymentIsUnowned(ownership, ticket, deadline, repository, summary))) return;

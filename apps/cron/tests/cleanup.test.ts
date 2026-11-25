@@ -190,7 +190,7 @@ test("a failed deployment deletes its known DNS record before its ticket", async
   const dns = new MemoryDns(
     new Map([
       ["brave-silver-atlas.edge.pontia.dev", { id: "dns-old" }],
-      ["*.brave-silver-atlas.p.pontia.dev", { id: "preview" }],
+      ["*.brave-silver-atlas.pontia.run", { id: "preview" }],
     ]),
   );
   const logs = logger();

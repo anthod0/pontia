@@ -15,7 +15,7 @@ test("TXT cleanup uses provider creation time and record ID, never deletes a fre
     {
       id: "preview",
       type: "TXT",
-      name: "_acme-challenge.brave-atlas.p.pontia.dev",
+      name: "_acme-challenge.brave-atlas.pontia.run",
       created_on: "2026-10-08T23:59:59Z",
     },
     {
@@ -53,13 +53,18 @@ test("TXT cleanup uses provider creation time and record ID, never deletes a fre
   const deleted: string[] = [];
   spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
     if (init?.method === "DELETE") {
-      deleted.push(String(input).split("/").at(-1)!);
+      deleted.push(new URL(String(input)).pathname);
       return Response.json({ success: true });
     }
     return Response.json({ success: true, result: records });
   }) as typeof fetch);
-  expect(await new CloudflareDnsProvider("secret", "zone").cleanupExpiredTxt(now)).toBe(2);
-  expect(deleted).toEqual(["old", "preview"]);
+  expect(
+    await new CloudflareDnsProvider("secret", "zone", "preview-zone").cleanupExpiredTxt(now),
+  ).toBe(2);
+  expect(deleted).toEqual([
+    "/client/v4/zones/zone/dns_records/old",
+    "/client/v4/zones/preview-zone/dns_records/preview",
+  ]);
 });
 
 test("TXT cleanup enumerates all pages before deleting records", async () => {
@@ -71,6 +76,8 @@ test("TXT cleanup enumerates all pages before deleting records", async () => {
       return Response.json({ success: true });
     }
     const page = url.searchParams.get("page");
+    if (url.pathname.includes("/preview-zone/"))
+      return Response.json({ success: true, result: [] });
     events.push(`page:${page}`);
     return Response.json({
       success: true,
@@ -86,7 +93,9 @@ test("TXT cleanup enumerates all pages before deleting records", async () => {
     });
   }) as typeof fetch);
   expect(
-    await new CloudflareDnsProvider("secret", "zone").cleanupExpiredTxt(new Date("2026-10-10")),
+    await new CloudflareDnsProvider("secret", "zone", "preview-zone").cleanupExpiredTxt(
+      new Date("2026-10-10"),
+    ),
   ).toBe(20);
   expect(events.slice(0, 2)).toEqual(["page:1", "page:2"]);
   expect(events.slice(2)).toEqual(Array(20).fill("delete"));

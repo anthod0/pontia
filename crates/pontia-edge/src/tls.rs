@@ -126,8 +126,8 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let control_path = root.path().join("tls.pem");
         let preview_path = root.path().join("preview-tls.pem");
-        let preview_name = "5173-device.demo.p.pontia.dev";
-        let nested_name = "nested.5173-device.demo.p.pontia.dev";
+        let preview_name = "5173-device.demo.pontia.run";
+        let nested_name = "nested.5173-device.demo.pontia.run";
         let write_cert = |path: &std::path::Path, names: Vec<String>| {
             let key = rcgen::generate_simple_self_signed(names).unwrap();
             std::fs::write(
@@ -141,12 +141,12 @@ mod tests {
             &control_path,
             vec![
                 "localhost".into(),
-                "*.demo.p.pontia.dev".into(),
+                "*.demo.pontia.run".into(),
                 nested_name.into(),
             ],
         );
         let resolver = EdgeCertResolver::new(
-            "demo.p.pontia.dev",
+            "demo.pontia.run",
             RustlsConfig::from_pem_file(&control_path, &control_path)
                 .await
                 .unwrap(),
@@ -182,7 +182,7 @@ mod tests {
                 .is_success()
         );
         for _ in 0..2 {
-            let cert = write_cert(&preview_path, vec!["*.demo.p.pontia.dev".into()]);
+            let cert = write_cert(&preview_path, vec!["*.demo.pontia.run".into()]);
             resolver.load_preview(&preview_path).await.unwrap();
             assert!(
                 request(preview_name, cert)

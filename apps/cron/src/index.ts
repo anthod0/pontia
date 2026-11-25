@@ -11,7 +11,7 @@ export interface Env {
   DB: D1Database;
   CLOUDFLARE_DNS_TOKEN: string;
   CLOUDFLARE_DNS_ZONE_ID: string;
-  CLOUDFLARE_PREVIEW_DNS_ZONE_ID?: string;
+  CLOUDFLARE_PREVIEW_DNS_ZONE_ID: string;
 }
 
 type ScheduledDependencies = {

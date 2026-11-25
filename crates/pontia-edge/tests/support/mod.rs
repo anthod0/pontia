@@ -176,7 +176,7 @@ impl TestEdge {
         let router = edge.router(
             "127.0.0.1",
             edge_listener.local_addr().unwrap().port(),
-            Some("test.p.pontia.dev"),
+            Some("test.pontia.run"),
         );
         let edge_handle = Handle::new();
         let edge_task = tokio::spawn(

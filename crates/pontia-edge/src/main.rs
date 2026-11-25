@@ -183,7 +183,7 @@ async fn init_with_output<W: Write + ?Sized>(args: PendingInit, output: &mut W) 
         acme_challenge: args.acme_challenge,
         browser_dashboard_origin: "https://app.pontia.dev".to_owned(),
         preview_base_hostname: Some(format!(
-            "{}.p.pontia.dev",
+            "{}.pontia.run",
             hostname.split('.').next().unwrap()
         )),
     };

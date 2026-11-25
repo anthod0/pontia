@@ -67,7 +67,7 @@ function event(
         DB: database.binding,
         JWT_SECRET: jwtSecret,
         AUTH_ORIGIN: cloudOrigin,
-        PREVIEW_ZONE: "p.pontia.dev",
+        PREVIEW_ZONE: "pontia.run",
         E2E_CAPABILITY_SIGNING_KEY: signingKey,
       },
     },
@@ -485,12 +485,15 @@ test("preview tokens bind a dashboard login to its ready device, edge, and port 
     token: string;
   };
   expect(result.preview_origin).toBe(
-    "https://5173-0195e7d41b227c339d44123456789abc.brave-atlas.p.pontia.dev:8443",
+    "https://5173-0195e7d41b227c339d44123456789abc.brave-atlas.pontia.run:8443",
   );
   const { payload, protectedHeader } = await jwtVerify(result.token, signingKeys.publicKey, {
     algorithms: ["EdDSA"],
     typ: "pontia-preview+jwt",
   });
+  const fromPreview = await request({ port: 5173 }, "office-mac", result.preview_origin);
+  expect(fromPreview.status).toBe(403);
+  expect(fromPreview.headers.get("access-control-allow-origin")).toBeNull();
   expect(protectedHeader.typ).toBe("pontia-preview+jwt");
   expect(payload).toEqual({
     purpose: "localhost_preview",

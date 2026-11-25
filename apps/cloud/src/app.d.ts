@@ -18,7 +18,7 @@ declare global {
         E2E_REGISTRATION_PROOF_PRIVATE_KEY: string;
         E2E_REGISTRATION_PROOF_PUBLIC_KEY: string;
         PREVIEW_ZONE?: string;
-        CLOUDFLARE_PREVIEW_DNS_ZONE_ID?: string;
+        CLOUDFLARE_PREVIEW_DNS_ZONE_ID: string;
         CLOUDFLARE_DNS_TOKEN: string;
         CLOUDFLARE_DNS_ZONE_ID: string;
         EDGE_NETWORK_RATE_LIMIT: RateLimit;

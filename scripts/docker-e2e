@@ -96,6 +96,7 @@ def initialize(state):
             # Never give this environment permission to manage public DNS.
             "CLOUDFLARE_DNS_TOKEN": "disabled-in-local-e2e",
             "CLOUDFLARE_DNS_ZONE_ID": "disabled-in-local-e2e",
+            "CLOUDFLARE_PREVIEW_DNS_ZONE_ID": "disabled-in-local-e2e",
         }
         write_private(state / "cloud.dev.vars", "".join(
             f"{key}={json.dumps(value)}\n" for key, value in values.items()
@@ -361,7 +362,7 @@ def prepare_edge(state, config):
                     "ec_paramgen_curve:P-256", "-nodes", "-days", "2", "-keyout", str(key),
                     "-subj", "/CN=Docker E2E Preview", "-addext", "basicConstraints=CA:FALSE",
                     "-addext", "extendedKeyUsage=serverAuth", "-addext",
-                    "subjectAltName=DNS:*.docker-e2e.p.pontia.dev"], capture_output=True).stdout
+                    "subjectAltName=DNS:*.docker-e2e.pontia.run"], capture_output=True).stdout
         write_private(state / "preview-cert.pem", cert)
         write_private(state / "edge/preview-tls.pem", cert + key.read_bytes())
     return seed

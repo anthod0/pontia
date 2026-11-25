@@ -26,7 +26,7 @@ use tokio::{
 };
 use tokio_stream::wrappers::ReceiverStream;
 
-const HOST: &str = "5173-0195e7c11b227c339d44123456789abc.test.p.pontia.dev:8443";
+const HOST: &str = "5173-0195e7c11b227c339d44123456789abc.test.pontia.run:8443";
 const V4: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
 const V6: IpAddr = IpAddr::V6(Ipv6Addr::LOCALHOST);
 

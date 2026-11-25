@@ -31,7 +31,7 @@ function event(body: unknown, token = credential, allowed = true, keys: string[]
     platform: {
       env: {
         DB: database.binding,
-        PREVIEW_ZONE: "p.pontia.dev",
+        PREVIEW_ZONE: "pontia.run",
         CLOUDFLARE_PREVIEW_DNS_ZONE_ID: "preview-zone",
         CLOUDFLARE_DNS_TOKEN: "provider-secret",
         CLOUDFLARE_DNS_ZONE_ID: "zone",
@@ -138,7 +138,7 @@ test("pending deployment can clean its own TXT but cannot bypass network verific
 
 test("upgraded private edge provisions wildcard DNS, confirms TLS and cleans up its preview records", async () => {
   await registered();
-  const base = "brave-atlas.p.pontia.dev";
+  const base = "brave-atlas.pontia.run";
   const records = new Map<
     string,
     { id: string; type: string; name: string; content: string; proxied?: boolean }
@@ -181,6 +181,6 @@ test("upgraded private edge provisions wildcard DNS, confirms TLS and cleans up 
   healthy = true;
   expect((await manageEdgePreview(event({}), "confirm")).status).toBe(200);
   expect((await database.db.select().from(edges).get())?.previewEnabled).toBe(1);
-  await new CloudflareDnsProvider("secret", "preview-zone", "p.pontia.dev").cleanupHostname(base);
+  await new CloudflareDnsProvider("secret", "preview-zone", "pontia.run").cleanupHostname(base);
   expect(records.size).toBe(0);
 });

@@ -30,7 +30,7 @@ impl Preview {
         let device = Uuid::now_v7();
         let now = jsonwebtoken::get_current_timestamp();
         let claims = json!({"purpose":"localhost_preview","aud":EDGE_ID,"sub":Uuid::now_v7(),"did":device,"port":5173,"iat":now,"exp":now+14400});
-        let host = format!("5173-{}.test.p.pontia.dev", device.simple());
+        let host = format!("5173-{}.test.pontia.run", device.simple());
         Self {
             server,
             device,
@@ -72,7 +72,7 @@ impl Preview {
         let (cookie, attrs) = cookie.split_once("; ").unwrap();
         assert_eq!(cookie, format!("__Host-pontia_preview={token}"));
         let age = attrs
-            .strip_prefix("Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=")
+            .strip_prefix("Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=")
             .unwrap()
             .parse::<u64>()
             .unwrap();
@@ -97,7 +97,7 @@ async fn isolates_hosts_and_reserves_the_probe() {
             .server
             .http
             .get(format!("{}/healthz", p.server.edge_origin))
-            .header(header::HOST, format!("{label}.test.p.pontia.dev"))
+            .header(header::HOST, format!("{label}.test.pontia.run"))
             .send()
             .await
             .unwrap();
@@ -107,7 +107,7 @@ async fn isolates_hosts_and_reserves_the_probe() {
         .server
         .http
         .get(format!("{}/__pontia_preview_health", p.server.edge_origin))
-        .header(header::HOST, "probe.test.p.pontia.dev")
+        .header(header::HOST, "probe.test.pontia.run")
         .send()
         .await
         .unwrap();
@@ -116,7 +116,7 @@ async fn isolates_hosts_and_reserves_the_probe() {
         .server
         .http
         .get(format!("{}/tunnel", p.server.edge_origin))
-        .header(header::HOST, "wrong.p.pontia.dev")
+        .header(header::HOST, "wrong.pontia.run")
         .send()
         .await
         .unwrap();
@@ -257,7 +257,7 @@ async fn proxies_control_named_paths_streams_and_app_cookies() {
                 assert_eq!(req.uri().query(), Some("q=1"));
                 assert_eq!(req.uri().path(), "/preview/v1/http/5173/e2e/v1/requests");
                 Response::builder()
-                    .header(header::SET_COOKIE, "a=1; Domain = .pontia.dev; Secure")
+                    .header(header::SET_COOKIE, "a=1; Domain = .pontia.run; Secure")
                     .header(header::SET_COOKIE, "__HoSt-pontia_preview=bad; Path=/")
                     .header(header::SET_COOKIE, "b=2")
                     .body(req.into_body())

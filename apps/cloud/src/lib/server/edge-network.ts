@@ -457,7 +457,7 @@ export class CloudflareDnsProvider implements DnsProvider {
 export function previewDns(env: App.Platform["env"]) {
   return new CloudflareDnsProvider(
     env.CLOUDFLARE_DNS_TOKEN,
-    env.CLOUDFLARE_PREVIEW_DNS_ZONE_ID || env.CLOUDFLARE_DNS_ZONE_ID,
+    env.CLOUDFLARE_PREVIEW_DNS_ZONE_ID,
     env.PREVIEW_ZONE,
   );
 }

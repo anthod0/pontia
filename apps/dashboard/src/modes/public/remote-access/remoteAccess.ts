@@ -334,7 +334,7 @@ export async function requestPreviewToken(
     origin.protocol !== "https:" ||
     origin.port === "0" ||
     !origin.hostname.startsWith(hostPrefix) ||
-    !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.p\.pontia\.dev$/.test(
+    !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.pontia\.run$/.test(
       origin.hostname.slice(hostPrefix.length),
     ) ||
     typeof value.token !== "string" ||

@@ -102,7 +102,7 @@ test("verifies address control before creating an idempotent A record", async ()
       return socketResponse(httpResponse(challenge), (request) => calls.push(request));
     },
     dns,
-    preview: { zone: "p.pontia.dev", dns },
+    preview: { zone: "pontia.run", dns },
   });
   expect(result).toEqual({ status: "configured", hostname: "brave-atlas.edge.pontia.dev" });
   expect(calls[0]).toBe("8.8.8.8:80");
@@ -112,7 +112,7 @@ test("verifies address control before creating an idempotent A record", async ()
   expect(calls[1]).toContain("\r\nHost: 8.8.8.8\r\n");
   expect(calls.slice(2)).toEqual([
     "brave-atlas.edge.pontia.dev=8.8.8.8",
-    "*.brave-atlas.p.pontia.dev=8.8.8.8",
+    "*.brave-atlas.pontia.run=8.8.8.8",
   ]);
 });
 

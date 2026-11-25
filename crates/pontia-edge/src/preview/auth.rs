@@ -52,7 +52,7 @@ pub(super) async fn exchange(edge: &Edge, target: Target, mut req: Request) -> R
         return failure(StatusCode::BAD_REQUEST);
     };
     let cookie = format!(
-        "{COOKIE}={}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age={age}",
+        "{COOKIE}={}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age={age}",
         form.token
     );
     (

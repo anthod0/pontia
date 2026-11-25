@@ -5,7 +5,7 @@ export class CloudflareDnsProvider implements DnsProvider {
   constructor(
     private readonly token: string,
     private readonly zoneId: string,
-    private readonly previewZoneId = zoneId,
+    private readonly previewZoneId: string,
   ) {}
 
   private baseUrl(zoneId: string) {
@@ -13,7 +13,7 @@ export class CloudflareDnsProvider implements DnsProvider {
   }
 
   private zoneFor(hostname: string) {
-    return hostname.endsWith(".p.pontia.dev") ? this.previewZoneId : this.zoneId;
+    return hostname.endsWith(".pontia.run") ? this.previewZoneId : this.zoneId;
   }
 
   private headers() {
@@ -22,7 +22,7 @@ export class CloudflareDnsProvider implements DnsProvider {
 
   async cleanupExpiredTxt(now: Date) {
     let deleted = 0;
-    for (const zoneId of new Set([this.zoneId, this.previewZoneId])) {
+    for (const zoneId of [this.zoneId, this.previewZoneId]) {
       deleted += await this.cleanupExpiredZoneTxt(now, zoneId);
     }
     return deleted;
@@ -48,7 +48,7 @@ export class CloudflareDnsProvider implements DnsProvider {
         )
           continue;
         const match =
-          /^_acme-challenge\.([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)\.(?:edge|p)\.pontia\.dev$/.exec(
+          /^_acme-challenge\.([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)\.(?:edge\.pontia\.dev|pontia\.run)$/.exec(
             record.name,
           );
         const created = Date.parse(record.created_on);

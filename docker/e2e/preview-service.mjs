@@ -15,7 +15,7 @@ for (const [hostname, port] of [["127.0.0.1", 5173], ["::1", 5174]]) {
       }
       if (path === "/page") {
         return new Response("<!doctype html><title>Loopback preview</title><p id=sec>ready</p>", {
-          headers: { "Content-Type": "text/html", "Set-Cookie": "app_cookie=present; Path=/" },
+          headers: { "Content-Type": "text/html", "Set-Cookie": "app_cookie=present; Path=/; SameSite=None; Secure; Partitioned" },
         });
       }
       if (!appCookie) {
