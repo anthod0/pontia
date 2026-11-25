@@ -190,5 +190,5 @@
       <div aria-hidden="true" class="pointer-events-none absolute bottom-0 h-16 w-px" bind:this={bottom}></div>
     </div>
   </div>
-  <ScrollToBottomButton sentinel={bottom} root={feed} onclick={followSend} class="absolute inset-x-0 bottom-2 z-10 px-1 [.mobile-bot-chat_&]:bottom-[var(--mobile-footer-h)]" />
+  <ScrollToBottomButton sentinel={bottom} root={feed} onclick={followSend} class="absolute inset-x-0 bottom-2 z-10 px-1 [.mobile-bot-chat_&]:bottom-[calc(var(--mobile-footer-h)+var(--mobile-scroll-button-gap))]" />
 </div>

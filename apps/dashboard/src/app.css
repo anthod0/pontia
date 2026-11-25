@@ -265,6 +265,7 @@ body {
 
 .mobile-shell {
   --mobile-tab-h: 60px;
+  --mobile-scroll-button-gap: 1.5rem;
   --mobile-tab-gap: max(10px, calc(env(safe-area-inset-bottom) - 10px));
   position: fixed;
   inset: var(--visual-viewport-top, 0px) 0 var(--visual-viewport-bottom, 0px);
@@ -459,7 +460,10 @@ body:has([data-mobile-bot-sheet]) [data-sonner-toast] button {
 }
 
 .mobile-shell .chat-scroll-button {
-  bottom: calc(var(--chat-composer-height) + var(--visual-viewport-bottom, 0px) + 0.5rem);
+  bottom: calc(
+    var(--chat-composer-height) + var(--visual-viewport-bottom, 0px) +
+      var(--mobile-scroll-button-gap)
+  );
   inset-inline: 0;
 }
 .mobile-shell .chat-scroll-button button {
