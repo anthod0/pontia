@@ -114,18 +114,6 @@ fn external_api_router(state: HttpState) -> Router {
             "/api/v1/sessions/messages/read",
             post(api::read_session_messages),
         )
-        .route("/api/v1/bot/session-messages", post(api::session_messages))
-        .route("/api/v1/bot/chat-history", post(api::bots::chat_history))
-        .route("/api/v1/bot/memory", post(api::memory_command))
-        .route("/api/v1/bot/user", post(api::update_user))
-        .route("/api/v1/bot/profile", post(api::profile_command))
-        .route("/api/v1/bot/workspace", post(api::workspace_command))
-        .route("/api/v1/bot/description", post(api::bots::set_description))
-        .route("/api/v1/bot/link-message", post(api::bots::link_message))
-        .route("/api/v1/bot/todo", post(api::bots::session_todo))
-        .route("/api/v1/bot/send-to-user", post(api::bots::reply))
-        .route("/api/v1/bot/dreaming", post(api::dreaming_command))
-        .route("/api/v1/bot/helper", post(api::helper_command))
         .route("/api/v1/bots/dreaming", post(api::bots::dream))
         .route("/api/v1/bots", get(api::bots::list).post(api::bots::create))
         .route("/api/v1/bots/clients", get(api::bots::clients))
@@ -424,6 +412,18 @@ fn external_api_router(state: HttpState) -> Router {
             state.clone(),
             api::authenticate,
         ))
+        .route("/api/v1/bot/session-messages", post(api::session_messages))
+        .route("/api/v1/bot/chat-history", post(api::bots::chat_history))
+        .route("/api/v1/bot/memory", post(api::memory_command))
+        .route("/api/v1/bot/user", post(api::update_user))
+        .route("/api/v1/bot/profile", post(api::profile_command))
+        .route("/api/v1/bot/workspace", post(api::workspace_command))
+        .route("/api/v1/bot/description", post(api::bots::set_description))
+        .route("/api/v1/bot/link-message", post(api::bots::link_message))
+        .route("/api/v1/bot/todo", post(api::bots::session_todo))
+        .route("/api/v1/bot/send-to-user", post(api::bots::reply))
+        .route("/api/v1/bot/dreaming", post(api::dreaming_command))
+        .route("/api/v1/bot/helper", post(api::helper_command))
         .layer(DefaultBodyLimit::max(EXTERNAL_API_REQUEST_BODY_LIMIT))
         .with_state(state)
 }

@@ -523,13 +523,13 @@ async fn start_and_resume_preserve_environment_filters_and_override_session_iden
     ] {
         let fixture = Fixture::create_with_request(None, "default", None, |request| {
             request.model = Some("model-two".into());
+            request.credential_env = Some("PONTIA_BOT_TOOL_TOKEN".into());
             request.runtime_environment = [
                 (
                     "PONTIA_SESSION_ID".into(),
                     "wrong-configured-session".into(),
                 ),
                 ("PROBE_KEEP".into(), "keep".into()),
-                ("PONTIA_BOT_TOOL_TOKEN".into(), "fixture-token".into()),
             ]
             .into();
         })
@@ -565,7 +565,24 @@ async fn start_and_resume_preserve_environment_filters_and_override_session_iden
         let mut expected = expected_filter;
         expected["developer_instructions"] =
             json!(pontia_agent_control::standalone_session_instructions());
-        expected["shell_environment_policy.set"] = json!({"PROBE_KEEP":"keep","PONTIA_SESSION_ID":fixture.session,"PONTIA_BOT_TOOL_TOKEN":"fixture-token"});
+        let token = requests[0]["params"]["config"]["shell_environment_policy.set"]["PONTIA_BOT_TOOL_TOKEN"].as_str().unwrap();
+        assert!(
+            fixture
+                .app
+                .queries()
+                .verify_session_credential(&fixture.session, "PONTIA_BOT_TOOL_TOKEN", token)
+                .await
+                .unwrap()
+        );
+        let environment: String =
+            sqlx::query_scalar("SELECT runtime_environment FROM sessions WHERE session_id=?")
+                .bind(&fixture.session)
+                .fetch_one(&fixture.app.db())
+                .await
+                .unwrap();
+        assert!(!environment.contains(token));
+        assert!(!environment.contains("PONTIA_BOT_TOOL_TOKEN"));
+        expected["shell_environment_policy.set"] = json!({"PROBE_KEEP":"keep","PONTIA_SESSION_ID":fixture.session,"PONTIA_BOT_TOOL_TOKEN":token});
         for request in requests.iter() {
             assert_eq!(request["params"]["config"], expected);
         }

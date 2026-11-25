@@ -6,9 +6,9 @@ mod profile_templates;
 use std::{env, time::Duration};
 
 use pontia_bot::identity::{TOOL_TOKEN_ENV, TOOL_TOKEN_HEADER};
-use pontia_config::AppConfig;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use std::net::SocketAddr;
 
 pub(crate) use args::BotCommand;
 use args::{BotTool, MemoryCommand};
@@ -25,15 +25,17 @@ struct ApiError {
     message: String,
 }
 
-pub(crate) async fn run(command: BotCommand, config: &AppConfig) -> Result<(), String> {
+pub(crate) async fn run(command: BotCommand) -> Result<(), String> {
     if matches!(
         command.command,
         BotTool::Profile(profile::ProfileCommand::Templates)
     ) {
-        print!(
-            "{}",
-            profile_templates::load(&config.auth_origin, command.json).await
-        );
+        let vars = env::var("PONTIA_AUTH_ORIGIN")
+            .into_iter()
+            .map(|origin| ("PONTIA_AUTH_ORIGIN".into(), origin))
+            .collect();
+        let origin = pontia_config::auth_origin(&vars).map_err(|error| error.to_string())?;
+        print!("{}", profile_templates::load(&origin, command.json).await);
         return Ok(());
     }
     let session_id = env::var("PONTIA_SESSION_ID")
@@ -79,22 +81,18 @@ pub(crate) async fn run(command: BotCommand, config: &AppConfig) -> Result<(), S
     if endpoint == "memory" {
         request["reason"] = json!(reason);
     }
-    let token = config
-        .external_api_token
-        .as_deref()
-        .ok_or("Pontia local API token is not configured")?;
-    let addr = pontia::lifecycle::local_health_addr(config.bind_addr);
-    let mut request = reqwest::Client::builder()
+    let token = env::var(TOOL_TOKEN_ENV).map_err(|_| "Missing PONTIA_BOT_TOOL_TOKEN")?;
+    let addr: SocketAddr = env::var(pontia_bot::identity::TOOL_ADDR_ENV)
+        .map_err(|_| "Missing PONTIA_BOT_API_ADDR")?
+        .parse()
+        .map_err(|_| "Invalid PONTIA_BOT_API_ADDR")?;
+    let response = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .build()
         .map_err(|err| err.to_string())?
         .post(format!("http://{addr}/api/v1/bot/{endpoint}"))
-        .bearer_auth(token)
-        .json(&request);
-    if let Ok(credential) = env::var(TOOL_TOKEN_ENV) {
-        request = request.header(TOOL_TOKEN_HEADER, credential);
-    }
-    let response = request
+        .header(TOOL_TOKEN_HEADER, token)
+        .json(&request)
         .send()
         .await
         .map_err(|err| format!("Cannot reach pontiad: {err}"))?;

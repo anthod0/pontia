@@ -4,6 +4,7 @@ use pontia_bot::identity::{BotAccess, BotIdentity, BotRole, IdentityError};
 use pontia_config::{WorkspaceBrowserConfig, WorkspaceRootConfig};
 use pontia_http::{HttpState, router};
 use serde_json::{Value, json};
+use sha2::Digest;
 use std::{
     future::Future,
     pin::Pin,
@@ -53,6 +54,12 @@ impl Fixture {
         .await
         .unwrap();
         pontia_storage_sqlite::run_migrations(&db).await.unwrap();
+        if bound {
+            for session in ["bot", "helper", "dreaming"] {
+                sqlx::query("INSERT INTO sessions(session_id,client_type,state,credential_env,credential_sha256) VALUES (?,'generic','idle','PONTIA_BOT_TOOL_TOKEN',?)")
+                    .bind(session).bind(sha2::Sha256::digest(session).to_vec()).execute(&db).await.unwrap();
+            }
+        }
         let control =
             pontia_agent_control::AgentControl::builder(db, root.path().to_path_buf()).build();
         let app = AppState::builder(control)
@@ -71,11 +78,6 @@ impl Fixture {
         }
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        std::fs::write(
-            root.path().join("config.toml"),
-            format!("bind_addr = \"{addr}\"\nexternal_api_token = \"test-token\"\n"),
-        )
-        .unwrap();
         let server = tokio::spawn(async move {
             axum::serve(listener, router(state)).await.unwrap();
         });
@@ -87,6 +89,7 @@ impl Fixture {
         }
     }
     async fn cli(&self, session: &str, args: &[&str]) -> Output {
+        let addr = self.addr.to_string();
         let root = self.root.path().to_path_buf();
         let session = session.to_owned();
         let args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
@@ -94,7 +97,9 @@ impl Fixture {
             Command::new(env!("CARGO_BIN_EXE_pontia"))
                 .arg("bot")
                 .args(args)
+                .env("PONTIA_BOT_API_ADDR", addr)
                 .env("PONTIA_HOME", root)
+                .env("PONTIA_BOT_TOOL_TOKEN", &session)
                 .env("PONTIA_SESSION_ID", session)
                 .output()
                 .unwrap()
@@ -487,7 +492,7 @@ async fn production_tools_reject_unbound_sessions_forged_roles_and_missing_authe
             .send()
             .await
             .unwrap();
-        assert_eq!(response.status(), 401);
+        assert_eq!(response.status(), 403);
         let mut forged = request;
         forged["role"] = json!("bot");
         assert_eq!(

@@ -9,6 +9,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
+use sha2::Digest;
 use tower::ServiceExt;
 
 async fn fixture() -> TestApp {
@@ -585,9 +586,9 @@ async fn linking_a_message_requires_the_current_bot_session_and_its_credential()
     message(&app, "a", "previous", "2026-01-01T00:00:00Z", "normal").await;
     message(&app, "a", "follow", "2026-01-02T00:00:00Z", "normal").await;
     for session in ["s", "old"] {
-        sqlx::query("INSERT INTO sessions(session_id, client_type, state, application_id, application_ref, runtime_environment)
-            VALUES (?, 'generic', 'idle', 'bot', ?, ?)")
-            .bind(session).bind(format!("a:{session}")).bind(json!({"PONTIA_BOT_TOOL_TOKEN":session}).to_string())
+        sqlx::query("INSERT INTO sessions(session_id, client_type, state, application_id, application_ref, credential_env, credential_sha256)
+            VALUES (?, 'generic', 'idle', 'bot', ?, 'PONTIA_BOT_TOOL_TOKEN', ?)")
+            .bind(session).bind(format!("a:{session}")).bind(sha2::Sha256::digest(session).to_vec())
             .execute(&app.db).await.unwrap();
     }
     let router = pontia_http::router(app.state.clone());

@@ -3,6 +3,7 @@ use serde_json::{Value, json};
 use std::process::{Command, Output};
 
 struct Fixture {
+    addr: std::net::SocketAddr,
     root: tempfile::TempDir,
     requests: tokio::sync::mpsc::UnboundedReceiver<Value>,
     server: tokio::task::JoinHandle<()>,
@@ -19,7 +20,8 @@ impl Fixture {
                     let sender = sender.clone();
                     let data = data.clone();
                     async move {
-                        assert_eq!(headers["authorization"], "Bearer test-token");
+                        assert!(!headers.contains_key("authorization"));
+                        assert_eq!(headers["x-pontia-bot-tool-token"], "fixture-token");
                         sender.send(request).unwrap();
                         Json(json!({"data": data, "error": null, "meta": {}}))
                     }
@@ -28,13 +30,9 @@ impl Fixture {
         );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        std::fs::write(
-            root.path().join("config.toml"),
-            format!("bind_addr = \"{addr}\"\nexternal_api_token = \"test-token\"\n"),
-        )
-        .unwrap();
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         Self {
+            addr,
             root,
             requests,
             server,
@@ -42,13 +40,16 @@ impl Fixture {
     }
 
     async fn cli(&self, args: &[&str]) -> Output {
+        let addr = self.addr.to_string();
         let root = self.root.path().to_path_buf();
         let args: Vec<String> = args.iter().map(|arg| arg.to_string()).collect();
         tokio::task::spawn_blocking(move || {
             Command::new(env!("CARGO_BIN_EXE_pontia"))
                 .arg("bot")
                 .args(args)
+                .env("PONTIA_BOT_API_ADDR", addr)
                 .env("PONTIA_HOME", root)
+                .env("PONTIA_BOT_TOOL_TOKEN", "fixture-token")
                 .env("PONTIA_SESSION_ID", "caller-session")
                 .output()
                 .unwrap()
@@ -69,6 +70,7 @@ impl Fixture {
             .find(|line| line.starts_with("pontia bot "))
             .unwrap()
             .to_owned();
+        let addr = self.addr.to_string();
         let root = self.root.path().to_path_buf();
         tokio::task::spawn_blocking(move || {
             Command::new("bash")
@@ -84,7 +86,9 @@ impl Fixture {
                             .display()
                     ),
                 )
+                .env("PONTIA_BOT_API_ADDR", addr)
                 .env("PONTIA_HOME", &root)
+                .env("PONTIA_BOT_TOOL_TOKEN", "fixture-token")
                 .env("PONTIA_SESSION_ID", "caller-session")
                 .output()
                 .unwrap()

@@ -2,7 +2,7 @@ use crate::{Adapter, Peer, unavailable};
 use pontia_agent_control::{AgentBindingService, EventIngestService, runtime::ControlTarget};
 use pontia_core::{Error, Result};
 use serde_json::Value;
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 
 impl Adapter {
     pub(crate) async fn resume_bound(
@@ -76,10 +76,15 @@ impl Adapter {
             state: Default::default(),
             connection: Default::default(),
         });
-        let (environment, effort): (String, Option<String>) = sqlx::query_as(
-            "SELECT runtime_environment, json_extract(metadata, '$.reasoning_effort') FROM sessions WHERE session_id=?"
-        ).bind(&target.session_id).fetch_one(&events.db()).await?;
-        let environment: BTreeMap<String, String> = serde_json::from_str(&environment)?;
+        let effort: Option<String> = sqlx::query_scalar(
+            "SELECT json_extract(metadata, '$.reasoning_effort') FROM sessions WHERE session_id=?",
+        )
+        .bind(&target.session_id)
+        .fetch_one(&events.db())
+        .await?;
+        let environment = pontia_agent_control::ControlQueryService::new(events.db())
+            .runtime_environment(&target.session_id)
+            .await?;
         peers.insert(peer.session.clone(), peer.clone());
         drop(peers);
         peer.start(&events, root, &script, &environment, effort.as_deref())

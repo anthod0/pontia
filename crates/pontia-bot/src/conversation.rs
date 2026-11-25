@@ -169,6 +169,7 @@ pub struct ConversationService {
     handoff: HandoffService,
     default_workspace: Option<PathBuf>,
     activity: Arc<Mutex<HashMap<String, Arc<Activity>>>>,
+    tool_addr: std::net::SocketAddr,
     generation_limits: GenerationLimits,
 }
 
@@ -189,8 +190,29 @@ impl ConversationService {
             default_workspace: user_home.map(|path| path.join("Pontia")),
             control,
             activity: Arc::default(),
+            tool_addr: ([127, 0, 0, 1], 8080).into(),
             generation_limits: GenerationLimits::default(),
         }
+    }
+
+    pub async fn authenticate_tool(
+        &self,
+        session: &str,
+        token: Option<&str>,
+    ) -> std::result::Result<(), IdentityError> {
+        let token = token.ok_or(IdentityError)?;
+        self.control
+            .queries()
+            .verify_session_credential(session, TOOL_TOKEN_ENV, token)
+            .await
+            .map_err(|_| IdentityError)?
+            .then_some(())
+            .ok_or(IdentityError)
+    }
+
+    pub fn with_tool_address(mut self, addr: std::net::SocketAddr) -> Self {
+        self.tool_addr = addr;
+        self
     }
 
     pub(crate) fn default_workspace(&self) -> Result<&Path> {
@@ -304,7 +326,12 @@ impl ConversationService {
             include_standalone_session_instructions: false,
             metadata,
             initial_task: None,
-            runtime_environment: [(TOOL_TOKEN_ENV.into(), uuid::Uuid::new_v4().to_string())].into(),
+            credential_env: Some(TOOL_TOKEN_ENV.into()),
+            runtime_environment: [(
+                crate::identity::TOOL_ADDR_ENV.into(),
+                self.tool_addr.to_string(),
+            )]
+            .into(),
             ownership: Some(ownership),
         })
     }
@@ -751,8 +778,12 @@ impl ConversationService {
                     .session_metadata(&bot.client_type, &bot.client_key)
                     .await?,
                 initial_task: None,
-                runtime_environment: [(TOOL_TOKEN_ENV.into(), uuid::Uuid::new_v4().to_string())]
-                    .into(),
+                credential_env: Some(TOOL_TOKEN_ENV.into()),
+                runtime_environment: [(
+                    crate::identity::TOOL_ADDR_ENV.into(),
+                    self.tool_addr.to_string(),
+                )]
+                .into(),
                 ownership: Some(SessionOwnership {
                     application_id: APPLICATION_ID.into(),
                     reference: format!("{ownership_prefix}{launch}"),
@@ -853,24 +884,6 @@ impl ConversationService {
 }
 
 impl BotIdentity for ConversationService {
-    fn authenticate_tool<'a>(
-        &'a self,
-        session_id: &'a str,
-        token: Option<&'a str>,
-    ) -> std::pin::Pin<Box<dyn Future<Output = std::result::Result<(), IdentityError>> + Send + 'a>>
-    {
-        Box::pin(async move {
-            let token = token.ok_or(IdentityError)?;
-            let authorized = self
-                .control
-                .queries()
-                .verify_session_credential(session_id, TOOL_TOKEN_ENV, token)
-                .await
-                .map_err(|_| IdentityError)?;
-            authorized.then_some(()).ok_or(IdentityError)
-        })
-    }
-
     fn resolve<'a>(
         &'a self,
         session_id: &'a str,

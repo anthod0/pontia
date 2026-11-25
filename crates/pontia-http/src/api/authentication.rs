@@ -20,6 +20,14 @@ pub(crate) async fn authenticate(
     mut request: Request,
     next: Next,
 ) -> Result<Response, ApiError> {
+    if request
+        .headers()
+        .contains_key(pontia_bot::identity::TOOL_TOKEN_HEADER)
+    {
+        return Err(ApiError::authentication_failed(
+            "Bot tool credentials cannot access this route",
+        ));
+    }
     let principal = if request
         .extensions()
         .get::<crate::e2e::AuthenticatedE2eRequest>()

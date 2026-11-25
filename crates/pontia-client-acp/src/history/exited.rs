@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, path::Path, sync::Mutex};
+use std::{path::Path, sync::Mutex};
 
 use agent_client_protocol::{
     Agent, UntypedMessage,
@@ -24,13 +24,11 @@ pub(super) async fn load(
     source: &AgentBindingResolveRequest,
 ) -> Result<Replay> {
     let db = adapter.pool.get().ok_or_else(unavailable)?;
-    let environment: String = sqlx::query_scalar(
-        "SELECT runtime_environment FROM sessions WHERE session_id=? AND state='exited'",
-    )
-    .bind(&source.session_id)
-    .fetch_optional(db)
-    .await?
-    .ok_or_else(unavailable)?;
+    sqlx::query("SELECT 1 FROM sessions WHERE session_id=? AND state='exited'")
+        .bind(&source.session_id)
+        .fetch_optional(db)
+        .await?
+        .ok_or_else(unavailable)?;
     let binding = AgentBindingService::new(db.clone())
         .binding_for_session(&source.session_id)
         .await?
@@ -57,11 +55,11 @@ pub(super) async fn load(
             &mut launch,
         )?;
     }
-    launch
-        .env
-        .extend(serde_json::from_str::<BTreeMap<String, String>>(
-            &environment,
-        )?);
+    launch.env.extend(
+        ControlQueryService::new(db.clone())
+            .runtime_environment(&source.session_id)
+            .await?,
+    );
     if let Some(profile) = policy.profile {
         profile.configure_launch(&mut launch);
     }

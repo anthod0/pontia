@@ -193,23 +193,6 @@ impl ControlQueryService {
         }))
     }
 
-    pub async fn verify_session_credential(
-        &self,
-        session_id: &str,
-        environment_key: &str,
-        credential: &str,
-    ) -> Result<bool> {
-        Ok(sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM sessions
-             WHERE session_id = ? AND json_extract(runtime_environment, ?) = ?)",
-        )
-        .bind(session_id)
-        .bind(format!("$.{environment_key}"))
-        .bind(credential)
-        .fetch_one(&self.pool)
-        .await?)
-    }
-
     pub async fn latest_owned_session(
         &self,
         application_id: &str,

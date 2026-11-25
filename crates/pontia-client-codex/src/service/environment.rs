@@ -49,12 +49,9 @@ impl CodexService {
             }
             result => result?,
         };
-        let stored: String =
-            sqlx::query_scalar("SELECT runtime_environment FROM sessions WHERE session_id=?")
-                .bind(session)
-                .fetch_one(&self.pool)
-                .await?;
-        let environment = serde_json::from_str(&stored)?;
+        let environment = pontia_agent_control::ControlQueryService::new(self.pool.clone())
+            .runtime_environment(session)
+            .await?;
         let mut config = environment_config(session, &response["config"], environment)?;
         if mode == SessionMode::Restricted {
             disable_mcp_servers(&mut config, &response)?;

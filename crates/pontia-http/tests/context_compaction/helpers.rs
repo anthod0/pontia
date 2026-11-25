@@ -11,8 +11,8 @@ use tower::ServiceExt;
 async fn seed_bot(fixture: &Fixture) {
     fixture.seed().await;
     sqlx::query(
-        r#"INSERT INTO sessions(session_id,client_type,state,application_id,application_ref,runtime_environment)
-        VALUES ('bot-session','compaction-test','idle','bot','bot:1','{"PONTIA_BOT_TOOL_TOKEN":"bot-token"}');
+        r#"INSERT INTO sessions(session_id,client_type,state,application_id,application_ref,credential_env, credential_sha256)
+        VALUES ('bot-session','compaction-test','idle','bot','bot:1','PONTIA_BOT_TOOL_TOKEN', x'df27f9beb68b7766af3ab2cd7eeefe0c759ca4d085db8b2235811ad36f27cd1c');
         INSERT INTO bots(bot_id,name,client_type,client_key,model,current_session_id)
         VALUES ('bot','Bot','compaction-test','default','test','bot-session');
         INSERT INTO bot_helpers(reference,bot_id,session_id) VALUES ('helper:bot:1','bot','session');"#,

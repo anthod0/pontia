@@ -1,4 +1,5 @@
 use pontia_bot::identity::{BotAccess, BotIdentity, BotRole, IdentityError};
+use sha2::Digest;
 use std::{
     future::Future,
     pin::Pin,
@@ -46,6 +47,17 @@ impl Fixture {
         .await
         .unwrap();
         pontia_storage_sqlite::run_migrations(&db).await.unwrap();
+        if bound {
+            for session in [
+                "bot-session",
+                "helper-session",
+                "dreaming-session",
+                "reader-session",
+            ] {
+                sqlx::query("INSERT INTO sessions(session_id,client_type,state,credential_env,credential_sha256) VALUES (?,'generic','idle','PONTIA_BOT_TOOL_TOKEN',?)")
+                    .bind(session).bind(sha2::Sha256::digest(session).to_vec()).execute(&db).await.unwrap();
+            }
+        }
         let control =
             pontia_agent_control::AgentControl::builder(db, root.path().to_path_buf()).build();
         let app = AppState::builder(control)
@@ -57,17 +69,13 @@ impl Fixture {
         }
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        std::fs::write(
-            root.path().join("config.toml"),
-            format!("bind_addr = \"{addr}\"\nexternal_api_token = \"test-token\"\n"),
-        )
-        .unwrap();
         let server = tokio::spawn(async move {
             axum::serve(listener, router(state)).await.unwrap();
         });
         Self { root, addr, server }
     }
     async fn cli(&self, session: Option<&str>, args: &[&str]) -> Output {
+        let addr = self.addr.to_string();
         let root = self.root.path().to_path_buf();
         let session = session.map(str::to_owned);
         let args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
@@ -76,13 +84,16 @@ impl Fixture {
             command
                 .args(["bot", "memory"])
                 .args(&args)
+                .env("PONTIA_BOT_API_ADDR", addr)
                 .env("PONTIA_HOME", &root)
                 .env_remove("PONTIA_SESSION_ID");
             if let Some(session) = session {
                 if session == "dreaming-session" && !args.iter().any(|arg| arg == "--reason") {
                     command.args(["--reason", "Test evidence"]);
                 }
-                command.env("PONTIA_SESSION_ID", session);
+                command
+                    .env("PONTIA_BOT_TOOL_TOKEN", &session)
+                    .env("PONTIA_SESSION_ID", session);
             }
             command.output().unwrap()
         })
@@ -303,7 +314,7 @@ async fn production_entrypoint_denies_unbound_and_caller_supplied_roles() {
             .await
             .unwrap()
             .status(),
-        401
+        403
     );
     let denied = client
         .post(&url)

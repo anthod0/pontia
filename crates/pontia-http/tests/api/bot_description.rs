@@ -8,6 +8,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use serde_json::{Value, json};
+use sha2::Digest;
 use tower::ServiceExt;
 
 fn configuration() -> Value {
@@ -73,9 +74,8 @@ async fn set_description(
     token: Option<&str>,
     description: &str,
 ) -> (StatusCode, Value) {
-    let mut request = Request::post("/api/v1/bot/description")
-        .header("Authorization", format!("Bearer {TOKEN}"))
-        .header("Content-Type", "application/json");
+    let mut request =
+        Request::post("/api/v1/bot/description").header("Content-Type", "application/json");
     if let Some(token) = token {
         request = request.header(pontia_bot::identity::TOOL_TOKEN_HEADER, token);
     }
@@ -108,8 +108,8 @@ async fn only_the_current_bot_can_fill_its_empty_description() {
         ("helper", format!("helper:{id}:1")),
         ("dream", format!("dreaming:{id}")),
     ] {
-        sqlx::query("INSERT INTO sessions(session_id, client_type, state, application_id, application_ref, runtime_environment) VALUES (?, 'pi', 'idle', 'bot', ?, ?)")
-            .bind(session).bind(owner).bind(json!({"PONTIA_BOT_TOOL_TOKEN": session}).to_string())
+        sqlx::query("INSERT INTO sessions(session_id, client_type, state, application_id, application_ref, credential_env, credential_sha256) VALUES (?, 'pi', 'idle', 'bot', ?, 'PONTIA_BOT_TOOL_TOKEN', ?)")
+            .bind(session).bind(owner).bind(sha2::Sha256::digest(session).to_vec())
             .execute(&app.db).await.unwrap();
     }
     sqlx::query("UPDATE bots SET current_session_id = 'current' WHERE bot_id = ?")
@@ -128,6 +128,30 @@ async fn only_the_current_bot_can_fill_its_empty_description() {
             set_description(&router, session, token, "test").await.0,
             StatusCode::FORBIDDEN
         );
+    }
+    let admin_only = Request::post("/api/v1/bot/description")
+        .header("Authorization", format!("Bearer {TOKEN}"))
+        .header("Content-Type", "application/json")
+        .body(Body::from(
+            json!({"session_id":"current","input":{"description":"test"}}).to_string(),
+        ))
+        .unwrap();
+    assert_eq!(
+        router.clone().oneshot(admin_only).await.unwrap().status(),
+        StatusCode::FORBIDDEN
+    );
+    for bearer in [None, Some("current"), Some(TOKEN)] {
+        let mut request =
+            Request::get("/api/v1/bots").header(pontia_bot::identity::TOOL_TOKEN_HEADER, "current");
+        if let Some(token) = bearer {
+            request = request.header("Authorization", format!("Bearer {token}"));
+        }
+        let response = router
+            .clone()
+            .oneshot(request.body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
     let set = |text| set_description(&router, "current", Some("current"), text);
     let (status, body) = set("test").await;

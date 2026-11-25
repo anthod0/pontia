@@ -180,6 +180,7 @@ impl SessionCommandService {
                     "metadata": request.metadata,
                     "ownership": request.ownership,
                     "runtime_environment": request.runtime_environment,
+                    "credential_env": request.credential_env,
                     "mode": request.mode,
                     "launch_mode": request.launch_mode,
                 }),
@@ -220,7 +221,7 @@ impl SessionCommandService {
                     handle: request.handle.clone(),
                     role: request.role.clone(),
                     start_command: None,
-                    environment: request.runtime_environment.clone(),
+                    environment: self.queries.runtime_environment(&session_id).await?,
                 },
                 configuration,
             )

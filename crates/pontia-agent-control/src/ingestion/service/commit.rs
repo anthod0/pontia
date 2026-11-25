@@ -47,13 +47,15 @@ impl EventCommitter {
     ) -> Result<CommitOutcome> {
         event.validate_runtime_shape()?;
         // Launch settings belong to the Session, not its durable or broadcast events.
-        let runtime_environment = if event.event_type == EventType::SessionCreated {
-            event
-                .payload
-                .as_object_mut()
-                .and_then(|payload| payload.remove("runtime_environment"))
+        let (runtime_environment, credential_env) = if event.event_type == EventType::SessionCreated
+            && let Some(payload) = event.payload.as_object_mut()
+        {
+            (
+                payload.remove("runtime_environment"),
+                payload.remove("credential_env"),
+            )
         } else {
-            None
+            (None, None)
         };
         // Bound durable input at the shared ingestion boundary, including
         // Pontia-owned and in-process events that do not pass through HTTP.
@@ -339,10 +341,16 @@ impl EventCommitter {
 
         persist_projections_in_tx(&mut tx, &projection, state_version).await?;
         if event.event_type == EventType::SessionCreated {
-            sqlx::query("UPDATE sessions SET application_id=?, application_ref=?, runtime_environment=? WHERE session_id=?")
+            let credential_env = credential_env.as_ref().and_then(serde_json::Value::as_str);
+            let mut environment = runtime_environment.unwrap_or_else(|| serde_json::json!({}));
+            if let (Some(key), Some(values)) = (credential_env, environment.as_object_mut()) {
+                values.remove(key);
+            }
+            sqlx::query("UPDATE sessions SET application_id=?, application_ref=?, runtime_environment=?, credential_env=? WHERE session_id=?")
                 .bind(event.payload.pointer("/ownership/application_id").and_then(serde_json::Value::as_str))
                 .bind(event.payload.pointer("/ownership/reference").and_then(serde_json::Value::as_str))
-                .bind(runtime_environment.unwrap_or_else(|| serde_json::json!({})).to_string())
+                .bind(environment.to_string())
+                .bind(credential_env)
                 .bind(&event.session_id).execute(&mut *tx).await?;
             if let Some(directory) = event.payload["workspace"].as_str() {
                 sqlx::query(

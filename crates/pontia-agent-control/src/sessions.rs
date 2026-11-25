@@ -55,6 +55,8 @@ pub struct CreateSessionRequest {
     #[serde(skip)]
     pub runtime_environment: BTreeMap<String, String>,
     #[serde(skip)]
+    pub credential_env: Option<String>,
+    #[serde(skip)]
     pub ownership: Option<crate::SessionOwnership>,
 }
 

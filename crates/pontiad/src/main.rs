@@ -63,7 +63,8 @@ async fn main() -> Result<()> {
         app_state.db(),
         app_state.control().clients(),
     );
-    let state = http::HttpState::new(app_state, dashboard).with_bot_config(config.bot)?;
+    let state = http::HttpState::new(app_state, dashboard)
+        .with_bot_config(config.bot, local_addr(bound_addr))?;
 
     info!(addr = %bound_addr, "starting pontia control plane");
     info!(url = %dashboard_url(bound_addr), "dashboard available");
@@ -178,7 +179,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn dashboard_url(addr: SocketAddr) -> String {
+fn local_addr(addr: SocketAddr) -> SocketAddr {
     let host = if addr.ip().is_unspecified() {
         match addr.ip() {
             IpAddr::V4(_) => IpAddr::V4(Ipv4Addr::LOCALHOST),
@@ -188,7 +189,11 @@ fn dashboard_url(addr: SocketAddr) -> String {
         addr.ip()
     };
 
-    format!("http://{}/dashboard", SocketAddr::new(host, addr.port()))
+    SocketAddr::new(host, addr.port())
+}
+
+fn dashboard_url(addr: SocketAddr) -> String {
+    format!("http://{}/dashboard", local_addr(addr))
 }
 
 fn init_tracing() {

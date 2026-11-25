@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 use std::borrow::Cow;
 
 #[tokio::test]
-async fn upgrade_removes_only_the_public_environment_copy() {
+async fn upgrade_removes_legacy_tool_tokens_and_preserves_other_environment() {
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     let old = sqlx::migrate::Migrator {
         migrations: Cow::Owned(
@@ -16,7 +16,7 @@ async fn upgrade_removes_only_the_public_environment_copy() {
         ..sqlx::migrate::Migrator::DEFAULT
     };
     old.run(&pool).await.unwrap();
-    let environment = json!({"PONTIA_BOT_TOOL_TOKEN":"private-token"});
+    let environment = json!({"PONTIA_BOT_TOOL_TOKEN":"private-token","KEEP":"value"});
     sqlx::query("INSERT INTO sessions(session_id,client_type,state,metadata,runtime_environment) VALUES ('legacy','codex','exited',?,?)")
         .bind(json!({"model":"test-model","codex_environment":{"PONTIA_BOT_TOOL_TOKEN":"stale-token"}}).to_string())
         .bind(environment.to_string())
@@ -36,6 +36,6 @@ async fn upgrade_removes_only_the_public_environment_copy() {
     );
     assert_eq!(
         serde_json::from_str::<Value>(&runtime).unwrap(),
-        environment
+        json!({"KEEP":"value"})
     );
 }

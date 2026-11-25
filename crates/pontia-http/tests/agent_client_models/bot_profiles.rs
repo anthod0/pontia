@@ -1,4 +1,5 @@
 use super::*;
+use sha2::Digest;
 
 async fn profile_tool(
     app: &Router,
@@ -36,8 +37,8 @@ async fn bot_fixture() -> (Router, sqlx::SqlitePool, tempfile::TempDir) {
         ("retrieval", "helper:bot-a:2"),
         ("dream", "dreaming:bot-a"),
     ] {
-        sqlx::query("INSERT INTO sessions(session_id,client_type,state,application_id,application_ref,runtime_environment) VALUES (?, 'pi', 'idle', 'bot', ?, ?)")
-            .bind(session).bind(owner).bind(json!({"PONTIA_BOT_TOOL_TOKEN":session}).to_string())
+        sqlx::query("INSERT INTO sessions(session_id,client_type,state,application_id,application_ref,credential_env, credential_sha256) VALUES (?, 'pi', 'idle', 'bot', ?, 'PONTIA_BOT_TOOL_TOKEN', ?)")
+            .bind(session).bind(owner).bind(sha2::Sha256::digest(session).to_vec())
             .execute(&db).await.unwrap();
     }
     sqlx::query("INSERT INTO bots(bot_id,name,client_type,client_key,model,current_session_id) VALUES ('bot-a','Bot','pi','default','p/one','current')")

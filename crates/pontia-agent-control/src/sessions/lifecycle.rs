@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, path::Path};
+use std::path::Path;
 
 use pontia_core::error::{Error, Result};
 use pontia_runtime::RuntimeStartRequest;
@@ -355,7 +355,7 @@ impl SessionCommandService {
                     handle: session.handle.clone(),
                     role: session.role.clone(),
                     start_command: persisted_start_command,
-                    environment: self.runtime_environment(session_id).await?,
+                    environment: self.queries.runtime_environment(session_id).await?,
                 },
                 1,
             )
@@ -483,7 +483,7 @@ impl SessionCommandService {
         )
         .await?;
         let prior_restart_count = 0;
-        let environment = self.runtime_environment(session_id).await?;
+        let environment = self.queries.runtime_environment(session_id).await?;
         let mode = self.queries.session_mode(session_id).await?;
         let launch_mode = self.queries.session_launch_mode(session_id).await?;
         let _launch = pontia_runtime::launch_lock::launch(pontia_home)?;
@@ -574,14 +574,5 @@ impl SessionCommandService {
             data,
             duplicate: false,
         })
-    }
-
-    async fn runtime_environment(&self, session_id: &str) -> Result<BTreeMap<String, String>> {
-        let environment: String =
-            sqlx::query_scalar("SELECT runtime_environment FROM sessions WHERE session_id=?")
-                .bind(session_id)
-                .fetch_one(&self.pool)
-                .await?;
-        Ok(serde_json::from_str(&environment)?)
     }
 }

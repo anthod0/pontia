@@ -666,6 +666,7 @@ async fn submission_rejects_a_node_whose_workflow_is_not_running() {
             launch_mode: Default::default(),
             mode: Default::default(),
             model: None,
+            credential_env: None,
             ownership: None,
             client_type: "pi".to_string(),
             title: None,

@@ -110,7 +110,7 @@ pub(super) async fn authorize_tool(
         .get(TOOL_TOKEN_HEADER)
         .and_then(|value| value.to_str().ok());
     state
-        .bot_identity()
+        .bots()
         .authenticate_tool(session_id, token)
         .await
         .map_err(|error| ApiError::custom(StatusCode::FORBIDDEN, "forbidden", error.to_string()))

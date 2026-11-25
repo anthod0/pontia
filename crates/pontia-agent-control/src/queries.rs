@@ -1,3 +1,4 @@
+mod credentials;
 mod domain_events;
 mod launch;
 mod snapshots;

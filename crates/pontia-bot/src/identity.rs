@@ -1,5 +1,6 @@
 use std::{future::Future, pin::Pin};
 
+pub const TOOL_ADDR_ENV: &str = "PONTIA_BOT_API_ADDR";
 pub const TOOL_TOKEN_HEADER: &str = "x-pontia-bot-tool-token";
 pub const TOOL_TOKEN_ENV: &str = "PONTIA_BOT_TOOL_TOKEN";
 
@@ -27,12 +28,4 @@ pub trait BotIdentity: Send + Sync {
         &'a self,
         session_id: &'a str,
     ) -> Pin<Box<dyn Future<Output = std::result::Result<BotAccess, IdentityError>> + Send + 'a>>;
-
-    fn authenticate_tool<'a>(
-        &'a self,
-        session_id: &'a str,
-        _token: Option<&'a str>,
-    ) -> Pin<Box<dyn Future<Output = std::result::Result<(), IdentityError>> + Send + 'a>> {
-        Box::pin(async move { self.resolve(session_id).await.map(|_| ()) })
-    }
 }

@@ -731,8 +731,8 @@ impl ClientSession for AcpAdapter {
         Box::pin(async move {
             let pool = events.db();
             target.validate(&pool).await?;
-            let (model, reasoning_effort, environment): (Option<String>, Option<String>, String) = sqlx::query_as(
-                "SELECT json_extract(metadata, '$.model'), json_extract(metadata, '$.reasoning_effort'), runtime_environment FROM sessions WHERE session_id = ?",
+            let (model, reasoning_effort): (Option<String>, Option<String>) = sqlx::query_as(
+                "SELECT json_extract(metadata, '$.model'), json_extract(metadata, '$.reasoning_effort') FROM sessions WHERE session_id = ?",
             )
             .bind(&target.session_id)
             .fetch_one(&pool)
@@ -755,7 +755,9 @@ impl ClientSession for AcpAdapter {
                     handle: None,
                     role: None,
                     start_command: None,
-                    environment: serde_json::from_str(&environment)?,
+                    environment: pontia_agent_control::ControlQueryService::new(pool.clone())
+                        .runtime_environment(&target.session_id)
+                        .await?,
                 },
             )
             .await

@@ -1,5 +1,6 @@
 use super::*;
 use pontia_bot::identity::{BotAccess, BotIdentity, BotRole, IdentityError};
+use sha2::Digest;
 use std::{future::Future, pin::Pin};
 
 struct Fixture {
@@ -78,12 +79,20 @@ async fn fixture() -> Fixture {
 }
 
 async fn post(state: impl Into<http::HttpState>, path: &str, input: Value) -> (StatusCode, Value) {
+    let auth = if path.starts_with("/api/v1/bot/") {
+        (
+            pontia_bot::identity::TOOL_TOKEN_HEADER,
+            "fixture-token".to_string(),
+        )
+    } else {
+        ("authorization", format!("Bearer {TOKEN}"))
+    };
     let response = http::router(state)
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri(path)
-                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .header(auth.0, auth.1)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(input.to_string()))
                 .unwrap(),
@@ -227,6 +236,10 @@ async fn missing_failed_sources_and_invalid_queries_do_not_look_like_empty_histo
     assert!(body["data"].is_null());
 }
 
+async fn seed_caller_credential(state: &AppState) {
+    sqlx::query("UPDATE sessions SET credential_env='PONTIA_BOT_TOOL_TOKEN', credential_sha256=? WHERE session_id='caller'").bind(sha2::Sha256::digest("fixture-token").to_vec()).execute(&state.db()).await.unwrap();
+}
+
 struct Identity(BotRole);
 impl BotIdentity for Identity {
     fn resolve<'a>(
@@ -249,6 +262,8 @@ impl BotIdentity for Identity {
 async fn bot_readers_share_defaults_and_require_authorized_identity() {
     let f = fixture().await;
     let input = json!({"session_id":"caller", "input":{"session_id":"sess_messages", "limit":1}});
+    seed_session(&f.state, "caller").await;
+    seed_caller_credential(&f.state).await;
     let expected = read(&f.state, input["input"].clone()).await;
     for role in [
         BotRole::Bot,
@@ -314,8 +329,8 @@ async fn helper_check_reads_paginated_native_history_without_changing_execution(
     seed_session(&f.state, "caller").await;
     let pool = f.state.db();
     sqlx::query("INSERT INTO bots(bot_id,name,client_type,client_key,model,current_session_id) VALUES ('bot-check','Bot','pi','default','test','caller')").execute(&pool).await.unwrap();
-    sqlx::query("UPDATE sessions SET application_id='bot', application_ref='bot-check:launch', runtime_environment=? WHERE session_id='caller'")
-        .bind(json!({"PONTIA_BOT_TOOL_TOKEN":"caller-credential"}).to_string()).execute(&pool).await.unwrap();
+    sqlx::query("UPDATE sessions SET application_id='bot', application_ref='bot-check:launch', credential_env='PONTIA_BOT_TOOL_TOKEN', credential_sha256=? WHERE session_id='caller'")
+        .bind(sha2::Sha256::digest("caller-credential").to_vec()).execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO bot_helpers(reference,bot_id,session_id) VALUES ('helper:check','bot-check','sess_messages')").execute(&pool).await.unwrap();
     sqlx::query("UPDATE sessions SET metadata=json_set(metadata,'$.codex_environment',json(?)) WHERE session_id='sess_messages'")
         .bind(json!({"PONTIA_BOT_TOOL_TOKEN":"helper-secret"}).to_string())
@@ -392,6 +407,7 @@ async fn startup_failure_can_be_checked_without_history_and_closed_without_a_con
     use pontia_agent_control::{PontiaEvent, PontiaEventSource, PontiaEventType};
     let (state, _pontia_home) = test_state().await;
     seed_session(&state, "caller").await;
+    seed_caller_credential(&state).await;
     seed_session(&state, "failed-helper").await;
     let pool = state.db();
     sqlx::query("INSERT INTO bots(bot_id,name,client_type,client_key,model,current_session_id) VALUES ('bot-check','Bot','pi','default','test','caller')").execute(&pool).await.unwrap();
@@ -434,8 +450,8 @@ async fn retrieval_helper_reads_arbitrary_sessions_without_memory_associations()
     let pool = f.state.db();
     sqlx::query("INSERT INTO bots(bot_id,name,client_type,client_key,model) VALUES ('reader-bot','Bot','pi','default','test')").execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO bot_helpers(reference,bot_id,session_id) VALUES ('helper:reader','reader-bot','retrieval-caller')").execute(&pool).await.unwrap();
-    sqlx::query("UPDATE sessions SET role='retrieval', runtime_environment=? WHERE session_id='retrieval-caller'")
-        .bind(json!({"PONTIA_BOT_TOOL_TOKEN":"reader-credential"}).to_string()).execute(&pool).await.unwrap();
+    sqlx::query("UPDATE sessions SET role='retrieval', credential_env='PONTIA_BOT_TOOL_TOKEN', credential_sha256=? WHERE session_id='retrieval-caller'")
+        .bind(sha2::Sha256::digest("reader-credential").to_vec()).execute(&pool).await.unwrap();
     let request =
         json!({"session_id":"retrieval-caller", "input":{"session_id":"sess_messages", "limit":1}});
     let expected = read(&f.state, request["input"].clone()).await;

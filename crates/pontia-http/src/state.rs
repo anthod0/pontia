@@ -28,7 +28,6 @@ pub struct HttpState {
     bots: ConversationService,
     helpers: pontia_bot::helpers::HelperService,
     dreaming: pontia_bot::dreaming::DreamingService,
-    bot_identity: Arc<dyn BotIdentity>,
 }
 
 impl HttpState {
@@ -70,20 +69,21 @@ impl HttpState {
             bots,
             helpers,
             dreaming,
-            bot_identity: identity,
         }
     }
 
     pub fn with_bot_config(
         mut self,
         config: pontia_config::BotConfig,
+        tool_addr: std::net::SocketAddr,
     ) -> pontia_core::Result<Self> {
-        self.bots =
-            self.bots
-                .with_generation_limits(pontia_bot::conversation::GenerationLimits::new(
-                    config.context_token_limit.get(),
-                    config.context_window_percent,
-                )?);
+        self.bots = self
+            .bots
+            .with_tool_address(tool_addr)
+            .with_generation_limits(pontia_bot::conversation::GenerationLimits::new(
+                config.context_token_limit.get(),
+                config.context_window_percent,
+            )?);
         self.helpers =
             pontia_bot::helpers::HelperService::new(self.app.control().clone(), self.bots.clone());
         self.dreaming = pontia_bot::dreaming::DreamingService::new(
@@ -109,7 +109,6 @@ impl HttpState {
             ),
             identity.clone(),
         );
-        self.bot_identity = identity;
         self
     }
 
@@ -139,10 +138,6 @@ impl HttpState {
 
     pub fn bots(&self) -> &ConversationService {
         &self.bots
-    }
-
-    pub(crate) fn bot_identity(&self) -> &dyn BotIdentity {
-        self.bot_identity.as_ref()
     }
 
     pub fn user_commands(&self) -> &UserCommands {

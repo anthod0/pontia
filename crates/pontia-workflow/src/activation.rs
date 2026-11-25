@@ -150,6 +150,7 @@ fn session_request(
         launch_mode: Default::default(),
         mode: launch.mode,
         model: launch.model,
+        credential_env: None,
         ownership: Some(pontia_agent_control::SessionOwnership {
             application_id: "workflow".into(),
             reference: format!("node:{}", node.node_id),

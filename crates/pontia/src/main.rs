@@ -305,8 +305,7 @@ async fn execute(command: Command) -> Result<bool, String> {
             Ok(true)
         }
         Command::Bot(command) => {
-            let config = pontia_clients::config_from_env().map_err(|error| error.to_string())?;
-            bot::run(command, &config).await?;
+            bot::run(command).await?;
             Ok(true)
         }
         Command::Workflow(command) => {

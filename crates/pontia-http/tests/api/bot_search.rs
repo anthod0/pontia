@@ -236,10 +236,10 @@ async fn chat_tool(
 
 async fn retrieval_fixture() -> TestApp {
     let app = fixture().await;
-    sqlx::query(r#"INSERT INTO sessions(session_id,client_type,state,role,runtime_environment)
-        VALUES ('reader','generic','idle','retrieval','{"PONTIA_BOT_TOOL_TOKEN":"cred-a"}'),
-               ('other-reader','generic','idle','retrieval','{"PONTIA_BOT_TOOL_TOKEN":"cred-b"}'),
-               ('helper','generic','idle',NULL,'{"PONTIA_BOT_TOOL_TOKEN":"cred-h"}');
+    sqlx::query(r#"INSERT INTO sessions(session_id,client_type,state,role,credential_env, credential_sha256)
+        VALUES ('reader','generic','idle','retrieval','PONTIA_BOT_TOOL_TOKEN', x'dd722eebece24666ffa703d6678b8b0562b384f78c6cf4c19372e4bef7d197d2'),
+               ('other-reader','generic','idle','retrieval','PONTIA_BOT_TOOL_TOKEN', x'fa4b5f8f6c17e2865852fbaee0ae55fbed9f9e2a9a6d51e88591f790a3796654'),
+               ('helper','generic','idle',NULL,'PONTIA_BOT_TOOL_TOKEN', x'f9e34ac7187d217f096f93dcd488d76004f4872c60a0b0a586c4561018249e04');
         INSERT INTO bot_helpers(reference,bot_id,session_id) VALUES
             ('helper:a:r','a','reader'), ('helper:b:r','b','other-reader'), ('helper:a:h','a','helper');"#)
         .execute(&app.db).await.unwrap();
