@@ -144,12 +144,28 @@ impl EventIngestService {
 impl TimelineCacheWriter {
     /// Flush a resident snapshot, or only the completed Turn and its adjacent checkpoint boundary.
     pub async fn flush(&self, session: &str, finished_turn: Option<&str>) {
-        if let Err(error) = self.write_snapshot(session, finished_turn).await {
+        if let Err(error) = self.write_snapshot(session, finished_turn, None).await {
             tracing::warn!(%error,session,"resident timeline cache write failed");
         }
     }
 
-    async fn write_snapshot(&self, session: &str, finished_turn: Option<&str>) -> Result<()> {
+    /// Cache all terminal ranges together: a new SDK fingerprint invalidates the
+    /// entire previous snapshot within the current compaction generation.
+    pub async fn flush_native_ranges(&self, session: &str) {
+        if let Err(error) = self
+            .write_snapshot(session, None, Some(HistorySource::Native))
+            .await
+        {
+            tracing::warn!(%error,session,"native timeline cache write failed");
+        }
+    }
+
+    async fn write_snapshot(
+        &self,
+        session: &str,
+        finished_turn: Option<&str>,
+        history_source: Option<HistorySource>,
+    ) -> Result<()> {
         let db = &self.store.0.control;
         let Some(binding) = AgentBindingService::new(db.clone())
             .binding_for_session(session)
@@ -163,20 +179,38 @@ impl TimelineCacheWriter {
         let Some(policy) = data.timeline_cache_policy() else {
             return Ok(());
         };
-        let _guard = self.store.flight(session, source_key(None, false)).await;
+        let _guard = self
+            .store
+            .flight(session, source_key(history_source, false))
+            .await;
         let (generation, revision, _) = self.store.revision(session).await?;
         let turns = SqliteTurnRepository::new(db.clone())
             .list_turns(session)
             .await?;
         let request = AgentBindingResolveRequest::from(&binding);
-        let Some(resident) = data.resident_history(request.clone()) else {
-            return Ok(());
+        let (history, session_checkpoints, validator) = if history_source.is_some() {
+            let Some(history) = data.native_history(request.clone(), None) else {
+                return Ok(());
+            };
+            let Some(probe) = history.cache_fingerprint() else {
+                return Ok(());
+            };
+            let Some(fingerprint) = probe.await else {
+                return Ok(());
+            };
+            (history, false, Some(fingerprint))
+        } else {
+            let Some(resident) = data.resident_history(request.clone()) else {
+                return Ok(());
+            };
+            let validator = data.timeline_cache_validator(&request, None)?;
+            (resident.history, resident.session_checkpoints, validator)
         };
         for checkpoints in [false, true]
             .into_iter()
-            .filter(|value| !*value || resident.session_checkpoints)
+            .filter(|value| !*value || session_checkpoints)
         {
-            let source = source_key(None, checkpoints);
+            let source = source_key(history_source, checkpoints);
             let range = match finished_turn {
                 Some(id) => {
                     let Some(i) = turns.iter().position(|t| t.turn_id == id) else {
@@ -196,13 +230,13 @@ impl TimelineCacheWriter {
                 } else {
                     0
                 },
-                validator: data.timeline_cache_validator(&request, None)?,
+                validator: validator.clone(),
             };
             Backfill {
                 store: &self.store,
                 key,
                 turns: &turns,
-                history: resident.history.as_ref(),
+                history: history.as_ref(),
                 checkpoints,
             }
             .fill(range)

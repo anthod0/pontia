@@ -1866,6 +1866,93 @@ async fn yolo_mode_reaches_the_sdk_host() {
 }
 
 #[tokio::test]
+async fn unopened_history_keeps_both_terminal_turns_when_claude_compacts() {
+    use pontia_agent_control::{TurnTimelineDirection, TurnTimelineService};
+
+    let h = Harness::new().await;
+    let session = h.create("first input").await;
+    h.gate(&session, 1, "start");
+    h.gate(&session, 1, "finish");
+    h.wait_states(&session, &["completed"]).await;
+    h.submit(&session, "second input").await;
+    h.gate(&session, 2, "start");
+    h.gate(&session, 2, "finish");
+    let turns = h.wait_states(&session, &["completed", "completed"]).await;
+
+    h.app
+        .session_commands()
+        .compact_session(&session)
+        .await
+        .unwrap();
+    let binding = pontia_agent_control::AgentBindingService::new(h.app.db())
+        .binding_for_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    let path = h
+        .root
+        .path()
+        .join(format!("history-{}.jsonl", binding.client_session_key));
+    let summary = json!({"session_id":binding.client_session_key,"uuid":"summary","type":"user","isCompactSummary":true});
+    let history = std::fs::read_to_string(&path).unwrap();
+    // The SDK now exposes only its summary and the retained second Turn.
+    std::fs::write(
+        &path,
+        format!(
+            "{summary}\n{}\n",
+            history.lines().skip(2).collect::<Vec<_>>().join("\n")
+        ),
+    )
+    .unwrap();
+    h.gate(&session, 1, "compact");
+    h.wait_session(&session, "idle").await;
+
+    let page = TurnTimelineService::new(h.app.event_ingest_service())
+        .page(session.clone(), TurnTimelineDirection::Backward, None, 20)
+        .await
+        .unwrap();
+    assert_eq!(page.items.len(), 2);
+    for entry in page.items {
+        assert_eq!(entry.turn_id.as_deref(), Some(turns[1].0.as_str()));
+        assert_eq!(entry.item.content_preview, "second input");
+    }
+
+    let cache = sqlx::SqlitePool::connect_with(
+        sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(h.root.path().join("cache/session-timeline.db"))
+            .read_only(true),
+    )
+    .await
+    .unwrap();
+    for ((turn, _), expected) in turns.iter().zip(["first input", "second input"]) {
+        let (encoding, payload): (i64, Vec<u8>) = sqlx::query_as(
+            "SELECT encoding,payload FROM cached_turns WHERE session_id=? AND source_key='native' AND generation=0 AND turn_id=?"
+        ).bind(&session).bind(turn).fetch_one(&cache).await.unwrap();
+        let bytes = match encoding {
+            0 => payload,
+            1 => zstd::decode_all(&payload[..]).unwrap(),
+            _ => panic!("unexpected cached range encoding {encoding}"),
+        };
+        let items: Vec<Value> = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(items.len(), 2);
+        for (item, role) in items.iter().zip(["user", "assistant"]) {
+            assert_eq!(item["role"], role);
+            assert_eq!(item["content_preview"], expected);
+        }
+    }
+    let event: (String, i64) = sqlx::query_as("SELECT event_id,unixepoch(occurred_at) FROM events WHERE session_id=? AND event_type='session.compaction_completed'")
+        .bind(&session).fetch_one(&h.app.db()).await.unwrap();
+    let markers: Vec<(String, i64)> =
+        sqlx::query_as("SELECT event_id,occurred_at FROM cached_compactions WHERE session_id=?")
+            .bind(&session)
+            .fetch_all(&cache)
+            .await
+            .unwrap();
+    assert_eq!(markers, [event]);
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn compacted_sdk_history_keeps_readable_turns_and_resumes_without_private_summaries() {
     use pontia_agent_control::{TurnTimelineDirection, TurnTimelineService};
     let h = Harness::new().await;

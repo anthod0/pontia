@@ -18,3 +18,4 @@ tempfile = "3"
 [dev-dependencies]
 pontia-version.workspace = true
 pontia-storage-sqlite.workspace = true
+zstd = "0.14.3"

@@ -307,7 +307,7 @@ impl ClientSession for Adapter {
             }
             let id = uuid::Uuid::new_v4().to_string();
             {
-                let mut state = peer.state.lock().await;
+                let mut state = peer::lock_after_cache_write(&peer.state).await;
                 if state.unavailable.is_some() || state.closing || state.closed {
                     return Err(unavailable());
                 }
@@ -355,6 +355,7 @@ impl ClientSession for Adapter {
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move {
             let peer = self.target(&events, target).await?;
+            drop(peer::lock_after_cache_write(&peer.state).await);
             peer.connection()?
                 .request(json!({"method":"compact", "operation_id":operation_id}))
                 .await

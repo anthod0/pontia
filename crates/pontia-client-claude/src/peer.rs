@@ -7,7 +7,7 @@ use std::{
     path::PathBuf,
     sync::{Arc, RwLock},
 };
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, MutexGuard, watch};
 
 pub(crate) struct Input {
     pub id: String,
@@ -23,8 +23,27 @@ pub(crate) struct State {
     pub closed_anchor: Option<String>,
     pub native: Option<String>,
     pub input: Option<Input>,
+    pub cache_write: Option<watch::Sender<()>>,
     pub interactions: HashMap<String, crate::interactions::PendingInteraction>,
 }
+
+// A new input can trigger automatic compaction. Wait for the terminal snapshot
+// before handing control back to the SDK, without holding the peer state lock.
+pub(crate) async fn lock_after_cache_write(state: &Mutex<State>) -> MutexGuard<'_, State> {
+    loop {
+        let mut guard = state.lock().await;
+        let Some(pending) = guard.cache_write.clone() else {
+            return guard;
+        };
+        if pending.is_closed() {
+            guard.cache_write = None;
+            return guard;
+        }
+        drop(guard);
+        pending.closed().await;
+    }
+}
+
 pub(crate) struct Peer {
     pub session: String,
     pub runtime: String,
@@ -196,4 +215,29 @@ pub(crate) fn field<'a>(value: &'a Value, name: &str) -> Result<&'a str> {
 }
 pub(crate) fn invalid() -> Error {
     Error::Domain("Claude Code fact is invalid or unassociated".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn cancelled_command_leaves_pending_snapshot_for_the_next_command() {
+        let (pending, writing) = watch::channel(());
+        let state = Mutex::new(State {
+            cache_write: Some(pending),
+            ..State::default()
+        });
+        for _ in 0..2 {
+            let mut waiting = std::pin::pin!(lock_after_cache_write(&state));
+            tokio::select! {
+                biased;
+                _ = &mut waiting => panic!("advanced before the snapshot finished"),
+                () = std::future::ready(()) => {}
+            }
+            assert!(state.try_lock().is_ok());
+        }
+        drop(writing);
+        assert!(lock_after_cache_write(&state).await.cache_write.is_none());
+    }
 }

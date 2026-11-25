@@ -220,6 +220,17 @@ impl Peer {
                 }) =>
             {
                 state.input = None;
+                if !ack.duplicate
+                    && let Some(writer) = events.timeline_cache_writer()
+                {
+                    let session = self.session.clone();
+                    let (pending, writing) = tokio::sync::watch::channel(());
+                    state.cache_write = Some(pending);
+                    tokio::spawn(async move {
+                        writer.flush_native_ranges(&session).await;
+                        drop(writing);
+                    });
+                }
             }
             _ => {}
         }
