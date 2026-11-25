@@ -7,7 +7,7 @@
   import type { ActionData, PageData } from "./$types";
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
-  const browserSessions = $derived(data.sessions.filter((session) => session.kind === "browser"));
+  const hasOtherBrowser = $derived(data.sessions.some((session) => session.kind === "browser" && !session.current));
 
   function date(value: string) {
     return new Date(value).toLocaleString(getLocale());
@@ -24,14 +24,15 @@
 {#if form?.error}<p class="auth-error" role="alert">{form.error}</p>{/if}
 
 <section>
-  {#if browserSessions.length > 0}
+  {#if data.sessions.length > 0}
     <ul class="management-list">
-      {#each browserSessions as session (session.id)}
+      {#each data.sessions as session (session.id)}
+        {@const revokeLabel = session.kind === "cli" ? m.sessions_revoke_cli() : session.current ? m.sessions_revoke_current() : m.sessions_revoke_browser()}
         <li>
           <div>
-            <h3>{session.current ? m.sessions_current() : m.sessions_browser()}</h3>
+            <h3>{session.kind === "cli" ? m.sessions_cli() : session.current ? m.sessions_current() : m.sessions_browser()}</h3>
             <p>
-              {session.lastSeenAt ? m.sessions_last_login({ date: date(session.lastSeenAt) }) : m.sessions_last_login_unavailable()}{session.country ? ` · ${session.country}` : ""}{session.provider ? ` · ${session.provider}` : ""}
+              {session.lastSeenAt ? m.sessions_last_active({ date: date(session.lastSeenAt) }) : m.sessions_last_active_unavailable()}{session.country ? ` · ${session.country}` : ""}{session.provider ? ` · ${session.provider}` : ""}
             </p>
           </div>
           <form method="POST" action="?/revokeSession">
@@ -40,8 +41,8 @@
               type="submit"
               variant="destructive"
               size="icon"
-              aria-label={session.current ? m.sessions_revoke_current() : m.sessions_revoke_browser()}
-              title={m.sessions_revoke()}
+              aria-label={revokeLabel}
+              title={revokeLabel}
             >
               <TrashIcon size={16} />
             </Button>
@@ -52,7 +53,7 @@
   {:else}
     <p>{m.sessions_none()}</p>
   {/if}
-  {#if browserSessions.length > 1}
+  {#if hasOtherBrowser}
     <div class="batch-action">
       <AlertDialog.Root>
         <AlertDialog.Trigger class="batch-link">{m.sessions_sign_out_others()}</AlertDialog.Trigger>

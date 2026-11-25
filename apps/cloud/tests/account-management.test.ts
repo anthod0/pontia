@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import type { RequestEvent } from "@sveltejs/kit";
 import { eq } from "drizzle-orm";
 import { base64url } from "jose";
+import { authenticateCliCredential } from "../src/lib/server/auth/cli";
 import { issueLogin } from "../src/lib/server/auth/jwt";
 import { sha256Base64url } from "../src/lib/server/crypto";
 import { accounts, authSessions, devices, edges, users } from "../src/lib/server/db/schema";
@@ -38,8 +39,8 @@ const loadDevices = loadDevicesPage as unknown as (event: RequestEvent) => Promi
   devices: { id: string; edgeName: string }[];
 }>;
 
-async function signedInEvent(fields: Record<string, string> = {}) {
-  const login = await issueLogin(database.db, currentSessionId, secret);
+async function signedInEvent(fields: Record<string, string> = {}, browserId = currentSessionId) {
+  const login = await issueLogin(database.db, browserId, secret);
   const body = new FormData();
   for (const [name, value] of Object.entries(fields)) body.set(name, value);
   return {
@@ -99,12 +100,14 @@ test("account setup is needed until the user has a registered device, regardless
   expect((await loadAccount(event)).hasDevices).toBe(false);
 });
 
-test("the settings pages return the current profile, browser logins, and registered devices", async () => {
+test("the settings pages return the current profile, browser sessions, CLI credentials, and registered devices", async () => {
   await insertCurrentUser();
   await database.db.insert(authSessions).values({
     id: "0199791c-6600-7000-8000-000000000004",
     userId,
     kind: "cli",
+    country: "SG",
+    lastSeenAt: "2026-11-24T12:00:00.000Z",
     tokenHash: "cli-hash",
   });
   const edgeId = "0199791c-6600-7000-8000-000000000020";
@@ -135,7 +138,15 @@ test("the settings pages return the current profile, browser logins, and registe
   expect(accountPage.profile.displayName).toBe("Old name");
   expect(accountPage.hasDevices).toBe(true);
   expect(sessionsPage.sessions).toEqual([
-    expect.objectContaining({ id: currentSessionId, current: true }),
+    expect.objectContaining({ id: currentSessionId, kind: "browser", current: true }),
+    expect.objectContaining({
+      id: "0199791c-6600-7000-8000-000000000004",
+      kind: "cli",
+      current: false,
+      country: "SG",
+      lastSeenAt: "2026-11-24T12:00:00.000Z",
+      expiresAt: null,
+    }),
   ]);
   expect(devicesPage.devices).toEqual([
     expect.objectContaining({ id: deviceId, edgeName: "Home edge" }),
@@ -262,6 +273,43 @@ test("editing a device does not modify another user's device", async () => {
     name: "Other device",
     handle: "other-device",
   });
+});
+
+test("only the owner can revoke a CLI credential and it immediately stops authenticating", async () => {
+  await insertCurrentUser();
+  const sessionId = "0199791c-6600-7000-8000-000000000004";
+  const cliSecret = base64url.encode(new Uint8Array(32).fill(17));
+  const credential = `ptr_v1_${sessionId}_${cliSecret}`;
+  const otherUserId = "0199791c-6600-7000-8000-000000000010";
+  await database.db.insert(users).values({ id: otherUserId });
+  await database.db.insert(authSessions).values({
+    id: sessionId,
+    userId: otherUserId,
+    kind: "cli",
+    tokenHash: await sha256Base64url(cliSecret),
+  });
+  const revoke = sessionActions.revokeSession as (event: RequestEvent) => Promise<unknown>;
+  await revoke(await signedInEvent({ session_id: sessionId }));
+  expect(await authenticateCliCredential(database.db, credential)).toEqual({
+    userId: otherUserId,
+    sessionId,
+  });
+  expect((await loadSessions(await signedInEvent())).sessions.map((s) => s.id)).toEqual([
+    currentSessionId,
+  ]);
+
+  const otherBrowserId = "0199791c-6600-7000-8000-000000000011";
+  await database.db.insert(authSessions).values({
+    id: otherBrowserId,
+    userId: otherUserId,
+    kind: "browser",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+  });
+  await revoke(await signedInEvent({ session_id: sessionId }, otherBrowserId));
+  expect(await authenticateCliCredential(database.db, credential)).toBeNull();
+  expect(
+    await database.db.select().from(authSessions).where(eq(authSessions.id, sessionId)),
+  ).toHaveLength(0);
 });
 
 test("signing out other browsers preserves the current browser and CLI credentials", async () => {

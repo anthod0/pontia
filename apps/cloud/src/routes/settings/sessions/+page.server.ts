@@ -30,7 +30,6 @@ export const load: PageServerLoad = async (event) => {
     .where(
       and(
         eq(authSessions.userId, authentication.login.user_id),
-        eq(authSessions.kind, "browser"),
         or(isNull(authSessions.expiresAt), gt(authSessions.expiresAt, new Date().toISOString())),
       ),
     )
@@ -56,13 +55,7 @@ export const actions: Actions = {
     if (!id) return fail(400, { error: m.sessions_error_select() });
     await authentication.db
       .delete(authSessions)
-      .where(
-        and(
-          eq(authSessions.id, id),
-          eq(authSessions.userId, authentication.login.user_id),
-          eq(authSessions.kind, "browser"),
-        ),
-      );
+      .where(and(eq(authSessions.id, id), eq(authSessions.userId, authentication.login.user_id)));
     return { success: "session_revoked" };
   },
 
