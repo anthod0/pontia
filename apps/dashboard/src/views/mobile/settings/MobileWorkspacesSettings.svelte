@@ -73,7 +73,7 @@
   <p role="status">{$t('workspaces.loadingBrowser')}</p>
 {:else}
   {#if !browser.workspaceRoots.length}<p class="py-3">{$t('workspaces.noRoots')}<br />{$t('workspaces.runPrefix')} <code>pontia init</code> {$t('workspaces.initSuffix')}</p>{/if}
-  <nav class="mb-3 flex gap-1 overflow-x-auto rounded-2xl bg-muted p-1" aria-label={$t('workspaces.browserLocations')}>
+  <nav class="mb-3 flex gap-5 overflow-x-auto border-b" aria-label={$t('workspaces.browserLocations')}>
     <button
       class="location"
       aria-pressed={browser.view === 'active'}
@@ -239,16 +239,22 @@
 
 <style>
   .location {
+    position: relative;
     flex: none;
     min-height: 44px;
-    border-radius: 0.75rem;
-    padding: 0 0.85rem;
     color: var(--muted-foreground);
-    font-size: 0.875rem;
+    font-size: 15px;
+    font-weight: 500;
   }
   .location[aria-pressed='true'] {
-    background: var(--card);
-    color: var(--foreground);
+    color: var(--heading);
     font-weight: 600;
+  }
+  .location[aria-pressed='true']::after {
+    position: absolute;
+    inset: auto 0 0;
+    height: 2px;
+    background: var(--primary);
+    content: '';
   }
 </style>
