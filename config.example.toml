@@ -9,6 +9,12 @@ completed_retention_days = 30
 # Cleanup runs at service startup and then at this interval. All values must be positive integers.
 cleanup_interval_hours = 24
 
+[preview]
+# Allow remote HTTP and WebSocket previews on this device.
+enabled = true
+# Exceptions to the default blocked ports. Port 0 and the daemon's listening port are always blocked.
+allowed_ports = []
+
 [dashboard]
 # Local Vite dist directory or a remote .tar.gz/.tgz/.zip archive containing exactly one index.html.
 source = "apps/dashboard/dist"

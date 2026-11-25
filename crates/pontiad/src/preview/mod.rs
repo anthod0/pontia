@@ -9,6 +9,7 @@ use axum::{
 };
 use hyper::client::conn::http1;
 use hyper_util::rt::TokioIo;
+use pontia_config::PreviewConfig;
 use pontia_tunnel::protocol::{HeaderDirection, TunnelRoute, preview_headers};
 use std::time::Duration;
 use tokio::{sync::watch, time::timeout};
@@ -16,13 +17,15 @@ use tokio::{sync::watch, time::timeout};
 #[derive(Clone)]
 pub struct LocalPreviewProxy {
     bound_port: u16,
+    config: PreviewConfig,
     shutdown: watch::Receiver<bool>,
 }
 
 impl LocalPreviewProxy {
-    pub fn new(bound_port: u16, shutdown: watch::Receiver<bool>) -> Self {
+    pub fn new(bound_port: u16, config: PreviewConfig, shutdown: watch::Receiver<bool>) -> Self {
         Self {
             bound_port,
+            config,
             shutdown,
         }
     }
@@ -40,7 +43,9 @@ impl LocalPreviewProxy {
             }
             None => return StatusCode::NOT_FOUND.into_response(),
         };
-        if loopback::forbidden(port, self.bound_port) {
+        if !self.config.enabled
+            || loopback::forbidden(port, self.bound_port, &self.config.allowed_ports)
+        {
             return (
                 StatusCode::FORBIDDEN,
                 [("x-pontia-preview-error", "port_forbidden")],

@@ -518,3 +518,21 @@ fn legacy_remote_connection_fields_are_ignored() {
         );
     }
 }
+
+#[test]
+fn loads_preview_defaults_and_device_overrides() {
+    let root = tempfile::tempdir().unwrap();
+    let vars = vars_for_home(root.path());
+    let file = root.path().join("config.toml");
+    let defaults = AppConfig::from_vars(&vars).unwrap().preview;
+    assert!(defaults.enabled);
+    assert!(defaults.allowed_ports.is_empty());
+
+    fs::write(&file, "[preview]\nallowed_ports = [9222, 2376]").unwrap();
+    let preview = AppConfig::from_vars(&vars).unwrap().preview;
+    assert!(preview.enabled);
+    assert_eq!(preview.allowed_ports, [9222, 2376]);
+
+    fs::write(file, "[preview]\nenabled = false").unwrap();
+    assert!(!AppConfig::from_vars(&vars).unwrap().preview.enabled);
+}

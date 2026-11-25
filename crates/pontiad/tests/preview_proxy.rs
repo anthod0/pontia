@@ -14,6 +14,7 @@ use axum::{
 };
 use bytes::{Bytes, BytesMut};
 use futures_util::{StreamExt, stream};
+use pontia_config::PreviewConfig;
 use pontia_tunnel::{
     DeviceRequestHandler, TunnelConnection, WsTunnelFrame, connect_edge, serve_device,
 };
@@ -38,6 +39,10 @@ struct Tunnel {
 
 impl Tunnel {
     async fn start(bound_port: u16) -> Self {
+        Self::with_config(bound_port, PreviewConfig::default()).await
+    }
+
+    async fn with_config(bound_port: u16, config: PreviewConfig) -> Self {
         let mut tasks = JoinSet::new();
         let (tx, mut rx) = mpsc::channel(1);
         let app = Router::new().route(
@@ -57,7 +62,7 @@ impl Tunnel {
             .await
             .unwrap();
         let (shutdown, stop) = watch::channel(false);
-        let proxy = LocalPreviewProxy::new(bound_port, stop.clone());
+        let proxy = LocalPreviewProxy::new(bound_port, config, stop.clone());
         let handler = DeviceRequestHandler::new(move |req| {
             let proxy = proxy.clone();
             async move {
@@ -252,7 +257,7 @@ async fn denies_daemon_and_bad_ports_and_classifies_refused_connections() {
         .local_addr()
         .unwrap()
         .port();
-    for port in [own_port, 22, 25, 4190, 6000, 6679, unused] {
+    for port in [own_port, 22, 25, 4190, 6000, 6679, 2375, 9222, unused] {
         for kind in ["http", "ws"] {
             let req = request(Method::POST, kind, port, "/")
                 .body(Body::empty())
@@ -271,6 +276,70 @@ async fn denies_daemon_and_bad_ports_and_classifies_refused_connections() {
             assert_eq!(res.status(), status);
             assert_eq!(res.headers()["x-pontia-preview-error"], reason);
         }
+    }
+}
+
+#[tokio::test]
+async fn forwards_to_explicitly_allowed_sensitive_port() {
+    let candidates = [9222, 9229, 8888, 8001, 6379, 11434, 2375, 2376]
+        .map(|port| std::net::SocketAddr::new(V4, port));
+    let listener = TcpListener::bind(candidates.as_slice()).await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let mut tunnel = Tunnel::with_config(
+        8080,
+        PreviewConfig {
+            allowed_ports: vec![port],
+            ..Default::default()
+        },
+    )
+    .await;
+    let app = Router::new().route("/", get(|| async { "preview" }));
+    tunnel
+        .tasks
+        .spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let req = request(Method::GET, "http", port, "/")
+        .body(Body::empty())
+        .unwrap();
+    let res = tunnel.connection.request_preview_http(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(to_bytes(res.into_body(), 128).await.unwrap(), "preview");
+}
+
+#[tokio::test]
+async fn disabled_preview_rejects_http_and_ws_but_preserves_e2e() {
+    let tunnel = Tunnel::with_config(
+        0,
+        PreviewConfig {
+            enabled: false,
+            allowed_ports: vec![9222],
+        },
+    )
+    .await;
+    for port in [5173, 9222] {
+        let http = request(Method::GET, "http", port, "/")
+            .body(Body::empty())
+            .unwrap();
+        let ws = request(Method::POST, "ws", port, "/")
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(
+            tunnel
+                .connection
+                .request_preview_http(http)
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            tunnel
+                .connection
+                .open_preview_ws(ws)
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::FORBIDDEN
+        );
     }
     let res = tunnel
         .connection

@@ -129,6 +129,9 @@ impl AppConfig {
             bot: file.and_then(|config| config.bot).unwrap_or_default(),
             client_configuration,
             dashboard,
+            preview: file
+                .and_then(|config| config.preview.clone())
+                .unwrap_or_default(),
             remote: file.and_then(|config| config.remote.clone()),
         })
     }

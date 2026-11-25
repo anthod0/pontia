@@ -41,6 +41,23 @@ pub struct AppConfig {
     pub client_configuration: ClientConfigurationSources,
     pub dashboard: DashboardConfig,
     pub remote: Option<RemoteConfig>,
+    pub preview: PreviewConfig,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct PreviewConfig {
+    pub enabled: bool,
+    pub allowed_ports: Vec<u16>,
+}
+
+impl Default for PreviewConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            allowed_ports: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]

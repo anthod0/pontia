@@ -110,8 +110,11 @@ async fn main() -> Result<()> {
                     }
                 }
             });
-            let preview =
-                pontiad::LocalPreviewProxy::new(bound_addr.port(), cleanup_shutdown.subscribe());
+            let preview = pontiad::LocalPreviewProxy::new(
+                bound_addr.port(),
+                config.preview,
+                cleanup_shutdown.subscribe(),
+            );
             let handler = pontia_tunnel::DeviceRequestHandler::new(move |request| {
                 let ingress = ingress.clone();
                 let preview = preview.clone();

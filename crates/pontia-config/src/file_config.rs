@@ -17,6 +17,7 @@ pub(super) struct FileConfig {
     pub(super) uploads: Option<super::UploadsConfig>,
     pub(super) bot: Option<super::BotConfig>,
     pub(super) dashboard: Option<DashboardConfig>,
+    pub(super) preview: Option<super::PreviewConfig>,
     pub(super) remote: Option<RemoteConfig>,
 }
 
