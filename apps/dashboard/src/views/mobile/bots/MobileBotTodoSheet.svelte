@@ -6,6 +6,7 @@
   import type { BotMessage } from '../../../api/types'
   import { useDeviceRuntime } from '../../../device/context'
   import { useMobileStack } from '$lib/mobile/overlayStack.svelte'
+  import TodoViews from '../../../components/bots/TodoViews.svelte'
   import MobileBotSheet from './MobileBotSheet.svelte'
   import MobileBotTodoCard from './MobileBotTodoCard.svelte'
   import MobileBotReplySheet from './MobileBotReplySheet.svelte'
@@ -37,7 +38,6 @@
 
 {#snippet card(item: BotMessage)}
   <MobileBotTodoCard
-    botName={chat.timeline.bot?.name ?? ''}
     {item}
     onjump={() => onjump(item.id)}
     oncontext={() => oncontext(item.id)}
@@ -46,21 +46,22 @@
       replying = true
     }}
     onquote={() => stack.back(() => chat.addQuote(entryQuote(item)!))}
-    onchange={(action) => chat.changeTodo(item.id, action)}
+    onignore={() => chat.changeTodo(item.id, 'resolve')}
   />
 {/snippet}
 <MobileBotSheet bind:open title={$t('bots.todos')}>
   {#if todos.error}<p role="alert">
       {todos.error.message} <button onclick={() => todos.refetch()}>{$t('common.retry')}</button>
     </p>
-  {:else if todos.data}
-    {#each todos.data.open as item (item.id)}{@render card(item)}{:else}<p>{$t('bots.noTodos')}</p>{/each}
-    {#if todos.data.recently_resolved.length}
-      <details>
-        <summary class="py-3">{$t('bots.recentlyResolved')}</summary>
-        {#each todos.data.recently_resolved as item (item.id)}{@render card(item)}{/each}
-      </details>
-    {/if}
+  {:else if todos.data && chat.timeline.bot}
+    {@const data = todos.data}
+    <TodoViews count={data.open.length} groups={[{ bot: chat.timeline.bot, items: data.recently_resolved }]}
+      onjump={(_, item) => onjump(item.id)} oncontext={(_, item) => oncontext(item.id)}
+      onreopen={(_, item) => chat.changeTodo(item.id, 'reopen')}>
+      {#snippet pending()}
+        {#each data.open as item (item.id)}{@render card(item)}{:else}<p>{$t('bots.noTodos')}</p>{/each}
+      {/snippet}
+    </TodoViews>
   {:else}<p role="status">{$t('common.loading')}</p>{/if}
 </MobileBotSheet>
 {#if replying && reply}<MobileBotReplySheet

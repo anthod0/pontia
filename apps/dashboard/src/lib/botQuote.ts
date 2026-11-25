@@ -161,3 +161,12 @@ export function entryText(message: BotMessage): string {
     ).join("\n")
   );
 }
+
+export function withoutLinks(message: BotMessage, text: string) {
+  return message.kind === "bot_reply" ? text.replace(/!?\[([^\]]+)\]\([^)]+\)/g, "$1") : text;
+}
+
+export function todoSummary(message: BotMessage) {
+  const quote = entryQuote(message);
+  return quote ? withoutLinks(message, quoteSummary(quote)) : "";
+}

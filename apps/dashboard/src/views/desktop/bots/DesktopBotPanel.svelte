@@ -5,9 +5,6 @@
   import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon'
   import ArrowBendUpLeftIcon from 'phosphor-svelte/lib/ArrowBendUpLeftIcon'
   import EyeSlashIcon from 'phosphor-svelte/lib/EyeSlashIcon'
-  import ArrowUUpLeftIcon from 'phosphor-svelte/lib/ArrowUUpLeftIcon'
-  import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
-  import * as Collapsible from '$lib/components/ui/collapsible/index.js'
   import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { useTopBarAction } from '../../../components/layout/topBarAction'
@@ -24,7 +21,7 @@
   import * as Tabs from '$lib/components/ui/tabs/index.js'
   import { t } from '$lib/i18n'
   import MessageTime from '$lib/components/MessageTime.svelte'
-  import { entryQuote, entryText, parseQuotedMessage, plainText, quoteSummary, type BotQuote } from '$lib/botQuote'
+  import { entryQuote, entryText, parseQuotedMessage, plainText, todoSummary, withoutLinks, type BotQuote } from '$lib/botQuote'
   import type { Bot, BotMessage } from '../../../api/types'
   import { useDeviceRuntime } from '../../../device/context'
   import type { LocalhostPreviewTarget } from '$lib/localhostPreview'
@@ -32,6 +29,7 @@
   import LocalhostPreviewPanel from '../../../components/chat/LocalhostPreviewPanel.svelte'
   import FilePreviewPanel from '../../../components/chat/FilePreviewPanel.svelte'
   import FilePreviewResizer from '../../../components/chat/FilePreviewResizer.svelte'
+  import TodoViews from '../../../components/bots/TodoViews.svelte'
   import BotAvatar from '../../../components/bots/BotAvatar.svelte'
   import BotMessageSearch from '../../../components/bots/BotMessageSearch.svelte'
   import BotGitTab from '../../../components/bots/BotGitTab.svelte'
@@ -102,15 +100,6 @@
   export function viewTodos() {
     tab.current = 'todo'
     panel.current = true
-  }
-
-  function withoutLinks(message: BotMessage, text: string) {
-    return message.kind === 'bot_reply' ? text.replace(/!?\[([^\]]+)\]\([^)]+\)/g, '$1') : text
-  }
-
-  function summary(message: BotMessage) {
-    const quote = entryQuote(message)
-    return quote ? withoutLinks(message, quoteSummary(quote)) : ''
   }
 
   /** The whole message as plain text, so the Context tab never cuts it short. */
@@ -209,27 +198,19 @@
 {/snippet}
 
 {#snippet todoCard(message: BotMessage)}
-  {@const done = message.todo?.state === 'done' ? message.todo : null}
-  <li class={['rounded-xl border p-3', done ? 'border-transparent bg-muted/50' : 'bg-background']}>
+  <li class="rounded-xl border bg-background p-3">
     <button type="button" class="block w-full rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring" onclick={() => jump(message.id)}>
       <span class="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
         <BotAvatar shape={bot.avatar_shape} color={bot.avatar_color} class="size-4" />
         <MessageTime value={message.created_at} class="px-0" />
-        {#if done}
-          <span class="ml-auto">{done.by === 'user' ? $t('bots.resolvedByYou') : $t('bots.closedByBot', { name: bot.name })} · <MessageTime value={done.at} class="px-0" /></span>
-        {/if}
       </span>
-      <span class={['text-[13px] leading-5 [overflow-wrap:anywhere]', done ? 'line-clamp-2 text-muted-foreground' : 'line-clamp-3']}>{summary(message)}</span>
+      <span class="line-clamp-3 text-[13px] leading-5 [overflow-wrap:anywhere]">{todoSummary(message)}</span>
     </button>
-    <div class={['mt-2 flex items-center gap-1 touch-target:flex-wrap touch-target:gap-2 touch-target:[&>button]:min-h-11 touch-target:[&>button]:min-w-11', done && 'text-muted-foreground']}>
+    <div class="mt-2 flex items-center gap-1 touch-target:flex-wrap touch-target:gap-2 touch-target:[&>button]:min-h-11 touch-target:[&>button]:min-w-11">
       <Button variant="ghost" size="xs" onclick={() => viewContext(message.id)}><TreeStructureIcon />{$t('bots.context')}</Button>
-      {#if !done}
-        <Button variant="ghost" size="xs" class="ml-auto" onclick={() => ontodochange(message.id, 'resolve')}><EyeSlashIcon />{$t('bots.ignore')}</Button>
-        <Button variant="ghost" size="xs" onclick={() => quoteTodo(message)}><QuotesIcon />{$t('bots.quote')}</Button>
-        <Button id="bot-todo-reply-{message.id}" variant="outline" size="xs" aria-expanded={reply?.message.id === message.id} aria-controls="bot-todo-reply-box-{message.id}" onclick={() => toggleReply(message)}><ArrowBendUpLeftIcon />{$t('bots.reply')}</Button>
-      {:else if done.by === 'user'}
-        <Button variant="ghost" size="xs" class="ml-auto" onclick={() => ontodochange(message.id, 'reopen')}><ArrowUUpLeftIcon />{$t('bots.reopen')}</Button>
-      {/if}
+      <Button variant="ghost" size="xs" class="ml-auto" onclick={() => ontodochange(message.id, 'resolve')}><EyeSlashIcon />{$t('bots.ignore')}</Button>
+      <Button variant="ghost" size="xs" onclick={() => quoteTodo(message)}><QuotesIcon />{$t('bots.quote')}</Button>
+      <Button id="bot-todo-reply-{message.id}" variant="outline" size="xs" aria-expanded={reply?.message.id === message.id} aria-controls="bot-todo-reply-box-{message.id}" onclick={() => toggleReply(message)}><ArrowBendUpLeftIcon />{$t('bots.reply')}</Button>
     </div>
     {#if reply?.message.id === message.id}
       {@const current = reply}
@@ -321,30 +302,25 @@
         {#if todos.isError}
           <div role="alert" class="text-sm">{todos.error.message} <Button variant="ghost" size="xs" onclick={() => todos.refetch()}>{$t('common.retry')}</Button></div>
         {:else if todos.data}
-          {#if todos.data.open.length}
-            <ul class="space-y-2">
-              {#each todos.data.open as message (message.id)}
-                {@render todoCard(message)}
-              {/each}
-            </ul>
-          {:else}
-            <Empty.Root class="min-h-0 p-6"><Empty.Header>
-              <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><CheckCircleIcon class="size-6" /></Empty.Media>
-              <Empty.Title>{$t('bots.noTodos')}</Empty.Title>
-            </Empty.Header></Empty.Root>
-          {/if}
-          {#if todos.data.recently_resolved.length}
-            <Collapsible.Root class="mt-4">
-              <Collapsible.Trigger class="group flex items-center gap-1 rounded-sm px-1 text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-ring">
-                <CaretRightIcon class="size-3 transition-transform group-aria-expanded:rotate-90" />{$t('bots.recentlyResolved')} {todos.data.recently_resolved.length}
-              </Collapsible.Trigger>
-              <Collapsible.Content>
-                <ul class="mt-2 space-y-2">
-                  {#each todos.data.recently_resolved as message (message.id)}{@render todoCard(message)}{/each}
+          {@const data = todos.data}
+          <TodoViews count={data.open.length} groups={[{ bot, items: data.recently_resolved }]}
+            onjump={(_, item) => jump(item.id)} oncontext={(_, item) => viewContext(item.id)}
+            onreopen={(_, item) => ontodochange(item.id, 'reopen')}>
+            {#snippet pending()}
+              {#if data.open.length}
+                <ul class="space-y-2">
+                  {#each data.open as message (message.id)}
+                    {@render todoCard(message)}
+                  {/each}
                 </ul>
-              </Collapsible.Content>
-            </Collapsible.Root>
-          {/if}
+              {:else}
+                <Empty.Root class="min-h-0 p-6"><Empty.Header>
+                  <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><CheckCircleIcon class="size-6" /></Empty.Media>
+                  <Empty.Title>{$t('bots.noTodos')}</Empty.Title>
+                </Empty.Header></Empty.Root>
+              {/if}
+            {/snippet}
+          </TodoViews>
         {:else}
           <p role="status" class="text-sm text-muted-foreground">{$t('common.loading')}</p>
         {/if}

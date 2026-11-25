@@ -12,9 +12,7 @@ export function createBotTodos(
 ) {
   const bots = $derived(
     (directory.bots ?? []).filter(
-      (bot, i) =>
-        (directory.summaries[i]?.open_todo_count ?? 0) > 0 ||
-        (includeRecentlyResolved && !!device.queryClient.getQueryData(["bot-todos", bot.bot_id])),
+      (_, i) => includeRecentlyResolved || (directory.summaries[i]?.open_todo_count ?? 0) > 0,
     ),
   );
   const queries = createQueries(

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TodoViews from '../../components/bots/TodoViews.svelte'
   import BotAvatar from '../../components/bots/BotAvatar.svelte'
   import MobileBotTodoCard from './bots/MobileBotTodoCard.svelte'
   import MobileBotContextSheet from './bots/MobileBotContextSheet.svelte'
@@ -26,20 +27,22 @@
     else void go()
   }
   const openGroups = $derived(todos.groups.filter(({result}) => !result.data || result.data.open.length))
-  const resolved = $derived(
-    todos.groups.flatMap(({ bot, result }) => (result.data?.recently_resolved ?? []).map((item) => ({ bot, item }))),
-  )
+  const count = $derived(todos.groups.reduce((sum, {result}) => sum + (result.data?.open.length ?? 0), 0))
+  const groups = $derived(todos.groups.map(({ bot, result }) => ({ bot, items: result.data?.recently_resolved ?? [] })))
+  const error = $derived(directory.error ?? todos.groups.find(({result}) => result.error)?.result.error)
+  const loading = $derived(directory.pending || todos.groups.some(({result}) => result.isPending))
+
+  function viewContext(bot: Bot, item: BotMessage) {
+    active = { bot, item }
+    context = true
+  }
 </script>
 
 {#snippet card(bot: Bot, item: BotMessage)}
   <MobileBotTodoCard
-    botName={bot.name}
     {item}
     onjump={() => jump(bot, item.id)}
-    oncontext={() => {
-      active = { bot, item }
-      context = true
-    }}
+    oncontext={() => viewContext(bot, item)}
     onreply={() => {
       active = { bot, item }
       reply = true
@@ -48,7 +51,7 @@
       createQuoteDraft(device.id, bot.bot_id).current = entryQuote(item)
       void navigate('/bots/' + encodeURIComponent(bot.bot_id))
     }}
-    onchange={(action) => changeBotTodo(device, bot.bot_id, item.id, action)}
+    onignore={() => changeBotTodo(device, bot.bot_id, item.id, 'resolve')}
   />
 {/snippet}
 {#if active && context}<MobileBotContextSheet
@@ -70,34 +73,34 @@
     }}
   />
 {/if}
-<div class="grid gap-5">
-  {#each openGroups as { bot, result } (bot.bot_id)}
-    <section class="grid gap-2">
-      <h2>
-        <button
-          class="flex min-h-11 items-center gap-2 font-semibold"
-          onclick={() => navigate('/bots/' + encodeURIComponent(bot.bot_id))}
-        >
-          <BotAvatar class="size-7" shape={bot.avatar_shape} color={bot.avatar_color} />{bot.name}
-        </button>
-      </h2>
-      {#if result.error}<p role="alert">{result.error.message}</p>{:else if result.isPending}<p role="status">
-          {$t('common.loading')}
-        </p>{/if}
-      {#each result.data?.open ?? [] as item (item.id)}{@render card(bot, item)}{/each}
-    </section>
-  {:else}
-    <p role="status" class="py-6 text-muted-foreground">
-      {directory.error?.message ?? $t(directory.pending ? 'common.loading' : 'bots.noTodos')}
-    </p>
-  {/each}
-  {#if resolved.length}
-    <details>
-      <summary class="cursor-pointer py-3 text-sm text-muted-foreground">{$t('bots.recentlyResolved')}</summary>
-      {#each resolved as { bot, item } (bot.bot_id + ':' + item.id)}
-        <p class="mt-2 text-sm font-semibold">{bot.name}</p>
-        {@render card(bot, item)}
+{#snippet status()}
+  {#if error}<p role="alert">{error.message}</p>{:else if loading}<p role="status">{$t('common.loading')}</p>{/if}
+{/snippet}
+<TodoViews {count} {groups} showBot status={error || loading ? status : undefined}
+  onjump={(bot, item) => jump(bot, item.id)} oncontext={viewContext}
+  onreopen={(bot, item) => changeBotTodo(device, bot.bot_id, item.id, 'reopen')}>
+  {#snippet pending()}
+    <div class="grid gap-5">
+      {#each openGroups as { bot, result } (bot.bot_id)}
+        <section class="grid gap-2">
+          <h2>
+            <button
+              class="flex min-h-11 items-center gap-2 font-semibold"
+              onclick={() => navigate('/bots/' + encodeURIComponent(bot.bot_id))}
+            >
+              <BotAvatar class="size-7" shape={bot.avatar_shape} color={bot.avatar_color} />{bot.name}
+            </button>
+          </h2>
+          {#if result.error}<p role="alert">{result.error.message}</p>{:else if result.isPending}<p role="status">
+              {$t('common.loading')}
+            </p>{/if}
+          {#each result.data?.open ?? [] as item (item.id)}{@render card(bot, item)}{/each}
+        </section>
+      {:else}
+        <p role="status" class="py-6 text-muted-foreground">
+          {directory.error?.message ?? $t(directory.pending ? 'common.loading' : 'bots.noTodos')}
+        </p>
       {/each}
-    </details>
-  {/if}
-</div>
+    </div>
+  {/snippet}
+</TodoViews>

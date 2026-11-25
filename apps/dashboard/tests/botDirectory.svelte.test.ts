@@ -57,22 +57,27 @@ test("loads todos concurrently for just the Bots with open items", async () => {
   }
 });
 
-test("keeps recently resolved items available after the last open todo is handled", async () => {
+test("loads recent history for a Bot with no open todos or cached history", async () => {
   const cache = testDevice.queryClient;
   cache.setQueryData(["bots"], [{ bot_id: "last" }]);
-  cache.setQueryData(["bot-summary", "last"], { open_todo_count: 1 });
+  cache.setQueryData(["bot-summary", "last"], { open_todo_count: 0 });
+  const at = "2026-11-21T08:00:00Z";
+  const done = {
+    id: "handled",
+    kind: "bot_reply",
+    content: "Review complete",
+    status: "normal",
+    created_at: at,
+    todo: { state: "done", by: "user", at },
+  } as const;
   const request = vi
     .spyOn(testDevice.api, "getBotTodos")
-    .mockResolvedValue({ open: [], recently_resolved: [] });
+    .mockResolvedValue({ open: [], recently_resolved: [done] });
   let todos!: ReturnType<typeof createBotTodos>;
   const stop = $effect.root(() => {
     todos = createBotTodos(testDevice, createBotDirectory(testDevice), true);
   });
   try {
-    await waitFor(() => expect(todos.groups[0]?.result.data).toBeDefined());
-    const done = { id: "handled", todo: { state: "done", by: "user" } };
-    cache.setQueryData(["bot-todos", "last"], { open: [], recently_resolved: [done] });
-    cache.setQueryData(["bot-summary", "last"], { open_todo_count: 0 });
     await waitFor(() => expect(todos.groups[0]?.result.data?.recently_resolved).toEqual([done]));
   } finally {
     stop();

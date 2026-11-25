@@ -600,11 +600,11 @@ test("dates a todo and its closing time in the todo panel", async () => {
   const panel = within(screen.getByRole("complementary"));
   const [open] = await panel.findAllByRole("listitem");
   expect(open.querySelector("time")).toHaveAttribute("datetime", todo.created_at);
-  await fireEvent.click(panel.getByRole("button", { name: /Recently resolved/ }));
-  const done = (await panel.findAllByRole("listitem"))[1];
-  const times = [...done.querySelectorAll("time")].map((time) => time.getAttribute("datetime"));
-  expect(times).toEqual([reply.created_at, at]);
-  expect(done.querySelectorAll("time")[1]).toHaveTextContent(/Nov 21/);
+  await fireEvent.click(panel.getByRole("tab", { name: "Resolved 1" }));
+  const done = await panel.findByRole("listitem");
+  expect(done.querySelector("time")).toHaveAttribute("datetime", at);
+  expect(panel.getByRole("heading", { name: /Nov 21/ })).toBeVisible();
+  expect(panel.queryByRole("button", { name: "Reopen" })).toBeNull();
 });
 
 test("ignoring a todo resolves it like marking it done", async () => {
