@@ -8,10 +8,11 @@
   let drag = $state<{ pointerId: number; startX: number; startWidth: number } | null>(null)
   let currentWidth = $state<number | null>(null)
 
-  let frame = 0
   onMount(() => {
+    const observer = new ResizeObserver(() => { currentWidth = Math.round(panelWidth()) })
+    observer.observe(handle.parentElement!)
     currentWidth = Math.round(panelWidth())
-    return () => cancelAnimationFrame(frame)
+    return () => observer.disconnect()
   })
 
   $effect(() => {
@@ -25,7 +26,8 @@
   }
 
   function resize(width: number): number {
-    const next = clampFilePreviewWidth(width, window.innerWidth)
+    const space = handle.closest('.file-preview-layout')!
+    const next = clampFilePreviewWidth(width, space.getBoundingClientRect().width)
     currentWidth = next
     filePreviewWidth.preview(next)
     return next
@@ -58,7 +60,6 @@
 
   function reset() {
     filePreviewWidth.save(null)
-    frame = requestAnimationFrame(() => { currentWidth = Math.round(panelWidth()) })
   }
 </script>
 
@@ -70,7 +71,7 @@
   tabindex="0"
   aria-orientation="vertical"
   aria-label={$t('files.resizePreview')}
-  aria-valuemin={FILE_PREVIEW_MIN_WIDTH}
+  aria-valuemin={Math.min(FILE_PREVIEW_MIN_WIDTH, currentWidth ?? FILE_PREVIEW_MIN_WIDTH)}
   aria-valuenow={currentWidth ?? undefined}
   title={$t('files.resizePreview')}
   data-dragging={drag ? 'true' : undefined}

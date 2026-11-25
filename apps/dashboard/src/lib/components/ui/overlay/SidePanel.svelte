@@ -28,7 +28,7 @@
     }
     const shell = dock.closest('.file-preview-layout')
     const closing = shell?.getAnimations?.().find(animation =>
-      animation instanceof CSSTransition && animation.transitionProperty === '--file-preview-width')
+      animation instanceof CSSTransition && animation.transitionProperty === '--file-preview-open')
     if (!closing) {
       renderDock = false
       return
@@ -53,7 +53,7 @@
   const panelClass = 'flex flex-col border-l bg-surface outline-none pt-[env(safe-area-inset-top)]'
   $effect(() => {
     if (!mobile.current || !open || !ref) return
-    const shell = document.querySelector<HTMLElement>('.file-preview-layout')
+    const shell = document.querySelector<HTMLElement>('.desktop-shell')
     if (!shell) return
     shell.inert = true
     return () => { shell.inert = false }

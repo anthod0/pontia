@@ -297,10 +297,11 @@ test("local file links open in the Files tab, which lists them again after a rel
 });
 
 test("resizes the panel with the keyboard and remembers the width", async () => {
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
-    width: 400,
-  } as DOMRect);
-  vi.stubGlobal("innerWidth", 1440);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return { width: this.classList.contains("file-preview-layout") ? 1200 : 400 } as DOMRect;
+  });
   render(SessionPanelHarness);
   await fireEvent.click(sidebarButton());
   const handle = within(sidePanel()).getByRole("separator", { name: "Resize preview" });

@@ -7,7 +7,7 @@
   import { isSettingsPath } from '../../components/settings/sections'
   import { dashboardRelativePath } from '$lib/dashboardRoutes'
   import { provideFilePreviewNavigator } from '../../components/chat/filePreviewContext'
-  import { filePreviewWidth } from '../../components/chat/filePreviewWidth'
+  import { CHAT_MIN_WIDTH, FILE_PREVIEW_MIN_WIDTH, filePreviewWidth } from '../../components/chat/filePreviewWidth'
   import { useSessionPanel } from '../../components/chat/sessionPanel/sessionPanelContext.svelte'
   import SessionSidePanel from '../../components/chat/sessionPanel/SessionSidePanel.svelte'
   import FileDropZone from '../../components/chat/FileDropZone.svelte'
@@ -44,61 +44,66 @@
 
 <svelte:window onpopstate={updatePath} onclick={updatePathAfterNavigation} />
 
-<Sidebar.Provider class="desktop-shell file-preview-layout" style={$filePreviewWidth === null ? undefined : `--file-preview-saved-width: ${$filePreviewWidth}px`}>
+<Sidebar.Provider class="desktop-shell">
   {@render sidebar()}
-  <Sidebar.Inset class="bg-surface lg:mr-[var(--file-preview-width)]">
-    <FileDropZone>
-      <!-- On chat pages only the top bar buttons take pointer input, so the feed beneath still scrolls. -->
-      <div class={['sticky z-10 flex items-center', chatPath ? 'pointer-events-none' : 'bg-surface']} style="top: var(--visual-viewport-top, 0px)">
-        <div class="min-w-0 flex-1">
-          {@render topbar()}
+  <div class="file-preview-layout flex min-w-0 flex-1"
+    style:--chat-min-width={`${CHAT_MIN_WIDTH}px`}
+    style:--file-preview-min-width={`${FILE_PREVIEW_MIN_WIDTH}px`}
+    style:--file-preview-saved-width={$filePreviewWidth === null ? undefined : `${$filePreviewWidth}px`}>
+    <Sidebar.Inset class="bg-surface lg:mr-[var(--file-preview-width)]">
+      <FileDropZone>
+        <!-- On chat pages only the top bar buttons take pointer input, so the feed beneath still scrolls. -->
+        <div class={['sticky z-10 flex items-center', chatPath ? 'pointer-events-none' : 'bg-surface']} style="top: var(--visual-viewport-top, 0px)">
+          <div class="min-w-0 flex-1">
+            {@render topbar()}
+          </div>
+          {@render $topBarAction?.()}
+          <div class="shrink-0 md:pr-4"><DownloadCenter /></div>
         </div>
-        {@render $topBarAction?.()}
-        <div class="shrink-0 md:pr-4"><DownloadCenter /></div>
-      </div>
-      <main class={mainClass}>
-        <div class={contentClass}>
-          {#if settingsPath}
-            <SettingsShell>
+        <main class={mainClass}>
+          <div class={contentClass}>
+            {#if settingsPath}
+              <SettingsShell>
+                {@render children()}
+              </SettingsShell>
+            {:else}
               {@render children()}
-            </SettingsShell>
-          {:else}
-            {@render children()}
-          {/if}
-        </div>
-      </main>
-    </FileDropZone>
-  </Sidebar.Inset>
-  {#if sessionPanel.source}
-    {#key sessionPanel.source.device}
-      <SessionSidePanel panel={sessionPanel} source={sessionPanel.source} />
-    {/key}
-  {/if}
+            {/if}
+          </div>
+        </main>
+      </FileDropZone>
+    </Sidebar.Inset>
+    {#if sessionPanel.source}
+      {#key sessionPanel.source.device}
+        <SessionSidePanel panel={sessionPanel} source={sessionPanel.source} />
+      {/key}
+    {/if}
+  </div>
 </Sidebar.Provider>
 
 <style>
-  @property --file-preview-width {
-    syntax: '<length>';
+  @property --file-preview-open {
+    syntax: '<number>';
     inherits: true;
-    initial-value: 0px;
+    initial-value: 0;
   }
 
   @media (min-width: 1024px) {
     :global(.file-preview-layout) {
-      /* Keep in sync with FILE_PREVIEW_MIN_WIDTH and FILE_PREVIEW_RESERVED_WIDTH. */
-      --file-preview-target-width: clamp(
-        320px,
-        var(--file-preview-saved-width, clamp(360px, 40vw, 640px)),
-        calc(100vw - 480px)
+      container-type: inline-size;
+      --file-preview-target-width: min(
+        calc(100cqw - var(--chat-min-width)),
+        max(var(--file-preview-min-width), var(--file-preview-saved-width, clamp(360px, 40vw, 640px)))
       );
+      --file-preview-width: calc(var(--file-preview-open) * var(--file-preview-target-width));
     }
     :global(.file-preview-layout:has([data-docked-panel-open])) {
-      --file-preview-width: var(--file-preview-target-width);
+      --file-preview-open: 1;
     }
   }
   @media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
-    :global(body:not(.file-preview-resizing) .file-preview-layout) {
-      transition: --file-preview-width 200ms ease-out;
+    :global(.file-preview-layout) {
+      transition: --file-preview-open 200ms ease-out;
     }
   }
 </style>
