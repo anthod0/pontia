@@ -1,9 +1,15 @@
-use std::{future::Future, io::Write, time::Duration};
+use std::{
+    future::Future,
+    io::Write,
+    net::{Ipv4Addr, SocketAddr},
+    time::Duration,
+};
 
 use anyhow::{Context, Result};
+use futures_util::{StreamExt, stream::FuturesUnordered};
 use hickory_resolver::{
     TokioResolver,
-    config::{ResolveHosts, ResolverConfig},
+    config::{NameServerConfigGroup, ResolveHosts, ResolverConfig},
     name_server::TokioConnectionProvider,
 };
 use tokio::time::{Instant, MissedTickBehavior};
@@ -18,63 +24,79 @@ pub(crate) async fn wait_for_txt(
     value: &str,
     output: &mut (impl Write + ?Sized),
 ) -> Result<()> {
-    wait_for_txt_with_resolver(hostname, value, &challenge_resolver(), output).await
+    wait_for_txt_with_resolvers(hostname, value, &challenge_resolvers(), output).await
 }
 
-fn challenge_resolver() -> TokioResolver {
+async fn wait_for_txt_with_resolvers(
+    hostname: &str,
+    value: &str,
+    resolvers: &[TokioResolver],
+    output: &mut (impl Write + ?Sized),
+) -> Result<()> {
+    let name = format!("_acme-challenge.{hostname}.");
+    wait_for_txt_with_lookup(&name, || lookup_txt(resolvers, &name, value), output).await
+}
+
+fn challenge_resolvers() -> [TokioResolver; 4] {
+    [
+        Ipv4Addr::new(223, 5, 5, 5),
+        Ipv4Addr::new(119, 29, 29, 29),
+        Ipv4Addr::new(1, 1, 1, 1),
+        Ipv4Addr::new(8, 8, 8, 8),
+    ]
+    .map(|ip| challenge_resolver(SocketAddr::from((ip, 53))))
+}
+
+fn challenge_resolver(address: SocketAddr) -> TokioResolver {
     // A host stub can cache NXDOMAIN longer than the propagation deadline.
-    let mut builder = TokioResolver::builder_with_config(
-        ResolverConfig::google(),
-        TokioConnectionProvider::default(),
-    );
+    let servers = NameServerConfigGroup::from_ips_clear(&[address.ip()], address.port(), true);
+    let config = ResolverConfig::from_parts(None, vec![], servers);
+    let mut builder =
+        TokioResolver::builder_with_config(config, TokioConnectionProvider::default());
     builder.options_mut().use_hosts_file = ResolveHosts::Never;
     builder.options_mut().cache_size = 0;
     builder.build()
 }
 
-async fn wait_for_txt_with_resolver(
-    hostname: &str,
-    value: &str,
-    resolver: &TokioResolver,
-    output: &mut (impl Write + ?Sized),
-) -> Result<()> {
-    let name = format!("_acme-challenge.{hostname}.");
-    wait_for_txt_with_lookup(
-        &name,
-        value,
-        || async {
-            let records = resolver.txt_lookup(name.as_str()).await?;
-            Ok(records
-                .iter()
-                .map(|record| {
+async fn lookup_txt(resolvers: &[TokioResolver], name: &str, expected: &str) -> Result<bool> {
+    let mut queries: FuturesUnordered<_> = resolvers.iter().map(|r| r.txt_lookup(name)).collect();
+    let mut last_error = None;
+    let mut received_records = false;
+    while let Some(result) = queries.next().await {
+        match result {
+            Ok(records) => {
+                if records.iter().any(|record| {
                     record
                         .txt_data()
                         .iter()
                         .flat_map(|part| part.iter().copied())
-                        .collect()
-                })
-                .collect())
-        },
-        output,
-    )
-    .await
+                        .eq(expected.bytes())
+                }) {
+                    return Ok(true);
+                }
+                received_records = true;
+            }
+            Err(error) => last_error = Some(error),
+        }
+    }
+    if !received_records && let Some(error) = last_error {
+        return Err(error.into());
+    }
+    Ok(false)
 }
 
 async fn wait_for_txt_with_lookup<F, Fut>(
     name: &str,
-    expected: &str,
     mut lookup: F,
     output: &mut (impl Write + ?Sized),
 ) -> Result<()>
 where
     F: FnMut() -> Fut,
-    Fut: Future<Output = Result<Vec<Vec<u8>>>>,
+    Fut: Future<Output = Result<bool>>,
 {
     progress(
         output,
-        &format!(
-            "Waiting for DNS-01 TXT record {name} using Google Public DNS (up to 5 minutes)..."
-        ),
+        &format!("Waiting for DNS-01 TXT record {name} using public DNS (up to 5 minutes)..."),
     )?;
     let started = Instant::now();
     let deadline = started + PROPAGATION_TIMEOUT;
@@ -103,14 +125,16 @@ where
             }
         };
         match result {
-            Ok(Ok(records)) if records.iter().any(|record| record == expected.as_bytes()) => {
+            Ok(Ok(true)) => {
                 progress(
                     output,
                     "DNS-01 TXT record is visible; starting Let's Encrypt validation...",
                 )?;
                 return Ok(());
             }
-            Ok(Ok(_)) => last_observation = "the expected TXT value is not visible yet".to_owned(),
+            Ok(Ok(false)) => {
+                last_observation = "the expected TXT value is not visible yet".to_owned()
+            }
             Ok(Err(error)) => last_observation = format!("public DNS query failed: {error:#}"),
             Err(_) => last_observation = "public DNS query timed out after 5 seconds".to_owned(),
         }
@@ -131,68 +155,94 @@ mod tests {
 
     #[tokio::test]
     async fn challenge_queries_use_public_nameservers_without_local_caching() {
-        let resolver = challenge_resolver();
-        let servers = resolver.config().name_servers();
-        assert!(!servers.is_empty());
-        assert!(servers.iter().all(|server| {
-            hickory_resolver::config::GOOGLE_IPS.contains(&server.socket_addr.ip())
-        }));
-        assert_eq!(resolver.options().cache_size, 0);
+        let resolvers = challenge_resolvers();
+        for (resolver, expected) in resolvers.iter().zip([
+            "223.5.5.5:53",
+            "119.29.29.29:53",
+            "1.1.1.1:53",
+            "8.8.8.8:53",
+        ]) {
+            let expected: SocketAddr = expected.parse().unwrap();
+            let servers = resolver.config().name_servers();
+            assert!(!servers.is_empty());
+            assert!(servers.iter().all(|server| server.socket_addr == expected));
+            assert_eq!(resolver.options().cache_size, 0);
+            assert_eq!(resolver.options().use_hosts_file, ResolveHosts::Never);
+        }
+    }
+
+    async fn answer_txt(socket: &tokio::net::UdpSocket, parts: Option<&[&str]>) {
+        use hickory_resolver::proto::{
+            op::{Message, MessageType, ResponseCode},
+            rr::{RData, Record, RecordType, rdata::TXT},
+        };
+        let mut bytes = [0u8; 4096];
+        let (length, peer) = socket.recv_from(&mut bytes).await.unwrap();
+        let request = Message::from_vec(&bytes[..length]).unwrap();
+        let query = request.queries()[0].clone();
+        assert_eq!(query.name().to_utf8(), "_acme-challenge.edge.example.");
+        assert_eq!(query.query_type(), RecordType::TXT);
+        let mut response = Message::new();
+        response
+            .set_id(request.id())
+            .set_message_type(MessageType::Response)
+            .set_recursion_desired(true)
+            .set_recursion_available(true)
+            .add_query(query.clone());
+        if let Some(parts) = parts {
+            response.add_answer(Record::from_rdata(
+                query.name().clone(),
+                60,
+                RData::TXT(TXT::new(parts.iter().map(|s| s.to_string()).collect())),
+            ));
+        } else {
+            response.set_response_code(ResponseCode::NXDomain);
+        }
+        socket
+            .send_to(&response.to_vec().unwrap(), peer)
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
-    async fn queries_configured_dns_and_concatenates_txt_character_strings() {
-        use hickory_resolver::{
-            config::NameServerConfig,
-            proto::{
-                op::{Message, MessageType},
-                rr::{RData, Record, RecordType, rdata::TXT},
-                xfer::Protocol,
-            },
+    async fn accepts_matching_segments_despite_nxdomain_stale_and_silent_servers() {
+        use tokio::net::UdpSocket;
+        let silent = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let stale = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let negative = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let matching = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let resolvers = [&silent, &negative, &stale, &matching]
+            .map(|s| challenge_resolver(s.local_addr().unwrap()));
+        let serve = async {
+            answer_txt(&negative, None).await;
+            answer_txt(&stale, Some(&["old-value"])).await;
+            silent.recv_from(&mut [0; 512]).await.unwrap();
+            answer_txt(&matching, Some(&["expected-", "value"])).await;
         };
-        let socket = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
-        let address = socket.local_addr().unwrap();
-        let mut config = ResolverConfig::new();
-        config.add_name_server(NameServerConfig::new(address, Protocol::Udp));
-        let resolver =
-            TokioResolver::builder_with_config(config, TokioConnectionProvider::default()).build();
-        let server = tokio::spawn(async move {
-            let mut bytes = [0u8; 4096];
-            let (length, peer) = socket.recv_from(&mut bytes).await.unwrap();
-            let request = Message::from_vec(&bytes[..length]).unwrap();
-            let query = request.queries()[0].clone();
-            assert_eq!(query.name().to_utf8(), "_acme-challenge.edge.example.");
-            assert_eq!(query.query_type(), RecordType::TXT);
-            let mut response = Message::new();
-            response
-                .set_id(request.id())
-                .set_message_type(MessageType::Response)
-                .set_recursion_desired(true)
-                .set_recursion_available(true)
-                .add_query(query.clone())
-                .add_answer(Record::from_rdata(
-                    query.name().clone(),
-                    60,
-                    RData::TXT(TXT::new(vec!["expected-".to_owned(), "value".to_owned()])),
-                ));
-            socket
-                .send_to(&response.to_vec().unwrap(), peer)
+        let mut output = Vec::new();
+        let query =
+            wait_for_txt_with_resolvers("edge.example", "expected-value", &resolvers, &mut output);
+        let (_, result) =
+            tokio::time::timeout(Duration::from_secs(3), async { tokio::join!(serve, query) })
                 .await
                 .unwrap();
-        });
-        tokio::time::timeout(
-            Duration::from_secs(3),
-            wait_for_txt_with_resolver(
-                "edge.example",
-                "expected-value",
-                &resolver,
-                &mut Vec::new(),
-            ),
-        )
-        .await
-        .unwrap()
-        .unwrap();
-        server.await.unwrap();
+        result.unwrap();
+    }
+
+    #[tokio::test]
+    async fn retries_uncached_after_stale_txt() {
+        let socket = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let resolvers = [challenge_resolver(socket.local_addr().unwrap())];
+        for (value, visible) in [("stale", false), ("expected", true)] {
+            let query = lookup_txt(&resolvers, "_acme-challenge.edge.example.", "expected");
+            let (_, result) = tokio::time::timeout(Duration::from_secs(3), async {
+                let parts = [value];
+                tokio::join!(answer_txt(&socket, Some(&parts)), query)
+            })
+            .await
+            .unwrap();
+            assert_eq!(result.unwrap(), visible);
+        }
     }
 
     #[tokio::test(start_paused = true)]
@@ -201,8 +251,7 @@ mod tests {
         let mut output = Vec::new();
         let error = wait_for_txt_with_lookup(
             "_acme-challenge.edge.example.",
-            "expected",
-            std::future::pending::<Result<Vec<Vec<u8>>>>,
+            std::future::pending::<Result<bool>>,
             &mut output,
         )
         .await
@@ -223,11 +272,10 @@ mod tests {
         let mut calls = 0;
         let error = wait_for_txt_with_lookup(
             "_acme-challenge.edge.example.",
-            "expected",
             || {
                 calls += 1;
                 std::future::ready(if calls == 1 {
-                    Ok(vec![b"stale".to_vec()])
+                    Ok(false)
                 } else {
                     Err(anyhow::anyhow!("resolver unavailable"))
                 })
@@ -246,14 +294,9 @@ mod tests {
         let mut output = Vec::new();
         wait_for_txt_with_lookup(
             "_acme-challenge.edge.example.",
-            "expected",
             || {
                 calls += 1;
-                std::future::ready(Ok(vec![if calls < 3 {
-                    b"stale".to_vec()
-                } else {
-                    b"expected".to_vec()
-                }]))
+                std::future::ready(Ok(calls >= 3))
             },
             &mut output,
         )
