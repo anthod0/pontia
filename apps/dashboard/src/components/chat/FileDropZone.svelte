@@ -10,9 +10,15 @@
 
   // Nested elements fire their own enter/leave pairs; count them so the overlay stays up until the drag leaves the zone.
   // A leave toward the outside resets the count, since elements re-rendered mid-drag never send their own leave.
-  let dragDepth = $state(0)
-  const showOverlay = $derived(dragDepth > 0 && fileDrop.target !== null && !fileDrop.target.unavailable)
+  let dragDepth = 0
+  // The overlay covers the conversation and stops above the input box, which stays sharp as the drop destination.
+  let overlayBottom = $state(0)
+  const unavailableReason = $derived(fileDrop.target?.unavailableReason ?? null)
 
+  function setDragDepth(depth: number): void {
+    dragDepth = depth
+    fileDrop.dragging = depth > 0
+  }
   // The Bot side panel renders inside the zone but sits beside the main panel, outside the overlay.
   function inMainPanel(node: EventTarget | null): boolean {
     return node instanceof Element && zone!.contains(node) && !node.closest('[data-bot-chat-panel]')
@@ -23,36 +29,47 @@
   function dragEnter(event: DragEvent): void {
     if (!droppable(event)) return
     event.preventDefault()
-    dragDepth += 1
+    if (dragDepth === 0) {
+      const input = fileDrop.target!.element
+      overlayBottom = input ? Math.max(0, window.innerHeight - input.getBoundingClientRect().top) : 0
+    }
+    setDragDepth(dragDepth + 1)
   }
   function dragOver(event: DragEvent): void {
     if (!droppable(event)) return
     event.preventDefault()
-    event.dataTransfer!.dropEffect = fileDrop.target!.unavailable ? 'none' : 'copy'
+    event.dataTransfer!.dropEffect = fileDrop.target!.unavailableReason ? 'none' : 'copy'
   }
   function dragLeave(event: DragEvent): void {
     if (!droppable(event)) return
     const next = event.relatedTarget
-    dragDepth = next instanceof Node && !inMainPanel(next) ? 0 : Math.max(0, dragDepth - 1)
+    setDragDepth(next instanceof Node && !inMainPanel(next) ? 0 : Math.max(0, dragDepth - 1))
   }
   // Capture keeps the message editor from inserting the dropped file as text.
   function drop(event: DragEvent): void {
     if (!droppable(event)) return
     event.preventDefault()
     event.stopPropagation()
-    dragDepth = 0
+    setDragDepth(0)
     const target = fileDrop.target!
-    if (target.unavailable || !event.dataTransfer!.files.length) return
+    if (target.unavailableReason || !event.dataTransfer!.files.length) return
     target.add(Array.from(event.dataTransfer!.files))
   }
 </script>
 
 <div bind:this={zone} class="contents" role="presentation" ondragenter={dragEnter} ondragover={dragOver} ondragleave={dragLeave} ondropcapture={drop}>
   {@render children()}
-  {#if showOverlay}
-    <div class="pointer-events-none fixed inset-y-0 left-0 right-0 z-45 flex flex-col items-center justify-center gap-3 bg-background/60 text-primary backdrop-blur-sm transition-[left] duration-200 ease-linear md:left-[var(--sidebar-width)] lg:right-[var(--file-preview-width,0px)] group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)]">
-      <FileArrowUpIcon class="size-10" />
-      <p class="text-base font-medium">{$t('files.dropToUpload')}</p>
+  {#if fileDrop.dragging && fileDrop.target}
+    <div class="pointer-events-none fixed top-0 left-0 right-0 z-45 bg-background/70 p-3 backdrop-blur-[3px] transition-[left] duration-200 ease-linear md:left-[var(--sidebar-width)] lg:right-[var(--file-preview-width,0px)] group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)]" style:bottom={`${overlayBottom}px`}>
+      <div class={['flex size-full flex-col items-center justify-center gap-1 rounded-2xl border-[1.5px] border-dashed px-4 text-center', unavailableReason ? 'border-muted-foreground/40 bg-muted/40' : 'border-primary/55 bg-selected/60']}>
+        <span class={['mb-2 grid size-12 place-items-center rounded-full', unavailableReason ? 'bg-muted text-inactive' : 'bg-primary/14 text-primary']}>
+          <FileArrowUpIcon class="size-6" weight="duotone" />
+        </span>
+        <p class={['text-[15px] font-semibold', unavailableReason ? 'text-muted-foreground' : 'text-heading']}>
+          {unavailableReason ? $t('files.dropUnavailable') : $t('files.dropToAdd')}
+        </p>
+        <p class="text-xs text-muted-foreground">{unavailableReason ?? $t('files.dropHint')}</p>
+      </div>
     </div>
   {/if}
 </div>

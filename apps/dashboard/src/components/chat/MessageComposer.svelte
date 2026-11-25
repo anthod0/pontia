@@ -2,7 +2,7 @@
   import { createComposer } from "../../features/chat/composer.svelte"
   import ResponsiveDialog from '$lib/components/ui/overlay/ResponsiveDialog.svelte'
   import ResponsiveMenu from '$lib/components/ui/overlay/ResponsiveMenu.svelte'
-  import { t } from '$lib/i18n';
+  import { t, translate } from '$lib/i18n';
   import { tick, type Snippet } from 'svelte'
   import ArrowsOutIcon from 'phosphor-svelte/lib/ArrowsOutIcon'
   import ArrowsInIcon from 'phosphor-svelte/lib/ArrowsInIcon'
@@ -21,7 +21,7 @@
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
   import UploadAttachments from './UploadAttachments.svelte'
-  import { useFileDrop } from './fileDrop.svelte'
+  import { useFileDrop, type FileDropTarget } from './fileDrop.svelte'
   import ChatCommandInput from './ChatCommandInput.svelte'
   import { type ChatCommand } from '$lib/chatCommands'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -198,14 +198,22 @@
   }
 
   const fileDrop = useFileDrop()
+  let composerForm = $state<HTMLFormElement | null>(null)
+  const dropTarget: FileDropTarget = {
+    get unavailableReason() {
+      if (!controller.uploadUnavailable) return null
+      if (!controller.attachments.ready) return translate('files.dropPreparing')
+      if (busy || controller.sending) return translate('files.dropSending')
+      return translate('files.dropDisabled')
+    },
+    get element() { return composerForm },
+    add: files => void controller.uploads?.add(files),
+  }
   $effect(() => {
-    const draft = controller.uploads
-    if (!fileDrop || !draft) return
-    return fileDrop.register({
-      get unavailable() { return controller.uploadUnavailable },
-      add: files => void draft.add(files),
-    })
+    if (!fileDrop || !controller.uploads) return
+    return fileDrop.register(dropTarget)
   })
+  const dropHighlighted = $derived(fileDrop?.activeTarget === dropTarget)
 
   function handleKeydown(event: KeyboardEvent): void {
     if (event.isComposing || event.keyCode === 229) return
@@ -277,7 +285,7 @@
   </div>
 {/if}
 
-<PromptInput.Root class={compact ? 'grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center' : 'w-full'} onSubmit={() => submit()}>
+<PromptInput.Root bind:ref={composerForm} class={cn(compact ? 'grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center' : 'w-full', dropHighlighted && 'border-primary ring-3 ring-primary/20')} onSubmit={() => submit()}>
   {#if controller.uploads}
     <div class={compact ? 'col-span-3 row-start-1' : 'contents'}>
       <UploadAttachments bind:this={uploadPicker} draft={controller.uploads} disabled={disabled || busy || controller.sending} />

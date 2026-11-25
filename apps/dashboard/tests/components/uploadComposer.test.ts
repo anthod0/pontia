@@ -171,12 +171,14 @@ test("uploads files dropped anywhere on the main panel, showing the overlay whil
   const feed = screen.getByText("Conversation feed");
   const dataTransfer = clipboard([new File(["pdf"], "notes.pdf", { type: "application/pdf" })], []);
   await fireEvent.dragEnter(feed, { dataTransfer });
-  expect(screen.getByText("Drop files to upload")).toBeInTheDocument();
+  expect(screen.getByText("Release to add to your message")).toBeInTheDocument();
+  expect(screen.getByText("Multiple files supported · Up to 1 GiB each")).toBeInTheDocument();
+  expect(screen.getByRole("textbox").closest("form")).toHaveClass("border-primary");
   await fireEvent.dragEnter(screen.getByRole("textbox"), { dataTransfer });
   await fireEvent.dragLeave(feed, { dataTransfer });
-  expect(screen.getByText("Drop files to upload")).toBeInTheDocument();
+  expect(screen.getByText("Release to add to your message")).toBeInTheDocument();
   expect(await fireEvent.drop(screen.getByRole("textbox"), { dataTransfer })).toBe(false);
-  expect(screen.queryByText("Drop files to upload")).not.toBeInTheDocument();
+  expect(screen.queryByText("Release to add to your message")).not.toBeInTheDocument();
   await screen.findByRole("button", { name: "Remove attachment notes.pdf" });
   expect(screen.getByRole("textbox")).toHaveTextContent("");
 });
@@ -193,7 +195,7 @@ test("hides the overlay when the drag leaves the main panel", async () => {
   await fireEvent.dragEnter(textbox, { dataTransfer });
   await fireEvent.dragLeave(feed, { dataTransfer });
   await fireEvent.dragLeave(textbox, { dataTransfer });
-  expect(screen.queryByText("Drop files to upload")).not.toBeInTheDocument();
+  expect(screen.queryByText("Release to add to your message")).not.toBeInTheDocument();
   // A re-rendered element never sends its leave; leaving toward the sidebar still clears the overlay.
   await fireEvent.dragEnter(feed, { dataTransfer });
   await fireEvent.dragEnter(textbox, { dataTransfer });
@@ -203,7 +205,7 @@ test("hides the overlay when the drag leaves the main panel", async () => {
     value: screen.getByText("Sidebar"),
   });
   await fireEvent(textbox, leave);
-  expect(screen.queryByText("Drop files to upload")).not.toBeInTheDocument();
+  expect(screen.queryByText("Release to add to your message")).not.toBeInTheDocument();
 });
 
 test("leaves drops on the Bot side panel alone", async () => {
@@ -214,12 +216,12 @@ test("leaves drops on the Bot side panel alone", async () => {
   const panel = screen.getByText("Bot side panel");
   const dataTransfer = clipboard([new File(["a"], "a.txt")], []);
   await fireEvent.dragEnter(panel, { dataTransfer });
-  expect(screen.queryByText("Drop files to upload")).not.toBeInTheDocument();
+  expect(screen.queryByText("Release to add to your message")).not.toBeInTheDocument();
   expect(await fireEvent.drop(panel, { dataTransfer })).toBe(true);
   expect(screen.queryByRole("button", { name: "Remove attachment a.txt" })).not.toBeInTheDocument();
 });
 
-test("refuses dropped files while the composer is busy", async () => {
+test("refuses dropped files while the composer is busy and says why", async () => {
   const view = render(FileDropZoneHarness, { draftId: crypto.randomUUID() });
   await waitFor(() =>
     expect(screen.getByRole("button", { name: "Add", exact: true })).toBeEnabled(),
@@ -233,8 +235,12 @@ test("refuses dropped files while the composer is busy", async () => {
   await fireEvent.dragEnter(feed, { dataTransfer });
   expect(await fireEvent.dragOver(feed, { dataTransfer })).toBe(false);
   expect(dataTransfer.dropEffect).toBe("none");
-  expect(screen.queryByText("Drop files to upload")).not.toBeInTheDocument();
+  expect(screen.queryByText("Release to add to your message")).not.toBeInTheDocument();
+  expect(screen.getByText("Can't add files right now")).toBeInTheDocument();
+  await screen.findByText("A message is being sent. Add files after it finishes.");
+  expect(screen.getByRole("textbox").closest("form")).not.toHaveClass("border-primary");
   expect(await fireEvent.drop(feed, { dataTransfer })).toBe(false);
+  expect(screen.queryByText("Can't add files right now")).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Remove attachment a.txt" })).not.toBeInTheDocument();
 });
 
@@ -246,7 +252,7 @@ test("ignores drags that carry no files", async () => {
   await fireEvent.dragEnter(screen.getByText("Conversation feed"), {
     dataTransfer: clipboard([], ["text/plain"]),
   });
-  expect(screen.queryByText("Drop files to upload")).not.toBeInTheDocument();
+  expect(screen.queryByText("Release to add to your message")).not.toBeInTheDocument();
 });
 
 test("keeps rich text pastes that carry a rendered image as text", async () => {
