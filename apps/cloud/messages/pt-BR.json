@@ -228,6 +228,10 @@
 
   "device_title": "Confirmar dispositivo — Pontia",
   "device_heading": "Confirme o acesso do dispositivo.",
+  "device_authorized_heading": "Acesso aprovado",
+  "device_wait_registration": "Aguardando o registro do dispositivo. Volte ao terminal, selecione um Edge e confirme o nome do dispositivo. O Dashboard abrirá aqui automaticamente.",
+  "device_wait_timeout": "O registro está demorando mais que o esperado. Conclua a configuração no terminal e abra o Dashboard.",
+  "device_open_dashboard": "Abrir Dashboard",
   "device_approved": "Acesso aprovado. Você pode voltar ao terminal.",
   "device_denied": "Acesso negado. Você pode voltar ao terminal.",
   "device_invalid": "Este código é inválido, expirou ou já foi usado.",

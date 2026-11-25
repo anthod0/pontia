@@ -16,6 +16,7 @@ import {
 } from "../src/routes/api/dashboard/devices/[device_handle]/connect/+server";
 import { GET as profile, OPTIONS as profileOptions } from "../src/routes/api/dashboard/me/+server";
 import { POST as preview } from "../src/routes/api/dashboard/devices/[device_handle]/preview-token/+server";
+import { GET as registration } from "../src/routes/api/device/registration/+server";
 import { testDatabase } from "./database";
 
 const callListDevices = listDevices as unknown as (event: RequestEvent) => Promise<Response>;
@@ -166,6 +167,35 @@ test("lists only the authenticated user's minimal stateless device records", asy
     ],
   });
   expectCredentialedCors(response);
+});
+
+test("approval polling matches the owner, initializing device and registration time", async () => {
+  const token = await seedDashboardFixtureAndLogin();
+  const approved = Date.parse("2026-11-01T10:00:00Z");
+  const get = registration as unknown as (event: RequestEvent) => Promise<Response>;
+  const poll = (id: string, at: number, credential?: string) =>
+    get(
+      event(`/api/device/registration?init_device=${id}&approved_at=${at}`, { token: credential }),
+    );
+  await database.db
+    .update(devices)
+    .set({ createdAt: new Date(approved + 1).toISOString() })
+    .where(eq(devices.id, ownerDeviceId));
+  expect((await poll(ownerDeviceId, approved)).status).toBe(401);
+  expect((await (await poll(ownerDeviceId, approved + 2, token)).json()) as unknown).toEqual({
+    handle: null,
+  });
+  expect((await (await poll(otherId, approved, token)).json()) as unknown).toEqual({
+    handle: null,
+  });
+  expect(
+    (await (await poll("0195e7d5-1b22-7c33-9d44-123456789abc", 1, token)).json()) as unknown,
+  ).toEqual({
+    handle: null,
+  });
+  expect((await (await poll(ownerDeviceId, approved, token)).json()) as unknown).toEqual({
+    handle: "office-mac",
+  });
 });
 
 test("returns the authenticated user's current profile to the Public Dashboard", async () => {

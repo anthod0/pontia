@@ -37,11 +37,12 @@ struct StoredCredential<'a> {
 }
 
 pub async fn run(vars: &HashMap<String, String>) -> Result<(), String> {
-    run_with_verification(vars, |_| {}).await
+    run_with_verification(vars, None, |_| {}).await
 }
 
 pub async fn run_with_verification<F>(
     vars: &HashMap<String, String>,
+    init_device: Option<&str>,
     on_verification: F,
 ) -> Result<(), String>
 where
@@ -50,7 +51,7 @@ where
     let home = pontia_home(vars)?;
     let origin = auth_origin(vars)?;
     tokio::select! {
-        result = login(&origin, &home, on_verification) => result,
+        result = login(&origin, &home, init_device, on_verification) => result,
         result = tokio::signal::ctrl_c() => {
             result.map_err(|error| format!("failed to listen for cancellation: {error}"))?;
             Err("login canceled".to_string())
@@ -58,7 +59,12 @@ where
     }
 }
 
-async fn login<F>(origin: &Url, home: &Path, on_verification: F) -> Result<(), String>
+async fn login<F>(
+    origin: &Url,
+    home: &Path,
+    init_device: Option<&str>,
+    on_verification: F,
+) -> Result<(), String>
 where
     F: FnOnce(&str),
 {
@@ -86,7 +92,7 @@ where
         .json()
         .await
         .map_err(|_| "the login service returned an invalid authorization response".to_string())?;
-    let verification_url = validate_authorization(&authorization, origin)?;
+    let verification_url = validate_authorization(&authorization, origin, init_device)?;
 
     println!("{}", terminal::heading("Sign in to Pontia Cloud"));
     println!("  1. Open this URL in a browser on any device:");
@@ -148,7 +154,11 @@ where
     }
 }
 
-fn validate_authorization(response: &AuthorizationResponse, origin: &Url) -> Result<Url, String> {
+fn validate_authorization(
+    response: &AuthorizationResponse,
+    origin: &Url,
+    init_device: Option<&str>,
+) -> Result<Url, String> {
     let mut verification = Url::parse(&response.verification_uri)
         .map_err(|_| "the login service returned an invalid verification address".to_string())?;
     if verification.origin() != origin.origin()
@@ -164,6 +174,11 @@ fn validate_authorization(response: &AuthorizationResponse, origin: &Url) -> Res
     verification
         .query_pairs_mut()
         .append_pair("user_code", &response.user_code);
+    if let Some(id) = init_device {
+        verification
+            .query_pairs_mut()
+            .append_pair("init_device", id);
+    }
     Ok(verification)
 }
 
@@ -374,10 +389,13 @@ mod tests {
         });
 
         // Exercise the login exchange over loopback; origin validation still requires HTTPS.
-        tokio::time::timeout(Duration::from_secs(10), login(&origin, root.path(), |_| {}))
-            .await
-            .unwrap()
-            .unwrap();
+        tokio::time::timeout(
+            Duration::from_secs(10),
+            login(&origin, root.path(), None, |_| {}),
+        )
+        .await
+        .unwrap()
+        .unwrap();
 
         let peers = peers.lock().unwrap();
         assert_eq!(peers.len(), 3);
@@ -414,7 +432,13 @@ mod tests {
             interval: 5,
         };
 
-        let verification = validate_authorization(&authorization, &origin).unwrap();
+        let verification = validate_authorization(&authorization, &origin, None).unwrap();
+        let id = Uuid::now_v7().to_string();
+        let init_url = validate_authorization(&authorization, &origin, Some(&id)).unwrap();
+        assert_eq!(
+            init_url.as_str(),
+            format!("https://pontia.dev/device?user_code=BCDF-GHJK&init_device={id}")
+        );
 
         assert_eq!(
             verification.as_str(),

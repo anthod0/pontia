@@ -95,7 +95,7 @@ pub(crate) async fn run(
 ) -> Result<ServiceRestart, String> {
     match command.command {
         RemoteCommandKind::Edges => edges(vars).await.map(|_| ServiceRestart::NotRequired),
-        RemoteCommandKind::Enable(args) => enable_with_args(vars, args)
+        RemoteCommandKind::Enable(args) => enable_with_args(vars, args, None)
             .await
             .map(|access| access.restart),
         RemoteCommandKind::Edit(args) => edit(vars, args).await,
@@ -220,13 +220,17 @@ async fn edges(vars: &HashMap<String, String>) -> Result<(), String> {
     Ok(())
 }
 
-pub async fn enable(vars: &HashMap<String, String>) -> Result<RemoteAccess, String> {
-    enable_with_args(vars, EnableArgs::default()).await
+pub async fn enable(
+    vars: &HashMap<String, String>,
+    planned_id: Option<String>,
+) -> Result<RemoteAccess, String> {
+    enable_with_args(vars, EnableArgs::default(), planned_id).await
 }
 
 async fn enable_with_args(
     vars: &HashMap<String, String>,
     args: EnableArgs,
+    planned_id: Option<String>,
 ) -> Result<RemoteAccess, String> {
     let home = login::pontia_home(vars)?;
     let origin = login::auth_origin(vars)?;
@@ -238,7 +242,7 @@ async fn enable_with_args(
         credential: &credential,
     };
     let config_path = home.join("config.toml");
-    let device_id = ensure_device_id(&config_path)?;
+    let device_id = ensure_device_id(&config_path, planned_id)?;
     let e2e_config = api.e2e_config().await?;
 
     if let Some(device) = api.find_device(&device_id).await? {
@@ -723,13 +727,17 @@ fn read_device_id(path: &Path) -> Result<Option<String>, String> {
     device_id(&read_document(path)?, path)
 }
 
-fn ensure_device_id(path: &Path) -> Result<String, String> {
+pub(super) fn planned_device_id(path: &Path) -> Result<String, String> {
+    Ok(read_device_id(path)?.unwrap_or_else(|| Uuid::now_v7().to_string()))
+}
+
+fn ensure_device_id(path: &Path, planned_id: Option<String>) -> Result<String, String> {
     let mut document = read_document(path)?;
     if let Some(device_id) = device_id(&document, path)? {
         return Ok(device_id);
     }
 
-    let device_id = Uuid::now_v7().to_string();
+    let device_id = planned_id.unwrap_or_else(|| Uuid::now_v7().to_string());
     document["remote"]["device_id"] = toml_edit::value(&device_id);
     private_file::atomic_write(path, document.to_string().as_bytes())?;
     Ok(device_id)
@@ -1189,8 +1197,11 @@ mod tests {
         let path = root.path().join("config.toml");
         fs::write(&path, "bind_addr = '127.0.0.1:9000'\n").unwrap();
 
-        let first = ensure_device_id(&path).unwrap();
-        let second = ensure_device_id(&path).unwrap();
+        let planned = planned_device_id(&path).unwrap();
+        assert!(read_device_id(&path).unwrap().is_none());
+        let first = ensure_device_id(&path, Some(planned.clone())).unwrap();
+        assert_eq!(first, planned);
+        let second = ensure_device_id(&path, None).unwrap();
         let contents = fs::read_to_string(path).unwrap();
 
         assert_eq!(first, second);
@@ -1206,7 +1217,11 @@ mod tests {
         let original = "[remote]\ndevice_id = 'not-a-uuid'\n";
         fs::write(&path, original).unwrap();
 
-        assert!(ensure_device_id(&path).unwrap_err().contains("UUIDv7"));
+        assert!(
+            ensure_device_id(&path, None)
+                .unwrap_err()
+                .contains("UUIDv7")
+        );
         assert_eq!(fs::read_to_string(path).unwrap(), original);
     }
 

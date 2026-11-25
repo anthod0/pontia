@@ -228,6 +228,10 @@
 
   "device_title": "确认设备 — Pontia",
   "device_heading": "确认设备访问。",
+  "device_authorized_heading": "授权成功",
+  "device_wait_registration": "正在等待设备登记。请返回终端选择 Edge 并确认设备名称。登记完成后，此页会自动打开 Dashboard。",
+  "device_wait_timeout": "等待设备登记超时。请在终端完成设置，然后打开 Dashboard。",
+  "device_open_dashboard": "打开 Dashboard",
   "device_approved": "已批准访问。你可以返回终端。",
   "device_denied": "已拒绝访问。你可以返回终端。",
   "device_invalid": "此代码无效、已过期或已被使用。",

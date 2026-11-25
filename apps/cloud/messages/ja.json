@@ -228,6 +228,10 @@
 
   "device_title": "デバイスの確認 — Pontia",
   "device_heading": "デバイスのアクセスを確認します。",
+  "device_authorized_heading": "アクセスを承認しました",
+  "device_wait_registration": "デバイスの登録を待っています。ターミナルに戻り、Edge を選んでデバイス名を確定してください。登録が完了すると、このページで Dashboard が開きます。",
+  "device_wait_timeout": "デバイス登録の待機時間を過ぎました。ターミナルで設定を完了してから Dashboard を開いてください。",
+  "device_open_dashboard": "Dashboard を開く",
   "device_approved": "アクセスを承認しました。ターミナルに戻ってください。",
   "device_denied": "アクセスを拒否しました。ターミナルに戻ってください。",
   "device_invalid": "このコードは無効か、期限切れか、すでに使用されています。",

@@ -1001,10 +1001,7 @@ async fn run_init() -> Result<bool, String> {
     } else {
         println!();
         match enable_remote_access(&vars).await {
-            Ok(url) => {
-                open_dashboard("Remote Dashboard", &url);
-                Ok(true)
-            }
+            Ok(()) => Ok(true),
             Err(error) => {
                 println!(
                     "\n{}",
@@ -1036,20 +1033,30 @@ async fn run_init() -> Result<bool, String> {
     result
 }
 
-async fn enable_remote_access(vars: &HashMap<String, String>) -> Result<String, String> {
-    if !login::has_valid_credential(vars)? {
-        login::run_with_verification(vars, |url| {
+async fn enable_remote_access(vars: &HashMap<String, String>) -> Result<(), String> {
+    let planned_id = if !login::has_valid_credential(vars)? {
+        let id = remote::planned_device_id(&login::pontia_home(vars)?.join("config.toml"))?;
+        login::run_with_verification(vars, Some(&id), |url| {
             let _ = open_browser(url);
         })
         .await?;
+        Some(id)
     } else {
         println!("{}", terminal::success("Already signed in to Pontia Cloud"));
-    }
-    let access = remote::enable(vars).await?;
+        None
+    };
+    let needs_approval = planned_id.is_some();
+    let access = remote::enable(vars, planned_id).await?;
     if matches!(access.restart, remote::ServiceRestart::Required) {
         restart_service_for_remote_config()?;
     }
-    remote_dashboard_url(&access.device_handle)
+    let url = remote_dashboard_url(&access.device_handle)?;
+    if needs_approval {
+        print_dashboard_url("Remote Dashboard", &url);
+    } else {
+        open_dashboard("Remote Dashboard", &url);
+    }
+    Ok(())
 }
 
 fn remote_dashboard_url(device_handle: &str) -> Result<String, String> {
@@ -1061,12 +1068,16 @@ fn remote_dashboard_url(device_handle: &str) -> Result<String, String> {
     Ok(url.to_string())
 }
 
-fn open_dashboard(label: &str, url: &str) {
+fn print_dashboard_url(label: &str, url: &str) {
     println!(
         "\n{}",
         terminal::heading(format!("Pontia is ready. Open the {label}:"))
     );
     println!("\n  {}\n", terminal::link(url));
+}
+
+fn open_dashboard(label: &str, url: &str) {
+    print_dashboard_url(label, url);
     if open_browser(url).is_ok() {
         println!("{}", terminal::success("Opened in your browser"));
     } else {
