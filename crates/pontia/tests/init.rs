@@ -441,6 +441,10 @@ fn rerunning_preserves_the_token_comments_and_unknown_config_without_requesting_
             .permissions()
             .mode();
         assert_eq!(mode & 0o777, 0o600);
+        assert_eq!(
+            fs::metadata(&pontia_home).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
     }
 }
 

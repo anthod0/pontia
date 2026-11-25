@@ -240,3 +240,48 @@ async fn directory_registration_markers_follow_activation_and_deactivation() {
         ])
     );
 }
+
+async fn assert_file_access_denied(state: &AppState, id: &str, expected: StatusCode) {
+    let base = format!("/api/v1/workspaces/{id}");
+    for suffix in ["file-picker?query=src", "git/changes", "git/branches"] {
+        assert_eq!(
+            get_json(state.clone(), &format!("{base}/{suffix}")).await.0,
+            expected,
+            "{suffix}"
+        );
+    }
+    assert_eq!(
+        post_empty(state.clone(), &format!("{base}/git-status/refresh"))
+            .await
+            .0,
+        expected
+    );
+}
+
+#[tokio::test]
+async fn deleted_and_outside_workspaces_deny_files_and_git() {
+    let root = tempfile::tempdir().unwrap();
+    let projects = root.path().join("projects");
+    fs::create_dir(&projects).unwrap();
+    let (state, _home) = test_state(vec![root_config("projects", &projects)]).await;
+    let workspace = register(&state, "").await;
+    let id = workspace["workspace_id"].as_str().unwrap();
+    let base = format!("/api/v1/workspaces/{id}");
+    assert_eq!(
+        post_empty(state.clone(), &format!("{base}/git-status/refresh"))
+            .await
+            .0,
+        StatusCode::OK
+    );
+    assert_eq!(delete_json(state.clone(), &base).await.0, StatusCode::OK);
+    assert_file_access_denied(&state, id, StatusCode::CONFLICT).await;
+
+    let (outside, _) = pontia_agent_control::workspaces::upsert_canonical_workspace(
+        &state.db(),
+        root.path().to_str().unwrap(),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_file_access_denied(&state, &outside.workspace_id, StatusCode::NOT_FOUND).await;
+}

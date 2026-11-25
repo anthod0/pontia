@@ -264,10 +264,7 @@ impl AcpAdapter {
         input.flush()?;
         input.rewind()?;
         std::fs::create_dir_all(root.join("state"))?;
-        let log = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(root.join("state/acp-relay.log"))?;
+        let log = pontia_core::private_fs::append_log(&root.join("state/acp-relay.log"))?;
         let mut command = pontia_runtime::detached_command(&executable, "Pontia stdio relay")?;
         let mut child = command
             .arg("--stdio-relay")

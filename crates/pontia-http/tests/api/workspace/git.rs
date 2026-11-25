@@ -116,6 +116,7 @@ async fn git_changes_lists_grouped_files_with_line_counts() {
 #[tokio::test]
 async fn git_changes_reports_non_git_workspace() {
     let root = tempfile::tempdir().unwrap();
+    git(root.path(), &["init", "-q"]);
     fs::create_dir(root.path().join("notes")).unwrap();
     let (state, id, _pontia_home) = workspace_for(root.path(), "notes").await;
 
@@ -454,6 +455,7 @@ async fn git_history_rejects_invalid_refs_and_commits() {
 #[tokio::test]
 async fn git_branches_is_not_found_outside_a_repository() {
     let root = tempfile::tempdir().unwrap();
+    git(root.path(), &["init", "-q"]);
     fs::create_dir(root.path().join("notes")).unwrap();
     let (state, id, _pontia_home) = workspace_for(root.path(), "notes").await;
 
@@ -594,4 +596,52 @@ fn sign_head(app: &Path) {
         Some(signed.as_bytes()),
     );
     git(app, &["update-ref", "HEAD", sha.trim()]);
+}
+
+#[tokio::test]
+async fn local_filter_does_not_prevent_inspection_of_a_modified_file() {
+    let root = tempfile::tempdir().unwrap();
+    let app = root.path().join("app");
+    repo_with_changes(&app);
+    fs::write(
+        app.join(".gitattributes"),
+        "README.md filter=custom.driver\n",
+    )
+    .unwrap();
+    git(
+        &app,
+        &[
+            "config",
+            "filter.custom.driver.process",
+            "pontia-nonexistent-test-program",
+        ],
+    );
+    git(&app, &["config", "filter.custom.driver.required", "true"]);
+    let (state, id, _home) = workspace_for(root.path(), "app").await;
+    let base = format!("/api/v1/workspaces/{id}");
+    let (status, body) = get_json(
+        state.clone(),
+        &format!("{base}/git/diff?path=README.md&group=unstaged"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["data"]["diff"]["hunks"][0]["lines"][3]["text"], "four");
+    git(&app, &["config", "--unset", "filter.custom.driver.process"]);
+    git(
+        &app,
+        &["config", "filter.custom.driver.clean", "git stripspace"],
+    );
+    fs::write(app.join("README.md"), "one\nTWO\nthree\nfour   \n").unwrap();
+    let (status, body) = get_json(
+        state.clone(),
+        &format!("{base}/git/diff?path=README.md&group=unstaged"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body["data"]["diff"]["hunks"][0]["lines"][3]["text"],
+        "four   "
+    );
+    let (_, body) = post_empty(state, &format!("{base}/git-status/refresh")).await;
+    assert_eq!(body["data"]["git_status"]["state"], "observed");
 }

@@ -176,6 +176,8 @@ pub(super) async fn connect_background(
         }
     }
     let socket = &endpoint.socket;
+    let directory = socket.parent().expect("background socket directory");
+    pontia_core::private_fs::directory(directory).map_err(protocol_error)?;
     let lock_path = socket.with_extension("lock");
     if let Some(stream) = probe(socket).await? {
         // A socket is visible before its creator has finished validating the server.
@@ -189,8 +191,6 @@ pub(super) async fn connect_background(
             Err(error) => return Err(protocol_error(error)),
         }
     }
-    let directory = socket.parent().expect("background socket directory");
-    std::fs::create_dir_all(directory).map_err(protocol_error)?;
     let lock = OpenOptions::new()
         .create(true)
         .truncate(false)
@@ -228,10 +228,7 @@ pub(super) async fn connect_background(
     }
     let executable = crate::setup::resolve_executable(std::env::var("PATH").ok().as_deref())
         .map_err(protocol_error)?;
-    let log = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(directory.parent().unwrap().join("runtime.log"))
+    let log = pontia_core::private_fs::append_log(&directory.parent().unwrap().join("runtime.log"))
         .map_err(protocol_error)?;
     let mut command =
         pontia_runtime::detached_command(&executable, "Pontia background Codex app-server")

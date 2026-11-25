@@ -143,8 +143,13 @@ async fn upstream_disconnect_and_unavailability_close_only_the_affected_transpor
 async fn reclaims_stale_sockets_but_preserves_live_listeners_and_other_files() {
     let root = tempfile::tempdir().unwrap();
     let path = socket_path(root.path());
+    std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
     std::fs::write(&path, b"keep").unwrap();
     assert!(Proxy::bind(root.path()).await.is_err());
+    assert_eq!(
+        std::fs::metadata(root.path()).unwrap().permissions().mode() & 0o777,
+        0o700
+    );
     assert_eq!(std::fs::read(&path).unwrap(), b"keep");
     std::fs::remove_file(&path).unwrap();
     drop(UnixListener::bind(&path).unwrap());
@@ -277,4 +282,35 @@ async fn ephemeral_threads_never_create_runtime_associations() {
         task.await.unwrap().unwrap();
         assert!(incoming.recv().await.is_none());
     }
+}
+
+#[tokio::test]
+async fn mismatched_peer_is_disconnected_before_connecting_upstream() {
+    use tokio::io::AsyncReadExt;
+    let root = tempfile::tempdir().unwrap();
+    let mut proxy = Proxy::bind(root.path()).await.unwrap();
+    proxy.owner_uid = proxy.owner_uid.wrapping_add(1);
+    let mut client = UnixStream::connect(&proxy.path).await.unwrap();
+    let (shutdown, stop) = watch::channel(false);
+    let (observations, _events) = mpsc::channel(1);
+    let state = test_state(root.path()).await;
+    let task = tokio::spawn(async move {
+        proxy
+            .run(
+                stop,
+                || panic!("rejected peer reached upstream"),
+                observations,
+                state,
+            )
+            .await
+    });
+    assert_eq!(
+        timeout(Duration::from_secs(3), client.read(&mut [0]))
+            .await
+            .unwrap()
+            .unwrap(),
+        0
+    );
+    shutdown.send(true).unwrap();
+    task.await.unwrap().unwrap();
 }

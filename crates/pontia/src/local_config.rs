@@ -28,6 +28,7 @@ pub fn generate_token(
 
 /// Persist the credential without materializing configuration defaults.
 pub fn persist_token(config: &AppConfig, token: &str) -> Result<bool, String> {
+    config.prepare_home().map_err(|error| error.to_string())?;
     let path = config.pontia_home.join("config.toml");
     let original = match fs::read_to_string(&path) {
         Ok(contents) => contents,

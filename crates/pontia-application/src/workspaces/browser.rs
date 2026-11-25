@@ -1,4 +1,4 @@
-use pontia_agent_control::workspaces::{WorkspaceService, get_workspace_record};
+use pontia_agent_control::workspaces::WorkspaceService;
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
@@ -179,6 +179,8 @@ impl WorkspaceBrowserService {
         query: &str,
         limit: Option<usize>,
     ) -> Result<FilePickerResultView> {
+        let root_path =
+            super::accessible_workspace_path(&self.pool, &self.config, workspace_id).await?;
         let config = self.config_file_picker();
         if !config.enabled || query.chars().count() < config.min_query_chars {
             return Ok(FilePickerResultView {
@@ -187,17 +189,6 @@ impl WorkspaceBrowserService {
                 warnings: Vec::new(),
             });
         }
-        let workspace = get_workspace_record(&self.pool, workspace_id)
-            .await?
-            .ok_or_else(|| Error::NotFound(format!("workspace {workspace_id} not found")))?;
-        let workspace_path = PathBuf::from(&workspace.canonical_path);
-        let root_path = std::fs::canonicalize(&workspace_path)?;
-        if !root_path.is_dir() {
-            return Err(Error::NotFound(format!(
-                "workspace {workspace_id} directory is not available"
-            )));
-        }
-
         let mut override_builder = ignore::overrides::OverrideBuilder::new(&root_path);
         for glob in &config.ignore_globs {
             override_builder.add(&format!("!{glob}")).map_err(|err| {

@@ -68,11 +68,13 @@ pub(crate) fn socket_path(home: &Path) -> PathBuf {
 
 pub(crate) struct Proxy {
     listener: UnixListener,
+    owner_uid: u32,
     path: PathBuf,
 }
 
 impl Proxy {
     pub(crate) async fn bind(home: &Path) -> Result<Self> {
+        pontia_core::private_fs::directory(home)?;
         let path = socket_path(home);
         if let Ok(metadata) = std::fs::symlink_metadata(&path) {
             if !metadata.file_type().is_socket() {
@@ -97,7 +99,11 @@ impl Proxy {
             }
         }
         let listener = UnixListener::bind(&path)?;
-        let proxy = Self { listener, path };
+        let proxy = Self {
+            listener,
+            path,
+            owner_uid: unsafe { libc::geteuid() },
+        };
         std::fs::set_permissions(&proxy.path, std::fs::Permissions::from_mode(0o600))?;
         Ok(proxy)
     }
@@ -122,6 +128,9 @@ impl Proxy {
                 }
                 accepted = self.listener.accept() => {
                     let (downstream, _) = accepted?;
+                    if !downstream.peer_cred().is_ok_and(|peer| peer.uid() == self.owner_uid) {
+                        continue;
+                    }
                     let endpoint = upstream();
                     let observations = observations.clone();
                     let state = state.clone();

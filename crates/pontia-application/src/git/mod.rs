@@ -5,7 +5,7 @@ pub(crate) mod command;
 mod diff;
 mod history;
 
-use pontia_agent_control::get_workspace_record;
+use pontia_config::WorkspaceBrowserConfig;
 use pontia_core::error::{Error, Result};
 use sqlx::SqlitePool;
 use std::path::PathBuf;
@@ -19,11 +19,12 @@ pub use history::{
 
 pub struct WorkspaceGitService {
     pool: SqlitePool,
+    config: WorkspaceBrowserConfig,
 }
 
 impl WorkspaceGitService {
-    pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+    pub fn new(pool: SqlitePool, config: WorkspaceBrowserConfig) -> Self {
+        Self { pool, config }
     }
 
     pub async fn changes(&self, workspace_id: &str) -> Result<GitChangesView> {
@@ -98,15 +99,9 @@ impl WorkspaceGitService {
     }
 
     async fn repo_root(&self, workspace_id: &str) -> Result<Option<PathBuf>> {
-        let workspace = get_workspace_record(&self.pool, workspace_id)
-            .await?
-            .ok_or_else(|| Error::NotFound(format!("workspace {workspace_id} not found")))?;
-        let path = PathBuf::from(&workspace.canonical_path);
-        if !path.is_dir() {
-            return Err(Error::NotFound(format!(
-                "workspace {workspace_id} directory is not available"
-            )));
-        }
+        let path =
+            crate::workspaces::accessible_workspace_path(&self.pool, &self.config, workspace_id)
+                .await?;
         Ok(command::repo_root(&path).await?.map(PathBuf::from))
     }
 }

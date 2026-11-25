@@ -58,10 +58,7 @@ pub(crate) async fn launch(
     writeln!(input, "{bootstrap}")?;
     input.rewind()?;
     std::fs::create_dir_all(root.join("state"))?;
-    let log = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(root.join("state/claude-host.log"))?;
+    let log = pontia_core::private_fs::append_log(&root.join("state/claude-host.log"))?;
     let mut command =
         pontia_runtime::detached_command(Path::new(&crate::setup::node()), "Pontia Claude host")?;
     let mut child = command

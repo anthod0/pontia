@@ -99,10 +99,7 @@ impl GenericRuntimeManager {
         let workspace = paths::workspace_path(root, &request)?;
         let logs = paths::log_paths(root);
         std::fs::create_dir_all(&logs.log_dir)?;
-        let stderr = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&logs.runtime_log)?;
+        let stderr = pontia_core::private_fs::append_log(&logs.runtime_log)?;
         let command = request
             .start_command
             .as_deref()
@@ -237,6 +234,12 @@ time.sleep(10)
         let process: ProcessFingerprint =
             serde_json::from_value(result.metadata["process_fingerprint"].clone()).unwrap();
         let log = root.path().join("state/runtime.log");
+        assert_eq!(
+            std::os::unix::fs::PermissionsExt::mode(
+                &std::fs::metadata(&log).unwrap().permissions()
+            ) & 0o777,
+            0o600
+        );
         for _ in 0..200 {
             if std::fs::read_to_string(&log).unwrap() == "ready\n" {
                 break;

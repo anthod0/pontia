@@ -55,10 +55,7 @@ impl GenericRuntimeManager {
             .runtime_id
             .clone()
             .unwrap_or_else(|| new_runtime_id().to_string());
-        std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_path)?;
+        pontia_core::private_fs::append_log(&log_path)?;
         let runtime_paths = script::RuntimePaths {
             log_path: &log_path,
         };

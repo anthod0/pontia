@@ -148,3 +148,59 @@ async fn session_runtimes_schema_uses_structured_runtime_fields_without_runtime_
         ]
     );
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn existing_control_database_and_wal_files_are_private() {
+    use std::{fs, os::unix::fs::PermissionsExt};
+    let root = tempfile::tempdir().unwrap();
+    let db = root.path().join("pontia.db");
+    fs::write(&db, []).unwrap();
+    fs::set_permissions(&db, fs::Permissions::from_mode(0o644)).unwrap();
+    let pool = connect_sqlite(&format!("sqlite://{}", db.display()))
+        .await
+        .unwrap();
+    sqlx::query("CREATE TABLE test(id INTEGER)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    for name in ["pontia.db", "pontia.db-wal", "pontia.db-shm"] {
+        assert_eq!(
+            fs::metadata(root.path().join(name))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600,
+            "{name}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn read_only_open_leaves_a_missing_database_absent() {
+    let root = tempfile::tempdir().unwrap();
+    let db = root.path().join("absent.db");
+    assert!(
+        connect_sqlite(&format!("sqlite://{}?mode=ro", db.display()))
+            .await
+            .is_err()
+    );
+    assert!(!db.exists());
+}
+
+#[tokio::test]
+async fn named_memory_database_creates_no_disk_file() {
+    let root = tempfile::tempdir().unwrap();
+    let db = root.path().join("named:memory.db");
+    let pool = connect_sqlite(&format!("sqlite://{}?mode=memory", db.display()))
+        .await
+        .unwrap();
+    let filename: String =
+        sqlx::query_scalar("SELECT file FROM pragma_database_list WHERE name='main'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(filename.is_empty());
+    assert!(!db.exists());
+}

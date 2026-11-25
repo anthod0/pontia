@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import {
@@ -347,6 +347,7 @@ describe("EventReporter", () => {
     const results = await Promise.all(events.map((event) => reporter.report(context, event)));
     expect(results.map((result) => result.accepted)).toEqual([false, false]);
     expect(request).toHaveBeenCalledTimes(1);
+    if (process.platform !== "win32") expect((await stat(logFile)).mode & 0o777).toBe(0o600);
     const log = await readFile(logFile, "utf8");
     for (const event of events) expect(log).toContain(event.report_key);
   });

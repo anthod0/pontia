@@ -1,6 +1,7 @@
 pub mod domain;
 pub mod error;
 pub mod ids;
+pub mod private_fs;
 pub mod time;
 
 pub use error::{Error, Result};

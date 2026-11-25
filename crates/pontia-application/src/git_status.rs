@@ -1,4 +1,4 @@
-use pontia_agent_control::get_workspace_record;
+use pontia_config::WorkspaceBrowserConfig;
 use pontia_core::error::{Error, Result};
 use pontia_storage_sqlite::repositories::git_status::{
     GitStatusUpsertRecord, SqliteGitStatusRepository,
@@ -117,13 +117,19 @@ impl GitRefreshEntry {
 pub struct WorkspaceGitStatusService {
     pool: SqlitePool,
     refresh_coordinator: GitRefreshCoordinator,
+    config: WorkspaceBrowserConfig,
 }
 
 impl WorkspaceGitStatusService {
-    pub fn new(pool: SqlitePool, refresh_coordinator: GitRefreshCoordinator) -> Self {
+    pub fn new(
+        pool: SqlitePool,
+        refresh_coordinator: GitRefreshCoordinator,
+        config: WorkspaceBrowserConfig,
+    ) -> Self {
         Self {
             pool,
             refresh_coordinator,
+            config,
         }
     }
 
@@ -131,10 +137,13 @@ impl WorkspaceGitStatusService {
         &self,
         workspace_id: &str,
     ) -> Result<WorkspaceGitStatusView> {
+        let path =
+            crate::workspaces::accessible_workspace_path(&self.pool, &self.config, workspace_id)
+                .await?;
         let pool = self.pool.clone();
         self.refresh_coordinator
             .refresh(workspace_id, || async move {
-                refresh_workspace_git_status_now(pool, workspace_id).await
+                refresh_workspace_git_status_now(pool, workspace_id, &path).await
             })
             .await
     }
@@ -143,14 +152,11 @@ impl WorkspaceGitStatusService {
 async fn refresh_workspace_git_status_now(
     pool: SqlitePool,
     workspace_id: &str,
+    path: &Path,
 ) -> Result<WorkspaceGitStatusView> {
-    let workspace = get_workspace_record(&pool, workspace_id)
-        .await?
-        .ok_or_else(|| Error::NotFound(format!("workspace {workspace_id} not found")))?;
-
     let repository = SqliteGitStatusRepository::new(pool.clone());
     let observed_at = repository.current_timestamp().await?;
-    let outcome = observe_git_status(&workspace.canonical_path).await;
+    let outcome = observe_git_status(path).await;
     match outcome {
         Ok(parsed) => {
             let clean = parsed.staged_count == 0
@@ -191,8 +197,7 @@ async fn refresh_workspace_git_status_now(
         })
 }
 
-async fn observe_git_status(workspace_path: &str) -> Result<ParsedGitStatus> {
-    let workspace_path = Path::new(workspace_path);
+async fn observe_git_status(workspace_path: &Path) -> Result<ParsedGitStatus> {
     let repo_root = run_git_text(workspace_path, &["rev-parse", "--show-toplevel"]).await?;
     let status = run_git_text(workspace_path, &["status", "--porcelain=v2", "--branch"]).await?;
     let mut parsed = parse_porcelain_v2_status(&status)?;

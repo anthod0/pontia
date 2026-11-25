@@ -452,11 +452,7 @@ impl ClientControlService {
         tracing::warn!(session_id, %error, "Client control channel unavailable");
         let path = pontia_runtime::pontia_log_paths(&self.pontia_home).runtime_log;
         let entry = json!({"code":"client_control_unavailable","session_id":session_id,"message":error.to_string()});
-        if let Ok(mut log) = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)
-        {
+        if let Ok(mut log) = pontia_core::private_fs::append_log(&path) {
             let _ = writeln!(log, "{entry}");
         }
     }

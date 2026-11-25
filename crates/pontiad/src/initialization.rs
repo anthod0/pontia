@@ -15,6 +15,7 @@ pub async fn initialize(config: &AppConfig) -> Result<AppState> {
             ),
         });
     }
+    config.prepare_home()?;
     let db = connect_sqlite(&config.database_url).await?;
 
     if config.run_migrations {

@@ -313,6 +313,12 @@ async fn filesystem_initialization_failure_can_be_retried_with_the_saved_bot_id(
     std::fs::remove_dir(&user).unwrap();
     f.bots.initialize(&bot_id).await.unwrap();
     assert_eq!(std::fs::read_to_string(&user).unwrap(), "");
+    #[cfg(unix)]
+    assert_eq!(
+        std::os::unix::fs::PermissionsExt::mode(&std::fs::metadata(&user).unwrap().permissions())
+            & 0o777,
+        0o600
+    );
     std::fs::write(&user, "user edited this").unwrap();
     let reopened = BotService::new(f.pool.clone(), f.root.path(), f.registry.clone());
     reopened.initialize(&bot_id).await.unwrap();

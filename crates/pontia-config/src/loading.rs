@@ -14,6 +14,10 @@ const DEFAULT_BIND_ADDR: &str = "127.0.0.1:8080";
 const DEFAULT_AUTH_ORIGIN: &str = "https://pontia.dev";
 
 impl AppConfig {
+    pub fn prepare_home(&self) -> std::io::Result<()> {
+        pontia_core::private_fs::directory(&self.pontia_home)
+    }
+
     pub fn from_env(defaults: &super::ClientConfigDefaults) -> Result<Self> {
         let vars: HashMap<String, String> = env::vars().collect();
         Self::from_vars(&vars, defaults)

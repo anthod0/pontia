@@ -24,7 +24,8 @@ pub async fn refresh_workspace_git_status(
     State(state): State<AppState>,
     Path(workspace_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = WorkspaceGitStatusService::new(state.db(), state.git_refresh());
+    let service =
+        WorkspaceGitStatusService::new(state.db(), state.git_refresh(), state.workspace_browser());
     let git_status = service.refresh_workspace_git_status(&workspace_id).await?;
     Ok(ok(json!({ "git_status": git_status })))
 }

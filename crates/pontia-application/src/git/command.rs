@@ -1,7 +1,7 @@
 //! Read-only git invocation with a timeout and an output cap.
 
 use pontia_core::error::{Error, Result};
-use std::{path::Path, process::Stdio, time::Duration};
+use std::{collections::BTreeSet, path::Path, process::Stdio, time::Duration};
 use tokio::{io::AsyncReadExt, process::Command};
 
 const GIT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -22,6 +22,66 @@ pub(crate) async fn run_git(
     limit: usize,
     allow_exit_one: bool,
 ) -> Result<GitOutput> {
+    // Read names only. Included files inherit the scope of the including config.
+    let config = invoke(
+        dir,
+        &[],
+        &[
+            "config",
+            "--null",
+            "--show-scope",
+            "--name-only",
+            "--get-regexp",
+            r"^filter\..*\.(clean|smudge|process)$",
+        ],
+        1024 * 1024,
+        true,
+    )
+    .await?;
+    if config.truncated {
+        return Err(Error::Domain(
+            "git filter configuration exceeds limit".into(),
+        ));
+    }
+    let overrides = filter_overrides(&config.stdout)?;
+    invoke(dir, &overrides, args, limit, allow_exit_one).await
+}
+
+fn filter_overrides(config: &[u8]) -> Result<Vec<String>> {
+    let config = std::str::from_utf8(config)
+        .map_err(|_| Error::Domain("invalid git filter configuration".into()))?;
+    let mut fields = config.split_terminator('\0');
+    let mut drivers = BTreeSet::new();
+    while let Some(scope) = fields.next() {
+        let key = fields
+            .next()
+            .ok_or_else(|| Error::Domain("missing git config key".into()))?;
+        if matches!(scope, "local" | "worktree") {
+            let (driver, _) = key
+                .rsplit_once('.')
+                .ok_or_else(|| Error::Domain("invalid git filter key".into()))?;
+            if driver.contains('=') {
+                return Err(Error::Domain("git filter name cannot be overridden".into()));
+            }
+            drivers.insert(driver);
+        }
+    }
+    Ok(drivers
+        .into_iter()
+        .flat_map(|driver| {
+            ["clean=", "smudge=", "process=", "required=false"]
+                .map(|setting| format!("{driver}.{setting}"))
+        })
+        .collect())
+}
+
+async fn invoke(
+    dir: &Path,
+    overrides: &[String],
+    args: &[&str],
+    limit: usize,
+    allow_exit_one: bool,
+) -> Result<GitOutput> {
     let label = args.join(" ");
     let mut child = Command::new("git")
         .arg("-C")
@@ -35,7 +95,15 @@ pub(crate) async fn run_git(
             "-c",
             "log.showSignature=false",
         ])
+        .args(
+            overrides
+                .iter()
+                .flat_map(|setting| ["-c", setting.as_str()]),
+        )
         .args(args)
+        .env_remove("GIT_CONFIG")
+        .env("GIT_DIR", dir.join(".git"))
+        .env("GIT_WORK_TREE", dir)
         .env("GIT_OPTIONAL_LOCKS", "0")
         .env("GIT_LITERAL_PATHSPECS", "1")
         .env("GIT_TERMINAL_PROMPT", "0")
@@ -135,6 +203,20 @@ pub(crate) async fn repo_root(dir: &Path) -> Result<Option<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn disables_only_drivers_with_repository_commands() {
+        let config = b"global\0filter.lfs.process\0local\0filter.Custom.Driver.clean\0worktree\0filter.Custom.Driver.smudge\0";
+        assert_eq!(
+            filter_overrides(config).unwrap(),
+            [
+                "filter.Custom.Driver.clean=",
+                "filter.Custom.Driver.smudge=",
+                "filter.Custom.Driver.process=",
+                "filter.Custom.Driver.required=false"
+            ]
+        );
+    }
 
     #[tokio::test]
     async fn stops_git_when_output_reaches_the_limit() {

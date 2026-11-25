@@ -12,15 +12,18 @@ impl BotService {
         let clients = self.clients.clone();
         tokio::task::spawn_blocking(move || -> Result<()> {
             clients.initialize_private_directory(&directory)?;
-            match std::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(root.join("USER.md"))
-            {
+            let user = root.join("USER.md");
+            match pontia_core::private_fs::open(
+                &user,
+                std::fs::OpenOptions::new().write(true).create_new(true),
+            ) {
                 Ok(_) => Ok(()),
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                    // Existing content must be readable; a directory is not an initialized file.
-                    std::fs::read_to_string(root.join("USER.md"))?;
+                    let mut file = pontia_core::private_fs::open(
+                        &user,
+                        std::fs::OpenOptions::new().read(true),
+                    )?;
+                    std::io::Read::read_to_string(&mut file, &mut String::new())?;
                     Ok(())
                 }
                 Err(error) => Err(error.into()),
