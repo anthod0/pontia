@@ -91,6 +91,18 @@ impl SqliteAgentClientRepository {
         Ok(())
     }
 
+    pub async fn clear_model_catalog(&self, client: &str, key: &str) -> Result<()> {
+        sqlx::query(
+            "UPDATE agent_clients SET model_catalog = NULL
+             WHERE client_type = ? AND client_key = ?",
+        )
+        .bind(client)
+        .bind(key)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
     pub async fn begin_version_check(
         &self,
         client: &str,

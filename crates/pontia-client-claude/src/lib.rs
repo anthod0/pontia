@@ -43,6 +43,7 @@ pub fn registration_with_host(host: Option<PathBuf>) -> ClientRegistration {
         context: Arc::new(OnceLock::new()),
     });
     ClientRegistration {
+        auth: None,
         configuration: Some(Arc::new(Configuration {
             host: adapter.host.clone(),
         })),

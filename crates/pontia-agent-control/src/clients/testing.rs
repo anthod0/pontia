@@ -27,6 +27,7 @@ pub(crate) fn clients() -> super::ClientRegistry {
     registry.register(crate::client_contract::test_registration());
     registry.register(super::ClientRegistration {
         configuration: None,
+        auth: None,
         interactions: None,
         service: None,
         instructions: None,

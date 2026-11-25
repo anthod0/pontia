@@ -238,6 +238,7 @@ pub(super) fn clients() -> pontia_agent_control::clients::ClientRegistry {
     });
     let mut clients = pontia_agent_control::clients::ClientRegistry::default();
     clients.register(pontia_agent_control::clients::ClientRegistration {
+        auth: None,
         configuration: None,
         interactions: None,
         service: None,

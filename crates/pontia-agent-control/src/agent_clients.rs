@@ -26,6 +26,8 @@ pub struct AgentClientDetails {
     pub setup: Option<ClientSetup>,
     pub setup_command: Option<String>,
     pub has_record: bool,
+    /// Pontia manages this entry's authentication. Performs no I/O.
+    pub auth_supported: bool,
     pub version: Option<String>,
     pub version_checked_at: Option<String>,
     pub created_at: Option<String>,
@@ -156,6 +158,11 @@ impl AgentClientService {
                 .map(|integration| format!("pontia setup {}", integration.setup_name())),
             enabled: record.as_ref().is_some_and(|row| row.enabled),
             has_record: record.is_some(),
+            auth_supported: self
+                .clients
+                .get(client)
+                .and_then(|registration| registration.auth.as_ref())
+                .is_some_and(|auth| auth.supports_auth(key)),
             detection: configuration.detect(&effective, context),
             version: record.as_ref().and_then(|row| row.version.clone()),
             version_checked_at: record

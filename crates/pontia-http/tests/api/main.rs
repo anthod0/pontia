@@ -8,6 +8,7 @@ mod bot_reload;
 mod bot_search;
 mod bot_timeline;
 mod bot_todos;
+mod client_auth;
 mod e2e_authentication;
 mod entrypoint_authentication;
 mod external_event_stream;

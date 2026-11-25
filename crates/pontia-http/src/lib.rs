@@ -108,6 +108,33 @@ pub fn router(state: impl Into<HttpState>) -> Router {
     HttpEntrypoints::new(state).local_http()
 }
 
+fn client_auth_router() -> Router<HttpState> {
+    const CLIENT: &str = "/api/v1/agent-clients/{client_type}/{client_key}/auth";
+    const SESSION: &str =
+        "/api/v1/agent-clients/{client_type}/{client_key}/auth/sessions/{session_id}";
+    Router::new()
+        .route(CLIENT, get(api::get_client_auth))
+        .route(
+            &format!("{CLIENT}/sessions"),
+            post(api::start_client_auth_session),
+        )
+        .route(&format!("{CLIENT}/logout"), post(api::logout_client_auth))
+        .route(SESSION, get(api::get_client_auth_session))
+        .route(
+            &format!("{SESSION}/stream"),
+            get(api::stream_client_auth_session),
+        )
+        .route(
+            &format!("{SESSION}/input"),
+            post(api::submit_client_auth_input),
+        )
+        .route(
+            &format!("{SESSION}/cancel"),
+            post(api::cancel_client_auth_session),
+        )
+        .route_layer(middleware::map_response(api::no_store))
+}
+
 fn external_api_router(state: HttpState) -> Router {
     Router::new()
         .route(
@@ -408,6 +435,7 @@ fn external_api_router(state: HttpState) -> Router {
             "/api/v1/sessions/{session_id}/turns/{turn_id}/events",
             get(api::list_turn_events),
         )
+        .merge(client_auth_router())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             api::authenticate,

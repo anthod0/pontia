@@ -4,6 +4,7 @@ mod control_changes;
 pub use control_changes::{ControlChange, ControlChanges};
 mod agent_profiles;
 mod branch_replay;
+pub mod client_auth;
 pub mod clients;
 pub mod context;
 pub mod control;

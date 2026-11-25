@@ -44,6 +44,7 @@ struct LifecycleState {
 
 struct IntegrationState {
     clients: crate::clients::ClientRegistry,
+    client_auth: crate::client_auth::ClientAuthService,
     client_control: crate::ClientControlService,
 }
 
@@ -114,6 +115,12 @@ impl AgentControl {
             builder.pontia_home.clone(),
         ));
         scheduler.connect(&inbox, &sessions);
+        let client_auth = crate::client_auth::ClientAuthService::new(
+            builder.db.clone(),
+            builder.clients.clone(),
+            builder.pontia_home.clone(),
+            builder.shutdown.clone(),
+        );
         Self {
             inner: Arc::new(AgentControlInner {
                 commands: CommandServices {
@@ -141,6 +148,7 @@ impl AgentControl {
                     shutdown: builder.shutdown,
                 },
                 integrations: IntegrationState {
+                    client_auth,
                     clients: builder.clients,
                     client_control: builder.client_control,
                 },
@@ -150,6 +158,10 @@ impl AgentControl {
 
     pub fn clients(&self) -> crate::clients::ClientRegistry {
         self.inner.integrations.clients.clone()
+    }
+
+    pub fn client_auth(&self) -> crate::client_auth::ClientAuthService {
+        self.inner.integrations.client_auth.clone()
     }
 
     pub async fn run_timeline_cache_cleanup(&self) {

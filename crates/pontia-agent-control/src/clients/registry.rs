@@ -9,6 +9,7 @@ use std::{collections::HashMap, sync::Arc};
 #[derive(Clone)]
 pub struct ClientRegistration {
     pub configuration: Option<Arc<dyn crate::client_contract::ClientConfiguration>>,
+    pub auth: Option<Arc<dyn crate::client_contract::ClientAuth>>,
     pub interactions: Option<Arc<dyn crate::client_contract::ClientInteractions>>,
     pub events: Option<Arc<dyn crate::client_contract::ClientEventInterpreter>>,
     pub service: Option<Arc<dyn ClientService>>,

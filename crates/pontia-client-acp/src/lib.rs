@@ -1,6 +1,7 @@
 mod adapter;
 mod agents;
 mod antigravity;
+mod auth;
 mod capabilities;
 mod compaction;
 pub mod configuration;

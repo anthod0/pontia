@@ -27,6 +27,7 @@ use std::{path::Path, sync::Arc};
 
 pub fn registration() -> ClientRegistration {
     ClientRegistration {
+        auth: Some(Arc::new(crate::auth::CodexAuth)),
         configuration: Some(Arc::new(crate::configuration::CodexConfiguration)),
         interactions: Some(Arc::new(CodexClient)),
         service: Some(Arc::new(crate::service::CodexBackgroundService)),

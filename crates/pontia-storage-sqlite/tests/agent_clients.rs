@@ -174,3 +174,32 @@ async fn version_checks_coalesce_and_only_the_current_attempt_can_record_a_versi
         .unwrap();
     assert!(repo.get(client, key).await.unwrap().is_none());
 }
+
+#[tokio::test]
+async fn clearing_a_model_catalog_only_affects_the_selected_entry() {
+    let pool = connect_sqlite("sqlite::memory:").await.unwrap();
+    run_migrations(&pool).await.unwrap();
+    let repository = SqliteAgentClientRepository::new(pool.clone());
+    for key in ["kiro", "grok"] {
+        repository.save("acp", key, true).await.unwrap();
+        repository
+            .save_model_catalog("acp", key, None, r#"{"fetched_at":1}"#, 1)
+            .await
+            .unwrap();
+    }
+    repository.clear_model_catalog("acp", "kiro").await.unwrap();
+    assert_eq!(repository.model_catalog("acp", "kiro").await.unwrap(), None);
+    assert_eq!(
+        repository
+            .model_catalog("acp", "grok")
+            .await
+            .unwrap()
+            .as_deref(),
+        Some(r#"{"fetched_at":1}"#)
+    );
+    repository
+        .clear_model_catalog("acp", "missing")
+        .await
+        .unwrap();
+    pool.close().await;
+}

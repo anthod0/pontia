@@ -1,3 +1,4 @@
+pub mod auth;
 mod channel;
 mod detection;
 pub use detection::{ClientDetection, DetectionContext, DetectionStatus};
@@ -18,6 +19,7 @@ pub mod native_history;
 mod service;
 mod session;
 mod setup;
+pub use auth::ClientAuth;
 pub use channel::{ClientControlChannel, ClientControlOperation};
 pub use data::{
     BranchTargetRequest, ClientData, ClientLaunchRequest, ClientLauncher, NativeEventEvidence,

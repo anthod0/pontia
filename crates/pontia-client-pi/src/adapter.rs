@@ -22,6 +22,7 @@ pub fn registration(tui_command: Option<String>) -> ClientRegistration {
         .map(|command| serde_json::json!({"tui_command": if command.trim().is_empty() { "pi" } else { &command }}))
         .unwrap_or_else(|| serde_json::json!({}));
     ClientRegistration {
+        auth: None,
         configuration: Some(Arc::new(crate::config::PiConfiguration::new(
             file,
             environment,

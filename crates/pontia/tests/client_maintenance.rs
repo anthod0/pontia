@@ -53,6 +53,7 @@ fn entry(has_record: bool, enabled: bool) -> AgentClientDetails {
         version: None,
         version_checked_at: None,
         has_record,
+        auth_supported: false,
         enabled,
         detection: ClientDetection::detected("pi"),
         setup: Some(ClientSetup::Initialized),

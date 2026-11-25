@@ -64,6 +64,7 @@ fn register(agents: AcpAgents, relay_executable: Option<std::path::PathBuf>) -> 
         interactions: Arc::new(OnceLock::new()),
     });
     ClientRegistration {
+        auth: Some(Arc::new(crate::auth::AcpAuth::new(config.clone()))),
         configuration: Some(config),
         interactions: Some(adapter.clone()),
         events: None,
