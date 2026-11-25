@@ -614,7 +614,7 @@ async function openTodos() {
 test("lists a todo's actions with context first, then Ignore, Quote and Reply", async () => {
   serve([todo]);
   const item = await openTodos();
-  const actions = ["Context", "Cancel todo", "Quote", "Reply"].map((name) =>
+  const actions = ["Context", "Mark done", "Quote", "Reply"].map((name) =>
     item.getByRole("button", { name }),
   );
   for (const [before, after] of actions.slice(0, -1).map((button, i) => [button, actions[i + 1]]))
@@ -649,11 +649,11 @@ test("ignoring a todo resolves it like marking it done", async () => {
     todo: { state: "done", by: "user", at: new Date().toISOString() },
   });
   const item = await openTodos();
-  await fireEvent.click(item.getByRole("button", { name: "Cancel todo" }));
+  await fireEvent.click(item.getByRole("button", { name: "Mark done" }));
   await waitFor(() => expect(change).toHaveBeenCalledWith(bot.bot_id, todo.id, false));
   await waitFor(() =>
     expect(toast.success).toHaveBeenCalledWith(
-      "Todo cancelled",
+      "Marked as done",
       expect.objectContaining({ action: expect.objectContaining({ label: "Undo" }) }),
     ),
   );
@@ -667,11 +667,11 @@ test("ignores an open todo from its message menu", async () => {
   });
   render(BotChatPage, { botId: bot.bot_id });
   await fireEvent.contextMenu(await screen.findByText("certificate"), { clientX: 10, clientY: 10 });
-  await fireEvent.click(await screen.findByRole("menuitem", { name: "Cancel todo" }));
+  await fireEvent.click(await screen.findByRole("menuitem", { name: "Mark done" }));
   await waitFor(() => expect(change).toHaveBeenCalledWith(bot.bot_id, todo.id, false));
   await waitFor(() =>
     expect(toast.success).toHaveBeenCalledWith(
-      "Todo cancelled",
+      "Marked as done",
       expect.objectContaining({ action: expect.objectContaining({ label: "Undo" }) }),
     ),
   );
