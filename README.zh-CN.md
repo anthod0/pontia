@@ -48,7 +48,7 @@ Pontia 让你从电脑或手机浏览器给 Lead Bot 派任务，由它协调开
 
 ![本地运行的 Luma 指南展示 Cedar Spur 路线](https://files.pontia.dev/cloud/sidebar-preview-1120-dc9f6355c8d9.webp)
 
-**4. Files** — 从聊天中打开 CSV 文件，以表格形式查看内容。
+**4. Files** — 浏览工作区文件，预览代码、Markdown、HTML、JSON/YAML、CSV/TSV 表格和图片。
 
 ![路线调查表显示，12 号路口的路牌写着 Cedar Spur，调查记录中则是 North Fork](https://files.pontia.dev/cloud/sidebar-files-1120-a0085ef90962.webp)
 
