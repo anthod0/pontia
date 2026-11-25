@@ -30,6 +30,13 @@
     onclick={(event: MouseEvent) => actions?.openMenu(id, event)}><DotsThreeIcon weight="bold" /></Button>
 {/snippet}
 
+{#snippet todoButton()}
+  <button type="button" class="grid size-7 shrink-0 place-items-center self-end rounded-md outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring [.mobile-shell_&]:size-11"
+    aria-label={$t('bots.todos')} title={$t('bots.todos')} onclick={ontodos}>
+    <span class="size-2 rounded-full bg-primary"></span>
+  </button>
+{/snippet}
+
 <!-- A file's menu looks like its download action and always shows; image tiles keep their own reveal. -->
 {#snippet fileMenuButton(id: string, look: FileActionLook)}
   <Button {...fileActionButton} class={fileActionClass[look]} aria-haspopup="menu" aria-label={$t('bots.messageActions')}
@@ -88,17 +95,14 @@
                   </span>
                 {/if}
                 {#if mobile && entry.todo?.state === 'open'}
-                  <button class="min-h-11 min-w-11 text-primary" onclick={ontodos}>{$t('bots.todos')}</button>
+                  {@render todoButton()}
                 {/if}
                 <MessageTime value={entry.created_at} />
                 {#if mobile}{@render menuButton(entry.id)}{/if}
               </div>
             </div>
             {#if !mobile && entry.todo?.state === 'open'}
-              <button type="button" class="grid size-7 shrink-0 place-items-center self-end rounded-md outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label={$t('bots.todos')} title={$t('bots.todos')} onclick={() => ontodos()}>
-                <span class="size-2 rounded-full bg-primary"></span>
-              </button>
+              {@render todoButton()}
             {/if}
             {#if !mobile && entry.kind === 'bot_reply'}{@render menuButton(entry.id)}{/if}
           </div>
