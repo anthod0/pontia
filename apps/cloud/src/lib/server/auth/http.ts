@@ -28,8 +28,8 @@ import { AuthError, type Provider } from "./types";
 
 const LOGIN_COOKIE = "__Host-_at";
 const REFRESH_COOKIE = "__Host-_rt";
-const OAUTH_COOKIE = "_oauth";
-const PENDING_ACCOUNT_COOKIE = "_pending_account";
+const OAUTH_COOKIE = "__Host-_oauth";
+const PENDING_ACCOUNT_COOKIE = "__Host-_pending_account";
 const cookieOptions = {
   path: "/",
   httpOnly: true,

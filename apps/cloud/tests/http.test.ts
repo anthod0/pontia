@@ -121,7 +121,8 @@ async function beginVerifiedConflict(client: ReturnType<typeof browser>, returnT
 
 async function signedIn(client: ReturnType<typeof browser>) {
   const authUrl = new URL(await location(startLogin(client.event("/api/auth/google/login"))));
-  expect(client.options.get("_oauth")).toMatchObject({
+  expect(client.options.get("__Host-_oauth")).toEqual({
+    path: "/",
     httpOnly: true,
     secure: true,
     sameSite: "lax",
@@ -164,7 +165,7 @@ test("HTTP login, linking and logout persist identity and set and clear protecte
   expect(claims).not.toHaveProperty("ip");
   expect(claims).not.toHaveProperty("userAgent");
   expect(claims).not.toHaveProperty("country");
-  expect(client.cookies.has("_oauth")).toBe(false);
+  expect(client.cookies.has("__Host-_oauth")).toBe(false);
   const bindingUrl = new URL(await location(startBinding(client.event("/api/auth/github/bind"))));
   expect(
     await location(
@@ -266,7 +267,8 @@ test("verified email conflict verifies the existing subject, links, logs in, and
   const client = browser();
   const returnTo = "/device?user_code=BCDF-GHJK";
   await beginVerifiedConflict(client, returnTo);
-  expect(client.options.get("_pending_account")).toMatchObject({
+  expect(client.options.get("__Host-_pending_account")).toEqual({
+    path: "/",
     httpOnly: true,
     secure: true,
     sameSite: "lax",
@@ -278,7 +280,7 @@ test("verified email conflict verifies the existing subject, links, logs in, and
   });
   expect(await database.db.select().from(users)).toHaveLength(1);
   expect(await database.db.select().from(accounts)).toHaveLength(1);
-  const pendingToken = client.cookies.get("_pending_account")!;
+  const pendingToken = client.cookies.get("__Host-_pending_account")!;
   const verifyUrl = new URL(
     await location(startPendingBinding(client.event("/api/auth/pending/bind"))),
   );
@@ -294,15 +296,15 @@ test("verified email conflict verifies the existing subject, links, logs in, and
   ).toBe(returnTo);
   const claims = await verifyLogin(client.cookies.get("__Host-_at")!, config.JWT_SECRET);
   expect(claims.user_id).toBe(original.userId);
-  expect(client.cookies.has("_pending_account")).toBe(false);
+  expect(client.cookies.has("__Host-_pending_account")).toBe(false);
   expect(await database.db.select().from(users)).toHaveLength(1);
   expect(await database.db.select().from(accounts)).toHaveLength(2);
 
-  client.cookies.set("_pending_account", pendingToken);
+  client.cookies.set("__Host-_pending_account", pendingToken);
   expect(await location(createIndependentAccount(client.event("/api/auth/pending/create")))).toBe(
     "/login?error=account_conflict",
   );
-  expect(client.cookies.has("_pending_account")).toBe(false);
+  expect(client.cookies.has("__Host-_pending_account")).toBe(false);
   expect(await database.db.select().from(users)).toHaveLength(1);
 });
 
@@ -351,7 +353,7 @@ test("pending binding rejects a different existing provider subject and clears p
       ),
     ),
   ).toBe("/login?error=invalid_credentials");
-  expect(client.cookies.has("_pending_account")).toBe(false);
+  expect(client.cookies.has("__Host-_pending_account")).toBe(false);
   expect(await database.db.select().from(accounts)).toHaveLength(1);
 });
 
@@ -378,7 +380,7 @@ test("HTTP endpoints reject cross-origin actions and tampered callback state bef
     ),
   ).toBe("/login?error=invalid_oauth");
   expect(fetchSpy).not.toHaveBeenCalled();
-  expect(client.cookies.has("_oauth")).toBe(false);
+  expect(client.cookies.has("__Host-_oauth")).toBe(false);
 });
 
 test("binding callback rejects logout in another request and a browser switched to another user", async () => {

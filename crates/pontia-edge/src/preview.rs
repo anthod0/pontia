@@ -164,6 +164,25 @@ fn error(status: StatusCode, navigation: bool, message: &str) -> Response {
 
 async fn relay(edge: &Edge, target: Target, auth: Authority, mut req: Request) -> Response {
     let headers = req.headers();
+    let is_ws = req.method() == Method::GET
+        && headers
+            .get(header::UPGRADE)
+            .is_some_and(|v| v.as_bytes().eq_ignore_ascii_case(b"websocket"))
+        && headers
+            .get_all(header::CONNECTION)
+            .iter()
+            .flat_map(|value| value.as_bytes().split(|&b| b == b','))
+            .any(|token| token.trim_ascii().eq_ignore_ascii_case(b"upgrade"));
+    if is_ws {
+        let host = auth.host().to_ascii_lowercase();
+        let origin = match auth.port_u16() {
+            None | Some(443) => format!("https://{host}"),
+            Some(port) => format!("https://{host}:{port}"),
+        };
+        if !crate::browser_http::exact_origin(headers, &origin) {
+            return StatusCode::FORBIDDEN.into_response();
+        }
+    }
     let navigation = headers
         .get("sec-fetch-mode")
         .is_some_and(|v| v == "navigate")
@@ -191,17 +210,6 @@ async fn relay(edge: &Edge, target: Target, auth: Authority, mut req: Request) -
         );
     };
     let (mut parts, body) = req.into_parts();
-    let is_ws = parts.method == Method::GET
-        && parts
-            .headers
-            .get(header::UPGRADE)
-            .is_some_and(|v| v.as_bytes().eq_ignore_ascii_case(b"websocket"))
-        && parts
-            .headers
-            .get_all(header::CONNECTION)
-            .iter()
-            .flat_map(|value| value.as_bytes().split(|&b| b == b','))
-            .any(|token| token.trim_ascii().eq_ignore_ascii_case(b"upgrade"));
     let (kind, route) = if is_ws {
         ("ws", TunnelRoute::PreviewWs { port: target.port })
     } else {

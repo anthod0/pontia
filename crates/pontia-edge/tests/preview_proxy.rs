@@ -382,6 +382,35 @@ async fn returns_navigation_errors_and_preserves_application_errors() {
 }
 
 #[tokio::test]
+async fn websocket_requires_one_same_origin_header_before_routing_to_device() {
+    let p = Preview::start().await;
+    let origin = format!("https://{}", p.host);
+    let cookie = p.cookie().await;
+    let sibling = origin.replacen("5173-", "5174-", 1);
+    for origins in [
+        vec![],
+        vec!["null".to_owned()],
+        vec![sibling],
+        vec![format!("http://{}", p.host)],
+        vec![format!("{origin}:8443")],
+        vec![origin.clone(), origin],
+    ] {
+        let mut request = p
+            .request(Method::GET, "/hmr")
+            .header(header::COOKIE, &cookie)
+            .header(header::CONNECTION, "upgrade")
+            .header(header::UPGRADE, "websocket");
+        for value in origins {
+            request = request.header(header::ORIGIN, value);
+        }
+        assert_eq!(
+            request.send().await.unwrap().status(),
+            StatusCode::FORBIDDEN
+        );
+    }
+}
+
+#[tokio::test]
 async fn websocket_waits_for_device_and_relays_negotiated_messages() {
     let p = Preview::start().await;
     let cookie = p.cookie().await;
@@ -389,7 +418,13 @@ async fn websocket_waits_for_device_and_relays_negotiated_messages() {
         .server
         .device(p.device, |req| async move {
             assert_eq!(req.method(), Method::POST);
-            assert_eq!(req.headers()[header::ORIGIN], "https://example.test");
+            assert_eq!(
+                req.headers()[header::ORIGIN].to_str().unwrap(),
+                format!(
+                    "https://{}",
+                    req.headers()["x-pontia-preview-host"].to_str().unwrap()
+                )
+            );
             assert!(!req.headers().contains_key(header::COOKIE));
             if req.uri().path().ends_with("/deny") {
                 return Response::builder().status(403).body(Body::empty()).unwrap();
@@ -413,10 +448,16 @@ async fn websocket_waits_for_device_and_relays_negotiated_messages() {
         let mut req = format!("{}{path}", p.server.edge_origin.replace("https:", "wss:"))
             .into_client_request()
             .unwrap();
+        let host = if path == "/hmr" {
+            format!("{}:{}", p.host, req.uri().port_u16().unwrap())
+        } else {
+            p.host.clone()
+        };
+        let origin = format!("https://{host}");
         for (name, value) in [
-            (header::HOST, p.host.as_str()),
+            (header::HOST, host.as_str()),
             (header::COOKIE, cookie.as_str()),
-            (header::ORIGIN, "https://example.test"),
+            (header::ORIGIN, origin.as_str()),
             (header::SEC_WEBSOCKET_PROTOCOL, "vite-hmr"),
         ] {
             req.headers_mut().insert(name, value.parse().unwrap());
