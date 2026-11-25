@@ -1716,7 +1716,7 @@ async fn standalone_session_instructions_are_fixed_before_input_and_survive_resu
 #[tokio::test]
 async fn session_instructions_are_validated_fixed_and_preserved_across_resume() {
     let h = Harness::new().await;
-    for system in ["   ", "hello {{name}}", "name}}"] {
+    for system in ["", " "] {
         let request = serde_json::from_value(json!({"client_type":"claude-agent", "workspace":h.root.path(), "system_instructions":system})).unwrap();
         assert!(matches!(
             h.app.session_commands().create_session(request).await,
@@ -1726,7 +1726,7 @@ async fn session_instructions_are_validated_fixed_and_preserved_across_resume() 
     let request = serde_json::from_value(json!({
         "client_type": "claude-agent",
         "workspace": h.root.path(),
-        "system_instructions": "explicit-marker\n\ncaller-marker",
+        "system_instructions": "explicit-marker\n\n{{name}}",
         "include_standalone_session_instructions": true,
     }))
     .unwrap();
@@ -1761,7 +1761,7 @@ async fn session_instructions_are_validated_fixed_and_preserved_across_resume() 
         .map(|frame| frame["system_prompt"].clone())
         .collect();
     let expected = format!(
-        "{}\n\nexplicit-marker\n\ncaller-marker",
+        "{}\n\nexplicit-marker\n\n{{{{name}}}}",
         pontia_agent_control::standalone_session_instructions()
     );
     assert_eq!(prompts, vec![json!(expected), json!(expected)]);

@@ -8,15 +8,8 @@ pub fn standalone_session_instructions() -> &'static str {
 }
 
 pub fn validate_static_instructions(system: Option<&str>) -> Result<()> {
-    if let Some(system) = system {
-        if system.trim().is_empty() {
-            return Err(Error::Domain("system_instructions cannot be empty".into()));
-        }
-        if system.contains("{{") || system.contains("}}") {
-            return Err(Error::Domain(
-                "system_instructions must be static; template placeholders are unsupported".into(),
-            ));
-        }
+    if system.is_some_and(|text| text.trim().is_empty()) {
+        return Err(Error::Domain("system_instructions cannot be empty".into()));
     }
     Ok(())
 }
@@ -88,5 +81,23 @@ impl SessionInstructionsService {
         snapshot
             .map(|value| serde_json::from_str(&value).map_err(Into::into))
             .transpose()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn instructions_allow_literal_braces_and_reject_blank_text() {
+        for system in [None, Some("{{"), Some("}}"), Some("{{name}}")] {
+            validate_static_instructions(system).unwrap();
+        }
+        for system in ["", " \n"] {
+            assert!(matches!(
+                validate_static_instructions(Some(system)),
+                Err(Error::Domain(_))
+            ));
+        }
     }
 }

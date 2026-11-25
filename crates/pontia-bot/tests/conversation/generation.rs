@@ -43,6 +43,36 @@ async fn reconcile(service: &ConversationService) {
 }
 
 #[tokio::test]
+async fn exited_session_is_rebuilt_with_literal_braces_in_bot_reply() {
+    let (_root, _pool, client, control, conversation) = fixture().await;
+    let (id, old) = bot(&conversation).await;
+    let body = r#"Render {{name}} with {"data":{"id":1}}"#;
+    conversation
+        .send_to_user(ReplyRequest {
+            session_id: old.clone(),
+            input: Reply {
+                todo: false,
+                resolve_todos: vec![],
+                related_to: vec![],
+                message: body.into(),
+            },
+        })
+        .await
+        .unwrap();
+    session_fact(&control, &old, EventType::SessionExited, json!({})).await;
+
+    let sent = conversation.send(&id, "continue").await.unwrap();
+    assert_eq!(sent.message.status, MessageStatus::Normal);
+    let new = current(&conversation, &id).await.unwrap();
+    assert_ne!(new, old);
+    assert!(instructions(&control, &new).await.contains(body));
+    assert_eq!(
+        client.inputs.lock().unwrap().last().unwrap().session_id,
+        new
+    );
+}
+
+#[tokio::test]
 async fn completed_compaction_waits_for_idle_and_rotates_once_after_restart() {
     let (_root, _pool, _client, control, conversation) = fixture().await;
     let _exits = report_exits(&control);

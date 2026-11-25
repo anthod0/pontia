@@ -19,7 +19,7 @@ async fn instructions_compose_only_the_requested_sources() {
             true,
             Some(format!("{standalone}\n\ncaller-marker")),
         ),
-        (Some("caller-marker"), false, Some("caller-marker".into())),
+        (Some("Hello {{name}}"), false, Some("Hello {{name}}".into())),
         (None, false, None),
     ] {
         assert_eq!(
@@ -27,7 +27,7 @@ async fn instructions_compose_only_the_requested_sources() {
             expected.map(|prompt| json!({"system_prompt":prompt}))
         );
     }
-    for invalid in ["", " \n", "Hello {{name}}", "name}}"] {
+    for invalid in ["", " \n"] {
         assert!(matches!(
             service.resolve("pi", Some(invalid), false),
             Err(pontia_core::Error::Domain(_))

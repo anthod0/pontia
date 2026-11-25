@@ -213,15 +213,15 @@ async fn profile_launch_defaults_and_validation() {
         StatusCode::BAD_REQUEST
     );
     input["model"] = json!("provider/model");
+    input["system_prompt"] = json!("{{input}}");
     let (status, created) = post_json(state.clone(), "/api/v1/agent-profiles", input, None).await;
     assert_eq!(status, StatusCode::CREATED, "{created}");
     assert_eq!(created["data"]["agent_profile"]["model"], "provider/model");
-    for (field, value) in [
-        ("profile_id", " "),
-        ("name", " "),
-        ("system_prompt", " "),
-        ("system_prompt", "{{input}}"),
-    ] {
+    assert_eq!(
+        created["data"]["agent_profile"]["system_prompt"],
+        "{{input}}"
+    );
+    for (field, value) in [("profile_id", " "), ("name", " "), ("system_prompt", " ")] {
         let mut input = profile("invalid");
         input[field] = json!(value);
         assert_eq!(

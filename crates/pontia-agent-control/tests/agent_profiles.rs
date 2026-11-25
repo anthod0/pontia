@@ -153,7 +153,7 @@ async fn crud_and_launch_use_current_profile() {
     ));
     assert_eq!(service.get("reviewer").await.unwrap().unwrap(), initial);
     let mut edited = configured();
-    edited.system_prompt = Some("Edited".into());
+    edited.system_prompt = Some("Edited {{input}}".into());
     let updated = service.update("reviewer", edited, None).await.unwrap();
     assert_eq!(updated.created_at, initial.created_at);
     assert_eq!(service.list().await.unwrap(), vec![updated]);
@@ -161,7 +161,7 @@ async fn crud_and_launch_use_current_profile() {
     assert_eq!(launch.client_type.as_deref(), Some("generic"));
     assert_eq!(launch.client_key.as_deref(), Some("default"));
     assert_eq!(launch.model.as_deref(), Some("model"));
-    assert_eq!(launch.system_prompt.as_deref(), Some("Edited"));
+    assert_eq!(launch.system_prompt.as_deref(), Some("Edited {{input}}"));
     service.delete("reviewer", None).await.unwrap();
     assert!(matches!(
         service.resolve_launch("reviewer").await,
@@ -205,7 +205,7 @@ async fn rejects_empty_identifiers_partial_defaults_and_invalid_instructions() {
         }
         invalid.push(input);
     }
-    for text in [" ", "{{input}}", "closing}}"] {
+    for text in ["", " "] {
         let mut input = request();
         input.system_prompt = Some(text.into());
         invalid.push(input);

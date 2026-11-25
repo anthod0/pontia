@@ -160,9 +160,6 @@ impl pontia_agent_control::client_contract::ClientInstructions for Client {
     fn inject_standalone_session_instructions(&self) -> bool {
         true
     }
-    fn validate_instructions(&self, _: Option<&str>) -> Result<()> {
-        Ok(())
-    }
     fn bind(
         &self,
         input: &pontia_agent_control::client_contract::InstructionsBindingInput<'_>,

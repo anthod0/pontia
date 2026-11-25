@@ -63,7 +63,7 @@ async fn explicit_instructions_are_appended_and_pinned_across_history_and_restar
         &h,
         json!({
             "metadata":{"acp_agent_id":"second"},
-            "system_instructions":"profile-marker\n\ncaller-marker",
+            "system_instructions":"profile-marker\n\n{{name}}",
             "include_standalone_session_instructions": true,
         }),
     )
@@ -78,7 +78,7 @@ async fn explicit_instructions_are_appended_and_pinned_across_history_and_restar
     h.restart().await;
     h.wait_ready(&session, 2).await;
     let expected = format!(
-        "{}\n\nprofile-marker\n\ncaller-marker",
+        "{}\n\nprofile-marker\n\n{{{{name}}}}",
         standalone_session_instructions()
     );
     assert_prompts(&h, Some(&expected));
@@ -277,7 +277,7 @@ async fn recovery_fails_if_previously_injected_instructions_cannot_be_applied() 
 #[tokio::test]
 async fn invalid_session_instructions_are_rejected() {
     let h = Harness::new(&[]).await;
-    for system in [" ", "Hello {{name}}", "name}}"] {
+    for system in ["", " "] {
         assert!(matches!(
             create(&h, json!({"system_instructions":system})).await,
             Err(Error::Domain(_))
