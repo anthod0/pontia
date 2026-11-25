@@ -1,10 +1,12 @@
 use std::{future::Future, io::Write, time::Duration};
 
 use anyhow::{Context, Result};
-use hickory_resolver::TokioResolver;
+use hickory_resolver::{
+    TokioResolver,
+    config::{ResolveHosts, ResolverConfig},
+    name_server::TokioConnectionProvider,
+};
 use tokio::time::{Instant, MissedTickBehavior};
-
-use crate::network::system_dns_resolver;
 
 const PROPAGATION_TIMEOUT: Duration = Duration::from_secs(300);
 const QUERY_TIMEOUT: Duration = Duration::from_secs(5);
@@ -16,7 +18,18 @@ pub(crate) async fn wait_for_txt(
     value: &str,
     output: &mut (impl Write + ?Sized),
 ) -> Result<()> {
-    wait_for_txt_with_resolver(hostname, value, &system_dns_resolver()?, output).await
+    wait_for_txt_with_resolver(hostname, value, &challenge_resolver(), output).await
+}
+
+fn challenge_resolver() -> TokioResolver {
+    // A host stub can cache NXDOMAIN longer than the propagation deadline.
+    let mut builder = TokioResolver::builder_with_config(
+        ResolverConfig::google(),
+        TokioConnectionProvider::default(),
+    );
+    builder.options_mut().use_hosts_file = ResolveHosts::Never;
+    builder.options_mut().cache_size = 0;
+    builder.build()
 }
 
 async fn wait_for_txt_with_resolver(
@@ -59,7 +72,9 @@ where
 {
     progress(
         output,
-        &format!("Waiting for DNS-01 TXT record {name} using system DNS (up to 5 minutes)..."),
+        &format!(
+            "Waiting for DNS-01 TXT record {name} using Google Public DNS (up to 5 minutes)..."
+        ),
     )?;
     let started = Instant::now();
     let deadline = started + PROPAGATION_TIMEOUT;
@@ -96,8 +111,8 @@ where
                 return Ok(());
             }
             Ok(Ok(_)) => last_observation = "the expected TXT value is not visible yet".to_owned(),
-            Ok(Err(error)) => last_observation = format!("system DNS query failed: {error:#}"),
-            Err(_) => last_observation = "system DNS query timed out after 5 seconds".to_owned(),
+            Ok(Err(error)) => last_observation = format!("public DNS query failed: {error:#}"),
+            Err(_) => last_observation = "public DNS query timed out after 5 seconds".to_owned(),
         }
         next_query = Instant::now() + RETRY_DELAY;
     }
@@ -115,10 +130,20 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    async fn challenge_queries_use_public_nameservers_without_local_caching() {
+        let resolver = challenge_resolver();
+        let servers = resolver.config().name_servers();
+        assert!(!servers.is_empty());
+        assert!(servers.iter().all(|server| {
+            hickory_resolver::config::GOOGLE_IPS.contains(&server.socket_addr.ip())
+        }));
+        assert_eq!(resolver.options().cache_size, 0);
+    }
+
+    #[tokio::test]
     async fn queries_configured_dns_and_concatenates_txt_character_strings() {
         use hickory_resolver::{
-            config::{NameServerConfig, ResolverConfig},
-            name_server::TokioConnectionProvider,
+            config::NameServerConfig,
             proto::{
                 op::{Message, MessageType},
                 rr::{RData, Record, RecordType, rdata::TXT},
