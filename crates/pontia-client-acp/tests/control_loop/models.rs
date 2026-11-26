@@ -316,6 +316,95 @@ async fn restore_applies_the_observed_effort_after_model_selection() {
 }
 
 #[tokio::test]
+async fn connected_sessions_expose_and_apply_confirmed_reasoning_effort() {
+    let h = Harness::new(&[
+        ("ACP_MODELS", "flat"),
+        ("ACP_EFFORT", "1"),
+        ("ACP_EFFECTIVE_EFFORT", "low"),
+    ])
+    .await;
+    let session = h.create("first").await.unwrap();
+    let initial = h
+        .app
+        .queries()
+        .get_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(initial.capabilities.reasoning_effort_control);
+    assert_eq!(initial.reasoning_effort.as_deref(), Some("medium"));
+
+    h.app
+        .session_commands()
+        .set_reasoning_effort(
+            &session,
+            pontia_agent_control::SetSessionReasoningEffortRequest {
+                reasoning_effort: "high".into(),
+            },
+        )
+        .await
+        .unwrap();
+
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let view = h
+                .app
+                .queries()
+                .get_session(&session)
+                .await
+                .unwrap()
+                .unwrap();
+            if view.reasoning_effort.as_deref() == Some("low") {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let request = h
+        .wire()
+        .into_iter()
+        .find(|frame| frame["method"] == "session/set_config_option")
+        .unwrap();
+    assert_eq!(request["params"]["configId"], "fast-effort");
+    assert_eq!(request["params"]["value"], "high");
+    assert_eq!(
+        h.events(&session, "session.reasoning_effort_updated").await,
+        2
+    );
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn sessions_without_a_thought_level_selector_cannot_change_reasoning_effort() {
+    let h = Harness::new(&[("ACP_MODELS", "flat")]).await;
+    let session = h.create("first").await.unwrap();
+    let view = h
+        .app
+        .queries()
+        .get_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!view.capabilities.reasoning_effort_control);
+    assert!(matches!(
+        h.app
+            .session_commands()
+            .set_reasoning_effort(
+                &session,
+                pontia_agent_control::SetSessionReasoningEffortRequest {
+                    reasoning_effort: "high".into(),
+                },
+            )
+            .await,
+        Err(Error::CapabilityUnavailable(_))
+    ));
+    assert_eq!(h.requests("session/set_config_option"), 0);
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn kiro_model_discovery_avoids_creating_a_session_it_cannot_delete() {
     let h = Harness::new(&[("ACP_MODELS", "deferred")]).await;
     assert!(matches!(

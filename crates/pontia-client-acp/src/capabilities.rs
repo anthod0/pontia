@@ -118,6 +118,7 @@ pub(crate) struct Live {
     pub current: bool,
     pub ready: bool,
     pub has_native: bool,
+    pub has_reasoning_effort: bool,
     pub closing: bool,
     pub active: bool,
     pub replaying: bool,
@@ -136,6 +137,7 @@ pub(crate) fn live(
             || negotiated.interject
             || bounds.prompt_steering;
         caps.interrupt &= state.active;
+        caps.reasoning_effort_control &= state.has_reasoning_effort;
         caps.manual_compaction &=
             negotiated.compact_command && !state.active && !state.blocked && !state.replaying;
         caps.accept_task &= !state.replaying && !state.blocked;
@@ -174,11 +176,34 @@ mod tests {
             current: true,
             ready: true,
             has_native: true,
+            has_reasoning_effort: false,
             closing: false,
             active: false,
             replaying: false,
             blocked: false,
         }
+    }
+
+    #[test]
+    fn reasoning_effort_control_requires_a_live_thought_level_selector() {
+        let bounds = AgentBounds::of("another", None);
+        assert!(
+            !live(&bounds, Negotiated::default(), idle())
+                .unwrap()
+                .reasoning_effort_control
+        );
+        assert!(
+            live(
+                &bounds,
+                Negotiated::default(),
+                Live {
+                    has_reasoning_effort: true,
+                    ..idle()
+                },
+            )
+            .unwrap()
+            .reasoning_effort_control
+        );
     }
 
     #[test]

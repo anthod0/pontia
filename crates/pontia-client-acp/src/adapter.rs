@@ -646,6 +646,22 @@ impl ClientSession for AcpAdapter {
         })
     }
 
+    fn set_reasoning_effort<'a>(
+        &'a self,
+        events: EventIngestService,
+        target: &'a ControlTarget,
+        reasoning_effort: &'a str,
+    ) -> ClientOperation<'a, ()> {
+        Box::pin(async move {
+            let peer = self.peer(&target.session_id).await?;
+            target.validate(&events.db()).await?;
+            if target.instance()? != peer.runtime {
+                return Err(unavailable());
+            }
+            crate::models::set_reasoning_effort(&peer, reasoning_effort).await
+        })
+    }
+
     fn capabilities<'a>(
         &'a self,
         session: &'a str,

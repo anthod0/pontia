@@ -137,6 +137,13 @@ pub(crate) async fn select(
     Ok(())
 }
 
+pub(crate) async fn set_reasoning_effort(
+    peer: &std::sync::Arc<Peer>,
+    reasoning_effort: &str,
+) -> Result<()> {
+    set(peer, Category::ThoughtLevel, reasoning_effort, false).await
+}
+
 async fn set(
     peer: &std::sync::Arc<Peer>,
     category: Category,
@@ -219,6 +226,7 @@ pub(crate) fn replace(state: &mut SessionState, options: Vec<SessionConfigOption
     }
     state.current_model = model;
     state.config_options = options;
+    state.refresh_capabilities();
 }
 
 pub(crate) async fn report(

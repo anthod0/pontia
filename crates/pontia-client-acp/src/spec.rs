@@ -12,7 +12,7 @@ pub const ACP_MAX_CAPABILITIES: AgentClientCapabilities = AgentClientCapabilitie
     topology: false,
     branch_control: false,
     fork_session: false,
-    reasoning_effort_control: false,
+    reasoning_effort_control: true,
     manual_compaction: true,
     compaction_events: true,
     compaction_history: true,

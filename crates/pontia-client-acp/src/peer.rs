@@ -200,6 +200,7 @@ impl SessionState {
                 current: self.current,
                 ready: self.ready,
                 has_native: self.native.is_some(),
+                has_reasoning_effort: crate::models::effort(&self.config_options).is_some(),
                 closing: self.closing,
                 active: self.active.is_some(),
                 replaying: self.replay.is_some(),
