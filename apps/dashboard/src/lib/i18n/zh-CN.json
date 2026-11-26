@@ -936,7 +936,6 @@
   "profiles.create": "创建 Profile",
   "profiles.idInvalid": "只能使用小写字母、数字、'.'、'_' 或 '-'，并以字母或数字开头。",
   "profiles.descriptionHint": "Bot 根据这段描述判断何时使用这个 Profile。",
-  "profiles.promptHint": "追加到用这个 Profile 启动的 Session 的指令中。",
   "profiles.select": "选择一个 Profile 进行编辑。",
   "profiles.saved": "Profile 已保存",
   "profiles.noLaunch": "未设置客户端和模型",

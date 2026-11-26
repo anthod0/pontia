@@ -305,8 +305,7 @@
   <div class="grid gap-2">
     <Label for={`${id}-prompt`}>{$t('profiles.systemPrompt')}</Label>
     <Textarea id={`${id}-prompt`} bind:value={draft.system_prompt} rows={8} spellcheck={false} class="min-h-40 font-mono text-xs leading-5" disabled={saving} aria-invalid={!!errors.system_prompt} />
-    {#if errors.system_prompt}<p role="alert" class="text-sm text-destructive">{errors.system_prompt}</p>
-    {:else}<p class="text-xs text-muted-foreground">{$t('profiles.promptHint')}</p>{/if}
+    {#if errors.system_prompt}<p role="alert" class="text-sm text-destructive">{errors.system_prompt}</p>{/if}
   </div>
 
   {/snippet}

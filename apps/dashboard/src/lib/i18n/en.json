@@ -936,7 +936,6 @@
   "profiles.create": "Create profile",
   "profiles.idInvalid": "Use lowercase letters, digits, '.', '_' or '-', starting with a letter or digit.",
   "profiles.descriptionHint": "Bots read this to decide when to use the profile.",
-  "profiles.promptHint": "Added to the instructions of Sessions started with this profile.",
   "profiles.select": "Select a profile to edit it.",
   "profiles.saved": "Profile saved",
   "profiles.noLaunch": "No client or model",
