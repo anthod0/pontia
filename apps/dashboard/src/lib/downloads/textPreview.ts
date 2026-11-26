@@ -1,6 +1,5 @@
 import { responseSize } from "./save";
-
-export const TEXT_PREVIEW_LIMIT = 1024 * 1024;
+import { FILE_PREVIEW_LIMIT } from "./preview";
 
 export class TextPreviewError extends Error {
   constructor(readonly reason: "tooLarge" | "notText") {
@@ -9,7 +8,7 @@ export class TextPreviewError extends Error {
 }
 
 export async function readTextPreview(response: Response): Promise<string> {
-  if ((responseSize(response) ?? 0) > TEXT_PREVIEW_LIMIT) {
+  if ((responseSize(response) ?? 0) > FILE_PREVIEW_LIMIT) {
     await response.body?.cancel();
     throw new TextPreviewError("tooLarge");
   }
@@ -33,7 +32,7 @@ export async function readTextPreview(response: Response): Promise<string> {
         break;
       }
       received += value.byteLength;
-      if (received > TEXT_PREVIEW_LIMIT) throw new TextPreviewError("tooLarge");
+      if (received > FILE_PREVIEW_LIMIT) throw new TextPreviewError("tooLarge");
       const chunk = decode(value, true);
       if (chunk.includes("\0")) throw new TextPreviewError("notText");
       text += chunk;

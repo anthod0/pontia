@@ -74,6 +74,26 @@ async fn path_download_reads_current_file_without_creating_events() {
 }
 
 #[tokio::test]
+async fn path_download_streams_a_five_mibibyte_preview_without_truncation() {
+    let app = fixture().await;
+    let workspace = tempfile::tempdir().unwrap();
+    let path = workspace.path().join("preview.bin");
+    let content = vec![17; 5 * 1024 * 1024];
+    std::fs::write(&path, &content).unwrap();
+
+    let response = path_content(&app, "s", &path, true).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers()["content-length"],
+        content.len().to_string()
+    );
+    assert_eq!(
+        response.into_body().collect().await.unwrap().to_bytes(),
+        content
+    );
+}
+
+#[tokio::test]
 async fn path_download_requires_authentication_session_and_absolute_regular_file_within_size_limit()
 {
     let app = fixture().await;

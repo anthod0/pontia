@@ -127,7 +127,7 @@ test.each([
 });
 
 test("uses the list once any file turns out not to be a previewable image", async () => {
-  mockFileInfo({ "/work/big.png": { size: 21 * 1024 * 1024 } });
+  mockFileInfo({ "/work/big.png": { size: 5 * 1024 * 1024 + 1 } });
   render(SharedFilesHarness, { paths: work("a.png", "big.png") });
   expect(await screen.findByText(/^2 files/)).toBeInTheDocument();
   expect(screen.queryByText("2 images")).not.toBeInTheDocument();
