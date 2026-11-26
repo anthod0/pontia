@@ -5,7 +5,16 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode},
 };
-use pontia_agent_control::clients::ClientRegistry;
+use pontia_agent_control::{
+    client_contract::{
+        DetectionContext,
+        install::{
+            AuthGuidance, AuthStatus, ClientInstaller, InstallMethod, InstallProvenance,
+            InstallSpec, PrerequisiteStatus,
+        },
+    },
+    clients::ClientRegistry,
+};
 use pontia_application::AppState;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
@@ -16,8 +25,66 @@ async fn app() -> (Router, tempfile::TempDir) {
     app_with_acp(|_| pontia_client_acp::registration()).await
 }
 
+struct TestInstaller {
+    ready: bool,
+}
+
+impl ClientInstaller for TestInstaller {
+    fn client_type(&self) -> &'static str {
+        "acp"
+    }
+
+    fn client_key(&self) -> &'static str {
+        "grok"
+    }
+
+    fn inspect(&self, _: &DetectionContext<'_>) -> InstallSpec {
+        InstallSpec {
+            provenance: InstallProvenance::NotInstalled,
+            methods: vec![InstallMethod {
+                id: "test".into(),
+                label: "Test installer".into(),
+                recommended: true,
+                supported_on_platform: true,
+                source_summary: "test fixture".into(),
+                target_summary: "temporary directory".into(),
+                prerequisites: vec![PrerequisiteStatus {
+                    id: "fixture".into(),
+                    label: "Test prerequisite".into(),
+                    required: true,
+                    satisfied: self.ready,
+                    detected_detail: self.ready.then(|| "available".into()),
+                    missing_hint: (!self.ready).then(|| "Install the test prerequisite".into()),
+                }],
+            }],
+            auth: AuthGuidance {
+                status: AuthStatus::Unknown,
+                login_command: None,
+                headless_login_command: None,
+                env_vars: Vec::new(),
+                docs_url: None,
+            },
+        }
+    }
+
+    fn install(
+        &self,
+        _: &str,
+        _: &mut pontia_runtime::client_operations::InstallOperation,
+    ) -> std::io::Result<()> {
+        unreachable!()
+    }
+}
+
 async fn app_with_acp(
     registration: impl FnOnce(&std::path::Path) -> pontia_agent_control::clients::ClientRegistration,
+) -> (Router, tempfile::TempDir) {
+    app_with_acp_and_prerequisite(registration, true).await
+}
+
+async fn app_with_acp_and_prerequisite(
+    registration: impl FnOnce(&std::path::Path) -> pontia_agent_control::clients::ClientRegistration,
+    prerequisite_ready: bool,
 ) -> (Router, tempfile::TempDir) {
     let root = tempfile::tempdir().unwrap();
     let db = connect_sqlite("sqlite::memory:").await.unwrap();
@@ -33,6 +100,9 @@ async fn app_with_acp(
     clients.register(pi);
     clients.register(pontia_client_codex::registration());
     clients.register(registration(root.path()));
+    clients.register_installer(Arc::new(TestInstaller {
+        ready: prerequisite_ready,
+    }));
     let state = AppState::builder(
         pontia_agent_control::AgentControl::builder(db, root.path().into())
             .clients(clients)
@@ -72,6 +142,30 @@ async fn request(
     let value =
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
     (status, value)
+}
+
+async fn external_request(
+    app: &Router,
+    method: &str,
+    path: &str,
+    body: Option<Value>,
+    authorized: bool,
+) -> axum::response::Response {
+    let mut request = Request::builder().method(method).uri(path);
+    if authorized {
+        request = request.header("Authorization", "Bearer test-token");
+    }
+    app.clone()
+        .oneshot(
+            request
+                .header("Content-Type", "application/json")
+                .body(Body::from(
+                    body.map(|value| value.to_string()).unwrap_or_default(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
 }
 
 #[tokio::test]
@@ -585,4 +679,210 @@ async fn listing_returns_saved_details_while_the_version_check_runs() {
     })
     .await
     .expect("settings page triggered a background version check");
+}
+
+#[tokio::test]
+async fn install_inspection_and_preflight_errors_are_exposed_by_the_external_api() {
+    let (app, _root) =
+        app_with_acp_and_prerequisite(|_| pontia_client_acp::registration(), false).await;
+    let (_, response) = request(&app, "GET", "/acp/grok", None, true).await;
+    let install = &response["data"]["agent_client"]["install"];
+    assert_eq!(install["provenance"], "not_installed");
+    assert_eq!(install["supported"], true);
+    assert_eq!(install["available_actions"], json!(["install"]));
+    assert_eq!(install["methods"][0]["id"], "test");
+    assert_eq!(install["methods"][0]["ready"], false);
+    assert_eq!(
+        install["methods"][0]["prerequisites"][0]["satisfied"],
+        false
+    );
+
+    let response = external_request(
+        &app,
+        "POST",
+        "/api/v1/agent-clients/acp/grok/install",
+        Some(json!({})),
+        true,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(body["error"]["code"], "prerequisite_missing");
+
+    let response = external_request(
+        &app,
+        "POST",
+        "/api/v1/agent-clients/acp/grok/install",
+        Some(json!({"action":"upgrade"})),
+        true,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(body["error"]["code"], "action_unavailable");
+}
+
+#[tokio::test]
+async fn operation_snapshots_and_sse_resume_logs_by_byte_offset() {
+    use pontia_runtime::client_operations::{self as operations, Phase};
+
+    let (app, root) = app().await;
+    let operation = operations::run(root.path(), "acp", "grok", "test", |operation| {
+        operation.log("first")?;
+        operation.advance(Phase::Installing)?;
+        operation.log("second")?;
+        operation.advance(Phase::Verifying)
+    })
+    .unwrap();
+
+    let latest = external_request(
+        &app,
+        "GET",
+        "/api/v1/agent-client-operations/latest",
+        None,
+        true,
+    )
+    .await;
+    assert_eq!(latest.status(), StatusCode::OK);
+    let latest: Value =
+        serde_json::from_slice(&to_bytes(latest.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(latest["data"]["operation"]["id"], operation.id.to_string());
+    assert_eq!(latest["data"]["operation"]["output"], "first\nsecond\n");
+
+    let incremental = external_request(
+        &app,
+        "GET",
+        &format!("/api/v1/agent-client-operations/{}?offset=6", operation.id),
+        None,
+        true,
+    )
+    .await;
+    let incremental: Value =
+        serde_json::from_slice(&to_bytes(incremental.into_body(), usize::MAX).await.unwrap())
+            .unwrap();
+    assert_eq!(incremental["data"]["operation"]["output"], "second\n");
+
+    let stream = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/agent-client-operations/{}/stream",
+                    operation.id
+                ))
+                .header("Authorization", "Bearer test-token")
+                .header("Last-Event-ID", "6")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stream.status(), StatusCode::OK);
+    assert!(
+        stream.headers()[axum::http::header::CONTENT_TYPE]
+            .to_str()
+            .unwrap()
+            .starts_with("text/event-stream")
+    );
+    let body = String::from_utf8(
+        to_bytes(stream.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(body.contains("event: state"));
+    assert!(body.contains("event: log"));
+    assert!(body.contains("event: done"));
+    assert!(body.contains(r#""offset":6"#));
+    assert!(body.contains(r#""chunk":"second\n""#));
+    assert!(!body.contains(r#""chunk":"first"#));
+}
+
+#[tokio::test]
+async fn install_conflicts_and_cancellation_use_the_persisted_operation() {
+    use pontia_runtime::client_operations::{self as operations, Phase, Status};
+    use std::{sync::mpsc, thread, time::Duration};
+
+    let (app, root) = app().await;
+    let home = root.path().to_path_buf();
+    let worker_home = home.clone();
+    let (started, receipt) = mpsc::channel();
+    let worker = thread::spawn(move || {
+        operations::run(&worker_home, "acp", "grok", "test", |operation| {
+            operation.advance(Phase::Installing)?;
+            operation.log("working")?;
+            started.send(operation.id()).unwrap();
+            loop {
+                operation.checkpoint()?;
+                thread::sleep(Duration::from_millis(10));
+            }
+        })
+        .unwrap()
+    });
+    let id = receipt.recv().unwrap();
+
+    let conflict = external_request(
+        &app,
+        "POST",
+        "/api/v1/agent-clients/acp/grok/install",
+        Some(json!({"method_id":"test"})),
+        true,
+    )
+    .await;
+    assert_eq!(conflict.status(), StatusCode::CONFLICT);
+    let conflict: Value =
+        serde_json::from_slice(&to_bytes(conflict.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(conflict["error"]["code"], "operation_in_progress");
+
+    let cancelled = external_request(
+        &app,
+        "POST",
+        &format!("/api/v1/agent-client-operations/{id}/cancel"),
+        None,
+        true,
+    )
+    .await;
+    assert_eq!(cancelled.status(), StatusCode::OK);
+    let cancelled: Value =
+        serde_json::from_slice(&to_bytes(cancelled.into_body(), usize::MAX).await.unwrap())
+            .unwrap();
+    assert_eq!(cancelled["data"]["operation"]["cancel_requested"], true);
+    assert_eq!(worker.join().unwrap().status, Status::Cancelled);
+
+    let again = external_request(
+        &app,
+        "POST",
+        &format!("/api/v1/agent-client-operations/{id}/cancel"),
+        None,
+        true,
+    )
+    .await;
+    assert_eq!(again.status(), StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn operation_routes_require_authentication() {
+    let (app, _root) = app().await;
+    for (method, path) in [
+        ("GET", "/api/v1/agent-client-operations/latest"),
+        (
+            "GET",
+            "/api/v1/agent-client-operations/00000000-0000-0000-0000-000000000000",
+        ),
+        (
+            "GET",
+            "/api/v1/agent-client-operations/00000000-0000-0000-0000-000000000000/stream",
+        ),
+        (
+            "POST",
+            "/api/v1/agent-client-operations/00000000-0000-0000-0000-000000000000/cancel",
+        ),
+        ("POST", "/api/v1/agent-clients/acp/grok/install"),
+    ] {
+        let response = external_request(&app, method, path, Some(json!({})), false).await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
 }

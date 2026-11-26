@@ -58,6 +58,7 @@ fn entry(has_record: bool, enabled: bool) -> AgentClientDetails {
         detection: ClientDetection::detected("pi"),
         setup: Some(ClientSetup::Initialized),
         setup_command: None,
+        install: None,
         created_at: None,
         updated_at: None,
     }

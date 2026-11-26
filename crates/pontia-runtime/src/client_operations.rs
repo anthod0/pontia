@@ -6,6 +6,9 @@ use std::{
     io::{self, Read, Seek, SeekFrom, Write},
     os::unix::fs::symlink,
     path::{Path, PathBuf},
+    process::Stdio,
+    thread,
+    time::{Duration, Instant},
 };
 use tempfile::NamedTempFile;
 use uuid::Uuid;
@@ -127,6 +130,76 @@ pub fn read_log(home: &Path, id: Uuid, offset: u64) -> io::Result<Vec<u8>> {
     let mut bytes = Vec::new();
     file.take(64 * 1024).read_to_end(&mut bytes)?;
     Ok(bytes)
+}
+
+pub fn log_size(home: &Path, id: Uuid) -> io::Result<u64> {
+    Ok(fs::metadata(directory(home).join(format!("{id}.log")))?.len())
+}
+
+/// Starts the existing foreground CLI orchestration as a process that can outlive pontiad.
+pub fn start(
+    home: &Path,
+    cli: &Path,
+    selector: &str,
+    method_id: &str,
+    auto_setup: bool,
+    auto_enable: bool,
+) -> io::Result<InstallState> {
+    let dir = directory(home);
+    private_fs::directory(&dir)?;
+    let launch = lock(&dir, "launch.lock")?;
+    launch.lock()?;
+    if latest(home)?.is_some_and(|operation| operation.status == Status::Running) {
+        return Err(io::Error::new(
+            io::ErrorKind::WouldBlock,
+            "Another client operation is running",
+        ));
+    }
+    let previous = latest(home)?.map(|operation| operation.id);
+    let mut command = crate::detached::detached_command(cli, "Pontia Agent Client install")?;
+    command
+        .args([
+            "client", "install", selector, "--method", method_id, "--yes",
+        ])
+        .env("PONTIA_HOME", home)
+        .env("NO_COLOR", "1")
+        .current_dir(home)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if !auto_setup {
+        command.arg("--no-setup");
+    }
+    if !auto_enable {
+        command.arg("--no-enable");
+    }
+    let mut child = command.spawn()?;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        if let Some(operation) = latest(home)?
+            && Some(operation.id) != previous
+        {
+            crate::detached::reap_detached_child(child);
+            return Ok(operation);
+        }
+        if let Some(status) = child.try_wait()? {
+            let output = child.wait_with_output()?;
+            let message = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            return Err(io::Error::other(if message.is_empty() {
+                format!("Install worker exited with {status}")
+            } else {
+                message
+            }));
+        }
+        if Instant::now() >= deadline {
+            crate::detached::reap_detached_child(child);
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "Install worker did not report its operation",
+            ));
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
 }
 
 pub struct InstallOperation {

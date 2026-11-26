@@ -199,8 +199,28 @@ fn external_api_router(state: HttpState) -> Router {
             get(api::agent_client_setup_status),
         )
         .route(
+            "/api/v1/agent-client-operations/latest",
+            get(api::latest_agent_client_operation),
+        )
+        .route(
+            "/api/v1/agent-client-operations/{operation_id}",
+            get(api::get_agent_client_operation),
+        )
+        .route(
+            "/api/v1/agent-client-operations/{operation_id}/stream",
+            get(api::stream_agent_client_operation),
+        )
+        .route(
+            "/api/v1/agent-client-operations/{operation_id}/cancel",
+            post(api::cancel_agent_client_operation),
+        )
+        .route(
             "/api/v1/agent-clients/{client_type}/{client_key}/setup",
             post(api::setup_agent_client),
+        )
+        .route(
+            "/api/v1/agent-clients/{client_type}/{client_key}/install",
+            post(api::install_agent_client),
         )
         .route("/api/v1/agent-clients", get(api::list_agent_clients))
         .route(

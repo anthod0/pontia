@@ -8,8 +8,10 @@ pub use bot_memory::{get_user_file, list_memories, memory_command, replace_user_
 mod agent_clients;
 pub mod bots;
 pub use agent_clients::{
-    agent_client_setup_status, delete_agent_client, get_agent_client, list_agent_client_models,
-    list_agent_clients, patch_agent_client, setup_agent_client,
+    agent_client_setup_status, cancel_agent_client_operation, delete_agent_client,
+    get_agent_client, get_agent_client_operation, install_agent_client,
+    latest_agent_client_operation, list_agent_client_models, list_agent_clients,
+    patch_agent_client, setup_agent_client, stream_agent_client_operation,
 };
 mod agent_profiles;
 mod client_auth;

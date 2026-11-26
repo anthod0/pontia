@@ -4,11 +4,13 @@ use pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientReposit
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::SqlitePool;
-use std::{collections::BTreeSet, path::Path};
+use std::{collections::BTreeSet, io, path::Path};
+use uuid::Uuid;
 
 use crate::{
     client_contract::{
         ClientConfiguration, ClientDetection, ClientSetup, DetectionContext, DetectionStatus,
+        install::{AuthGuidance, InstallMethod, InstallProvenance, InstallSpec},
     },
     clients::ClientRegistry,
 };
@@ -25,6 +27,8 @@ pub struct AgentClientDetails {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub setup: Option<ClientSetup>,
     pub setup_command: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub install: Option<AgentClientInstallDetails>,
     pub has_record: bool,
     /// Pontia manages this entry's authentication. Performs no I/O.
     pub auth_supported: bool,
@@ -32,6 +36,76 @@ pub struct AgentClientDetails {
     pub version_checked_at: Option<String>,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentClientInstallDetails {
+    pub supported: bool,
+    pub provenance: InstallProvenance,
+    pub available_actions: Vec<String>,
+    pub methods: Vec<AgentClientInstallMethod>,
+    pub auth: AuthGuidance,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentClientInstallMethod {
+    #[serde(flatten)]
+    pub method: InstallMethod,
+    pub ready: bool,
+}
+
+impl From<InstallSpec> for AgentClientInstallDetails {
+    fn from(spec: InstallSpec) -> Self {
+        let available_actions = if spec.provenance == InstallProvenance::NotInstalled {
+            vec!["install".into()]
+        } else {
+            Vec::new()
+        };
+        Self {
+            supported: true,
+            provenance: spec.provenance,
+            available_actions,
+            methods: spec
+                .methods
+                .into_iter()
+                .map(|method| AgentClientInstallMethod {
+                    ready: method.ready(),
+                    method,
+                })
+                .collect(),
+            auth: spec.auth,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct AgentClientOperationView {
+    #[serde(flatten)]
+    pub operation: pontia_runtime::client_operations::InstallState,
+    pub log_size: u64,
+    pub output_offset: u64,
+    pub next_offset: u64,
+    pub output: String,
+}
+
+impl AgentClientOperationView {
+    pub fn finished(&self) -> bool {
+        self.operation.status != pontia_runtime::client_operations::Status::Running
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ClientInstallStartError {
+    #[error(transparent)]
+    Control(#[from] Error),
+    #[error("{0}")]
+    Unavailable(String),
+    #[error("{0}")]
+    PrerequisiteMissing(String),
+    #[error("{0}")]
+    InProgress(String),
+    #[error(transparent)]
+    Io(#[from] io::Error),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -140,6 +214,10 @@ impl AgentClientService {
         let effective = configuration.merged(key);
         let (name, short_id) = configuration.presentation(key, &effective);
         let integration = self.clients.integration(client, key);
+        let install = self
+            .clients
+            .installer(client, key)
+            .map(|installer| installer.inspect(context).into());
         let setup = match integration {
             Some(integration) => integration
                 .detect_setup(context)
@@ -156,6 +234,7 @@ impl AgentClientService {
             setup: Some(setup),
             setup_command: integration
                 .map(|integration| format!("pontia setup {}", integration.setup_name())),
+            install,
             enabled: record.as_ref().is_some_and(|row| row.enabled),
             has_record: record.is_some(),
             auth_supported: self
@@ -330,6 +409,129 @@ impl AgentClientService {
         self.repository.delete(client, key).await
     }
 
+    pub async fn start_install(
+        &self,
+        home: std::path::PathBuf,
+        client: &str,
+        key: &str,
+        method_id: Option<&str>,
+        auto_setup: bool,
+        auto_enable: bool,
+    ) -> std::result::Result<AgentClientOperationView, ClientInstallStartError> {
+        let vars = std::env::vars().collect();
+        let context = DetectionContext {
+            vars: &vars,
+            pontia_home: &home,
+        };
+        let details = self.get(client, key, &context).await?;
+        let installer = self.clients.installer(client, key).ok_or_else(|| {
+            ClientInstallStartError::Unavailable(
+                "Installation is unavailable for this client".into(),
+            )
+        })?;
+        let spec = installer.inspect(&context);
+        if spec.provenance != InstallProvenance::NotInstalled {
+            return Err(ClientInstallStartError::Unavailable(
+                "Client is already installed".into(),
+            ));
+        }
+        let method = spec
+            .methods
+            .iter()
+            .find(|method| method_id.map_or(method.recommended, |id| method.id == id))
+            .ok_or_else(|| {
+                ClientInstallStartError::Unavailable(format!(
+                    "No matching installation method: {}",
+                    method_id.unwrap_or("recommended")
+                ))
+            })?;
+        if !method.ready() {
+            let missing = method
+                .prerequisites
+                .iter()
+                .filter(|prerequisite| prerequisite.required && !prerequisite.satisfied)
+                .map(|prerequisite| {
+                    prerequisite
+                        .missing_hint
+                        .as_deref()
+                        .unwrap_or(&prerequisite.label)
+                })
+                .collect::<Vec<_>>();
+            return Err(ClientInstallStartError::PrerequisiteMissing(
+                if missing.is_empty() {
+                    "Installation method is unavailable on this platform".into()
+                } else {
+                    missing.join("\n")
+                },
+            ));
+        }
+        let cli = std::env::current_exe()?.with_file_name("pontia");
+        let selector = details.short_id;
+        let method_id = method.id.clone();
+        let operation_home = home.clone();
+        let operation = tokio::task::spawn_blocking(move || {
+            pontia_runtime::client_operations::start(
+                &operation_home,
+                &cli,
+                &selector,
+                &method_id,
+                auto_setup,
+                auto_enable,
+            )
+        })
+        .await
+        .map_err(|error| io::Error::other(error.to_string()))?
+        .map_err(|error| {
+            if error.kind() == io::ErrorKind::WouldBlock {
+                ClientInstallStartError::InProgress(error.to_string())
+            } else {
+                ClientInstallStartError::Io(error)
+            }
+        })?;
+        operation_view(&home, operation.id, Some(0), 64 * 1024)
+            .await
+            .map_err(ClientInstallStartError::from)
+    }
+
+    pub async fn latest_operation(
+        home: std::path::PathBuf,
+        tail_bytes: u64,
+    ) -> Result<Option<AgentClientOperationView>> {
+        let id = tokio::task::spawn_blocking({
+            let home = home.clone();
+            move || pontia_runtime::client_operations::latest(&home)
+        })
+        .await
+        .map_err(|error| Error::Domain(error.to_string()))??
+        .map(|operation| operation.id);
+        match id {
+            Some(id) => Ok(Some(operation_view(&home, id, None, tail_bytes).await?)),
+            None => Ok(None),
+        }
+    }
+
+    pub async fn operation(
+        home: std::path::PathBuf,
+        id: Uuid,
+        offset: Option<u64>,
+    ) -> Result<AgentClientOperationView> {
+        operation_view(&home, id, offset, 64 * 1024).await
+    }
+
+    pub async fn cancel_operation(
+        home: std::path::PathBuf,
+        id: Uuid,
+    ) -> Result<AgentClientOperationView> {
+        let operation_home = home.clone();
+        tokio::task::spawn_blocking(move || {
+            pontia_runtime::client_operations::cancel(&operation_home, id)
+        })
+        .await
+        .map_err(|error| Error::Domain(error.to_string()))?
+        .map_err(operation_error)?;
+        operation_view(&home, id, None, 64 * 1024).await
+    }
+
     /// Read once before creating any durable Session or launching a runtime. Existing
     /// Session control and recovery deliberately do not use this admission check.
     pub async fn for_creation(&self, client: &str, metadata: &Value) -> Result<Option<Value>> {
@@ -360,6 +562,42 @@ impl AgentClientService {
             .as_ref()
             .map(|configuration| configuration.resolve(key))
             .transpose()
+    }
+}
+
+async fn operation_view(
+    home: &Path,
+    id: Uuid,
+    offset: Option<u64>,
+    tail_bytes: u64,
+) -> Result<AgentClientOperationView> {
+    let home = home.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        let operation = pontia_runtime::client_operations::state(&home, id)?;
+        let log_size = pontia_runtime::client_operations::log_size(&home, id)?;
+        let output_offset = offset
+            .unwrap_or_else(|| log_size.saturating_sub(tail_bytes.min(64 * 1024)))
+            .min(log_size);
+        let bytes = pontia_runtime::client_operations::read_log(&home, id, output_offset)?;
+        let next_offset = output_offset + bytes.len() as u64;
+        Ok(AgentClientOperationView {
+            operation,
+            log_size,
+            output_offset,
+            next_offset,
+            output: String::from_utf8_lossy(&bytes).into_owned(),
+        })
+    })
+    .await
+    .map_err(|error| Error::Domain(error.to_string()))?
+    .map_err(operation_error)
+}
+
+fn operation_error(error: io::Error) -> Error {
+    match error.kind() {
+        io::ErrorKind::NotFound => Error::NotFound("Client operation not found".into()),
+        io::ErrorKind::Other => Error::StateConflict(error.to_string()),
+        _ => Error::Io(error),
     }
 }
 
