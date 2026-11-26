@@ -307,6 +307,13 @@ impl ClientControlService {
         Ok(self.connection(session_id).await?.is_some())
     }
 
+    pub async fn reasoning_effort_control_available(&self, session_id: &str) -> Result<bool> {
+        Ok(self
+            .connection(session_id)
+            .await?
+            .is_some_and(|connection| connection.channel.reasoning_effort_control_available()))
+    }
+
     pub async fn interrupt(&self, session_id: &str, runtime_id: &str) -> Result<()> {
         self.request(session_id, runtime_id, false, |channel| async move {
             channel.interrupt().await

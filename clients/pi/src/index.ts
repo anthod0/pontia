@@ -441,6 +441,12 @@ export function createPontiaPiExtension(
         },
       },
       binding,
+      {
+        setReasoningEffort(level) {
+          lifecycleContext();
+          pi.setThinkingLevel(level);
+        },
+      },
     );
     if (generation !== controlGeneration) {
       await socket.close();

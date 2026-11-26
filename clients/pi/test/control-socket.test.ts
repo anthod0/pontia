@@ -127,6 +127,47 @@ test("compaction control acknowledges native initiation and rejects malformed op
   expect(responses.filter((r) => r.error).map((r) => r.error.code)).toEqual([-32602, -32602]);
 });
 
+test("reasoning effort control accepts native Pi levels and rejects malformed requests", async () => {
+  const responses: any[] = [];
+  const root = await server((socket, message) => {
+    if (!message.method) {
+      responses.push(message);
+      return;
+    }
+    for (const [id, params] of [
+      ["valid", { reasoning_effort: "xhigh" }],
+      ["unknown", { reasoning_effort: "extreme" }],
+      ["extra", { reasoning_effort: "high", persist: true }],
+    ]) {
+      socket.write(
+        `${JSON.stringify({ jsonrpc: "2.0", id, method: "set_reasoning_effort", params })}\n`,
+      );
+    }
+    reply(socket, message.id, {});
+  });
+  const setReasoningEffort = vi.fn();
+  const client = await connectPi(
+    root,
+    () => {},
+    () => {},
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    {},
+    { setReasoningEffort },
+  );
+  onTestFinished(() => client.close());
+  await client.request("begin", {});
+  await vi.waitFor(() => expect(responses).toHaveLength(3));
+  expect(setReasoningEffort).toHaveBeenCalledExactlyOnceWith("xhigh");
+  expect(responses.find((response) => response.id === "valid").result).toEqual({ accepted: true });
+  expect(
+    responses.filter((response) => response.error).map((response) => response.error.code),
+  ).toEqual([-32602, -32602]);
+});
+
 test("branch replay can resolve over the same socket and rejects malformed message identifiers", async () => {
   const replies: any[] = [];
   const root = await server((socket, message) => {

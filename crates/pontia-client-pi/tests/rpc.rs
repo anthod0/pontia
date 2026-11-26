@@ -84,6 +84,47 @@ async fn correlates_concurrent_calls_with_out_of_order_responses() {
 }
 
 #[tokio::test]
+async fn reasoning_effort_waits_for_the_pi_acknowledgement() {
+    let (left, right) = UnixStream::pair().unwrap();
+    let (peer, _incoming) = PiRpcPeer::new(left);
+    let (received, wait_until_received) = tokio::sync::oneshot::channel();
+    let (release, wait_until_released) = tokio::sync::oneshot::channel();
+    let server = tokio::spawn(async move {
+        let mut pi = BufReader::new(right);
+        let mut line = String::new();
+        pi.read_line(&mut line).await.unwrap();
+        let request: Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(request["method"], "set_reasoning_effort");
+        assert_eq!(request["params"], json!({"reasoning_effort":"max"}));
+        received.send(()).unwrap();
+        wait_until_released.await.unwrap();
+        pi.get_mut()
+            .write_all(
+                format!(
+                    "{}\n",
+                    json!({"jsonrpc":"2.0","id":request["id"],"result":{"accepted":true}})
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+    });
+    let pending = tokio::spawn({
+        let peer = peer.clone();
+        async move {
+            pontia_agent_control::ClientControlChannel::set_reasoning_effort(peer.as_ref(), "max")
+                .await
+        }
+    });
+    wait_until_received.await.unwrap();
+    assert!(!pending.is_finished());
+    release.send(()).unwrap();
+    pending.await.unwrap().unwrap();
+    server.await.unwrap();
+    peer.close();
+}
+
+#[tokio::test]
 async fn a_lost_response_is_unknown_and_is_never_replayed() {
     let (left, right) = UnixStream::pair().unwrap();
     let (peer, _incoming) = PiRpcPeer::new(left);

@@ -63,6 +63,12 @@ async fn reasoning_effort_control_uses_the_current_connection() {
         )
         .await
         .unwrap();
+    assert!(
+        control
+            .reasoning_effort_control_available("session")
+            .await
+            .unwrap()
+    );
 
     control
         .set_reasoning_effort("session", "original", "high")

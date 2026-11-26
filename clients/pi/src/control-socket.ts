@@ -20,6 +20,22 @@ export interface CompactionControl {
   compact(operationId: string): void;
 }
 
+export type PiThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
+export interface ReasoningEffortControl {
+  setReasoningEffort(level: PiThinkingLevel): void;
+}
+
+const THINKING_LEVELS = new Set<PiThinkingLevel>([
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+]);
+
 export interface PiControlBinding {
   socket?: RuntimeConnection;
   handle?: ControlHandler;
@@ -37,6 +53,7 @@ export async function connectPi(
   history?: () => HistoryContext,
   compaction?: CompactionControl,
   binding: PiControlBinding = {},
+  reasoningEffort?: ReasoningEffortControl,
 ): Promise<RuntimeConnection> {
   binding.error = onError;
   binding.reconnected = onReconnect;
@@ -67,6 +84,26 @@ export async function connectPi(
       }
       try {
         compaction.compact(params.operation_id);
+        respond({ result: { accepted: true } });
+      } catch (failure) {
+        error(
+          failure instanceof RpcError ? failure.code : -32006,
+          failure instanceof Error ? failure.message : String(failure),
+        );
+      }
+      return;
+    }
+    if (method === "set_reasoning_effort" && reasoningEffort) {
+      if (
+        Object.keys(params).some((key) => key !== "reasoning_effort") ||
+        typeof params.reasoning_effort !== "string" ||
+        !THINKING_LEVELS.has(params.reasoning_effort as PiThinkingLevel)
+      ) {
+        error(-32602, "set_reasoning_effort requires a Pi thinking level");
+        return;
+      }
+      try {
+        reasoningEffort.setReasoningEffort(params.reasoning_effort as PiThinkingLevel);
         respond({ result: { accepted: true } });
       } catch (failure) {
         error(

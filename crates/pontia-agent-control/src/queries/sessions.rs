@@ -142,7 +142,8 @@ impl ControlQueryService {
                     .await?
             } else if entry.spec.adapter.dispatch == crate::client_contract::DispatchMode::Connected
             {
-                self.connected_control_available(session_id).await?
+                self.connected_reasoning_effort_control_available(session_id)
+                    .await?
             } else {
                 false
             };
@@ -164,6 +165,19 @@ impl ControlQueryService {
             return Ok(false);
         };
         match control.available(session_id).await {
+            Ok(available) => Ok(available),
+            Err(
+                pontia_core::Error::StateConflict(_) | pontia_core::Error::CapabilityUnavailable(_),
+            ) => Ok(false),
+            Err(error) => Err(error),
+        }
+    }
+
+    async fn connected_reasoning_effort_control_available(&self, session_id: &str) -> Result<bool> {
+        let Some(control) = &self.control else {
+            return Ok(false);
+        };
+        match control.reasoning_effort_control_available(session_id).await {
             Ok(available) => Ok(available),
             Err(
                 pontia_core::Error::StateConflict(_) | pontia_core::Error::CapabilityUnavailable(_),

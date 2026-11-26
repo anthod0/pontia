@@ -31,6 +31,9 @@ pub trait ClientControlChannel: Send + Sync {
             ))
         })
     }
+    fn reasoning_effort_control_available(&self) -> bool {
+        self.available()
+    }
     fn available(&self) -> bool;
     fn process_id(&self) -> Option<u32> {
         None

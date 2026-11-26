@@ -379,6 +379,118 @@ async fn reported_effort_is_validated_and_can_be_cleared_in_the_session_view() {
 }
 
 #[tokio::test]
+async fn reasoning_effort_control_projects_only_the_pi_confirmed_value() {
+    let (state, root) = state().await;
+    let (pi, mut requests) = client(&state);
+    let (session, runtime) = register(&pi, root.path()).await;
+    let view = state
+        .queries()
+        .get_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!view.capabilities.reasoning_effort_control);
+    pi.call(
+        "event.report",
+        fact(
+            &session,
+            &runtime,
+            "session.ready",
+            json!({"client_session_key":"native"}),
+        ),
+    )
+    .await
+    .unwrap();
+    pi.call(
+        "event.report",
+        fact(
+            &session,
+            &runtime,
+            "session.reasoning_effort_updated",
+            json!({"reasoning_effort":"medium"}),
+        ),
+    )
+    .await
+    .unwrap();
+    let view = state
+        .queries()
+        .get_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(view.capabilities.reasoning_effort_control);
+
+    let commands = state.session_commands();
+    let control = commands.set_reasoning_effort(
+        &session,
+        pontia_agent_control::SetSessionReasoningEffortRequest {
+            reasoning_effort: "max".into(),
+        },
+    );
+    let native = async {
+        let request = requests.recv().await.unwrap();
+        assert_eq!(request.method, "set_reasoning_effort");
+        assert_eq!(request.params, json!({"reasoning_effort":"max"}));
+        pi.reply(request.id, json!({"accepted":true}))
+            .await
+            .unwrap();
+    };
+    let (result, ()) = tokio::join!(control, native);
+    result.unwrap();
+    assert_eq!(
+        state
+            .queries()
+            .get_session(&session)
+            .await
+            .unwrap()
+            .unwrap()
+            .reasoning_effort
+            .as_deref(),
+        Some("medium")
+    );
+
+    pi.call(
+        "event.report",
+        fact(
+            &session,
+            &runtime,
+            "session.reasoning_effort_updated",
+            json!({"reasoning_effort":"high"}),
+        ),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        state
+            .queries()
+            .get_session(&session)
+            .await
+            .unwrap()
+            .unwrap()
+            .reasoning_effort
+            .as_deref(),
+        Some("high")
+    );
+    pi.close();
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            let view = state
+                .queries()
+                .get_session(&session)
+                .await
+                .unwrap()
+                .unwrap();
+            if !view.capabilities.reasoning_effort_control {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
 async fn compaction_control_and_facts_share_identity_without_changing_session_state() {
     let (state, root) = state().await;
     let (pi, mut requests) = client(&state);

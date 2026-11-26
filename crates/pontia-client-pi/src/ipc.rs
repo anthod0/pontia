@@ -43,6 +43,7 @@ pub(crate) async fn serve_peer(
         peer: peer.clone(),
         handling: AtomicUsize::new(0),
         invalidated: AtomicBool::new(false),
+        reasoning_effort_controllable: AtomicBool::new(false),
     });
     let mut registered = None;
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
@@ -171,6 +172,12 @@ async fn dispatch(
     registered: &mut Option<NativeAttachment>,
 ) -> Result<Value> {
     let _identity_guard = state.client_control().lock_identity().await;
+    let ready_report = request.method == "event.report"
+        && request
+            .params
+            .pointer("/event/type")
+            .and_then(Value::as_str)
+            == Some("session.ready");
     if let Some(identity) = registered.as_ref() {
         let current: Arc<dyn pontia_agent_control::ClientControlChannel> = channel.clone();
         state
@@ -220,7 +227,13 @@ async fn dispatch(
         let identity = registered
             .as_ref()
             .ok_or_else(|| Error::StateConflict("Pi reporting requires registration".into()))?;
-        return reporting::report_event(state, identity, request.params.clone()).await;
+        let result = reporting::report_event(state, identity, request.params.clone()).await?;
+        if ready_report {
+            channel
+                .reasoning_effort_controllable
+                .store(true, Ordering::SeqCst);
+        }
+        return Ok(result);
     }
     if request.method == "session.context" {
         let query: ContextQuery = serde_json::from_value(request.params.clone())?;
@@ -273,6 +286,19 @@ async fn dispatch(
             channel.clone(),
         )
         .await?;
+    let session_state = state
+        .queries()
+        .session_snapshot(&identity.session_id)
+        .await?
+        .ok_or_else(|| Error::NotFound(format!("session {} not found", identity.session_id)))?
+        .state;
+    channel.reasoning_effort_controllable.store(
+        matches!(
+            session_state.as_str(),
+            "idle" | "busy" | "waiting_for_interaction"
+        ),
+        Ordering::SeqCst,
+    );
 
     state
         .inbox_commands()
@@ -286,6 +312,13 @@ struct PiChannel {
     peer: Arc<PiRpcPeer>,
     handling: AtomicUsize,
     invalidated: AtomicBool,
+    reasoning_effort_controllable: AtomicBool,
+}
+
+impl PiChannel {
+    fn connected(&self) -> bool {
+        !self.invalidated.load(Ordering::SeqCst) && !self.peer.is_closed()
+    }
 }
 
 // A terminal fact can invalidate control while its reporting acknowledgement is pending.
@@ -301,6 +334,12 @@ impl Drop for ReplyGuard<'_> {
 }
 
 impl pontia_agent_control::ClientControlChannel for PiChannel {
+    fn set_reasoning_effort<'a>(
+        &'a self,
+        reasoning_effort: &'a str,
+    ) -> pontia_agent_control::ClientControlOperation<'a> {
+        self.peer.set_reasoning_effort(reasoning_effort)
+    }
     fn compact<'a>(
         &'a self,
         operation_id: &'a str,
@@ -317,7 +356,10 @@ impl pontia_agent_control::ClientControlChannel for PiChannel {
         self.process_id
     }
     fn available(&self) -> bool {
-        !self.invalidated.load(Ordering::SeqCst) && !self.peer.is_closed()
+        self.connected()
+    }
+    fn reasoning_effort_control_available(&self) -> bool {
+        self.connected() && self.reasoning_effort_controllable.load(Ordering::SeqCst)
     }
     fn invalidate(&self) {
         self.invalidated.store(true, Ordering::SeqCst);

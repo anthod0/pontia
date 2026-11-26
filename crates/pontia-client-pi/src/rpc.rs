@@ -75,6 +75,26 @@ impl PiRpcPeer {
 }
 
 impl pontia_agent_control::ClientControlChannel for PiRpcPeer {
+    fn set_reasoning_effort<'a>(
+        &'a self,
+        reasoning_effort: &'a str,
+    ) -> pontia_agent_control::ClientControlOperation<'a> {
+        Box::pin(async move {
+            if self
+                .call(
+                    "set_reasoning_effort",
+                    json!({"reasoning_effort": reasoning_effort}),
+                )
+                .await?
+                != json!({"accepted": true})
+            {
+                return Err(Error::ControlUnknown(
+                    "Invalid Pi reasoning effort acknowledgement".into(),
+                ));
+            }
+            Ok(())
+        })
+    }
     fn steer<'a>(
         &'a self,
         input: &'a str,
