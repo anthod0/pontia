@@ -82,7 +82,7 @@ async function quoteFromMenu(row: HTMLElement) {
   );
 }
 
-// jsdom cannot hit-test the editable line beside a non-editable widget.
+// jsdom cannot reliably place the caret in the editable paragraph by clicking it.
 async function typeReply(text: string) {
   const editor = screen.getByRole("textbox");
   editor.focus();
@@ -183,7 +183,7 @@ test.each(["Backspace", "deleteContentBackward"])(
     await screen.findByText("certificate");
     await quoteFromMenu(rows()[0]);
     const editor = screen.getByRole("textbox");
-    expect(within(editor).getByRole("button", { name: /^Remove quote/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Remove quote/ })).toBeInTheDocument();
     await typeReply("Unquoted");
     document.getSelection()!.collapse(editor.querySelector("p"), 0);
     if (key === "Backspace") await fireEvent.keyDown(editor, { key });
@@ -192,7 +192,9 @@ test.each(["Backspace", "deleteContentBackward"])(
         editor,
         new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: key }),
       );
-    await waitFor(() => expect(within(editor).queryByRole("button")).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /^Remove quote/ })).not.toBeInTheDocument(),
+    );
     await fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(send).toHaveBeenCalledWith(bot.bot_id, "Unquoted"));
   },
@@ -532,7 +534,7 @@ test.each([false, true])(
     await screen.findByText(original);
     if (!restore) await quoteFromMenu(rows()[0]);
     const pending = document.querySelector("[data-bot-pending-quote]")!;
-    expect(pending.querySelector("span")!.textContent).toBe(expected);
+    expect(pending).toHaveTextContent(expected);
     await typeReply("Explain");
     await fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() =>

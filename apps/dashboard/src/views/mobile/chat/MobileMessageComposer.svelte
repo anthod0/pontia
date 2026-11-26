@@ -66,6 +66,7 @@
     },
   })
   const mentionIdentities = new Map<string, FilePickerFileView>()
+  const hasPrefix = $derived(Boolean(prefix))
   const placeholder = $derived(workspaceId !== undefined ? $t('chat.taskPlaceholder') : $t('bots.message'))
   let inlineInput = $state<ChatCommandInput>()
   let expandedInput = $state<ChatCommandInput>()
@@ -90,11 +91,12 @@
 
 {#snippet editor()}
   <div class="flex h-full flex-col gap-2">
+    {#if prefix}<div class="mx-3 mt-2">{@render prefix()}</div>{/if}
     <div class="min-h-0 flex-1 overflow-auto [&_[role=listbox]]:static" onpastecapture={paste}>
       <ChatCommandInput
         bind:this={expandedInput}
         bind:value
-        {prefix}
+        {hasPrefix}
         {onRemovePrefix}
         {workspaceId}
         {mentionIdentities}
@@ -120,13 +122,15 @@
     draft={controller.uploads}
     disabled={busy || controller.sending}
   />{/if}
-<div class="mobile-glass flex items-end rounded-3xl p-1">
+<div class="mobile-glass flex flex-col rounded-3xl p-1">
+  {#if prefix}<div class="ml-12 mr-2 mt-2">{@render prefix()}</div>{/if}
+  <div class="flex items-end">
     <ComposerAddMenu mobile disabled={!!controller.uploadUnavailable} onSelectFile={() => picker?.choose()} onConfirm={({value,label}) => controller.uploads?.addSecret(value,label)} onClose={focusInput}/>
   <div class="min-w-0 flex-1 [&_[role=listbox]]:max-w-full" bind:clientHeight={height} onpastecapture={paste}>
     <ChatCommandInput
       bind:this={inlineInput}
       bind:value
-      {prefix}
+      {hasPrefix}
       {onRemovePrefix}
       {workspaceId}
       {mentionIdentities}
@@ -161,4 +165,5 @@
     onclick={() => submit()}><PaperPlaneTiltIcon class="size-4" /></button
   >
   {/if}
+  </div>
 </div>

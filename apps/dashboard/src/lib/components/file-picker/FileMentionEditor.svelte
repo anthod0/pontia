@@ -1,9 +1,7 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
   import { useDeviceRuntime } from '../../../device/context';
-  import { Portal } from '$lib/components/ui/popover/index.js'
-  import { Decoration, DecorationSet } from '@tiptap/pm/view'
-  import { onMount, tick, type Snippet } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import { Editor, Extension, type Extensions } from '@tiptap/core'
   import Document from '@tiptap/extension-document'
   import HardBreak from '@tiptap/extension-hard-break'
@@ -35,7 +33,7 @@
     mentionIdentities?: Map<string, FilePickerFileView>
     suggestionListId?: string
     activeSuggestionId?: string
-    prefix?: Snippet
+    hasPrefix?: boolean
     onRemovePrefix?: () => void
     extensions?: Extensions
   }
@@ -54,14 +52,13 @@
     mentionIdentities = new Map(),
     suggestionListId,
     activeSuggestionId,
-    prefix,
+    hasPrefix = false,
     onRemovePrefix,
     extensions = [],
   }: Props = $props()
 
   const suggestionPluginKey = new PluginKey('fileMentionSuggestion')
 
-  let prefixHost = $state<HTMLSpanElement>()
   let editorElement = $state<HTMLDivElement | null>(null)
   let listbox = $state<HTMLDivElement | null>(null)
   let editorState = $state<{ editor: Editor | null }>({ editor: null })
@@ -140,7 +137,7 @@
 
   function removePrefixAtStart(): boolean {
     const editor = editorState.editor
-    if (!prefix || !onRemovePrefix || !editor) return false
+    if (!hasPrefix || !onRemovePrefix || !editor) return false
     // Home can move the browser caret before ProseMirror receives selectionchange.
     const caret = editor.view.dom.ownerDocument.getSelection()
     if (caret?.anchorNode && editor.view.dom.contains(caret.anchorNode)) {
@@ -193,8 +190,6 @@
   onMount(() => {
     if (!editorElement) return
 
-    const host = document.createElement('span')
-    prefixHost = host
     const editor = new Editor({
       element: editorElement,
       extensions: [
@@ -202,7 +197,7 @@
         Paragraph,
         Text,
         HardBreak,
-        Placeholder.configure({ placeholder: () => prefix ? '' : placeholder }),
+        Placeholder.configure({ placeholder }),
         ...extensions,
         Extension.create({
           name: 'promptKeyboard',
@@ -237,9 +232,6 @@
       content: promptDocumentFromText(value, mentionIdentities),
       editable: !disabled,
       editorProps: {
-        decorations: state => prefix
-          ? DecorationSet.create(state.doc, [Decoration.widget(1, host, { side: -1, stopEvent: () => true })])
-          : null,
         attributes: {
           ...(id ? { id } : {}),
           role: 'textbox',
@@ -291,12 +283,11 @@
   })
 
   $effect(() => {
-    const nextPlaceholder = prefix ? '' : placeholder
     const editor = editorState.editor
     if (!editor) return
     editor.view.dom.setAttribute('aria-label', placeholder)
-    editor.view.dom.setAttribute('aria-placeholder', nextPlaceholder)
-    editor.view.dom.setAttribute('placeholder', nextPlaceholder)
+    editor.view.dom.setAttribute('aria-placeholder', placeholder)
+    editor.view.dom.setAttribute('placeholder', placeholder)
     editor.view.dispatch(editor.state.tr)
   })
 
@@ -329,8 +320,6 @@
     editor.commands.setTextSelection(editor.state.doc.content.size - 1)
   })
 </script>
-
-{#if prefixHost && prefix}<Portal to={prefixHost}>{@render prefix()}</Portal>{/if}
 
 <div class="relative w-full">
   <div bind:this={editorElement}></div>

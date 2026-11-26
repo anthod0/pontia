@@ -95,6 +95,7 @@
     closeExpanded: () => { fullscreenOpen = false },
   })
   const command = $derived(controller.command)
+  const hasPrefix = $derived(Boolean(prefix))
   let inlineInput = $state<HTMLDivElement | null>(null)
   // Sticky until the draft is cleared, so a line that only wraps in the narrow compact row cannot flip layouts back and forth.
   let multiline = $state(false)
@@ -291,9 +292,14 @@
       <UploadAttachments bind:this={uploadPicker} draft={controller.uploads} disabled={disabled || busy || controller.sending} />
     </div>
   {/if}
-  <PromptInput.Body class={compact ? 'col-start-2 row-start-2' : undefined} onpastecapture={pasteFiles}>
+  {#if prefix}
+    <div class={compact ? 'col-span-3 row-start-2 ml-8 mr-2.5 mt-2' : 'mx-3 mt-2'}>
+      {@render prefix()}
+    </div>
+  {/if}
+  <PromptInput.Body class={compact ? `col-start-2 ${hasPrefix ? 'row-start-3' : 'row-start-2'}` : undefined} onpastecapture={pasteFiles}>
     <div bind:this={inlineInput} class="relative">
-      <ChatCommandInput bind:this={editor} id={inputId} bind:value {prefix} {onRemovePrefix} {commands} onCommand={controller.executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? `min-h-0 py-2 text-base sm:text-[13.5px] ${compact ? 'px-0' : 'pl-3 pr-10 sm:pr-3'}` : 'min-h-[52px] px-4 py-3 text-base sm:text-[13.5px]'} />
+      <ChatCommandInput bind:this={editor} id={inputId} bind:value {hasPrefix} {onRemovePrefix} {commands} onCommand={controller.executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? `min-h-0 py-2 text-base sm:text-[13.5px] ${compact ? 'px-0' : 'pl-3 pr-10 sm:pr-3'}` : 'min-h-[52px] px-4 py-3 text-base sm:text-[13.5px]'} />
       {#if fullscreen && !compact}
         <Button type="button" variant="ghost" size="icon-sm" class="absolute right-1 top-1 sm:hidden" aria-label={$t('chat.expandComposer')} onclick={() => void openFullscreen()}>
           <ArrowsOutIcon class="size-4" />
@@ -305,10 +311,10 @@
     {#if command?.disabledReason}<p role="status" class="px-4 pb-2 text-xs text-muted-foreground">{command.disabledReason}</p>{/if}
   </div>
   <PromptInput.Toolbar class={compact ? 'contents' : cn(fullscreen && 'px-1 pb-1', controller.uploads ? 'pt-0' : 'justify-end pt-0')}>
-    <div class={compact ? 'col-start-1 row-start-2 py-1 pl-1' : 'contents'}>
+    <div class={compact ? `col-start-1 ${hasPrefix ? 'row-start-3' : 'row-start-2'} py-1 pl-1` : 'contents'}>
       {@render uploadButton(uploadPicker)}
     </div>
-    <div class={compact ? 'col-start-3 row-start-2 p-1' : 'contents'}>
+    <div class={compact ? `col-start-3 ${hasPrefix ? 'row-start-3' : 'row-start-2'} p-1` : 'contents'}>
       {#if interruptMode && controller.attachments.items.length === 0}
         <Button type="button" size={fullscreen ? 'icon-sm' : 'icon'} disabled={interruptBusy} aria-label={$t('chat.interrupt')} title={$t('chat.interrupt')} onclick={() => interrupt()}>
           <StopIcon class="size-4" />
@@ -338,8 +344,9 @@
 
       <PromptInput.Root class="mt-2 flex min-h-0 w-full flex-1 flex-col shadow-none" onSubmit={submitAndCloseFullscreen}>
         {#if controller.uploads}<UploadAttachments bind:this={fullscreenUploadPicker} draft={controller.uploads} disabled={disabled || busy || controller.sending} />{/if}
+        {#if prefix}<div class="mx-2 mt-2">{@render prefix()}</div>{/if}
         <PromptInput.Body class="min-h-0 flex-1" onpastecapture={pasteFiles}>
-          <ChatCommandInput bind:this={fullscreenEditor} bind:value {prefix} {onRemovePrefix} {commands} commandSide="bottom" onCommand={controller.executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget autofocus onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-[52px] overscroll-contain pr-2" />
+          <ChatCommandInput bind:this={fullscreenEditor} bind:value {hasPrefix} {onRemovePrefix} {commands} commandSide="bottom" onCommand={controller.executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget autofocus onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-[52px] overscroll-contain pr-2" />
         </PromptInput.Body>
         {#if command?.disabledReason}<p role="status" class="pb-2 text-xs text-muted-foreground">{command.disabledReason}</p>{/if}
         <PromptInput.Toolbar class={controller.uploads ? 'shrink-0 pt-0' : 'shrink-0 justify-end pt-0'}>
