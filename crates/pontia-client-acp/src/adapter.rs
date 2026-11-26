@@ -702,7 +702,7 @@ impl ClientSession for AcpAdapter {
         session: &'a str,
     ) -> ClientOperation<'a, ClientSessionDetails> {
         Box::pin(async move {
-            let binding = AgentBindingService::new(pool)
+            let binding = AgentBindingService::new(pool.clone())
                 .binding_for_session(session)
                 .await?;
             let (agent_id, agent_info, system_prompt_injected) = match binding {
@@ -711,7 +711,16 @@ impl ClientSession for AcpAdapter {
                     binding.metadata["agent_info"].clone(),
                     Some(binding.metadata["system_prompt_injected"] == true),
                 ),
-                None => (None, serde_json::Value::Null, None),
+                None => (
+                    sqlx::query_scalar(
+                        "SELECT json_extract(metadata, '$.acp_agent_id') FROM sessions WHERE session_id = ?",
+                    )
+                    .bind(session)
+                    .fetch_one(&pool)
+                    .await?,
+                    serde_json::Value::Null,
+                    None,
+                ),
             };
             let name = agent_id.as_ref().map(|id| {
                 self.config

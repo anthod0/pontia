@@ -588,6 +588,7 @@ async fn capabilities_remain_unavailable_until_session_setup_finishes() {
     assert!(!before.capabilities.accept_task);
     assert!(!before.capabilities.stream_output);
     assert!(before.capabilities.timeline);
+    assert_eq!(before.client_details["acp"]["agent_id"], "first");
     assert!(matches!(
         h.history(&session).await,
         Err(pontia_agent_control::TurnTimelineServiceError::Pending)
