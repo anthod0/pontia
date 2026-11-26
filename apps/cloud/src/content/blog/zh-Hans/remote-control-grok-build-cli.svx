@@ -1,0 +1,201 @@
+---
+title: "手机和浏览器远程控制 Grok Build CLI 实战（附 Grok Build vs Claude Code vs Codex 对比）"
+description: "Grok 有没有远程控制？详解 Grok Build CLI 的 ACP 架构、安装与三路认证、如何通过 Pontia 从手机和浏览器端到端加密遥控本机 grok 会话，以及在同一仓库里分工编排 Grok Build、Claude Code 与 Codex。"
+published: "2026-11-27"
+---
+
+## Grok 有没有远程控制？
+
+**直接结论：Grok Build CLI 本身没有官方的手机或浏览器远程控制本机会话的功能。**
+
+截至 **Grok Build CLI `v1.0.92`**（xAI 官方 changelog 2026 年 11 月 19 日发布），本机 `grok` 二进制提供的是本机交互式 TUI、本机 `grok dashboard`、无头脚本模式 `grok -p`，以及一等公民的 ACP 服务 `grok agent stdio`。它并没有自带用于遥控本机终端会话的手机 App 或云端网页遥控器；早期的 `/share` 命令也已在 `1.0.50` 中移除，`code.grok.com` 同样不是本机 CLI 的远程控制入口。
+
+许多开发者容易把 **Grok Build** 和 **Grok Bot**（见 [docs.x.ai/grok-bot/overview](https://docs.x.ai/grok-bot/overview)）混为一谈。Grok Bot 是 xAI 的另一款独立产品，运行在云端持久化电脑上，并不连接到你本机或 VPS 上的 `grok` 进程。（如果你想对比云端 VM 方案与本机 CLI 编排路线，可以参考 [Grok Bot 开源平替怎么选](/blog/open-source-local-grok-bot-alternative)。）
+
+好在 Grok Build 原生提供标准的 `grok agent stdio` ACP 接口。要从手机或任意浏览器远程控制本机 Grok Build CLI，只需接入支持 ACP 的本机控制面——例如 [Pontia](/docs/agent-clients/grok)——由它在本机 Workspace 中拉起 `grok agent stdio` 会话，并通过端到端加密中继把会话接到桌面与手机浏览器。
+
+Pontia 是我们开发的工具。文中关于 Grok Build、Grok Bot、Claude Code 与 Codex CLI 的全部事实均在 2026 年 11 月 27 日对照官方文档与更新日志一手核验。
+
+## Grok Build CLI 安装与三路认证实操
+
+Grok Build CLI 支持 Linux 与 macOS（x86-64 与 Arm64），并提供三条清晰的认证路径，覆盖桌面开发机、无头 SSH 服务器与 CI 自动化场景。
+
+### 安装方式
+
+可以直接使用 xAI 官方安装脚本：
+
+```sh
+curl -fsSL https://x.ai/cli/install.sh | bash
+```
+
+或者通过 npm 全局安装：
+
+```sh
+npm i -g @xai-official/grok
+```
+
+如果设备上已经安装了 Pontia，也可以在设备终端里一条命令完成安装、校验与启用：
+
+```sh
+pontia client install grok
+```
+
+或者在 Remote Dashboard 中打开 **Settings → Agent Clients → Grok Build → Install**。Pontia 会调用 xAI 官方安装程序（需要 Bash 以及 `curl` 或 `wget`），验证 `grok --version` 并启用该 Client。如果你已通过其他方式安装好 `grok`，只需确认它在运行 Pontia 服务的用户的 `PATH` 中，然后执行：
+
+```sh
+pontia client enable grok
+```
+
+### 三种认证路径
+
+1. **有桌面浏览器的本机：**
+
+   ```sh
+   grok login
+   ```
+
+2. **无头 Linux 主机或 SSH 环境（RFC 8628 Device Code）：**
+
+   ```sh
+   grok login --device-auth
+   ```
+
+   命令会打印一个授权 URL 和一次性 user code，你在手机或任意电脑的浏览器中打开完成授权即可，并支持令牌刷新。Pontia Remote Dashboard 的首次 Client 引导（以及 **Settings → Agent Clients → Grok Build → Sign in**）也可以远程发起同一套设备码登录流程。关键细节：**执行登录的操作系统用户必须与运行 Pontia 服务的用户一致**，这样 `pontiad` 才能读取到登录态。
+
+3. **自动化脚本或 CI 场景：**
+
+   在环境变量中设置 `XAI_API_KEY`。如果是在 Pontia 托管服务环境中新增了 `XAI_API_KEY` 或修改了 `PATH`，修改后运行 `pontia up`，让托管服务加载最新环境变量。
+
+### 模型与计费口径
+
+Grok Build CLI 的默认模型会随版本发布与账号模型目录动态更新：xAI 官方 CLI 页面与文档指向 Grok 4.5，API 旗舰模型为 `grok-4.7`，早期的 `grok-build-0.1` 已于 2026 年 11 月 19 日下线。通过账号登录（`grok login` / `--device-auth`）消耗的是 SuperGrok 或 X Subscription 的共享每周额度；配置 `XAI_API_KEY` 时则按 xAI API 另行计费。
+
+## 通过 Pontia 从手机和浏览器远程控制本机 Grok Build CLI
+
+明确一点：这里的 Web 与手机远程控制由 **Pontia** 提供，它负责在本机启动并管理 `grok agent stdio` 会话，而不是 Grok CLI 官方自带的功能。
+
+### 完整接入步骤
+
+在你的开发机或 Linux VPS 上执行：
+
+```sh
+# 1. 安装并启用 Grok Build（若已安装则改用 pontia client enable grok）
+pontia client install grok
+
+# 2. 以运行 Pontia 的同一 OS 用户完成设备码登录
+grok login --device-auth
+
+# 3. 登录 Pontia Cloud 并开启远程访问
+pontia login
+pontia remote enable
+```
+
+`pontia login` 会输出一次性验证码，可直接在手机浏览器中确认。`pontia remote enable` 默认选择 **Auto**，自动连接延迟最低的可用 Edge（需要完全掌控中继节点时，也可以部署[自托管 Edge](/docs/self-hosted-edge)）。
+
+设备注册完成后：
+
+1. 在手机或任意电脑浏览器打开 [app.pontia.dev](https://app.pontia.dev)（可安装到手机主屏幕作为 Web 应用）。
+2. 在 [Workspaces](/docs/workspaces) 中激活并选中你的项目目录。
+3. 在 **New chat** 中选择 **Grok Build**，保留 **Client default** 或指定模型与思考深度（reasoning effort），发送任务即可开始。
+
+### 远程控制实装能力一览
+
+- **应用层端到端加密，代码与执行留在本机：** 浏览器生成临时密钥并从 Pontia Cloud 获取短期签名能力凭证，目标设备直接校验该凭证，随后双方通过 X25519 HPKE 建立会话密钥并用 ChaCha20-Poly1305 保护通信记录（[安全](/docs/security)）。Edge 仅转发密文，源码、凭据与 `grok agent stdio` 进程始终留在你的设备上。
+- **运行中指令注入、打断、审批与上下文压缩：** Dashboard 实时流式展示 Grok 的回复与工作步骤，权限请求可直接在手机上批准或拒绝。Grok 正在执行时，你可以继续发消息，在下一次工具或模型切换时把新指令注入当前 Turn；若最后一次切换已经过去，Pontia 会自动将其作为下一个 Turn 交付。你也可以随时中断当前 Turn，并在 Session 空闲或中断时点击 **Compact context** 或发送 `/compact`，保持 Session 打开并在时间线留下压缩检查点。
+- **动态模型目录与思考深度选择：** Pontia 会读取所选 Workspace 对应的 Grok 模型目录，列出可用模型及每个模型公开的 reasoning effort 档位（包括默认模型的 effort 选项），并在 Session 顶部显示 Grok 实际生效的模型与思考深度。
+- **本机 `localhost` 实时预览、文件查看与手机端 Git Diff：** 让 Agent 在回复中输出本地开发服务地址（支持 `localhost`、`127.0.0.1`、`[::1]`、`0.0.0.0`），点击即可在侧栏[预览](/docs/previews)中打开。远程访问时，Pontia 会通过所选 Edge 签发限时 `pontia.run` 预览地址，完整支持 HTTP 与 WebSocket 热更新、桌面 / 375 px 手机宽度切换，默认放行 `3000`、`4173`、`5173`、`8000` 等常见开发端口。配合手机布局底部的 **Chats**、**Sessions**、**Todos**、**Device** 四个常驻标签页，还可以随时查看语法高亮源码、Markdown、JSON/YAML 树、可排序 CSV/TSV 表格以及 **Git** 面板中的暂存/未暂存改动与提交历史（[Dashboard 指南](/docs/dashboard)）。
+
+## Grok Build vs Claude Code vs Codex CLI 客观对比
+
+当开发者对比 **Grok Build vs Claude Code vs Codex** 时，真正影响工程落地的往往不是单轮题库跑分，而是协议与嵌入方式、无头脚本能力、项目指令文件、权限与沙箱模型以及远程访问方式。
+
+| 对比维度 | Grok Build CLI（`grok`） | Claude Code（`claude`） | Codex CLI（`codex`） |
+| --- | --- | --- | --- |
+| **协议与嵌入方式** | 一等 ACP 服务（`grok agent stdio`）、本机 TUI、本机 `grok dashboard` | 自有 CLI + Claude Agent SDK（Pontia 通过 `@pontia/claude-client` 接入） | `codex app-server` JSON-RPC 守护进程 + 本机 TUI |
+| **无头 / 脚本模式** | `grok -p`（[无头脚本文档](https://docs.x.ai/build/cli/headless-scripting)） | `claude -p` | `codex exec` |
+| **项目指令文件** | `AGENTS.md` | `CLAUDE.md` | `AGENTS.md` |
+| **权限与沙箱模型** | 工具审批提示；Pontia 支持 `default`、`yolo`、`restricted` 模式 | 工具权限规则与审批模式 | 操作系统级沙箱（`workspace-write` 等）+ 审批策略（`on-request` 等） |
+| **官方远程控制能力** | 本机 CLI 无内置远程控制（Grok Bot 为独立云端 VM 产品） | 官方 Claude Code Remote Control（Web / 手机） | 依托 ChatGPT 桌面端的手机远程控制（Mac / Windows 主机）+ 独立 Codex Cloud |
+| **Pontia 远程接入** | 原生接入 `grok agent stdio`，支持 Linux 与 macOS（[Grok Build 指南](/docs/agent-clients/grok)） | 原生接入 Claude Agent SDK（[Claude Code 指南](/docs/agent-clients/claude)） | 原生接入 `codex app-server` 守护进程，支持无头 Linux 与 macOS（[Codex 指南](/docs/agent-clients/codex)） |
+
+几点核心观察：
+
+- **Grok Build** 的一大工程优势是官方二进制直接内置标准 ACP 服务（`grok agent stdio`），且沿用 `AGENTS.md` 约定与简洁的 `grok -p` 无头模式，非常适合接入本地控制面和脚本流水线。
+- **Claude Code** 拥有成熟的官方 Remote Control 体验、完善的 SDK 能力与 `CLAUDE.md` 规范（见 [How Claude Code works](https://code.claude.com/docs/en/how-claude-code-works)）。
+- **Codex CLI** 则以常驻 `app-server` 守护进程、细粒度 OS 级沙箱（`workspace-write`）和 `codex exec` 见长；关于 Codex 手机端控制方案的详细对比，可查看 [如何用手机控制 Codex CLI](/blog/control-codex-cli-from-your-phone)。
+
+## 实战：不必三选一，在同一仓库里按角色分工编排三者
+
+真实项目里，把整个代码库锁死在单个 CLI 上往往不是最优解。深度规划与架构设计、并发编码实现、代码库检索以及跨模型独立审查各有侧重，很多开发者本身也同时订阅或配额覆盖了多家工具。
+
+借助 Pontia 的 [Agent Profiles（Agent 配置）](/docs/agent-profiles)、[Bot](/docs/bots) 与并行 [Helper](/docs/bots/helpers) 以及持久化 [Workflow](/docs/workflows)，你可以在同一个 [Workspace](/docs/workspaces) 里让 Grok Build、Claude Code 和 Codex 各司其职。
+
+### 1. 用 Agent Profile 固化角色能力
+
+在 **Settings → Agent Profiles** 中为不同岗位创建可复用配置，组合以下要素：
+
+- **Profile ID**（例如 `architect`、`coder`、`grok-reviewer`）；
+- **Description**：写明该角色负责的任务范围与边界，供 Bot 派活时判断；
+- **Client**、**Model** 以及可选的 **reasoning effort**；
+- **Use YOLO mode**：需要该专用 Helper 或 Workflow 节点免审批使用常规工具时开启；
+- **System prompt**：沉淀该角色的工作准则。
+
+这样就可以把一个 Profile 设为 Claude Code 或 Codex 负责方案设计与主干实现，另一个 Profile 设为 Grok Build（`grok-reviewer`）专门做变更审查与边界检查，再配一个轻量的检索 Profile 负责代码调研。
+
+### 2. 用常驻 Bot 协调并行 Helper
+
+创建一个常驻 [Bot](/docs/bots)（底层客户端同样可以直接选 Grok Build；Bot Session、记忆检索和 Dreaming 使用 Pontia 的受限 Profile，以免审批方式提供文件读取和终端命令）。
+
+收到复杂任务后，Bot 会把可并行的子任务拆给多个 [Helper](/docs/bots/helpers)。通用 Helper 会继承 Bot 自身的 Client、模型和思考深度，专用 Helper 则由 Bot 按 Profile ID 拉起：
+
+```sh
+pontia bot helper create --profile-id grok-reviewer
+```
+
+当多个 Helper 需要同时修改同一代码库时，Bot 会从原项目 Workspace 启动，并要求每个 Helper 在其中新建独立的 Git worktree 与分支，互不覆盖工作副本。每个 Helper 都是原生 CLI Session，你随时可以从手机或桌面点开查看工具调用、追加指令或查看 Diff。
+
+### 3. 用 Workflow 固化跨客户端流水线
+
+对于阶段、输入与交付物都明确的可重复流程（如“实现 → 跨客户端审查”），直接写一份 TOML [Workflow](/docs/workflows)，通过 `execution_profile_id` 为每个 Agent 节点绑定对应 Profile：
+
+```toml
+title = "跨客户端实现与审查"
+cwd = "."
+
+[[handoffs]]
+name = "spec.md"
+source = "./spec.md"
+
+[[nodes]]
+type = "agent"
+phase = "Implementation"
+title = "Implement feature"
+instructions = "Implement the approved spec and run the relevant test suite."
+execution_profile_id = "coder"
+inputs = ["spec.md"]
+output = "implementation.md"
+
+[[nodes]]
+type = "agent"
+phase = "Review"
+title = "Grok reviewer"
+instructions = "Review the current changes against the spec and write the findings."
+execution_profile_id = "grok-reviewer"
+inputs = ["spec.md", "implementation.md"]
+output = "review.md"
+```
+
+通过 `pontia workflow run ./workflow.toml` 启动后，即可在 Dashboard 中跟踪各阶段状态与对应 Session。如果需要通过 External API 创建普通 Session，也可以直接用 `mode` 字段选择 `default`、`yolo` 或 `restricted`（详见 [Agent Clients](/docs/agent-clients#client-credentials-and-permissions)）。
+
+## 参考资料与延伸阅读
+
+- [xAI Grok Build 官方概览](https://docs.x.ai/build/overview)
+- [xAI Grok Build 企业文档](https://docs.x.ai/build/enterprise)
+- [xAI Grok Build 无头脚本指南（`grok -p`）](https://docs.x.ai/build/cli/headless-scripting)
+- [xAI Grok Build 更新日志](https://x.ai/changelog/build)
+- [xAI Grok Bot 官方概览](https://docs.x.ai/grok-bot/overview)
+- [Claude Code 工作原理文档](https://code.claude.com/docs/en/how-claude-code-works)
+- [Pontia Grok Build Agent Client 指南](/docs/agent-clients/grok)
+- [Pontia 远程访问](/docs/remote-access) 与 [安全架构](/docs/security)
+- [Pontia Agent Profiles](/docs/agent-profiles)、[Bots](/docs/bots)、[并行 Helpers](/docs/bots/helpers) 与 [Workflows](/docs/workflows)
+- [Grok Bot 开源平替怎么选：自托管云 VM 与本机 CLI 编排的架构对比](/blog/open-source-local-grok-bot-alternative)

@@ -1,0 +1,201 @@
+---
+title: "Grok Build CLI をスマホ・ブラウザーからリモート操作する方法（Grok Build vs Claude Code vs Codex 比較付き）"
+description: "Grok にリモートコントロールはあるか？Grok Build CLI の ACP 構造、インストールと 3 つの認証手順、Pontia でローカルの grok セッションを E2E 暗号化で遠隔操作する方法、さらに同一リポジトリで Grok Build・Claude Code・Codex を役割分担する実践構成を解説します。"
+published: "2026-11-27"
+---
+
+## Grok にリモートコントロール機能はあるか？
+
+**結論から言うと、ローカルの Grok Build CLI セッションを操作する公式のスマホ・ブラウザー向けリモートコントロール機能はありません。**
+
+**Grok Build CLI `v1.0.92`**（xAI 公式 changelog にて 2026 年 11 月 19 日リリース確認）の時点で、`grok` バイナリが提供しているのはローカルの対話型 TUI、ローカル `grok dashboard`、ヘッドレス実行の `grok -p`、そしてファーストクラスの ACP サーバーである `grok agent stdio` です。ローカル端末上のセッションを外から操作するモバイルアプリや Web リモコンは含まれていません。以前の `/share` コマンドは `v1.0.50` で削除されており、`code.grok.com` もローカル `grok` プロセスのリモコンではありません。
+
+混同しやすい製品として **Grok Bot**（[docs.x.ai/grok-bot/overview](https://docs.x.ai/grok-bot/overview)）がありますが、これは永続的なクラウドコンピューター上で動く別製品であり、手元の PC や VPS 上の `grok` を操作する仕組みではありません（クラウド VM 型とローカル CLI オーケストレーションの違いは[オープンソースの Grok Bot 代替を比較](/blog/open-source-local-grok-bot-alternative)で詳しく整理しています）。
+
+一方で Grok Build は標準の ACP サーバー（`grok agent stdio`）を内蔵しているため、ACP 対応のローカルコントロールプレーン（[Pontia](/docs/agent-clients/grok) など）を組み合わせれば、コードと実行環境を自分のマシンに残したまま、エンドツーエンド暗号化されたリレー経由でスマートフォンやブラウザーからローカルの `grok` セッションを操作できます。
+
+Pontia は私たちが開発しているツールです。本記事の Grok Build、Grok Bot、Claude Code、Codex CLI に関する記述は、すべて 2026 年 11 月 27 日時点で公式ドキュメントおよび公式 changelog から直接確認しています。
+
+## Grok Build CLI のインストールと 3 つの認証ルート
+
+Grok Build CLI は Linux と macOS（x86-64 / Arm64）に対応しており、デスクトップ環境、SSH / ヘッドレス環境、CI / 自動化環境に合わせて 3 通りの認証方法を選べます。
+
+### インストール
+
+xAI の公式インストーラーを使う場合：
+
+```sh
+curl -fsSL https://x.ai/cli/install.sh | bash
+```
+
+npm でインストールする場合：
+
+```sh
+npm i -g @xai-official/grok
+```
+
+Pontia を使っているデバイスなら、ターミナルから 1 コマンドでインストールと有効化まで完了できます：
+
+```sh
+pontia client install grok
+```
+
+Remote Dashboard の **Settings → Agent Clients → Grok Build → Install** から実行しても同じです。Pontia は xAI の公式インストーラー（Bash と `curl` または `wget` が必要）を実行し、`grok --version` を確認したうえで Client を有効にします。すでに別経路で `grok` を導入済みなら、Pontia サービスユーザーの `PATH` に通した状態で次を実行します：
+
+```sh
+pontia client enable grok
+```
+
+### 3 つの認証方法
+
+1. **ローカルブラウザーが使えるデスクトップ環境:**
+
+   ```sh
+   grok login
+   ```
+
+2. **ヘッドレス Linux や SSH 環境（RFC 8628 Device Code）:**
+
+   ```sh
+   grok login --device-auth
+   ```
+
+   認証 URL とワンタイムのユーザーコードが表示されるため、スマートフォンや別の PC のブラウザーで承認でき、トークン更新にも対応します。Pontia の Remote Dashboard の初回 Client ガイド（および **Settings → Agent Clients → Grok Build → Sign in**）からも同じデバイスコード認証を開始できます。重要な点として、**Pontia サービスを実行する OS ユーザーと同じユーザーでログイン**してください。
+
+3. **CI・自動化・API 課金での利用:**
+
+   シェルまたは Pontia サービス環境に `XAI_API_KEY` を設定します。サービス環境や `PATH` を変更した後は `pontia up` を実行し、管理サービスに新しい値を反映させます。
+
+### モデルと課金体系
+
+CLI のデフォルトモデルはリリースとアカウントのモデルカタログに追従します（公式の `x.ai/cli` とドキュメントは Grok 4.5 を案内しており、API のフラッグシップは `grok-4.7`、旧 `grok-build-0.1` は 2026 年 11 月 19 日に提供終了しました）。アカウントログイン（`grok login` / `--device-auth`）は SuperGrok または X Subscription の共有週間利用枠を消費し、`XAI_API_KEY` は xAI API として別課金されます。
+
+## Pontia でローカル Grok Build CLI をスマホ・ブラウザーから操作する
+
+ここでリモート操作を提供するのは Grok CLI 本体ではなく **Pontia** です。Pontia がデバイスの Workspace 内で `grok agent stdio` を起動し、Web / モバイルの Dashboard へ安全に接続します。
+
+### セットアップ手順
+
+リポジトリを置いている Linux / macOS マシンまたは VPS で実行します：
+
+```sh
+# 1. Grok Build をインストールして有効化（導入済みなら pontia client enable grok）
+pontia client install grok
+
+# 2. Pontia と同じ OS ユーザーでデバイスコード認証
+grok login --device-auth
+
+# 3. Pontia Cloud にサインインしてリモートアクセスを有効化
+pontia login
+pontia remote enable
+```
+
+`pontia login` は任意のブラウザーで承認できるワンタイムコードを発行します。`pontia remote enable` はデフォルトの **Auto** で最寄りの低遅延 Edge を自動選択します（中継経路まで自社・個人管理したい場合は[セルフホスト Edge](/docs/self-hosted-edge) も選択できます）。
+
+登録が終わったら：
+
+1. スマートフォンまたは任意のブラウザーで [app.pontia.dev](https://app.pontia.dev) を開きます（ホーム画面に Web アプリとしてインストール可能）。
+2. [Workspaces](/docs/workspaces) で対象プロジェクトのディレクトリを有効化して選択します。
+3. **New chat** で **Grok Build** を選び、**Client default** またはモデルと reasoning effort を指定して作業を開始します。
+
+### 接続後に使えるリモート機能
+
+- **E2E 暗号化された通信とローカル実行:** ブラウザーが一時鍵を生成し、Pontia Cloud から発行された短期署名付きケイパビリティをデバイス側が直接検証します。通信は X25519 ベースの HPKE と ChaCha20-Poly1305 で暗号化され、Edge は暗号文のみを中継します（[セキュリティ](/docs/security)）。コード・認証情報・`grok agent stdio` の実行はすべて手元のデバイスに留まります。
+- **実行中の追加指示、中断、承認、コンテキスト圧縮:** Grok の応答と作業ステップをリアルタイムで確認し、権限リクエストをスマホから承認・拒否できます。作業中に別のメッセージを送ると、次のツールまたはモデルの切り替え時に指示が取り込まれ、現在の Turn に反映されます（最後の切り替えを過ぎている場合は次の Turn として配信されます）。実行中の Turn の中断や、アイドル / 中断状態での **Compact context**（または `/compact`）による Session を維持したままのコンテキスト圧縮にも対応しています。
+- **モデルと reasoning effort の選択:** Pontia は選択した Workspace 用の Grok モデルカタログを読み取り、利用可能なモデルと各モデルが公開する reasoning effort（デフォルトモデル用の effort 選択肢を含む）をピッカーに表示します。Session ヘッダーには Grok が報告した実際のモデルと reasoning effort が表示されます。
+- **スマホからの `localhost` ライブプレビュー、ファイル閲覧、Git 差分確認:** エージェントの返信に開発サーバーの URL（`localhost`、`127.0.0.1`、`[::1]`、`0.0.0.0`）を含めてもらうと、サイドパネルの[プレビュー](/docs/previews)でそのまま開けます。リモート接続時は選択した Edge 経由で期限付きの `pontia.run` URL が発行され、HTTP と WebSocket のライブリロード、`3000`・`4173`・`5173`・`8000` などの主要開発ポート、デスクトップ / 375 px モバイル幅切り替えに対応します。モバイル画面の常駐タブ（**Chats**、**Sessions**、**Todos**、**Device**）から、シンタックスハイライト付きコード、Markdown、JSON/YAML ツリー、ソート可能な CSV/TSV 表、さらに **Git** パネルの差分とコミット履歴まで確認できます（[Dashboard ガイド](/docs/dashboard)）。
+
+## Grok Build vs Claude Code vs Codex CLI の客観比較
+
+**Grok Build vs Claude Code vs Codex** を検討する際、実務で効いてくるのは単発のベンチマークよりも、プロトコルと組み込みやすさ、ヘッドレス実行、プロジェクト指示ファイル、権限・サンドボックス設計、そしてリモート操作の仕組みです。
+
+| 比較項目 | Grok Build CLI（`grok`） | Claude Code（`claude`） | Codex CLI（`codex`） |
+| --- | --- | --- | --- |
+| **プロトコルと組み込み** | 標準 ACP サーバー（`grok agent stdio`）、ローカル TUI、ローカル `grok dashboard` | 独自 CLI + Claude Agent SDK（Pontia は `@pontia/claude-client` で連携） | `codex app-server` JSON-RPC デーモン + ローカル TUI |
+| **ヘッドレス / スクリプト実行** | `grok -p`（[公式ヘッドレス文書](https://docs.x.ai/build/cli/headless-scripting)） | `claude -p` | `codex exec` |
+| **プロジェクト指示ファイル** | `AGENTS.md` | `CLAUDE.md` | `AGENTS.md` |
+| **権限とサンドボックス** | ツール承認プロンプト。Pontia では `default` / `yolo` / `restricted` モードを選択可能 | ツール権限ルールと承認モード | OS レベルのサンドボックス（`workspace-write` 等）+ 承認ポリシー（`on-request` 等） |
+| **公式リモートコントロール** | ローカル CLI 向けはなし（Grok Bot は別のクラウド VM 製品） | 公式の Claude Code Remote Control（Web / モバイル） | ChatGPT デスクトップ経由のモバイル操作（Mac / Windows ホスト）+ 別の Codex Cloud |
+| **Pontia でのリモート操作** | `grok agent stdio` で Linux / macOS に対応（[Grok Build ガイド](/docs/agent-clients/grok)） | Claude Agent SDK 経由で対応（[Claude Code ガイド](/docs/agent-clients/claude)） | `codex app-server` デーモン経由でヘッドレス Linux / macOS に対応（[Codex ガイド](/docs/agent-clients/codex)） |
+
+要点を整理すると：
+
+- **Grok Build** は公式バイナリに標準の ACP サーバー（`grok agent stdio`）を内蔵し、`AGENTS.md` とシンプルな `grok -p` を備えているため、ローカルのオーケストレーターやスクリプトに組み込みやすい構成です。
+- **Claude Code** は公式の Remote Control に加え、豊富な SDK 機能と `CLAUDE.md` による運用が強みです（[How Claude Code works](https://code.claude.com/docs/en/how-claude-code-works)）。
+- **Codex CLI** は常駐する `app-server` デーモン、明示的な OS サンドボックス（`workspace-write`）、`codex exec` が特徴です。Codex のモバイル運用比較は[スマートフォンから Codex CLI を使う方法](/blog/control-codex-cli-from-your-phone)も参考にしてください。
+
+## 実践パターン: 3 つの CLI を同じリポジトリで役割分担する
+
+実際の開発では「どれか 1 つだけを選ぶ」必要はありません。深い設計や計画、並列実装、コードベースの調査、別モデルによる独立レビューでは得意分野が異なり、複数のサブスクリプションや利用枠を使い分けたいケースも一般的です。
+
+Pontia の [Agent Profiles](/docs/agent-profiles)、[Bot](/docs/bots) と並列 [Helper](/docs/bots/helpers)、そして永続的な [Workflow](/docs/workflows) を使えば、同じ [Workspace](/docs/workspaces) 内で Grok Build・Claude Code・Codex を役割ごとに組み合わせて運用できます。
+
+### 1. 役割ごとの Agent Profile を定義する
+
+**Settings → Agent Profiles** で、次の組み合わせを再利用可能な Profile として登録します：
+
+- **Profile ID**（例: `architect`、`coder`、`grok-reviewer`）
+- **Description**：この役割が担当する仕事と境界（Bot が委任先を選ぶ際の判断材料）
+- **Client**、**Model**、任意の **reasoning effort**
+- **Use YOLO mode**：専門 Helper や Workflow ノードで承認プロンプトなしに通常ツールを使わせたい場合に有効化
+- **System prompt**：その役割専用の作業ルール
+
+たとえば、設計と実装の Profile を Claude Code や Codex に割り当て、差分レビューとエッジケース検証の Profile（`grok-reviewer`）を Grok Build に割り当てる、といった分担ができます。
+
+### 2. 常駐 Bot と並列 Helper でタスクを分担する
+
+有効な任意の Client（Grok Build を含む）で常駐 [Bot](/docs/bots) を作成します（Bot Session・メモリ取得・Dreaming は、ファイル読み取りとターミナルコマンドを承認なしで使える Pontia の制限付き Profile で動作します）。
+
+Bot に複合的な作業を依頼すると、独立した作業が並列 [Helper](/docs/bots/helpers) に切り出されます。汎用 Helper は Bot の Client・モデル・reasoning effort を引き継ぎ、専門 Helper は Profile ID を指定して起動されます：
+
+```sh
+pontia bot helper create --profile-id grok-reviewer
+```
+
+複数の Helper が同じリポジトリを並行して編集する場合は、元のプロジェクト Workspace から開始し、各 Helper に独立した Git worktree とブランチを作らせることで競合を防ぎます。すべての Helper はネイティブ CLI Session のまま保持されるため、スマホやデスクトップからいつでも開いて進捗確認・追加指示・差分確認ができます。
+
+### 3. 反復する工程を Workflow に定義する
+
+調査・実装・クロスレビューのように工程と入出力が定まっている作業は、TOML の [Workflow](/docs/workflows) に記述し、各 Agent ノードへ `execution_profile_id` を紐づけます：
+
+```toml
+title = "Feature delivery with cross-client review"
+cwd = "."
+
+[[handoffs]]
+name = "spec.md"
+source = "./spec.md"
+
+[[nodes]]
+type = "agent"
+phase = "Implementation"
+title = "Implement feature"
+instructions = "Implement the approved spec and run the relevant test suite."
+execution_profile_id = "coder"
+inputs = ["spec.md"]
+output = "implementation.md"
+
+[[nodes]]
+type = "agent"
+phase = "Review"
+title = "Grok reviewer"
+instructions = "Review the current changes against the spec and write the findings."
+execution_profile_id = "grok-reviewer"
+inputs = ["spec.md", "implementation.md"]
+output = "review.md"
+```
+
+`pontia workflow run ./workflow.toml` で起動すれば、各フェーズとノードの Session を Dashboard から追跡できます。External API から通常の Session を作成する場合も、`mode` フィールドで `default`・`yolo`・`restricted` を指定できます（[Agent Clients](/docs/agent-clients#client-credentials-and-permissions)）。
+
+## 一次資料と関連ガイド
+
+- [xAI Grok Build 概要](https://docs.x.ai/build/overview)
+- [xAI Grok Build エンタープライズドキュメント](https://docs.x.ai/build/enterprise)
+- [xAI Grok Build ヘッドレススクリプティング（`grok -p`）](https://docs.x.ai/build/cli/headless-scripting)
+- [xAI Grok Build changelog](https://x.ai/changelog/build)
+- [xAI Grok Bot 概要](https://docs.x.ai/grok-bot/overview)
+- [How Claude Code works](https://code.claude.com/docs/en/how-claude-code-works)
+- [Pontia Grok Build Agent Client ガイド](/docs/agent-clients/grok)
+- [Pontia リモートアクセス](/docs/remote-access)と[セキュリティ](/docs/security)
+- [Pontia Agent Profiles](/docs/agent-profiles)・[Bots](/docs/bots)・[並列 Helpers](/docs/bots/helpers)・[Workflows](/docs/workflows)
+- [オープンソースの Grok Bot 代替を比較: セルフホスト VM か、ローカル CLI オーケストレーションか](/blog/open-source-local-grok-bot-alternative)

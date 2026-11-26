@@ -1,0 +1,201 @@
+---
+title: "Remote control Grok Build CLI from your phone and browser (plus Grok Build vs Claude Code vs Codex)"
+description: "Does Grok have remote control? How Grok Build CLI works over ACP, how to install, authenticate, and remote-control local grok sessions from a phone or browser with Pontia, and how to combine Grok Build, Claude Code, and Codex in one repository."
+published: "2026-11-27"
+---
+
+## Does Grok have remote control?
+
+**Short answer: no—not natively for local Grok Build CLI sessions.**
+
+As of **Grok Build CLI `v1.0.92`** (released November 19, 2026), the local `grok` binary ships an interactive terminal UI, a local `grok dashboard`, headless scripting (`grok -p`), and a first-class Agent Client Protocol (ACP) server (`grok agent stdio`). It does not include a built-in mobile app or hosted web remote to control your local terminal sessions. The older `/share` command was removed in `v1.0.50`, and `code.grok.com` is not a remote controller for a local `grok` process.
+
+Part of the confusion comes from **Grok Bot**, a separate xAI product documented at [docs.x.ai/grok-bot/overview](https://docs.x.ai/grok-bot/overview). Grok Bot runs on a persistent cloud computer with its own thin clients; it does not attach to the `grok` binary on your workstation or VPS. (For a breakdown of cloud VMs vs local CLI orchestration, see [Open-source Grok Bot alternatives](/blog/open-source-local-grok-bot-alternative).)
+
+Because Grok Build exposes a native ACP transport (`grok agent stdio`), you can still control local `grok` sessions from a phone or browser without handing your code to a cloud VM. You connect a local ACP-capable control plane—such as [Pontia](/docs/agent-clients/grok)—which launches `grok agent stdio` directly inside your local Workspace and streams the session to a browser Dashboard over an end-to-end encrypted relay.
+
+Pontia is the tool we build. Every claim below about Grok Build, Grok Bot, Claude Code, and Codex CLI was verified against official documentation and release changelogs on November 27, 2026.
+
+## Install Grok Build CLI and choose an authentication path
+
+Grok Build installs cleanly on Linux and macOS (x86-64 and Arm64) and supports three authentication paths depending on whether you are at a desktop, connected over SSH, or running automated jobs.
+
+### Installation
+
+Install directly from xAI:
+
+```sh
+curl -fsSL https://x.ai/cli/install.sh | bash
+```
+
+Or via npm:
+
+```sh
+npm i -g @xai-official/grok
+```
+
+If you already use Pontia, you can install and register Grok Build in one command from the device terminal:
+
+```sh
+pontia client install grok
+```
+
+Or open **Settings → Agent Clients → Grok Build → Install** in the Remote Dashboard. Pontia runs xAI's official installer (requiring Bash plus `curl` or `wget`), verifies `grok --version`, and enables the Client. If `grok` is already installed on the Pontia service user's `PATH`, enable it directly:
+
+```sh
+pontia client enable grok
+```
+
+### Three authentication paths
+
+1. **Desktop with a local browser:**
+
+   ```sh
+   grok login
+   ```
+
+2. **Headless Linux host or SSH session (RFC 8628 Device Code):**
+
+   ```sh
+   grok login --device-auth
+   ```
+
+   This prints a verification URL and a one-time user code that you approve in any browser on your phone or laptop, and it handles token refresh automatically. Pontia's Remote Dashboard first-client guide (and **Settings → Agent Clients → Grok Build → Sign in**) can also launch this Device Code flow remotely. Run the login as the **same operating-system user** that runs Pontia so `pontiad` sees the saved credentials.
+
+3. **CI, scripts, or API-billed runs:**
+
+   Export `XAI_API_KEY` in the shell or in Pontia's managed service environment. After changing the service environment or `PATH`, run `pontia up` so the managed service receives the updated values.
+
+### Models and billing
+
+The default model in Grok Build CLI tracks xAI releases and your account's model catalog: xAI's CLI site and documentation point to Grok 4.5, the API flagship is `grok-4.7`, and the earlier `grok-build-0.1` model was retired on November 19, 2026. Interactive sign-in (`grok login` / `--device-auth`) uses the shared weekly quota of your SuperGrok or X Subscription, while `XAI_API_KEY` usage is billed separately through the xAI API.
+
+## Remote-control local Grok Build CLI from your phone and browser
+
+To control your local Grok Build sessions remotely, Pontia runs `grok agent stdio` on your machine inside your project directory and exposes that session to desktop and mobile browsers. This remote layer is provided by Pontia rather than built into `grok` itself.
+
+### End-to-end setup
+
+On the Linux or macOS machine (or VPS) where your repositories live:
+
+```sh
+# 1. Install and enable Grok Build (or `pontia client enable grok` if already installed)
+pontia client install grok
+
+# 2. Authenticate as the same OS user running Pontia
+grok login --device-auth
+
+# 3. Sign in to Pontia Cloud and register the device for remote access
+pontia login
+pontia remote enable
+```
+
+`pontia login` uses a one-time code you can approve from your phone. `pontia remote enable` defaults to **Auto** Edge selection, picking the reachable Edge with the lowest latency (you can also deploy a [self-hosted Edge](/docs/self-hosted-edge) if you want to run your own relay).
+
+Once the device is registered:
+
+1. Open [app.pontia.dev](https://app.pontia.dev) on your phone or any browser (you can install it to your home screen as a web app).
+2. Activate or select your project directory in [Workspaces](/docs/workspaces).
+3. In **New chat**, choose **Grok Build**, pick **Client default** or a specific model and reasoning effort level, and submit your task.
+
+### What works once connected
+
+- **End-to-end encrypted traffic with local execution:** The browser creates an ephemeral keypair and obtains a short-lived signed capability from Pontia Cloud, which your device verifies directly. Browser and device negotiate session keys with X25519-based HPKE and encrypt records with ChaCha20-Poly1305 ([Security](/docs/security)). The Edge relays ciphertext only; your source code, credentials, and `grok agent stdio` processes remain on your device.
+- **Steer, interrupt, approve, and compact from anywhere:** Follow Grok's replies and work steps as they stream and answer permission prompts directly from your phone. While Grok is actively working, send another message to inject instructions at the next tool or model transition—Grok continues the current Turn with your addition, or receives it as a follow-up Turn if the last transition has already passed. You can also interrupt the active Turn, and when a Session is idle or interrupted, trigger **Compact context** or send `/compact` to keep the Session open with a compaction checkpoint on its timeline.
+- **Model and reasoning effort selection:** Pontia reads Grok's model catalog for the selected Workspace and surfaces the available models alongside each model's advertised reasoning effort levels (including effort choices for the default model). The Session header displays the effective model and reasoning effort reported by Grok.
+- **Live `localhost` previews, files, and Git diffs on mobile:** Ask Grok to include the local dev server URL (`localhost`, `127.0.0.1`, `[::1]`, or `0.0.0.0`) in its reply and open it in the side-panel [Previews](/docs/previews). Over remote access, Pontia issues a time-limited preview address under `pontia.run` routed through your selected Edge—supporting HTTP and WebSocket live reload, common dev ports (`3000`, `4173`, `5173`, `8000`) out of the box, and a desktop / 375 px mobile width switcher. The **Files** and **Git** panels let you read syntax-highlighted files, Markdown, JSON/YAML trees, sortable CSV/TSV tables, staged/unstaged diffs, and commit history inside the phone layout's persistent **Chats**, **Sessions**, **Todos**, and **Device** tabs ([Dashboard guide](/docs/dashboard)).
+
+## Grok Build vs Claude Code vs Codex CLI
+
+Developers evaluating `grok build vs claude code vs codex` usually care less about a one-off prompt benchmark than about how each CLI integrates into an actual engineering setup: transport protocol, automation interface, repo instructions, sandboxing, and remote control.
+
+| Dimension | Grok Build CLI (`grok`) | Claude Code (`claude`) | Codex CLI (`codex`) |
+| --- | --- | --- | --- |
+| **Embedding & protocol** | First-class ACP server (`grok agent stdio`), local TUI, local `grok dashboard` | Proprietary CLI + Claude Agent SDK (`@pontia/claude-client` in Pontia) | `codex app-server` JSON-RPC daemon + local TUI |
+| **Headless / scripting** | `grok -p` ([headless docs](https://docs.x.ai/build/cli/headless-scripting)) | `claude -p` | `codex exec` |
+| **Project instructions** | `AGENTS.md` | `CLAUDE.md` | `AGENTS.md` |
+| **Permissions & sandbox** | Tool approval prompts; Pontia exposes `default`, `yolo`, and `restricted` modes | Tool permission rules & approval modes | OS-level sandbox (`workspace-write`, etc.) + approval policy (`on-request`, etc.) |
+| **Official remote control** | None for local CLI sessions (Grok Bot is a separate cloud-VM product) | Official Claude Code Remote Control (web/mobile) | ChatGPT desktop-backed mobile remote control (Mac/Windows host) + separate Codex Cloud |
+| **Remote control in Pontia** | Native via `grok agent stdio` on Linux & macOS ([Grok Build guide](/docs/agent-clients/grok)) | Native via Claude Agent SDK ([Claude Code guide](/docs/agent-clients/claude)) | Native via `codex app-server` daemon on Linux & macOS ([Codex guide](/docs/agent-clients/codex)) |
+
+Key takeaways from this comparison:
+
+- **Grok Build** stands out for shipping a clean, standard ACP interface (`grok agent stdio`) right inside the official binary and sharing `AGENTS.md` conventions with Codex, making it straightforward to embed in local orchestrators and CI scripts (`grok -p`).
+- **Claude Code** provides its own Remote Control experience alongside deep SDK hooks and `CLAUDE.md` conventions ([How Claude Code works](https://code.claude.com/docs/en/how-claude-code-works)).
+- **Codex CLI** pairs a persistent `app-server` daemon with explicit OS-level sandboxing (`workspace-write`) and `codex exec` for scripting. For a deeper look at Codex mobile options, see [How to use Codex CLI from your phone](/blog/control-codex-cli-from-your-phone).
+
+## Practical pattern: divide roles across all three CLIs in one repository
+
+In practice, you rarely need to lock an entire repository to a single coding CLI. Different tasks reward different strengths—deep architectural review, parallel implementation branches, rapid codebase search, or independent second-opinion code review—and you may already hold subscriptions or quotas across more than one provider.
+
+Pontia lets you keep Grok Build, Claude Code, and Codex CLI active in the same [Workspace](/docs/workspaces) and assign each tool a clear role using [Agent Profiles](/docs/agent-profiles), [Bots](/docs/bots) with parallel [Helpers](/docs/bots/helpers), and durable [Workflows](/docs/workflows).
+
+### 1. Define reusable Agent Profiles
+
+In **Settings → Agent Profiles**, create a Profile for each specialty by combining:
+
+- **Profile ID** (for example, `architect`, `coder`, `grok-reviewer`);
+- **Description** stating what tasks belong to this role and what boundary it respects;
+- **Client**, **Model**, and optional **reasoning effort**;
+- **Use YOLO mode** when that specialist helper or Workflow node should run its usual tools without approval prompts;
+- **System prompt** with role-specific rules.
+
+For example, you might keep one Profile on Claude Code or Codex for deep architecture planning and implementation, another Profile on Grok Build (`grok-reviewer`) focused on diff review and edge-case checks, and a lightweight researcher Profile for codebase exploration.
+
+### 2. Coordinate parallel tasks with a Bot and Helpers
+
+Create a long-lived [Bot](/docs/bots) backed by any enabled Client—including Grok Build (Bot Sessions, memory retrieval, and Dreaming run under Pontia's restricted profile with approval-free file reading and terminal commands).
+
+When you hand the Bot a multi-part job, it splits independent tasks across parallel [Helpers](/docs/bots/helpers). A general helper inherits the Bot's Client, model, and reasoning effort, while a specialist helper is launched from a specific Profile:
+
+```sh
+pontia bot helper create --profile-id grok-reviewer
+```
+
+When several helpers modify the same repository at once, the Bot starts from the active project Workspace and instructs each helper to create its own Git worktree and branch so edits run concurrently without checkout collisions. Every Helper remains a native Session you can open directly from your phone or desktop to inspect live tool output, steer, or review diffs.
+
+### 3. Codify repeatable pipelines in a Workflow
+
+For repeatable multi-stage processes—such as discovery, implementation, and cross-client review—define a TOML [Workflow](/docs/workflows) that binds each Agent Node to an `execution_profile_id`:
+
+```toml
+title = "Feature delivery with cross-client review"
+cwd = "."
+
+[[handoffs]]
+name = "spec.md"
+source = "./spec.md"
+
+[[nodes]]
+type = "agent"
+phase = "Implementation"
+title = "Implement feature"
+instructions = "Implement the approved spec and run the relevant test suite."
+execution_profile_id = "coder"
+inputs = ["spec.md"]
+output = "implementation.md"
+
+[[nodes]]
+type = "agent"
+phase = "Review"
+title = "Grok reviewer"
+instructions = "Review the current changes against the spec and write the findings."
+execution_profile_id = "grok-reviewer"
+inputs = ["spec.md", "implementation.md"]
+output = "review.md"
+```
+
+Run it with `pontia workflow run ./workflow.toml` and track each phase and Node Session from the Dashboard. If you drive Pontia programmatically through the External API, ordinary Sessions can also pick `default`, `yolo`, or `restricted` via the `mode` field ([Agent Clients](/docs/agent-clients#client-credentials-and-permissions)).
+
+## Primary sources and further reading
+
+- [xAI Grok Build overview](https://docs.x.ai/build/overview)
+- [xAI Grok Build enterprise docs](https://docs.x.ai/build/enterprise)
+- [xAI Grok Build headless scripting (`grok -p`)](https://docs.x.ai/build/cli/headless-scripting)
+- [xAI Grok Build changelog](https://x.ai/changelog/build)
+- [xAI Grok Bot overview](https://docs.x.ai/grok-bot/overview)
+- [How Claude Code works](https://code.claude.com/docs/en/how-claude-code-works)
+- [Pontia Grok Build Agent Client guide](/docs/agent-clients/grok)
+- [Pontia Remote access](/docs/remote-access) and [Security](/docs/security)
+- [Pontia Agent Profiles](/docs/agent-profiles), [Bots](/docs/bots), [Helpers](/docs/bots/helpers), and [Workflows](/docs/workflows)
+- [Open-source Grok Bot alternatives: cloud VMs vs local CLI orchestration](/blog/open-source-local-grok-bot-alternative)
