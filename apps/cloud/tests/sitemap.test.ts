@@ -32,15 +32,14 @@ test("publishes every language version with reciprocal alternates and an English
           ...entry!.matchAll(/<xhtml:link rel="alternate" hreflang="([^"]+)" href="([^"]+)"\/>/g),
         ].map((match) => [match[1], match[2]]),
       ).toEqual(alternatives);
-      if (path === "/blog/news") expect(entry).toContain("<lastmod>2026-11-01</lastmod>");
-      else expect(entry).not.toContain("<lastmod>");
     }
   }
+  expect(sitemap).not.toContain("<lastmod>");
 });
 
-test("uses publication dates when posts have no update date and preserves the source slug order", () => {
+test("preserves the source slug order", () => {
   const slugs = ["setup", "", "configuration"];
-  const sitemap = renderSitemap(slugs, [
+  renderSitemap(slugs, [
     {
       slug: "news",
       title: "News",
@@ -49,5 +48,4 @@ test("uses publication dates when posts have no update date and preserves the so
     },
   ]);
   expect(slugs).toEqual(["setup", "", "configuration"]);
-  expect(sitemap.match(/<lastmod>2026-10-01<\/lastmod>/g)).toHaveLength(4);
 });
