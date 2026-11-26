@@ -8,7 +8,7 @@ use tokio::{sync::OwnedSemaphorePermit, time::timeout};
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::{Edge, tickets::RedeemError};
+use crate::{Edge, auth::bearer_token, tickets::RedeemError};
 
 pub(crate) async fn upgrade(
     State(edge): State<Edge>,
@@ -22,7 +22,7 @@ pub(crate) async fn upgrade(
         Ok(permit) => permit,
         Err(_) => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
-    let ticket = match bearer_ticket(&headers) {
+    let ticket = match bearer_token(&headers) {
         Some(ticket) => ticket,
         None => return unauthorized(),
     };
@@ -53,19 +53,6 @@ fn offers_protocol(headers: &HeaderMap, expected: &str) -> bool {
         .filter_map(|value| value.to_str().ok())
         .flat_map(|value| value.split(','))
         .any(|value| value.trim() == expected)
-}
-
-fn bearer_ticket(headers: &HeaderMap) -> Option<&str> {
-    let mut values = headers.get_all(header::AUTHORIZATION).iter();
-    let value = values.next()?.to_str().ok()?;
-    if values.next().is_some() {
-        return None;
-    }
-    let ticket = value.strip_prefix("Bearer ")?;
-    if ticket.is_empty() || ticket.bytes().any(|byte| byte.is_ascii_whitespace()) {
-        return None;
-    }
-    Some(ticket)
 }
 
 fn unauthorized() -> Response {

@@ -511,7 +511,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The file preview sidebar can be resized and has a refresh button.
 - The image viewer pages between the images shared in a Session.
 - Codex answers to agent questions appear as answered questions in the conversation.
-- Edge settings in Cloud show the version each Edge is running. The Edge `/healthz` endpoint reports it in the `Pontia-Edge-Version` response header.
+- Edge settings in Cloud show the version each Edge is running. The public Edge `/healthz` endpoint returns `ok` for availability checks.
 - The Cloud site slogan is translated into Simplified Chinese, Japanese, and Portuguese.
 
 ### Changed

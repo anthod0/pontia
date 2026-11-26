@@ -12,7 +12,7 @@ use uuid::Uuid;
 const ORIGIN: &str = "https://app.pontia.dev";
 
 #[tokio::test]
-async fn health_check_reports_the_running_version() {
+async fn public_health_check_returns_only_ok() {
     let server = TestEdge::start().await;
     let response = server
         .http
@@ -22,10 +22,8 @@ async fn health_check_reports_the_running_version() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(
-        response.headers()["pontia-edge-version"],
-        include_str!("../../../VERSION").trim()
-    );
+    assert!(!response.headers().contains_key("pontia-edge-version"));
+    assert!(!response.headers().contains_key("pontia-update-nonce"));
     assert_eq!(
         response.headers()["strict-transport-security"],
         "max-age=31536000; includeSubDomains"

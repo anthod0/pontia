@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { SignJWT, base64url } from "jose";
+import { capabilitySigningKey } from "../edge-auth";
 import type { Database } from "../db";
 import { devices, edges } from "../db/schema";
 import { edgeApiOrigin } from "../edge-network";
@@ -21,16 +22,6 @@ function writeU64(output: Uint8Array, offset: number, value: number) {
   new DataView(output.buffer, output.byteOffset, output.byteLength).setBigUint64(
     offset,
     BigInt(value),
-  );
-}
-
-export function capabilitySigningKey(signingKeyPkcs8: string) {
-  return crypto.subtle.importKey(
-    "pkcs8",
-    buffer(base64url.decode(signingKeyPkcs8)),
-    { name: "Ed25519" },
-    false,
-    ["sign"],
   );
 }
 

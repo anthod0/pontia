@@ -1,11 +1,11 @@
-import { base64url, SignJWT } from "jose";
+import { base64url } from "jose";
 import {
   DnsProviderError,
   readDnsProviderResponse,
   type DnsOperation,
 } from "./cloudflare-dns-errors";
 import { isEdgePort, edgeAuthority } from "../edge-port";
-import { capabilitySigningKey } from "./remote-access/device-connect";
+import { capabilitySigningKey, signEdgeControlToken } from "./edge-auth";
 
 const EDGE_ZONE = "edge.pontia.dev";
 const PROBE_TIMEOUT_MS = 5_000;
@@ -31,6 +31,7 @@ const OWNERSHIP_KEY_LABEL = "pontia-edge-ownership-key-v1\0";
 const OWNERSHIP_PROOF_LABEL = "pontia-edge-ownership-v1\0";
 
 export type EdgeNetworkIdentity = {
+  id: string;
   tunnelUrl: string;
 };
 
@@ -276,14 +277,13 @@ export async function verifyEdgeOwnership(
   const bytes = randomBytes(32);
   if (bytes.length !== 32) throw new Error("nonce generator returned the wrong length");
   const nonce = base64url.encode(bytes);
-  const now = Math.floor(Date.now() / 1000);
-  const token = await new SignJWT({ host: hostname, port })
-    .setProtectedHeader({ alg: "EdDSA", typ: "pontia-edge-ownership+jwt" })
-    .setAudience(edgeId)
-    .setJti(nonce)
-    .setIssuedAt(now)
-    .setExpirationTime(now + 60)
-    .sign(await capabilitySigningKey(signingKey));
+  const token = await signEdgeControlToken(await capabilitySigningKey(signingKey), {
+    purpose: "ownership",
+    edgeId,
+    nonce,
+    hostname,
+    port,
+  });
   try {
     const response = await fetcher(
       `https://${edgeAuthority(hostname, port)}/__pontia/verify-ownership`,
@@ -337,16 +337,21 @@ async function boundedText(response: Response, maximum: number) {
 
 export async function probeEdgeHealth(
   identity: EdgeNetworkIdentity,
+  signingKey: CryptoKey,
   fetcher: HttpFetcher,
 ): Promise<EdgeHealth> {
   const origin = edgeApiOrigin(identity.tunnelUrl);
   if (!origin) return { status: "unreachable" };
+  const token = await signEdgeControlToken(signingKey, {
+    purpose: "version",
+    edgeId: identity.id,
+  });
   try {
-    const response = await fetcher(`${origin}/healthz`, {
-      method: "GET",
+    const response = await fetcher(`${origin}/__pontia/version`, {
+      method: "POST",
       redirect: "manual",
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-      headers: { Accept: "text/plain" },
+      headers: { Authorization: `Bearer ${token}`, Accept: "text/plain" },
     });
     if (
       response.status !== 200 ||

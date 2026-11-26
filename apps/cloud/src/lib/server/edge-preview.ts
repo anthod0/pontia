@@ -10,14 +10,14 @@ import {
   previewDns,
   probePreview,
 } from "./edge-network";
-import { remoteDatabase } from "./remote-access/http";
+import { bearerCredential, remoteDatabase } from "./remote-access/http";
 import { authenticateEdgeCredential } from "./remote-access/resources";
 
 export async function manageEdgePreview(event: RequestEvent, operation: "provision" | "confirm") {
   if (event.url.protocol !== "https:") return json({ error: "https_required" }, { status: 400 });
   const env = environment(event);
   const db = remoteDatabase(event);
-  const credential = event.request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
+  const credential = bearerCredential(event.request);
   const principal = credential && (await authenticateEdgeCredential(db, credential));
   if (!principal) return json({ error: "invalid_edge_credentials" }, { status: 401 });
   const edge = await db

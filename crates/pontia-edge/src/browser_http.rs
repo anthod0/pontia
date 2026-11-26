@@ -8,7 +8,7 @@ use axum::{
 };
 use pontia_tunnel::TunnelError;
 
-use crate::Edge;
+use crate::{Edge, auth::bearer_token};
 
 pub const SESSIONS_PATH: &str = "/e2e/v1/sessions";
 pub const REQUESTS_PATH: &str = "/e2e/v1/requests";
@@ -110,18 +110,6 @@ pub(crate) async fn relay(
 pub(crate) fn exact_origin(headers: &HeaderMap, expected: &str) -> bool {
     let mut values = headers.get_all(header::ORIGIN).iter();
     values.next().and_then(|value| value.to_str().ok()) == Some(expected) && values.next().is_none()
-}
-
-pub(crate) fn bearer_token(headers: &HeaderMap) -> Option<&str> {
-    let mut values = headers.get_all(header::AUTHORIZATION).iter();
-    let token = values.next()?.to_str().ok()?.strip_prefix("Bearer ")?;
-    if values.next().is_some()
-        || token.is_empty()
-        || token.bytes().any(|byte| byte.is_ascii_whitespace())
-    {
-        return None;
-    }
-    Some(token)
 }
 
 fn error(status: StatusCode, code: &str) -> Response {

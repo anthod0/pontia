@@ -9,7 +9,7 @@ use axum::{
 };
 use uuid::Uuid;
 
-use crate::{Edge, browser_http::bearer_token, systemd::Systemd};
+use crate::{Edge, auth::bearer_token, systemd::Systemd};
 
 #[derive(Clone)]
 pub(crate) struct Notifications(Arc<Mutex<Uuid>>);
@@ -20,18 +20,26 @@ impl Default for Notifications {
     }
 }
 
-pub(crate) async fn health(
+pub(crate) async fn health() -> &'static str {
+    "ok"
+}
+
+pub(crate) async fn version(
     State(edge): State<Edge>,
-) -> ([(&'static str, String); 3], &'static str) {
+    headers: HeaderMap,
+) -> Result<([(&'static str, String); 3], &'static str), StatusCode> {
+    if !bearer_token(&headers).is_some_and(|token| edge.access_tokens.version(token)) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
     let nonce = *edge.updates.0.lock().unwrap();
-    (
+    Ok((
         [
             ("pontia-edge-version", pontia_version::version().to_string()),
             ("pontia-update-nonce", nonce.to_string()),
             ("cache-control", "no-store".into()),
         ],
         "ok",
-    )
+    ))
 }
 
 pub(crate) async fn notify(State(edge): State<Edge>, headers: HeaderMap) -> StatusCode {

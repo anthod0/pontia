@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use axum::http::{HeaderMap, header};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, get_current_timestamp};
 use serde::{Deserialize, de::DeserializeOwned};
@@ -12,7 +13,7 @@ pub struct AccessTokenVerifier {
 }
 
 #[derive(Deserialize)]
-struct Claims {
+struct AdmissionClaims {
     device_id: Uuid,
     user_id: Uuid,
     iat: u64,
@@ -46,9 +47,24 @@ impl AccessTokenVerifier {
         })
     }
 
-    fn claims<T: DeserializeOwned>(&self, token: &str, typ: &str) -> Option<T> {
+    fn verify_jwt<T: DeserializeOwned>(&self, token: &str, typ: &str) -> Option<T> {
         let signed = decode::<T>(token, &self.key, &self.validation).ok()?;
-        (signed.header.typ.as_deref() == Some(typ)).then_some(signed.claims)
+        (signed.header.alg == Algorithm::EdDSA && signed.header.typ.as_deref() == Some(typ))
+            .then_some(signed.claims)
+    }
+
+    pub(crate) fn version(&self, token: &str) -> bool {
+        #[derive(Deserialize)]
+        struct Version {
+            #[serde(rename = "aud")]
+            _audience: Uuid,
+            iat: u64,
+            exp: u64,
+        }
+        let Some(claims) = self.verify_jwt::<Version>(token, "pontia-edge-version+jwt") else {
+            return false;
+        };
+        fresh_lifetime(claims.iat, claims.exp, 60).is_some()
     }
 
     pub(crate) fn update_nonce(&self, token: &str) -> Option<Uuid> {
@@ -60,9 +76,9 @@ impl AccessTokenVerifier {
             iat: u64,
             exp: u64,
         }
-        let claims: Update = self.claims(token, "pontia-edge-update+jwt")?;
-        remaining_lifetime(claims.iat, claims.exp)?;
-        (claims.exp - claims.iat <= 60).then_some(claims.jti)
+        let claims: Update = self.verify_jwt(token, "pontia-edge-update+jwt")?;
+        fresh_lifetime(claims.iat, claims.exp, 60)?;
+        Some(claims.jti)
     }
 
     /// Returns the nonce of a fresh Cloud ownership challenge for this edge endpoint.
@@ -77,11 +93,10 @@ impl AccessTokenVerifier {
             iat: u64,
             exp: u64,
         }
-        let claims: Ownership = self.claims(token, "pontia-edge-ownership+jwt")?;
-        remaining_lifetime(claims.iat, claims.exp)?;
+        let claims: Ownership = self.verify_jwt(token, "pontia-edge-ownership+jwt")?;
+        fresh_lifetime(claims.iat, claims.exp, 60)?;
         let nonce = URL_SAFE_NO_PAD.decode(&claims.jti).ok()?;
-        (claims.exp - claims.iat <= 60
-            && claims.host == hostname
+        (claims.host == hostname
             && claims.port == port
             && claims.jti.len() == 43
             && nonce.len() == 32
@@ -90,16 +105,28 @@ impl AccessTokenVerifier {
     }
 
     pub(crate) fn authenticate(&self, token: &str) -> Option<Uuid> {
-        let claims: Claims = self.claims(token, "JWT")?;
-        remaining_lifetime(claims.iat, claims.exp)?;
+        let claims: AdmissionClaims = self.verify_jwt(token, "JWT")?;
+        fresh_lifetime(claims.iat, claims.exp, 4 * 3600)?;
         (claims.device_id.get_version_num() == 7 && !claims.user_id.is_nil())
             .then_some(claims.device_id)
     }
 }
 
-fn remaining_lifetime(iat: u64, exp: u64) -> Option<u64> {
+pub(crate) fn bearer_token(headers: &HeaderMap) -> Option<&str> {
+    let mut values = headers.get_all(header::AUTHORIZATION).iter();
+    let token = values.next()?.to_str().ok()?.strip_prefix("Bearer ")?;
+    if values.next().is_some()
+        || token.is_empty()
+        || token.bytes().any(|byte| byte.is_ascii_whitespace())
+    {
+        return None;
+    }
+    Some(token)
+}
+
+fn fresh_lifetime(iat: u64, exp: u64, maximum: u64) -> Option<u64> {
     let now = get_current_timestamp();
-    (iat <= now && now < exp && exp - iat <= 4 * 3600).then(|| exp - now)
+    (iat <= now && now < exp && exp - iat <= maximum).then(|| exp - now)
 }
 
 #[cfg(test)]

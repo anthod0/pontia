@@ -22,11 +22,15 @@ test("notifies reachable outdated Edges with a signed one-use challenge and cont
   await database.db.insert(edges).values(rows);
   const nonce = crypto.randomUUID();
   const tokens = new Map<string, string>();
+  const versionTokens = new Map<string, string>();
   const fetcher = async (target: string, init: RequestInit) => {
     const url = new URL(target);
     const name = url.hostname.split(".")[0];
-    if (url.pathname === "/healthz") {
+    if (url.pathname === "/__pontia/version") {
       if (name === "offline") throw new Error("offline");
+      expect(init.method).toBe("POST");
+      expect(init.redirect).toBe("manual");
+      versionTokens.set(name, new Headers(init.headers).get("authorization")!.slice(7));
       return new Response("ok", {
         headers: {
           "pontia-edge-version": name === "current" ? "2.0.0" : "1.0.0",
@@ -59,6 +63,16 @@ test("notifies reachable outdated Edges with a signed one-use challenge and cont
       algorithms: ["EdDSA"],
     });
     expect(payload.jti).toBe(nonce);
+    expect(payload.exp! - payload.iat!).toBe(60);
+  }
+  for (const row of rows) {
+    const token = versionTokens.get(row.name);
+    if (!token) continue;
+    const { payload } = await jwtVerify(token, publicKey, {
+      audience: row.id,
+      typ: "pontia-edge-version+jwt",
+      algorithms: ["EdDSA"],
+    });
     expect(payload.exp! - payload.iat!).toBe(60);
   }
 });

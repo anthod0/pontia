@@ -63,7 +63,7 @@ sudo systemctl status pontia-edge.service
 sudo journalctl -u pontia-edge.service --no-pager -n 200
 ```
 
-公网健康检查端点 `https://HOST[:PORT]/healthz` 返回 `ok`，并在 `Pontia-Edge-Version` 响应头中提供运行中的版本号。也可以在 [Edge 设置](/settings/edges)中查看该版本号。
+公网健康检查端点 `https://HOST[:PORT]/healthz` 返回 `ok`。运行中的版本号可在 [Edge 设置](/settings/edges)中查看。
 
 手动更新：
 

@@ -63,7 +63,7 @@ sudo systemctl status pontia-edge.service
 sudo journalctl -u pontia-edge.service --no-pager -n 200
 ```
 
-公開ヘルスエンドポイント `https://HOST[:PORT]/healthz` は `ok` を返し、`Pontia-Edge-Version` レスポンスヘッダーに稼働中のバージョンを示します。バージョンは [Edge 設定](/settings/edges) でも確認できます。
+公開ヘルスエンドポイント `https://HOST[:PORT]/healthz` は `ok` を返します。稼働中のバージョンは [Edge 設定](/settings/edges) で確認できます。
 
 手動で更新します。
 

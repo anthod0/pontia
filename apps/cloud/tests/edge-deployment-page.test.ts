@@ -1,4 +1,5 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
+import { base64url, generateKeyPair } from "jose";
 import type { RequestEvent } from "@sveltejs/kit";
 import { eq } from "drizzle-orm";
 import { issueLogin } from "../src/lib/server/auth/jwt";
@@ -19,6 +20,12 @@ const loadEdges = load as unknown as (
 ) => Promise<{ ownedEdges: unknown[]; publicEdges: unknown[] }>;
 const ownerId = "0199791c-6600-7000-8000-000000000011";
 const loadEdgeHealth = getEdgeHealth as unknown as (event: RequestEvent) => Promise<Response>;
+const { privateKey: edgeHealthPrivateKey } = await generateKeyPair("EdDSA", {
+  extractable: true,
+});
+const edgeHealthSigningKey = base64url.encode(
+  new Uint8Array(await crypto.subtle.exportKey("pkcs8", edgeHealthPrivateKey)),
+);
 
 afterEach(() => mock.restore());
 
@@ -42,6 +49,7 @@ async function authenticatedEvent(userId: string): Promise<RequestEvent> {
         AUTH_ORIGIN: "https://pontia.example",
         DB: database.binding,
         JWT_SECRET: secret,
+        E2E_CAPABILITY_SIGNING_KEY: edgeHealthSigningKey,
         EDGE_HEALTH_RATE_LIMIT: {
           async limit({ key }: { key: string }) {
             healthLimits.push(key);
@@ -192,9 +200,9 @@ test("the health endpoint checks only edges visible to the signed-in user", asyn
     },
   });
   expect(requested.sort()).toEqual([
-    "https://owned-edge.edge.pontia.dev/healthz",
-    "https://public-edge.edge.pontia.dev/healthz",
-    "https://relay.example.com:8443/healthz",
+    "https://owned-edge.edge.pontia.dev/__pontia/version",
+    "https://public-edge.edge.pontia.dev/__pontia/version",
+    "https://relay.example.com:8443/__pontia/version",
   ]);
   expect(healthLimits).toEqual([ownerId]);
 });

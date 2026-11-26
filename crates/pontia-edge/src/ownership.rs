@@ -6,7 +6,7 @@ use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use ring::{digest, hmac};
 use uuid::Uuid;
 
-use crate::{Edge, browser_http::bearer_token, credential::parse_credential};
+use crate::{Edge, auth::bearer_token, credential::parse_credential};
 
 const KEY_LABEL: &[u8] = b"pontia-edge-ownership-key-v1\0";
 const PROOF_LABEL: &[u8] = b"pontia-edge-ownership-v1\0";
@@ -42,10 +42,6 @@ pub(crate) async fn verify(edge: Edge, headers: HeaderMap, hostname: &str, port:
         [
             (header::CONTENT_TYPE, "text/plain".to_owned()),
             (header::CACHE_CONTROL, "no-store".to_owned()),
-            (
-                header::HeaderName::from_static("pontia-edge-version"),
-                pontia_version::version().to_string(),
-            ),
         ],
         proof(edge_id, &secret, hostname, port, &nonce),
     )

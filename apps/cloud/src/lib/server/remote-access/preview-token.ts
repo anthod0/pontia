@@ -5,7 +5,7 @@ import type { Database } from "../db";
 import { devices, edges } from "../db/schema";
 import { edgeIsAccessibleTo } from "./resources";
 import { isValidDeviceHandle } from "./device-handle";
-import { capabilitySigningKey } from "./device-connect";
+import { capabilitySigningKey } from "../edge-auth";
 
 // Fetch Standard bad ports, also enforced at the device's loopback dialer.
 const blockedPorts = new Set([

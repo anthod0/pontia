@@ -10,7 +10,7 @@ import {
   previewDns,
   validDnsChallenge,
 } from "$lib/server/edge-network";
-import { remoteDatabase } from "$lib/server/remote-access/http";
+import { bearerCredential, remoteDatabase } from "$lib/server/remote-access/http";
 import { authenticateEdgeCredential } from "$lib/server/remote-access/resources";
 import type { RequestHandler } from "./$types";
 
@@ -33,7 +33,7 @@ export const POST: RequestHandler = async (event) => {
       return json({ error: "invalid_dns_challenge" }, { status: 400 });
     }
     operation = body.operation;
-    const credential = event.request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
+    const credential = bearerCredential(event.request);
     if (!credential) return json({ error: "invalid_edge_credentials" }, { status: 401 });
     const db = remoteDatabase(event);
     const principal = await authenticateEdgeCredential(db, credential);

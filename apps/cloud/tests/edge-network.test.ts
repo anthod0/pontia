@@ -25,7 +25,7 @@ function mockGlobalFetch(
 }
 
 const identity = {
-  edgeId: "0199791c-6600-7000-8000-000000000001",
+  id: "0199791c-6600-7000-8000-000000000001",
   tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel",
 };
 
@@ -333,23 +333,35 @@ test("ownership verification signs a bound challenge and accepts only the edge's
 });
 
 test("health verification requires trusted HTTPS and the fixed response", async () => {
+  const { privateKey, publicKey } = await generateKeyPair("EdDSA");
+  let token = "";
   expect(
-    await probeEdgeHealth(identity, async (input, init) => {
-      expect(input).toBe("https://brave-atlas.edge.pontia.dev/healthz");
+    await probeEdgeHealth(identity, privateKey, async (input, init) => {
+      expect(input).toBe("https://brave-atlas.edge.pontia.dev/__pontia/version");
+      expect(init.method).toBe("POST");
       expect(init.redirect).toBe("manual");
+      token = new Headers(init.headers).get("authorization")!.slice("Bearer ".length);
       return new Response("ok");
     }),
   ).toEqual({ status: "healthy", version: null });
+  const { payload } = await jwtVerify(token, publicKey, {
+    audience: identity.id,
+    typ: "pontia-edge-version+jwt",
+    algorithms: ["EdDSA"],
+  });
+  expect(payload.exp! - payload.iat!).toBe(60);
   const headers = { "Pontia-Edge-Version": "1.2.3" };
   expect(
-    await probeEdgeHealth(identity, async () => new Response("almost ok", { headers })),
+    await probeEdgeHealth(identity, privateKey, async () => new Response("almost ok", { headers })),
   ).toEqual({ status: "unreachable" });
 });
 
 test("an invalid Edge version does not affect health", async () => {
+  const { privateKey } = await generateKeyPair("EdDSA");
   expect(
     await probeEdgeHealth(
       identity,
+      privateKey,
       async () =>
         new Response("ok", {
           headers: { "Pontia-Edge-Version": "1.2.3, 2.3.4" },
@@ -482,6 +494,7 @@ test("Cloudflare DNS adapter updates only the exact A record", async () => {
 });
 
 test("health checks never contact non-public tunnel hosts", async () => {
+  const { privateKey } = await generateKeyPair("EdDSA");
   for (const tunnelUrl of [
     "wss://127.0.0.1/tunnel",
     "wss://[::1]/tunnel",
@@ -489,7 +502,7 @@ test("health checks never contact non-public tunnel hosts", async () => {
     "wss://metadata.internal/tunnel",
   ]) {
     expect(
-      await probeEdgeHealth({ tunnelUrl }, async () => {
+      await probeEdgeHealth({ id: identity.id, tunnelUrl }, privateKey, async () => {
         throw new Error("must not be called");
       }),
     ).toEqual({ status: "unreachable" });

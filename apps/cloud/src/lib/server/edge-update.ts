@@ -1,9 +1,8 @@
 import { gt } from "drizzle-orm";
-import { SignJWT } from "jose";
 import type { Database } from "./db";
 import { edges } from "./db/schema";
 import { edgeApiOrigin, probeEdgeHealth } from "./edge-network";
-import { capabilitySigningKey } from "./remote-access/device-connect";
+import { capabilitySigningKey, signEdgeControlToken } from "./edge-auth";
 
 // Each page fits within the Worker's concurrent outbound connection limit.
 const pageSize = 5;
@@ -24,17 +23,14 @@ export async function notifyEdgeUpdates(
   const key = await capabilitySigningKey(signingKey);
   const outcomes = await Promise.all(
     page.map(async (edge) => {
-      const health = await probeEdgeHealth(edge, fetcher);
+      const health = await probeEdgeHealth(edge, key, fetcher);
       if (health.status !== "healthy" || health.version === version || !health.updateNonce)
         return "skipped";
-      const now = Math.floor(Date.now() / 1000);
-      const token = await new SignJWT({})
-        .setProtectedHeader({ alg: "EdDSA", typ: "pontia-edge-update+jwt" })
-        .setAudience(edge.id)
-        .setJti(health.updateNonce)
-        .setIssuedAt(now)
-        .setExpirationTime(now + 60)
-        .sign(key);
+      const token = await signEdgeControlToken(key, {
+        purpose: "update",
+        edgeId: edge.id,
+        nonce: health.updateNonce,
+      });
       try {
         const response = await fetcher(edgeApiOrigin(edge.tunnelUrl) + "/__pontia/notify-update", {
           method: "POST",

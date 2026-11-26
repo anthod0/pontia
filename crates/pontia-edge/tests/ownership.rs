@@ -94,7 +94,7 @@ async fn only_a_fresh_cloud_challenge_for_this_endpoint_receives_a_proof() {
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(response.headers()["content-type"], "text/plain");
     assert_eq!(response.headers()["cache-control"], "no-store");
-    assert!(response.headers().contains_key("pontia-edge-version"));
+    assert!(!response.headers().contains_key("pontia-edge-version"));
     let proof = response.text().await.unwrap();
     assert_eq!(proof.len(), 43);
     assert_eq!(URL_SAFE_NO_PAD.decode(&proof).unwrap().len(), 32);

@@ -1,7 +1,7 @@
-mod access_token;
 pub mod acme;
 mod acme_dns;
-pub use access_token::AccessTokenVerifier;
+mod auth;
+pub use auth::AccessTokenVerifier;
 mod browser_http;
 pub mod certificate;
 pub mod challenge;
@@ -90,6 +90,7 @@ impl Edge {
         let ownership_host = hostname.to_owned();
         let control = Router::new()
             .route("/healthz", get(notify_update::health))
+            .route("/__pontia/version", post(notify_update::version))
             .route("/__pontia/notify-update", post(notify_update::notify))
             .route(
                 "/__pontia/verify-ownership",

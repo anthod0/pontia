@@ -4,6 +4,7 @@ import { currentLogin, environment } from "$lib/server/auth/http";
 import { database } from "$lib/server/db";
 import { edges } from "$lib/server/db/schema";
 import { probeEdgeHealth } from "$lib/server/edge-network";
+import { capabilitySigningKey } from "$lib/server/edge-auth";
 import type { RequestHandler } from "./$types";
 
 export const GET: RequestHandler = async (event) => {
@@ -18,9 +19,12 @@ export const GET: RequestHandler = async (event) => {
     .select({ id: edges.id, tunnelUrl: edges.tunnelUrl })
     .from(edges)
     .where(or(eq(edges.userId, user.user_id), eq(edges.accessScope, "public")));
+  const signingKey = await capabilitySigningKey(env.E2E_CAPABILITY_SIGNING_KEY);
 
   const results = await Promise.all(
-    visibleEdges.map(async (edge) => [edge.id, await probeEdgeHealth(edge, fetch)] as const),
+    visibleEdges.map(
+      async (edge) => [edge.id, await probeEdgeHealth(edge, signingKey, fetch)] as const,
+    ),
   );
 
   return json({ edges: Object.fromEntries(results) }, { headers: { "Cache-Control": "no-store" } });
