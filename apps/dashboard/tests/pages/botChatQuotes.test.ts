@@ -550,7 +550,7 @@ test.each([false, true])(
   },
 );
 
-test("opens context from the message menu and reveals an earlier linked message", async () => {
+test("opens context from the message menu and locates an earlier linked message", async () => {
   const first = { ...reply, content: "Renew the [certificate](/notes.md) first." };
   const latest = message(5, "user_input", "Proceed");
   const pages = serve([latest], { older: [first] });
@@ -562,12 +562,15 @@ test("opens context from the message menu and reveals an earlier linked message"
   await fireEvent.contextMenu(await screen.findByText("Proceed"), { clientX: 10, clientY: 10 });
   await fireEvent.click(await screen.findByRole("menuitem", { name: "View context" }));
   const panel = await screen.findByRole("complementary");
-  const linked = await within(panel).findByRole("button", {
-    name: /Renew the certificate first\./,
-  });
+  const linked = panel.querySelector(`[data-context-message="${first.id}"]`)!;
+  await within(linked).findByText("certificate");
   expect(context).toHaveBeenCalledWith(bot.bot_id, latest.id, expect.any(AbortSignal));
   expect(linked.querySelector("time")).toHaveAttribute("datetime", first.created_at);
-  await fireEvent.click(linked);
+  await fireEvent.click(
+    within(linked).getByRole("button", {
+      name: /Show Helper Bot's message .* in chat/,
+    }),
+  );
   await waitFor(() =>
     expect(document.querySelector(`[data-bot-entry-id="${first.id}"]`)).toHaveAttribute(
       "data-highlighted",
@@ -576,7 +579,7 @@ test("opens context from the message menu and reveals an earlier linked message"
   expect(pages.mock.calls.some(([, page]) => page.before === "older")).toBe(true);
 });
 
-test("shows whole messages with their line breaks in the context tab", async () => {
+test("renders context messages as Markdown without dropping content", async () => {
   const ending = "This final sentence must stay visible.";
   const first = { ...reply, content: `Checked:\n\n- ${"long ".repeat(500)}\n\n${ending}` };
   const latest = message(5, "user_input", "Proceed");
@@ -589,10 +592,11 @@ test("shows whole messages with their line breaks in the context tab", async () 
   await fireEvent.contextMenu(await screen.findByText("Proceed"), { clientX: 10, clientY: 10 });
   await fireEvent.click(await screen.findByRole("menuitem", { name: "View context" }));
   const panel = await screen.findByRole("complementary");
-  const text = (await within(panel).findByText(new RegExp(ending))).closest("span")!;
-  expect(text.textContent).toBe(`Checked:\n${"long ".repeat(500).trim()}\n${ending}`);
-  expect(text).toHaveClass("whitespace-pre-line");
-  expect(text).not.toHaveClass("line-clamp-3");
+  const item = panel.querySelector(`[data-context-message="${first.id}"]`)!;
+  await within(item).findByText(ending);
+  expect(item).toHaveTextContent("Checked:");
+  expect(item).toHaveTextContent(ending);
+  expect(item.querySelector("ul li")).toHaveTextContent("long long long");
 });
 
 const todo = {

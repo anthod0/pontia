@@ -21,6 +21,7 @@
     sessionId?: string
     /** Absolute path of the containing document, or a directory ending in `/`, used to resolve relative local links. */
     linkBase?: string | null
+    variant?: 'default' | 'context'
   }
 
   const renderers: Partial<Renderers> = {
@@ -39,6 +40,7 @@
     streamId,
     sessionId,
     linkBase = null,
+    variant = 'default',
     class: className,
     ref = $bindable(null),
     ...restProps
@@ -49,8 +51,10 @@
   bind:this={ref}
   class={cn(
     'size-full min-w-0 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
-    markdown
+    markdown && variant === 'default'
       ? 'max-w-full overflow-x-auto text-sm leading-[1.85] [&_a]:text-primary [&_a]:underline [&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_code]:font-mono [&_code]:text-xs [&_code]:text-primary [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_em]:italic [&_h1]:mb-4 [&_h1]:mt-6 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:mb-3 [&_h2]:mt-5 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:mt-4 [&_h3]:text-lg [&_h3]:font-semibold [&_h4]:mb-2 [&_h4]:mt-3 [&_h4]:font-semibold [&_hr]:my-6 [&_hr]:border-border [&_li]:my-1 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-3 [&_strong]:font-semibold [&_table]:my-4 [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto [&_table]:w-full [&_table]:border-collapse [&_table]:text-left [&_tbody_tr:last-child]:border-0 [&_td]:border [&_td]:border-border [&_td]:px-3 [&_td]:py-2 [&_th]:border [&_th]:border-border [&_th]:bg-muted [&_th]:px-3 [&_th]:py-2 [&_th]:font-semibold [&_thead_tr]:border-b [&_tr]:border-border [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5'
+      : markdown
+        ? 'max-w-full overflow-x-auto [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-[3px] [&_blockquote]:my-3 [&_blockquote]:border-l-[3px] [&_blockquote]:border-border [&_blockquote]:py-0.5 [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.87em] [&_code]:text-primary [&_em]:italic [&_h1]:mt-[18px] [&_h1]:mb-2 [&_h1]:text-[1.2em] [&_h1]:leading-[1.5] [&_h1]:font-semibold [&_h2]:mt-[18px] [&_h2]:mb-2 [&_h2]:text-[1.13em] [&_h2]:leading-[1.5] [&_h2]:font-semibold [&_h3]:mt-[18px] [&_h3]:mb-2 [&_h3]:text-[1.06em] [&_h3]:leading-[1.5] [&_h3]:font-semibold [&_h4]:mt-3 [&_h4]:mb-2 [&_h4]:font-semibold [&_hr]:my-4 [&_hr]:border-border [&_li]:my-1 [&_li::marker]:text-muted-foreground [&_ol]:my-2.5 [&_ol]:list-decimal [&_ol]:pl-[1.4em] [&_p]:my-2.5 [&_strong]:font-semibold [&_table]:my-3 [&_table]:block [&_table]:max-w-full [&_table]:w-full [&_table]:overflow-x-auto [&_table]:rounded-[10px] [&_table]:border [&_table]:border-border [&_table]:border-collapse [&_table]:text-left [&_table]:text-[0.93em] [&_tbody_tr:last-child_td]:border-b-0 [&_td]:border-b [&_td]:border-border [&_td]:px-3 [&_td]:py-[7px] [&_td]:whitespace-nowrap [&_th]:border-b [&_th]:border-border [&_th]:bg-muted [&_th]:px-3 [&_th]:py-[7px] [&_th]:font-semibold [&_th]:whitespace-nowrap [&_ul]:my-2.5 [&_ul]:list-disc [&_ul]:pl-[1.4em] [&_[data-code-block]]:my-3 [&_[data-code-block]]:rounded-[10px] [&_[data-code-block-body]_.markdown-code-highlight]:text-[0.87em]'
       : 'whitespace-pre-wrap',
     className,
   )}

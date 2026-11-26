@@ -58,7 +58,7 @@
 {/snippet}
 
 {#if timeline.bot}
-  <DesktopBotPanel bind:this={panel} bot={timeline.bot} count={timeline.openTodoCount} fileSessionId={timeline.fileLinkSession?.session_id ?? null} onjump={chat.jumpTo} onquote={chat.addQuote} onreply={chat.replyTodo} ontodochange={chat.changeTodo} />
+  <DesktopBotPanel bind:this={panel} bot={timeline.bot} count={timeline.openTodoCount} fileLinkSession={timeline.fileLinkSession} onjump={chat.jumpTo} onquote={chat.addQuote} onreply={chat.replyTodo} ontodochange={chat.changeTodo} />
   <!-- The feed scrolls beneath the transparent top bar, like the Session chat page. -->
   <section class="mx-auto -mt-12 flex h-dvh max-w-3xl flex-col" aria-label={timeline.bot.name}>
     <BotConversation {chat} oncontext={id=>panel?.viewContext(id)} ontodos={()=>panel?.viewTodos()} />

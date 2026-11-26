@@ -21,7 +21,7 @@
   import * as Tabs from '$lib/components/ui/tabs/index.js'
   import { t } from '$lib/i18n'
   import MessageTime from '$lib/components/MessageTime.svelte'
-  import { entryQuote, entryText, parseQuotedMessage, plainText, todoSummary, withoutLinks, type BotQuote } from '$lib/botQuote'
+  import { entryQuote, todoSummary, type BotQuote } from '$lib/botQuote'
   import type { Bot, BotMessage, BotSearchType } from '../../../api/types'
   import { useDeviceRuntime } from '../../../device/context'
   import type { LocalhostPreviewTarget } from '$lib/localhostPreview'
@@ -33,6 +33,7 @@
   import BotAvatar from '../../../components/bots/BotAvatar.svelte'
   import BotMessageSearch from '../../../components/bots/BotMessageSearch.svelte'
   import BotGitTab from '../../../components/bots/BotGitTab.svelte'
+  import BotContextList from '../../../components/bots/BotContextList.svelte'
   import RecentFileList from '../../../components/chat/files/RecentFileList.svelte'
   import { createRecentFiles, withRecentFile } from '$lib/botRecentFiles'
   import { botPanelTabs, type PanelTab } from '$lib/botPanelTab'
@@ -42,11 +43,11 @@
   import { registerShortcut } from '$lib/shortcuts/dispatch'
   import { adjacentValue } from '$lib/shortcuts/sessionNavigation'
 
-  let { bot, count, fileSessionId, onjump, onquote, onreply, ontodochange }: {
+  let { bot, count, fileLinkSession, onjump, onquote, onreply, ontodochange }: {
     bot: Bot
     count: number
-    /** The Session that reads the Bot's shared files. */
-    fileSessionId: string | null
+    /** The Session that reads the Bot's shared files and resolves their relative links. */
+    fileLinkSession: { session_id: string; workspace: string | null } | null
     ontodochange: (id: string, open: boolean) => void
     /** Scrolls to a message; `path` names its shared file to highlight. */
     onjump: (id: string, path?: string | null) => Promise<void>
@@ -54,6 +55,7 @@
     /** Sends `text` quoting `quote`; `retry` resubmits the reply box and returns false when it cannot. */
     onreply: (quote: BotQuote, text: string, retry: () => boolean) => Promise<boolean>
   } = $props()
+  const fileSessionId = $derived(fileLinkSession?.session_id ?? null)
   const action = useTopBarAction()
   onMount(() => {
     action?.set(sidebarButton)
@@ -105,11 +107,6 @@
 
   export function viewTodos() {
     void panel.show('todo')
-  }
-
-  /** The whole message as plain text, so the Context tab never cuts it short. */
-  function fullText(message: BotMessage) {
-    return withoutLinks(message, plainText(entryText(message)))
   }
 
   async function closeOverlay() {
@@ -196,6 +193,7 @@
         {#if files}<FileTextIcon class="size-6" />{:else}<TreeStructureIcon class="size-6" />{/if}
       </Empty.Media>
       <Empty.Title>{$t(files ? 'files.noneOpen' : 'bots.noSelection')}</Empty.Title>
+      {#if !files}<Empty.Description>{$t('bots.noSelectionHint')}</Empty.Description>{/if}
     </Empty.Header>
   </Empty.Root>
 {/snippet}
@@ -260,41 +258,18 @@
     <Tabs.Content value="context" class="flex min-h-0 flex-col">
       {#if !selected}
         {@render empty(false)}
-      {:else if context.isError}
-        <div role="alert" class="p-3 text-sm">{context.error.message} <Button variant="ghost" size="xs" onclick={() => context.refetch()}>{$t('common.retry')}</Button></div>
-      {:else if context.data}
-        <div class="min-h-0 flex-1 overflow-auto overscroll-contain p-3">
-          {#if context.data.truncated}<p class="pb-3 text-center text-xs text-muted-foreground">{$t('bots.contextTruncated')}</p>{/if}
-          <ol class="relative space-y-2 before:absolute before:inset-y-4 before:left-[18px] before:w-px before:bg-border">
-            {#each context.data.messages as message (message.id)}
-              {@const user = message.kind === 'user_input'}
-              <li class="relative">
-                <button type="button" aria-current={message.id === selected ? 'true' : undefined}
-                  class={['flex w-full gap-2.5 rounded-xl p-2 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring', message.id === selected && 'bg-muted ring-2 ring-primary/50']}
-                  onclick={() => jump(message.id)}>
-                  <span class="relative grid size-5 shrink-0 place-items-center rounded-full bg-surface ring-4 ring-surface">
-                    {#if user}<span aria-hidden="true" class="grid size-5 place-items-center rounded-full bg-border text-[10px] font-semibold text-heading">{$t('bots.you').slice(0, 1)}</span>
-                    {:else}<BotAvatar shape={bot.avatar_shape} color={bot.avatar_color} class="size-5" />{/if}
-                  </span>
-                  <span class="min-w-0 flex-1">
-                    <span class="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
-                      <span class="font-medium text-heading [overflow-wrap:anywhere]">{user ? $t('bots.you') : bot.name}</span>
-                      <MessageTime value={message.created_at} class="px-0 whitespace-nowrap" />
-                      {#if message.todo?.state === 'open'}<span class="ml-auto rounded bg-primary/10 px-1.5 text-[11px] font-medium whitespace-nowrap text-primary">{$t('bots.todos')}</span>
-                      {:else if message.todo?.state === 'done'}<span class="ml-auto flex items-center gap-0.5 whitespace-nowrap"><CheckCircleIcon class="size-3" />{$t('bots.todoDone')}</span>{/if}
-                      {#if user && parseQuotedMessage(message.content).quote}<span class="flex items-center gap-0.5 whitespace-nowrap"><QuotesIcon class="size-3" />{$t('bots.quoted')}</span>{/if}
-                    </span>
-                    <span class="block text-[13px] leading-5 whitespace-pre-line [overflow-wrap:anywhere]">{fullText(message)}</span>
-                    {#if message.status === 'failed'}<span class="text-xs text-destructive">{$t('bots.sendFailed')}</span>{/if}
-                  </span>
-                </button>
-              </li>
-            {/each}
-          </ol>
-          {#if context.data.messages.length === 1}<p class="pt-4 text-center text-xs text-muted-foreground">{$t('bots.noRelated')}</p>{/if}
-        </div>
       {:else}
-        <p role="status" class="p-3 text-sm text-muted-foreground">{$t('common.loading')}</p>
+        <BotContextList
+          {bot}
+          {selected}
+          messages={context.data?.messages}
+          truncated={context.data?.truncated}
+          error={context.error}
+          {fullscreen}
+          {fileLinkSession}
+          onretry={() => void context.refetch()}
+          onjump={jump}
+        />
       {/if}
     </Tabs.Content>
     <Tabs.Content value="search" class="flex min-h-0 flex-col">

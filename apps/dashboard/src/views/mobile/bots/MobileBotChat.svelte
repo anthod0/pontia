@@ -187,6 +187,6 @@
     </div>
     <MobileBotMenuSheet bind:open={menu} bot={timeline.bot} onselect={select} onsaved={() => timeline.refresh(true)} />
     <MobileBotTodoSheet bind:open={todos} {chat} oncontext={viewContext} onjump={jump} />
-    <MobileBotContextSheet bind:open={context} bot={timeline.bot} id={contextId} onjump={jump} />
+    <MobileBotContextSheet bind:open={context} bot={timeline.bot} id={contextId} fileLinkSession={timeline.fileLinkSession} onjump={jump} />
   {:else if !timeline.refreshError}<MobileBotChatSkeleton />{/if}
 </section>

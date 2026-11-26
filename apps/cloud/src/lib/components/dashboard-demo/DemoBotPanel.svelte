@@ -28,6 +28,7 @@
 	import BotAvatarMark from '$lib/components/bot-story/BotAvatarMark.svelte';
 	import DemoFilesTab from './DemoFilesTab.svelte';
 	import DemoGitChanges from './DemoGitChanges.svelte';
+	import DemoBotContextList from './DemoBotContextList.svelte';
 	import DemoPreviewTab from './DemoPreviewTab.svelte';
 	import DemoStackHeader from './DemoStackHeader.svelte';
 	import GlobeIcon from 'phosphor-svelte/lib/GlobeIcon';
@@ -106,6 +107,7 @@
 		const quotes = target?.kind === 'user' ? target.quote : undefined;
 		return messages.filter((entry) => entry.id === selected || entry.id === quotes || (entry.kind === 'user' && entry.quote === selected));
 	});
+	const contextSubtitle = $derived(context.length ? `${context.length} messages · ${context[0].time} – ${context.at(-1)!.time}` : bot.name);
 	const results = $derived(query.trim() ? messages.filter((entry) => plainText(entry).toLowerCase().includes(query.trim().toLowerCase())).reverse() : []);
 	const workspace = $derived(workspaces.find((item) => item.id === workspaceId));
 
@@ -247,7 +249,7 @@
 			<button type="button" class={iconButton} aria-label="Close" title="Close" onclick={onclose}><XIcon class="size-4" /></button>
 		</header>
 		<div class="hidden @max-3xl/demo:block">
-			<DemoStackHeader title={stack?.title ?? (tab === 'files' && file ? file : tabTitles[tab])} subtitle={stack ? stack.subtitle : bot.name} onback={back} />
+			<DemoStackHeader title={stack?.title ?? (tab === 'files' && file ? file : tabTitles[tab])} subtitle={stack ? stack.subtitle : tab === 'context' ? contextSubtitle : bot.name} onback={back} />
 		</div>
 
 		{#if tab === 'preview'}<DemoPreviewTab bind:url={preview} />{/if}
@@ -256,37 +258,9 @@
 
 		<Tabs.Content value="context" class="flex min-h-0 flex-col">
 			{#if !context.length}
-				{@render empty(TreeStructureIcon, 'No message selected')}
+				{@render empty(TreeStructureIcon, 'No message selected', "Choose View context from a message's menu.")}
 			{:else}
-				<div class="demo-scroll min-h-0 flex-1 overflow-auto p-3">
-					<ol class="relative space-y-2 before:absolute before:inset-y-4 before:left-[18px] before:w-px before:bg-border">
-						{#each context as entry (entry.id)}
-							{@const user = entry.kind === 'user'}
-							<li class="relative">
-								<button
-									type="button"
-									aria-current={entry.id === selected ? 'true' : undefined}
-									class={cn('flex w-full gap-2.5 rounded-xl p-2 text-left hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary', entry.id === selected && 'bg-muted ring-2 ring-primary/50')}
-									onclick={() => onjump(entry.id)}
-								>
-									<span class="relative grid size-5 shrink-0 place-items-center rounded-full bg-surface ring-4 ring-surface">{@render avatar(entry, 'size-5')}</span>
-									<span class="min-w-0 flex-1">
-										<span class="flex items-center gap-1.5 text-xs text-muted-foreground">
-											<span class="font-medium text-heading">{user ? 'You' : bot.name}</span>
-											<span class="tabular-nums">{entry.time}</span>
-											{#if entry.kind === 'bot' && entry.todo === 'open'}<span class="ml-auto rounded bg-primary/10 px-1.5 text-[11px] font-medium text-primary">Todo</span>
-											{:else if entry.kind === 'bot' && entry.todo}<span class="ml-auto flex items-center gap-0.5"><CheckCircleIcon class="size-3" />Done</span>{/if}
-											{#if entry.kind === 'user' && entry.quote}<span class="flex items-center gap-0.5"><QuotesIcon class="size-3" />Quoted</span>{/if}
-										</span>
-										<span class="text-[13px] leading-5 [overflow-wrap:anywhere]">{plainText(entry)}</span>
-										{#if entry.kind === 'user' && entry.failed}<span class="text-xs text-destructive">Message failed to send</span>{/if}
-									</span>
-								</button>
-							</li>
-						{/each}
-					</ol>
-					{#if context.length === 1}<p class="pt-4 text-center text-xs text-muted-foreground">No related messages</p>{/if}
-				</div>
+				<DemoBotContextList {bot} messages={context} selected={selected!} {onjump} onopenfile={onopenfile} />
 			{/if}
 		</Tabs.Content>
 
