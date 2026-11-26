@@ -9,6 +9,8 @@ import type {
   AgentClientSetupOperation,
   AgentClientOperation,
   AgentClientAuthStatus,
+  AgentClientAuthProbe,
+  AgentClientAuthSession,
   Bot,
   BotMessage,
   BotMessagePage,
@@ -358,6 +360,93 @@ export function createApi(device: DeviceRuntime) {
     return (
       await request<{ auth: AgentClientAuthStatus }>(`${agentClientPath(target)}/auth`, options)
     ).auth;
+  }
+
+  async function probeAgentClientAuth(
+    options: ReadRequestOptions = {},
+  ): Promise<AgentClientAuthProbe> {
+    return (
+      await request<{ auth_probe: AgentClientAuthProbe }>("/agent-clients/auth-probe", options)
+    ).auth_probe;
+  }
+
+  async function startAgentClientLogin(
+    target: AgentClientView,
+    methodId: string,
+    fields: Record<string, string> = {},
+  ): Promise<AgentClientAuthSession> {
+    return (
+      await request<{ session: AgentClientAuthSession }>(
+        `${agentClientPath(target)}/auth/sessions`,
+        { method: "POST", body: { method_id: methodId, fields }, mutating: true },
+      )
+    ).session;
+  }
+
+  async function getAgentClientLoginSession(
+    target: AgentClientView,
+    sessionId: string,
+    options: ReadRequestOptions = {},
+  ): Promise<AgentClientAuthSession> {
+    return (
+      await request<{ session: AgentClientAuthSession }>(
+        `${agentClientPath(target)}/auth/sessions/${encodeURIComponent(sessionId)}`,
+        options,
+      )
+    ).session;
+  }
+
+  async function streamAgentClientLoginSession(
+    target: AgentClientView,
+    sessionId: string,
+    signal: AbortSignal,
+  ): Promise<Response> {
+    const headers = new Headers();
+    device.access.applyApiAuthentication(headers);
+    const response = await device.access.apiFetch(
+      device.access.apiUrl(
+        `${API_BASE}${agentClientPath(target)}/auth/sessions/${encodeURIComponent(sessionId)}/stream`,
+      ),
+      {
+        headers,
+        credentials: device.access.apiCredentials,
+        signal: device.access.apiSignal(signal),
+      },
+    );
+    if (!response.ok || !response.body) {
+      if (isAuthenticationFailure(response.status)) device.access.handleApiAuthenticationFailure();
+      throw new ApiError(
+        `Login stream failed: ${response.status} ${response.statusText}`,
+        "auth_session_stream_failed",
+        response.status,
+      );
+    }
+    return response;
+  }
+
+  async function cancelAgentClientLogin(
+    target: AgentClientView,
+    sessionId: string,
+  ): Promise<AgentClientAuthSession> {
+    return (
+      await request<{ session: AgentClientAuthSession }>(
+        `${agentClientPath(target)}/auth/sessions/${encodeURIComponent(sessionId)}/cancel`,
+        { method: "POST", mutating: true },
+      )
+    ).session;
+  }
+
+  async function submitAgentClientLoginInput(
+    target: AgentClientView,
+    sessionId: string,
+    input: unknown,
+  ): Promise<AgentClientAuthSession> {
+    return (
+      await request<{ session: AgentClientAuthSession }>(
+        `${agentClientPath(target)}/auth/sessions/${encodeURIComponent(sessionId)}/input`,
+        { method: "POST", body: input, mutating: true },
+      )
+    ).session;
   }
 
   async function listSessionCreationOptions(
@@ -1122,6 +1211,12 @@ export function createApi(device: DeviceRuntime) {
     cancelAgentClientOperation,
     streamAgentClientOperation,
     getAgentClientAuth,
+    probeAgentClientAuth,
+    startAgentClientLogin,
+    getAgentClientLoginSession,
+    streamAgentClientLoginSession,
+    cancelAgentClientLogin,
+    submitAgentClientLoginInput,
     listSessionCreationOptions,
     listPendingInteractions,
     getInteraction,

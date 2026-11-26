@@ -38,7 +38,7 @@
 </script>
 
 {#key device}
-  <DeviceProvider {device}>
+  <DeviceProvider {device} onboarding={!!$token.trim()}>
     {#if $token.trim()}
       <AppShell>{@render children()}</AppShell>
     {:else}

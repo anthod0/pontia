@@ -9,6 +9,7 @@
   import { registerShortcut } from '$lib/shortcuts/dispatch'
   import { adjacentValue } from '$lib/shortcuts/sessionNavigation'
   import { targetLabelClass, targetSegmentClass, targetToolbarClass } from './targetSegment'
+  import { useAgentClientOnboardingStatus } from '../../features/onboarding/context.svelte'
 
   interface Props {
     workspaceId: string
@@ -37,7 +38,8 @@
   }: Props = $props()
 
   const selectedOption = $derived(creationOptions.find((option) => option.id === creationOptionId))
-  const clientSelectDisabled = $derived(!fixedWorkspace && (disabled || !creationOptions.length))
+  const onboarding = useAgentClientOnboardingStatus()
+  const clientSelectDisabled = $derived(!fixedWorkspace && (disabled || onboarding?.probing || !creationOptions.length))
   const workspaceSelectDisabled = $derived(fixedWorkspace || disabled || workspacesLoading || !workspaces.length)
 
   registerShortcut('switchAgentClient', event => {
@@ -77,7 +79,7 @@
       options={creationOptions} keyOf={option => option.id} labelOf={option => option.name}>
       {#snippet trigger()}
         <ClientIcon clientType={selectedOption?.client_type} acpAgentId={selectedOption?.metadata.acp_agent_id} class="size-3.5 text-foreground" />
-        <span class={targetLabelClass}>{selectedOption?.name ?? $t('clients.agentClient')}</span>
+        <span class={targetLabelClass}>{onboarding?.probing ? $t('onboarding.clients.probing') : selectedOption?.name ?? $t('clients.agentClient')}</span>
       {/snippet}
       {#snippet option(option)}
         <ClientIcon clientType={option.client_type} acpAgentId={option.metadata.acp_agent_id} class="size-3.5 text-foreground" />

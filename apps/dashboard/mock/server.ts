@@ -25,10 +25,11 @@ export interface MockDevice {
   data: MockData;
   streams: Set<(event: DashboardStreamEvent) => void>;
   timers: Map<string, ReturnType<typeof setTimeout>>;
+  authProbed: boolean;
 }
 
 export function createMockDevice(data: MockData): MockDevice {
-  return { data, streams: new Set(), timers: new Map() };
+  return { data, streams: new Set(), timers: new Map(), authProbed: false };
 }
 
 /** A response body sent without the `{ data, meta, error }` envelope. */
@@ -442,6 +443,27 @@ function findAgentClient(device: MockDevice, clientType: string, clientKey: stri
   );
 }
 
+function mockClientAuth(client: ReturnType<typeof findAgentClient>) {
+  const managed = client.client_type === "codex" || client.client_key === "grok";
+  return {
+    state: client.client_key === "antigravity" ? "unknown" : "unauthenticated",
+    checked_at: now(),
+    methods: managed
+      ? [
+          {
+            id: "device_code",
+            label: `${client.name} Account`,
+            kind: "device_code",
+            recommended: true,
+            remote_compatible: true,
+            start_fields: [],
+          },
+        ]
+      : [],
+    supports_logout: false,
+  };
+}
+
 function findInboxMessage(session: MockSession, messageId: string): InboxMessageView {
   return (
     session.inbox.find((message) => message.message_id === messageId) ?? notFound("Inbox message")
@@ -599,6 +621,33 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
 
   ["GET", "/agent-client-setup", ({ device }) => ({ operation: device.data.clientSetup })],
   ["GET", "/agent-client-operations/latest", () => ({ operation: null })],
+  [
+    "GET",
+    "/agent-clients/auth-probe",
+    ({ device }) => {
+      const firstProbe = !device.authProbed;
+      device.authProbed = true;
+      return {
+        auth_probe: {
+          first_probe: firstProbe,
+          agent_clients: firstProbe
+            ? device.data.agentClients.map((client) => ({
+                client_type: client.client_type,
+                client_key: client.client_key,
+                auth: mockClientAuth(client),
+              }))
+            : [],
+        },
+      };
+    },
+  ],
+  [
+    "GET",
+    "/agent-clients/:type/:key/auth",
+    ({ device, params: [type, key] }) => ({
+      auth: mockClientAuth(findAgentClient(device, type, key)),
+    }),
+  ],
   [
     "POST",
     "/agent-clients/:type/:key/setup",

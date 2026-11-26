@@ -201,8 +201,83 @@ export interface AgentClientAuthStatus {
   account?: { label?: string; plan?: string; provider?: string; workspace?: string };
   detail?: string;
   checked_at: string;
-  methods: Array<{ id: string }>;
+  methods: AgentClientAuthMethod[];
   supports_logout: boolean;
+  active_session_id?: string;
+}
+
+export interface AgentClientAuthMethod {
+  id: string;
+  label: string;
+  description?: string;
+  kind: "device_code" | "oauth_loopback_relay" | "oauth_code_paste" | "api_key";
+  recommended: boolean;
+  remote_compatible: boolean;
+  start_fields: AgentClientAuthField[];
+}
+
+export interface AgentClientAuthField {
+  name: string;
+  label: string;
+  kind:
+    | { type: "text" | "url" | "secret" }
+    | { type: "select"; options: Array<{ value: string; label: string }> };
+  required: boolean;
+  placeholder?: string;
+  default_value?: string;
+  description?: string;
+}
+
+export interface AgentClientAuthProbe {
+  first_probe: boolean;
+  agent_clients: Array<{
+    client_type: string;
+    client_key: string;
+    auth: AgentClientAuthStatus;
+  }>;
+}
+
+export type AgentClientAuthStep =
+  | { type: "pending"; message?: string }
+  | {
+      type: "device_code";
+      verification_url: string;
+      user_code: string;
+      expires_in_secs?: number;
+      message?: string;
+    }
+  | {
+      type: "browser_redirect";
+      auth_url: string;
+      relay_mode: "paste_callback_url" | "paste_auth_code" | "auto_local_callback";
+      callback_hint?: string;
+      message?: string;
+    }
+  | { type: "await_input"; prompt: string; fields: AgentClientAuthField[] }
+  | { type: "completing"; message?: string }
+  | { type: "succeeded"; status: AgentClientAuthStatus }
+  | { type: "failed"; code: string; message: string; retryable: boolean }
+  | { type: "cancelled"; message?: string };
+
+export interface AgentClientAuthSession {
+  session_id: string;
+  client_type: string;
+  client_key: string;
+  method_id: string;
+  state:
+    | "starting"
+    | "awaiting_user"
+    | "completing"
+    | "succeeded"
+    | "failed"
+    | "cancelled"
+    | "timed_out";
+  step: AgentClientAuthStep;
+  sequence: number;
+  created_at: string;
+  updated_at: string;
+  expires_at: string;
+  terminal_at?: string;
 }
 
 export interface AgentClientSetupOperation {

@@ -44,7 +44,7 @@
   {@render children()}
 {:else if device}
   {#key device}
-    <DeviceProvider {device}>
+    <DeviceProvider {device} onboarding>
       {#if handle && currentPath === '/new' && !isMobileShell()}
         <NewChatPage routeScope={host.routeScope} {deviceSelector} />
       {:else if handle}

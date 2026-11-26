@@ -13,6 +13,7 @@
   import { Input } from '$lib/components/ui/input/index.js'
   import { Label } from '$lib/components/ui/label/index.js'
   import { Textarea } from '$lib/components/ui/textarea/index.js'
+  import { useAgentClientOnboardingStatus } from '../../features/onboarding/context.svelte'
 
   let { bot, onboarding, oncancel, onsaved, saving = $bindable(false) }: {
     bot?: Bot
@@ -23,6 +24,7 @@
   } = $props()
   const id = $props.id()
   const device = useDeviceRuntime()
+  const clientOnboarding = useAgentClientOnboardingStatus()
   const clients = createQuery(
     () => ({
       queryKey: ['bot-clients'],
@@ -102,13 +104,13 @@
       reasoningEffort = ''
       effortUnavailable = false
       modelAvailable = false
-    }} disabled={saving || !clients.data?.length}
+    }} disabled={saving || clientOnboarding?.probing || !clients.data?.length}
       label={$t('clients.agentClient')} triggerClass="w-full" id={`${id}-client`}
       options={clients.data ?? []} keyOf={client => client.id} labelOf={client => client.name}>
       {#snippet trigger()}
         <span class="flex min-w-0 items-center gap-2">
           {#if selected}<ClientIcon clientType={selected.client_type} acpAgentId={selected.client_key} class="size-4 text-foreground" />{/if}
-          <span class="truncate">{selected?.name ?? $t(clients.isPending ? 'common.loading' : 'clients.choose')}</span>
+          <span class="truncate">{clientOnboarding?.probing ? $t('onboarding.clients.probingMobile') : selected?.name ?? $t(clients.isPending ? 'common.loading' : 'clients.choose')}</span>
         </span>
       {/snippet}
       {#snippet option(client)}
