@@ -394,8 +394,11 @@ impl ClientSession for Adapter {
             let id = {
                 let state = peer.state.lock().await;
                 let input = state.input.as_ref().ok_or_else(unavailable)?;
-                if turn.is_none() || input.turn.as_deref() != turn || state.closing || state.closed
-                {
+                let matches = match turn {
+                    Some(turn) => input.turn.as_deref() == Some(turn),
+                    None => input.turn.is_none(),
+                };
+                if !matches || state.closing || state.closed {
                     return Err(unavailable());
                 }
                 input.id.clone()
@@ -450,7 +453,7 @@ impl ClientSession for Adapter {
                 ..Default::default()
             };
             if let Some((pool, _)) = self.context.get() {
-                offline.accept_task = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM sessions s WHERE s.session_id=? AND s.state='exited' AND json_extract((SELECT payload FROM events WHERE session_id=s.session_id AND event_type='session.exited' ORDER BY rowid DESC LIMIT 1),'$.reason')='claude_sdk_closed')")
+                offline.accept_task = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM sessions s WHERE s.session_id=? AND s.state='exited' AND (json_extract((SELECT payload FROM events WHERE session_id=s.session_id AND event_type='session.exited' ORDER BY rowid DESC LIMIT 1),'$.reason')='claude_sdk_closed' OR EXISTS(SELECT 1 FROM session_runtimes r WHERE r.session_id=s.session_id AND r.state='exited' AND r.runtime_id=json_extract((SELECT payload FROM events WHERE session_id=s.session_id AND event_type='session.exited' ORDER BY rowid DESC LIMIT 1),'$.runtime_id'))))")
                     .bind(session).fetch_one(pool).await?;
             }
             let Ok(peer) = self.peer(session).await else {

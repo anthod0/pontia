@@ -24,24 +24,26 @@ impl Adapter {
             return Ok(());
         }
         if let Some(previous) = peers.get(&target.session_id)
-            && (!previous.state.lock().await.closed
-                || previous.connection()?.process.observe()
-                    != pontia_runtime::ProcessObservation::Exited)
+            && previous.connection()?.process.observe()
+                != pontia_runtime::ProcessObservation::Exited
         {
             return Err(Error::CapabilityUnavailable(
-                "Claude Code previous execution has not confirmed closure".into(),
+                "Claude Code previous execution has not exited".into(),
             ));
         }
-        // Runtime exit alone proves only host exit. Require the persisted SDK
-        // close confirmation, including when the control service was restarted.
         let payload: Option<String> = sqlx::query_scalar("SELECT payload FROM events WHERE session_id=? AND event_type='session.exited' ORDER BY rowid DESC LIMIT 1")
             .bind(&target.session_id).fetch_optional(&events.db()).await?;
         let payload: Value = payload
             .map(|s| serde_json::from_str(&s))
             .transpose()?
             .unwrap_or(Value::Null);
-        if payload["reason"] != "claude_sdk_closed"
-            || payload["runtime_id"].as_str() != target.runtime_id.as_deref()
+        let runtime_exited: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM session_runtimes WHERE session_id=? AND runtime_id=? AND state='exited')")
+            .bind(&target.session_id)
+            .bind(target.runtime_id.as_deref())
+            .fetch_one(&events.db())
+            .await?;
+        if payload["runtime_id"].as_str() != target.runtime_id.as_deref()
+            || (payload["reason"] != "claude_sdk_closed" && !runtime_exited)
         {
             return Err(Error::CapabilityUnavailable(
                 "Claude Code previous execution state is unknown".into(),

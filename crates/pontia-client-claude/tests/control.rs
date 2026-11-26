@@ -975,37 +975,73 @@ async fn missing_history_is_an_error_and_never_starts_a_replacement_conversation
 }
 
 #[tokio::test]
-async fn host_loss_keeps_history_readable_and_does_not_authorize_parallel_resume() {
+async fn host_loss_allows_manual_and_input_driven_resume_after_process_exit() {
+    for input_driven in [false, true] {
+        let h = Harness::new().await;
+        let session = h.create("unfinished").await;
+        h.gate(&session, 1, "start");
+        h.wait_states(&session, &["running"]).await;
+        assert!(
+            h.app
+                .session_commands()
+                .resume_session(&session, h.root.path())
+                .await
+                .is_err()
+        );
+        h.gate(&session, 1, "lost");
+        h.wait_session(&session, "exited").await;
+        h.wait_states(&session, &["interrupted"]).await;
+        assert!(
+            h.app
+                .queries()
+                .get_session(&session)
+                .await
+                .unwrap()
+                .unwrap()
+                .capabilities
+                .accept_task
+        );
+        if input_driven {
+            let result = h.resume_input(&session, "automatic recovery").await;
+            assert_eq!(result["inbox_message"]["state"], "resuming");
+        } else {
+            h.app
+                .session_commands()
+                .resume_session(&session, h.root.path())
+                .await
+                .unwrap();
+            h.submit(&session, "manual recovery").await;
+        }
+        h.wait_inputs(&session, 2).await;
+        assert_eq!(
+            h.wire(&session)
+                .iter()
+                .filter(|value| value["method"] == "spawn")
+                .count(),
+            2
+        );
+        h.stop().await;
+    }
+}
+
+#[tokio::test]
+async fn host_loss_does_not_resume_when_native_history_is_unreadable() {
     let h = Harness::new().await;
-    let session = h.create("unfinished").await;
+    let session = h.create("unreadable after loss").await;
     h.gate(&session, 1, "start");
     h.wait_states(&session, &["running"]).await;
-    assert!(
-        h.app
-            .session_commands()
-            .resume_session(&session, h.root.path())
-            .await
-            .is_err()
-    );
+    let binding = pontia_agent_control::AgentBindingService::new(h.app.db())
+        .binding_for_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
     h.gate(&session, 1, "lost");
-    tokio::time::timeout(Duration::from_secs(5), async {
-        loop {
-            let view = serde_json::to_value(
-                h.app
-                    .queries()
-                    .get_session(&session)
-                    .await
-                    .unwrap()
-                    .unwrap(),
-            )
-            .unwrap();
-            if view["claude-agent"]["unavailable_reason"] == "host_unavailable" {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(5)).await;
-        }
-    })
-    .await
+    h.wait_session(&session, "exited").await;
+    std::fs::remove_file(
+        h.root
+            .path()
+            .join(format!("history-{}.jsonl", binding.client_session_key)),
+    )
     .unwrap();
     assert!(
         h.app
@@ -1015,28 +1051,27 @@ async fn host_loss_keeps_history_readable_and_does_not_authorize_parallel_resume
             .is_err()
     );
     assert_eq!(
-        h.history(&session).await.unwrap().groups[0].items[0]
-            .item
-            .content_preview,
-        "unfinished"
-    );
-    h.app.inbox_commands().notify_available(&session);
-    h.app.inbox_commands().drain_inbox(&session).await.unwrap();
-    assert_eq!(h.turns(&session).await[0].1, "running");
-    assert_eq!(
         h.wire(&session)
             .iter()
-            .filter(|v| v["method"] == "spawn")
+            .filter(|value| value["method"] == "spawn")
             .count(),
         1
     );
-    assert_eq!(
-        h.wire(&session)
-            .iter()
-            .filter(|v| v["method"] == "input")
-            .count(),
-        1
-    );
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn host_exit_after_the_control_socket_closes_still_allows_resume() {
+    let h = Harness::new().await;
+    let session = h.create("delayed loss").await;
+    h.gate(&session, 1, "start");
+    h.wait_states(&session, &["running"]).await;
+    h.gate(&session, 1, "lost");
+    h.wait_session(&session, "exited").await;
+    h.wait_states(&session, &["interrupted"]).await;
+    let result = h.resume_input(&session, "after delayed exit").await;
+    assert_eq!(result["inbox_message"]["state"], "resuming");
+    h.wait_inputs(&session, 2).await;
     h.stop().await;
 }
 
@@ -1141,6 +1176,31 @@ async fn parallel_approvals_are_claimed_once_and_never_release_the_turn_boundary
 }
 
 #[tokio::test]
+async fn waiting_interaction_without_a_turn_can_be_interrupted() {
+    let h = Harness::new().await;
+    let session = h.create("approval-before-turn").await;
+    h.interactions(&session, &["pending"]).await;
+    h.wait_session(&session, "waiting_for_interaction").await;
+    assert!(h.turns(&session).await.is_empty());
+    let outcome = h
+        .app
+        .turn_commands()
+        .interrupt_current_turn(&session)
+        .await
+        .unwrap();
+    assert!(outcome.data["turn"].is_null());
+    h.interactions(&session, &["expired"]).await;
+    assert_eq!(
+        h.wire(&session)
+            .iter()
+            .filter(|value| value["method"] == "interrupt")
+            .count(),
+        1
+    );
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn rejects_oversized_host_cards_and_registers_the_next_valid_request() {
     let h = Harness::new().await;
     let session = h.create("approval-limits").await;
@@ -1225,7 +1285,17 @@ async fn cancellation_disconnect_and_host_loss_reject_stale_choices_without_turn
                 .await
                 .is_err()
         );
-        assert_eq!(h.turns(&session).await[0].1, "running");
+        if matches!(action, "lost" | "lost-during-choice") {
+            h.wait_states(&session, &["interrupted"]).await;
+        }
+        assert_eq!(
+            h.turns(&session).await[0].1,
+            if matches!(action, "lost" | "lost-during-choice") {
+                "interrupted"
+            } else {
+                "running"
+            }
+        );
         assert_eq!(
             h.wire(&session)
                 .iter()
@@ -1523,7 +1593,7 @@ async fn lost_input_receipt_is_unknown_and_never_replayed() {
     );
     assert!(h.turns(&session).await.is_empty());
     assert!(
-        !h.app
+        h.app
             .queries()
             .get_session(&session)
             .await

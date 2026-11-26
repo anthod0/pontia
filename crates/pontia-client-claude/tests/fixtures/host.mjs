@@ -55,6 +55,7 @@ if (process.argv[2] === "history-info") {
   let pendingReady;
   let connection;
   let connected = false;
+  let delayedLoss = false;
   const reports = new Set();
   let respond;
   const permissions = new Set();
@@ -94,6 +95,19 @@ if (process.argv[2] === "history-info") {
     if (value.kind === "ready") connection.registered({sessionId: config.session_id, runtimeId: config.runtime_id, clientSessionKey: native});
     return report;
   };
+  const permissionRequest = (id) => ({
+    kind: "interaction_requested",
+    authorization_digest: "a".repeat(64),
+    interaction_key: id,
+    title: "Allow Write?",
+    description: "fixture.txt",
+    options: [
+      { key: "allow", label: "Allow once", intent: "positive" },
+      { key: "allow_always", label: "Always allow in this session: Write", intent: "positive" },
+      { key: "deny", label: "Deny", intent: "negative" },
+    ],
+    blocking: true,
+  });
   const estimate = (used) => event({
     kind: "context_usage",
     context_usage: {
@@ -143,6 +157,11 @@ if (process.argv[2] === "history-info") {
         }
         // Receipt is deliberately delivered before execution begins.
         send({ type: "response", id: request.id, status: "accepted" });
+        if (active.text === "approval-before-turn") {
+          const id = `permission-${active.number}-0`;
+          permissions.add(id);
+          await event(permissionRequest(id));
+        }
         if (active.text === "replay reports") {
           for (const { params, report } of captured) {
             const original = await report;
@@ -291,21 +310,12 @@ if (process.argv[2] === "history-info") {
         event({ kind: "reasoning", input_id: active.id, item_id: "thought", delta: " options" });
       }
       event({ kind: "text", input_id: active.id, item_id: "reply", delta: active.text });
-      if (active.text.startsWith("approval")) {
+      if (active.text.startsWith("approval") && active.text !== "approval-before-turn") {
         for (let n = 0; n < (active.text === "approval-pair" ? 2 : 1); n++) {
           const id = `permission-${active.number}-${n}`;
           permissions.add(id);
           const request = {
-            kind: "interaction_requested",
-            authorization_digest: "a".repeat(64),
-            interaction_key: id,
-            title: "Allow Write?",
-            description: "fixture.txt",
-            options: [
-              { key: "allow", label: "Allow once", intent: "positive" },
-              { key: "allow_always", label: "Always allow in this session: Write", intent: "positive" },
-              { key: "deny", label: "Deny", intent: "negative" },
-            ],
+            ...permissionRequest(id),
             blocking: active.text !== "approval-background",
           };
           if (active.text === "approval-limits") {
@@ -347,7 +357,15 @@ if (process.argv[2] === "history-info") {
       }
     }
     if (gate("cancel")) expire();
-    if (gate("lost")) process.exit(0);
+    if (gate("lost")) {
+      if (active.text === "delayed loss" && !delayedLoss) {
+        delayedLoss = true;
+        void connection.close();
+        setTimeout(() => process.exit(0), 750);
+      } else if (!delayedLoss) {
+        process.exit(0);
+      }
+    }
     if (active.started && gate("finish")) {
       if (active.text === "unsupported")
         event({ kind: "unavailable", reason: "unsupported_result" });

@@ -6,6 +6,7 @@ import { test } from "node:test";
 import { Host, ControlError } from "../src/host.js";
 import { modelOptions } from "../src/models.js";
 import type { HostEvent } from "../src/facts.js";
+import type { TerminalReason } from "@anthropic-ai/claude-agent-sdk";
 import {
   assistant,
   first,
@@ -432,6 +433,86 @@ test("a correlated API error assistant can start and fail a task without a text 
   );
   assert.equal(events.filter((e) => e.kind === "finished" && e.outcome === "failed").length, 1);
 });
+
+const terminalOutcomes: Record<TerminalReason, "completed" | "failed" | "interrupted"> = {
+  blocking_limit: "failed",
+  rapid_refill_breaker: "failed",
+  prompt_too_long: "failed",
+  image_error: "failed",
+  model_error: "failed",
+  api_error: "failed",
+  malformed_tool_use_exhausted: "failed",
+  aborted_streaming: "interrupted",
+  aborted_tools: "interrupted",
+  stop_hook_prevented: "failed",
+  hook_stopped: "failed",
+  tool_deferred: "failed",
+  max_turns: "failed",
+  background_requested: "failed",
+  completed: "completed",
+  budget_exhausted: "failed",
+  structured_output_retry_exhausted: "failed",
+  tool_deferred_unavailable: "failed",
+  turn_setup_failed: "failed",
+};
+
+for (const [reason, expected] of Object.entries(terminalOutcomes)) {
+  test(`SDK terminal reason ${reason} ends the task as ${expected}`, async (t) => {
+    const { fixture, events, host } = setup();
+    t.after(() => host.close());
+    host.submit(first, "task");
+    fixture.messages.push(init());
+    fixture.messages.push(assistant());
+    fixture.messages.push(result(first, { terminal_reason: reason }));
+    await settle();
+    assert.deepEqual(
+      events.filter((event) => event.kind === "finished").map((event) => event.outcome),
+      [expected],
+    );
+    assert.equal(events.some((event) => event.kind === "unavailable"), false);
+  });
+}
+
+for (const stopReason of ["max_tokens", "refusal"]) {
+  test(`SDK stop reason ${stopReason} fails the task without disabling the host`, async (t) => {
+    const { fixture, events, host } = setup();
+    t.after(() => host.close());
+    host.submit(first, "task");
+    fixture.messages.push(init());
+    fixture.messages.push(assistant());
+    fixture.messages.push(result(first, { stop_reason: stopReason }));
+    await settle();
+    assert.deepEqual(
+      events.filter((event) => event.kind === "finished").map((event) => event.outcome),
+      ["failed"],
+    );
+    assert.equal(events.some((event) => event.kind === "unavailable"), false);
+  });
+}
+
+for (const subtype of [
+  "error_during_execution",
+  "error_max_turns",
+  "error_max_budget_usd",
+  "error_max_structured_output_retries",
+]) {
+  test(`SDK error subtype ${subtype} without terminal_reason fails the task`, async (t) => {
+    const { fixture, events, host } = setup();
+    t.after(() => host.close());
+    host.submit(first, "task");
+    fixture.messages.push(init());
+    fixture.messages.push(assistant());
+    fixture.messages.push(
+      result(first, { subtype, is_error: true, stop_reason: null, terminal_reason: undefined }),
+    );
+    await settle();
+    assert.deepEqual(
+      events.filter((event) => event.kind === "finished").map((event) => event.outcome),
+      ["failed"],
+    );
+    assert.equal(events.some((event) => event.kind === "unavailable"), false);
+  });
+}
 
 for (const [label, reply, terminal] of [
   ["result without a start", undefined, result()],

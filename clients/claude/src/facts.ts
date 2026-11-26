@@ -1,4 +1,8 @@
-import type { SDKMessage, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
+import type {
+  SDKMessage,
+  SDKResultMessage,
+  TerminalReason,
+} from "@anthropic-ai/claude-agent-sdk";
 
 export type InteractionOption = { key: string; label: string; intent: "positive" | "negative" };
 
@@ -100,30 +104,37 @@ export class FactError extends Error {
   }
 }
 
-function outcome(message: SDKResultMessage): "completed" | "failed" | "interrupted" | undefined {
-  if (
-    message.subtype === "success" &&
-    !message.is_error &&
-    message.stop_reason === "end_turn" &&
-    message.terminal_reason === "completed"
-  )
-    return "completed";
-  if (
-    message.subtype === "success" &&
-    message.is_error &&
-    message.stop_reason === "stop_sequence" &&
-    message.terminal_reason === "api_error"
-  )
-    return "failed";
-  if (
-    ((message.subtype === "error_during_execution" && message.is_error) ||
-      (message.subtype === "success" && !message.is_error)) &&
-    (((message.stop_reason === null || message.stop_reason === "tool_use") &&
-      message.terminal_reason === "aborted_streaming") ||
-      (message.stop_reason === "tool_use" && message.terminal_reason === "aborted_tools"))
-  )
-    return "interrupted";
-  return undefined;
+type Outcome = "completed" | "failed" | "interrupted";
+
+const terminalOutcomes = {
+  blocking_limit: "failed",
+  rapid_refill_breaker: "failed",
+  prompt_too_long: "failed",
+  image_error: "failed",
+  model_error: "failed",
+  api_error: "failed",
+  malformed_tool_use_exhausted: "failed",
+  aborted_streaming: "interrupted",
+  aborted_tools: "interrupted",
+  stop_hook_prevented: "failed",
+  hook_stopped: "failed",
+  tool_deferred: "failed",
+  max_turns: "failed",
+  background_requested: "failed",
+  completed: "completed",
+  budget_exhausted: "failed",
+  structured_output_retry_exhausted: "failed",
+  tool_deferred_unavailable: "failed",
+  turn_setup_failed: "failed",
+} satisfies Record<TerminalReason, Outcome>;
+
+function outcome(message: SDKResultMessage): Outcome | undefined {
+  if (message.stop_reason === "max_tokens" || message.stop_reason === "refusal") return "failed";
+  if (message.terminal_reason !== undefined) {
+    if (!Object.hasOwn(terminalOutcomes, message.terminal_reason)) return undefined;
+    return terminalOutcomes[message.terminal_reason as TerminalReason];
+  }
+  return message.subtype === "success" && !message.is_error ? "completed" : "failed";
 }
 
 function association(

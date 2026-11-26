@@ -105,9 +105,24 @@ impl Adapter {
         // Socket loss alone is not a runtime or execution exit.
         peer.unavailable(&connection, "control_connection_lost")
             .await;
-        for _ in 0..25 {
+        let mut shutdown = app.shutdown().subscribe();
+        loop {
             if connection.process.observe() == ProcessObservation::Exited {
                 peer.unavailable(&connection, "host_unavailable").await;
+                app.event_ingest_service()
+                    .ingest_runtime_observation_event(pontia_agent_control::PontiaEvent::new(
+                        &peer.session,
+                        None,
+                        pontia_agent_control::PontiaEventSource::RuntimeManager,
+                        "claude-agent",
+                        PontiaEventType::SessionExited,
+                        json!({
+                            "reason":"host_exited",
+                            "runtime_id":peer.runtime,
+                            "role":"claude_sdk_host"
+                        }),
+                    ))
+                    .await?;
                 peer.runtime_event(
                     &app.event_ingest_service(),
                     PontiaEventType::RuntimeExited,
@@ -116,7 +131,10 @@ impl Adapter {
                 .await?;
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(20)).await;
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_millis(20)) => {}
+                _ = shutdown.wait_for(|stop| *stop) => break,
+            }
         }
         serving
     }
