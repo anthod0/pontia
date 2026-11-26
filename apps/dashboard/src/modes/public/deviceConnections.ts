@@ -95,6 +95,7 @@ export function createDeviceConnections(remote: RemoteAccess) {
       );
       if (submit) {
         toast.info(translate("preview.popupBlocked"), {
+          duration: 6000,
           action: { label: translate("preview.open"), onClick: submit },
         });
       }
@@ -110,6 +111,7 @@ export function createDeviceConnections(remote: RemoteAccess) {
             ? "preview.unavailable"
             : "preview.failed",
         ),
+        { duration: 6000 },
       );
     }
   }

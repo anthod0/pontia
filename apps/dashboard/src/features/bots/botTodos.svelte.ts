@@ -42,6 +42,7 @@ export async function setBotTodo(
     if (!open && message.todo?.state === "done" && message.todo.by === "user") {
       toast.success(translate("bots.todoCancelled"), {
         id: message.id,
+        duration: 6000,
         action: {
           label: translate("common.undo"),
           onClick: () => void setBotTodo(device, botId, id, true, updated, failed),
@@ -49,7 +50,7 @@ export async function setBotTodo(
       });
     }
   } catch (failure) {
-    toast.error(failure instanceof Error ? failure.message : String(failure));
+    toast.error(failure instanceof Error ? failure.message : String(failure), { duration: 6000 });
     failed?.();
   } finally {
     void device.queryClient.invalidateQueries({ queryKey: ["bot-todos", botId] });

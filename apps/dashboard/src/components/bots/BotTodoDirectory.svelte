@@ -70,6 +70,7 @@
       const sent = await device.api.sendBotMessage(bot.bot_id, quotedMessage(quote, text))
       if (sent.status === 'failed') throw new Error($t('bots.sendFailed'))
       toast.success($t('bots.replySent'), {
+        duration: 6000,
         action: { label: $t('bots.viewReply'), onClick: () => jump(bot, sent.id) },
       })
     }}

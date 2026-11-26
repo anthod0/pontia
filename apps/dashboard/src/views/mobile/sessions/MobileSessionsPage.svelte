@@ -45,7 +45,7 @@
     try {
       await action()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e))
+      toast.error(e instanceof Error ? e.message : String(e), { duration: 6000 })
     }
   }
   async function save(title: string | null) {

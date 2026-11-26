@@ -35,6 +35,7 @@ export function createBotChat(botId: string) {
   function showActionError(failure: unknown, retry: (event: MouseEvent) => void) {
     toast.error(failure instanceof Error ? failure.message : String(failure), {
       id: actionToastId,
+      duration: 6000,
       important: true,
       action: { label: translate("common.retry"), onClick: retry },
     });
@@ -56,7 +57,7 @@ export function createBotChat(botId: string) {
     try {
       if (!(await timeline.reveal(id))) {
         missingQuotes = [...missingQuotes, id];
-        toast.error(translate("bots.quoteMissing"));
+        toast.error(translate("bots.quoteMissing"), { duration: 6000 });
         return;
       }
       await tick();
@@ -68,7 +69,7 @@ export function createBotChat(botId: string) {
         highlighted = highlightedPath = null;
       }, 1500);
     } catch (failure) {
-      toast.error(failure instanceof Error ? failure.message : String(failure));
+      toast.error(failure instanceof Error ? failure.message : String(failure), { duration: 6000 });
     } finally {
       jumping = null;
     }
@@ -136,6 +137,7 @@ export function createBotChat(botId: string) {
           : error instanceof Error
             ? error.message
             : String(error),
+        { duration: 6000 },
       );
     } finally {
       reloading = false;

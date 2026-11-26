@@ -207,7 +207,7 @@
     menuOpen = sheetOpen = false
     const text = next.excerpt ?? ('content' in next.entry ? messageText(next.entry) : '')
     if (await copyText(text)) toast.success($t('common.copied'))
-    else toast.error($t('files.copyFailed'))
+    else toast.error($t('files.copyFailed'), { duration: 6000 })
   }
 
   // The menu button reports whether its menu is open; the page styles it from that.

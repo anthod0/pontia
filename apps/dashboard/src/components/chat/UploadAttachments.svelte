@@ -23,9 +23,9 @@
   export function choose(item?: UploadItem) { resumeItem = item; picker.multiple = !item; picker.click() }
   $effect(() => {
     const { warning, items } = $draft
-    notify('upload-warning', warning, () => toast.warning(warning!, { id: 'upload-warning' }))
+    notify('upload-warning', warning, () => toast.warning(warning!, { id: 'upload-warning', duration: 6000 }))
     for (const item of items)
-      notify(`upload-error-${item.id}`, item.error, () => toast.error($t('files.uploadFailedNamed', { name: displayName(item) }), { id: `upload-error-${item.id}`, description: item.error }))
+      notify(`upload-error-${item.id}`, item.error, () => toast.error($t('files.uploadFailedNamed', { name: displayName(item) }), { id: `upload-error-${item.id}`, description: item.error, duration: 6000 }))
   })
   function displayName(item: UploadItem) {
     return item.secret?.label ?? item.secret?.masked ?? item.name

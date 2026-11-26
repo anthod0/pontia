@@ -22,7 +22,7 @@
       await deleteProfile.mutateAsync(target.profile_id)
       ondeleted(target)
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : String(cause))
+      toast.error(cause instanceof Error ? cause.message : String(cause), { duration: 6000 })
     }
   }
 </script>

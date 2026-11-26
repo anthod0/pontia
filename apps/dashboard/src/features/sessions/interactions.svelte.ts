@@ -105,7 +105,7 @@ export function createInteractions(sessionId: () => string) {
 
   $effect(() => {
     if (error && error !== lastToastedError) {
-      toast.error(translate("interaction.failed"), { description: error });
+      toast.error(translate("interaction.failed"), { description: error, duration: 6000 });
       lastToastedError = error;
     }
     if (!error) lastToastedError = null;

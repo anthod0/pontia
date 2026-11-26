@@ -129,7 +129,7 @@ export function createFilePreview(
       copyTimer = setTimeout(() => {
         copied = false;
       }, 1600);
-    else toast.error(translate("files.copyFailed"));
+    else toast.error(translate("files.copyFailed"), { duration: 6000 });
   }
 
   function download() {

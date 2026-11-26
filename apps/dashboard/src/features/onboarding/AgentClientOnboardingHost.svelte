@@ -111,6 +111,7 @@
       return
     }
     toast.info($t('onboarding.clients.toast.skipped'), {
+      duration: 6000,
       action: { label: $t('onboarding.clients.toast.goSettings'), onClick: () => void navigate('/settings/clients') },
     })
   }

@@ -105,6 +105,7 @@ export function createComposer(options: {
       toast.error(error instanceof Error ? error.message : String(error), {
         id: submissionToastId,
         duration: Number.POSITIVE_INFINITY,
+        closeButton: true,
         important: true,
         action: {
           label: translate("common.retry"),

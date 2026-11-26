@@ -17,7 +17,7 @@
 {#snippet diff()}{#if git.diff}<MobileGitDiffScreen {device} {workspaceId} target={{ file: git.diff }} files={changeFiles} />{/if}{/snippet}
 {#snippet commitDiff()}{#if git.commit && git.commitFile}<MobileGitDiffScreen {device} {workspaceId} target={{ sha: git.commit, file: git.commitFile }} files={commitFiles} />{/if}{/snippet}
 <GitPanel {device} {workspaceId} {git}
-  onstatuserror={(error) => toast.error(error.message)}
+  onstatuserror={(error) => toast.error(error.message, { duration: 6000 })}
   onopen={(file, files) => {
     git.diff = file
     changeFiles = groupChanges(files).flatMap(group => group.files)

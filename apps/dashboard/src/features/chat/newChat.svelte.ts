@@ -101,6 +101,7 @@ export function createNewChat(device: DeviceRuntime, scope: () => string | undef
         ),
         {
           description: error,
+          duration: 6000,
           ...(!actionError
             ? {
                 action: {

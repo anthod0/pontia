@@ -53,7 +53,7 @@
       await chat.post($t('bots.profileHint.askMessage'), null)
       dismiss(botKey)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      toast.error(error instanceof Error ? error.message : String(error), { duration: 6000 })
     } finally {
       asking = false
     }
@@ -61,7 +61,8 @@
   function saved(profile: AgentProfileView) {
     selected = undefined
     toast.success($t('bots.profileHint.added', { profile: profile.name, name }), {
-      action: { label: $t('bots.profileHint.view'), onClick: () => void navigate(path, { profile: profile.profile_id }, { scope }) }
+      duration: 6000,
+      action: { label: $t('bots.profileHint.view'), onClick: () => void navigate(path, { profile: profile.profile_id }, { scope }) },
     })
   }
 </script>

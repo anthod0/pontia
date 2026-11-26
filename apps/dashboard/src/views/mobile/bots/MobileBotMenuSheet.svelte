@@ -34,6 +34,7 @@
           : error instanceof Error
             ? error.message
             : String(error),
+        { duration: 6000 },
       )
     }
   }

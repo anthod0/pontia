@@ -47,9 +47,14 @@
       await directory.reload(bot.bot_id)
       toast.success($t('bots.reloadReady'))
     } catch (error) {
-      toast.error(error instanceof ApiError && error.code === 'state_conflict'
-        ? $t('bots.reloadBusy')
-        : error instanceof Error ? error.message : String(error))
+      toast.error(
+        error instanceof ApiError && error.code === 'state_conflict'
+          ? $t('bots.reloadBusy')
+          : error instanceof Error
+            ? error.message
+            : String(error),
+        { duration: 6000 },
+      )
     }
   }
 </script>

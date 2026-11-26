@@ -40,6 +40,28 @@
   const mainClass = $derived(settingsPath ? 'min-w-0 flex-1 bg-surface' : chatPath ? 'min-w-0 flex-1 bg-surface px-4 md:px-8' : 'min-w-0 flex-1 bg-surface p-4 md:p-6')
 
   const contentClass = $derived(settingsPath || chatPath ? 'min-w-0 w-full' : 'mx-auto min-w-0 w-full max-w-7xl')
+  let contentInset = $state<HTMLElement | null>(null)
+
+  $effect(() => {
+    if (!contentInset) return
+    const inset = contentInset
+    const root = document.documentElement
+    const update = () => {
+      const bounds = inset.getBoundingClientRect()
+      root.style.setProperty('--desktop-content-left', `${bounds.left}px`)
+      root.style.setProperty('--desktop-content-right', `${window.innerWidth - bounds.right}px`)
+    }
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(inset)
+    window.addEventListener('resize', update)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', update)
+      root.style.removeProperty('--desktop-content-left')
+      root.style.removeProperty('--desktop-content-right')
+    }
+  })
 </script>
 
 <svelte:window onpopstate={updatePath} onclick={updatePathAfterNavigation} />
@@ -50,7 +72,7 @@
     style:--chat-min-width={`${CHAT_MIN_WIDTH}px`}
     style:--file-preview-min-width={`${FILE_PREVIEW_MIN_WIDTH}px`}
     style:--file-preview-saved-width={$filePreviewWidth === null ? undefined : `${$filePreviewWidth}px`}>
-    <Sidebar.Inset class="bg-surface lg:mr-[var(--file-preview-width)]">
+    <Sidebar.Inset bind:ref={contentInset} class="bg-surface lg:mr-[var(--file-preview-width)]">
       <FileDropZone>
         <!-- On chat pages only the top bar buttons take pointer input, so the feed beneath still scrolls. -->
         <div class={['sticky z-10 flex items-center', chatPath ? 'pointer-events-none' : 'bg-surface']} style="top: var(--visual-viewport-top, 0px)">

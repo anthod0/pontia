@@ -20,7 +20,11 @@
 
 <svelte:window onlanguagechange={updateBrowserLanguage} />
 
-<Toaster richColors position={isMobileShell() ? 'bottom-center' : 'top-center'}
-  offset={{ top: 'var(--notification-top, 24px)', bottom: 'var(--mobile-toast-bottom)' }}
-  mobileOffset={{ top: 'var(--notification-top)', bottom: 'var(--mobile-toast-bottom)' }} />
+<Toaster
+  position="top-center"
+  gap={8}
+  pauseWhenPageIsHidden
+  swipeDirections={['top']}
+  offset={{ top: '56px' }}
+  mobileOffset={{ top: 'var(--mobile-toast-top)' }} />
 {@render children()}
