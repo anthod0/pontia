@@ -286,10 +286,19 @@ if (process.argv[2] === "history-info") {
         });
       }
       active.reply = randomUUID();
+      const content = [{ type: "text", text: active.text }];
+      if (active.text === "managed-tools") {
+        content.push(
+          { type: "tool_use", id: "read-call", name: "Read", input: { file_path: "src/lib.rs", offset: 2, limit: 4 } },
+          { type: "tool_use", id: "glob-call", name: "Glob", input: { pattern: "**/*.rs" } },
+          { type: "tool_use", id: "broken-call", name: "Write", input: { content: "missing path" } },
+          { type: "tool_use", id: "bash-call", name: "Bash", input: { command: "sleep 10" } },
+        );
+      }
       history({
         type: "assistant",
         uuid: active.reply,
-        message: { role: "assistant", content: [{ type: "text", text: active.text }] },
+        message: { role: "assistant", content },
       });
       event({
         kind: "context_usage",
@@ -354,6 +363,18 @@ if (process.argv[2] === "history-info") {
           failed: true,
           content: "denied",
         });
+      }
+      if (active.text === "managed-tools") {
+        for (const tool of content.slice(1)) {
+          event({
+            kind: "tool",
+            input_id: active.id,
+            call_id: tool.id,
+            name: tool.name,
+            arguments: tool.input,
+          });
+        }
+        event({ kind: "tool_progress", input_id: active.id, call_id: "bash-call" });
       }
     }
     if (gate("cancel")) expire();

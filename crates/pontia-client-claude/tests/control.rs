@@ -483,6 +483,24 @@ impl Harness {
         .await
         .unwrap();
     }
+    async fn wait_live_items(&self, session: &str, turn: &str, count: usize) -> Vec<Value> {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if let Some(snapshot) = self.app.live_output().snapshot(session, turn)
+                    && snapshot.items.len() >= count
+                {
+                    return snapshot
+                        .items
+                        .iter()
+                        .map(|item| serde_json::to_value(item).unwrap())
+                        .collect();
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap()
+    }
     async fn interactions(&self, session: &str, expected: &[&str]) -> Vec<Value> {
         tokio::time::timeout(Duration::from_secs(5), async {
             loop {
@@ -1707,6 +1725,122 @@ async fn reasoning_deltas_share_live_output_with_text_and_tools() {
     ));
     h.gate(&session, 1, "finish");
     h.wait_states(&session, &["completed"]).await;
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn live_read_tool_uses_the_standard_managed_card() {
+    let h = Harness::new().await;
+    let session = h.create("managed-tools").await;
+    h.gate(&session, 1, "start");
+    let turn = h.wait_states(&session, &["running"]).await[0].0.clone();
+    let items = h.wait_live_items(&session, &turn, 5).await;
+    let read = items
+        .iter()
+        .find(|item| item["call_id"] == "read-call")
+        .unwrap();
+    assert_eq!(
+        read["managed_tool_use"],
+        json!({
+            "tool_name":"Read",
+            "input":{"type":"read","path":"src/lib.rs","start_line":2,"end_line":5}
+        })
+    );
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn live_unknown_tool_keeps_the_generic_card() {
+    let h = Harness::new().await;
+    let session = h.create("managed-tools").await;
+    h.gate(&session, 1, "start");
+    let turn = h.wait_states(&session, &["running"]).await[0].0.clone();
+    let items = h.wait_live_items(&session, &turn, 5).await;
+    let glob = items
+        .iter()
+        .find(|item| item["call_id"] == "glob-call")
+        .unwrap();
+    assert!(glob.get("managed_tool_use").is_none());
+    assert_eq!(glob["arguments"], json!({"pattern":"**/*.rs"}));
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn live_tool_progress_marks_the_call_running() {
+    let h = Harness::new().await;
+    let session = h.create("managed-tools").await;
+    h.gate(&session, 1, "start");
+    let turn = h.wait_states(&session, &["running"]).await[0].0.clone();
+    let bash = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let Some(snapshot) = h.app.live_output().snapshot(&session, &turn)
+                && let Some(item) = snapshot
+                    .items
+                    .iter()
+                    .find(|item| serde_json::to_value(item).unwrap()["call_id"] == "bash-call")
+            {
+                let item = serde_json::to_value(item).unwrap();
+                if item["status"]["phase"] == "running" {
+                    break item;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(bash["status"], json!({"phase":"running"}));
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn history_read_tool_uses_the_standard_managed_card() {
+    let h = Harness::new().await;
+    let session = h.create("managed-tools").await;
+    h.gate(&session, 1, "start");
+    h.gate(&session, 1, "finish");
+    h.wait_states(&session, &["completed"]).await;
+    h.app
+        .session_commands()
+        .terminate_session(&session)
+        .await
+        .unwrap();
+    let page = h.history(&session).await.unwrap();
+    let read = page.groups[0]
+        .items
+        .iter()
+        .find(|item| item.item.call_id.as_deref() == Some("read-call"))
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(&read.item.managed_tool_use).unwrap(),
+        json!({
+            "tool_name":"Read",
+            "input":{"type":"read","path":"src/lib.rs","start_line":2,"end_line":5}
+        })
+    );
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn history_unknown_tool_keeps_the_generic_card() {
+    let h = Harness::new().await;
+    let session = h.create("managed-tools").await;
+    h.gate(&session, 1, "start");
+    h.gate(&session, 1, "finish");
+    h.wait_states(&session, &["completed"]).await;
+    h.app
+        .session_commands()
+        .terminate_session(&session)
+        .await
+        .unwrap();
+    let page = h.history(&session).await.unwrap();
+    let glob = page.groups[0]
+        .items
+        .iter()
+        .find(|item| item.item.call_id.as_deref() == Some("glob-call"))
+        .unwrap();
+    assert!(glob.item.managed_tool_use.is_none());
+    assert_eq!(glob.item.content_preview, r#"{"pattern":"**/*.rs"}"#);
     h.stop().await;
 }
 

@@ -113,7 +113,7 @@ fn anchor(binding: &AgentBindingResolveRequest, value: &str) -> Result<String> {
 impl ClientData for Adapter {
     fn timeline_cache_policy(&self) -> Option<TimelineCachePolicy> {
         Some(TimelineCachePolicy {
-            render_version: 1,
+            render_version: 2,
             read_while_online: true,
             backfill_all_turns_on_miss: true,
             supports_session_checkpoints: false,
@@ -463,81 +463,90 @@ fn render(
     let text_block = [json!({"type":"text","text":content.as_str().unwrap_or("")})];
     let blocks = content.as_array().map(Vec::as_slice).unwrap_or(&text_block);
     for (index, block) in blocks.iter().enumerate() {
-        let (kind, role, text, title, call_id, status) = match block["type"].as_str() {
-            Some("text") => (
-                role,
-                role,
-                block["text"].as_str().unwrap_or("").into(),
-                None,
-                None,
-                None,
-            ),
-            Some("thinking") => (
-                "thinking",
-                "assistant",
-                block["thinking"].as_str().unwrap_or("").into(),
-                None,
-                None,
-                None,
-            ),
-            Some("tool_use") if block["name"] == "AskUserQuestion" => {
-                let id = block["id"].as_str();
-                let prompts = block["input"]["questions"].as_array();
-                if let (Some(id), Some(prompts)) = (id, prompts) {
-                    questions.insert(id.to_owned(), prompts.clone());
-                }
-                let text = prompts
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|q| q["question"].as_str())
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                (
-                    "tool_call",
-                    "assistant",
-                    text,
-                    Some("Questions and answers".into()),
-                    id.map(str::to_owned),
+        let (kind, role, text, title, call_id, status, managed_tool_use) =
+            match block["type"].as_str() {
+                Some("text") => (
+                    role,
+                    role,
+                    block["text"].as_str().unwrap_or("").into(),
                     None,
-                )
-            }
-            Some("tool_use") => (
-                "tool_call",
-                "assistant",
-                block["input"].to_string(),
-                block["name"].as_str().map(str::to_owned),
-                block["id"].as_str().map(str::to_owned),
-                None,
-            ),
-            Some("tool_result") => (
-                "tool_result",
-                "tool",
-                {
-                    let content = &block["content"];
-                    block["tool_use_id"]
-                        .as_str()
-                        .and_then(|id| questions.remove(id))
-                        .and_then(|questions| answered_questions(&questions, content.as_str()?))
-                        .unwrap_or_else(|| {
-                            content
-                                .as_str()
-                                .map(str::to_owned)
-                                .unwrap_or_else(|| content.to_string())
-                        })
-                },
-                None,
-                block["tool_use_id"].as_str().map(str::to_owned),
-                Some(
-                    if block["is_error"] == true {
-                        "failed"
-                    } else {
-                        "completed"
-                    }
-                    .into(),
+                    None,
+                    None,
+                    None,
                 ),
-            ),
-            _ => continue,
-        };
+                Some("thinking") => (
+                    "thinking",
+                    "assistant",
+                    block["thinking"].as_str().unwrap_or("").into(),
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
+                Some("tool_use") if block["name"] == "AskUserQuestion" => {
+                    let id = block["id"].as_str();
+                    let prompts = block["input"]["questions"].as_array();
+                    if let (Some(id), Some(prompts)) = (id, prompts) {
+                        questions.insert(id.to_owned(), prompts.clone());
+                    }
+                    let text = prompts
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|q| q["question"].as_str())
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    (
+                        "tool_call",
+                        "assistant",
+                        text,
+                        Some("Questions and answers".into()),
+                        id.map(str::to_owned),
+                        None,
+                        None,
+                    )
+                }
+                Some("tool_use") => {
+                    let name = block["name"].as_str();
+                    (
+                        "tool_call",
+                        "assistant",
+                        block["input"].to_string(),
+                        name.map(str::to_owned),
+                        block["id"].as_str().map(str::to_owned),
+                        None,
+                        name.and_then(|name| crate::tool_use::from_call(name, &block["input"])),
+                    )
+                }
+                Some("tool_result") => (
+                    "tool_result",
+                    "tool",
+                    {
+                        let content = &block["content"];
+                        block["tool_use_id"]
+                            .as_str()
+                            .and_then(|id| questions.remove(id))
+                            .and_then(|questions| answered_questions(&questions, content.as_str()?))
+                            .unwrap_or_else(|| {
+                                content
+                                    .as_str()
+                                    .map(str::to_owned)
+                                    .unwrap_or_else(|| content.to_string())
+                            })
+                    },
+                    None,
+                    block["tool_use_id"].as_str().map(str::to_owned),
+                    Some(
+                        if block["is_error"] == true {
+                            "failed"
+                        } else {
+                            "completed"
+                        }
+                        .into(),
+                    ),
+                    None,
+                ),
+                _ => continue,
+            };
         items.push(TurnTimelineItem {
             turn_id: Some(turn.into()),
             item: TimelineItem {
@@ -553,7 +562,7 @@ fn render(
                 occurred_at: message["timestamp"].as_str().map(str::to_owned),
                 content_preview: text,
                 call_id,
-                managed_tool_use: None,
+                managed_tool_use,
             },
         });
     }

@@ -428,7 +428,7 @@ export class Host {
       }
       return;
     }
-    if (["stream_event", "assistant", "result", "user"].includes(message.type)) {
+    if (["stream_event", "assistant", "result", "user", "tool_progress"].includes(message.type)) {
       if (!this.native || message.session_id !== this.native)
         throw new Error("native_identity_mismatch");
       if (this.retrying && message.type !== "user") {

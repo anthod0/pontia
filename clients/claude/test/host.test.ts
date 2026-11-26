@@ -310,6 +310,70 @@ test("streamed text and full assistant messages render once; tool generation is 
   assert.equal(events.filter((e) => e.kind === "finished" && e.outcome === "completed").length, 1);
 });
 
+test("tool progress marks a known top-level tool running once", async (t) => {
+  const { fixture, events, host } = setup();
+  t.after(() => host.close());
+  host.submit(first, "task");
+  fixture.messages.push(init());
+  fixture.messages.push(
+    assistant(first, [
+      { type: "tool_use", id: "call", name: "Bash", input: { command: "sleep 10" } },
+    ]),
+  );
+  fixture.messages.push({
+    type: "tool_progress",
+    tool_use_id: "call",
+    tool_name: "Bash",
+    parent_tool_use_id: null,
+    elapsed_time_seconds: 5,
+    uuid: "progress-1",
+    session_id: native,
+  });
+  fixture.messages.push({
+    type: "tool_progress",
+    tool_use_id: "call",
+    tool_name: "Bash",
+    parent_tool_use_id: null,
+    elapsed_time_seconds: 10,
+    uuid: "progress-2",
+    session_id: native,
+  });
+  fixture.messages.push({
+    type: "tool_progress",
+    tool_use_id: "unknown",
+    tool_name: "Bash",
+    parent_tool_use_id: null,
+    elapsed_time_seconds: 5,
+    uuid: "progress-unknown",
+    session_id: native,
+  });
+  fixture.messages.push({
+    type: "tool_progress",
+    tool_use_id: "call",
+    tool_name: "Bash",
+    parent_tool_use_id: "subagent",
+    elapsed_time_seconds: 15,
+    uuid: "progress-nested",
+    session_id: native,
+  });
+  await settle();
+  fixture.messages.push(result());
+  fixture.messages.push({
+    type: "tool_progress",
+    tool_use_id: "call",
+    tool_name: "Bash",
+    parent_tool_use_id: null,
+    elapsed_time_seconds: 20,
+    uuid: "progress-after-result",
+    session_id: native,
+  });
+  await settle();
+  assert.deepEqual(
+    events.filter((event) => event.kind === "tool_progress"),
+    [{ kind: "tool_progress", input_id: first, call_id: "call" }],
+  );
+});
+
 test("streamed thinking joins its deltas once without hiding text or tools", async (t) => {
   const { fixture, events, host } = setup();
   t.after(() => host.close());
@@ -469,7 +533,10 @@ for (const [reason, expected] of Object.entries(terminalOutcomes)) {
       events.filter((event) => event.kind === "finished").map((event) => event.outcome),
       [expected],
     );
-    assert.equal(events.some((event) => event.kind === "unavailable"), false);
+    assert.equal(
+      events.some((event) => event.kind === "unavailable"),
+      false,
+    );
   });
 }
 
@@ -486,7 +553,10 @@ for (const stopReason of ["max_tokens", "refusal"]) {
       events.filter((event) => event.kind === "finished").map((event) => event.outcome),
       ["failed"],
     );
-    assert.equal(events.some((event) => event.kind === "unavailable"), false);
+    assert.equal(
+      events.some((event) => event.kind === "unavailable"),
+      false,
+    );
   });
 }
 
@@ -510,7 +580,10 @@ for (const subtype of [
       events.filter((event) => event.kind === "finished").map((event) => event.outcome),
       ["failed"],
     );
-    assert.equal(events.some((event) => event.kind === "unavailable"), false);
+    assert.equal(
+      events.some((event) => event.kind === "unavailable"),
+      false,
+    );
   });
 }
 

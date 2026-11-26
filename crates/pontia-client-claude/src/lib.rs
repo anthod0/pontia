@@ -11,6 +11,7 @@ mod reports;
 mod resume;
 pub mod setup;
 mod spec;
+mod tool_use;
 mod transport;
 
 use peer::{Input, Peer};

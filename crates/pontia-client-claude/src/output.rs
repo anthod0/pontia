@@ -57,12 +57,22 @@ pub(crate) async fn publish(
             item_id: format!("input:{}", field(event, "item_id")?),
             text: field(event, "text")?.into(),
         }],
-        Some("tool") => vec![LiveOutputUpdate::ToolCall {
-            item_id: format!("tool:{}", field(event, "call_id")?),
+        Some("tool") => {
+            let name = field(event, "name")?;
+            vec![LiveOutputUpdate::ToolCall {
+                item_id: format!("tool:{}", field(event, "call_id")?),
+                call_id: field(event, "call_id")?.into(),
+                tool_name: name.into(),
+                arguments: event["arguments"].clone(),
+                managed_tool_use: crate::tool_use::from_call(name, &event["arguments"]),
+            }]
+        }
+        Some("tool_progress") => vec![LiveOutputUpdate::ToolStatusUpdated {
             call_id: field(event, "call_id")?.into(),
-            tool_name: field(event, "name")?.into(),
-            arguments: event["arguments"].clone(),
-            managed_tool_use: None,
+            status: LiveToolStatus {
+                phase: LiveToolPhase::Running,
+                outcome: None,
+            },
         }],
         Some("tool_result") => {
             let failed = event["failed"].as_bool().ok_or_else(invalidated)?;

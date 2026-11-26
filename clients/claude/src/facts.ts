@@ -1,8 +1,4 @@
-import type {
-  SDKMessage,
-  SDKResultMessage,
-  TerminalReason,
-} from "@anthropic-ai/claude-agent-sdk";
+import type { SDKMessage, SDKResultMessage, TerminalReason } from "@anthropic-ai/claude-agent-sdk";
 
 export type InteractionOption = { key: string; label: string; intent: "positive" | "negative" };
 
@@ -28,6 +24,7 @@ export type HostEvent =
   | { kind: "reasoning"; input_id: string; item_id: string; delta: string }
   | { kind: "input"; input_id: string; item_id: string; text: string }
   | { kind: "tool"; input_id: string; call_id: string; name: string; arguments: unknown }
+  | { kind: "tool_progress"; input_id: string; call_id: string }
   | { kind: "tool_result"; input_id: string; call_id: string; failed: boolean; content: unknown }
   | {
       kind: "finished";
@@ -164,6 +161,7 @@ export class InputFacts {
   private streamedReasoning = new Set<string>();
   private complete = new Set<string>();
   private tools = new Set<string>();
+  private progressingTools = new Set<string>();
   historyAnchor: string;
 
   constructor(
@@ -194,6 +192,16 @@ export class InputFacts {
 
   accept(message: SDKMessage): void {
     if ("parent_tool_use_id" in message && message.parent_tool_use_id) return;
+    if (
+      message.type === "tool_progress" &&
+      !this.finished &&
+      this.tools.has(message.tool_use_id) &&
+      !this.progressingTools.has(message.tool_use_id)
+    ) {
+      this.progressingTools.add(message.tool_use_id);
+      this.emit({ kind: "tool_progress", input_id: this.id, call_id: message.tool_use_id });
+      return;
+    }
     if (message.type === "result") {
       const match = association(message, this.inputs);
       if (match === "none") return; // An automatic/background result does not consume our task.
@@ -283,6 +291,7 @@ export class InputFacts {
     if (message.type === "user" && Array.isArray(message.message.content)) {
       for (const block of message.message.content) {
         if (block.type === "tool_result" && this.tools.delete(block.tool_use_id)) {
+          this.progressingTools.delete(block.tool_use_id);
           if (message.uuid) this.historyAnchor = message.uuid;
           this.emit({
             kind: "tool_result",
