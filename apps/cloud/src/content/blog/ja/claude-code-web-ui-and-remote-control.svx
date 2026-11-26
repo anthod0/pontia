@@ -1,0 +1,106 @@
+---
+title: "Claude Code Web UI と Remote Control 徹底比較：Cloud Session、claude rc、SSH+tmux、Pontia の違いと選び方"
+description: "ブラウザーやスマートフォンから Claude Code を操作する 4 つの方式—Anthropic Cloud Session（claude --cloud）、Remote Control（claude rc）、SSH+tmux、エンドツーエンド暗号化対応のローカル制御面 Pontia—を、実行場所・暗号化モデル・localhost ライブプレビュー・並列運用で比較します。"
+published: "2026-11-27"
+---
+
+**Claude Code UI** や **Claude Code Web 版**、**Claude Remote Control** を調べ始めると、最初にぶつかる落とし穴があります。`claude.ai/code` という同じ入口の中に、仕組みがまったく異なる 2 種類のセッションが同居していることです。さらに手元の開発機や VPS で動かしているエンジニアは、**SSH + tmux** やローカル向けのコントロールプレーンとも比較することになります。
+
+Pontia は私たちが開発しているプロジェクトです。本記事における Anthropic の Cloud Session と Remote Control に関する仕様は、すべて 2026 年 11 月 27 日時点で公式一次ドキュメントをもとに確認しています。Claude Code は更新ペースが速いため、最新のフラグや制限は末尾の公式リンクもあわせてご確認ください。
+
+## まず整理する：`claude.ai/code` にある 2 つのまったく別な仕組み
+
+Anthropic の公式ドキュメントでは、`--cloud` と `--remote-control` は無関係な機能であると明記されています（旧来の `--remote` フラグは `--cloud` の非推奨エイリアスです）。どちらも `claude.ai/code` から開けますが、コードの実行場所・認証要件・ノート PC を閉じたときの挙動が大きく異なります。
+
+### 1. Cloud Session（`claude --cloud` / Web クラウドセッション）
+
+**Claude Cloud Session** は、手元のマシンではなく Anthropic が管理する隔離された Ubuntu 24.04 x86_64 VM（または組織の self-hosted runner）上で実行されます（[Claude Code on the web](https://code.claude.com/docs/en/claude-code-on-the-web)、[Cloud environments](https://code.claude.com/docs/en/cloud-environments)）。
+
+- **向いている点：** ノート PC を閉じてもクラウド上で作業が継続するため、並列での PR 作成や定型的な修正をブラウザーやスマートフォンから投げやすい構成です。VM 利用の追加課金はなく、契約プランの使用量枠として計算されます。
+- **把握しておくべき技術的境界：**
+  - **ローカルの作業ツリーは見えない：** セッションごとに GitHub からクローンされるため、手元の未コミット変更やローカル専用ファイルは参照できません。GitHub 以外のリポジトリでは `CCR_FORCE_BUNDLE=1` でローカルバンドルをアップロードできますが、リモートへプッシュバックすることはできません。
+  - **GitHub プロキシの制約：** Anthropic の GitHub プロキシが認証情報を注入する仕組み上、ブランチ削除・タグのプッシュ・GitHub GraphQL（`gh pr` や `gh issue` などに影響）が拒否されます。
+  - **隔離された VM 環境とアイドル停止：** コンテナ内の `localhost` や Docker はクラウド VM 側のものであり、手元の環境ではありません。数分間のアイドルで一時停止され、`docker compose` やデータベースなどのバックグラウンドプロセスはスナップショットに残りません。手元のデータベース、社内ネットワーク、ローカル開発サーバーのプレビューにも接続できません。
+
+### 2. Remote Control（`claude remote-control` / 公式エイリアス `claude rc`）
+
+**Claude Remote Control**（`claude remote-control`、公式短縮エイリアス `claude rc`）は、実行を手元のマシンに残したまま `claude.ai/code` や Claude の iOS / Android アプリから監視・操作する機能です（[Remote Control](https://code.claude.com/docs/en/remote-control)）。[2026-w34](https://code.claude.com/docs/en/whats-new/2026-w34) で research preview を卒業しています。
+
+- **接続の仕組み：** ホスト側でインバウンドポートを開く必要はなく、ローカルの `claude` プロセスが Anthropic API へ外向きの HTTPS + ストリーミング接続を張ります。出力されるセッション URL、スペースキーで切り替える QR コード、またはモバイルアプリの **Code** タブにあるデバイスカードから接続できます。
+- **把握しておくべき技術的境界：**
+  - **ホストに紐づくライフサイクル：** 実行がローカルに残るため、ノート PC をスリープさせたりプロセスを終了したりするとオフラインになります。server モードでは約 10 分間のネットワーク断でプロセスが終了し、Claude Code `>= v2.1.200` では停止から約 4 時間以内であれば再開できます。
+  - **サブスクリプション専用：** Pro / Max / Ultra / Team / Enterprise の claude.ai サブスクリプションが必要です。API キー、Amazon Bedrock、Google Vertex AI、Microsoft Foundry、ゲートウェイやプロキシ向けのカスタム `ANTHROPIC_BASE_URL` には対応していません。
+  - **エンドツーエンド暗号化ではない：** 通信経路は TLS で保護されますが、複数端末での同期と再接続のためにトランスクリプト（メッセージ・応答・ツール活動）が Anthropic のサーバーに保存されます（[Data usage](https://code.claude.com/docs/en/data-usage)）。そのため、Zero Data Retention（ZDR）や HIPAA 要件のある組織では有効化できません。
+  - **UI とプレビューの範囲：** diff ペインの表示や権限リクエストへの応答（一部の転送ダイアログは 5 分でタイムアウト）に対応しますが、手元の `localhost` 開発ポートをスマートフォンのリモートプレビューにそのまま埋め込む機能はありません。
+
+## 3. SSH + tmux（`claude code ssh`）
+
+すでにリモートの Linux ワークステーションや VPS 上で Claude Code を動かしているエンジニアにとって、もっとも手軽な出発点は Tailscale や WireGuard 越しに使う **SSH + tmux**（または `screen`）です。
+
+- **向いている点：** アプリケーション層に第三者の中継が入らず、API キー・Bedrock・Vertex・カスタム `ANTHROPIC_BASE_URL` を含めあらゆる認証・プロバイダー構成で使えます。常時稼働サーバー上で `tmux` に載せておけば、SSH が切れてもノート PC を閉じてもプロセスは動き続けます。
+- **把握しておくべき技術的境界：** Tailscale などのネットワーク基盤が解決するのは到達性であり、スマートフォンやブラウザーでの操作体験ではありません。小さな画面の端末 TUI で複数ファイルの大きな diff を読み、ファイルツリーを辿り、承認プロンプトに応答し、リモートの `localhost:5173` をスマートフォンで確認し、複数タスクの判断待ちを整理するには、ポートフォワードや別ツールを自前で組み合わせる必要があります。VPS 運用やネットワーク比較の詳細は[VPS 上でコーディングエージェントを動かす](/blog/run-coding-agents-on-a-vps)と[Tailscale vs Cloudflare Tunnel](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)も参照してください。
+
+## 4. Pontia + ローカル Claude Code
+
+[Pontia](/docs/how-it-works)（Apache-2.0）は、ローカルで動作するコントロールプレーン（`pontiad`）と、デスクトップ・スマートフォン共通のブラウザー Dashboard（[app.pontia.dev](https://app.pontia.dev)）を組み合わせたオープンソースツールです。Anthropic の Remote Control に被せるラッパーではなく、`@pontia/claude-client` と Claude Agent SDK を使って手元のマシン上で Claude Code を直接実行します（[Claude Code Agent Client](/docs/agent-clients/claude)）。
+
+### 手元の開発環境をそのまま使うローカル実行
+
+Pontia 経由で起動した Claude Code は、ローカルの OS ユーザー権限で有効化済みの [Workspace](/docs/workspaces) 内を直接操作するため、未コミットの変更、ローカルデータベース、Docker コンテナ、ビルドキャッシュ、社内ネットワークにそのままアクセスできます。マシン上の既存の Claude Code サインインやモデルプロバイダー設定をそのまま利用でき、`CLAUDE_CONFIG_DIR` による設定ディレクトリ指定や `PONTIA_CLAUDE_HOST_PATH` による独自クライアント指定にも対応します。Session 終了後も履歴を閲覧でき、新しいメッセージを送れば同じネイティブ会話を再開できます。
+
+### エンドツーエンド暗号化のリモートアクセス（公式 Edge / セルフホスト Edge）
+
+Pontia は接続の認可と暗号化データの転送を分離しています（[セキュリティ](/docs/security)）。
+
+- **Pontia Cloud** はサインイン、デバイス登録、ブラウザーの一時鍵・対象デバイス・鍵バージョンに紐づく短命の署名付きケーパビリティ発行のみを担当します。
+- **ブラウザーとデバイス間**では、認証済みリクエスト ID とリプレイ検出を備えたアプリケーション層の **X25519 HPKE + ChaCha20-Poly1305** エンドツーエンド暗号化セッションを確立します。
+- **中継経路に平文を出さない設計：** Pontia Cloud も中継する Edge ノードも、プロジェクトコードや会話の平文を見ることができません。ホスト側は標準的な外向き HTTPS/WSS 接続のみでインバウンドポートは不要です。公式 Edge をそのまま使うことも、自身のパブリック Linux サーバーへ[セルフホスト Edge](/docs/self-hosted-edge)（ドメインまたはパブリック IP 直接＋Let's Encrypt 証明書）を配置することもできます。中継モデルの詳細は[コーディングエージェントのリモートはエンドツーエンドで暗号化されていますか？](/blog/self-hosted-relay-for-coding-agents)で掘り下げています。
+
+### Git diff・ファイル・`localhost` ライブプレビューを 1 つの画面で
+
+スマートフォンの小さな端末に押し込む代わりに、[Dashboard](/docs/dashboard) は会話の横に確認用パネルを備えます（モバイルでは **Chats**・**Sessions**・**Todos**・**Device** の 4 タブ構成）。
+
+- **構造化された Git パネル：** 現在のブランチ、upstream、ahead/behind 件数、staged / unstaged / untracked / conflicted ファイルを一覧し、`[`・`]` キーで diff を切り替えられます。**History** を展開すればブランチや過去コミットの差分もたどれます。
+- **多彩なファイルプレビュー：** 返信内のファイルリンク、添付カード、**Files** パネルから、構文強調されたコード、相対リンクをたどれる Markdown、ソース表示切替付きサンドボックス HTML、ソート可能な CSV/TSV テーブル、展開・折りたたみ可能な JSON/YAML ツリー、画像ライトボックスをその場で開けます（[プレビュー](/docs/previews)）。
+- **ローカル `localhost` Web アプリのライブプレビュー：** Claude Code の返信に `localhost`、`127.0.0.1`、`[::1]`、`0.0.0.0` の URL を含めて選択すると、チャット横にライブプレビューが開きます。HTTP と WebSocket の両方がローカルポートへ届くため Vite や Next.js の HMR・ライブリロードが機能し、ツールバーでデスクトップ幅と 375 px モバイル幅を切り替えられます。ローカル Dashboard からは直接接続し、[Remote Dashboard](/docs/remote-access) からは選択した Edge 経由で期限付きの `pontia.run` プレビューアドレスを通じて安全にルーティングします。`3000`・`4173`・`5173`・`8000` など一般的な開発ポートは既定で動作し、`8888`・`9222`・`9229`・`11434` など明示許可が必要なポートは `$PONTIA_HOME/config.toml` の `[preview].allowed_ports` に追加して `pontia up` を実行します（[設定](/docs/configuration#local-preview)）。
+
+### 並列タスクのオーケストレーションと複数クライアント統合
+
+単発の Claude Code Session に加え、常駐の [Bot](/docs/bots) に仕事を委任して複数の [Helper](/docs/bots/helpers) を独立した Git worktree とブランチで並列実行できます。各 Helper はネイティブの Session としていつでも開いて進捗確認や直接指示が可能です。判断待ちは [Bot チャット](/docs/bots/chat) とモバイルの **Todos** タブに集約され、引用返信で 1 件ずつ処理しても他の並列タスクは止まりません。さらに Claude Code に加えて Codex、Pi、Grok Build、Kiro、Google Antigravity の 6 つの [Agent Client](/docs/agent-clients) を同じ Dashboard で扱い、[Agent Profile](/docs/agent-profiles) で役割ごとに使い分けられます。
+
+### Pontia でローカル Claude Code を始める
+
+Node.js LTS（`node`・`npm`）と Claude Code のサインインまたはプロバイダー設定を済ませた Linux / macOS 環境で次を実行します。
+
+```sh
+npx @pontia/cli init
+```
+
+初期化時に **Claude Code** を選びます（既存の Pontia 環境では `pontia setup claude` を実行すると `@pontia/claude-client` の導入と有効化が行われます）。後からリモートアクセスを追加する場合は `pontia login` と `pontia remote enable` を実行し、デスクトップまたはスマートフォンのブラウザーで [app.pontia.dev](https://app.pontia.dev) を開きます。
+
+## 4 方式の横並び比較
+
+| 観点 | Cloud Session（`claude --cloud`） | Remote Control（`claude rc`） | SSH + tmux（`claude code ssh`） | [Pontia](/docs/how-it-works) + ローカル Claude Code |
+| --- | --- | --- | --- | --- |
+| **コードの実行場所** | Anthropic 管理の Ubuntu 24.04 x86_64 VM（または組織 self-hosted runner） | 手元のローカルマシン | リモート Linux ホスト / ワークステーション / VPS | 手元の Linux / macOS マシンまたは VPS（`@pontia/claude-client` + Claude Agent SDK） |
+| **ノート PC を閉じた後の継続** | 可（クラウド VM 上で継続） | 不可（ローカルのスリープや終了でオフライン。server モードは約 10 分の切断で終了、`>= v2.1.200` は停止から約 4 時間以内なら再開可） | 常時稼働の VPS / サーバー上の `tmux` なら可 | 常時稼働ホスト上で `pontiad` を動かせば継続（Linux systemd lingering / macOS LaunchAgent） |
+| **プライバシーと暗号化** | コード・セッションとも Anthropic クラウド VM 上で動作。GitHub プロキシ経由 | Anthropic API への外向き HTTPS/TLS。同期・再接続用にトランスクリプトをサーバー保存（E2E 暗号化なし、ZDR / HIPAA 組織は利用不可） | ホストへの直接 SSH（または Tailscale / WireGuard 経由）。ベンダー中継なし | ブラウザー〜デバイス間のアプリケーション層 **X25519 HPKE + ChaCha20-Poly1305** E2E 暗号化。公式・[セルフホスト Edge](/docs/self-hosted-edge) ともに平文不可視 |
+| **ローカル DB・Docker・社内網・`localhost` プレビュー** | VM 内のみ。アイドル停止でバックグラウンドプロセスは消え、ローカル DB や社内網へは未接続 | ローカル DB・Docker・社内網は利用可。公式 UI にスマートフォン向け `localhost` 埋め込みプレビューなし | ホスト環境へフルアクセス。スマートフォンからリモート `localhost` を見るには別途トンネルやポート転送が必要 | ローカル DB・Docker・社内網へフルアクセス＋WebSocket HMR・375 px モバイル切替・期限付き `pontia.run` 経由の `localhost` ライブプレビューを標準搭載 |
+| **Git diff・ファイル閲覧 UI** | `claude.ai/code` 上でクローン済みリポジトリを閲覧 | diff ペインと権限ダイアログ（一部転送ダイアログは 5 分タイムアウト） | 端末 TUI のみ（`git diff`、ページャー、CLI エディター） | サイドパネルの **Git**（ステータス、diff、ブランチ・コミット **History**）＋ **Files**・**プレビュー**（コード、Markdown、HTML、CSV/TSV、JSON/YAML、画像） |
+| **マルチタスク運用** | `claude.ai/code` で独立したクラウドセッションを並列起動 | `claude rc` プロセスごとに 1 ローカルセッション | `tmux` のペイン・ウィンドウを手動管理 | 常駐 [Lead Bot](/docs/bots)＋独立 Git worktree の並列 [Helper](/docs/bots/helpers)、非同期 **Todo** キュー、役割別 [Agent Profile](/docs/agent-profiles) |
+| **対応アカウント・プロバイダー・クライアント** | claude.ai プラン（使用量枠を消費。GitHub リポジトリまたは片道 `CCR_FORCE_BUNDLE=1`） | Pro / Max / Ultra / Team / Enterprise サブスクリプションのみ（API キー、Bedrock、Vertex、Foundry、カスタム `ANTHROPIC_BASE_URL` 非対応） | 任意の Claude Code 認証・プロバイダー、任意のターミナル CLI エージェント | ローカルの Claude Code サインインやプロバイダー設定（カスタム `CLAUDE_CONFIG_DIR` 含む）をそのまま利用。Codex、Pi、Grok Build、Kiro、Antigravity も同一 Dashboard で利用可能 |
+
+## シナリオ別の選び方
+
+コードと実行環境がどこにあるかを基準に選ぶと迷いません。
+
+- **Cloud Session（`claude --cloud`）を選ぶケース：** リポジトリが GitHub にあり、ローカル DB や社内サービス、未コミット変更に依存しない作業を、ノート PC を閉じた後も並列で進めておきたいとき。
+- **Claude Remote Control（`claude rc`）を選ぶケース：** 対象の claude.ai サブスクリプションを使っており（API キーや Bedrock/Vertex/Foundry、独自ベース URL を使わない）、組織に ZDR / HIPAA や E2E 暗号化の制約がなく、公式 Claude アプリから単一のローカルセッションへ最短でつなぎたいとき。
+- **SSH + tmux（`claude code ssh`）を選ぶケース：** すでに SSH / Tailscale 越しの端末操作に慣れており、構造化された diff ビューアーやファイルプレビュー、スマートフォンからの `localhost` ライブプレビューを必要としないとき。
+- **Pontia を選ぶケース：** ローカルのリポジトリ、データベース、Docker、社内ネットワークの上で Claude Code を直接動かしつつ、アプリケーション層のエンドツーエンド暗号化（必要ならセルフホスト Edge）、デスクトップ・スマートフォンでの Git diff とファイルプレビュー、クリック 1 つで開く `localhost` ライブプレビュー、そして Lead Bot＋並列 worktree Helper や Codex・Pi・Grok Build・Kiro・Antigravity との併用まで 1 つの画面にまとめたいとき。
+
+## 参考リンク
+
+- Anthropic 公式ドキュメント：[Remote Control](https://code.claude.com/docs/en/remote-control)、[Claude Code on the web](https://code.claude.com/docs/en/claude-code-on-the-web)、[Cloud environments](https://code.claude.com/docs/en/cloud-environments)、[Data usage](https://code.claude.com/docs/en/data-usage)、[2026-w34 の新機能](https://code.claude.com/docs/en/whats-new/2026-w34)、[Claude Code on the web 記事](https://claude.com/resources/articles/claude-code-on-the-web)
+- Pontia ドキュメント：[Claude Code Agent Client](/docs/agent-clients/claude)、[Pontia の仕組み](/docs/how-it-works)、[セキュリティ](/docs/security)、[リモートアクセス](/docs/remote-access)、[Edge をセルフホストする](/docs/self-hosted-edge)、[Dashboard ガイド](/docs/dashboard)、[プレビュー](/docs/previews)、[Bots](/docs/bots)、[Helper を並列実行](/docs/bots/helpers)
+- 関連記事：[Codex、Claude Code、Pi のリモートコントロール比較](/blog/coding-agent-remote-control-alternatives)、[コーディングエージェントのリモートはエンドツーエンドで暗号化されていますか？](/blog/self-hosted-relay-for-coding-agents)、[エージェントハーネスからコーディングエージェントオーケストレーターへ](/blog/coding-agent-orchestrator-lead-bot-helpers)、[VPS 上でコーディングエージェントを動かす](/blog/run-coding-agents-on-a-vps)

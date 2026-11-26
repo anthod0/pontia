@@ -1,0 +1,106 @@
+---
+title: "Claude Code 网页版与 Remote Control 深度对比：Cloud Session、claude rc、SSH+tmux 与 Pontia 怎么选"
+description: "拆解 Claude Code Web UI 与手机远程控制的四种实战方案：Anthropic Cloud Session（claude --cloud）、Remote Control（claude rc）、SSH+tmux 与 Pontia 本机端到端加密控制面，涵盖隐私加密边界、本机数据库与 localhost 实时预览及选型建议。"
+published: "2026-11-27"
+---
+
+搜索 **Claude Code 网页版**、**Claude Code UI** 或 **Claude Remote Control** 时，最容易混淆的一件事是：`claude.ai/code` 这一个入口背后，其实承载着两种完全不同的会话架构；与此同时，习惯在工作站或 VPS 上跑终端的工程师，还会拿 **SSH + tmux** 以及本机控制面来对比。
+
+Pontia 是我们开发的项目。文中关于 Anthropic Cloud Session 与 Remote Control 的所有技术细节，均于 2026 年 11 月 27 日对照 Anthropic 官方一手文档核验。Claude Code 迭代很快，涉及具体参数与限制时建议结合文末官方链接复核。
+
+## 先拆清：`claude.ai/code` 里的两种完全不同的东西
+
+Anthropic 官方文档明确指出：`--cloud` 与 `--remote-control` 是互不相关的两套机制（旧的 `--remote` 只是 `--cloud` 的废弃别名）。它们都能在 `claude.ai/code` 打开，但代码在哪里执行、凭据怎么用、合上笔记本后会不会断，差别极大。
+
+### 1. Cloud Session（`claude --cloud` / `claude.ai/code` 云端会话）
+
+**Claude Cloud Session** 运行在 Anthropic 托管的隔离 Ubuntu 24.04 x86_64 虚拟机（或组织自建的 self-hosted runner）里，而不是你的本机（见 [Claude Code on the web](https://code.claude.com/docs/en/claude-code-on-the-web)、[Cloud environments](https://code.claude.com/docs/en/cloud-environments)）。
+
+- **适用强项：** 合上笔记本后任务照常在云端跑，适合批量清 PR、跑独立修复或并行改文档；计算资源计入现有套餐用量限额，不单独收 VM 费用。
+- **真实工程边界：**
+  - **看不到本机工作区：** 每次会话从 GitHub 克隆代码，看不到你本机未提交的改动、临时脚本或本地测试夹具。非 GitHub 仓库虽可通过 `CCR_FORCE_BUNDLE=1` 上传本地 bundle，但云端无法把提交推回原远端。
+  - **GitHub proxy 的操作限制：** Anthropic 通过 GitHub proxy 注入凭据而不把原始 token 暴露给容器，但 proxy 会拒绝删除分支、拒绝推送 tag、拒绝 GraphQL 请求（这会直接影响 `gh pr`、`gh issue` 等命令）。
+  - **与本机环境完全隔离且空闲会暂停：** 容器里的 `localhost` 和 Docker 属于那台云端 VM，不是你本机；空闲几分钟后环境就会暂停，且后台常驻进程（例如 `docker compose` 或数据库服务）不会进入快照。它也连不上你本机的数据库、公司内网服务和本地开发服务器预览。
+
+### 2. Remote Control（`claude remote-control` / 官方别名 `claude rc`）
+
+**Claude Remote Control**（命令为 `claude remote-control`，官方短别名 `claude rc`）把代码执行留在本机，再让你通过 `claude.ai/code` 或 Claude iOS/Android 客户端远程查看和操控（见 [Remote Control](https://code.claude.com/docs/en/remote-control)）。该功能已在 [2026-w34](https://code.claude.com/docs/en/whats-new/2026-w34) 正式结束 research preview。
+
+- **连接方式：** 本机不需要开任何入站端口，由本地 `claude` 进程向 Anthropic API 发起出站 HTTPS + streaming 连接。你可以用终端打印的会话 URL、按空格切出的二维码，或手机端 **Code** 标签页里的设备卡片直接接入。
+- **真实工程边界：**
+  - **绑定本机生命周期：** 执行留在本机意味着笔记本合盖休眠或进程退出即离线。在 server 模式下，断网约 10 分钟进程会自动退出；在 Claude Code `>= v2.1.200` 版本上，停服后约 4 小时内可恢复会话。
+  - **仅支持订阅账号：** 必须使用 Pro、Max、Ultra、Team 或 Enterprise 的 claude.ai 订阅登录，不支持 API key、Amazon Bedrock、Google Vertex AI、Microsoft Foundry，也不支持指向网关或代理的自定义 `ANTHROPIC_BASE_URL`。
+  - **不是端到端加密：** 传输走 TLS，但会话 transcript（消息、回复、工具活动）会保存在 Anthropic 服务器上以支撑多端同步与断线重连（见 [Data usage](https://code.claude.com/docs/en/data-usage)）。因此启用了 Zero Data Retention（ZDR）或有 HIPAA 合规要求的组织无法开启 Remote Control。
+  - **界面与预览边界：** 官方远程界面提供 diff 面板并支持远程回答权限请求（部分转发对话框有 5 分钟超时），但没有把本机 `localhost` 开发端口直接嵌进手机实时预览的能力。
+
+## 3. SSH + tmux（`claude code ssh`）
+
+如果你原本就把 Claude Code 跑在远端 Linux 工作站或 VPS 上，最直接的远程方式通常是 **SSH + tmux**（或 `screen`），再配合 Tailscale 或 WireGuard 组网避免暴露公网 SSH 端口。
+
+- **适用强项：** 应用层没有任何第三方中继，兼容所有模型凭据和网关（API key、Bedrock、Vertex、自定义 `ANTHROPIC_BASE_URL`）；部署在常开服务器时，`tmux` 能在 SSH 断线或笔记本合盖后保活进程。
+- **真实工程边界：** Tailscale 等组网工具只解决“网络通不通”，不解决手机和浏览器里的交互体验。在小屏终端里看跨文件大段 diff、浏览项目文件树、点选多步权限审批、把远端 `localhost:5173` 页面打开到手机上验收，以及跟踪多个并发任务里到底哪一个在等你拍板，都要靠自己额外拼接端口转发、编辑器和通知脚本。关于常开主机部署与穿透方案的底层权衡，可延伸阅读[在 VPS 上运行编码 Agent](/blog/run-coding-agents-on-a-vps) 与[面向编码 Agent 的 Tailscale 与 Cloudflare Tunnel 对比](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)。
+
+## 4. Pontia + 本机 Claude Code
+
+[Pontia](/docs/how-it-works)（Apache-2.0）是一套开源的本机控制面（`pontiad`）加上面向桌面与手机浏览器的远程 Dashboard（[app.pontia.dev](https://app.pontia.dev)）。它不是在 Anthropic Remote Control 外面套壳，而是直接通过 `@pontia/claude-client` 和 Claude Agent SDK 在你本机拉起并驱动 Claude Code（见 [Claude Code Agent Client 文档](/docs/agent-clients/claude)）。
+
+### 直接运行在本机真实开发环境里
+
+通过 Pontia 启动的 Claude Code 会以你的本机系统用户在已激活的 [Workspace](/docs/workspaces) 中运行，天然访问你本机未提交的代码改动、本地数据库、Docker 容器、编译缓存和内网服务。它直接复用本机已有的 Claude Code 登录状态或模型提供商配置——同时支持通过 `CLAUDE_CONFIG_DIR` 指定自定义配置目录，或通过 `PONTIA_CLAUDE_HOST_PATH` 使用自定义客户端安装。Session 退出后，你仍可在 Dashboard 中浏览完整历史，并在需要时发送新消息恢复同一个原生对话。
+
+### 端到端加密远程访问（官方 Edge 或自托管 Edge）
+
+Pontia 将远程连接授权与加密流量传输彻底分离（见[安全文档](/docs/security)）：
+
+- **Pontia Cloud** 仅负责账号登录、设备注册，以及签发绑定浏览器临时密钥、目标设备与密钥版本的短时能力凭证。
+- **浏览器与设备之间**直接建立应用层 **X25519 HPKE + ChaCha20-Poly1305** 端到端加密会话，并附带认证请求 ID 与防重放追踪。
+- **中继节点零明文：** 无论是 Pontia Cloud 还是负责转发密文的 Edge 节点，都看不到项目代码与对话明文。设备侧仅发起标准出站 HTTPS/WSS 连接，无需开放入站端口；你可以直接使用官方 Edge，也可以在自己的公网 Linux 服务器上部署[自托管 Edge](/docs/self-hosted-edge)（支持域名或直接使用公网 IP 签发 Let's Encrypt 证书）。关于中继安全模型的详细拆解，见[你的编程 Agent 远程方案是端到端加密的吗？](/blog/self-hosted-relay-for-coding-agents)。
+
+### 专为验收打造的 Git、文件与 `localhost` 实时预览
+
+不用在手机上勉强操作终端 TUI，[Dashboard](/docs/dashboard) 直接在对话旁提供结构化工程面板（手机端则提供 **Chats**、**Sessions**、**Todos**、**Device** 四个常驻标签页）：
+
+- **结构化 Git 面板：** 查看当前分支、upstream 与 ahead/behind 计数、staged / unstaged / untracked / conflicted 文件列表与逐文件 diff（支持 `[` 与 `]` 快捷切换），展开 **History** 即可浏览分支与历史 commit 的变更详情。
+- **多格式文件预览：** 点击回复中的文件路径、附件卡片或 **Files** 面板中的文件，即可直接查看语法高亮源码、支持相对路径跳转的 Markdown、带源码切换的沙箱 HTML、可排序的 CSV/TSV 表格、可折叠展开的 JSON/YAML 树与图片灯箱（见[预览文档](/docs/previews)）。
+- **本机 `localhost` Web 应用实时预览：** 让 Claude Code 在回复里附上 `localhost`、`127.0.0.1`、`[::1]` 或 `0.0.0.0` 地址，点击即在对话旁打开实时预览。HTTP 请求与 WebSocket 连接会直达同一本地端口（Vite / Next.js 等开发服务器的热更新开箱即用），工具栏支持刷新以及桌面宽度与 375 px 手机宽度切换。本地 Dashboard 直连本地端口；通过[远程 Dashboard](/docs/remote-access) 访问时，Pontia 会获取一个有时效的 `pontia.run` 预览地址，经所选 Edge 安全路由回本机端口。`3000`、`4173`、`5173`、`8000` 等常见开发端口默认可用，需要显式放行的端口（如 `8888`、`9222`、`9229`、`11434`）可写入 `$PONTIA_HOME/config.toml` 的 `[preview].allowed_ports` 并执行 `pontia up` 生效（见[配置文档](/docs/configuration#local-preview)）。
+
+### 多任务编排与多客户端统一工作台
+
+除了直接开启单个 Claude Code Session，你还可以创建常驻的领域 [Bot](/docs/bots)，让 Lead Bot 把复杂任务拆给多个并行 [Helper](/docs/bots/helpers)——每个 Helper 在独立的 Git worktree 与分支里干活，同时保持为可随时点开查看、直接接管的原生 Session。需要你拍板的问题会以 **Todo** 形式汇总在 [Bot 对话](/docs/bots/chat) 与手机端 **Todos** 标签页里，引用回复即自动关闭，完全不阻塞其他并行任务。同一套 Dashboard 深度集成 6 个 [Agent Client](/docs/agent-clients)（Claude Code、Codex、Pi、Grok Build、Kiro 与 Google Antigravity），并可通过 [Agent 配置（Profiles）](/docs/agent-profiles) 按角色灵活搭配客户端与模型。
+
+### 在 Pontia 上快速接入本机 Claude Code
+
+在已安装 Node.js LTS（`node` 与 `npm`）且已登录或配置好 Claude Code 的 Linux / macOS 设备上执行：
+
+```sh
+npx @pontia/cli init
+```
+
+初始化过程中选择 **Claude Code** 即可（已有 Pontia 安装可运行 `pontia setup claude` 自动安装 `@pontia/claude-client` 并启用该 Client）。如需为已有安装开启远程访问，依次运行 `pontia login` 与 `pontia remote enable`，随后在任意桌面或手机浏览器打开 [app.pontia.dev](https://app.pontia.dev)。
+
+## 四路方案横向对比
+
+| 对比维度 | Cloud Session（`claude --cloud`） | Remote Control（`claude rc`） | SSH + tmux（`claude code ssh`） | [Pontia](/docs/how-it-works) + 本机 Claude Code |
+| --- | --- | --- | --- | --- |
+| **代码执行位置** | Anthropic 托管 Ubuntu 24.04 x86_64 VM（或组织 self-hosted runner） | 你自己的本机 | 远端 Linux 主机 / 工作站 / VPS | 你自己的 Linux 或 macOS 本机 / VPS（通过 `@pontia/claude-client` + Claude Agent SDK） |
+| **合盖续航能力** | 支持（云端 VM 持续运行） | 不支持（本机休眠或进程退出即离线；server 模式断网约 10 分钟退出，`>= v2.1.200` 停服约 4 小时内可恢复） | 跑在常开 VPS / 服务器上的 `tmux` 内时支持 | `pontiad` 运行在常开 VPS / 主机上时持续在线（Linux systemd lingering / macOS LaunchAgent） |
+| **隐私与加密模型** | 代码与会话运行在 Anthropic 云端 VM；GitHub proxy 代理仓库访问 | 出站 HTTPS/TLS 连 Anthropic API；transcript 存服务器端用于同步重连（非端到端加密，ZDR / HIPAA 组织不可用） | 直连主机 SSH（或经 Tailscale / WireGuard），无厂商中继 | 浏览器与设备间应用层 **X25519 HPKE + ChaCha20-Poly1305** 端到端加密；官方或[自托管 Edge](/docs/self-hosted-edge) 均不可见明文 |
+| **本机 DB / Docker / 内网与 `localhost` 预览** | 仅限云端 VM 内环境；空闲暂停不保留后台进程；连不到本机 DB 与内网 | 本机 DB / Docker / 内网正常可用；官方 UI 无法把本机 `localhost` 嵌进手机实时预览 | 本机环境完全可用；手机看远端 `localhost` 需自行配端口转发或隧道 | 完整访问本机 DB / Docker / 内网 + 内置 `localhost` 实时预览（支持 WebSocket 热更新、375 px 手机视图与远程 `pontia.run` 限时路由） |
+| **Git diff 与文件浏览体验** | `claude.ai/code` 网页界面查看云端克隆仓库 | 内置 diff 面板与权限弹窗（部分转发对话框 5 分钟超时） | 纯终端 TUI（`git diff`、命令行分页器与编辑器） | 侧栏 **Git**（状态、diff、分支与提交 **History**）+ 多格式 **Files** 与 **预览**（代码、Markdown、HTML、CSV/TSV、JSON/YAML、图片） |
+| **多任务编排能力** | 在 `claude.ai/code` 并行开多个独立云端会话 | 每个 `claude rc` 进程对应单个本机会话 | 手动管理多个 `tmux` 窗格 / 窗口 | 常驻 [Lead Bot](/docs/bots) 并行调度独立 Git worktree [Helper](/docs/bots/helpers)、异步 **Todo** 决策流与角色化 [Agent Profiles](/docs/agent-profiles) |
+| **适用账号 / 凭据与客户端** | claude.ai 套餐（计入套餐用量，支持 GitHub 仓库或单向 `CCR_FORCE_BUNDLE=1`） | 仅限 Pro / Max / Ultra / Team / Enterprise 订阅（不支持 API key、Bedrock、Vertex、Foundry 或自定义 `ANTHROPIC_BASE_URL`） | 任意 Claude Code 认证/网关，及任意终端 Agent CLI | 复用本机 Claude Code 登录或模型提供商配置（支持自定义 `CLAUDE_CONFIG_DIR`），同台界面兼容 Codex、Pi、Grok Build、Kiro、Antigravity |
+
+## 务实选型建议
+
+把决定拉回“你的真实运行环境在哪里”，选择其实非常清晰：
+
+- **选 Cloud Session（`claude --cloud`）：** 仓库托管在 GitHub、任务不依赖本机数据库、公司内网服务或未提交改动，且你最看重“合上笔记本后云端继续并行跑 PR、零本地运维”。
+- **选 Claude Remote Control（`claude rc`）：** 你使用的是符合条件的 claude.ai 订阅（不走 API key、Bedrock/Vertex/Foundry 或自定义网关），团队没有 ZDR / HIPAA 或端到端加密硬要求，且只需要在官方 Claude App 里最快接入单个本机会话。
+- **选 SSH + tmux（`claude code ssh`）：** 你已经习惯在自己的 SSH / Tailscale 网络里直接操作纯终端 TUI，且不需要图形化的多文件 diff 面板、文件预览器或手机端嵌入式 `localhost` 预览。
+- **选 Pontia：** 你需要 Claude Code 直接运行在自己的本机代码、数据库、Docker 与内网服务之中，同时获得应用层端到端加密（并可按需自托管 Edge）、桌面与手机端结构化 Git 与文件预览、一键点开的 `localhost` 热更新实时预览，以及用 Lead Bot + 多 Helper（独立 Git worktree）并行推进任务，并与 Codex、Pi、Grok Build、Kiro、Antigravity 在同一工作台协同。
+
+## 参考资料与延伸阅读
+
+- Anthropic 官方一手文档：[Remote Control](https://code.claude.com/docs/en/remote-control)、[Claude Code on the web](https://code.claude.com/docs/en/claude-code-on-the-web)、[Cloud environments](https://code.claude.com/docs/en/cloud-environments)、[Data usage](https://code.claude.com/docs/en/data-usage)、[2026-w34 更新说明](https://code.claude.com/docs/en/whats-new/2026-w34) 与 [Claude Code on the web 专题介绍](https://claude.com/resources/articles/claude-code-on-the-web)
+- Pontia 文档：[Claude Code Agent Client](/docs/agent-clients/claude)、[工作原理](/docs/how-it-works)、[安全架构](/docs/security)、[远程访问](/docs/remote-access)、[自托管 Edge](/docs/self-hosted-edge)、[Dashboard 指南](/docs/dashboard)、[预览](/docs/previews)、[Bots](/docs/bots) 与[并行运行 Helper](/docs/bots/helpers)
+- 延伸对比：[Codex、Claude Code 和 Pi 的远程控制对比](/blog/coding-agent-remote-control-alternatives)、[你的编程 Agent 远程方案是端到端加密的吗？](/blog/self-hosted-relay-for-coding-agents)、[从 Agent Harness 到 Coding Agent Orchestrator](/blog/coding-agent-orchestrator-lead-bot-helpers) 与[在 VPS 上运行编码 Agent](/blog/run-coding-agents-on-a-vps)
