@@ -8,7 +8,7 @@ stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 bun install --cwd "$root/clients/claude" --frozen-lockfile
 bun run --cwd "$root/clients/claude" build
-cp "$root/clients/claude/package.json" "$root/LICENSE" "$stage/"
+cp "$root/clients/claude/package.json" "$root/clients/claude/README.md" "$root/LICENSE" "$stage/"
 mkdir "$stage/dist"
 cp -R "$root/clients/claude/dist/src" "$stage/dist/src"
 cp -R "$root/clients/claude/dist/shared" "$stage/dist/shared"

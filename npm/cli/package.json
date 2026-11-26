@@ -1,7 +1,21 @@
 {
   "name": "@pontia/cli",
   "version": "0.0.0",
-  "description": "Install Pontia from the npm registry.",
+  "description": "Run Claude Code, Codex, Grok Build, Kiro, Google Antigravity, Pi, ACP coding agents, and Pontia Bots locally and control them remotely.",
+  "keywords": [
+    "pontia",
+    "claude-code",
+    "codex",
+    "grok-build",
+    "kiro",
+    "antigravity",
+    "pi",
+    "acp",
+    "coding-agent",
+    "ai-agent",
+    "self-hosted",
+    "remote-control"
+  ],
   "homepage": "https://pontia.dev/",
   "bugs": {
     "url": "https://github.com/anthod0/pontia/issues"

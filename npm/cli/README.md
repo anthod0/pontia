@@ -1,6 +1,6 @@
 # @pontia/cli
 
-Install [Pontia](https://pontia.dev/) from the npm registry. Pontia lets you run and control your coding agents (pi, Codex, Claude Code, and ACP agents) from a local or remote Dashboard.
+Install [Pontia](https://pontia.dev/) from the npm registry. Pontia runs coding agents and Bots on your device and lets you control them from its local or remote Dashboard. It supports Claude Code, Codex, Grok Build, Kiro, Google Antigravity, Pi, and ACP agents.
 
 The `pontia` and `pontiad` binaries come from a platform package on your configured registry, so npm mirrors and private registries work.
 
@@ -36,6 +36,9 @@ This runs `pontia update`, which downloads from the Pontia release server instea
 ## Documentation
 
 - [Getting started](https://pontia.dev/docs/getting-started)
+- [Bots](https://pontia.dev/docs/bots)
+- [Agent Clients](https://pontia.dev/docs/agent-clients)
+- [Remote access](https://pontia.dev/docs/remote-access)
 - [Initialization](https://pontia.dev/docs/initialization)
 
 ## License

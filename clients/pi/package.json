@@ -3,8 +3,13 @@
   "version": "0.0.0",
   "description": "Pi extension that connects coding-agent sessions to Pontia.",
   "keywords": [
+    "ai-agent",
+    "coding-agent",
+    "pi",
     "pi-package",
-    "pontia-client-plugin"
+    "pontia",
+    "pontia-client-plugin",
+    "remote-control"
   ],
   "homepage": "https://pontia.dev/",
   "bugs": {

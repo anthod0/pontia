@@ -2,6 +2,16 @@
   "name": "@pontia/claude-client",
   "version": "0.0.0",
   "description": "Claude Code client for Pontia",
+  "keywords": [
+    "pontia",
+    "claude-code",
+    "claude-agent-sdk",
+    "coding-agent"
+  ],
+  "homepage": "https://pontia.dev/docs/agent-clients/claude",
+  "bugs": {
+    "url": "https://github.com/anthod0/pontia/issues"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -10,6 +20,7 @@
   },
   "files": [
     "dist/src",
+    "README.md",
     "LICENSE",
     "dist/shared"
   ],
