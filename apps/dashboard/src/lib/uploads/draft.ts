@@ -26,6 +26,7 @@ export type UploadItem = {
   record?: UploadRecord;
   upload?: Upload;
   file?: File;
+  thumbnailUrl?: string;
   error?: string;
   secret?: Omit<SecretFile, "path">;
   saved: boolean;
@@ -44,6 +45,7 @@ export async function fileDigest(file: Blob, signal?: AbortSignal): Promise<stri
 }
 export function createUploadDrafts(device: DeviceRuntime) {
   const retainedDrafts = new Map<string, ReturnType<typeof createUploadDraft>>();
+  const thumbnailUrls = new Set<string>();
   function uploadKey(): string {
     const bytes = crypto.getRandomValues(new Uint8Array(16));
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
@@ -78,6 +80,12 @@ export function createUploadDrafts(device: DeviceRuntime) {
     async function forget(item: UploadItem) {
       if (item.secret || !item.record) return;
       await removeUploadRecord(item.record);
+    }
+    function releaseThumbnail(item: UploadItem) {
+      const url = item.thumbnailUrl;
+      item.thumbnailUrl = undefined;
+      if (!url || !thumbnailUrls.delete(url)) return;
+      URL.revokeObjectURL(url);
     }
     function active(item: UploadItem, signal: AbortSignal) {
       signal.throwIfAborted();
@@ -215,10 +223,14 @@ export function createUploadDrafts(device: DeviceRuntime) {
       }
     })();
     function enqueue(file: File, id: string, secret?: UploadItem["secret"]) {
+      const thumbnailUrl =
+        !secret && file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
+      if (thumbnailUrl) thumbnailUrls.add(thumbnailUrl);
       const item: UploadItem = {
         id,
         secret,
         file: secret ? file : undefined,
+        thumbnailUrl,
         name: file.name,
         size: file.size,
         status: "hashing",
@@ -263,6 +275,7 @@ export function createUploadDrafts(device: DeviceRuntime) {
           emit();
           return;
         }
+        releaseThumbnail(item);
         state.items = state.items.filter((value) => value !== item);
         emit();
       },
@@ -273,6 +286,7 @@ export function createUploadDrafts(device: DeviceRuntime) {
           item.file = undefined;
         }
         for (const item of items) await forget(item);
+        for (const item of items) releaseThumbnail(item);
         state.items = state.items.filter((item) => !items.includes(item));
         emit();
       },
@@ -295,6 +309,8 @@ export function createUploadDrafts(device: DeviceRuntime) {
     dispose() {
       for (const draft of retainedDrafts.values()) draft.destroy();
       retainedDrafts.clear();
+      for (const url of thumbnailUrls) URL.revokeObjectURL(url);
+      thumbnailUrls.clear();
     },
   };
 }

@@ -2,31 +2,12 @@
   import { t } from '$lib/i18n';
   // The inline and fullscreen composers render this component for the same draft; notify once per error.
   const notified = new Map<string, string>()
-  // Both composers share one object URL per image; the draft drops the File once its upload completes.
-  const previews = new Map<string, { url: string; holders: number }>()
-  function holdPreview(id: string, file: File | undefined) {
-    let preview = previews.get(id)
-    if (!preview) {
-      if (!file) return undefined
-      preview = { url: URL.createObjectURL(file), holders: 0 }
-      previews.set(id, preview)
-    }
-    preview.holders++
-    return preview.url
-  }
-  function releasePreview(id: string) {
-    const preview = previews.get(id)
-    if (!preview || --preview.holders > 0) return
-    URL.revokeObjectURL(preview.url)
-    previews.delete(id)
-  }
 </script>
 
 <script lang="ts">
   import SecretChip from './SecretChip.svelte'
   import { fileKind, fileKindOf } from './fileKind'
   import { toast } from 'svelte-sonner'
-  import { onDestroy } from 'svelte'
   import { Button } from '$lib/components/ui/button/index.js'
   import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
   import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon'
@@ -38,8 +19,6 @@
   let { draft, disabled = false }: { draft: UploadDraft; disabled?: boolean } = $props()
   let picker: HTMLInputElement
   let resumeItem: UploadItem | undefined
-  const held: Record<string, string> = {}
-  let thumbnails = $state<Record<string, string>>({})
   const unknownKind = fileKind('')
   export function choose(item?: UploadItem) { resumeItem = item; picker.multiple = !item; picker.click() }
   $effect(() => {
@@ -48,19 +27,6 @@
     for (const item of items)
       notify(`upload-error-${item.id}`, item.error, () => toast.error($t('files.uploadFailedNamed', { name: displayName(item) }), { id: `upload-error-${item.id}`, description: item.error }))
   })
-  $effect(() => {
-    const ids = new Set<string>()
-    for (const item of $draft.items) {
-      ids.add(item.id)
-      if (item.id in held || item.secret) continue
-      const url = holdPreview(item.id, item.file?.type.startsWith('image/') ? item.file : undefined)
-      if (url) held[item.id] = url
-    }
-    for (const id of Object.keys(held))
-      if (!ids.has(id)) { releasePreview(id); delete held[id] }
-    thumbnails = { ...held }
-  })
-  onDestroy(() => { for (const id of Object.keys(held)) releasePreview(id) })
   function displayName(item: UploadItem) {
     return item.secret?.label ?? item.secret?.masked ?? item.name
   }
@@ -115,7 +81,7 @@
   <ul class="flex gap-3 px-3 pb-1 pt-3 max-sm:overflow-x-auto max-sm:[scrollbar-width:none] sm:flex-wrap">
     {#each $draft.items as item (item.id)}
       {@const kind = fileKindOf(item.name)}
-      {@const thumbnail = thumbnails[item.id]}
+      {@const thumbnail = item.thumbnailUrl}
       {@const failed = item.status === 'failed'}
       <li class="relative size-16 shrink-0" title={tooltip(item)}>
         <div class={['relative size-full overflow-hidden rounded-xl', failed ? 'bg-destructive/10' : 'bg-muted']}>

@@ -2,7 +2,7 @@ import { testDevice } from "./deviceFixture";
 import { File, Blob } from "node:buffer";
 import { get } from "svelte/store";
 import { afterEach, expect, test, vi } from "vitest";
-import { fileDigest } from "../src/lib/uploads/draft";
+import { createUploadDrafts, fileDigest } from "../src/lib/uploads/draft";
 const { createUploadDraft } = testDevice.uploadDrafts;
 import { loadUploadRecords, saveUploadRecord } from "../src/lib/uploads/records";
 import { parseUploadMessage, uploadMessage } from "../src/lib/uploads/message";
@@ -183,6 +183,67 @@ test("uploads on Local HTTP origins without secure-context crypto APIs", async (
   expect(remote.patches).toEqual([0]);
   expect(get(draft).items[0].status).toBe("complete");
   draft.destroy();
+});
+
+test("releases image thumbnails when attachments leave their draft", async () => {
+  const create = vi
+    .spyOn(URL, "createObjectURL")
+    .mockReturnValueOnce("blob:remove")
+    .mockReturnValueOnce("blob:clear");
+  const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => new Promise(() => {})),
+  );
+  const draft = createUploadDraft(crypto.randomUUID());
+  try {
+    await draft.initialized;
+    await draft.add([
+      new File(["remove"], "remove.png", { type: "image/png" }),
+      new File(["clear"], "clear.png", { type: "image/png" }),
+    ]);
+    await vi.waitFor(() => expect(get(draft).items).toHaveLength(2));
+    const [removed] = get(draft).items;
+
+    await draft.remove(removed);
+    expect(revoke).toHaveBeenCalledTimes(1);
+    expect(revoke).toHaveBeenLastCalledWith("blob:remove");
+
+    await draft.clear();
+    expect(revoke).toHaveBeenCalledTimes(2);
+    expect(revoke).toHaveBeenLastCalledWith("blob:clear");
+  } finally {
+    draft.destroy();
+    create.mockRestore();
+    revoke.mockRestore();
+  }
+});
+
+test("keeps image thumbnails until the upload runtime is disposed", async () => {
+  const create = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:dispose");
+  const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => new Promise(() => {})),
+  );
+  const uploadDrafts = createUploadDrafts(testDevice);
+  const draft = uploadDrafts.createUploadDraft(crypto.randomUUID());
+  try {
+    await draft.initialized;
+    await draft.add([new File(["dispose"], "dispose.png", { type: "image/png" })]);
+    await vi.waitFor(() => expect(get(draft).items).toHaveLength(1));
+
+    draft.destroy();
+    expect(revoke).not.toHaveBeenCalled();
+
+    uploadDrafts.dispose();
+    expect(revoke).toHaveBeenCalledOnce();
+    expect(revoke).toHaveBeenCalledWith("blob:dispose");
+  } finally {
+    uploadDrafts.dispose();
+    create.mockRestore();
+    revoke.mockRestore();
+  }
 });
 
 test("recognizes valid quoted XML attributes while keeping extra attributes and nested markup literal", () => {

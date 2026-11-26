@@ -1,5 +1,6 @@
 import { testDevice } from "../deviceFixture";
 import { createEvent, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { get } from "svelte/store";
 import { afterEach, expect, test, vi } from "vitest";
 const toast = vi.hoisted(() => ({
   error: vi.fn(),
@@ -8,6 +9,7 @@ const toast = vi.hoisted(() => ({
 }));
 vi.mock("svelte-sonner", () => ({ toast }));
 import MessageComposer from "../../src/components/chat/MessageComposer.svelte";
+import UploadAttachments from "../../src/components/chat/UploadAttachments.svelte";
 import FileDropZoneHarness from "./FileDropZoneHarness.svelte";
 import { loadUploadRecords, saveUploadRecord } from "../../src/lib/uploads/records";
 testDevice.access.uploadStorageScope = async () => "composer-test";
@@ -154,6 +156,53 @@ test("shows a pasted image as a thumbnail and releases it when the attachment is
     await waitFor(() => expect(revoke).toHaveBeenCalledWith("blob:thumbnail"));
     expect(screen.queryByRole("img", { name: "image.png" })).not.toBeInTheDocument();
   } finally {
+    create.mockRestore();
+    revoke.mockRestore();
+  }
+});
+
+test("keeps a completed image thumbnail when the attachment component remounts", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_url: string, init: RequestInit) => {
+      const headers = new Headers(init.headers);
+      const upload = {
+        upload_id: headers.get("Idempotency-Key") ?? crypto.randomUUID(),
+        name: "image.png",
+        size: 3,
+        sha256: "b29814cf5792e684cd75b6e9f5464fe3f49088c3f3acbbbd55124d28c59b2073",
+        offset: 3,
+        completed: true,
+        path: "/device/image.png",
+        created_at: "2026-11-27T00:00:00Z",
+      };
+      return new Response(JSON.stringify({ data: { upload }, error: null, meta: {} }));
+    }),
+  );
+  const create = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:completed-thumbnail");
+  const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  const draft = testDevice.uploadDrafts.getRetainedUploadDraft(crypto.randomUUID());
+  try {
+    await draft.initialized;
+    await draft.add([new File(["png"], "image.png", { type: "image/png" })]);
+    await waitFor(() => expect(get(draft).items[0]?.status).toBe("complete"));
+    expect(get(draft).items[0].file).toBeUndefined();
+
+    const first = render(UploadAttachments, { draft });
+    const thumbnail = await screen.findByRole("img", { name: "image.png" });
+    expect(thumbnail).toHaveAttribute("src", "blob:completed-thumbnail");
+    first.unmount();
+    expect(revoke).not.toHaveBeenCalled();
+
+    render(UploadAttachments, { draft });
+    expect(await screen.findByRole("img", { name: "image.png" })).toHaveAttribute(
+      "src",
+      "blob:completed-thumbnail",
+    );
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(revoke).not.toHaveBeenCalled();
+  } finally {
+    await draft.clear();
     create.mockRestore();
     revoke.mockRestore();
   }
