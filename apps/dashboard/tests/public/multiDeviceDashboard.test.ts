@@ -7,7 +7,22 @@ import { createRemoteAccessFixture } from "./fixtures/remoteConnections";
 import { loadUploadRecords, removeUploadRecord } from "../../src/lib/uploads/records";
 
 let fixture: ReturnType<typeof createRemoteAccessFixture>;
-const goto = vi.hoisted(() => vi.fn(async (url: string) => window.history.pushState({}, "", url)));
+vi.mock("$app/state", async (importOriginal) => {
+  const original = await importOriginal<typeof import("$app/state")>();
+  return {
+    ...original,
+    page: Object.create(original.page, {
+      state: { get: () => window.history.state ?? {} },
+      url: { get: () => new URL(window.location.href) },
+    }),
+  };
+});
+const goto = vi.hoisted(() =>
+  vi.fn(async (url: string, options: { replaceState?: boolean; state?: App.PageState } = {}) => {
+    const method = options.replaceState ? "replaceState" : "pushState";
+    window.history[method](options.state ?? {}, "", url);
+  }),
+);
 vi.mock("$app/navigation", () => ({ goto }));
 const redirectToSignIn = vi.hoisted(() => vi.fn());
 vi.mock("../../src/modes/public/signInRedirect", () => ({ redirectToSignIn }));
@@ -193,6 +208,50 @@ test("switching devices restores each device's last opened chat after a reload",
   await waitFor(() => expect(location.pathname).toBe("/office-mac/chat/same"));
   await chooseSidebarDevice("Travel Laptop");
   await waitFor(() => expect(location.pathname).toBe("/travel-laptop/chat/same"));
+});
+
+test("switching devices preserves a side panel supported by the restored chat", async () => {
+  localStorage.setItem(
+    "pontia.lastPage:travel-laptop",
+    JSON.stringify({ kind: "chat", id: "last-travel" }),
+  );
+  window.history.replaceState({}, "", "/office-mac/chat/same?panel=git");
+  render(MultiDeviceDashboardHarness);
+  await sidebar().findByRole("button", { name: "office-mac chat" });
+
+  await chooseSidebarDevice("Travel Laptop");
+
+  await waitFor(() => expect(location.pathname).toBe("/travel-laptop/chat/last-travel"));
+  expect(location.search).toBe("?panel=git");
+});
+
+test("switching devices drops a panel tab unsupported by the restored chat", async () => {
+  localStorage.setItem(
+    "pontia.lastPage:travel-laptop",
+    JSON.stringify({ kind: "chat", id: "last-travel" }),
+  );
+  window.history.replaceState({}, "", "/office-mac/bots/pontia?panel=context");
+  render(MultiDeviceDashboardHarness);
+  await screen.findByText("Device page");
+
+  await chooseSidebarDevice("Travel Laptop");
+
+  await waitFor(() => expect(location.pathname).toBe("/travel-laptop/chat/last-travel"));
+  expect(location.search).toBe("");
+});
+
+test("a device without a last chat does not carry the old panel into a later switch", async () => {
+  window.history.replaceState({}, "", "/office-mac/chat/same?panel=git");
+  render(MultiDeviceDashboardHarness);
+  await sidebar().findByRole("button", { name: "office-mac chat" });
+
+  await chooseSidebarDevice("Travel Laptop");
+  await waitFor(() => expect(location.pathname).toBe("/travel-laptop"));
+  expect(location.search).toBe("");
+
+  await chooseSidebarDevice("Office Mac");
+  await waitFor(() => expect(location.pathname).toBe("/office-mac/chat/same"));
+  expect(location.search).toBe("");
 });
 
 test("sidebar follows the routed device after navigation", async () => {
@@ -466,13 +525,14 @@ test("Back to chat returns to the last chat of the device chosen in settings", a
 });
 
 test("sidebar device selection keeps the settings section and permits an offline target", async () => {
-  window.history.replaceState({}, "", "/office-mac/settings/clients");
+  window.history.replaceState({}, "", "/office-mac/settings/clients?panel=git");
   render(MultiDeviceDashboardHarness);
   await screen.findByText("Device page");
   expect(screen.queryByLabelText("Settings device")).not.toBeInTheDocument();
   fixture.connectionFailures.get("travel-laptop")!(new Error("offline"));
   await chooseSidebarDevice("Travel Laptop");
   await waitFor(() => expect(location.pathname).toBe("/travel-laptop/settings/clients"));
+  expect(location.search).toBe("");
   await userEvent.click(await screen.findByRole("button", { name: "Try again" }));
   await screen.findByText("Device page");
   expect(fixture.signals.get("office-mac")).toHaveLength(1);

@@ -127,7 +127,7 @@
       return;
     }
     returnToLastPage();
-    void navigate('/', undefined, { scope: `/${target}` });
+    void navigate('/', undefined, { scope: `/${target}`, preserveSidePanel: true });
   }
 
   function openNewChat(): void {

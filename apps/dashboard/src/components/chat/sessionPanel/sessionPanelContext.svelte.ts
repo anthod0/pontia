@@ -4,14 +4,12 @@ import { SidePanelRoute } from "$lib/sidePanelRoute.svelte";
 import type { PersistedState } from "$lib/storage";
 import type { RecentFile } from "$lib/botRecentFiles";
 import { createSessionRecentFiles, withSessionRecentFile } from "$lib/sessionRecentFiles";
+import { sessionPanelTabs, type SessionPanelTab } from "$lib/sessionPanelTab";
 import type { DeviceRuntime } from "../../../device/runtime";
 import type { FilePreviewTarget } from "../filePreviewContext";
 import { GitPanelState } from "../git/gitPanelState.svelte";
 
-const panelTabs = ["files", "preview", "git"] as const;
-
-/** A tab of the session side panel. */
-export type SessionPanelTab = (typeof panelTabs)[number];
+export type { SessionPanelTab } from "$lib/sessionPanelTab";
 
 /** The Session the panel shows, registered by the session page. */
 export type SessionPanelSource = {
@@ -25,7 +23,7 @@ export type SessionPanelSource = {
  * it reopens on the tab last used.
  */
 export class SessionPanel {
-  #route = new SidePanelRoute<SessionPanelTab>(panelTabs);
+  #route = new SidePanelRoute<SessionPanelTab>(sessionPanelTabs);
   mobileEntry?: { sessionId: string; tab: SessionPanelTab };
   source = $state.raw<SessionPanelSource | null>(null);
   /** The last Session shown, kept while the next session page loads. */

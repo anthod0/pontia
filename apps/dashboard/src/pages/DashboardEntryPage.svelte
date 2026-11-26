@@ -7,6 +7,7 @@
   import MobileBotChatSkeleton from '../views/mobile/bots/MobileBotChatSkeleton.svelte'
   import { useDeviceRuntime } from '../device/context'
   import { isMobileShell } from '$lib/hooks/shellMode.svelte'
+  import { page } from '$app/state'
   import NewChatPage from './NewChatPage.svelte'
 
   // A newly opened Dashboard and "Back to chat" reopen the last Session chat or Bot chat; otherwise this is New Chat.
@@ -15,7 +16,9 @@
   let restoring = $state(takeLastPage(device.id))
 
   $effect(() => {
-    if (!restoring && isMobileShell()) void navigate('/bots', undefined, { scope: routeScope, replaceState: true })
+    if (restoring) return
+    if (isMobileShell()) void navigate('/bots', undefined, { scope: routeScope, replaceState: true })
+    else if (page.state.deviceSwitchPanel) void navigate('/', undefined, { scope: routeScope, replaceState: true })
   })
 
   onMount(() => {
@@ -26,7 +29,7 @@
       // The Bot chat opens at once, before the device answers; a Bot deleted since then is forgotten afterwards.
       const opened = `/bots/${encodeURIComponent(page.id)}`
       endReturnToLastPage()
-      void navigate(opened, undefined, { scope: routeScope, replaceState: true })
+      void navigate(opened, undefined, { scope: routeScope, replaceState: true, preserveSidePanel: true })
       void lastPagePath(device, page).then(path => {
         if (!path && dashboardRelativePath() === opened) void navigate('/', undefined, { scope: routeScope, replaceState: true })
       })
@@ -35,7 +38,7 @@
     void lastPagePath(device, page).then(path => {
       if (disposed) return
       endReturnToLastPage()
-      if (path) void navigate(path, undefined, { scope: routeScope, replaceState: true })
+      if (path) void navigate(path, undefined, { scope: routeScope, replaceState: true, preserveSidePanel: true })
       else restoring = null
     })
     return () => { disposed = true }
