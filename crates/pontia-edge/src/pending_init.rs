@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{files::atomic_write, port::validate_edge_port};
+use crate::{config::PortPreviewSetting, files::atomic_write, port::validate_edge_port};
 
 pub const PENDING_INIT_PATH: &str = "/etc/pontia/edge/pending-init.json";
 
@@ -15,6 +15,7 @@ pub struct PendingInit {
     pub ticket: String,
     pub acme_staging: bool,
     pub port: Option<u16>,
+    pub preview_ports: Option<String>,
 }
 
 impl PendingInit {
@@ -39,6 +40,11 @@ impl PendingInit {
             validate_edge_port(port)
                 .map_err(anyhow::Error::msg)
                 .context("pending initialization contains an invalid port")?;
+        }
+        if let Some(ranges) = &pending.preview_ports {
+            PortPreviewSetting::parse(ranges)
+                .map_err(anyhow::Error::msg)
+                .context("pending initialization contains invalid preview ports")?;
         }
         Ok(pending)
     }
@@ -65,6 +71,7 @@ mod tests {
             ticket: "pet_v1_secret".to_owned(),
             acme_staging: true,
             port: Some(8443),
+            preview_ports: Some("20000-20099".to_owned()),
         }
     }
 
@@ -102,7 +109,7 @@ mod tests {
         let path = test_root.path().join("pending-init.json");
         fs::write(
             &path,
-            br#"{"edge_id":"0199791c-6600-7000-8000-000000000001","ticket":"pet_v1_secret","acme_staging":false,"port":null,"acme_challenge":"dns-01"}"#,
+            br#"{"edge_id":"0199791c-6600-7000-8000-000000000001","ticket":"pet_v1_secret","acme_staging":false,"port":null,"preview_ports":null,"acme_challenge":"dns-01"}"#,
         )
         .unwrap();
 

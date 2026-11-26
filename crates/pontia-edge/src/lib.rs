@@ -30,6 +30,8 @@ use axum::{
     middleware,
     routing::{get, post},
 };
+use axum_server::tls_rustls::RustlsConfig;
+use config::PortPreviewConfig;
 use tokio::sync::{Semaphore, watch};
 
 pub use browser_http::{BrowserOrigins, REQUESTS_PATH, SESSIONS_PATH};
@@ -87,7 +89,55 @@ impl Edge {
     }
 
     pub fn router(&self, hostname: &str, port: u16, preview_base: Option<&str>) -> Router {
+        self.router_inner(hostname, port, preview_base, None)
+    }
+
+    pub fn router_with_port_preview(
+        &self,
+        hostname: &str,
+        port: u16,
+        preview_base: Option<&str>,
+        config: Option<&PortPreviewConfig>,
+        tls: RustlsConfig,
+    ) -> Router {
+        let manager = config.map(|config| {
+            preview::port_manager::PreviewPortManager::new(
+                self.clone(),
+                hostname,
+                port,
+                config,
+                tls,
+            )
+        });
+        self.router_inner(hostname, port, preview_base, manager)
+    }
+
+    fn router_inner(
+        &self,
+        hostname: &str,
+        port: u16,
+        preview_base: Option<&str>,
+        port_preview: Option<preview::port_manager::PreviewPortManager>,
+    ) -> Router {
         let ownership_host = hostname.to_owned();
+        let preview_open = match port_preview {
+            Some(manager) => Router::new()
+                .route(
+                    "/__pontia/preview/open",
+                    post(preview::port_manager::PreviewPortManager::open)
+                        .options(browser_http::preflight),
+                )
+                .with_state(manager),
+            None => Router::new().route(
+                "/__pontia/preview/open",
+                post(preview::port_manager::PreviewPortManager::unavailable)
+                    .options(browser_http::preflight),
+            ),
+        }
+        .route_layer(middleware::from_fn_with_state(
+            self.clone(),
+            browser_http::cors,
+        ));
         let control = Router::new()
             .route("/healthz", get(notify_update::health))
             .route("/__pontia/version", post(notify_update::version))
@@ -116,6 +166,7 @@ impl Edge {
                         browser_http::cors,
                     )),
             )
+            .merge(preview_open)
             .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
             .with_state(self.clone());
         preview::router(self.clone(), control, hostname, port, preview_base)

@@ -21,6 +21,7 @@ use axum_server::{Handle, tls_rustls::RustlsConfig};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use ed25519_dalek::{Signer, SigningKey};
 use futures_util::StreamExt;
+use pontia_edge::config::PortPreviewConfig;
 use pontia_edge::{BrowserOrigins, ConnectionLimits, Edge, TicketRedeemer};
 use pontia_tunnel::{DeviceRequestHandler, protocol, serve_device};
 use rustls::{ClientConfig, RootCertStore, ServerConfig, pki_types::PrivatePkcs8KeyDer};
@@ -66,6 +67,7 @@ pub struct TestEdge {
     pub cloud_origin: String,
     pub connector: Connector,
     pub http: reqwest::Client,
+    pub edge_tls: RustlsConfig,
     tickets: Arc<Mutex<HashMap<String, Uuid>>>,
     issued: Arc<AtomicUsize>,
     delay_redemption: Arc<AtomicBool>,
@@ -77,6 +79,10 @@ pub struct TestEdge {
 
 impl TestEdge {
     pub async fn start() -> Self {
+        Self::start_with_preview(None).await
+    }
+
+    pub async fn start_with_preview(port_preview: Option<PortPreviewConfig>) -> Self {
         let root = tempfile::tempdir().unwrap();
         let rcgen::CertifiedKey { cert, signing_key } =
             rcgen::generate_simple_self_signed(vec!["127.0.0.1".into()]).unwrap();
@@ -173,20 +179,20 @@ impl TestEdge {
                 ticket_redeem_timeout: Duration::from_millis(500),
             },
         );
-        let router = edge.router(
+        let edge_tls = RustlsConfig::from_config(Arc::new(server_tls()));
+        let router = edge.router_with_port_preview(
             "127.0.0.1",
             edge_listener.local_addr().unwrap().port(),
             Some("test.pontia.run"),
+            port_preview.as_ref(),
+            edge_tls.clone(),
         );
         let edge_handle = Handle::new();
         let edge_task = tokio::spawn(
-            axum_server::from_tcp_rustls(
-                edge_listener,
-                RustlsConfig::from_config(Arc::new(server_tls())),
-            )
-            .unwrap()
-            .handle(edge_handle.clone())
-            .serve(router.into_make_service()),
+            axum_server::from_tcp_rustls(edge_listener, edge_tls.clone())
+                .unwrap()
+                .handle(edge_handle.clone())
+                .serve(router.into_make_service()),
         );
         Self {
             root,
@@ -196,6 +202,7 @@ impl TestEdge {
             cloud_origin,
             connector,
             http,
+            edge_tls,
             tickets,
             issued,
             delay_redemption,

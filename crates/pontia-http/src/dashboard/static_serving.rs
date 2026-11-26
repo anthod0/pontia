@@ -19,7 +19,7 @@ pub(crate) async fn security_headers(mut response: Response) -> Response {
             "img-src 'self' https: data: blob:; ",
             "connect-src 'self' https:; ",
             "frame-src 'self' http: https: blob:; ",
-            "form-action 'self' https://*.pontia.run:*; ",
+            "form-action 'self' https:; ",
             "object-src 'none'; ",
             "base-uri 'none'; ",
             "frame-ancestors 'none'",

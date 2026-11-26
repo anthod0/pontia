@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { base64url } from "jose";
+import { eq } from "drizzle-orm";
 import { devices, edges, users } from "../src/lib/server/db/schema";
 import { connectDashboardDevice } from "../src/lib/server/remote-access/device-connect";
 import { verifyDeviceKeyProof } from "../src/lib/server/remote-access/device-key-proof";
@@ -166,6 +167,39 @@ test("a self-hosted edge on its own domain receives connections but no previews"
     PREVIEW_ZONE: "pontia.run",
     E2E_CAPABILITY_SIGNING_KEY: keys.privateKey,
   } as unknown as App.Platform["env"];
+  expect(await issuePreviewToken(database.db, "user-owner", handle, 5173, env)).toEqual({
+    status: 409,
+    body: { error: "edge_preview_unavailable" },
+  });
+});
+
+test("owned private IP edges receive edge-port preview tokens", async () => {
+  const keys = await capabilityKeys();
+  await seedDevice(base64url.encode(new Uint8Array(32).fill(7)));
+  const env = {
+    PREVIEW_ZONE: "pontia.run",
+    E2E_CAPABILITY_SIGNING_KEY: keys.privateKey,
+  } as unknown as App.Platform["env"];
+
+  for (const [tunnelUrl, edgeApiOrigin] of [
+    ["wss://8.8.8.8/tunnel", "https://8.8.8.8"],
+    ["wss://[2606:4700:4700::1111]:8443/tunnel", "https://[2606:4700:4700::1111]:8443"],
+  ]) {
+    await database.db.update(edges).set({ tunnelUrl }).where(eq(edges.userId, "user-owner"));
+    const result = await issuePreviewToken(database.db, "user-owner", handle, 5173, env);
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({
+      mode: "edge_port",
+      edge_api_origin: edgeApiOrigin,
+      expires_at: expect.any(Number),
+      token: expect.any(String),
+    });
+  }
+
+  await database.db
+    .update(edges)
+    .set({ accessScope: "public" })
+    .where(eq(edges.userId, "user-owner"));
   expect(await issuePreviewToken(database.db, "user-owner", handle, 5173, env)).toEqual({
     status: 409,
     body: { error: "edge_preview_unavailable" },

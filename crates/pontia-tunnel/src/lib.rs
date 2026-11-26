@@ -1,7 +1,7 @@
 mod client;
 pub mod endpoint;
 mod preview_token;
-pub use preview_token::PreviewTokenVerifier;
+pub use preview_token::{PreviewTokenVerifier, VerifiedPreviewToken};
 pub mod protocol;
 mod transport;
 pub mod ws_frame;

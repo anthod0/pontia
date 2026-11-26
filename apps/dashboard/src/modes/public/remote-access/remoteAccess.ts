@@ -314,7 +314,7 @@ export function dashboardBootstrapUrl(handle: string): string {
 }
 
 export async function requestPreviewToken(
-  device: Pick<PublicDevice, "handle" | "deviceId">,
+  device: Pick<PublicDevice, "handle" | "deviceId"> & { edgeApiOrigin?: string | null },
   port: number,
   signal: AbortSignal,
 ) {
@@ -330,6 +330,20 @@ export async function requestPreviewToken(
   );
   if (!response.ok) throw new CloudRequestError("Cloud request failed.", response.status);
   const value: unknown = await response.json();
+  if (
+    isRecord(value) &&
+    value.mode === "edge_port" &&
+    typeof value.edge_api_origin === "string" &&
+    typeof value.token === "string" &&
+    value.token.trim() &&
+    Number.isSafeInteger(value.expires_at)
+  ) {
+    const edgeApiOrigin = parseEdgeOrigin(value.edge_api_origin);
+    if (!device.edgeApiOrigin || edgeApiOrigin !== device.edgeApiOrigin) {
+      throw new CloudRequestError("Cloud returned an invalid preview token response.");
+    }
+    return { mode: "edge_port" as const, edgeApiOrigin, token: value.token };
+  }
   const origin =
     isRecord(value) && typeof value.preview_origin === "string"
       ? URL.parse(value.preview_origin)
@@ -350,5 +364,5 @@ export async function requestPreviewToken(
     !Number.isSafeInteger(value.expires_at)
   )
     throw new CloudRequestError("Cloud returned an invalid preview token response.");
-  return { origin: origin.origin, token: value.token };
+  return { mode: "managed_dns" as const, origin: origin.origin, token: value.token };
 }

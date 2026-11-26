@@ -1,5 +1,11 @@
 mod auth;
+pub(crate) mod port_manager;
 mod ws;
+
+use std::sync::{
+    Arc,
+    atomic::{AtomicU64, AtomicUsize, Ordering},
+};
 
 use axum::{
     Router,
@@ -19,9 +25,62 @@ use uuid::Uuid;
 use crate::Edge;
 
 #[derive(Clone, Copy)]
-struct Target {
+pub(super) struct Target {
     device: Uuid,
     port: u16,
+}
+
+#[derive(Clone)]
+pub(super) struct Activity {
+    last_activity_unix: Arc<AtomicU64>,
+    active_ws: Arc<AtomicUsize>,
+}
+
+impl Activity {
+    pub(super) fn new() -> Self {
+        let activity = Self {
+            last_activity_unix: Arc::new(AtomicU64::new(0)),
+            active_ws: Arc::new(AtomicUsize::new(0)),
+        };
+        activity.touch();
+        activity
+    }
+
+    pub(super) fn touch(&self) {
+        self.last_activity_unix
+            .store(jsonwebtoken::get_current_timestamp(), Ordering::Relaxed);
+    }
+
+    pub(super) fn last_activity(&self) -> u64 {
+        self.last_activity_unix.load(Ordering::Relaxed)
+    }
+
+    pub(super) fn websockets(&self) -> usize {
+        self.active_ws.load(Ordering::Relaxed)
+    }
+
+    pub(super) fn websocket_opened(&self) {
+        self.active_ws.fetch_add(1, Ordering::Relaxed);
+        self.touch();
+    }
+
+    pub(super) fn websocket_closed(&self) {
+        self.active_ws.fetch_sub(1, Ordering::Relaxed);
+        self.touch();
+    }
+
+    pub(super) fn websocket_guard(&self) -> WebSocketActivity {
+        self.websocket_opened();
+        WebSocketActivity(self.clone())
+    }
+}
+
+pub(super) struct WebSocketActivity(Activity);
+
+impl Drop for WebSocketActivity {
+    fn drop(&mut self) {
+        self.0.websocket_closed();
+    }
 }
 
 impl Target {
@@ -137,11 +196,71 @@ async fn dispatch(State(hosts): State<Hosts>, req: Request) -> Response {
         return StatusCode::NOT_FOUND.into_response();
     };
     let mut response = if req.uri().path() == "/__pontia_auth" {
-        auth::exchange(&hosts.edge, target, req).await
+        auth::exchange(&hosts.edge, target, auth::legacy_cookie(), None, req).await
     } else {
-        relay(&hosts.edge, target, auth, req).await
+        relay(&hosts.edge, target, auth, auth::legacy_cookie(), None, req).await
     };
     restrict_embedding(response.headers_mut(), &hosts.edge.origins.dashboard);
+    response
+}
+
+pub(super) fn port_router(
+    edge: Edge,
+    hostname: &str,
+    listen_port: u16,
+    target: Target,
+    activity: Activity,
+) -> Router {
+    Router::new().fallback(port_dispatch).with_state(PortHost {
+        edge,
+        hostname: hostname.to_owned(),
+        listen_port,
+        target,
+        activity,
+    })
+}
+
+#[derive(Clone)]
+struct PortHost {
+    edge: Edge,
+    hostname: String,
+    listen_port: u16,
+    target: Target,
+    activity: Activity,
+}
+
+async fn port_dispatch(State(host): State<PortHost>, req: Request) -> Response {
+    let authority = match authority(&req, host.listen_port) {
+        Ok(authority) => authority,
+        Err(status) => return status.into_response(),
+    };
+    if !authority_host(&authority).eq_ignore_ascii_case(&host.hostname)
+        || authority.port_u16().unwrap_or(443) != host.listen_port
+    {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let cookie = auth::port_cookie(host.listen_port);
+    let mut response = if req.uri().path() == "/__pontia_auth" {
+        auth::exchange(
+            &host.edge,
+            host.target,
+            &cookie,
+            Some(host.activity.clone()),
+            req,
+        )
+        .await
+    } else {
+        relay(
+            &host.edge,
+            host.target,
+            authority,
+            &cookie,
+            Some(host.activity.clone()),
+            req,
+        )
+        .await
+    };
+    restrict_embedding(response.headers_mut(), &host.edge.origins.dashboard);
     response
 }
 
@@ -179,7 +298,14 @@ fn error(status: StatusCode, navigation: bool, message: &str) -> Response {
     response
 }
 
-async fn relay(edge: &Edge, target: Target, auth: Authority, mut req: Request) -> Response {
+async fn relay(
+    edge: &Edge,
+    target: Target,
+    auth: Authority,
+    cookie_name: &str,
+    activity: Option<Activity>,
+    mut req: Request,
+) -> Response {
     let headers = req.headers();
     let is_ws = req.method() == Method::GET
         && headers
@@ -207,7 +333,7 @@ async fn relay(edge: &Edge, target: Target, auth: Authority, mut req: Request) -
             .get(header::ACCEPT)
             .and_then(|v| v.to_str().ok())
             .is_some_and(|v| v.contains("text/html"));
-    let Some(token) = auth::strip_cookie(req.headers_mut()).filter(|token| {
+    let Some(token) = auth::strip_cookie(req.headers_mut(), cookie_name).filter(|token| {
         edge.access_tokens
             .preview
             .verify(token, target.device, target.port)
@@ -219,6 +345,9 @@ async fn relay(edge: &Edge, target: Target, auth: Authority, mut req: Request) -
             "Reopen this preview from the Dashboard to renew your session.",
         );
     };
+    if let Some(activity) = &activity {
+        activity.touch();
+    }
     let Some(connection) = edge.online.connection(target.device) else {
         return error(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -251,7 +380,7 @@ async fn relay(edge: &Edge, target: Target, auth: Authority, mut req: Request) -
             Ok(upgrade) => upgrade,
             Err(e) => return e.into_response(),
         };
-        ws::open(connection, uri, forwarded, upgrade).await
+        ws::open(connection, uri, forwarded, upgrade, activity).await
     } else {
         parts.uri = uri;
         parts.headers = forwarded;
@@ -432,5 +561,15 @@ mod tests {
         ] {
             assert_eq!(authority_host(&authority.parse().unwrap()), expected);
         }
+    }
+
+    #[test]
+    fn websocket_activity_is_released_when_its_guard_is_dropped() {
+        let activity = Activity::new();
+        {
+            let _guard = activity.websocket_guard();
+            assert_eq!(activity.websockets(), 1);
+        }
+        assert_eq!(activity.websockets(), 0);
     }
 }

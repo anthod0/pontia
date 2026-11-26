@@ -15,7 +15,10 @@ use pontia_edge::{
         issue_dns_and_save, issue_http_and_save,
     },
     certificate,
-    config::{CLOUD_ORIGIN, CONFIG_PATH, ServiceConfig, hostname_from_tunnel_url},
+    config::{
+        CLOUD_ORIGIN, CONFIG_PATH, PortPreviewConfig, PortPreviewSetting, ServiceConfig,
+        hostname_from_tunnel_url,
+    },
     credential::{CREDENTIAL_PATH, ensure_managed_directory, ensure_root, read_edge_credential},
     enrollment::{
         EdgeConfirmationClient, HttpCloudClient, InitializationResult, initialize_and_enroll,
@@ -83,6 +86,13 @@ struct InitArgs {
     /// Public HTTPS/WSS port (default 443). Certificate validation also uses public port 80.
     #[arg(long, value_parser = parse_edge_port)]
     port: Option<u16>,
+    /// Preview listener ranges, for example 20000-20099 or 3000-9999,20000-20099; use off to disable.
+    #[arg(long, value_parser = parse_preview_ports)]
+    preview_ports: Option<String>,
+}
+
+fn parse_preview_ports(value: &str) -> std::result::Result<String, String> {
+    PortPreviewSetting::parse(value).map(|_| value.to_owned())
 }
 
 #[tokio::main]
@@ -113,11 +123,21 @@ impl From<InitArgs> for PendingInit {
             ticket: args.ticket,
             acme_staging: args.acme_staging,
             port: args.port,
+            preview_ports: args.preview_ports,
         }
     }
 }
 
 async fn init(args: InitArgs) -> Result<()> {
+    if let Some(value) = args.preview_ports.as_deref()
+        && let Some(preview) = PortPreviewSetting::parse(value)
+            .map_err(anyhow::Error::msg)?
+            .enabled()
+    {
+        preview
+            .allowed_ports(args.port.unwrap_or(443))
+            .map_err(anyhow::Error::msg)?;
+    }
     // Do not hold the global stdout lock across network waits or cancellation.
     let mut output = std::io::stdout();
     prepare_initialization(&mut output)?;
@@ -181,7 +201,19 @@ async fn init_with_output<W: Write + ?Sized>(args: PendingInit, output: &mut W) 
         acme_challenge: AcmeChallenge::Http01,
         browser_dashboard_origin: "https://app.pontia.dev".to_owned(),
         preview_base_hostname: None,
+        port_preview: match args.preview_ports.as_deref() {
+            Some(value) => PortPreviewSetting::parse(value).map_err(anyhow::Error::msg)?,
+            None if hostname.parse::<std::net::IpAddr>().is_ok() => {
+                PortPreviewSetting::Enabled(PortPreviewConfig::default_pool())
+            }
+            None => PortPreviewSetting::Disabled,
+        },
     };
+    if let Some(preview) = expected_config.port_preview.enabled() {
+        preview
+            .allowed_ports(expected_config.port)
+            .map_err(anyhow::Error::msg)?;
+    }
     let credential = read_edge_credential(CREDENTIAL_PATH.as_ref())?;
     let systemd = Systemd::default();
     let endpoint = tunnel_url(&hostname, expected_config.port);
@@ -436,10 +468,12 @@ async fn serve() -> Result<()> {
     let address = listener.local_addr()?;
     let shared_acme = (config.port == 80 && config.acme_challenge == AcmeChallenge::Http01)
         .then(pontia_edge::challenge::ChallengeResponses::default);
-    let router = edge.router(
+    let router = edge.router_with_port_preview(
         &config.hostname,
         config.port,
         config.preview_base_hostname.as_deref(),
+        config.port_preview.enabled(),
+        tls.clone(),
     );
     let renewal = tokio::spawn(renew_certificates(
         config,
@@ -837,7 +871,7 @@ mod tests {
     }
 
     #[test]
-    fn init_accepts_only_an_optional_port_and_always_uses_http_validation() {
+    fn init_accepts_edge_and_preview_ports_and_always_uses_http_validation() {
         let base = [
             "pontia-edge",
             "init",
@@ -852,6 +886,15 @@ mod tests {
                 panic!("expected init")
             };
             assert_eq!(args.port, port);
+            assert_eq!(args.preview_ports, None);
+        }
+        for value in ["off", "20000-20099", "3000-9999,20000-20099"] {
+            let cli =
+                Cli::try_parse_from(base.into_iter().chain(["--preview-ports", value])).unwrap();
+            let Some(Command::Init(args)) = cli.command else {
+                panic!("expected init")
+            };
+            assert_eq!(args.preview_ports.as_deref(), Some(value));
         }
         for method in ["dns-01", "http-01"] {
             assert!(
@@ -860,6 +903,11 @@ mod tests {
         }
         for port in ["0", "25", "6000", "65536"] {
             assert!(Cli::try_parse_from(base.into_iter().chain(["--port", port])).is_err());
+        }
+        for ranges in ["", "80", "20001-20000", "20000,"] {
+            assert!(
+                Cli::try_parse_from(base.into_iter().chain(["--preview-ports", ranges])).is_err()
+            );
         }
     }
 

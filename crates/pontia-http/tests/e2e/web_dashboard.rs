@@ -50,7 +50,7 @@ async fn dashboard_and_preview_shell_have_distinct_embedding_policies() {
         if frame_options == "DENY" {
             // Self-hosted edges may use any HTTPS origin; form posts stay limited to previews.
             assert!(policy.contains("connect-src 'self' https:;"));
-            assert!(policy.contains("form-action 'self' https://*.pontia.run:*;"));
+            assert!(policy.contains("form-action 'self' https:;"));
         }
         assert_eq!(headers["x-content-type-options"], "nosniff");
         assert_eq!(headers["referrer-policy"], "strict-origin");

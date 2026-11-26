@@ -18,6 +18,7 @@ type Entry = ConnectedDevice & {
   retryTimer?: ReturnType<typeof setTimeout>;
   retryDelay: number;
   unsubscribe?: () => void;
+  edgeApiOrigin: string | null;
 };
 
 export function createDeviceConnections(remote: RemoteAccess) {
@@ -52,6 +53,7 @@ export function createDeviceConnections(remote: RemoteAccess) {
     entry.unsubscribe = undefined;
     entry.connection?.dispose();
     entry.connection = null;
+    entry.edgeApiOrigin = null;
     entry.runtime?.dispose();
     entry.runtime = null;
   }
@@ -139,8 +141,9 @@ export function createDeviceConnections(remote: RemoteAccess) {
     });
     publish();
     try {
-      await connection.connect();
+      const target = await connection.connect();
       if (connection.signal.aborted) return;
+      entry.edgeApiOrigin = target.edgeApiOrigin;
       runtime.lifecycle.startDashboardRuntime(() => offline(entry));
     } catch (failure) {
       if (connection.signal.aborted) return;
@@ -175,6 +178,7 @@ export function createDeviceConnections(remote: RemoteAccess) {
           runtime: null,
           connection: null,
           retryDelay: 5000,
+          edgeApiOrigin: null,
         };
         entries.set(device.handle, entry);
         void connect(entry);

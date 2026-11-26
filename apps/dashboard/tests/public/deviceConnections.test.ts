@@ -478,6 +478,7 @@ test.each([401, 409, 503])(
     else
       expect(showError).toHaveBeenCalledWith(
         translate(status === 409 ? "preview.unavailable" : "preview.failed"),
+        { duration: 6000 },
       );
   },
 );

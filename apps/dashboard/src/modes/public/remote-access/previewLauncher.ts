@@ -1,7 +1,8 @@
-import { requestPreviewToken, type PublicDevice } from "./remoteAccess";
+import { CloudRequestError, requestPreviewToken, type PublicDevice } from "./remoteAccess";
+import { isEdgePort } from "./edgeEndpoint";
 
 export async function launchLocalhostPreview(
-  device: Pick<PublicDevice, "handle" | "deviceId">,
+  device: Pick<PublicDevice, "handle" | "deviceId"> & { edgeApiOrigin?: string | null },
   target: { port: number; redirect: string },
   signal: AbortSignal,
   loadingMessage: string,
@@ -14,7 +15,46 @@ export async function launchLocalhostPreview(
     popup.document.body.textContent = loadingMessage;
   }
   try {
-    const { origin, token } = await requestPreviewToken(device, target.port, signal);
+    const preview = await requestPreviewToken(device, target.port, signal);
+    let origin: string;
+    if (preview.mode === "edge_port") {
+      const response = await fetch(`${preview.edgeApiOrigin}/__pontia/preview/open`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${preview.token}` },
+        signal,
+      });
+      if (!response.ok) throw new CloudRequestError("Edge request failed.", response.status);
+      let value: unknown;
+      try {
+        value = await response.json();
+      } catch {
+        throw new CloudRequestError("Edge returned an invalid preview response.");
+      }
+      const parsed =
+        typeof value === "object" &&
+        value !== null &&
+        "preview_origin" in value &&
+        typeof value.preview_origin === "string"
+          ? URL.parse(value.preview_origin)
+          : null;
+      const control = new URL(preview.edgeApiOrigin);
+      const listenPort = parsed ? Number(parsed.port || 443) : 0;
+      if (
+        !parsed ||
+        parsed.origin !== (value as { preview_origin: string }).preview_origin ||
+        parsed.protocol !== "https:" ||
+        parsed.hostname !== control.hostname ||
+        listenPort < 1024 ||
+        !isEdgePort(listenPort) ||
+        listenPort === Number(control.port || 443)
+      ) {
+        throw new CloudRequestError("Edge returned an invalid preview response.");
+      }
+      origin = parsed.origin;
+    } else {
+      origin = preview.origin;
+    }
+    const token = preview.token;
     function submit() {
       if (signal.aborted || (frame && !frame.isConnected)) return;
       // The initial about:blank frame inherits the Dashboard origin for the exchange.

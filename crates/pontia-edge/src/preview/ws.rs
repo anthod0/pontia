@@ -14,11 +14,14 @@ use std::{convert::Infallible, time::Duration};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
+use super::Activity;
+
 pub(super) async fn open(
     connection: TunnelConnection,
     uri: Uri,
     headers: HeaderMap,
     mut upgrade: WebSocketUpgrade,
+    activity: Option<Activity>,
 ) -> Result<Response, TunnelError> {
     let (tx, rx) = mpsc::channel(1);
     let mut request = Request::post(uri)
@@ -47,7 +50,7 @@ pub(super) async fn open(
     Ok(upgrade
         .max_message_size(MAX_PREVIEW_WS_MESSAGE_BYTES)
         .max_frame_size(MAX_PREVIEW_WS_MESSAGE_BYTES)
-        .on_upgrade(move |socket| bridge(socket, tx, response.into_body())))
+        .on_upgrade(move |socket| bridge(socket, tx, response.into_body(), activity)))
 }
 
 fn message(frame: WsTunnelFrame) -> Message {
@@ -90,7 +93,13 @@ fn browser_error(error: axum::Error) -> u16 {
     }
 }
 
-async fn bridge(socket: WebSocket, tx: mpsc::Sender<Bytes>, body: Body) {
+async fn bridge(
+    socket: WebSocket,
+    tx: mpsc::Sender<Bytes>,
+    body: Body,
+    activity: Option<Activity>,
+) {
+    let _activity = activity.as_ref().map(Activity::websocket_guard);
     let (mut browser_tx, mut browser_rx) = socket.split();
     let upload = async {
         while let Some(msg) = browser_rx.next().await {

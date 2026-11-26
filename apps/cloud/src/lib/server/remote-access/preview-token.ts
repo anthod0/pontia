@@ -6,7 +6,7 @@ import { devices, edges } from "../db/schema";
 import { edgeIsAccessibleTo } from "./resources";
 import { isValidDeviceHandle } from "./device-handle";
 import { capabilitySigningKey } from "../edge-auth";
-import { managedEdgeDns } from "../edge-network";
+import { edgeApiOrigin, edgeHost, isGlobalUnicastIp, managedEdgeDns } from "../edge-network";
 
 // Fetch Standard bad ports, also enforced at the device's loopback dialer.
 const blockedPorts = new Set([
@@ -42,6 +42,8 @@ export async function issuePreviewToken(
         edge: edges.id,
         tunnel: edges.tunnelUrl,
         enabled: edges.previewEnabled,
+        accessScope: edges.accessScope,
+        edgeUserId: edges.userId,
       })
       .from(devices)
       .innerJoin(edges, eq(devices.edgeId, edges.id))
@@ -51,9 +53,6 @@ export async function issuePreviewToken(
       .get());
   if (!device) return { status: 404, body: { error: "device_not_found" } };
   const managedDns = managedEdgeDns(device.tunnel);
-  if (!device.enabled || !managedDns || !env.PREVIEW_ZONE)
-    return { status: 409, body: { error: "edge_preview_unavailable" } };
-  const hostname = `${port}-${device.id.replaceAll("-", "")}.${managedDns.label}.${env.PREVIEW_ZONE}`;
   const now = Math.floor(Date.now() / 1000);
   const expires = now + 4 * 3600;
   const token = await new SignJWT({ purpose: "localhost_preview", did: device.id, port })
@@ -63,10 +62,32 @@ export async function issuePreviewToken(
     .setIssuedAt(now)
     .setExpirationTime(expires)
     .sign(await capabilitySigningKey(env.E2E_CAPABILITY_SIGNING_KEY));
+  if (device.enabled && managedDns && env.PREVIEW_ZONE) {
+    const hostname = `${port}-${device.id.replaceAll("-", "")}.${managedDns.label}.${env.PREVIEW_ZONE}`;
+    return {
+      status: 200,
+      body: {
+        preview_origin: `https://${edgeAuthority(hostname, Number(new URL(device.tunnel).port || 443))}`,
+        token,
+        expires_at: expires,
+      },
+    };
+  }
+  const host = edgeHost(device.tunnel);
+  const origin = edgeApiOrigin(device.tunnel);
+  if (
+    device.accessScope !== "private" ||
+    device.edgeUserId !== userId ||
+    !host ||
+    !isGlobalUnicastIp(host) ||
+    !origin
+  )
+    return { status: 409, body: { error: "edge_preview_unavailable" } };
   return {
     status: 200,
     body: {
-      preview_origin: `https://${edgeAuthority(hostname, Number(new URL(device.tunnel).port || 443))}`,
+      mode: "edge_port",
+      edge_api_origin: origin,
       token,
       expires_at: expires,
     },

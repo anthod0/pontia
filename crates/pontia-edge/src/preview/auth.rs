@@ -1,4 +1,4 @@
-use super::{Target, error};
+use super::{Activity, Target, error};
 use crate::{Edge, browser_http::exact_origin};
 use axum::{
     Form,
@@ -8,7 +8,15 @@ use axum::{
 };
 use serde::Deserialize;
 
-const COOKIE: &str = "__Host-pontia_preview";
+const COOKIE_PREFIX: &str = "__Host-pontia_preview";
+
+pub(super) fn legacy_cookie() -> &'static str {
+    COOKIE_PREFIX
+}
+
+pub(super) fn port_cookie(port: u16) -> String {
+    format!("{COOKIE_PREFIX}_{port}")
+}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -17,7 +25,13 @@ struct Exchange {
     redirect: Option<String>,
 }
 
-pub(super) async fn exchange(edge: &Edge, target: Target, mut req: Request) -> Response {
+pub(super) async fn exchange(
+    edge: &Edge,
+    target: Target,
+    cookie_name: &str,
+    activity: Option<Activity>,
+    mut req: Request,
+) -> Response {
     let failure = |s| error(s, true, "Reopen the preview from the Dashboard.");
     if req.method() != Method::POST {
         return failure(StatusCode::METHOD_NOT_ALLOWED);
@@ -38,6 +52,9 @@ pub(super) async fn exchange(edge: &Edge, target: Target, mut req: Request) -> R
     else {
         return failure(StatusCode::UNAUTHORIZED);
     };
+    if let Some(activity) = activity {
+        activity.touch();
+    }
     let redirect = form.redirect.as_deref().unwrap_or("/");
     let path = redirect.split(['?', '#']).next().unwrap();
     if redirect.len() > 4096
@@ -54,8 +71,8 @@ pub(super) async fn exchange(edge: &Edge, target: Target, mut req: Request) -> R
         return failure(StatusCode::BAD_REQUEST);
     };
     let cookie = format!(
-        "{COOKIE}={}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age={age}",
-        form.token
+        "{cookie_name}={}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age={age}",
+        form.token,
     );
     (
         StatusCode::SEE_OTHER,
@@ -76,7 +93,7 @@ pub(super) async fn exchange(edge: &Edge, target: Target, mut req: Request) -> R
         .into_response()
 }
 
-pub(super) fn strip_cookie(headers: &mut HeaderMap) -> Option<String> {
+pub(super) fn strip_cookie(headers: &mut HeaderMap, expected_name: &str) -> Option<String> {
     let mut token = None;
     let mut rest = Vec::new();
     for line in headers.get_all(header::COOKIE) {
@@ -88,8 +105,11 @@ pub(super) fn strip_cookie(headers: &mut HeaderMap) -> Option<String> {
             .filter(|s| !s.is_empty())
         {
             match pair.split_once('=') {
-                Some((name, value)) if name.trim() == COOKIE => {
-                    if token.replace(value.to_owned()).is_some() {
+                Some((name, value))
+                    if name.trim() == COOKIE_PREFIX
+                        || name.trim().starts_with(&format!("{COOKIE_PREFIX}_")) =>
+                {
+                    if name.trim() == expected_name && token.replace(value.to_owned()).is_some() {
                         return None;
                     }
                 }
@@ -113,7 +133,12 @@ pub(super) fn sanitize_cookies(headers: &mut HeaderMap) {
             let mut parts = value.to_str().ok()?.split(';');
             let pair = parts.next()?.trim();
             let (name, _) = pair.split_once('=')?;
-            if name.trim().is_empty() || name.trim().eq_ignore_ascii_case(COOKIE) {
+            if name.trim().is_empty()
+                || name
+                    .trim()
+                    .to_ascii_lowercase()
+                    .starts_with(&COOKIE_PREFIX.to_ascii_lowercase())
+            {
                 return None;
             }
             let mut cookie = pair.to_owned();

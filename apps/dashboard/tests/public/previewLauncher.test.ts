@@ -6,6 +6,7 @@ import { launchLocalhostPreview } from "../../src/modes/public/remote-access/pre
 import { requestPreviewToken } from "../../src/modes/public/remote-access/remoteAccess";
 
 const device = { handle: "studio", deviceId: "01234567-89ab-cdef-0123-456789abcdef" };
+const edgeDevice = { ...device, edgeApiOrigin: "https://8.8.8.8:8443" };
 const href = "http://localhost:5173/page?q=1#part";
 const origin = "https://5173-0123456789abcdef0123456789abcdef.private-edge.pontia.run:8443";
 const response = { preview_origin: origin, token: "secret", expires_at: 1000 };
@@ -137,4 +138,97 @@ test.each([
 ])("rejects an invalid Cloud preview response %j", async (invalid) => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ ...response, ...invalid })));
   await expect(requestPreviewToken(device, 5173, signal)).rejects.toThrow();
+});
+
+test("opens an IP edge listener before posting the preview token", async () => {
+  const popup = { opener: window, document: document.implementation.createHTMLDocument() };
+  vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
+  const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = input.toString();
+    if (url.endsWith("/preview-token")) {
+      return Response.json({
+        mode: "edge_port",
+        edge_api_origin: edgeDevice.edgeApiOrigin,
+        token: "edge-secret",
+        expires_at: 1000,
+      });
+    }
+    expect(url).toBe("https://8.8.8.8:8443/__pontia/preview/open");
+    expect(init).toMatchObject({
+      method: "POST",
+      headers: { Authorization: "Bearer edge-secret" },
+    });
+    expect(init).not.toHaveProperty("credentials");
+    return Response.json({
+      preview_origin: "https://8.8.8.8:20000",
+      listen_port: 20000,
+      target_port: 5173,
+      remapped: true,
+    });
+  });
+  vi.stubGlobal("fetch", fetcher);
+  const submit = vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(function (
+    this: HTMLFormElement,
+  ) {
+    expect(this.action).toBe("https://8.8.8.8:20000/__pontia_auth");
+    expect(Object.fromEntries(new FormData(this))).toEqual({
+      token: "edge-secret",
+      redirect: "/app",
+    });
+  });
+
+  await launchLocalhostPreview(edgeDevice, { port: 5173, redirect: "/app" }, signal, "Loading");
+
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(submit).toHaveBeenCalledOnce();
+});
+
+test.each([
+  "https://9.9.9.9:20000",
+  "https://8.8.8.8:8443",
+  "https://8.8.8.8:443",
+  "https://8.8.8.8:10080",
+  "http://8.8.8.8:20000",
+  "https://8.8.8.8:20000/path",
+])("rejects an unsafe edge preview origin %s", async (previewOrigin) => {
+  const popup = {
+    opener: window,
+    close: vi.fn(),
+    document: document.implementation.createHTMLDocument(),
+  };
+  vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          mode: "edge_port",
+          edge_api_origin: edgeDevice.edgeApiOrigin,
+          token: "edge-secret",
+          expires_at: 1000,
+        }),
+      )
+      .mockResolvedValueOnce(Response.json({ preview_origin: previewOrigin })),
+  );
+
+  await expect(
+    launchLocalhostPreview(edgeDevice, { port: 5173, redirect: "/" }, signal, "Loading"),
+  ).rejects.toThrow();
+  expect(popup.close).toHaveBeenCalledOnce();
+});
+
+test("rejects an edge-port token for a different connected edge", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      Response.json({
+        mode: "edge_port",
+        edge_api_origin: "https://9.9.9.9:8443",
+        token: "secret",
+        expires_at: 1000,
+      }),
+    ),
+  );
+  await expect(requestPreviewToken(edgeDevice, 5173, signal)).rejects.toThrow();
 });
