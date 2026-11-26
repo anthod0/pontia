@@ -55,7 +55,23 @@ An agent shows you a file by writing its absolute path in a reply. A Markdown li
 /work/chart.png
 ```
 
-The files appear as one card below the reply, where you can download each file or click **Download all** to download every file that still exists. A card of more than six files shows the first four until you click **Show more**. When every file in a card is an image, the card shows the images together; click the list button to see their names and sizes. Images, text, and code files can also be previewed; other files, such as videos, PDFs, and archives, are download-only. Pontia reads the file from the device when you open or download it, so a file that was moved or deleted is no longer available.
+The files appear as one card below the reply, where you can download each file or click **Download all** to download the full card. A card of more than six files shows the first four until you click **Show more**. When every file in a card is an image, the card shows the images together; click the list button to see their names and sizes. Images, text, and code files open in the previewer, while videos, PDFs, and archives retain a direct download action. Pontia reads each file from the device when you open or download it, so keep shared files at their attached paths while the conversation needs them.
+
+See [Previews](/docs/previews) for live localhost apps, sandboxed HTML, sortable CSV and TSV tables, expandable JSON and YAML trees, and Markdown file navigation.
+
+## Inspect Git changes
+
+Open **Git** from a Session or Bot side panel to review the active Workspace repository. The panel shows the current branch, upstream, ahead and behind counts, staged, unstaged, untracked, and conflicted files. Select a file to read its diff, or use `[` and `]` to move between diffs.
+
+Expand **History** to browse branches and commits, inspect a commit's files, and compare their diffs. The panel refreshes after agent work and also provides a manual refresh action.
+
+## Send a Secret
+
+Select **+ → Secret** in the composer to send a token, password, key, or multiline credential as a sensitive file. Add an optional label to tell the agent what it is for. The chat shows a masked preview, while the agent receives a file path and instructions to read it directly from tools or scripts while keeping its plaintext in the sensitive file.
+
+## Use the phone layout
+
+The phone Dashboard has four persistent tabs: **Chats** for Bots, **Sessions** for direct agent conversations, **Todos** for open Bot follow-ups, and **Device** for device settings. Session and Bot action sheets open Chat, Files, Git, and Preview in screens sized for the phone.
 
 ## Work with Bots
 
@@ -86,8 +102,10 @@ Chat pages provide these shortcuts:
 | `Alt+1` … `Alt+9` | Open an active chat by sidebar position |
 | `Alt+N` | Open New chat |
 | `Alt+L` | Focus the composer |
+| `Alt+G` | Open or close the Git panel in a Session |
 | `Alt+M` | Switch to the next device. Add `Shift` to go back. |
 | `Alt+C` / `Alt+W` | On New chat, switch to the next Agent Client or Workspace. Add `Shift` to go back. |
+| `Alt+B` / `Alt+P` | In a Bot, switch Bot or side-panel tab. Add `Shift` to go back. |
 | `Alt+?` | Show the shortcut reference |
 | `Ctrl+B` (`Cmd+B` on macOS) | Toggle the sidebar |
 

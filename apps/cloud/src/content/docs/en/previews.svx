@@ -1,0 +1,32 @@
+<svelte:head>
+	<title>Previews — Pontia</title>
+	<meta name="description" content="Open local web apps and project files in live Pontia previews." />
+</svelte:head>
+
+# Previews
+
+Pontia opens local web apps and project files from a chat, so you can review an agent's work alongside the conversation.
+
+## Preview a local web app
+
+Ask the agent to include the app's localhost URL in its reply, then select that link. Pontia recognizes HTTP URLs on `localhost`, `127.0.0.1`, `[::1]`, and `0.0.0.0`, including their path, query, and fragment.
+
+The Preview panel opens beside the chat. Its address field stays within the selected local origin, and the toolbar lets you refresh the page, switch between desktop and 375 px mobile widths, or open it in a new tab. HTTP requests and WebSocket connections reach the same local port, which supports live-reload development servers.
+
+From the local Dashboard, the browser connects directly to the local app. From the [Remote Dashboard](/docs/remote-access), Pontia obtains a time-limited preview address under `pontia.run` and securely routes it through the selected Edge to the app on your device.
+
+Common development ports such as `3000`, `4173`, `5173`, and `8000` work with the default configuration. Add development or administration ports that need explicit access to `[preview].allowed_ports` in [Configuration](/docs/configuration#local-preview), then run `pontia up`.
+
+## Preview a file
+
+Select a file link in an agent reply, an attachment card, or the Files panel. Pontia chooses a view from the file name:
+
+- HTML runs in a sandbox that allows scripts and forms, with a source view available beside it.
+- CSV and TSV render as tables; select a column heading to sort ascending, descending, or return to file order.
+- JSON and YAML render as expandable trees with **Expand all** and **Collapse all** controls.
+- Markdown renders as formatted content. Relative links open another file in the same preview, and heading fragments scroll to the matching section.
+- Other text and code files use syntax-highlighted source. Images open in a lightbox.
+
+The file toolbar also provides refresh, copy, source, and download actions. On a phone, a file preview opens as its own screen and keeps the same in-document navigation history.
+
+Next: [use the Dashboard](/docs/dashboard) or [work with files in Bot chat](/docs/bots/chat).

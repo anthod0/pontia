@@ -7,7 +7,7 @@
 
 Workflow は、共通の目標に向けて Agent Node を永続的にオーケストレーションするものです。各 Agent Node は新しい Pontia の Session を受け取り、宣言された Handoff の入力を読み込み、Handoff の出力を 1 つ書き込み、割り当てられた作業の準備ができたら明示的に提出します。
 
-段階的な引き継ぎ、永続的な進捗、エージェントごとに分かれたコンテキストが役立つタスクには Workflow を使ってください。明示的な実行計画が不要な探索的な作業には、通常の Session を使ってください。
+段階、入力、出力、完了点があらかじめ決まっている反復可能な手順には Workflow を使います。Agent が委任方法を判断し、会話を通じて計画を調整する自由度の高い目標には [Bot](/docs/bots) を使います。どちらも [Agent Profile](/docs/agent-profiles) を再利用でき、Workflow は Profile を Node に割り当て、Bot は専門 helper に選択します。
 
 ## 定義を作成する
 
@@ -26,6 +26,7 @@ type = "agent"
 phase = "Discovery"
 title = "Research"
 instructions = "Inspect the current search implementation and propose a plan."
+execution_profile_id = "researcher"
 inputs = ["requirements.md"]
 output = "research.md"
 
@@ -41,6 +42,8 @@ output = "result.md"
 `cwd` には、既存のディレクトリで、[Workspace として有効にしたもの](/docs/workspaces)を設定します。Workflow 内のすべての Agent Client はそこで起動します。
 
 各 Node には `type = "agent"` を使います。Node は定義の順に実行されます。各入力には、初期の Handoff か、それより前の Node の出力を指定します。すべての出力には、ディレクトリ部分を含まない一意のファイル名を付けてください。
+
+Node で Agent Profile の Client、モデル、推論レベル、権限モード、システムプロンプトを使う場合は、`execution_profile_id` に既存の Profile ID を指定します。その Node 固有の instructions と Handoff 入力が今回のタスク用に追加されます。Profile の更新は、その後に開始する Node へ適用されます。
 
 ## 実行して確認する
 

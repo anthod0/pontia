@@ -64,7 +64,7 @@ $PONTIA_HOME/state/pi-hook.log
 
 ## Codex 无法连接
 
-确认你的 Codex 构建支持 app-server 守护进程，然后检查其按用户运行的服务。各平台命令见 [Codex](/docs/codex)。如果可执行文件或 `CODEX_HOME` 发生变化，或者启动器或其 shell PATH 配置缺失，请运行 `pontia setup codex`。
+确认你的 Codex 构建支持 app-server 守护进程，然后检查其按用户运行的服务。各平台命令见 [Codex](/docs/agent-clients/codex)。如果可执行文件或 `CODEX_HOME` 发生变化，或者启动器或其 shell PATH 配置缺失，请运行 `pontia setup codex`。
 
 命令、文件更改和权限审批会显示在 Dashboard 中。当 Codex 在等待 Dashboard 不显示的其他类型请求时，Agent 仍可能看起来卡住了。必要时中断该 Turn，然后调整 Codex 策略，或在原生 Codex 界面中回应该请求。
 

@@ -7,7 +7,7 @@
 
 Um Workflow é uma orquestração durável de Agent Nodes em direção a um objetivo comum. Cada Agent Node recebe uma nova Session do Pontia, lê as entradas de Handoff declaradas, grava uma saída de Handoff e faz o envio explicitamente quando o trabalho atribuído a ele está pronto.
 
-Use um Workflow quando uma tarefa se beneficia de Handoffs em etapas, progresso durável e contextos de agente separados. Use uma Session comum para trabalho exploratório que não precisa de um plano de execução explícito.
+Use um Workflow para um processo repetível cujas etapas, entradas, saídas e pontos de conclusão são conhecidos com antecedência. Use um [Bot](/docs/bots) para um objetivo aberto no qual o agente decide como delegar e adapta o plano pela conversa. Ambos podem reutilizar [Agent Profiles](/docs/agent-profiles): um Workflow os atribui aos Nodes, enquanto um Bot os seleciona para helpers especialistas.
 
 ## Criar uma definição
 
@@ -26,6 +26,7 @@ type = "agent"
 phase = "Discovery"
 title = "Research"
 instructions = "Inspect the current search implementation and propose a plan."
+execution_profile_id = "researcher"
 inputs = ["requirements.md"]
 output = "research.md"
 
@@ -41,6 +42,8 @@ output = "result.md"
 Defina `cwd` como um diretório existente que você tenha [ativado como uma Workspace](/docs/workspaces). Todos os Agent Clients do Workflow são iniciados nele.
 
 Use `type = "agent"` em cada Node. Os Nodes são executados na ordem da definição. Cada entrada indica um Handoff inicial ou a saída de um Node anterior. Dê a cada saída um nome de arquivo único, sem componentes de diretório.
+
+Defina `execution_profile_id` com o ID de um Agent Profile existente quando um Node precisar usar o Client, modelo, nível de raciocínio, modo de permissões e system prompt desse Profile. As instructions e os Handoffs do Node são acrescentados para a tarefa específica. Uma atualização do Profile vale para os Nodes iniciados depois dela.
 
 ## Executar e inspecionar
 

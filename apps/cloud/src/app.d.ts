@@ -1,9 +1,14 @@
 import "../worker-configuration.d.ts";
+import type { Locale } from "$lib/paraglide/runtime";
 
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 declare global {
   namespace App {
+    interface Locals {
+      locale: Locale;
+    }
+
     interface Platform {
       env: Env & {
         AUTH_ORIGIN: string;

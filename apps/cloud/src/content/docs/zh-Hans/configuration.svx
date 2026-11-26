@@ -39,8 +39,22 @@ roots = [
 | `dashboard.source` | 本地 Dashboard 构建目录，或仅包含一个 `index.html` 的远程 `.tar.gz`、`.tgz` 或 `.zip` 归档 |
 | `runtime.pi.tui_command` | 启动 Pi Session 时使用的 Pi 可执行文件或命令 |
 | `workspace_browser.roots` | Dashboard 可浏览以激活 Workspace 的目录 |
+| `preview.enabled` | 启用 localhost Web 应用预览；默认为 `true` |
+| `preview.allowed_ports` | 额外明确开放给预览的敏感开发或管理端口 |
 
 `dashboard.source` 的发布版默认值是与已安装 Pontia 版本匹配的 Dashboard 归档。远程 Dashboard 归档缓存在 `$PONTIA_HOME/cache/dashboard` 下；刷新失败时仍可使用已有缓存提供服务。
+
+<h2 id="local-preview">本地预览</h2>
+
+localhost 预览默认启用，并覆盖常规 Web 开发端口。当应用有意监听敏感开发或管理端口时，可将其加入配置：
+
+```toml
+[preview]
+enabled = true
+allowed_ports = [8888, 9222]
+```
+
+`allowed_ports` 接受 1 至 65535 的端口号，常用于 `8888` 上的 Jupyter、`9222` 上的 Chrome DevTools、`9229` 上的 Node inspect 和 `11434` 上的 Ollama。修改后运行 `pontia up`。Dashboard 操作方式见[预览](/docs/previews)。
 
 ## 文件选择器
 

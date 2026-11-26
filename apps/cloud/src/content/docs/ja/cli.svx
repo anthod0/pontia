@@ -20,11 +20,14 @@
 | `pontia doctor` | サービス、設定、ログイン、リモート登録のチェック結果を修復のヒントとともに説明します |
 | `pontia down` | ユーザー単位のサービスを停止して無効にします |
 | `pontia update` | 署名済みの最新安定版 `pontia` と `pontiad` をインストールします |
+| `pontia auto-update enable` | 6 時間ごとの自動更新チェックをインストールして開始します |
+| `pontia auto-update disable` | 自動更新スケジュールを停止して削除します |
+| `pontia auto-update status` | スケジュールと実行可能時刻を表示します |
 | `pontia uninstall` | Pontia の連携、シェル設定、自動起動サービスを削除します |
 | `pontia --version` | インストール済みのバージョンを表示します |
 | `pontia completions SHELL` | シェル用の補完スクリプトを出力します |
 
-Pontia が起動したエージェントが動作中の場合、`pontia down` と `pontia uninstall` は該当する Session を一覧表示します。`--force` を付けると、エージェントを停止してから処理を続けます。サービスがオフラインでも確認できます。起動元を確認できない旧バージョンの Codex バックグラウンドサーバーは、`--force` を付けても実行を継続し、警告が表示されます。
+Pontia が起動したエージェントが動作中の場合、`pontia down` と `pontia uninstall` は該当する Session を一覧表示します。`--force` を付けると、エージェントを停止して処理を続けます。サービスがオフラインでも確認できます。Codex から管理できる旧バージョンのバックグラウンドサーバーは、コマンドが個別に報告します。
 
 `pontia uninstall` は削除対象を表示し、確認を求めます。`--yes` で確認を省略できます。バイナリ、設定、認証情報、履歴、クラウドのデバイス登録、Agent Client 本体は保持されます。完了後は新しいターミナルを開いてください。再設定には `pontia init` を実行します。
 
@@ -34,9 +37,33 @@ Pontia が起動したエージェントが動作中の場合、`pontia down` �
 
 `pontiad` を停止すると、監視、入力の受信、Workflow のスケジューリングが停止します。Agent Client のネイティブな会話のライフサイクルは、各 Agent Client が別途管理します。
 
-## Bot の説明を設定する
+## Bot コマンド
 
-Bot の現在のメイン Session で `pontia bot set-description --description TEXT` を実行すると、その Bot の説明が空欄のときに最大 2,000 文字まで記入できます。ユーザーは Bot の設定で説明を編集したり、空欄に戻したりできます。
+Bot ツールは Pontia の Bot、helper、検索、Dreaming Session 内で実行します。機械可読出力にはグローバルの `--json` を追加します。
+
+| コマンド | 用途 |
+| --- | --- |
+| `pontia bot send-to-user` | 完全な返信を送り、以前のメッセージとの関連付け、todo の作成・解決を行います |
+| `pontia bot link-message` | 引用のないユーザーメッセージを 1〜5 件の以前のメッセージに関連付けます |
+| `pontia bot todo mark` / `todo resolve` | 既存メッセージの todo を開始または解決します |
+| `pontia bot set-description` | 現在の Bot の空の説明を記入します |
+| `pontia bot update-user` | 共有 `USER.md` の文字列を置換し、空の `--old-text` で追記します |
+| `pontia bot chat-history search` / `context` | Bot チャットを検索し、該当メッセージと前後を読みます |
+| `pontia bot session-messages` | 対象 Session のメッセージを Turn とカテゴリ別にページングして読みます |
+| `pontia bot helper create` / `list` / `send` / `reply` | helper の作成、一覧、連絡、Bot への結果報告を行います |
+| `pontia bot helper check` / `compact` / `close` | helper の確認、コンテキスト圧縮の依頼、Session の終了を行います |
+| `pontia bot profile templates` / `list` / `show` | テンプレート取得、Profile 一覧、完全な Profile 読み取りを行います |
+| `pontia bot profile clients` / `models` | Profile で使える Client またはモデルを一覧表示します |
+| `pontia bot profile create` / `update` / `delete` | 共有 Agent Profile を作成、変更、削除します |
+| `pontia bot workspace register` / `describe` | ディレクトリを登録・有効化し、Workspace の説明を設定・消去します |
+| `pontia bot memory pending` / `organize` | 整理待ちメモリを一覧し、整理状態を更新します |
+| `pontia bot memory create` / `update` / `archive` | メモリを作成、置換、アーカイブ、復元します |
+| `pontia bot memory link` / `unlink` | 2 件のアクティブなメモリ間のリンクを追加・削除します |
+| `pontia bot memory read` / `search` / `neighbors` | ID、完全キーワード、1 ホップのリンクでメモリを読みます |
+| `pontia bot memory retrieve` / `use` | 読み取り専用の深い検索を開始し、使用したメモリを記録します |
+| `pontia bot dreaming clarify` | あいまいなメモリの確認を Bot に依頼します |
+
+Dreaming によるメモリ書き込みでは、グローバルの `--reason` で根拠を記録します。ページングされる `session-messages`、`helper check`、`memory pending`、`memory neighbors` は次ページのコマンドを表示し、`helper check` はコンテキスト使用量と手動圧縮機能も表示します。
 
 ## シェル補完
 
@@ -68,6 +95,8 @@ pontia completions powershell | Out-String | Invoke-Expression
 | --- | --- |
 | `pontia client list` | すべての Agent Client エントリを、短縮 ID、名前、種類、有効状態とともに一覧表示します |
 | `pontia client list --json` | すべてのエントリを、ID を含む JSON で一覧表示します |
+| `pontia client install --list` | 登録済みインストーラー、方式、検出結果、前提条件を表示します |
+| `pontia client install CLIENT` | Client をインストールし、連携を設定して有効にします |
 | `pontia client show CLIENT` | 1 つのエントリを表示します |
 | `pontia client enable CLIENT` | 新しい Session でそのエントリを使えるようにします |
 | `pontia client disable CLIENT` | 新しい Session でそのエントリを使えないようにします。既存の Session は変わりません |
@@ -107,7 +136,7 @@ pontia completions powershell | Out-String | Invoke-Expression
 
 ## 終了ステータスとエラー
 
-`pontia status` と `pontia doctor` は、ローカルサービスが動作していて HTTP ヘルスチェックに合格すると正常終了します。アカウントとリモートの結果は別に確認してください。クラウドに登録されていても、デバイスにインターネットから到達できるとは限りません。
+`pontia status` と `pontia doctor` は、ローカルサービスが動作していて HTTP ヘルスチェックに合格すると正常終了します。アカウントとリモートの結果は各段階を個別に示します。デバイスへのインターネット接続は、リモート到達性の結果で確認してください。
 
 コマンドの成否は終了ステータスで確認してください。エラーは `pontia:` という接頭辞付きで標準エラー出力に書き込まれます。障害を診断するときは、秘匿情報を伏せたエラーを含めてください。
 

@@ -7,7 +7,7 @@
 
 Workflow 是围绕共同目标对多个 Agent Node 进行的持久编排。每个 Agent Node 获得一个新的 Pontia Session，读取声明的 Handoff 输入，写入一个 Handoff 输出，并在分配的工作完成后显式提交。
 
-当任务需要分阶段交接、持久进度和独立的 Agent 上下文时，使用 Workflow。对于不需要明确执行计划的探索性工作，使用普通 Session。
+对于阶段、输入、输出和完成点预先明确的固定流程，请使用 Workflow。对于由 Agent 决定如何委派、并通过对话持续调整计划的开放目标，请使用 [Bot](/docs/bots)。两者都能复用 [Agent Profile](/docs/agent-profiles)：Workflow 将 Profile 分配给 Node，Bot 则为专业 helper 选择 Profile。
 
 ## 创建定义
 
@@ -26,6 +26,7 @@ type = "agent"
 phase = "Discovery"
 title = "Research"
 instructions = "Inspect the current search implementation and propose a plan."
+execution_profile_id = "researcher"
 inputs = ["requirements.md"]
 output = "research.md"
 
@@ -41,6 +42,8 @@ output = "result.md"
 将 `cwd` 设为一个已存在且已[激活为 Workspace](/docs/workspaces) 的目录。Workflow 中的每个 Agent Client 都在该目录中启动。
 
 每个 Node 都使用 `type = "agent"`。Node 按定义顺序执行。每个输入指向一个初始 Handoff 或之前某个 Node 的输出。为每个输出指定一个唯一的、不含目录部分的文件名。
+
+当 Node 需要使用某个 Agent Profile 的 Client、模型、推理强度、权限模式和系统提示词时，将 `execution_profile_id` 设置为现有 Profile ID。该 Node 自己的 instructions 和 Handoff 输入会作为本次任务的补充。Profile 更新会应用于之后启动的 Node。
 
 ## 运行和查看
 

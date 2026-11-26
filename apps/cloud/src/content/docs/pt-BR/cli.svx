@@ -20,11 +20,14 @@ Use `pontia COMMAND --help` para ver as opções exatas da versão instalada.
 | `pontia doctor` | Explicar as verificações de serviço, configuração, login e registro remoto, com dicas de reparo |
 | `pontia down` | Parar e desativar o serviço por usuário |
 | `pontia update` | Instalar a release estável assinada mais recente de `pontia` e `pontiad` |
+| `pontia auto-update enable` | Instalar e iniciar verificações automáticas de atualização a cada seis horas |
+| `pontia auto-update disable` | Parar e remover o agendamento de atualização automática |
+| `pontia auto-update status` | Mostrar o agendamento e os horários disponíveis de execução |
 | `pontia uninstall` | Remover integrações do Pontia, configuração do shell e serviços de inicialização automática |
 | `pontia --version` | Exibir a versão instalada |
 | `pontia completions SHELL` | Exibir o script de autocompletar de um shell |
 
-Se houver agentes iniciados pelo Pontia em execução, `pontia down` e `pontia uninstall` listam as Sessions correspondentes. Use `--force` para encerrar esses agentes e prosseguir. A verificação funciona mesmo com o serviço offline. Com `--force`, um servidor Codex em segundo plano de uma versão anterior cuja origem não possa ser confirmada continua em execução e o comando exibe um aviso.
+Se houver agentes iniciados pelo Pontia em execução, `pontia down` e `pontia uninstall` listam as Sessions correspondentes. Use `--force` para encerrar esses agentes e prosseguir; a verificação também funciona com o serviço offline. O comando informa separadamente um servidor Codex em segundo plano de uma versão anterior que você pode gerenciar pelo Codex.
 
 `pontia uninstall` exibe a lista de limpeza e pede confirmação; use `--yes` para dispensar a confirmação. Os binários, configurações, credenciais, histórico, registro do dispositivo na nuvem e instalações dos Agent Clients são preservados. Abra um novo terminal após a limpeza. Execute `pontia init` para configurar novamente.
 
@@ -34,9 +37,33 @@ Veja [Inicialização](/docs/initialization) para a configuração interativa e 
 
 Parar o `pontiad` interrompe a observação, o recebimento de entradas e o agendamento de Workflows. Os Agent Clients gerenciam o ciclo de vida das suas conversas nativas separadamente.
 
-## Definir a descrição de um Bot
+## Comandos de Bot
 
-Na Session principal atual do Bot, execute `pontia bot set-description --description TEXT` para preencher a descrição se ela estiver vazia. O comando aceita até 2.000 caracteres. O usuário pode editar ou apagar a descrição nas configurações do Bot.
+As ferramentas de Bot rodam dentro de uma Session de Bot, helper, recuperação ou Dreaming do Pontia. Adicione a opção global `--json` para saída legível por máquinas.
+
+| Comando | Finalidade |
+| --- | --- |
+| `pontia bot send-to-user` | Enviar uma resposta completa, relacioná-la a mensagens anteriores e abrir ou resolver todos |
+| `pontia bot link-message` | Relacionar uma mensagem sem citação a uma a cinco mensagens anteriores |
+| `pontia bot todo mark` / `todo resolve` | Abrir ou resolver um todo em uma mensagem existente |
+| `pontia bot set-description` | Preencher a descrição vazia do Bot atual |
+| `pontia bot update-user` | Substituir texto no `USER.md` compartilhado ou anexar com `--old-text` vazio |
+| `pontia bot chat-history search` / `context` | Pesquisar o chat do Bot ou ler uma mensagem encontrada e suas vizinhas |
+| `pontia bot session-messages` | Ler mensagens paginadas de uma Session por Turn e categoria |
+| `pontia bot helper create` / `list` / `send` / `reply` | Criar, listar e coordenar helpers e relatar resultados ao Bot |
+| `pontia bot helper check` / `compact` / `close` | Inspecionar um helper, pedir compactação ou encerrar sua Session |
+| `pontia bot profile templates` / `list` / `show` | Buscar templates, listar Profiles ou ler um Profile completo |
+| `pontia bot profile clients` / `models` | Listar Clients ou modelos disponíveis para Profiles |
+| `pontia bot profile create` / `update` / `delete` | Criar, alterar ou excluir um Agent Profile compartilhado |
+| `pontia bot workspace register` / `describe` | Registrar e ativar um diretório ou definir e limpar a descrição da Workspace |
+| `pontia bot memory pending` / `organize` | Listar e organizar memórias pendentes |
+| `pontia bot memory create` / `update` / `archive` | Criar, substituir, arquivar ou restaurar uma memória |
+| `pontia bot memory link` / `unlink` | Adicionar ou remover um vínculo entre memórias ativas |
+| `pontia bot memory read` / `search` / `neighbors` | Ler memórias por ID, palavras-chave inteiras ou um nível de vínculos |
+| `pontia bot memory retrieve` / `use` | Iniciar recuperação profunda somente leitura ou registrar memórias usadas |
+| `pontia bot dreaming clarify` | Pedir ao Bot que esclareça memórias ambíguas |
+
+Gravações de memória pelo Dreaming usam a opção global `--reason` para registrar as evidências. Resultados paginados de `session-messages`, `helper check`, `memory pending` e `memory neighbors` imprimem o próximo comando; `helper check` também mostra uso de contexto e compactação manual.
 
 ## Autocompletar no shell
 
@@ -68,6 +95,8 @@ pontia completions powershell | Out-String | Invoke-Expression
 | --- | --- |
 | `pontia client list` | Listar todas as entradas de Agent Client com ID curto, nome, tipo e estado de habilitação |
 | `pontia client list --json` | Listar todas as entradas como JSON, incluindo o ID |
+| `pontia client install --list` | Mostrar instaladores registrados, métodos, detecção e pré-requisitos |
+| `pontia client install CLIENT` | Instalar um Client, configurar a integração e ativá-lo |
 | `pontia client show CLIENT` | Mostrar uma entrada |
 | `pontia client enable CLIENT` | Permitir que novas Sessions usem a entrada |
 | `pontia client disable CLIENT` | Impedir que novas Sessions usem a entrada; as Sessions existentes não mudam |
@@ -107,7 +136,7 @@ Mudanças na configuração remota que afetam o `pontiad` reiniciam um serviço 
 
 ## Código de saída e erros
 
-`pontia status` e `pontia doctor` terminam com sucesso quando o serviço local está em execução e a verificação de saúde HTTP passa. Leia os resultados de conta e remoto separadamente; o registro no Cloud não prova que o dispositivo está acessível pela internet.
+`pontia status` e `pontia doctor` terminam com sucesso quando o serviço local está em execução e a verificação de saúde HTTP passa. Os resultados de conta e remoto informam etapas separadas; use o resultado de alcance remoto para confirmar o acesso ao dispositivo pela internet.
 
 Use o código de saída para verificar se um comando teve sucesso. Os erros são escritos na saída de erro padrão com o prefixo `pontia:`. Inclua o erro, com dados sensíveis removidos, ao diagnosticar uma falha.
 

@@ -1,51 +1,62 @@
 <svelte:head>
 	<title>Agent Client — Pontia</title>
-	<meta name="description" content="选择和配置 Pontia 支持的编程 Agent 客户端。" />
+	<meta name="description" content="安装、登录并配置 Pontia 支持的编程 Agent Client。" />
 </svelte:head>
 
 # Agent Client
 
-Agent Client 将 Pontia 连接到编程 Agent 的原生会话、控制通道和对话历史。Agent 仍在本地运行，使用它自己的凭据、配置、工具和文件系统权限。
+Agent Client 将 Pontia 连接到编程 Agent 的原生会话、控制通道和对话历史。Agent 在本地运行，使用自己的凭据、配置、工具和文件系统权限。
 
-Pontia 包含以下 Agent Client：
-
-| Client | 本地要求 | 本地集成 |
+| Client | 一键安装 | 认证方式 |
 | --- | --- | --- |
-| [Pi](/docs/agent-clients/pi) | `pi` 和 `tmux` | Pontia 的 Pi 插件 |
-| [Codex](/docs/codex) | 支持 app-server 守护进程的 Codex CLI | 按用户启动的 Codex 守护进程、启动器和 shell PATH |
-| [Claude Code](/docs/agent-clients/claude) | Node.js LTS、npm 以及 Claude Code 认证 | 来自 npm 的 `@pontia/claude-client` 包 |
-| [Google Antigravity](/docs/agent-clients/antigravity) | `agy` | 内置 ACP 集成 |
-| [Grok Build](/docs/agent-clients/grok) | `grok` | 内置 ACP 集成 |
-| [Kiro](/docs/agent-clients/kiro) | `kiro-cli` | 内置 ACP 集成 |
+| [Pi](/docs/agent-clients/pi) | `pontia client install pi` | 设备上的 Pi 提供商凭据 |
+| [Codex](/docs/agent-clients/codex) | `pontia client install codex` | Dashboard 中的 ChatGPT Device Code，或设备上的 Codex 凭据 |
+| [Claude Code](/docs/agent-clients/claude) | `pontia client install claude-agent` | 设备上的 Claude Code 凭据 |
+| [Google Antigravity](/docs/agent-clients/antigravity) | `pontia client install antigravity` | 设备上的 Antigravity 登录 |
+| [Grok Build](/docs/agent-clients/grok) | `pontia client install grok` | Dashboard 中的 Grok Device Code |
+| [Kiro](/docs/agent-clients/kiro) | `pontia client install kiro` | Dashboard 中的 Kiro Free 或 Pro Device Code |
 
-Grok Build、Antigravity 和 Kiro 都可以运行普通 Session、Bot、helper、记忆任务和 Workflow 节点。每个独立指南分别介绍安装、认证、远程控制、模型设置和受限执行方式。
+Grok Build、Antigravity 和 Kiro 可运行普通 Session、Bot、helper、记忆任务和 Workflow 节点。各自的指南还介绍模型、远程控制和执行模式。
 
-## 在初始化时选择 Client
+## 安装并启用 Client
 
-运行：
+在 Dashboard 中打开 **Settings → Agent Clients**，选择 Client，再选择 **Install**。Pontia 会显示安装来源、目标位置和前置条件，在设备上运行安装程序，应用本地集成设置，并为新 Session 启用 Client。
+
+终端中可使用同样的流程：
 
 ```sh
-pontia init
+pontia client install CLIENT
 ```
 
-初始化程序会在应用配置之前检查你选择的 Client。Pi 默认选中；Codex 和 `claude-agent` 为可选项。选中的 Client 会为新的 Session 启用。
+使用 `pontia client install --list` 查看已注册的安装器和前置条件。安装时会请求确认；无人值守终端可添加 `--yes`。Pontia 为 Pi 和 Codex 使用托管的 npm 安装，为 Claude Code、Antigravity、Grok Build 和 Kiro 使用各自的官方安装器。
 
-运行 `pontia setup pi`、`pontia setup codex` 或 `pontia setup claude` 来安装或修复本地集成。省略 Client 名称即可交互式选择。Setup 也会启用该 Client。
+## 从任意浏览器登录
 
-也可以在 Dashboard 的 **设置 → Agent Clients** 中选择 Pi、Codex 或 Claude Code，点击 **初始化**，在该设备上执行相同的配置。页面会显示最近一次初始化的输出和结果，重新连接后仍可查看。
+Dashboard 可在所选设备上为 Codex、Grok Build 和 Kiro 启动适合远程操作的 Device Code 登录。
 
-## 各 Client 的能力不同
+1. 打开 **Settings → Agent Clients** 并选择 Client。
+2. 选择 **Sign in**。Kiro 可选择使用 AWS Builder ID 的 Free 流程，或使用 IAM Identity Center 的 Pro 流程；Pro 流程还会询问身份提供商 URL 和区域。
+3. 在任意浏览器中打开显示的验证页面，并输入一次性代码。
+4. Dashboard 确认登录账户后返回页面，再启用 Client。
 
-Dashboard 会显示所选 Client 支持的控制功能，例如中断、历史分支和排队投递。
+Pi 和 Claude Code 使用设备上配置的凭据，Antigravity 使用其本地登录。对应的 Dashboard 卡片会显示检测到的认证状态和相关终端命令。
 
-Pontia Session 在绑定后会与一个客户端原生对话身份持久关联。重新打开同一个原生对话会继续现有的 Session；新的原生对话则属于新的 Session。
+## 初始化时选择 Client
 
-<h2 id="client-credentials-and-permissions">Client 凭据和权限</h2>
+运行 `pontia init` 可在初始化 Pontia 时选择并检查 Pi、Codex 和 Claude Code。Pi 默认选中，所选 Client 会为新 Session 启用。
 
-每个 Client 使用自己的凭据、沙箱和本地权限。在开始集成之前，请登录每个 Client 并确认它能完成预期的工作。
+运行 `pontia setup pi`、`pontia setup codex` 或 `pontia setup claude` 可应用或修复推荐的本地集成。省略 Client 可交互式选择。Dashboard 中的 **Initialize** 会执行同样的设置，并在重新连接后保留最近的输出。
 
-创建 Session 时，可以在 `POST /api/v1/sessions` 请求中指定 `mode`。省略该字段或传入 `default` 时，使用 Dashboard 新建会话时的客户端配置。`yolo` 让 Pi、Claude Code、Codex、Grok Build、Antigravity 或 Kiro 跳过审批。`restricted` 使用客户端内置的工具限制和免审批配置，Bot、记忆检索和 Dreaming 均使用此模式。重启、恢复和历史分叉会沿用会话模式。
+<h2 id="client-credentials-and-permissions">选择 Session 权限</h2>
 
-例如，`{"client_type":"pi","workspace":"/path/to/workspace","mode":"restricted"}` 会在已登记的 Workspace 中启动 Pi，禁用编辑工具、MCP 和 skills。Kiro 和 Antigravity 的受限会话在 Pontia 管理的启动目录中安装 agent 文件。受限会话保留 shell 访问权限，仍可通过命令修改文件。
+每个 Client 使用自己的凭据、沙箱和本地权限。`POST /api/v1/sessions` 的可选 `mode` 字段用于选择执行模式；重启、恢复和历史分叉会沿用该模式。
 
-当 Client 缺失、无法启动或不再报告输出时，请参阅[故障排除](/docs/troubleshooting)。
+| 模式 | 效果 |
+| --- | --- |
+| `default` | 使用 Client 的常规设置，与从 Dashboard 新建 Session 时一致 |
+| `yolo` | 让 Pi、Claude Code、Codex、Grok Build、Antigravity 或 Kiro 无需审批即可使用工具 |
+| `restricted` | 使用 Client 内置的无人值守工具策略；Bot、记忆检索和 Dreaming 使用此模式 |
+
+Dashboard 会显示所选 Client 当前提供的控制功能，包括中断、历史分支和排队投递。Pontia Session 会保留其客户端原生对话身份，因此重新打开该原生对话会继续同一 Session。
+
+使用[故障排除](/docs/troubleshooting)恢复 Client 发现、启动和输出报告。

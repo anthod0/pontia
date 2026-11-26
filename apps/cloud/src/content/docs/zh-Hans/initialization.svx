@@ -21,7 +21,7 @@ npx @pontia/cli init
 
 向导可以让你：
 
-1. 选择要安装的 Client 集成：Pi、Codex、Claude Code 或其任意组合。Codex 包括其守护进程启动和[启动器](/docs/codex#codex-launcher)。
+1. 选择要安装的 Client 集成：Pi、Codex、Claude Code 或其任意组合。Codex 包括其守护进程启动和[启动器](/docs/agent-clients/codex#codex-launcher)。
 2. 检查并确认设置。
 3. 创建或保留本地 API token，启动 Pontia 服务，并启用所选 Client。
 4. 登录 Pontia Cloud，并为远程访问注册设备。

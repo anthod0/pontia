@@ -39,8 +39,22 @@ roots = [
 | `dashboard.source` | Local Dashboard build directory or remote `.tar.gz`, `.tgz`, or `.zip` archive containing exactly one `index.html` |
 | `runtime.pi.tui_command` | Pi executable or command used for launched Pi Sessions |
 | `workspace_browser.roots` | Directories the Dashboard may browse to activate Workspaces |
+| `preview.enabled` | Enables localhost web-app previews; defaults to `true` |
+| `preview.allowed_ports` | Additional sensitive development or administration ports explicitly available to previews |
 
 The release default for `dashboard.source` is the Dashboard archive matching the installed Pontia version. Remote Dashboard archives are cached under `$PONTIA_HOME/cache/dashboard`; an existing cache can still be served if refresh fails.
+
+<h2 id="local-preview">Local preview</h2>
+
+Localhost previews are enabled by default for normal web development ports. Add a sensitive development or administration port when the app intentionally listens there:
+
+```toml
+[preview]
+enabled = true
+allowed_ports = [8888, 9222]
+```
+
+`allowed_ports` accepts port numbers from 1 through 65535. It is commonly useful for Jupyter on `8888`, Chrome DevTools on `9222`, Node inspect on `9229`, and Ollama on `11434`. Run `pontia up` after changing these settings. See [Previews](/docs/previews) for the Dashboard workflow.
 
 ## File picker
 

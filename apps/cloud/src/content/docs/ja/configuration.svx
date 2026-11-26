@@ -39,8 +39,22 @@ roots = [
 | `dashboard.source` | Local Dashboard のビルドディレクトリ、または `index.html` をちょうど 1 つ含むリモートの `.tar.gz`、`.tgz`、`.zip` アーカイブ |
 | `runtime.pi.tui_command` | 起動する Pi の Session に使う Pi の実行ファイルまたはコマンド |
 | `workspace_browser.roots` | Workspace を有効にするために Dashboard が参照できるディレクトリ |
+| `preview.enabled` | localhost Web アプリのプレビューを有効にします。既定値は `true` です |
+| `preview.allowed_ports` | プレビューに明示的に追加する機密性の高い開発・管理ポート |
 
 リリース版での `dashboard.source` のデフォルトは、インストールされている Pontia のバージョンに対応する Dashboard アーカイブです。リモートの Dashboard アーカイブは `$PONTIA_HOME/cache/dashboard` にキャッシュされ、更新に失敗しても既存のキャッシュを配信できます。
+
+<h2 id="local-preview">ローカルプレビュー</h2>
+
+localhost プレビューは既定で有効になり、一般的な Web 開発ポートを利用できます。アプリが機密性の高い開発・管理ポートを意図的に使う場合は、そのポートを追加します。
+
+```toml
+[preview]
+enabled = true
+allowed_ports = [8888, 9222]
+```
+
+`allowed_ports` には 1〜65535 のポート番号を指定できます。代表例は `8888` の Jupyter、`9222` の Chrome DevTools、`9229` の Node inspect、`11434` の Ollama です。変更後に `pontia up` を実行します。Dashboard での使い方は[プレビュー](/docs/previews)を参照してください。
 
 ## ファイルピッカー
 

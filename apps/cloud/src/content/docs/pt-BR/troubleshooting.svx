@@ -64,7 +64,7 @@ Confira também se um `[runtime.pi].tui_command` personalizado tem um caminho ou
 
 ## O Codex não conecta
 
-Confirme que sua build do Codex suporta o daemon app-server e depois inspecione o serviço por usuário dele. Veja [Codex](/docs/codex) para os comandos de cada plataforma. Execute `pontia setup codex` se o executável ou o `CODEX_HOME` mudou, ou se o launcher ou a configuração de PATH do shell dele estiver ausente.
+Confirme que sua build do Codex suporta o daemon app-server e depois inspecione o serviço por usuário dele. Veja [Codex](/docs/agent-clients/codex) para os comandos de cada plataforma. Execute `pontia setup codex` se o executável ou o `CODEX_HOME` mudou, ou se o launcher ou a configuração de PATH do shell dele estiver ausente.
 
 Aprovações de comandos, alterações de arquivos e permissões aparecem no Dashboard. Um agente ainda pode parecer travado quando o Codex aguarda outro tipo de solicitação que o Dashboard não mostra. Interrompa o Turn se necessário e então ajuste a política do Codex ou responda à solicitação na interface nativa do Codex.
 

@@ -10,6 +10,7 @@ const privatePages = ["/login", "/settings", "/device", "/auth/account-conflict"
 const handlePage: Handle = ({ event, resolve }) =>
   paraglideMiddleware(event.request, async ({ request, locale }) => {
     event.request = request;
+    event.locals.locale = locale;
     const response = await resolve(event, {
       transformPageChunk: ({ html }) => html.replace("%lang%", locale),
     });

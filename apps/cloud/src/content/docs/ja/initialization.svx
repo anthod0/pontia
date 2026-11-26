@@ -21,7 +21,7 @@ npx @pontia/cli init
 
 ウィザードでは次のことができます:
 
-1. インストールする Client 連携を選択します: Pi、Codex、Claude Code、またはその任意の組み合わせ。Codex にはデーモンの起動設定と[ランチャー](/docs/codex#codex-launcher)が含まれます。
+1. インストールする Client 連携を選択します: Pi、Codex、Claude Code、またはその任意の組み合わせ。Codex にはデーモンの起動設定と[ランチャー](/docs/agent-clients/codex#codex-launcher)が含まれます。
 2. セットアップ内容を確認して承認します。
 3. ローカル API トークンを作成または保持し、Pontia サービスを起動して、選択した Client を有効にします。
 4. Pontia Cloud にサインインし、リモートアクセス用にデバイスを登録します。

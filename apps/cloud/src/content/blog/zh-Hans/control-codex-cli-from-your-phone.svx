@@ -50,7 +50,7 @@ npx @pontia/cli init       # select Codex
 
 完成后，打开 [app.pontia.dev](https://app.pontia.dev)，选择机器并启动 Session。
 
-可选的 Codex 启动器还能让你在终端中用 `codex` 启动的线程出现在 Dashboard 中，这样你可以在手机上继续它们。参见 [Codex 设置](/docs/codex)。高级用户可以[运行自己的中继](/docs/self-hosted-edge)来代替官方中继。
+可选的 Codex 启动器还能让你在终端中用 `codex` 启动的线程出现在 Dashboard 中，这样你可以在手机上继续它们。参见 [Codex 设置](/docs/agent-clients/codex)。高级用户可以[运行自己的中继](/docs/self-hosted-edge)来代替官方中继。
 
 ## 方案 2：ChatGPT 移动端远程控制
 

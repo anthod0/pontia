@@ -21,7 +21,7 @@ Isso instala o Pontia, se necessário, e inicia o assistente. Se o Pontia já es
 
 O assistente permite:
 
-1. Selecionar as integrações de Client a instalar: Pi, Codex, Claude Code ou qualquer combinação. O Codex inclui a inicialização do daemon e o [launcher](/docs/codex#codex-launcher).
+1. Selecionar as integrações de Client a instalar: Pi, Codex, Claude Code ou qualquer combinação. O Codex inclui a inicialização do daemon e o [launcher](/docs/agent-clients/codex#codex-launcher).
 2. Revisar e confirmar a configuração.
 3. Criar ou manter o token da API local, iniciar o serviço do Pontia e habilitar os Clients selecionados.
 4. Entrar no Pontia Cloud e registrar o dispositivo para acesso remoto.

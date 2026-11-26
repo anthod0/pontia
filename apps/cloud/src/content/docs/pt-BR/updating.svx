@@ -36,6 +36,17 @@ Para autoatualizações, mantenha `pontia` e `pontiad` como arquivos regulares n
 
 Por padrão, o Dashboard usa o arquivo de release correspondente à versão do binário, então uma atualização bem-sucedida também leva o Dashboard servido para essa versão, a menos que `[dashboard].source` seja sobrescrito.
 
+## Ativar atualizações locais automáticas
+
+No Linux e no macOS, o Pontia pode instalar um agendamento por usuário que verifica o canal estável assinado a cada seis horas. Ative-o com o mesmo usuário que possui o serviço do Pontia:
+
+```sh
+pontia auto-update enable
+pontia auto-update status
+```
+
+`status` mostra o agendamento instalado e os horários disponíveis de execução. Use `pontia auto-update disable` para remover o agendamento. Cada execução agendada usa o mesmo processo verificado de atualização e recuperação do serviço de `pontia update`.
+
 ## Instalar uma release específica
 
 O instalador aceita uma release que comece com `v`:

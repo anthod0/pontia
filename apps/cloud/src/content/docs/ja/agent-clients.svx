@@ -1,51 +1,62 @@
 <svelte:head>
 	<title>Agent Client — Pontia</title>
-	<meta name="description" content="Pontia が対応するコーディングエージェントのクライアントを選択して設定します。" />
+	<meta name="description" content="Pontia が対応するコーディング Agent Client をインストールし、サインインして設定します。" />
 </svelte:head>
 
 # Agent Client
 
-Agent Client は、Pontia をコーディングエージェントのネイティブの Session、制御チャネル、会話履歴に接続します。エージェントは引き続き、独自の認証情報、設定、ツール、ファイルシステムの権限でローカルに動作します。
+Agent Client は Pontia をコーディングエージェントのネイティブ Session、制御チャネル、会話履歴に接続します。エージェントは独自の認証情報、設定、ツール、ファイルシステム権限でローカルに動作します。
 
-Pontia には次の Agent Client が含まれています。
-
-| Client | ローカルの要件 | ローカルの連携 |
+| Client | ワンステップインストール | 認証 |
 | --- | --- | --- |
-| [Pi](/docs/agent-clients/pi) | `pi` と `tmux` | Pontia の Pi プラグイン |
-| [Codex](/docs/codex) | app-server デーモンに対応した Codex CLI | ユーザーごとの Codex デーモンの起動、ランチャー、シェルの PATH |
-| [Claude Code](/docs/agent-clients/claude) | Node.js LTS、npm、Claude Code の認証 | npm の `@pontia/claude-client` パッケージ |
-| [Google Antigravity](/docs/agent-clients/antigravity) | `agy` | 組み込み ACP 連携 |
-| [Grok Build](/docs/agent-clients/grok) | `grok` | 組み込み ACP 連携 |
-| [Kiro](/docs/agent-clients/kiro) | `kiro-cli` | 組み込み ACP 連携 |
+| [Pi](/docs/agent-clients/pi) | `pontia client install pi` | デバイス上の Pi プロバイダー認証情報 |
+| [Codex](/docs/agent-clients/codex) | `pontia client install codex` | Dashboard の ChatGPT Device Code、またはデバイス上の Codex 認証情報 |
+| [Claude Code](/docs/agent-clients/claude) | `pontia client install claude-agent` | デバイス上の Claude Code 認証情報 |
+| [Google Antigravity](/docs/agent-clients/antigravity) | `pontia client install antigravity` | デバイス上の Antigravity サインイン |
+| [Grok Build](/docs/agent-clients/grok) | `pontia client install grok` | Dashboard の Grok Device Code |
+| [Kiro](/docs/agent-clients/kiro) | `pontia client install kiro` | Dashboard の Kiro Free または Pro Device Code |
 
-Grok Build、Antigravity、Kiro は、通常の Session、Bot、helper、メモリタスク、Workflow ノードで利用できます。各ガイドで、インストール、認証、リモート操作、モデル設定、制限付き実行について説明します。
+Grok Build、Antigravity、Kiro は通常の Session、Bot、helper、メモリタスク、Workflow ノードで利用できます。各ガイドではモデル、リモート操作、実行モードも説明します。
 
-## 初期化時に Client を選択する
+## Client をインストールして有効にする
 
-次を実行します。
+Dashboard で **Settings → Agent Clients** を開き、Client を選んで **Install** を選択します。Pontia はインストール元、保存先、前提条件を表示し、デバイス上でインストーラーを実行してローカル連携を設定し、新しい Session で Client を有効にします。
+
+ターミナルでも同じ流れを利用できます。
 
 ```sh
-pontia init
+pontia client install CLIENT
 ```
 
-初期化ツールは、設定を適用する前に選択した Client を確認します。Pi はデフォルトで選択されており、Codex と `claude-agent` は任意です。選択した Client は新しい Session で有効になります。
+`pontia client install --list` で登録済みインストーラーと前提条件を確認できます。インストール時には確認が表示され、無人実行では `--yes` を追加できます。Pi と Codex には管理された npm インストールを、Claude Code、Antigravity、Grok Build、Kiro には各公式インストーラーを使います。
 
-ローカルの連携をインストールまたは修復するには、`pontia setup pi`、`pontia setup codex`、`pontia setup claude` を実行します。Client を省略すると対話形式で選択できます。セットアップでは Client も有効になります。
+## 任意のブラウザーからサインインする
 
-Dashboard の **Settings → Agent Clients** で Pi、Codex、Claude Code を選び、**Initialize** をクリックすると、そのデバイスで同じセットアップを実行できます。最新のセットアップの出力と結果は、再接続後も確認できます。
+Dashboard は選択したデバイス上で、Codex、Grok Build、Kiro のリモート対応 Device Code ログインを開始できます。
 
-## Client によってケイパビリティは異なる
+1. **Settings → Agent Clients** を開いて Client を選択します。
+2. **Sign in** を選択します。Kiro では AWS Builder ID を使う Free、または IAM Identity Center を使う Pro を選べます。Pro では ID プロバイダー URL とリージョンも入力します。
+3. 表示された確認ページを任意のブラウザーで開き、ワンタイムコードを入力します。
+4. Dashboard がアカウントを確認したら戻り、Client を有効にします。
 
-Dashboard には、中断、履歴の分岐、キューに入れた配信など、選択した Client が対応している操作が表示されます。
+Pi と Claude Code はデバイスに設定された認証情報を使い、Antigravity はローカルサインインを使います。各 Dashboard カードには検出した認証状態と関連するターミナルコマンドが表示されます。
 
-Pontia の Session は、バインド後、クライアントネイティブの会話 ID のひとつと永続的に関連付けられます。同じネイティブの会話を再び開くと既存の Session が続き、新しいネイティブの会話は新しい Session に属します。
+## 初期化時に Client を選ぶ
 
-<h2 id="client-credentials-and-permissions">Client の認証情報と権限</h2>
+`pontia init` を実行すると、Pontia の初期化中に Pi、Codex、Claude Code を選択して確認できます。Pi は既定で選択され、選んだ Client は新しい Session で有効になります。
 
-各 Client は、独自の認証情報、サンドボックス、ローカルの権限を使用します。連携を始める前に、各 Client にサインインし、目的の作業を実行できることを確認してください。
+`pontia setup pi`、`pontia setup codex`、`pontia setup claude` は推奨ローカル連携を適用または修復します。Client を省略すると対話形式で選択できます。Dashboard の **Initialize** も同じ設定を実行し、再接続後も最新の出力を表示します。
 
-Session の作成時に `POST /api/v1/sessions` の `mode` を指定できます。省略時または `default` では Dashboard から起動する場合と同じ Client 設定を使います。`yolo` は Pi、Claude Code、Codex、Grok Build、Antigravity、Kiro で承認を省略します。`restricted` は Client 固有のツール制限を適用して承認なしで実行します。Bot、メモリ検索、Dreaming はこのモードを使います。再起動、再開、履歴の分岐でもモードを引き継ぎます。
+<h2 id="client-credentials-and-permissions">Session の権限を選ぶ</h2>
 
-たとえば、登録済みの Workspace で `{"client_type":"pi","workspace":"/path/to/workspace","mode":"restricted"}` を指定すると、Pi の編集ツール、MCP、スキルが無効になります。Kiro と Antigravity は Pontia が管理する起動ディレクトリに制限付きエージェントのファイルを配置します。制限付き Session でもシェルからファイルを変更できます。
+各 Client は独自の認証情報、サンドボックス、ローカル権限を使います。`POST /api/v1/sessions` の任意の `mode` フィールドで実行モードを選び、再起動、再開、履歴の分岐でもそのモードを引き継ぎます。
 
-Client が見つからない、起動できない、出力を報告しなくなった場合は、[トラブルシューティング](/docs/troubleshooting)を参照してください。
+| モード | 効果 |
+| --- | --- |
+| `default` | Dashboard から Session を開始するときと同じ、Client の通常設定を使う |
+| `yolo` | Pi、Claude Code、Codex、Grok Build、Antigravity、Kiro で承認なしのツール利用を行う |
+| `restricted` | Client 組み込みの無人実行用ツールポリシーを使う。Bot、メモリ検索、Dreaming はこのモードを使う |
+
+Dashboard には、中断、履歴の分岐、キュー配信など、選択した Client が現在提供する操作が表示されます。Pontia Session はクライアントネイティブの会話 ID を保持するため、そのネイティブ会話を開き直すと同じ Session が続きます。
+
+[トラブルシューティング](/docs/troubleshooting)で Client の検出、起動、出力レポートを復旧できます。

@@ -64,7 +64,7 @@ $PONTIA_HOME/state/pi-hook.log
 
 ## Codex に接続できない
 
-使っている Codex のビルドが app-server デーモンに対応していることを確認し、そのユーザーごとのサービスを確認します。プラットフォームごとのコマンドは [Codex](/docs/codex) を参照してください。実行ファイルや `CODEX_HOME` が変わった場合、またはランチャーやそのシェルの PATH 設定がない場合は、`pontia setup codex` を実行してください。
+使っている Codex のビルドが app-server デーモンに対応していることを確認し、そのユーザーごとのサービスを確認します。プラットフォームごとのコマンドは [Codex](/docs/agent-clients/codex) を参照してください。実行ファイルや `CODEX_HOME` が変わった場合、またはランチャーやそのシェルの PATH 設定がない場合は、`pontia setup codex` を実行してください。
 
 コマンド、ファイル変更、権限の承認は Dashboard に表示されます。Dashboard に表示されない種類のリクエストを Codex が待っている場合、エージェントが止まっているように見えることがあります。必要に応じて Turn を中断し、Codex のポリシーを調整するか、ネイティブの Codex インターフェースでリクエストに応答してください。
 

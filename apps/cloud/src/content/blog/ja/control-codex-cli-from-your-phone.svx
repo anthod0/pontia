@@ -50,7 +50,7 @@ npx @pontia/cli init       # select Codex
 
 完了したら [app.pontia.dev](https://app.pontia.dev) を開き、マシンを選んで Session を開始します。
 
-オプションの Codex ランチャーを使うと、ターミナルで `codex` から開始したスレッドも Dashboard に表示され、スマートフォンから続けられます。[Codex のセットアップ](/docs/codex)を参照してください。上級者は、公式のリレーの代わりに[自分のリレーを運用](/docs/self-hosted-edge)することもできます。
+オプションの Codex ランチャーを使うと、ターミナルで `codex` から開始したスレッドも Dashboard に表示され、スマートフォンから続けられます。[Codex のセットアップ](/docs/agent-clients/codex)を参照してください。上級者は、公式のリレーの代わりに[自分のリレーを運用](/docs/self-hosted-edge)することもできます。
 
 ## 選択肢 2: ChatGPT モバイルのリモートコントロール
 

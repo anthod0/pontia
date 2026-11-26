@@ -1,0 +1,32 @@
+<svelte:head>
+	<title>预览 — Pontia</title>
+	<meta name="description" content="在 Pontia 中实时预览本地 Web 应用和项目文件。" />
+</svelte:head>
+
+# 预览
+
+Pontia 可以从对话中打开本地 Web 应用和项目文件，让你一边查看 Agent 的成果，一边继续沟通。
+
+## 预览本地 Web 应用
+
+让 Agent 在回复中附上应用的 localhost URL，然后选择该链接。Pontia 会识别 `localhost`、`127.0.0.1`、`[::1]` 和 `0.0.0.0` 上的 HTTP URL，并保留路径、查询参数和片段。
+
+预览会在对话侧栏中打开。地址栏可在当前本地源内导航；工具栏可以刷新页面、切换桌面与 375 px 手机宽度，或在新标签页中打开。HTTP 请求和 WebSocket 连接会到达同一本地端口，因此可直接使用开发服务器的热更新。
+
+使用本地 Dashboard 时，浏览器直接连接本地应用。使用[远程 Dashboard](/docs/remote-access) 时，Pontia 会获取一个有时效的 `pontia.run` 预览地址，并经所选 Edge 安全路由到设备上的应用。
+
+`3000`、`4173`、`5173`、`8000` 等常见开发端口可使用默认配置。需要显式开放的开发或管理端口可加入[配置](/docs/configuration#local-preview)中的 `[preview].allowed_ports`，然后运行 `pontia up`。
+
+## 预览文件
+
+选择 Agent 回复中的文件链接、附件卡片或 Files 面板中的文件。Pontia 会根据文件名选择视图：
+
+- HTML 在允许脚本和表单的沙箱中运行，并可切换到源码视图。
+- CSV 和 TSV 显示为表格；选择列标题可按升序、降序排序，或恢复文件顺序。
+- JSON 和 YAML 显示为可折叠树，并提供**全部展开**与**全部折叠**。
+- Markdown 显示为格式化内容；相对链接会在同一预览中打开另一个文件，标题片段会滚动到对应章节。
+- 其他文本和代码文件使用语法高亮源码视图；图片会在灯箱中打开。
+
+文件工具栏还提供刷新、复制、源码和下载操作。在手机上，文件预览会作为独立页面打开，并保留相同的文档内导航历史。
+
+接下来：[使用 Dashboard](/docs/dashboard)或[在 Bot 对话中处理文件](/docs/bots/chat)。

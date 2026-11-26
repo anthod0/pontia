@@ -20,11 +20,14 @@ Use `pontia COMMAND --help` for the exact options in your installed version.
 | `pontia doctor` | Explain service, configuration, login, and remote-registration checks, with repair hints |
 | `pontia down` | Stop and disable the per-user service |
 | `pontia update` | Install the latest signed stable `pontia` and `pontiad` release |
+| `pontia auto-update enable` | Install and start six-hour automatic update checks |
+| `pontia auto-update disable` | Stop and remove the automatic update schedule |
+| `pontia auto-update status` | Show the schedule and available run times |
 | `pontia uninstall` | Remove Pontia integrations, shell configuration, and autostart services |
 | `pontia --version` | Print the installed version |
 | `pontia completions SHELL` | Print the completion script for a shell |
 
-If Pontia-started agents are running, `pontia down` and `pontia uninstall` list their Sessions and require `--force` to stop them before continuing. This check also works when the service is offline. With `--force`, an older Codex background server whose ownership cannot be verified is left running with a warning.
+If Pontia-started agents are running, `pontia down` and `pontia uninstall` list their Sessions. Use `--force` to stop those agents and continue; this check also works when the service is offline. The command reports an older Codex background server separately when you can manage it from Codex.
 
 `pontia uninstall` shows the cleanup list and asks for confirmation; use `--yes` to skip the prompt. It keeps the binaries, configuration, credentials, history, cloud registration, and Agent Client installations. Open a new terminal after cleanup. Run `pontia init` to set up again.
 
@@ -34,15 +37,53 @@ See [Initialization](/docs/initialization) for interactive setup and the equival
 
 Stopping `pontiad` stops observation, input reception, and Workflow scheduling. Agent Clients manage the lifecycle of their native conversations separately.
 
-## Set a Bot description
+## Bot commands
 
-From the current main Bot Session, run `pontia bot set-description --description TEXT` to fill in an empty description. The command accepts up to 2,000 characters. Users can edit or clear the description in Bot settings.
+Bot tools run inside a Pontia Bot, helper, retrieval, or Dreaming Session. Add the global `--json` option for machine-readable output.
 
-## Bot helper compaction
+| Command | Purpose |
+| --- | --- |
+| `pontia bot send-to-user` | Send a complete reply, link it to earlier messages, open a todo, or resolve todos |
+| `pontia bot link-message` | Link an unquoted user message to one to five earlier messages |
+| `pontia bot todo mark` | Mark an existing chat message as an open todo |
+| `pontia bot todo resolve` | Resolve a todo on an existing chat message |
+| `pontia bot set-description` | Fill the current Bot's empty description |
+| `pontia bot update-user` | Replace text in the shared `USER.md`, or append with an empty `--old-text` |
+| `pontia bot chat-history search` | Search the requesting Bot's chat for literal text |
+| `pontia bot chat-history context` | Read a matched chat message with its chronological neighbors |
+| `pontia bot session-messages` | Read a target Session's paginated messages by Turn and category |
+| `pontia bot helper create` | Start a general or Profile-based helper in an active or temporary Workspace |
+| `pontia bot helper list` | List the current Bot's open helper Sessions |
+| `pontia bot helper send` | Send additional instructions to a helper |
+| `pontia bot helper reply` | Report a helper result to its Bot |
+| `pontia bot helper check` | Read helper status, capabilities, and paginated messages |
+| `pontia bot helper compact` | Request context compaction for an idle or interrupted helper |
+| `pontia bot helper close` | Exit a helper Session while retaining its history |
+| `pontia bot profile templates` | Fetch recommended Agent Profile templates |
+| `pontia bot profile list` | List shared Profiles and their availability |
+| `pontia bot profile show` | Read one Profile, including its system prompt |
+| `pontia bot profile clients` | List enabled Clients available to Profiles |
+| `pontia bot profile models` | List models offered by a Client |
+| `pontia bot profile create` | Create a shared Agent Profile |
+| `pontia bot profile update` | Change selected Profile fields |
+| `pontia bot profile delete` | Delete a shared Profile |
+| `pontia bot workspace register` | Register and activate a directory within a configured root |
+| `pontia bot workspace describe` | Set or clear a Workspace description |
+| `pontia bot memory pending` | List active memories awaiting organization |
+| `pontia bot memory organize` | Mark memory organization complete or pending |
+| `pontia bot memory create` | Create a device memory |
+| `pontia bot memory update` | Replace a memory's content and metadata |
+| `pontia bot memory archive` | Archive or restore a memory |
+| `pontia bot memory link` | Link two active memories |
+| `pontia bot memory unlink` | Remove a link between memories |
+| `pontia bot memory read` | Read active memories by ID |
+| `pontia bot memory search` | Search memories by whole keywords |
+| `pontia bot memory retrieve` | Start a read-only deep-retrieval helper |
+| `pontia bot memory neighbors` | Read one hop of linked active memories |
+| `pontia bot memory use` | Record memories used in a response or decision |
+| `pontia bot dreaming clarify` | Ask a Bot to clarify ambiguous memories |
 
-Run `pontia bot helper compact --session-id ID` from the current Bot Session to request context compaction for one of its helpers. The helper must be idle or interrupted, with manual compaction available from its client. Wait for a working helper to become idle before retrying.
-
-`pontia bot helper check --session-id ID` shows context usage and `capabilities.manual_compaction`. Add `--json` to either command for JSON output. A successful compact result contains `accepted: true` and an `operation_id`; it confirms the request, not completion. If the result is unknown, inspect the helper before retrying because compaction may already have started.
+Memory writes performed by Dreaming use the global `--reason` option to record their evidence. Paginated `session-messages`, `helper check`, `memory pending`, and `memory neighbors` results print the next command to run. `helper check` also reports context usage and manual-compaction availability.
 
 ## Shell completion
 
@@ -74,6 +115,8 @@ pontia completions powershell | Out-String | Invoke-Expression
 | --- | --- |
 | `pontia client list` | List every Agent Client entry with its short ID, name, type, and enabled state |
 | `pontia client list --json` | List every entry as JSON, including its ID |
+| `pontia client install --list` | Show registered installers, methods, detection results, and prerequisites |
+| `pontia client install CLIENT` | Install a Client, apply its integration setup, and enable it |
 | `pontia client show CLIENT` | Show one entry |
 | `pontia client enable CLIENT` | Allow new Sessions to use the entry |
 | `pontia client disable CLIENT` | Stop new Sessions from using the entry; existing Sessions are unchanged |
@@ -113,7 +156,7 @@ Remote configuration changes that affect `pontiad` restart a running managed ser
 
 ## Exit status and errors
 
-`pontia status` and `pontia doctor` exit successfully when the local service is running and its HTTP health check passes. Read the account and remote results separately; cloud registration does not prove that the device is reachable from the internet.
+`pontia status` and `pontia doctor` exit successfully when the local service is running and its HTTP health check passes. Account and remote results report separate stages; use the remote reachability result to confirm internet access to the device.
 
 Use the exit status to check command success. Errors are written to standard error with a `pontia:` prefix. Include the redacted error when diagnosing a failure.
 

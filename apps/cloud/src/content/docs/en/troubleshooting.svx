@@ -64,7 +64,7 @@ Also check a custom `[runtime.pi].tui_command` for an invalid path or wrapper.
 
 ## Codex cannot connect
 
-Confirm that your Codex build supports the app-server daemon, then inspect its per-user service. See [Codex](/docs/codex) for platform commands. Run `pontia setup codex` if the executable or `CODEX_HOME` changed, or if the launcher or its shell PATH configuration is missing.
+Confirm that your Codex build supports the app-server daemon, then inspect its per-user service. See [Codex](/docs/agent-clients/codex) for platform commands. Run `pontia setup codex` if the executable or `CODEX_HOME` changed, or if the launcher or its shell PATH configuration is missing.
 
 Command, file-change, and permission approvals appear in the Dashboard. An agent can still appear stuck when Codex waits for another kind of request that the Dashboard does not show. Interrupt the Turn if needed, then adjust the Codex policy or answer the request in the native Codex interface.
 

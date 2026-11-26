@@ -50,7 +50,7 @@ npx @pontia/cli init       # select Codex
 
 When it finishes, open [app.pontia.dev](https://app.pontia.dev), pick the machine, and start a session.
 
-The optional Codex launcher also makes threads you start with `codex` in a terminal appear in the Dashboard, so you can continue them from the phone. See [Codex setup](/docs/codex). Advanced users can [run their own relay](/docs/self-hosted-edge) instead of the official one.
+The optional Codex launcher also makes threads you start with `codex` in a terminal appear in the Dashboard, so you can continue them from the phone. See [Codex setup](/docs/agent-clients/codex). Advanced users can [run their own relay](/docs/self-hosted-edge) instead of the official one.
 
 ## Option 2: ChatGPT mobile remote control
 

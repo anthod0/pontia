@@ -5,13 +5,13 @@
 
 # Perguntas frequentes
 
-## Os agentes rodam no Pontia Cloud?
+## Onde os agentes rodam?
 
-Não. Agent Clients, ferramentas, credenciais e arquivos de projeto ficam no seu dispositivo. O Pontia Cloud coordena a identidade e a autorização remota; um Edge repassa o tráfego criptografado.
+Agent Clients, ferramentas, credenciais e arquivos de projeto ficam no seu dispositivo. O Pontia Cloud coordena a identidade e a autorização remota; um Edge repassa o tráfego criptografado.
 
-## Uma Workspace é um sandbox do sistema operacional?
+## O que uma raiz de Workspace controla?
 
-Não. As raízes de Workspace limitam o que o navegador do Pontia expõe para ativação e descoberta de arquivos. O Agent Client continua com as permissões e a política de sandbox do seu processo local.
+As raízes de Workspace definem o que o navegador do Pontia expõe para ativação e descoberta de arquivos. O Agent Client usa as permissões e a política de sandbox do seu processo local.
 
 ## Como acesso meu dispositivo remotamente?
 
@@ -31,6 +31,6 @@ Seus prompts e dados de projeto permanecem no seu dispositivo.
 
 Faça backup dos arquivos de projeto, do `$PONTIA_HOME` e dos dados nativos de conversa dos seus Agent Clients. Use um destino criptografado e confiável para o `$PONTIA_HOME`, que contém credenciais, além do estado de controle e dos arquivos de Workflow. Siga as instruções de backup de cada Client para os dados de conversa.
 
-## O Pontia suporta Windows?
+## Em quais sistemas operacionais o Pontia roda?
 
-Não. O plano de controle local suporta Linux e macOS 13.5 ou posterior. O Edge auto-hospedado suporta apenas Linux.
+O plano de controle local roda em Linux e macOS 13.5 ou posterior. Um Edge auto-hospedado roda em Linux.

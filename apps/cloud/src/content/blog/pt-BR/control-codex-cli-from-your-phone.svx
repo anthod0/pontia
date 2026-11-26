@@ -50,7 +50,7 @@ O `pontia init` faz o resto:
 
 Quando terminar, abra [app.pontia.dev](https://app.pontia.dev), escolha a máquina e inicie uma Session.
 
-O launcher opcional do Codex também faz com que as threads que você inicia com `codex` em um terminal apareçam no Dashboard, para que você possa continuá-las pelo celular. Veja [Configuração do Codex](/docs/codex). Usuários avançados podem [rodar o próprio relay](/docs/self-hosted-edge) em vez do oficial.
+O launcher opcional do Codex também faz com que as threads que você inicia com `codex` em um terminal apareçam no Dashboard, para que você possa continuá-las pelo celular. Veja [Configuração do Codex](/docs/agent-clients/codex). Usuários avançados podem [rodar o próprio relay](/docs/self-hosted-edge) em vez do oficial.
 
 ## Opção 2: controle remoto pelo app móvel do ChatGPT
 

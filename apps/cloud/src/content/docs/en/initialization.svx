@@ -21,7 +21,7 @@ This installs Pontia if needed and starts the wizard. If Pontia is already on yo
 
 The wizard lets you:
 
-1. Select the Client integrations to install: Pi, Codex, Claude Code, or any combination. Codex includes its daemon startup and [launcher](/docs/codex#codex-launcher).
+1. Select the Client integrations to install: Pi, Codex, Claude Code, or any combination. Codex includes its daemon startup and [launcher](/docs/agent-clients/codex#codex-launcher).
 2. Review and confirm the setup.
 3. Create or retain the local API token, start the Pontia service, and enable the selected Clients.
 4. Sign in to Pontia Cloud and register the device for remote access.

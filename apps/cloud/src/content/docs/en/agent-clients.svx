@@ -1,67 +1,62 @@
 <svelte:head>
 	<title>Agent Clients — Pontia</title>
-	<meta name="description" content="Choose and configure the coding-agent clients supported by Pontia." />
+	<meta name="description" content="Install, sign in to, and configure the coding-agent clients supported by Pontia." />
 </svelte:head>
 
 # Agent Clients
 
-An Agent Client connects Pontia to a coding agent's native session, control channel, and conversation history. The agent still runs locally with its own credentials, configuration, tools, and filesystem permissions.
+An Agent Client connects Pontia to a coding agent's native session, control channel, and conversation history. The agent runs locally with its own credentials, configuration, tools, and filesystem permissions.
 
-Pontia includes these Agent Clients:
-
-| Client | Local requirement | Local integration |
+| Client | One-step installer | Authentication |
 | --- | --- | --- |
-| [Pi](/docs/agent-clients/pi) | `pi` and `tmux` | Pontia's Pi plugin |
-| [Codex](/docs/codex) | A Codex CLI with app-server daemon support | Per-user Codex daemon startup, launcher, and shell PATH |
-| [Claude Code](/docs/agent-clients/claude) | Node.js LTS, npm, and Claude Code authentication | The `@pontia/claude-client` package from npm |
-| [Google Antigravity](/docs/agent-clients/antigravity) | `agy` | Built-in ACP integration |
-| [Grok Build](/docs/agent-clients/grok) | `grok` | Built-in ACP integration |
-| [Kiro](/docs/agent-clients/kiro) | `kiro-cli` | Built-in ACP integration |
+| [Pi](/docs/agent-clients/pi) | `pontia client install pi` | Pi provider credentials on the device |
+| [Codex](/docs/agent-clients/codex) | `pontia client install codex` | ChatGPT Device Code in the Dashboard, or Codex credentials on the device |
+| [Claude Code](/docs/agent-clients/claude) | `pontia client install claude-agent` | Claude Code credentials on the device |
+| [Google Antigravity](/docs/agent-clients/antigravity) | `pontia client install antigravity` | Antigravity sign-in on the device |
+| [Grok Build](/docs/agent-clients/grok) | `pontia client install grok` | Grok Device Code in the Dashboard |
+| [Kiro](/docs/agent-clients/kiro) | `pontia client install kiro` | Kiro Free or Pro Device Code in the Dashboard |
 
-Grok Build, Antigravity, and Kiro can run ordinary Sessions, Bots, helpers, memory tasks, and Workflow nodes. Their individual guides cover installation, authentication, remote controls, model settings, and restricted execution.
+Grok Build, Antigravity, and Kiro can run ordinary Sessions, Bots, helpers, memory tasks, and Workflow nodes. Their individual guides cover models, remote controls, and execution modes.
+
+## Install and enable a Client
+
+Open **Settings → Agent Clients** in the Dashboard, choose a Client, and select **Install**. Pontia shows the planned source, destination, and prerequisites, runs the installer on the device, applies its local integration setup, and enables the Client for new Sessions.
+
+The same flow is available from a terminal:
+
+```sh
+pontia client install CLIENT
+```
+
+Use `pontia client install --list` to inspect the registered installers and prerequisites. The installer asks for confirmation; add `--yes` for an unattended terminal. Pontia uses managed npm installs for Pi and Codex, the official Claude Code installer, and the official installers for Antigravity, Grok Build, and Kiro.
+
+## Sign in from any browser
+
+The Dashboard can start remote-compatible Device Code login on the selected device for Codex, Grok Build, and Kiro.
+
+1. Open **Settings → Agent Clients** and select the Client.
+2. Choose **Sign in**. For Kiro, select Free with AWS Builder ID or Pro with IAM Identity Center; the Pro flow also asks for the identity-provider URL and region.
+3. Open the displayed verification page in any browser and enter the one-time code.
+4. Return after the Dashboard confirms the signed-in account, then enable the Client.
+
+Pi and Claude Code use credentials configured on the device, and Antigravity uses its local sign-in. Their Dashboard cards show the detected authentication state and relevant terminal command.
 
 ## Choose Clients during initialization
 
-Run:
+Run `pontia init` to select and check Pi, Codex, and Claude Code while initializing Pontia. Pi is selected by default, and the selected Clients are enabled for new Sessions.
 
-```sh
-pontia init
-```
+Run `pontia setup pi`, `pontia setup codex`, or `pontia setup claude` to apply or repair a recommended local integration. Omit the Client to select interactively. In the Dashboard, **Initialize** runs the same setup and keeps its latest output available after reconnecting.
 
-The initializer checks your selected Clients before applying the configuration. Pi is selected by default; Codex and `claude-agent` are optional. Selected Clients are enabled for new Sessions.
+<h2 id="client-credentials-and-permissions">Choose Session permissions</h2>
 
-Run `pontia setup pi`, `pontia setup codex`, or `pontia setup claude` to install or repair a local integration. Omit the Client to select interactively. Setup also enables the Client.
-
-In the Dashboard, open **Settings → Agent Clients**, select Pi, Codex, or Claude Code, and click **Initialize** to perform the same setup on that device. The page shows the latest setup output and result, including after reconnecting.
-
-## Client capabilities differ
-
-The Dashboard presents the controls supported by the selected Client, such as interruption, history branching, and queued delivery.
-
-A Pontia Session is durably associated with one client-native conversation identity after binding. Reopening the same native conversation continues the existing Session; a new native conversation belongs to a new Session.
-
-<h2 id="client-credentials-and-permissions">Client credentials and permissions</h2>
-
-Each Client uses its own credentials, sandbox, and local permissions. Sign in to each Client and verify that it can perform the intended work before starting the integration.
-
-Choose a Session mode with the optional `mode` field on `POST /api/v1/sessions`. Restarts, resumes, and history forks inherit the mode.
+Each Client uses its own credentials, sandbox, and local permissions. The optional `mode` field on `POST /api/v1/sessions` selects the execution mode; restarts, resumes, and history forks inherit it.
 
 | Mode | Effect |
 | --- | --- |
-| `default` (or omit the field) | Use the Client’s usual settings, as when starting a Session from the Dashboard. |
-| `yolo` | Run Pi, Claude Code, Codex, Grok Build, Antigravity, or Kiro without approval prompts. Pi already runs tools without approval. |
-| `restricted` | Use the Client’s built-in unattended configuration, including its tool restrictions. Bots, memory retrieval, and Dreaming use this mode. |
+| `default` | Use the Client's usual settings, as when starting a Session from the Dashboard |
+| `yolo` | Run Pi, Claude Code, Codex, Grok Build, Antigravity, or Kiro with approval-free tool use |
+| `restricted` | Use the Client's built-in unattended tool policy; Bots, memory retrieval, and Dreaming use this mode |
 
-For example, to start Pi with its editing tools, MCP, and skills disabled:
+The Dashboard presents the live controls offered by the selected Client, including interruption, history branching, and queued delivery. A Pontia Session keeps its client-native conversation identity, so reopening that native conversation continues the same Session.
 
-```json
-{
-  "client_type": "pi",
-  "workspace": "/path/to/registered/workspace",
-  "mode": "restricted"
-}
-```
-
-Restricted Kiro and Antigravity Sessions install agent files in a Pontia-managed launch directory. The restricted configuration keeps shell access, which can modify files.
-
-See [Troubleshooting](/docs/troubleshooting) when a Client is missing, cannot start, or stops reporting output.
+Use [Troubleshooting](/docs/troubleshooting) to restore Client discovery, startup, and output reporting.

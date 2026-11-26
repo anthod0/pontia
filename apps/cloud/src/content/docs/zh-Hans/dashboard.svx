@@ -55,7 +55,23 @@ Agent 在回复中写出文件的绝对路径即可向你展示文件。Markdown
 /work/chart.png
 ```
 
-这些文件会作为一张卡片显示在该回复下方，你可以逐个下载，也可以点击 **Download all** 下载仍存在的全部文件。超过六个文件的卡片先显示前四个，点击 **Show more** 可展开。卡片中全是图片时会把图片拼在一起显示，点击列表按钮可以查看文件名和大小。图片、文本和代码文件还可以预览；视频、PDF、压缩包等其他文件只能下载。Pontia 会在你打开或下载时从设备读取文件，因此已移动或删除的文件将无法再获取。
+这些文件会作为一张卡片显示在该回复下方，你可以逐个下载，也可以点击 **Download all** 下载整张卡片。超过六个文件的卡片先显示前四个，点击 **Show more** 可展开。卡片中全是图片时会把图片拼在一起显示，点击列表按钮可以查看文件名和大小。图片、文本和代码文件会在预览器中打开；视频、PDF 和压缩包保留直接下载操作。Pontia 会在你打开或下载时从设备读取文件，因此请在对话仍需使用时将共享文件保留在附件所示路径。
+
+有关 localhost 实时应用、HTML 沙箱、可排序 CSV/TSV 表格、可折叠 JSON/YAML 树和 Markdown 文件导航，请参阅[预览](/docs/previews)。
+
+## 查看 Git 变更
+
+从 Session 或 Bot 侧栏打开 **Git**，即可查看当前 Workspace 仓库。面板显示当前分支、上游、领先与落后数量，以及 staged、unstaged、untracked 和 conflicted 文件。选择文件可查看 diff，也可用 `[` 和 `]` 在 diff 之间切换。
+
+展开 **History** 可浏览分支和提交、查看某次提交的文件及其 diff。Agent 完成工作后面板会刷新，也可手动刷新。
+
+## 发送 Secret
+
+在输入框中选择 **+ → Secret**，可将 token、密码、密钥或多行凭据作为敏感文件发送。可添加标签来告诉 Agent 其用途。对话中显示掩码预览；Agent 会收到文件路径和说明，通过工具或脚本直接读取，让明文保留在敏感文件中。
+
+## 使用手机布局
+
+手机 Dashboard 有四个常驻 Tab：**Chats** 用于 Bot，**Sessions** 用于直接 Agent 对话，**Todos** 用于待跟进的 Bot 事项，**Device** 用于设备设置。Session 和 Bot 的操作菜单会以适合手机的独立页面打开 Chat、Files、Git 和 Preview。
 
 ## 使用 Bot
 
@@ -86,8 +102,10 @@ Agent 在回复中写出文件的绝对路径即可向你展示文件。Markdown
 | `Alt+1` … `Alt+9` | 按侧边栏位置打开活跃聊天 |
 | `Alt+N` | 打开 New chat |
 | `Alt+L` | 聚焦输入框 |
+| `Alt+G` | 在 Session 中打开或关闭 Git 面板 |
 | `Alt+M` | 切换到下一个设备。加 `Shift` 切换到上一个。 |
 | `Alt+C` / `Alt+W` | 在 New chat 中切换到下一个 Agent Client 或 Workspace。加 `Shift` 切换到上一个。 |
+| `Alt+B` / `Alt+P` | 在 Bot 中切换 Bot 或侧栏 Tab。加 `Shift` 切换到上一个。 |
 | `Alt+?` | 显示快捷键参考 |
 | `Ctrl+B`（macOS 上为 `Cmd+B`） | 显示或隐藏侧边栏 |
 

@@ -1,0 +1,32 @@
+<svelte:head>
+	<title>Pré-visualizações — Pontia</title>
+	<meta name="description" content="Abra apps Web locais e arquivos de projeto em pré-visualizações ao vivo no Pontia." />
+</svelte:head>
+
+# Pré-visualizações
+
+O Pontia abre apps Web locais e arquivos de projeto a partir do chat, para você revisar o trabalho do agente ao lado da conversa.
+
+## Pré-visualizar um app Web local
+
+Peça ao agente para incluir a URL localhost do app na resposta e selecione o link. O Pontia reconhece URLs HTTP em `localhost`, `127.0.0.1`, `[::1]` e `0.0.0.0`, incluindo caminho, consulta e fragmento.
+
+A pré-visualização abre ao lado do chat. O campo de endereço navega dentro da origem local selecionada, e a barra permite atualizar a página, alternar entre a largura de desktop e a largura móvel de 375 px ou abrir em uma nova aba. Requisições HTTP e conexões WebSocket chegam à mesma porta local, permitindo usar o live reload do servidor de desenvolvimento.
+
+No Dashboard local, o navegador se conecta diretamente ao app local. No [Dashboard remoto](/docs/remote-access), o Pontia obtém um endereço de pré-visualização temporário em `pontia.run` e o roteia com segurança pelo Edge selecionado até o app no dispositivo.
+
+Portas comuns de desenvolvimento, como `3000`, `4173`, `5173` e `8000`, funcionam com a configuração padrão. Adicione portas de desenvolvimento ou administração que precisam de acesso explícito a `[preview].allowed_ports` em [Configuração](/docs/configuration#local-preview) e execute `pontia up`.
+
+## Pré-visualizar um arquivo
+
+Selecione um link de arquivo na resposta do agente, em um cartão de anexos ou no painel Files. O Pontia escolhe a visualização pelo nome do arquivo:
+
+- HTML roda em um sandbox que permite scripts e formulários, com uma visualização de código-fonte ao lado.
+- CSV e TSV aparecem como tabelas; selecione um cabeçalho para ordenar de forma crescente, decrescente ou voltar à ordem do arquivo.
+- JSON e YAML aparecem como árvores expansíveis com os controles **Expandir tudo** e **Recolher tudo**.
+- Markdown aparece formatado. Links relativos abrem outro arquivo na mesma pré-visualização, e fragmentos de títulos levam à seção correspondente.
+- Outros arquivos de texto e código usam código-fonte com realce de sintaxe. Imagens abrem em uma lightbox.
+
+A barra do arquivo também oferece atualização, cópia, código-fonte e download. No celular, a pré-visualização abre em uma tela própria e preserva o mesmo histórico de navegação entre documentos.
+
+Próximo: [use o Dashboard](/docs/dashboard) ou [trabalhe com arquivos no chat do Bot](/docs/bots/chat).

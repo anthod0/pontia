@@ -20,11 +20,14 @@
 | `pontia doctor` | 说明服务、配置、登录和远程注册检查结果，并给出修复提示 |
 | `pontia down` | 停止并禁用按用户运行的服务 |
 | `pontia update` | 安装最新的已签名稳定版 `pontia` 和 `pontiad` |
+| `pontia auto-update enable` | 安装并启动每六小时一次的自动更新检查 |
+| `pontia auto-update disable` | 停止并移除自动更新计划 |
+| `pontia auto-update status` | 显示计划和可用运行时间 |
 | `pontia uninstall` | 清理 Pontia 客户端集成、shell 配置和自启动服务 |
 | `pontia --version` | 打印已安装的版本 |
 | `pontia completions SHELL` | 打印指定 shell 的补全脚本 |
 
-如果 Pontia 启动的代理仍在运行，`pontia down` 和 `pontia uninstall` 会列出相应的 Session。使用 `--force` 可先停止这些代理，再继续操作。服务离线时也会执行检查。如果无法确认旧版 Codex 后台服务器的归属，`--force` 会保留该进程并显示警告。
+如果 Pontia 启动的代理仍在运行，`pontia down` 和 `pontia uninstall` 会列出相应的 Session。使用 `--force` 可停止这些代理并继续操作；服务离线时也会执行检查。对于可从 Codex 管理的旧版后台服务器，命令会单独报告。
 
 `pontia uninstall` 会列出清理项目并请求确认；使用 `--yes` 跳过确认。二进制、配置、凭证、历史数据、云端设备登记及 Agent Client 本体均保留。清理后请打开新终端；需要重新配置时运行 `pontia init`。
 
@@ -34,15 +37,33 @@
 
 停止 `pontiad` 会停止观察、输入接收和 Workflow 调度。Agent Client 会单独管理其原生对话的生命周期。
 
-## 设置 Bot 描述
+## Bot 命令
 
-在 Bot 的当前主 Session 中，运行 `pontia bot set-description --description TEXT` 可填写该 Bot 的空白描述，最多 2,000 个字符。用户可以在 Bot 设置中修改或清空描述。
+Bot 工具在 Pontia Bot、helper、检索或 Dreaming Session 中运行。添加全局 `--json` 可获得机器可读输出。
 
-## Bot 助手上下文压缩
+| 命令 | 用途 |
+| --- | --- |
+| `pontia bot send-to-user` | 发送完整回复、关联早先消息、建立 todo 或解决 todo |
+| `pontia bot link-message` | 将未引用的用户消息关联到一至五条早先消息 |
+| `pontia bot todo mark` / `todo resolve` | 将现有消息标为开放 todo，或解决其 todo |
+| `pontia bot set-description` | 填写当前 Bot 的空白描述 |
+| `pontia bot update-user` | 替换共享 `USER.md` 中的文字，空 `--old-text` 表示追加 |
+| `pontia bot chat-history search` / `context` | 搜索当前 Bot 对话，或读取匹配消息及相邻消息 |
+| `pontia bot session-messages` | 按 Turn 和类别分页读取目标 Session 消息 |
+| `pontia bot helper create` / `list` / `send` / `reply` | 创建、列出和协调 helper，并向 Bot 汇报结果 |
+| `pontia bot helper check` / `compact` / `close` | 查看 helper、请求上下文压缩或结束 helper Session |
+| `pontia bot profile templates` / `list` / `show` | 获取模板、列出 Profile 或读取完整 Profile |
+| `pontia bot profile clients` / `models` | 列出 Profile 可用的 Client 或模型 |
+| `pontia bot profile create` / `update` / `delete` | 创建、修改或删除共享 Agent Profile |
+| `pontia bot workspace register` / `describe` | 注册并激活目录，或设置、清除 Workspace 描述 |
+| `pontia bot memory pending` / `organize` | 列出并整理待组织的记忆 |
+| `pontia bot memory create` / `update` / `archive` | 创建、替换、归档或恢复记忆 |
+| `pontia bot memory link` / `unlink` | 添加或移除两条活跃记忆之间的链接 |
+| `pontia bot memory read` / `search` / `neighbors` | 按 ID、完整关键词或一层链接读取记忆 |
+| `pontia bot memory retrieve` / `use` | 启动只读深度检索，或记录本次使用的记忆 |
+| `pontia bot dreaming clarify` | 请 Bot 澄清有歧义的记忆 |
 
-在当前 Bot Session 中运行 `pontia bot helper compact --session-id ID`，可请求压缩该 Bot 所关联助手的上下文。助手必须处于 idle 或 interrupted 状态，且客户端当前具备手动压缩能力。助手正在工作时，请等它空闲后再试。
-
-`pontia bot helper check --session-id ID` 显示上下文用量及 `capabilities.manual_compaction`。两个命令均可加 `--json` 输出 JSON。压缩请求成功时返回 `accepted: true` 和 `operation_id`，仅表示请求已接受，不代表压缩完成。如果结果未知，请先检查助手再重试，因为压缩可能已经开始。
+Dreaming 执行记忆写入时使用全局 `--reason` 记录依据。分页的 `session-messages`、`helper check`、`memory pending` 和 `memory neighbors` 会打印下一页命令；`helper check` 也会显示上下文用量与手动压缩能力。
 
 ## Shell 补全
 
@@ -74,6 +95,8 @@ pontia completions powershell | Out-String | Invoke-Expression
 | --- | --- |
 | `pontia client list` | 列出每个 Agent Client 条目及其短 ID、名称、类型和启用状态 |
 | `pontia client list --json` | 以 JSON 列出每个条目，包括其 ID |
+| `pontia client install --list` | 显示已注册安装器、方法、检测结果和前置条件 |
+| `pontia client install CLIENT` | 安装 Client、应用集成设置并启用它 |
 | `pontia client show CLIENT` | 显示一个条目 |
 | `pontia client enable CLIENT` | 允许新 Session 使用该条目 |
 | `pontia client disable CLIENT` | 禁止新 Session 使用该条目；现有 Session 不受影响 |
@@ -113,7 +136,7 @@ pontia completions powershell | Out-String | Invoke-Expression
 
 ## 退出状态与错误
 
-当本地服务正在运行且其 HTTP 健康检查通过时，`pontia status` 和 `pontia doctor` 会成功退出。账户和远程结果需要单独查看；Cloud 注册并不能证明设备可从互联网访问。
+当本地服务正在运行且其 HTTP 健康检查通过时，`pontia status` 和 `pontia doctor` 会成功退出。账户与远程结果分别报告各阶段状态；请使用远程可达性结果确认设备的互联网访问状态。
 
 使用退出状态检查命令是否成功。错误会以 `pontia:` 前缀写入标准错误输出。诊断故障时，请附上脱敏后的错误信息。
 

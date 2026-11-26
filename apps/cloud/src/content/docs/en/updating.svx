@@ -36,6 +36,17 @@ For self-updates, keep `pontia` and `pontiad` as regular files in the same direc
 
 The Dashboard defaults to the release archive matching the binary version, so a successful update also moves the served Dashboard to that version unless `[dashboard].source` is overridden.
 
+## Enable automatic local updates
+
+On Linux and macOS, Pontia can install a per-user schedule that checks the signed stable channel every six hours. Enable it as the same user that owns the Pontia service:
+
+```sh
+pontia auto-update enable
+pontia auto-update status
+```
+
+`status` shows the installed schedule and available run times. Use `pontia auto-update disable` to remove the schedule. Each scheduled run uses the same verified update and service-recovery process as `pontia update`.
+
 ## Install a specific release
 
 The installer accepts a release beginning with `v`:

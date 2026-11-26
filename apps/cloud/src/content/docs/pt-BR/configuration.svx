@@ -39,8 +39,22 @@ roots = [
 | `dashboard.source` | Diretório de build do Dashboard local ou arquivo remoto `.tar.gz`, `.tgz` ou `.zip` contendo exatamente um `index.html` |
 | `runtime.pi.tui_command` | Executável ou comando do Pi usado nas Sessions do Pi iniciadas |
 | `workspace_browser.roots` | Diretórios que o Dashboard pode navegar para ativar Workspaces |
+| `preview.enabled` | Ativa pré-visualizações de apps Web em localhost; o padrão é `true` |
+| `preview.allowed_ports` | Portas sensíveis adicionais de desenvolvimento ou administração liberadas explicitamente para pré-visualização |
 
 O padrão de `dashboard.source` na versão de release é o arquivo do Dashboard correspondente à versão instalada do Pontia. Arquivos remotos do Dashboard ficam em cache em `$PONTIA_HOME/cache/dashboard`; um cache existente ainda pode ser servido se a atualização falhar.
+
+<h2 id="local-preview">Pré-visualização local</h2>
+
+As pré-visualizações localhost vêm ativadas para portas comuns de desenvolvimento Web. Adicione uma porta sensível de desenvolvimento ou administração quando o app a usar de propósito:
+
+```toml
+[preview]
+enabled = true
+allowed_ports = [8888, 9222]
+```
+
+`allowed_ports` aceita números de porta de 1 a 65535. É útil, por exemplo, para Jupyter em `8888`, Chrome DevTools em `9222`, Node inspect em `9229` e Ollama em `11434`. Execute `pontia up` após alterar essas opções. Veja [Pré-visualizações](/docs/previews) para o fluxo no Dashboard.
 
 ## Seletor de arquivos
 

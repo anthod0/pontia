@@ -36,6 +36,17 @@ pontia update
 
 Dashboard 默认使用与二进制版本匹配的发布归档，因此除非覆盖了 `[dashboard].source`，更新成功后所提供的 Dashboard 也会切换到该版本。
 
+## 启用本机自动更新
+
+在 Linux 和 macOS 上，Pontia 可以安装按用户运行的计划，每六小时检查一次已签名的稳定通道。请使用 Pontia 服务所属的同一用户启用：
+
+```sh
+pontia auto-update enable
+pontia auto-update status
+```
+
+`status` 会显示已安装的计划和可用运行时间。运行 `pontia auto-update disable` 可移除该计划。每次计划任务都使用与 `pontia update` 相同的已验证更新和服务恢复流程。
+
 ## 安装特定版本
 
 安装程序接受以 `v` 开头的版本号：
