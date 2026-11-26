@@ -17,4 +17,6 @@ npx @pontia/cli init
 
 **3.** 打开 [app.pontia.dev](https://app.pontia.dev)。
 
+**4.** 打开 **Bots**，创建第一个 Bot，并告诉它你希望完成什么。继续阅读 [Bots 指南](/docs/bots)。
+
 更多：[Linux](/docs/platforms/linux) · [macOS](/docs/platforms/macos) · [初始化](/docs/initialization) · [CLI](/docs/cli) · [更新](/docs/updating)

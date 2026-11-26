@@ -1,0 +1,47 @@
+<svelte:head>
+	<title>Agent Profiles — Pontia</title>
+	<meta name="description" content="Crie Agent Profiles reutilizáveis para Helpers de Bots e nós de Workflows." />
+</svelte:head>
+
+# Agent Profiles
+
+Um Agent Profile é uma combinação reutilizável de Agent Client, modelo, esforço de raciocínio, modo de permissões e instruções. Bots usam Profiles para dar a um helper a especialidade adequada; [Workflows](/docs/workflows) usam os mesmos Profiles em Agent Nodes.
+
+## Comece com um template
+
+Abra **Settings → Agent Profiles**, selecione **Novo profile** e escolha um template. Os templates integrados incluem **Researcher**, **Copywriter**, **Architect**, **Designer**, **Coder** e **Motion designer**. O template preenche o formulário; você pode editar todos os campos antes de criar o Profile.
+
+## Preencha o Profile
+
+Cada Profile contém:
+
+- **Nome**, exibido no Dashboard;
+- **Profile ID**, um identificador permanente definido na criação;
+- **Descrição**, que diz aos Bots quando essa especialidade é adequada;
+- **Client**, **Modelo** e esforço de raciocínio opcional;
+- **Usar modo YOLO**, que inicia novos trabalhos no modo de execução permissivo do Profile;
+- **System prompt**, com as instruções de trabalho do helper ou do nó de Workflow.
+
+O Profile ID deve começar com uma letra minúscula ou um número e usar apenas letras minúsculas, números, `.`, `_` e `-`. Escolha um ID estável, como `release-reviewer`.
+
+## Escreva uma boa descrição
+
+O Bot lê a descrição para decidir quando selecionar um Profile. Informe quais tarefas ele deve receber, qual resultado assume e um limite importante. Por exemplo:
+
+> Revisa mudanças de API de acordo com o contrato aprovado e relata comportamento incompatível com referências aos arquivos. Somente leitura; não implementa correções.
+
+Mantenha as regras de trabalho detalhadas no System prompt. Uma descrição específica ajuda o Bot a distinguir Profiles que usam Clients ou modelos parecidos.
+
+## Deixe um Bot gerenciar Profiles
+
+O Dashboard pode mostrar um cartão sugerindo Profiles especializados. Escolha um template ou selecione **Perguntar ao Bot** para planejar um conjunto útil. Você também pode pedir a qualquer Bot, no chat, para criar, atualizar ou excluir um Profile. O Bot verifica templates, Clients, modelos e opções de esforço de raciocínio antes de relatar a alteração.
+
+## Reutilize um Profile em Workflows
+
+Ao criar ou editar um Workflow, selecione o Profile de cada Agent Node. O nó inicia com o Client, o modelo, o modo de permissões e as instruções do Profile, além de sua própria tarefa e das entradas de Handoff.
+
+## Saiba quando as alterações se aplicam
+
+Os Profiles são compartilhados por todos os Bots do dispositivo. Atualizações se aplicam a novos helpers e nós de Workflow que ainda não começaram. Uma Session já iniciada mantém as instruções recebidas na criação. Excluir um Profile preserva o histórico das Sessions existentes.
+
+Em seguida, [execute Helpers em paralelo](/docs/bots/helpers) ou [crie um Workflow](/docs/workflows).

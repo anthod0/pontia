@@ -1,0 +1,46 @@
+<svelte:head>
+	<title>Run Helpers in parallel — Pontia</title>
+	<meta name="description" content="Delegate independent coding tasks to parallel Helpers and follow their work from a Bot chat." />
+</svelte:head>
+
+# Run Helpers in parallel
+
+Helpers are focused Agent Sessions that a Bot creates for individual tasks. Ask a Bot to split independent work across several helpers when you want coding agents to run in parallel while the Bot coordinates their results.
+
+## Delegate several tasks at once
+
+Describe the outcome and which parts can proceed independently. For example:
+
+> Investigate the failing tests, update the release notes, and review the API change in parallel. Report each result separately.
+
+The Bot creates a fresh helper for each task, gives it a concise title and complete instructions, and tracks all of them. The Bot can continue answering you while helpers work.
+
+## Choose the right Agent Client
+
+By default, a general helper uses the Bot's Client, model, and reasoning effort. To specialize a task, create an [Agent Profile](/docs/agent-profiles) and ask the Bot to use it. A Profile can select a different Client—such as Claude Code, Codex, or Grok Build—along with its model and task instructions.
+
+You can also request a Client or model directly in chat. The Bot checks which Profiles and Clients are currently available before starting the helper.
+
+## Keep project changes isolated
+
+For project work, the Bot starts a helper in the project's active Workspace. If several helpers will modify the same repository, ask each one to create its own Git worktree and branch. The worktrees stay associated with the original Workspace, so the helpers share project context without editing the same checkout.
+
+For independent, one-off work, the Bot can place output in a named folder under `~/Pontia` instead.
+
+## Check progress or add instructions
+
+Open a helper from the Bot's status or related Session link to see its conversation and current work. You can continue in either place:
+
+- send the Bot an addition or correction and ask it to pass the instruction to the working helper;
+- open the Helper Session and send the instruction there;
+- ask the Bot to summarize the status of all active tasks.
+
+The Bot reports helper replies in its own chat, so you can stay in the main conversation when you do not need the full Session detail.
+
+## Handle problems and finish cleanly
+
+If a helper encounters an error or an unexpected condition, it reports the impact to the Bot. The Bot can ask for your decision as a [todo](/docs/bots/chat), pass a correction to the helper, or arrange follow-up work.
+
+When a task finishes or is cancelled, the Bot closes its helper. Closing releases the active runtime while keeping the Session history available. Before deleting a Bot, close all of its open helpers.
+
+Return to [Bots](/docs/bots) or learn how to [create reusable Agent Profiles](/docs/agent-profiles).

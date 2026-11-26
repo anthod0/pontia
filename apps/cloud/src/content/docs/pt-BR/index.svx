@@ -13,6 +13,7 @@ O Pontia transforma seu dispositivo em uma nuvem de agentes. Os agentes de progr
 - [Inicialização](/docs/initialization) — use o assistente interativo ou inicialize passo a passo com comandos não interativos.
 - [Acesso remoto](/docs/remote-access) — registre um dispositivo e conecte-se pelo Dashboard hospedado.
 - [Guia do Dashboard](/docs/dashboard) — ative uma Workspace, inicie uma Session e controle o trabalho dos agentes.
+- [Bots](/docs/bots) — crie um assistente contínuo e delegue tarefas a vários agentes de código.
 - [Como o Pontia funciona](/docs/how-it-works) — entenda a execução local e os limites entre seu dispositivo, o Pontia Cloud e o Edge.
 
 ## Acesso remoto e segurança

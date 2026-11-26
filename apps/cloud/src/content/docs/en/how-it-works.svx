@@ -75,7 +75,7 @@ From the Dashboard, you can create, observe, continue, and interrupt supported a
 | Edge | Relays end-to-end encrypted dashboard traffic | No |
 | Pontia Cloud | Handles identity, device registration, and remote authorization | No |
 
-To set up a device, continue with [Getting started](/docs/getting-started). To connect from another device, see [Remote access](/docs/remote-access).
+To set up a device, continue with [Getting started](/docs/getting-started). To connect from another device, see [Remote access](/docs/remote-access). To coordinate ongoing work and multiple coding agents, see [Bots](/docs/bots).
 
 <style>
 	.architecture-diagram {

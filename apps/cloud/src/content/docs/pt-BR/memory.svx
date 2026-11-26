@@ -1,0 +1,40 @@
+<svelte:head>
+	<title>Memória compartilhada e USER.md — Pontia</title>
+	<meta name="description" content="Consulte memórias compartilhadas, edite o USER.md e ensine suas preferências duradouras a todos os Bots de um dispositivo." />
+</svelte:head>
+
+# Memória compartilhada e USER.md
+
+Todos os Bots de um dispositivo Pontia compartilham duas fontes de contexto duradouro: memórias de trabalhos anteriores e o `USER.md`, um perfil curto sobre você e seus acordos de trabalho.
+
+## Consulte e pesquise memórias
+
+Abra **Settings → Memory → Memories**. A lista mostra fatos, decisões, eventos, lições e observações lembrados, com a Workspace relacionada quando houver. Use **Pesquisar memórias** para filtrar e **Carregar mais** para continuar pelos resultados mais antigos.
+
+Você também pode pedir a um Bot para lembrar trabalhos anteriores no chat. Ele pesquisa memórias relevantes e pode fazer uma busca mais profunda quando a resposta exigir mais contexto.
+
+## Consulte e edite Sobre você
+
+Abra **Settings → Memory → Sobre você** para ver o `USER.md`. Alterne entre **Preview** e **Fonte** e selecione **Editar** para atualizá-lo. Ao salvar, todos os Bots do dispositivo passam a usar o novo texto.
+
+Use o `USER.md` para informações duradouras sobre sua identidade, preferências permanentes e regras explícitas, como idioma preferido, estilo de revisão ou uma regra aplicável a todos os projetos.
+
+## Corrija informações no chat
+
+Quando uma preferência ou um fato lembrado mudar, diga diretamente a qualquer Bot qual é a informação atual. Por exemplo:
+
+> Agora prefiro resumos de versão em português. Atualize o que você lembra para os próximos trabalhos.
+
+O Bot atualiza o `USER.md` quando a correção pertence ao perfil compartilhado ou registra uma memória corrigida sobre um trabalho anterior. A alteração fica disponível para os outros Bots do dispositivo.
+
+## Deixe o Dreaming organizar a memória
+
+O Dreaming revisa periodicamente as memórias pendentes do dispositivo, mantém informações duradouras úteis e relaciona itens. Quando evidências importantes forem ambíguas, ele pede esclarecimento por meio de um Bot relevante, sem tentar adivinhar. Responda no chat do Bot; uma rodada posterior poderá incorporar a explicação.
+
+## Compartilhe contexto entre Bots
+
+Todos os Bots do dispositivo leem as mesmas memórias e o mesmo `USER.md`, enquanto cada um preserva sua própria conversa. Assim, um Bot novo segue preferências existentes sem copiar o histórico de chats.
+
+Excluir um Bot mantém as memórias compartilhadas e o `USER.md`. Se o último Bot for excluído, o Dreaming pausa até que outro Bot seja criado.
+
+Volte para [Bots](/docs/bots) para ver como vários Bots dividem o trabalho.

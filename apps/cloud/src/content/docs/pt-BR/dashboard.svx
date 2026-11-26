@@ -57,17 +57,9 @@ Um agente mostra um arquivo escrevendo o caminho absoluto dele em uma resposta. 
 
 Os arquivos aparecem em um único card abaixo da resposta, onde você pode baixar cada arquivo ou clicar em **Download all** para baixar todos os que ainda existem. Um card com mais de seis arquivos mostra os quatro primeiros até você clicar em **Show more**. Quando todos os arquivos de um card são imagens, o card mostra as imagens juntas; clique no botão de lista para ver os nomes e tamanhos. Imagens e arquivos de texto e código também podem ser visualizados; outros arquivos, como vídeos, PDFs e arquivos compactados, só podem ser baixados. O Pontia lê o arquivo do dispositivo quando você o abre ou baixa, então um arquivo que foi movido ou excluído deixa de estar disponível.
 
-Quando um Bot anexar arquivos a uma resposta, eles aparecem na conversa com o Bot em um card com o tipo e o tamanho de cada arquivo. Imagens aparecem na própria conversa e abrem em tamanho real ao clicar; o visualizador navega pelas outras imagens do mesmo card; clique em um arquivo de texto ou código para visualizá-lo. Clique no botão de download para salvar qualquer arquivo.
+## Trabalhar com Bots
 
-## Iniciar uma conversa com um Bot
-
-Um novo Bot cumprimenta você no idioma do Dashboard e aguarda sua primeira mensagem. Quando entende em que você precisa de ajuda, ele pode preencher a própria descrição se ela estiver vazia. Você pode editar a descrição nas configurações do Bot a qualquer momento. Apague o texto para que o Bot possa escrever outra descrição.
-
-## Citar uma mensagem na conversa com um Bot
-
-Na conversa com um Bot, clique com o botão direito em uma mensagem, ou no botão **⋯** que aparece ao lado dela quando você passa o mouse, e escolha **Reply**. Para um arquivo ou imagem anexado, escolha **Quote file** ou **Quote image** no mesmo menu. Para citar parte de uma mensagem, selecione o trecho e escolha **Quote** acima da seleção. No celular, toque e segure a mensagem; o menu também oferece **Copy** e **Select text**. Shift+clique com o botão direito abre o menu do próprio navegador.
-
-A citação aparece acima do compositor; clique em **×** para removê-la. Citar outra mensagem substitui a atual, e é preciso escrever um texto para enviar uma citação. O Bot recebe o texto citado completo. Clique em uma citação em uma mensagem enviada para voltar à original, mesmo que ela esteja no histórico mais antigo.
+Consulte [Bots](/docs/bots) para criar, configurar, recarregar e excluir um Bot. O [guia do chat do Bot](/docs/bots/chat) explica respostas, citações, todos, contexto de mensagens relacionadas, busca, cartões de anexos, Files, Git e Preview.
 
 ## Comandos do chat
 
@@ -98,14 +90,6 @@ As páginas de chat oferecem estes atalhos:
 | `Alt+C` / `Alt+W` | No New chat, alterne para o próximo Agent Client ou Workspace. Adicione `Shift` para voltar. |
 | `Alt+?` | Mostrar a referência de atalhos |
 | `Ctrl+B` (`Cmd+B` no macOS) | Mostrar ou ocultar a barra lateral |
-
-## Excluir um Bot
-
-Clique no nome do Bot no topo da conversa para abrir as configurações e escolha **Delete Bot** na parte de baixo. No celular, use **Delete Bot** no menu **More** da barra superior.
-
-A exclusão remove permanentemente o Bot, o histórico de conversa e o diretório dele em `$PONTIA_HOME/bot`, e não pode ser desfeita. As memórias, o `USER.md` e as Workspaces são compartilhados por todos os Bots e são mantidos, assim como o histórico das Sessions de helper do Bot.
-
-Só é possível excluir um Bot quando ele não está trabalhando e todos os helpers dele estão fechados. A confirmação lista os helpers ainda abertos; peça ao Bot para fechá-los ou abra cada um e encerre-o. O último Bot também pode ser excluído. Nesse caso, a organização de memórias (dreaming) fica pausada até você criar um novo Bot.
 
 ## Organizar Sessions
 

@@ -1,0 +1,55 @@
+<svelte:head>
+	<title>Bots — Pontia</title>
+	<meta name="description" content="创建 Bot、分派工作，并在一段长期对话中编排多个 coding agent。" />
+</svelte:head>
+
+# Bots
+
+Bot 是一台 Pontia 设备上的长期助手。每个 Bot 有自己的对话并管理 Agent Client Session，同时与设备上的其他 Bot 共享 [Workspace](/docs/workspaces)、[Agent 配置](/docs/agent-profiles)、记忆和 `USER.md`。你可以用多个 Bot 分别负责不同工作流，避免把对话混在一起。
+
+## 创建第一个 Bot
+
+打开 **Bots**，选择**设置第一个 Bot**或**创建 Bot**。
+
+1. 输入名称，选择头像形状和颜色。
+2. 选择已启用的 Agent Client。
+3. 选择模型。如果模型提供思考深度档位，可选择一个档位或沿用默认值。
+4. 选择**开始聊天**或**创建 Bot**。
+
+新 Bot 会使用 Dashboard 当前语言问候你。第一条消息应说明希望它负责什么。Bot 理解自己的长期职责后，可以自动填写空白描述。之后可在 Bot 设置中修改或清空描述。
+
+## 告诉 Bot 在哪里工作
+
+处理现有项目时，先把项目目录激活为 Workspace，并告诉 Bot 具体项目；它会为任务复用该 Workspace。
+
+与项目无关的一次性任务可以放在 `~/Pontia` 下的 `YYYY-MM-DD_主题` 文件夹中，例如 `~/Pontia/2026-11-27_发布说明`。Bot 会在开始前告诉你路径，后续任务也可以继续使用同一文件夹。
+
+需要隔离 Git 分支时，Bot 会从原项目 Workspace 启动工作，并让 helper 在其中新建独立 worktree。无需把每个 worktree 再激活为 Workspace。
+
+## 查看工作状态
+
+Bot 列表和对话标题栏会显示当前活动。**正在处理你的消息**表示 Bot 正在响应最新输入。如果 Bot 已回复、helper 仍在继续，状态会显示最新的活跃任务。没有任务运行时，Bot 处于空闲状态。
+
+打开 Bot 对话即可查看进度、结果和待决事项。你可以继续发送新请求：Bot 会跟踪各项任务、把独立工作分派出去，并在同一对话中汇报。Todo、引用、搜索、附件和侧面板的用法见 [Bot 对话](/docs/bots/chat)。
+
+## 修改设置并重新加载
+
+点击对话顶部的 Bot 名称，或打开手机端的**更多**菜单，然后选择**编辑 Bot**。可以修改名称、描述、头像、Client、模型和思考深度。
+
+正在进行的工作会继续使用当前设置。Bot 空闲时，选择**重新加载 Bot 会话**，或在输入框中输入 `/reload`。下一条消息会使用最新设置启动新 Session，并带上 Bot 当前的对话上下文、共享用户信息和记忆。
+
+## 用多个 Bot 分工
+
+可以给每个 Bot 一个稳定职责，例如产品规划、代码实现或客户研究。它们的对话和 helper 彼此独立，但都能使用设备上相同的活跃 Workspace、Agent 配置、记忆和 `USER.md`。这样可以完成多 agent 编排，又不用重复配置项目和长期偏好。
+
+在一段 Bot 对话内，可以用 [Helper](/docs/bots/helpers) 并行处理多个边界清晰的任务。
+
+## 删除 Bot
+
+打开 Bot 设置并选择**删除 Bot**。手机端可从顶栏的**更多**菜单选择**删除 Bot**。
+
+先关闭所有 helper，并等待 Bot 完成当前工作。确认弹窗会列出仍需处理的 helper。
+
+删除会永久移除该 Bot 及其聊天记录，且无法撤销。共享记忆、`USER.md`、Workspace 和 helper Session 历史会保留。如果删除最后一个 Bot，共享记忆整理会在新建 Bot 后恢复。
+
+接下来可以[并行运行 Helper](/docs/bots/helpers)、[使用 Bot 对话](/docs/bots/chat)或[设置 Agent 配置](/docs/agent-profiles)。

@@ -1,0 +1,46 @@
+<svelte:head>
+	<title>并行运行 Helper — Pontia</title>
+	<meta name="description" content="把独立编码任务分派给并行 Helper，并从 Bot 对话跟进工作。" />
+</svelte:head>
+
+# 并行运行 Helper
+
+Helper 是 Bot 针对单项任务创建的专用 Agent Session。当多个工作可以独立推进时，让 Bot 拆分任务并同时派发给多个 helper，即可并行运行 coding agent，并由 Bot 汇总结果。
+
+## 同时分派多个任务
+
+说明最终目标和可以并行的部分。例如：
+
+> 请并行调查失败的测试、更新发布说明，并审查 API 变更，分别汇报结果。
+
+Bot 会为每项任务新建 helper，提供简洁标题和完整说明，并跟踪全部任务。Helper 工作时，Bot 仍可继续回复你。
+
+## 选择合适的 Agent Client
+
+默认情况下，通用 helper 使用 Bot 的 Client、模型和思考深度。需要专门能力时，可以创建 [Agent 配置](/docs/agent-profiles)，再让 Bot 使用它。Profile 可指定 Claude Code、Codex 或 Grok Build 等不同 Client，并带上模型和任务指令。
+
+也可以在对话中直接指定 Client 或模型。Bot 会在启动 helper 前检查当前可用的 Profile 和 Client。
+
+## 隔离项目改动
+
+处理项目时，Bot 会在该项目的活跃 Workspace 中启动 helper。如果多个 helper 都会修改同一个仓库，让它们分别创建自己的 Git worktree 和分支。Worktree 仍关联原 Workspace，各 helper 能共享项目上下文，又不会编辑同一个 checkout。
+
+一次性的独立工作可以放到 `~/Pontia` 下的命名文件夹中。
+
+## 查看进度或补充指令
+
+从 Bot 状态或相关 Session 链接打开 helper，即可查看它的对话和当前工作。你可以用以下方式继续：
+
+- 把补充或修正发给 Bot，请它转交给正在工作的 helper；
+- 打开 Helper Session，直接发送指令；
+- 让 Bot 汇总所有活跃任务的状态。
+
+Helper 的回复会回报到 Bot 对话中；不需要完整 Session 细节时，留在主对话即可。
+
+## 处理异常并完成清理
+
+Helper 遇到错误或意外情况时，会向 Bot 报告对任务的影响。Bot 可以通过 [Todo](/docs/bots/chat)请你决定、向 helper 转交修正，或安排后续工作。
+
+任务完成或取消后，Bot 会关闭对应 helper。关闭会释放运行资源，同时保留 Session 历史。删除 Bot 前，需要关闭它的全部 helper。
+
+返回 [Bots](/docs/bots)，或了解如何[创建可复用的 Agent 配置](/docs/agent-profiles)。

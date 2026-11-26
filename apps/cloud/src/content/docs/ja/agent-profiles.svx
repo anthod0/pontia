@@ -1,0 +1,47 @@
+<svelte:head>
+	<title>Agent Profiles — Pontia</title>
+	<meta name="description" content="Bot Helper と Workflow Node のための再利用可能な Agent Profile を作成します。" />
+</svelte:head>
+
+# Agent Profiles
+
+Agent Profile は、Agent Client、モデル、reasoning effort、権限モード、指示を再利用する設定です。Bot は helper の専門性を選ぶために使い、[Workflow](/docs/workflows) の Agent Node でも同じ Profile を使えます。
+
+## テンプレートから始める
+
+**Settings → Agent Profiles** を開き、**New profile** とテンプレートを選びます。組み込みテンプレートには **Researcher**、**Copywriter**、**Architect**、**Designer**、**Coder**、**Motion designer** があります。テンプレートがフォームを入力し、作成前にすべての項目を変更できます。
+
+## Profile を入力する
+
+各 Profile には次の項目があります。
+
+- **Name**：Dashboard に表示する名前。
+- **Profile ID**：作成時に決まる永続的な識別子。
+- **Description**：この専門性を選ぶ場面を Bot に伝える説明。
+- **Client**、**Model**、任意の reasoning effort。
+- **Use YOLO mode**：新しい作業を Profile の許可範囲の広い実行モードで開始する設定。
+- **System prompt**：helper または Workflow Node の作業指示。
+
+Profile ID は小文字または数字で始め、小文字、数字、`.`、`_`、`-` のみを使います。`release-reviewer` のような固定 ID を選びます。
+
+## 良い Description を書く
+
+Bot は Description を読み、Profile を使うべきか判断します。受け取るタスク、担当する成果、重要な境界を書いてください。例：
+
+> 承認済み契約と照合して API 変更をレビューし、破壊的変更をファイル位置付きで報告する。読み取り専用で、修正は実装しない。
+
+詳しい作業ルールは System prompt に書きます。具体的な Description にすると、似た Client やモデルを使う Profile を Bot が区別できます。
+
+## Bot に Profile を管理してもらう
+
+Dashboard に専門 Profile の提案カードが表示されることがあります。テンプレートを選ぶか、**Ask Bot** で相談できます。チャットで任意の Bot に Profile の追加、変更、削除を依頼することもできます。Bot はテンプレート、Client、モデル、reasoning effort を確認し、変更内容を報告します。
+
+## Workflow で再利用する
+
+Workflow の作成または編集時に、Agent Node ごとに Profile を選びます。Node はその Client、モデル、権限モード、指示と、Node 固有のタスクおよび Handoff 入力を使って開始します。
+
+## 変更が適用される範囲
+
+Profile はデバイス上のすべての Bot で共有されます。更新は新しい helper と、まだ開始していない Workflow Node に適用されます。開始済みの Session は作成時の Profile 指示を保持します。Profile を削除しても既存の Session 履歴は残ります。
+
+次は [Helper を並列実行](/docs/bots/helpers)するか、[Workflow を作成](/docs/workflows)してください。

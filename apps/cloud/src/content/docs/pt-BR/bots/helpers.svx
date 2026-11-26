@@ -1,0 +1,46 @@
+<svelte:head>
+	<title>Execute Helpers em paralelo — Pontia</title>
+	<meta name="description" content="Delegue tarefas independentes de código a Helpers paralelos e acompanhe o trabalho pelo chat do Bot." />
+</svelte:head>
+
+# Execute Helpers em paralelo
+
+Helpers são Agent Sessions focadas que um Bot cria para tarefas individuais. Quando houver trabalhos independentes, peça ao Bot que os distribua entre vários helpers para executar agentes de código em paralelo e coordenar os resultados.
+
+## Delegue várias tarefas de uma vez
+
+Descreva o resultado e quais partes podem avançar de forma independente. Por exemplo:
+
+> Investigue os testes com falha, atualize as notas da versão e revise a mudança da API em paralelo. Relate cada resultado separadamente.
+
+O Bot cria um helper novo para cada tarefa, fornece um título conciso e instruções completas e acompanha todos eles. Enquanto os helpers trabalham, o Bot pode continuar respondendo.
+
+## Escolha o Agent Client adequado
+
+Por padrão, um helper geral usa o Client, o modelo e o esforço de raciocínio do Bot. Para especializar uma tarefa, crie um [Agent Profile](/docs/agent-profiles) e peça ao Bot para usá-lo. Um Profile pode selecionar outro Client, como Claude Code, Codex ou Grok Build, além do modelo e das instruções da tarefa.
+
+Você também pode pedir um Client ou modelo diretamente no chat. Antes de iniciar o helper, o Bot verifica quais Profiles e Clients estão disponíveis.
+
+## Isole as alterações do projeto
+
+No trabalho de um projeto, o Bot inicia o helper na Workspace ativa correspondente. Se vários helpers modificarem o mesmo repositório, peça a cada um para criar seu próprio Git worktree e branch. Os worktrees continuam associados à Workspace original; assim, os helpers compartilham o contexto sem editar o mesmo checkout.
+
+Para trabalho avulso e independente, o Bot pode usar uma pasta nomeada em `~/Pontia`.
+
+## Verifique o progresso ou complemente as instruções
+
+Abra um helper pelo status do Bot ou pelo link da Session relacionada para ver a conversa e o trabalho atual. Você pode continuar de três formas:
+
+- enviar uma correção ou complemento ao Bot e pedir que ele repasse ao helper ativo;
+- abrir a Helper Session e enviar a instrução diretamente;
+- pedir ao Bot um resumo do status de todas as tarefas ativas.
+
+As respostas do helper chegam ao chat do Bot, portanto você pode permanecer na conversa principal quando não precisar de todos os detalhes da Session.
+
+## Trate problemas e finalize corretamente
+
+Se um helper encontrar um erro ou situação inesperada, ele informa o impacto ao Bot. O Bot pode pedir sua decisão com um [todo](/docs/bots/chat), repassar uma correção ao helper ou organizar um trabalho complementar.
+
+Quando a tarefa termina ou é cancelada, o Bot fecha o helper. Isso libera os recursos ativos e mantém o histórico da Session. Antes de excluir um Bot, feche todos os helpers dele.
+
+Volte para [Bots](/docs/bots) ou aprenda a [criar Agent Profiles reutilizáveis](/docs/agent-profiles).

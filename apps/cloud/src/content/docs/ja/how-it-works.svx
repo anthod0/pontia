@@ -75,7 +75,7 @@ Dashboard からは、デバイス上で動くサポートされたエージェ�
 | Edge | エンドツーエンド暗号化された Dashboard の通信を中継する | なし |
 | Pontia Cloud | ID、デバイス登録、リモート認可を扱う | なし |
 
-デバイスをセットアップするには、[はじめに](/docs/getting-started) に進んでください。別のデバイスから接続するには、[リモートアクセス](/docs/remote-access) を参照してください。
+デバイスをセットアップするには、[はじめに](/docs/getting-started) に進んでください。別のデバイスから接続するには、[リモートアクセス](/docs/remote-access) を参照してください。継続する作業と複数の coding agent を連携するには、[Bots](/docs/bots)を参照してください。
 
 <style>
 	.architecture-diagram {

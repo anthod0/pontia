@@ -13,6 +13,7 @@ Pontia はデバイスをエージェントクラウドに変えます。コー�
 - [初期化](/docs/initialization) — 対話型ウィザードを使うか、非対話型のコマンドで段階的に初期化します。
 - [リモートアクセス](/docs/remote-access) — デバイスを登録し、ホスト型の Dashboard から接続します。
 - [Dashboard ガイド](/docs/dashboard) — Workspace を有効にし、Session を開始して、エージェントの作業を操作します。
+- [Bots](/docs/bots) — 長期的なアシスタントを作り、複数の coding agent にタスクを委任します。
 - [Pontia の仕組み](/docs/how-it-works) — ローカル実行と、デバイス、Pontia Cloud、Edge の間の境界を理解します。
 
 ## リモートアクセスとセキュリティ

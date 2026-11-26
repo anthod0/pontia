@@ -75,7 +75,7 @@ Session 是 Pontia 对一个 Agent 工作单元的持久视图。所选的 Agent
 | Edge | 中继端到端加密的 Dashboard 流量 | 否 |
 | Pontia Cloud | 处理身份、设备注册和远程授权 | 否 |
 
-要设置设备，请继续阅读[快速开始](/docs/getting-started)。要从另一台设备连接，请参阅[远程访问](/docs/remote-access)。
+要设置设备，请继续阅读[快速开始](/docs/getting-started)。要从另一台设备连接，请参阅[远程访问](/docs/remote-access)。要编排长期工作和多个 coding agent，请参阅 [Bots](/docs/bots)。
 
 <style>
 	.architecture-diagram {

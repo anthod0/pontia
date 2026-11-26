@@ -1,0 +1,54 @@
+<svelte:head>
+	<title>Bot chat — Pontia</title>
+	<meta name="description" content="Use todos, replies, quotes, context, search, attachments, Files, Git, and Preview in a Bot conversation." />
+</svelte:head>
+
+# Bot chat
+
+Bot chat keeps requests, progress, decisions, and delivered files in one ongoing conversation. The same tools are available from the local and Remote Dashboards, with phone-friendly views for todos and supporting panels.
+
+## Keep decisions moving with todos
+
+Mark any user or Bot message as a todo from its message menu. When the Bot needs an answer before it can continue, it can mark its question as a todo for you.
+
+Open **Todo** in the chat side panel to see pending and recently resolved items. On a phone, open the **Todo** tab to see todos across Bots.
+
+You can finish a todo in three ways:
+
+- choose **Reply** from the todo and send your answer; the quoted reply closes it automatically;
+- choose **Mark done** when no written answer is needed;
+- let the Bot close it after the matter is resolved.
+
+Choose **Reopen** on a resolved item when it needs more work.
+
+## Reply and quote precisely
+
+Open a message's menu and choose **Reply** to quote the whole message. For one attachment, choose **Quote file** or **Quote image**. To quote only part of a message, select the text and choose **Quote selection**. On a phone, press and hold the message to open its actions.
+
+The quote appears above the composer. Add your message and send it; select **×** to remove the quote. Clicking a quote in sent chat jumps to the original message, including older history.
+
+## Follow related-message context
+
+The Bot links replies that continue an earlier topic. From a message menu, choose **View context** to see its quoted and linked messages as a chain. Select **Show** on an item to locate it in chat. This is useful when several tasks are active in the same conversation.
+
+## Search the conversation
+
+Open **Search** from the chat side panel or phone menu. Search all messages from you and the Bot, or filter for **Files** or **Images**. Select a result to return to that point in the conversation.
+
+## Open attachments and previews
+
+Files delivered by the Bot appear as attachment cards with names, types, and sizes. Images display inline and open in an image viewer. Text and code files open in Preview; other files can be downloaded. A multi-file card also offers **Download all**.
+
+Use **Quote file** or **Quote image** when your next instruction concerns one attachment. Files are read from the device when opened or downloaded, so keep delivered artifacts at their reported paths.
+
+## Use Files, Git, and Preview
+
+On desktop, the side panel keeps supporting material beside the chat:
+
+- **Files** lists files you recently opened from this Bot conversation.
+- **Git** shows changes and commit history for a Workspace you choose.
+- **Preview** opens supported attachments, source files, images, and structured data without leaving the chat.
+
+On a phone, choose **Files** or **Git** from the Bot menu; file previews open as their own screen.
+
+See [Bots](/docs/bots) for setup and settings, or [Helpers](/docs/bots/helpers) for parallel delegation.

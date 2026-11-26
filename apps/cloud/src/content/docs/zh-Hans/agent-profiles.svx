@@ -1,0 +1,47 @@
+<svelte:head>
+	<title>Agent 配置 — Pontia</title>
+	<meta name="description" content="为 Bot Helper 和 Workflow 节点创建可复用的 Agent 配置。" />
+</svelte:head>
+
+# Agent 配置
+
+Agent Profile（Dashboard 中文名为 Agent 配置）是一组可复用的 Agent Client、模型、思考深度、权限模式和指令。Bot 用它为 helper 选择合适专长；[Workflow](/docs/workflows) 的 Agent Node 也使用同一组 Profile。
+
+## 从模板开始
+
+打开**设置 → Agent 配置**，选择**新建配置**，再选择模板。内置模板包括 **Researcher**、**Copywriter**、**Architect**、**Designer**、**Coder** 和 **Motion designer**。模板会填写表单，创建前仍可修改全部字段。
+
+## 填写 Profile
+
+每个 Profile 包含：
+
+- **名称**，显示在 Dashboard 中；
+- **Profile ID**，创建时确定的永久标识；
+- **描述**，告诉 Bot 何时适合使用这项专长；
+- **Client**、**模型**和可选思考深度；
+- **使用 YOLO 模式**，让新任务使用该 Profile 的宽松执行模式；
+- **系统提示词**，包含 helper 或 Workflow 节点的工作指令。
+
+Profile ID 必须以小写字母或数字开头，只能包含小写字母、数字、`.`、`_` 和 `-`。请选择稳定的 ID，例如 `release-reviewer`。
+
+## 写好描述
+
+Bot 会读取描述，判断是否选择该 Profile。应说明它接收什么任务、负责什么结果，以及重要边界。例如：
+
+> 根据已确认的契约审查 API 变更，引用文件位置报告破坏性行为。只读，不实现修复。
+
+详细工作规则放在系统提示词中。具体的描述能帮助 Bot 区分使用相似 Client 或模型的多个 Profile。
+
+## 让 Bot 管理 Profile
+
+Dashboard 可能显示建议专业 Profile 的提示卡。可以直接选择模板，也可以选择**询问 Bot**共同规划。你也可以在对话中让任何 Bot 新增、修改或删除 Profile。Bot 会先检查模板、Client、模型和思考深度选项，再报告改动。
+
+## 在 Workflow 中复用
+
+创建或编辑 Workflow 时，为每个 Agent Node 选择 Profile。节点启动时会取得该 Profile 的 Client、模型、权限模式和指令，以及节点自身的任务和 Handoff 输入。
+
+## 修改何时生效
+
+Profile 由设备上的所有 Bot 共享。更新会用于新 helper 和尚未启动的 Workflow 节点。已经启动的 Session 会保留创建时取得的 Profile 指令。删除 Profile 不影响已有 Session 历史。
+
+接下来可以[并行运行 Helper](/docs/bots/helpers)或[创建 Workflow](/docs/workflows)。

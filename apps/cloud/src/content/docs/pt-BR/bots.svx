@@ -1,0 +1,55 @@
+<svelte:head>
+	<title>Bots — Pontia</title>
+	<meta name="description" content="Crie um Bot, delegue trabalho e coordene agentes de código em uma conversa contínua." />
+</svelte:head>
+
+# Bots
+
+Um Bot é um assistente de longo prazo em um dispositivo Pontia. Cada Bot mantém seu próprio chat e coordena Sessions de Agent Clients, enquanto compartilha [Workspaces](/docs/workspaces), [Agent Profiles](/docs/agent-profiles), memórias e o `USER.md` com os outros Bots do dispositivo. Use vários Bots para delegar frentes de trabalho sem misturar as conversas.
+
+## Crie seu primeiro Bot
+
+Abra **Bots** e selecione **Configurar seu primeiro Bot** ou **Criar Bot**.
+
+1. Digite um nome e escolha a forma e a cor do avatar.
+2. Selecione um Agent Client habilitado.
+3. Selecione um modelo. Se ele oferecer níveis de esforço de raciocínio, escolha um ou mantenha o padrão.
+4. Selecione **Começar a conversar** ou **Criar Bot**.
+
+O novo Bot cumprimenta você no idioma do Dashboard. Na primeira mensagem, explique o que ele deve assumir. Depois de entender sua função contínua, o Bot pode preencher automaticamente uma descrição vazia. Você pode editar ou apagar a descrição nas configurações do Bot.
+
+## Dê ao Bot um local de trabalho
+
+Para trabalhar em um projeto existente, primeiro ative o diretório como Workspace e informe ao Bot qual projeto deve usar. Ele reutiliza essa Workspace na tarefa.
+
+Para uma tarefa avulsa sem relação com um projeto, o Bot pode usar uma pasta em `~/Pontia` chamada `AAAA-MM-DD_assunto`, como `~/Pontia/2026-11-27_notas-da-versao`. O Bot informa o caminho antes de começar; trabalhos posteriores podem continuar na mesma pasta.
+
+Quando for útil isolar uma branch Git, o Bot inicia na Workspace original do projeto e orienta o helper a criar seu próprio worktree. Não é necessário ativar cada worktree como outra Workspace.
+
+## Acompanhe o trabalho
+
+A lista de Bots e o cabeçalho do chat mostram a atividade atual. **Trabalhando na sua mensagem** indica que o Bot está tratando a entrada mais recente. Se um helper continuar depois da resposta do Bot, o status mostra a tarefa ativa mais recente. Sem tarefas em execução, o Bot fica ocioso.
+
+Abra o chat do Bot para acompanhar progresso, resultados e decisões. Você pode continuar enviando pedidos: o Bot rastreia cada tarefa, delega trabalhos independentes e relata os resultados na mesma conversa. Consulte [Chat do Bot](/docs/bots/chat) para usar todos, citações, busca, anexos e o painel lateral.
+
+## Altere as configurações e recarregue
+
+Abra o nome do Bot no topo do chat ou o menu **Mais** no celular e selecione **Editar Bot**. Você pode alterar nome, descrição, avatar, Client, modelo e esforço de raciocínio.
+
+O trabalho em andamento continua com as configurações atuais. Quando o Bot estiver ocioso, selecione **Recarregar Session do Bot** ou digite `/reload` na caixa de mensagem. A próxima mensagem inicia uma nova Session com as configurações mais recentes e o contexto atual do chat, as informações compartilhadas do usuário e as memórias.
+
+## Divida o trabalho entre Bots
+
+Dê a cada Bot uma área contínua, como planejamento de produto, implementação ou pesquisa de clientes. Seus chats e helpers ficam separados, mas todos usam as mesmas Workspaces ativas, Agent Profiles, memórias e o `USER.md` do dispositivo. Assim, você coordena vários agentes sem duplicar a preparação do projeto nem preferências duradouras.
+
+Em uma conversa com um Bot, use [Helpers](/docs/bots/helpers) para executar várias tarefas bem delimitadas em paralelo.
+
+## Exclua um Bot
+
+Abra as configurações do Bot e selecione **Excluir Bot**. No celular, use **Excluir Bot** no menu **Mais** da barra superior.
+
+Primeiro, feche todos os helpers abertos e aguarde o Bot terminar o trabalho atual. A confirmação lista os helpers que ainda exigem atenção.
+
+A exclusão remove permanentemente o Bot e seu histórico de chat e não pode ser desfeita. Memórias compartilhadas, `USER.md`, Workspaces e o histórico das Sessions dos helpers são mantidos. Se você excluir o último Bot, a organização da memória compartilhada será retomada quando outro Bot for criado.
+
+Em seguida, [execute Helpers em paralelo](/docs/bots/helpers), [trabalhe no chat do Bot](/docs/bots/chat) ou [configure Agent Profiles](/docs/agent-profiles).

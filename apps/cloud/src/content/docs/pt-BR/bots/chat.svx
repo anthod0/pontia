@@ -1,0 +1,54 @@
+<svelte:head>
+	<title>Chat do Bot — Pontia</title>
+	<meta name="description" content="Use todos, respostas, citações, contexto, busca, anexos, Files, Git e Preview em uma conversa com um Bot." />
+</svelte:head>
+
+# Chat do Bot
+
+O chat do Bot reúne pedidos, progresso, decisões e arquivos entregues em uma conversa contínua. As mesmas ferramentas estão disponíveis nos Dashboards local e remoto, com telas adequadas ao celular para todos e painéis auxiliares.
+
+## Avance as decisões com todos
+
+No menu de uma mensagem do usuário ou do Bot, marque-a como todo. Quando o Bot precisar de uma resposta antes de continuar, ele também pode marcar a pergunta como todo.
+
+Abra **Todo** no painel lateral do chat para ver itens pendentes e resolvidos recentemente. No celular, abra a aba **Todo** para ver todos de vários Bots.
+
+Há três formas de concluir um todo:
+
+- selecione **Responder** no todo e envie a resposta; a resposta citada o fecha automaticamente;
+- selecione **Marcar como concluído** quando não for necessário responder por escrito;
+- deixe o Bot fechá-lo quando o assunto estiver resolvido.
+
+Selecione **Reabrir** em um item resolvido quando ele precisar de mais trabalho.
+
+## Responda e cite com precisão
+
+Abra o menu de uma mensagem e selecione **Responder** para citar a mensagem inteira. Para um anexo, selecione **Citar arquivo** ou **Citar imagem**. Para citar apenas um trecho, selecione o texto e escolha **Citar seleção**. No celular, mantenha a mensagem pressionada para abrir as ações.
+
+A citação aparece acima da caixa de mensagem. Adicione seu texto e envie; use **×** para remover a citação. Selecione uma citação já enviada para ir até a mensagem original, inclusive no histórico antigo.
+
+## Siga o contexto de mensagens relacionadas
+
+O Bot relaciona respostas que continuam um assunto anterior. No menu de uma mensagem, selecione **Ver contexto** para ver a cadeia de mensagens citadas e relacionadas. Selecione **Mostrar** em um item para localizá-lo no chat. Isso ajuda quando várias tarefas estão ativas na mesma conversa.
+
+## Pesquise a conversa
+
+Abra **Buscar** no painel lateral ou no menu do celular. Pesquise todas as mensagens suas e do Bot ou filtre por **Arquivos** e **Imagens**. Selecione um resultado para voltar ao ponto correspondente da conversa.
+
+## Abra anexos e previews
+
+Arquivos entregues pelo Bot aparecem como cartões com nome, tipo e tamanho. Imagens aparecem no chat e abrem em um visualizador. Arquivos de texto e código abrem no Preview; os demais podem ser baixados. Um cartão com vários arquivos também oferece **Baixar todos**.
+
+Use **Citar arquivo** ou **Citar imagem** quando a próxima instrução tratar de um anexo. Os arquivos são lidos do dispositivo no momento da abertura ou do download; mantenha os artefatos nos caminhos informados pelo Bot.
+
+## Use Files, Git e Preview
+
+No desktop, o painel lateral mantém o material auxiliar ao lado do chat:
+
+- **Files** lista os arquivos abertos recentemente a partir da conversa com o Bot.
+- **Git** mostra alterações e histórico de commits de uma Workspace escolhida.
+- **Preview** abre anexos compatíveis, arquivos-fonte, imagens e dados estruturados sem sair do chat.
+
+No celular, selecione **Files** ou **Git** no menu do Bot; previews de arquivos abrem em uma tela própria.
+
+Consulte [Bots](/docs/bots) para configuração e [Helpers](/docs/bots/helpers) para delegação em paralelo.

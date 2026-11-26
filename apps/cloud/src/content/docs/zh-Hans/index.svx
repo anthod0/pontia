@@ -13,6 +13,7 @@ Pontia 把你的设备变成 Agent 云。编程 Agent 使用你设备上的工�
 - [初始化](/docs/initialization) — 使用交互式向导，或通过非交互式命令逐步初始化。
 - [远程访问](/docs/remote-access) — 注册设备并通过托管的 Dashboard 连接。
 - [Dashboard 指南](/docs/dashboard) — 激活 Workspace、启动 Session 并控制 Agent 的工作。
+- [Bots](/docs/bots) — 创建长期助手，并完成多 agent 编排和任务分派。
 - [Pontia 的工作原理](/docs/how-it-works) — 了解本地执行，以及你的设备、Pontia Cloud 和 Edge 之间的边界。
 
 ## 远程访问与安全

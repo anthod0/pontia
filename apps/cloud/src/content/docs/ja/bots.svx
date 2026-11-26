@@ -1,0 +1,55 @@
+<svelte:head>
+	<title>Bots — Pontia</title>
+	<meta name="description" content="Bot を作成して仕事を任せ、継続する会話から複数の coding agent を連携させます。" />
+</svelte:head>
+
+# Bots
+
+Bot は、1 台の Pontia デバイスで長期的に使うアシスタントです。各 Bot は独自のチャットを持ち、Agent Client Session を管理します。同じデバイスの Bot は [Workspace](/docs/workspaces)、[Agent Profile](/docs/agent-profiles)、メモリ、`USER.md` を共有します。複数の Bot に別々の仕事を委任すれば、会話を混ぜずに進められます。
+
+## 最初の Bot を作成する
+
+**Bots** を開き、**最初の Bot を設定**または **Bot を作成**を選びます。
+
+1. 名前を入力し、アバターの形と色を選びます。
+2. 有効な Agent Client を選びます。
+3. モデルを選びます。モデルに reasoning effort がある場合は、レベルを選ぶか既定値を使います。
+4. **チャットを開始**または **Bot を作成**を選びます。
+
+新しい Bot は Dashboard の言語で挨拶します。最初のメッセージで、継続して担当してほしい内容を伝えてください。役割を把握すると、空の Description を Bot が自動入力できます。Description は Bot 設定でいつでも編集または消去できます。
+
+## 作業場所を指定する
+
+既存プロジェクトの作業では、先にディレクトリを Workspace として有効化し、どのプロジェクトかを Bot に伝えます。Bot はその Workspace を再利用します。
+
+プロジェクトに属さない一時的なタスクには、`~/Pontia` の下に `YYYY-MM-DD_件名` というフォルダーを使えます。例は `~/Pontia/2026-11-27_リリースノート` です。Bot は開始前にパスを知らせ、後日の続きでも同じフォルダーを使えます。
+
+Git ブランチを分離する場合、Bot は元のプロジェクト Workspace から作業を始め、helper に専用の worktree を作らせます。各 worktree を別の Workspace として有効化する必要はありません。
+
+## 作業状況を確認する
+
+Bot の一覧とチャットヘッダーに現在の活動が表示されます。**メッセージを処理中**は最新の入力に対応中です。Bot が返信したあとも helper が続行している場合は、最新の実行中タスクが表示されます。実行中のタスクがなければ idle です。
+
+Bot チャットを開くと、進捗、結果、判断事項を確認できます。追加の依頼も続けて送れます。Bot は各タスクを追跡し、独立した作業を委任して同じ会話で結果を報告します。Todo、引用、検索、添付ファイル、サイドパネルは [Bot チャット](/docs/bots/chat)を参照してください。
+
+## 設定を変更してリロードする
+
+チャット上部の Bot 名を開くか、スマートフォンの**その他**メニューから **Bot を編集**を選びます。名前、Description、アバター、Client、モデル、reasoning effort を変更できます。
+
+進行中の作業は現在の設定で続きます。Bot が idle のときに **Bot Session をリロード**を選ぶか、composer に `/reload` と入力します。次のメッセージから最新設定の新しい Session が始まり、現在のチャットコンテキスト、共有ユーザー情報、メモリを引き継ぎます。
+
+## 複数の Bot で分担する
+
+製品計画、実装、顧客調査など、Bot ごとに継続する担当を決めます。チャットと helper は別々ですが、有効な Workspace、Agent Profile、メモリ、`USER.md` はデバイス内で共有されます。プロジェクト設定や長期的な好みを重複させず、複数の agent を連携できます。
+
+1 つの Bot 会話内では、[Helper](/docs/bots/helpers)を使って複数の明確なタスクを並列実行できます。
+
+## Bot を削除する
+
+Bot 設定を開き、**Bot を削除**を選びます。スマートフォンでは、上部バーの**その他**メニューから選びます。
+
+まず開いている helper をすべて閉じ、Bot の現在の作業が終わるのを待ちます。確認ダイアログには対応が必要な helper が表示されます。
+
+削除すると Bot とチャット履歴は完全に消去され、元に戻せません。共有メモリ、`USER.md`、Workspace、Helper Session の履歴は保持されます。最後の Bot を削除した場合、別の Bot を作成すると共有メモリの整理が再開します。
+
+次は [Helper を並列実行](/docs/bots/helpers)、[Bot チャットを活用](/docs/bots/chat)、または [Agent Profile を設定](/docs/agent-profiles)してください。

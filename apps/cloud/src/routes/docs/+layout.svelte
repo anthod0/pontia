@@ -45,6 +45,16 @@
 			]
 		},
 		{
+			title: m.docs_group_bots,
+			links: [
+				{ href: '/docs/bots', title: m.docs_bots },
+				{ href: '/docs/bots/helpers', title: m.docs_bot_helpers },
+				{ href: '/docs/bots/chat', title: m.docs_bot_chat },
+				{ href: '/docs/agent-profiles', title: m.docs_agent_profiles },
+				{ href: '/docs/memory', title: m.docs_memory }
+			]
+		},
+		{
 			title: m.docs_group_reference,
 			links: [
 				{ href: '/docs/configuration', title: m.docs_configuration },

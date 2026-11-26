@@ -75,7 +75,7 @@ Pelo Dashboard, você pode criar, acompanhar, continuar e interromper Sessions d
 | Edge | Retransmite o tráfego do Dashboard com criptografia de ponta a ponta | Não |
 | Pontia Cloud | Cuida da identidade, do registro de dispositivos e da autorização remota | Não |
 
-Para configurar um dispositivo, continue em [Primeiros passos](/docs/getting-started). Para se conectar a partir de outro dispositivo, veja [Acesso remoto](/docs/remote-access).
+Para configurar um dispositivo, continue em [Primeiros passos](/docs/getting-started). Para se conectar a partir de outro dispositivo, veja [Acesso remoto](/docs/remote-access). Para coordenar trabalho contínuo e vários agentes de código, consulte [Bots](/docs/bots).
 
 <style>
 	.architecture-diagram {

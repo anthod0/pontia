@@ -1,0 +1,46 @@
+<svelte:head>
+	<title>Helper を並列実行する — Pontia</title>
+	<meta name="description" content="独立した coding task を並列 Helper に委任し、Bot チャットから進捗を確認します。" />
+</svelte:head>
+
+# Helper を並列実行する
+
+Helper は、個別のタスクのために Bot が作成する専用 Agent Session です。独立して進められる作業を複数の helper に分けるよう Bot に依頼すると、coding agent を並列実行しながら結果を Bot にまとめさせられます。
+
+## 複数のタスクを同時に委任する
+
+目標と、独立して進められる部分を伝えます。たとえば次のように依頼します。
+
+> 失敗しているテストの調査、リリースノートの更新、API 変更のレビューを並列で進め、結果を個別に報告してください。
+
+Bot はタスクごとに新しい helper を作成し、簡潔なタイトルと完結した指示を渡して追跡します。Helper の作業中も Bot は応答を続けられます。
+
+## 適切な Agent Client を選ぶ
+
+通常の helper は Bot の Client、モデル、reasoning effort を使います。専門化するには [Agent Profile](/docs/agent-profiles)を作り、それを使うよう Bot に依頼します。Profile では Claude Code、Codex、Grok Build など別の Client と、そのモデル、タスク指示を指定できます。
+
+チャットで Client やモデルを直接指定することもできます。Bot は helper を開始する前に、現在利用できる Profile と Client を確認します。
+
+## プロジェクトの変更を分離する
+
+プロジェクト作業では、Bot は有効な Workspace で helper を開始します。複数の helper が同じリポジトリを変更する場合は、それぞれに専用の Git worktree とブランチを作るよう依頼します。Worktree は元の Workspace と関連したままなので、同じ checkout を編集せずにプロジェクトのコンテキストを共有できます。
+
+独立した一時作業には、`~/Pontia` の下の名前付きフォルダーも使えます。
+
+## 進捗確認と追加指示
+
+Bot の状態または関連 Session のリンクから helper を開くと、会話と現在の作業を確認できます。続きは次の方法で伝えられます。
+
+- 追加や修正を Bot に送り、作業中の helper へ渡すよう依頼する。
+- Helper Session を開き、そこで直接指示する。
+- すべての実行中タスクの状態を Bot にまとめてもらう。
+
+Helper の返信は Bot のチャットにも報告されるため、Session の詳細が不要ならメインの会話に留まれます。
+
+## 問題に対応して終了する
+
+Helper がエラーや想定外の状況に遭遇すると、その影響を Bot に報告します。Bot は [Todo](/docs/bots/chat)で判断を求めたり、修正を helper に渡したり、追加作業を手配したりできます。
+
+タスクが完了またはキャンセルされると、Bot は helper を閉じます。閉じると実行リソースが解放され、Session 履歴は保持されます。Bot を削除する前に、開いている helper をすべて閉じてください。
+
+[Bots](/docs/bots) に戻るか、[再利用できる Agent Profile](/docs/agent-profiles)の作成方法に進んでください。

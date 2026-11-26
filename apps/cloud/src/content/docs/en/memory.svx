@@ -1,0 +1,40 @@
+<svelte:head>
+	<title>Shared memory and USER.md — Pontia</title>
+	<meta name="description" content="Review shared memories, edit USER.md, and teach every Bot on a device your lasting preferences." />
+</svelte:head>
+
+# Shared memory and USER.md
+
+Every Bot on a Pontia device shares two sources of durable context: memories from earlier work and `USER.md`, the short profile of you and your working agreements.
+
+## Browse and search memories
+
+Open **Settings → Memory → Memories**. The list shows remembered facts, decisions, events, lessons, and observations, with the related Workspace when available. Use **Search memories** to filter the list and **Load more** to continue through older results.
+
+You can also ask a Bot to recall earlier work in chat. The Bot searches relevant memories and can run a deeper lookup when the answer needs more context.
+
+## Review and edit About you
+
+Open **Settings → Memory → About you** to view `USER.md`. Switch between **Preview** and **Source**, then choose **Edit** to update it. Saving tells every Bot on the device to use the new text.
+
+Use `USER.md` for lasting identity facts, standing preferences, and explicit rules—for example, your preferred language, review style, or a rule that applies to every project.
+
+## Correct information in chat
+
+Tell any Bot when a preference or remembered fact has changed. Be direct about the current truth, for example:
+
+> I now prefer release summaries in Portuguese. Update what you remember for future work.
+
+The Bot updates `USER.md` when the correction belongs in your shared profile, or records a corrected memory for earlier work. The change becomes available to the other Bots on the same device.
+
+## Let Dreaming organize memory
+
+Dreaming periodically reviews pending memories on the device, keeps durable information useful, and connects related items. If important evidence is ambiguous, it asks one relevant Bot to clarify the point with you instead of guessing. Answer that question in the Bot chat; the clarification can be incorporated during a later round.
+
+## Share context across Bots
+
+All Bots on one device read the same memories and `USER.md`, while each Bot keeps its own conversation. This lets a newly created Bot follow your established preferences without copying chat history.
+
+Deleting a Bot keeps shared memories and `USER.md`. Deleting the last Bot pauses Dreaming until another Bot is created.
+
+Return to [Bots](/docs/bots) to learn how multiple Bots divide work.

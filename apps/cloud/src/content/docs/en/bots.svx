@@ -1,0 +1,55 @@
+<svelte:head>
+	<title>Bots — Pontia</title>
+	<meta name="description" content="Create a Bot, give it work, and coordinate coding agents from one ongoing conversation." />
+</svelte:head>
+
+# Bots
+
+A Bot is a long-lived assistant on one Pontia device. It keeps its own chat and coordinates Agent Client Sessions, while sharing [Workspaces](/docs/workspaces), [Agent Profiles](/docs/agent-profiles), memories, and `USER.md` with the other Bots on that device. Use multiple Bots to delegate separate streams of work without mixing their conversations.
+
+## Create your first Bot
+
+Open **Bots**, then select **Set up your first Bot** or **Create Bot**.
+
+1. Enter a name and choose an avatar shape and color.
+2. Select an enabled Agent Client.
+3. Select a model. If that model offers reasoning effort levels, choose one or keep its default.
+4. Select **Start chatting** or **Create Bot**.
+
+The new Bot greets you in the Dashboard language. Send a first message that explains what you want it to handle. Once the Bot understands its ongoing role, it can fill an empty description automatically. You can edit or clear the description later in Bot settings.
+
+## Give the Bot a place to work
+
+For work in an existing project, activate its directory as a Workspace first. Tell the Bot which project you mean; it reuses that active Workspace for the task.
+
+For a one-off task unrelated to a project, the Bot can use a folder under `~/Pontia` named `YYYY-MM-DD_subject`, such as `~/Pontia/2026-11-27_release-notes`. The Bot tells you the path before starting work. Later follow-up can continue in the same folder.
+
+When an isolated Git branch is useful, the Bot starts the work from the original project Workspace and asks its helper to create a separate worktree there. You do not need to activate each worktree as another Workspace.
+
+## Follow work in progress
+
+The Bot list and chat header show its current activity. **Working on your message** means the Bot is handling the latest input. If a helper continues after the Bot has replied, the status shows the newest active task. When no task is running, the Bot is idle.
+
+Open the Bot chat for progress messages and decisions. You can keep sending new requests: the Bot tracks each task, delegates independent work, and reports results in the same conversation. See [Bot chat](/docs/bots/chat) for todos, quotes, search, attachments, and the side panel.
+
+## Change settings and reload
+
+Open the Bot name at the top of its chat, or use the phone's **More** menu, then choose **Edit Bot**. You can change its name, description, avatar, Client, model, and reasoning effort.
+
+Existing work continues with its current settings. When the Bot is idle, choose **Reload Bot session** or type `/reload` in its composer. The next message starts a new Session with the latest settings and the Bot's current chat context, shared user information, and memories.
+
+## Divide work across Bots
+
+Give each Bot a stable area of responsibility—for example, product planning, implementation, or customer research. Their chats and helpers remain separate, while all Bots on the device can use the same active Workspaces, Agent Profiles, memories, and `USER.md`. This makes multi-agent orchestration easier without duplicating project setup or long-term preferences.
+
+Within one Bot conversation, use [Helpers](/docs/bots/helpers) to run several well-scoped tasks in parallel.
+
+## Delete a Bot
+
+Open Bot settings and select **Delete Bot**. On a phone, choose **Delete Bot** from the top bar's **More** menu.
+
+Close every open helper and wait for the Bot to finish its current work first. The confirmation dialog lists any helpers that still need attention.
+
+Deleting a Bot permanently removes that Bot and its chat history, and cannot be undone. Shared memories, `USER.md`, Workspaces, and helper Session history are kept. If you delete the last Bot, shared memory organization resumes after you create another Bot.
+
+Next: [run helpers in parallel](/docs/bots/helpers), [work in Bot chat](/docs/bots/chat), or [set up Agent Profiles](/docs/agent-profiles).

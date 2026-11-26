@@ -57,17 +57,9 @@ An agent shows you a file by writing its absolute path in a reply. A Markdown li
 
 The files appear as one card below the reply, where you can download each file or click **Download all** to download every file that still exists. A card of more than six files shows the first four until you click **Show more**. When every file in a card is an image, the card shows the images together; click the list button to see their names and sizes. Images, text, and code files can also be previewed; other files, such as videos, PDFs, and archives, are download-only. Pontia reads the file from the device when you open or download it, so a file that was moved or deleted is no longer available.
 
-When a Bot attaches files to a reply, they appear in the Bot chat as a card with each file's type and size. Images are shown inline and open full size when clicked; the viewer pages through the other images of the same card. Click a text or code file to preview it. Click the download button to save any file.
+## Work with Bots
 
-## Start a Bot chat
-
-A new Bot greets you in your Dashboard language and waits for your first message. Once it understands what you want help with, it can fill in its description if it is empty. You can edit the description in Bot settings at any time. Clear it to let the Bot write a new one.
-
-## Quote a Bot chat message
-
-In a Bot chat, right-click a message, or click the **⋯** button that appears next to it when you hover over it, and choose **Reply**. For one attached file or image, choose **Quote file** or **Quote image** from the same menu. To quote part of a message, select it and choose **Quote** above the selection. On a phone, press and hold a message; the menu also offers **Copy** and **Select text**. Shift+right-click opens the browser's own menu.
-
-The quote appears above the composer; click **×** to remove it. Quoting another message replaces it, and a message needs text to be sent with a quote. The Bot receives the full quoted text. Click a quote in a sent message to scroll back to the original, even when it is in older history.
+See [Bots](/docs/bots) to create, configure, reload, and delete a Bot. The [Bot chat guide](/docs/bots/chat) covers replies, quotes, todos, related-message context, search, attachment cards, Files, Git, and Preview.
 
 ## Chat commands
 
@@ -98,14 +90,6 @@ Chat pages provide these shortcuts:
 | `Alt+C` / `Alt+W` | On New chat, switch to the next Agent Client or Workspace. Add `Shift` to go back. |
 | `Alt+?` | Show the shortcut reference |
 | `Ctrl+B` (`Cmd+B` on macOS) | Toggle the sidebar |
-
-## Delete a Bot
-
-Open the Bot's settings by clicking its name at the top of the chat, then choose **Delete Bot** at the bottom. On a phone, use **Delete Bot** in the top bar's **More** menu.
-
-Deleting permanently removes the Bot, its chat history, and its directory under `$PONTIA_HOME/bot`. It cannot be undone. Memories, `USER.md`, and Workspaces are shared by all Bots and are kept, as is the history of the Bot's helper Sessions.
-
-A Bot can be deleted only when it is not working and all of its helpers are closed. The confirmation lists any open helpers; ask the Bot to close them, or open each one and end it. You can delete the last Bot. Memory organization (dreaming) then pauses until you create a new Bot.
 
 ## Organize Sessions
 
