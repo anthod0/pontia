@@ -7,9 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-11-27
+
 ### Added
 
+- Install supported Agent Clients from the CLI or Dashboard with prerequisite checks, live progress, verification, Pontia setup, and automatic enabling.
+- When no Agent Client is ready, Dashboard guides you through installation, sign-in, and enabling before starting a chat or Bot.
 - Deploy a self-hosted Edge directly on a public IPv4 or IPv6 address with an automatically renewed Let's Encrypt short-lived certificate.
+
+### Changed
+
+- The Git panel uses a denser file and commit layout with keyboard navigation across changes, history, and diffs.
+- Bot context opens in a dedicated message timeline, and running Turns show their elapsed time live.
+
+### Fixed
+
+- Text and image previews accept files up to 5 MiB.
+- Upload thumbnails remain available after sending, and large image search results no longer overload quote previews.
+- ACP Sessions report the correct agent details during startup.
+- Public self-hosted Edges owned by the signed-in account appear in both the available and owned Edge lists.
 
 ## [0.9.5] - 2026-11-26
 
@@ -1332,7 +1348,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.9.5...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.9.6...HEAD
+[0.9.6]: https://github.com/anthod0/pontia/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/anthod0/pontia/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/anthod0/pontia/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/anthod0/pontia/compare/v0.9.2...v0.9.3
