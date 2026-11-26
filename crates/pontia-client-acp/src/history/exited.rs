@@ -153,7 +153,7 @@ async fn read(
             )
             .connect_with(streams, async |cx: ConnectionTo<Agent>| {
                 let init = cx
-                    .send_request(InitializeRequest::new(ProtocolVersion::V1))
+                    .send_request(bounds.initialize_request())
                     .block_task()
                     .await?;
                 if init.protocol_version != ProtocolVersion::V1 {

@@ -105,6 +105,14 @@ def wait_for(name):
 def prompt(request, ordinal, cancellation):
     global active
     wait_for(f"update-{ordinal}")
+    if os.environ.get("ACP_STANDARD_COMPACTION") == "1" and ordinal == 1:
+        for update in [
+            {"sessionUpdate": "compaction_update", "compactionId": "standard-one", "status": "in_progress"},
+            {"sessionUpdate": "compaction_summary_chunk", "compactionId": "standard-one",
+             "content": {"type": "text", "text": "retained context"}},
+            {"sessionUpdate": "compaction_update", "compactionId": "standard-one", "status": "completed"},
+        ]:
+            send({"method": "session/update", "params": {"sessionId": native_id, "update": update}})
     if os.environ.get("ACP_READ_SESSION_ENV") == "1":
         value = subprocess.check_output(["sh", "-c", 'printf %s "$PONTIA_SESSION_ID"'], text=True)
         log({"session_environment": value, "runtime": os.environ.get("PONTIA_RUNTIME_INSTANCE_ID"), "native": native_id, "test_marker": os.environ.get("ACP_SESSION_MARKER")})

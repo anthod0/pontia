@@ -164,6 +164,7 @@ pub(crate) fn observe(context: &mut Value, frame: &Value) -> Option<Observation>
             Observation::Compacted {
                 operation,
                 manual: manual.is_some(),
+                native_compaction_id: Some(native_id.into()),
                 tokens_before: update["tokens_before"].as_u64(),
                 tokens_after: update["tokens_after"].as_u64(),
             }
@@ -215,6 +216,6 @@ mod tests {
         ));
         frame["params"]["_meta"]["isReplay"] = json!(false);
         assert!(matches!(observe(&mut context, &frame),
-            Some(Observation::Compacted { manual:false, operation, tokens_before:Some(100), tokens_after:Some(100) }) if operation == "grok:42"));
+            Some(Observation::Compacted { manual:false, operation, tokens_before:Some(100), tokens_after:Some(100), .. }) if operation == "grok:42"));
     }
 }

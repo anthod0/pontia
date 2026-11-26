@@ -84,6 +84,7 @@ pub(crate) fn compaction(
             Observation::Compacted {
                 operation: operation.into(),
                 manual: true,
+                native_compaction_id: None,
                 tokens_before: None,
                 tokens_after: None,
             }
@@ -120,7 +121,10 @@ pub(crate) fn compaction(
         "summarization_started" if automatic.is_none() => {
             let operation = new_operation();
             *automatic = Some(operation.clone());
-            return Some(Observation::AutoCompactionStarted { operation });
+            return Some(Observation::CompactionStarted {
+                operation,
+                manual: false,
+            });
         }
         "summarization_completed" => None,
         "summarization_failed" => Some(
@@ -143,6 +147,7 @@ pub(crate) fn compaction(
         None => Observation::Compacted {
             operation,
             manual: false,
+            native_compaction_id: None,
             tokens_before: None,
             tokens_after: None,
         },

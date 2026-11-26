@@ -1,4 +1,10 @@
-use agent_client_protocol::v1::schema::InitializeResponse;
+use agent_client_protocol::{
+    schema::ProtocolVersion,
+    v1::schema::{
+        ClientCapabilities, ClientSessionCapabilities, CompactionCapabilities, InitializeRequest,
+        InitializeResponse,
+    },
+};
 use pontia_core::{Error, Result, client_capabilities::AgentClientCapabilities};
 
 use crate::{ACP_MAX_CAPABILITIES, AcpAgentDefinition};
@@ -15,6 +21,16 @@ pub(crate) struct AgentBounds {
 impl AgentBounds {
     pub fn compaction_events(&self) -> bool {
         self.capabilities.compaction_events
+    }
+
+    pub fn initialize_request(&self) -> InitializeRequest {
+        let capabilities = if self.compaction_events() {
+            ClientCapabilities::new()
+                .session(ClientSessionCapabilities::new().compaction(CompactionCapabilities::new()))
+        } else {
+            ClientCapabilities::new()
+        };
+        InitializeRequest::new(ProtocolVersion::V1).client_capabilities(capabilities)
     }
 
     pub fn of(agent_id: &str, definition: Option<&AcpAgentDefinition>) -> Self {
@@ -336,6 +352,20 @@ mod tests {
             let builtin = Negotiated::from_initialize(&response, &grok).unwrap();
             assert_eq!(builtin.steer, supported == Some(true));
             assert_eq!(builtin.interject, supported.is_none());
+        }
+    }
+
+    #[test]
+    fn initialize_advertises_standard_compaction_only_for_supported_agents() {
+        let agents = AcpAgents::builtin();
+        for (agent, advertised) in [("grok", true), ("kiro", true), ("antigravity", false)] {
+            let bounds = AgentBounds::of(agent, agents.get(agent));
+            let request = serde_json::to_value(bounds.initialize_request()).unwrap();
+            assert_eq!(
+                request.pointer("/clientCapabilities/session/compaction"),
+                advertised.then_some(&json!({}))
+            );
+            assert_eq!(bounds.capabilities.compaction_events, advertised);
         }
     }
 }

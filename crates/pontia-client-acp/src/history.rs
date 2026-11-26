@@ -349,7 +349,7 @@ impl ClientData for AcpAdapter {
             read_while_online: false,
             backfill_all_turns_on_miss: true,
             supports_session_checkpoints: true,
-            preserve_pre_compaction: false,
+            preserve_pre_compaction: true,
         })
     }
     fn resident_history(&self, binding: AgentBindingResolveRequest) -> Option<ResidentTimeline> {

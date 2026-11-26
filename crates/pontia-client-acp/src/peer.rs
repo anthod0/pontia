@@ -634,9 +634,8 @@ impl Peer {
         new_session_instructions_meta_key: Option<&str>,
         model: Option<&str>,
     ) -> Result<(SessionId, Value)> {
-        let initialize = self
-            .call(InitializeRequest::new(ProtocolVersion::V1))
-            .await?;
+        let initialize_request = self.state.lock().await.agent.initialize_request();
+        let initialize = self.call(initialize_request).await?;
         if initialize.protocol_version != ProtocolVersion::V1 {
             return Err(Error::CapabilityUnavailable(
                 "ACP peer did not negotiate protocol v1".into(),

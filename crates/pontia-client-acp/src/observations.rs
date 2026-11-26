@@ -165,7 +165,7 @@ impl Peer {
                     json!({"client_session_key": binding, "launch_cwd": cwd, "binding_metadata": metadata}),
                 ).await?;
             }
-            Observation::AutoCompactionStarted { operation } => {
+            Observation::CompactionStarted { operation, manual } => {
                 fact(
                     events,
                     session,
@@ -173,13 +173,14 @@ impl Peer {
                     None,
                     EventType::SessionCompactionStarted,
                     format!("acp:compaction_started:{operation}"),
-                    json!({"operation_id":operation,"trigger":"unknown"}),
+                    json!({"operation_id":operation,"trigger":if manual {"manual"} else {"unknown"}}),
                 )
                 .await?;
             }
             Observation::Compacted {
                 operation,
                 manual,
+                native_compaction_id,
                 tokens_before,
                 tokens_after,
             } => {
@@ -197,6 +198,7 @@ impl Peer {
                     EventType::SessionCompactionCompleted,
                     format!("acp:compacted:{operation}"),
                     json!({"operation_id":operation,"trigger":if manual {"manual"} else {"unknown"},
+                        "native_compaction_id":native_compaction_id,
                         "tokens_before":tokens_before,"tokens_after":tokens_after}),
                 )
                 .await?;

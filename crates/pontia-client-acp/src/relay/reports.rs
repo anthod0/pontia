@@ -41,8 +41,9 @@ pub(crate) enum Observation {
         reason: String,
         index: usize,
     },
-    AutoCompactionStarted {
+    CompactionStarted {
         operation: String,
+        manual: bool,
     },
     UsageEstimate {
         ratio: f64,
@@ -51,6 +52,7 @@ pub(crate) enum Observation {
     Compacted {
         operation: String,
         manual: bool,
+        native_compaction_id: Option<String>,
         tokens_before: Option<u64>,
         tokens_after: Option<u64>,
     },
@@ -113,6 +115,7 @@ pub(super) struct Reports {
     started: Option<String>,
     promotion: Option<Promotion>,
     automatic_compaction: Option<String>,
+    standard_compactions: HashMap<String, StandardCompaction>,
     next_index: usize,
     kiro_steers: crate::kiro::Steers,
     original_terminal: Option<(String, String)>,
@@ -120,6 +123,26 @@ pub(super) struct Reports {
     finished: Option<String>,
     pub(super) close_request_id: Option<Value>,
     closed: bool,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StandardCompactionStatus {
+    InProgress,
+    Completed,
+    Failed,
+}
+
+struct StandardCompaction {
+    status: StandardCompactionStatus,
+    operation: String,
+    manual: bool,
+    error: Option<String>,
+}
+
+impl StandardCompactionStatus {
+    fn terminal(self) -> bool {
+        self != Self::InProgress
+    }
 }
 
 impl Reports {
@@ -343,6 +366,93 @@ impl Reports {
         }
     }
 
+    fn observe_standard_compaction(
+        &mut self,
+        context: &mut Value,
+        frame: &Value,
+    ) -> Option<Observation> {
+        use agent_client_protocol::v1::schema::{CompactionStatus, SessionUpdate};
+
+        if frame["method"] != "session/update"
+            || frame["params"]["sessionId"] != context["native"]
+            || frame["params"]["_meta"]["isReplay"] == true
+        {
+            return None;
+        }
+        let update: SessionUpdate =
+            serde_json::from_value(frame["params"]["update"].clone()).ok()?;
+        let (id, status) = match update {
+            SessionUpdate::CompactionSummaryChunk(chunk) => {
+                let id = chunk.compaction_id.to_string();
+                (id, StandardCompactionStatus::InProgress)
+            }
+            SessionUpdate::CompactionUpdate(update) => {
+                let status = match update.status {
+                    CompactionStatus::InProgress => StandardCompactionStatus::InProgress,
+                    CompactionStatus::Completed => StandardCompactionStatus::Completed,
+                    CompactionStatus::Failed | CompactionStatus::Cancelled => {
+                        StandardCompactionStatus::Failed
+                    }
+                    _ => return None,
+                };
+                (update.compaction_id.to_string(), status)
+            }
+            _ => return None,
+        };
+        let current_operation = context["compaction"]["operation"]
+            .as_str()
+            .map(str::to_owned);
+        let (compaction, first) = match self.standard_compactions.entry(id.clone()) {
+            std::collections::hash_map::Entry::Vacant(entry) => (
+                entry.insert(StandardCompaction {
+                    status,
+                    operation: current_operation
+                        .clone()
+                        .unwrap_or_else(|| format!("acp:{id}")),
+                    manual: current_operation.is_some(),
+                    error: None,
+                }),
+                true,
+            ),
+            std::collections::hash_map::Entry::Occupied(entry) => (entry.into_mut(), false),
+        };
+        if let Some(error) = frame["params"]["update"].get("error") {
+            if error.is_null() {
+                compaction.error = None;
+            } else if let Some(error) = error.as_str() {
+                compaction.error = Some(error.into());
+            }
+        }
+        if !first && (compaction.status == status || compaction.status.terminal()) {
+            return None;
+        }
+        compaction.status = status;
+        let operation = compaction.operation.clone();
+        let manual = compaction.manual;
+        let error = compaction.error.clone();
+        if status.terminal() && manual {
+            context["compaction"] = Value::Null;
+        }
+        match status {
+            StandardCompactionStatus::InProgress => {
+                Some(Observation::CompactionStarted { operation, manual })
+            }
+            StandardCompactionStatus::Completed => Some(Observation::Compacted {
+                operation,
+                manual,
+                native_compaction_id: Some(id),
+                tokens_before: None,
+                tokens_after: None,
+            }),
+            StandardCompactionStatus::Failed => Some(Observation::CompactionFailed {
+                operation,
+                manual,
+                aborted: frame["params"]["update"]["status"] == "cancelled",
+                message: error.unwrap_or_else(|| "ACP context compaction failed".into()),
+            }),
+        }
+    }
+
     pub fn observe(&mut self, context: &mut Value, frame: &Value) -> bool {
         if self.closed {
             // Outstanding RPCs can still receive replies after the Session closes.
@@ -405,13 +515,30 @@ impl Reports {
         let prompt = context["active"].clone();
         let update = &frame["params"]["update"];
         if context["compaction_events"] == true
-            && let Some(observation) = match context["compaction_protocol"].as_str() {
-                Some("grok") => crate::compaction::observe(context, frame),
-                Some("kiro") => {
-                    crate::kiro::compaction(context, frame, &mut self.automatic_compaction)
-                }
-                _ => None,
-            }
+            && let Some(observation) =
+                self.observe_standard_compaction(context, frame)
+                    .or_else(|| {
+                        let standard_manual_pending =
+                            self.standard_compactions.values().any(|compaction| {
+                                compaction.manual
+                                    && compaction.status == StandardCompactionStatus::InProgress
+                            });
+                        if standard_manual_pending
+                            && frame.get("method").is_none()
+                            && frame["id"] == context["compaction"]["request_id"]
+                        {
+                            return None;
+                        }
+                        match context["compaction_protocol"].as_str() {
+                            Some("grok") => crate::compaction::observe(context, frame),
+                            Some("kiro") => crate::kiro::compaction(
+                                context,
+                                frame,
+                                &mut self.automatic_compaction,
+                            ),
+                            _ => None,
+                        }
+                    })
         {
             self.push(observation);
         }
@@ -707,7 +834,7 @@ mod tests {
             .collect();
         assert!(matches!(observations.as_slice(), [
             Observation::UsageEstimate {ratio:0.095, size:Some(200000)},
-            Observation::AutoCompactionStarted {operation:start},
+            Observation::CompactionStarted {operation:start,manual:false},
             Observation::Compacted {operation:end,manual:false,..},
             Observation::Compacted {operation,manual:true,..},
             Observation::CompactionFailed {operation:failed,manual:true,message,..},
@@ -739,5 +866,178 @@ mod tests {
             serde_json::to_value(&reports.pending[0].report).unwrap(),
             expected
         );
+    }
+
+    #[test]
+    fn standard_compaction_updates_map_to_one_lifecycle() {
+        let mut reports = Reports::default();
+        let mut context = json!({
+            "ready": true,
+            "native": "native",
+            "compaction_events": true,
+            "compaction_protocol": "grok"
+        });
+        let update = |status: &str| {
+            json!({
+                "method": "session/update",
+                "params": {
+                    "sessionId": "native",
+                    "update": {
+                        "sessionUpdate": "compaction_update",
+                        "compactionId": "compact-1",
+                        "status": status
+                    }
+                }
+            })
+        };
+        reports.observe(
+            &mut context,
+            &json!({
+                "method": "session/update",
+                "params": {
+                    "sessionId": "native",
+                    "update": {
+                        "sessionUpdate": "compaction_summary_chunk",
+                        "compactionId": "compact-1",
+                        "content": {"type": "text", "text": "summary"}
+                    }
+                }
+            }),
+        );
+        reports.observe(&mut context, &update("in_progress"));
+        reports.observe(&mut context, &update("completed"));
+        reports.observe(&mut context, &update("failed"));
+        let observations: Vec<_> = reports
+            .pending
+            .iter()
+            .map(|pending| &pending.report.observation)
+            .collect();
+        assert!(matches!(observations.as_slice(), [
+            Observation::CompactionStarted { operation: start, manual: false },
+            Observation::Compacted {
+                operation: completed,
+                manual: false,
+                native_compaction_id: Some(native),
+                tokens_before: None,
+                tokens_after: None,
+            }
+        ] if start == "acp:compact-1" && completed == start && native == "compact-1"));
+    }
+
+    #[test]
+    fn standard_compaction_rejects_foreign_replay_and_reports_cancellation() {
+        let mut reports = Reports::default();
+        let mut context = json!({"ready": true, "native": "native", "compaction_events": true});
+        let mut frame = json!({
+            "method": "session/update",
+            "params": {
+                "sessionId": "foreign",
+                "update": {
+                    "sessionUpdate": "compaction_update",
+                    "compactionId": "compact-2",
+                    "status": "cancelled"
+                }
+            }
+        });
+        reports.observe(&mut context, &frame);
+        frame["params"]["sessionId"] = json!("native");
+        frame["params"]["_meta"] = json!({"isReplay": true});
+        reports.observe(&mut context, &frame);
+        frame["params"]["_meta"] = json!({"isReplay": false});
+        reports.observe(&mut context, &frame);
+        assert!(matches!(
+            reports.pending.front().map(|pending| &pending.report.observation),
+            Some(Observation::CompactionFailed {
+                operation,
+                manual: false,
+                aborted: true,
+                ..
+            }) if operation == "acp:compact-2"
+        ));
+        assert_eq!(reports.pending.len(), 1);
+    }
+
+    #[test]
+    fn standard_compaction_settles_the_matching_manual_operation() {
+        let mut reports = Reports::default();
+        let mut context = json!({
+            "ready": true,
+            "native": "native",
+            "compaction_events": true,
+            "compaction_protocol": "kiro",
+            "compaction": {"operation": "manual", "request_id": 42}
+        });
+        let update = |status: &str| {
+            json!({
+                "method": "session/update",
+                "params": {
+                    "sessionId": "native",
+                    "update": {
+                        "sessionUpdate": "compaction_update",
+                        "compactionId": "native-manual",
+                        "status": status
+                    }
+                }
+            })
+        };
+        reports.observe(&mut context, &update("in_progress"));
+        reports.observe(
+            &mut context,
+            &json!({"id": 42, "result": {"success": true}}),
+        );
+        reports.observe(&mut context, &update("completed"));
+        reports.observe(
+            &mut context,
+            &json!({"id": 42, "result": {"success": true}}),
+        );
+        let observations: Vec<_> = reports
+            .pending
+            .iter()
+            .map(|pending| &pending.report.observation)
+            .collect();
+        assert!(matches!(observations.as_slice(), [
+            Observation::CompactionStarted { operation: started, manual: true },
+            Observation::Compacted {
+                operation: completed,
+                manual: true,
+                native_compaction_id: Some(native),
+                ..
+            }
+        ] if started == "manual" && completed == started && native == "native-manual"));
+        assert!(context["compaction"].is_null());
+    }
+
+    #[test]
+    fn standard_compaction_retains_error_patches_until_failure() {
+        let mut reports = Reports::default();
+        let mut context = json!({"ready": true, "native": "native", "compaction_events": true});
+        let update = |status: &str, error: Value| {
+            json!({
+                "method": "session/update",
+                "params": {
+                    "sessionId": "native",
+                    "update": {
+                        "sessionUpdate": "compaction_update",
+                        "compactionId": "failed",
+                        "status": status,
+                        "error": error
+                    }
+                }
+            })
+        };
+        reports.observe(
+            &mut context,
+            &update("in_progress", json!("native failure")),
+        );
+        let mut failed = update("failed", Value::Null);
+        failed["params"]["update"]
+            .as_object_mut()
+            .unwrap()
+            .remove("error");
+        reports.observe(&mut context, &failed);
+        assert!(matches!(
+            reports.pending.back().map(|pending| &pending.report.observation),
+            Some(Observation::CompactionFailed { message, .. }) if message == "native failure"
+        ));
     }
 }

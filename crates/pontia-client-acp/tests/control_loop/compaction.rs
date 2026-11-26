@@ -92,3 +92,40 @@ async fn manual_compaction_survives_reattachment_and_replays_one_checkpoint() {
     assert_eq!(h.requests("_x.ai/compact_conversation"), 2);
     h.stop().await;
 }
+
+#[tokio::test]
+async fn standard_compaction_updates_report_one_paired_lifecycle() {
+    let h = Harness::new(&[("ACP_COMPACT", "1"), ("ACP_STANDARD_COMPACTION", "1")]).await;
+    let session = h.create("grok").await.unwrap();
+    let turn = h
+        .app
+        .turn_commands()
+        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .await
+        .unwrap()
+        .unwrap();
+    h.release("update-1");
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while h.events(&session, "session.compaction_completed").await == 0 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    h.release("release-1");
+    h.wait_turn(&session, &turn.turn_id, "completed").await;
+    assert_eq!(h.events(&session, "session.compaction_started").await, 1);
+    assert_eq!(h.events(&session, "session.compaction_completed").await, 1);
+    let payload: String = sqlx::query_scalar(
+        "SELECT payload FROM events WHERE session_id=? AND event_type='session.compaction_completed'",
+    )
+    .bind(&session)
+    .fetch_one(&h.app.db())
+    .await
+    .unwrap();
+    let payload: Value = serde_json::from_str(&payload).unwrap();
+    assert_eq!(payload["operation_id"], "acp:standard-one");
+    assert_eq!(payload["native_compaction_id"], "standard-one");
+    assert_eq!(payload["trigger"], "unknown");
+    h.stop().await;
+}
