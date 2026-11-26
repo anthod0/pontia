@@ -598,6 +598,7 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
   ["GET", "/auth/validate", () => ({ valid: true })],
 
   ["GET", "/agent-client-setup", ({ device }) => ({ operation: device.data.clientSetup })],
+  ["GET", "/agent-client-operations/latest", () => ({ operation: null })],
   [
     "POST",
     "/agent-clients/:type/:key/setup",

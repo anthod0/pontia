@@ -74,7 +74,7 @@
                   </Item.Media>
                   <Item.Content class="min-w-0 gap-0.5 text-left">
                     <Item.Title class="text-[15px] text-heading">{client.name}</Item.Title>
-                    <ClientStatus class="text-[13px]" status={clientStatus(client, settings.operationFor(client))} />
+                    <ClientStatus class="text-[13px]" status={clientStatus(client, settings.operationFor(client), settings.installOperationFor(client))} />
                   </Item.Content>
                   <CaretRightIcon class="size-4 shrink-0 text-muted-foreground" />
                 </button>

@@ -127,11 +127,81 @@ export interface AgentClientView {
     detail?: string;
   };
   setup_command: string | null;
+  install?: AgentClientInstallDetails;
+  auth_supported: boolean;
   version: string | null;
   version_checked_at: string | null;
   has_record: boolean;
   created_at: string | null;
   updated_at: string | null;
+}
+
+export interface AgentClientInstallPrerequisite {
+  id: string;
+  label: string;
+  required: boolean;
+  satisfied: boolean;
+  detected_detail: string | null;
+  missing_hint: string | null;
+}
+
+export interface AgentClientInstallMethod {
+  id: string;
+  label: string;
+  recommended: boolean;
+  supported_on_platform: boolean;
+  source_summary: string;
+  target_summary: string;
+  prerequisites: AgentClientInstallPrerequisite[];
+  ready: boolean;
+}
+
+export interface AgentClientAuthGuidance {
+  status: "configured" | "not_configured" | "unknown";
+  login_command: string | null;
+  headless_login_command: string | null;
+  env_vars: string[];
+  docs_url: string | null;
+}
+
+export interface AgentClientInstallDetails {
+  supported: boolean;
+  provenance:
+    | "not_installed"
+    | "pontia_managed"
+    | "vendor_native"
+    | "npm_global"
+    | "homebrew"
+    | "external_unmanaged";
+  available_actions: string[];
+  methods: AgentClientInstallMethod[];
+  auth: AgentClientAuthGuidance;
+}
+
+export interface AgentClientOperationState {
+  id: string;
+  client_type: string;
+  client_key: string;
+  method_id: string;
+  phase: "preflight" | "installing" | "verifying" | "setting_up" | "done";
+  status: "running" | "succeeded" | "failed" | "cancelled";
+  cancel_requested: boolean;
+  error: string | null;
+}
+
+export interface AgentClientOperation extends AgentClientOperationState {
+  log_size: number;
+  output_offset: number;
+  next_offset: number;
+  output: string;
+}
+
+export interface AgentClientAuthStatus {
+  state: "authenticated" | "unauthenticated" | "expired" | "unknown" | "unsupported";
+  account?: { label?: string; plan?: string; provider?: string; workspace?: string };
+  detail?: string;
+  checked_at: string;
+  supports_logout: boolean;
 }
 
 export interface AgentClientSetupOperation {

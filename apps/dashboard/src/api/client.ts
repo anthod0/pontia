@@ -7,6 +7,8 @@ import type {
   AgentClientModels,
   AgentClientView,
   AgentClientSetupOperation,
+  AgentClientOperation,
+  AgentClientAuthStatus,
   Bot,
   BotMessage,
   BotMessagePage,
@@ -265,6 +267,97 @@ export function createApi(device: DeviceRuntime) {
     return (
       await request<{ operation: AgentClientSetupOperation | null }>("/agent-client-setup", options)
     ).operation;
+  }
+
+  async function installAgentClient(
+    target: AgentClientView,
+    methodId: string,
+  ): Promise<AgentClientOperation> {
+    return (
+      await request<{ operation: AgentClientOperation }>(`${agentClientPath(target)}/install`, {
+        method: "POST",
+        body: { method_id: methodId, auto_setup: true, auto_enable: true },
+        mutating: true,
+        idempotency: false,
+        retryNetworkErrors: false,
+      })
+    ).operation;
+  }
+
+  async function getLatestAgentClientOperation(
+    options: ReadRequestOptions = {},
+  ): Promise<AgentClientOperation | null> {
+    return (
+      await request<{ operation: AgentClientOperation | null }>(
+        "/agent-client-operations/latest",
+        options,
+      )
+    ).operation;
+  }
+
+  async function getAgentClientOperation(
+    id: string,
+    offset: number,
+    options: ReadRequestOptions = {},
+  ): Promise<AgentClientOperation> {
+    return (
+      await request<{ operation: AgentClientOperation }>(
+        `/agent-client-operations/${encodeURIComponent(id)}?offset=${offset}`,
+        options,
+      )
+    ).operation;
+  }
+
+  async function cancelAgentClientOperation(id: string): Promise<AgentClientOperation> {
+    return (
+      await request<{ operation: AgentClientOperation }>(
+        `/agent-client-operations/${encodeURIComponent(id)}/cancel`,
+        {
+          method: "POST",
+          mutating: true,
+          idempotency: false,
+          retryNetworkErrors: false,
+        },
+      )
+    ).operation;
+  }
+
+  async function streamAgentClientOperation(
+    id: string,
+    offset: number,
+    signal: AbortSignal,
+  ): Promise<Response> {
+    const headers = new Headers();
+    device.access.applyApiAuthentication(headers);
+    headers.set("Last-Event-ID", String(offset));
+    const response = await device.access.apiFetch(
+      device.access.apiUrl(
+        `${API_BASE}/agent-client-operations/${encodeURIComponent(id)}/stream?offset=${offset}`,
+      ),
+      {
+        headers,
+        credentials: device.access.apiCredentials,
+        signal: device.access.apiSignal(signal),
+      },
+    );
+    if (!response.ok || !response.body) {
+      if (isAuthenticationFailure(response.status)) device.access.handleApiAuthenticationFailure();
+      throw new ApiError(
+        `Operation stream failed: ${response.status} ${response.statusText}`,
+        "operation_stream_failed",
+        response.status,
+      );
+    }
+    return response;
+  }
+
+  async function getAgentClientAuth(
+    target: AgentClientView,
+    options: ReadRequestOptions = {},
+  ): Promise<AgentClientAuthStatus> {
+    return (
+      await request<{ auth: AgentClientAuthStatus }>(`${agentClientPath(target)}/auth`, options)
+    ).auth;
   }
 
   async function listSessionCreationOptions(
@@ -1023,6 +1116,12 @@ export function createApi(device: DeviceRuntime) {
     resetAgentClient,
     setupAgentClient,
     getAgentClientSetup,
+    installAgentClient,
+    getLatestAgentClientOperation,
+    getAgentClientOperation,
+    cancelAgentClientOperation,
+    streamAgentClientOperation,
+    getAgentClientAuth,
     listSessionCreationOptions,
     listPendingInteractions,
     getInteraction,

@@ -84,7 +84,7 @@
                   />
                   <span class="min-w-0 flex-1 space-y-0.5">
                     <span class="block truncate text-sm font-medium text-heading">{client.name}</span>
-                    <ClientStatus status={clientStatus(client, settings.operationFor(client))} />
+                    <ClientStatus status={clientStatus(client, settings.operationFor(client), settings.installOperationFor(client))} />
                   </span>
                 </button>
               {/each}

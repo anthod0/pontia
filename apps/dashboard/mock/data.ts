@@ -374,6 +374,7 @@ function agentClient(
       clientType === "acp"
         ? null
         : `pontia setup ${clientType === "claude-agent" ? "claude" : clientType}`,
+    auth_supported: false,
     enabled: true,
     version,
     version_checked_at: version ? new Date().toISOString() : null,

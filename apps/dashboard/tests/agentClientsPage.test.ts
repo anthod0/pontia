@@ -14,6 +14,12 @@ const api = vi.hoisted(() => ({
   resetAgentClient: vi.fn(),
   setupAgentClient: vi.fn(),
   getAgentClientSetup: vi.fn(),
+  installAgentClient: vi.fn(),
+  getLatestAgentClientOperation: vi.fn(),
+  getAgentClientOperation: vi.fn(),
+  cancelAgentClientOperation: vi.fn(),
+  streamAgentClientOperation: vi.fn(),
+  getAgentClientAuth: vi.fn(),
 }));
 vi.mock("../src/api/client", async (importOriginal) => {
   const original = await importOriginal();
@@ -34,6 +40,7 @@ const peer = (key: string): AgentClientView => ({
   detection: { status: "unknown", detail: null },
   setup: { status: "not_required" },
   setup_command: null,
+  auth_supported: false,
   version: null,
   version_checked_at: null,
   has_record: true,
@@ -47,6 +54,7 @@ const nav = () => screen.getByRole("navigation", { name: "Agent clients" });
 beforeEach(() => {
   vi.resetAllMocks();
   api.getAgentClientSetup.mockResolvedValue(null);
+  api.getLatestAgentClientOperation.mockResolvedValue(null);
   api.listAgentProfiles.mockResolvedValue([]);
   api.listAgentClients.mockResolvedValue([peer("grok"), pi]);
 });
@@ -193,6 +201,168 @@ test("Grok can be enabled and reset", async () => {
       expect.objectContaining({ client_key: "grok" }),
     ),
   );
+});
+
+test("an available installer is confirmed and starts with automatic setup and enablement", async () => {
+  const user = userEvent.setup();
+  const method = {
+    id: "official_script",
+    label: "Official installer",
+    recommended: true,
+    supported_on_platform: true,
+    source_summary: "https://example.test/install.sh",
+    target_summary: "~/.local/bin/kiro-cli",
+    prerequisites: [
+      {
+        id: "bash",
+        label: "bash",
+        required: true,
+        satisfied: true,
+        detected_detail: "/usr/bin/bash",
+        missing_hint: null,
+      },
+    ],
+    ready: true,
+  };
+  const client: AgentClientView = {
+    ...peer("kiro"),
+    name: "Kiro",
+    enabled: false,
+    detection: { status: "not_detected", detail: null },
+    install: {
+      supported: true,
+      provenance: "not_installed",
+      available_actions: ["install"],
+      methods: [method],
+      auth: {
+        status: "not_configured",
+        login_command: "kiro-cli login",
+        headless_login_command: null,
+        env_vars: [],
+        docs_url: null,
+      },
+    },
+  };
+  api.listAgentClients.mockResolvedValue([client]);
+  api.installAgentClient.mockResolvedValue({
+    id: "install-1",
+    client_type: "acp",
+    client_key: "kiro",
+    method_id: method.id,
+    phase: "done",
+    status: "succeeded",
+    cancel_requested: false,
+    error: null,
+    log_size: 8,
+    output_offset: 0,
+    next_offset: 8,
+    output: "verified",
+  });
+  render(AgentClientsPage);
+  await user.click(await screen.findByRole("button", { name: /^Kiro/ }));
+  await user.click(screen.getByRole("button", { name: "Install", exact: true }));
+  const dialog = screen.getByRole("dialog");
+  await user.click(within(dialog).getByRole("button", { name: "Install", exact: true }));
+  await waitFor(() => expect(api.installAgentClient).toHaveBeenCalledWith(client, method.id));
+  expect(screen.getByRole("button", { name: "View output" })).toBeEnabled();
+});
+
+const installOperation = (
+  status: "running" | "succeeded" | "failed" | "cancelled" = "running",
+) => ({
+  id: "install-1",
+  client_type: "acp",
+  client_key: "kiro",
+  method_id: "official_script",
+  phase: status === "succeeded" ? ("done" as const) : ("installing" as const),
+  status,
+  cancel_requested: false,
+  error: status === "failed" ? "Process exited with 1" : null,
+  log_size: 6,
+  output_offset: 0,
+  next_offset: 6,
+  output: "first\n",
+});
+
+test("cancelling an installation requires confirmation and keeps the dialog open while cancellation is pending", async () => {
+  const user = userEvent.setup();
+  const client = { ...peer("kiro"), name: "Kiro" };
+  const running = installOperation();
+  api.listAgentClients.mockResolvedValue([client]);
+  api.getLatestAgentClientOperation.mockResolvedValue(running);
+  api.streamAgentClientOperation.mockImplementation(() => new Promise(() => {}));
+  api.cancelAgentClientOperation.mockResolvedValue({ ...running, cancel_requested: true });
+  render(AgentClientsPage);
+  await user.click(await screen.findByRole("button", { name: "Cancel" }));
+  const dialog = screen.getByRole("alertdialog");
+  await user.click(within(dialog).getByRole("button", { name: "Cancel installation" }));
+  await waitFor(() => expect(api.cancelAgentClientOperation).toHaveBeenCalledWith(running.id));
+  expect(screen.getByRole("alertdialog")).toBeVisible();
+  expect(within(dialog).getByRole("button", { name: "Cancelling…" })).toBeDisabled();
+});
+
+test("another running operation disables installation retry", async () => {
+  const client = { ...peer("kiro"), name: "Kiro" };
+  api.listAgentClients.mockResolvedValue([client, setupClient()]);
+  api.getLatestAgentClientOperation.mockResolvedValue(installOperation("failed"));
+  api.getAgentClientSetup.mockResolvedValue(operation("running"));
+  render(AgentClientsPage);
+  const retry = await screen.findByRole("button", { name: "Retry" });
+  expect(retry).toBeDisabled();
+});
+
+test("a disconnected installation stream resumes from the next byte offset", async () => {
+  const client = { ...peer("kiro"), name: "Kiro" };
+  const running = installOperation();
+  api.listAgentClients.mockResolvedValue([client]);
+  api.getLatestAgentClientOperation.mockResolvedValue(running);
+  api.streamAgentClientOperation
+    .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+    .mockImplementation(() => new Promise(() => {}));
+  api.getAgentClientOperation.mockResolvedValue({
+    ...running,
+    log_size: 13,
+    output_offset: 6,
+    next_offset: 13,
+    output: "second\n",
+  });
+  render(AgentClientsPage);
+  await waitFor(
+    () =>
+      expect(api.streamAgentClientOperation).toHaveBeenLastCalledWith(
+        running.id,
+        13,
+        expect.any(AbortSignal),
+      ),
+    { timeout: 4000 },
+  );
+  expect(api.getAgentClientOperation).toHaveBeenCalledWith(running.id, 6, {
+    signal: expect.any(AbortSignal),
+  });
+});
+
+test("a reopened completed installation loads output omitted from the latest tail snapshot", async () => {
+  const user = userEvent.setup();
+  const client = { ...peer("kiro"), name: "Kiro" };
+  const completed = {
+    ...installOperation("succeeded"),
+    log_size: 70_000,
+    output_offset: 65_536,
+    next_offset: 70_000,
+    output: "tail",
+  };
+  api.listAgentClients.mockResolvedValue([client]);
+  api.getLatestAgentClientOperation.mockResolvedValue(completed);
+  api.getAgentClientOperation.mockImplementation(async (_id, offset) =>
+    offset === 0
+      ? { ...completed, output_offset: 0, next_offset: 65_536, output: "head" }
+      : completed,
+  );
+  render(AgentClientsPage);
+  await user.click(await screen.findByRole("button", { name: "View output" }));
+  expect(within(screen.getByRole("dialog")).getByText("headtail")).toBeVisible();
+  expect(api.getAgentClientOperation).toHaveBeenNthCalledWith(1, completed.id, 0);
+  expect(api.getAgentClientOperation).toHaveBeenNthCalledWith(2, completed.id, 65_536);
 });
 
 const setupClient = (): AgentClientView => ({

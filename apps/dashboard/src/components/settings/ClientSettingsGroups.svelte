@@ -19,6 +19,8 @@
   import { cn } from '$lib/utils'
   import type { AgentClientView } from '../../api/types'
   import type { createAgentClients } from '../../features/settings/agentClients.svelte'
+  import AgentClientInstall from './AgentClientInstall.svelte'
+  import AgentClientAccount from './AgentClientAccount.svelte'
 
   let {
     settings,
@@ -31,8 +33,9 @@
   const profilesPath = '/settings/agent-profiles'
   const detected = $derived(client.detection.status !== 'not_detected')
   const operation = $derived(settings.operationFor(client))
+  const installOperation = $derived(settings.installOperationFor(client))
   const profileCount = $derived(settings.profileCount(client))
-  const setupDisabled = $derived(settings.setupBusy || settings.setupLoading || !!settings.setupConnectionError)
+  const setupDisabled = $derived(settings.operationBusy || settings.setupLoading || !!settings.setupConnectionError)
   const showIntegration = $derived(!!client.setup_command && client.setup.status !== 'not_required')
 
   const row = 'min-h-14 flex-nowrap gap-3 rounded-none px-0 py-2.5'
@@ -55,6 +58,10 @@
 <div class="min-w-0">
   <section>
     <Item.Group class="gap-0">
+      <AgentClientInstall {settings} {client} {mobile} />
+      {#if (client.detection.status === 'not_detected' && (client.install?.methods.length ?? 0) > 0) || installOperation}
+        <Item.Separator class={separator} />
+      {/if}
       <Item.Root class={row}>
         <Item.Content class="min-w-0 gap-0.5">
           <Item.Title class={title}>{$t('clients.enable')}</Item.Title>
@@ -65,7 +72,7 @@
             aria-label={$t('clients.enableNamed', { name: client.name })}
             class={cn(mobile && 'after:-inset-x-2.5 after:-inset-y-3.5')}
             checked={client.enabled}
-            disabled={settings.saving(client)}
+            disabled={settings.saving(client) || installOperation?.status === 'running'}
             onCheckedChange={() => settings.toggle(client)}
           />
         </Item.Actions>
@@ -219,6 +226,10 @@
           </Item.Actions>
         </Item.Root>
       {/if}
+      {#if detected}
+        <Item.Separator class={separator} />
+        <AgentClientAccount {client} {mobile} />
+      {/if}
     </Item.Group>
   </section>
 
@@ -235,7 +246,7 @@
               variant="ghost"
               size="sm"
               class={cn(button, lastGhost, 'text-destructive hover:bg-destructive/10 hover:text-destructive')}
-              disabled={settings.saving(client) || settings.setupBusy}
+              disabled={settings.saving(client) || settings.operationBusy}
               onclick={() => (resetOpen = true)}>{$t('clients.restoreDefault')}</Button
             >
           </Item.Actions>
