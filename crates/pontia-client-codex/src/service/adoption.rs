@@ -76,6 +76,7 @@ impl CodexService {
                     metadata: json!({"codex_control_root":runtime.root,"codex_launch_cwd":cwd}),
                     session_instructions,
                     launch_mode: runtime.target.launch_mode(),
+                    ..Default::default()
                 },
                 Some(&expected_session),
             )

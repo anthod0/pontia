@@ -18,11 +18,26 @@ pub struct NativeSessionIdentity {
     pub client_session_file: Option<String>,
 }
 
-#[derive(Default)]
 pub struct NativeSubscription {
     pub metadata: Value,
+    pub binding_metadata: Value,
     pub session_instructions: Option<Value>,
     pub launch_mode: pontia_core::LaunchMode,
+    pub runtime_environment: Value,
+    pub credential_env: Option<String>,
+}
+
+impl Default for NativeSubscription {
+    fn default() -> Self {
+        Self {
+            metadata: json!({}),
+            binding_metadata: json!({}),
+            session_instructions: None,
+            launch_mode: Default::default(),
+            runtime_environment: json!({}),
+            credential_env: None,
+        }
+    }
 }
 
 pub struct NativeSessionObservation {
@@ -73,8 +88,11 @@ impl NativeSessionService {
     ) -> Result<String> {
         let NativeSubscription {
             metadata,
+            binding_metadata,
             session_instructions,
             launch_mode,
+            runtime_environment,
+            credential_env,
         } = subscription;
         let workspace =
             crate::workspaces::require_active_workspace(&self.pool, &identity.launch_cwd).await?;
@@ -103,7 +121,7 @@ impl NativeSessionService {
                     PontiaEventSource::RuntimeManager,
                     client,
                     PontiaEventType::SessionCreated,
-                    json!({"workspace":workspace.canonical_path,"metadata":metadata,"session_instructions":session_instructions,"launch_mode":launch_mode}),
+                    json!({"workspace":workspace.canonical_path,"metadata":metadata,"session_instructions":session_instructions,"launch_mode":launch_mode,"runtime_environment":runtime_environment,"credential_env":credential_env}),
                 ),
                 UpsertAgentBindingRequest {
                     session_id: session.clone(),
@@ -111,7 +129,7 @@ impl NativeSessionService {
                     client_session_key: native_key.into(),
                     launch_cwd: workspace.canonical_path.clone(),
                     client_session_file: identity.client_session_file,
-                    metadata: json!({}),
+                    metadata: binding_metadata,
                 },
             )
             .await?;

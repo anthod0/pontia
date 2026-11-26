@@ -6,7 +6,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 }});
 const { connectRuntime, CONTROL_VERSION } = await import("../../../../clients/shared/control-socket.ts");
 import { randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, readFileSync, statSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { execFileSync } from "node:child_process";
@@ -33,7 +33,7 @@ if (process.argv[2] === "history-info") {
 } else {
   const config = { ...input, ...input.launch };
   const host = randomUUID();
-  const native = config.resume ?? randomUUID();
+  const native = config.native_session_id ?? config.resume ?? randomUUID();
   const history = (message) =>
     appendFileSync(
       join(config.cwd, `history-${native}.jsonl`),
@@ -204,6 +204,42 @@ if (process.argv[2] === "history-info") {
         const applied = request.reasoning_effort === "max" ? "low" : request.reasoning_effort;
         event({ kind: "reasoning_effort", reasoning_effort: applied });
         send({ type: "response", id: request.id, status: "accepted" });
+      } else if (request.method === "fork") {
+        const messages = readFileSync(join(config.cwd, `history-${native}.jsonl`), "utf8")
+          .trim()
+          .split("\n")
+          .map(JSON.parse);
+        const target = messages.findIndex((message) => message.uuid === request.target_message_id);
+        if (target < 0 || messages[target].type !== "user") {
+          send({ type: "response", id: request.id, status: "rejected" });
+          return;
+        }
+        const child = randomUUID();
+        const copied = messages.slice(0, target).map((message) => ({
+          ...message,
+          session_id: child,
+          uuid: randomUUID(),
+        }));
+        if (copied.length)
+          writeFileSync(
+            join(config.cwd, `history-${child}.jsonl`),
+            copied.map(JSON.stringify).join("\n") + "\n",
+          );
+        const requested = new Set(request.message_ids);
+        send({
+          type: "response",
+          id: request.id,
+          status: "accepted",
+          session_id: child,
+          resume: copied.length > 0,
+          message_ids: Object.fromEntries(
+            messages
+              .slice(0, target)
+              .flatMap((message, index) =>
+                requested.has(message.uuid) ? [[message.uuid, copied[index].uuid]] : [],
+              ),
+          ),
+        });
       } else if (request.method === "steer") {
         if (!active?.started || request.target_input_id !== active.id) {
           send({ type: "response", id: request.id, status: "rejected" });

@@ -650,13 +650,11 @@ test.each(["completed", "interrupted"] as const)(
       turn_id: "previous",
       state,
       input: { summary: "Original prompt" },
-      metadata: { native_turn_id: "native-previous" },
     });
     const active = turn({
       turn_id: "active",
       state: "running",
       input: { summary: "Running prompt" },
-      metadata: { native_turn_id: "native-active" },
     });
     prepareBranchChat([previous, active], {
       state: "busy",

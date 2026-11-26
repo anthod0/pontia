@@ -458,7 +458,6 @@ export function createSessionChat(routeSessionId: () => string | null) {
         seenTurnIds.add(message.turnId);
         const projectedTurn = turns.get(message.turnId);
         if (!projectedTurn || !eligibleTurnStates.has(projectedTurn.state)) return [];
-        if (session.capabilities.fork_session && !projectedTurn.metadata.native_turn_id) return [];
         if (!projectedTurn.input?.summary?.trim() || !message.content.trim()) return [];
         return [[message.id, message.content]];
       }),

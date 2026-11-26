@@ -91,11 +91,11 @@ impl SessionCommandService {
             stored
         } else {
             let eligible: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM turns t JOIN native_turn_bindings n ON n.session_id=t.session_id AND n.turn_id=t.turn_id WHERE t.session_id=? AND t.turn_id=? AND t.state IN ('completed','failed','interrupted'))",
+                "SELECT EXISTS(SELECT 1 FROM turns WHERE session_id=? AND turn_id=? AND state IN ('completed','failed','interrupted'))",
             ).bind(session_id).bind(&request.turn_id).fetch_one(&self.pool).await?;
             if !eligible {
                 return Err(Error::StateConflict(
-                    "Fork requires a completed native Turn boundary".into(),
+                    "Fork requires a completed Turn boundary".into(),
                 ));
             }
             let mut operation = ForkOperation {

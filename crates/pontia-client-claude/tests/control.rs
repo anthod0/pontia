@@ -14,6 +14,113 @@ struct Harness {
 }
 
 #[tokio::test]
+async fn dashboard_fork_excludes_the_edited_turn_and_continues_from_inherited_history() {
+    let h = Harness::new().await;
+    let source = h.create("first prompt").await;
+    h.gate(&source, 1, "start");
+    h.gate(&source, 1, "finish");
+    h.wait_states(&source, &["completed"]).await;
+    h.submit(&source, "original second prompt").await;
+    h.gate(&source, 2, "start");
+    h.gate(&source, 2, "finish");
+    let turns = h.wait_states(&source, &["completed", "completed"]).await;
+
+    let outcome = h
+        .app
+        .session_commands()
+        .fork_session(
+            &source,
+            pontia_agent_control::sessions::ForkSessionRequest {
+                operation_id: "edit-second".into(),
+                turn_id: turns[1].0.clone(),
+            },
+        )
+        .await
+        .unwrap();
+    let child = outcome
+        .session_id
+        .clone()
+        .unwrap_or_else(|| panic!("fork failed: {}", serde_json::to_string(&outcome).unwrap()));
+    let repeated = h
+        .app
+        .session_commands()
+        .fork_session(
+            &source,
+            pontia_agent_control::sessions::ForkSessionRequest {
+                operation_id: "edit-second".into(),
+                turn_id: turns[1].0.clone(),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(repeated.session_id.as_deref(), Some(child.as_str()));
+    let inherited: Vec<String> =
+        sqlx::query_scalar("SELECT input_summary FROM turns WHERE session_id=? ORDER BY rowid")
+            .bind(&child)
+            .fetch_all(&h.app.db())
+            .await
+            .unwrap();
+    assert_eq!(inherited, ["first prompt"]);
+    let lineage: (String, String) = sqlx::query_as(
+        "SELECT parent_session_id,forked_from_turn_id FROM session_lineage WHERE child_session_id=?",
+    )
+    .bind(&child)
+    .fetch_one(&h.app.db())
+    .await
+    .unwrap();
+    assert_eq!(lineage, (source, turns[1].0.clone()));
+
+    h.submit(&child, "edited second prompt").await;
+    h.gate(&child, 1, "start");
+    h.gate(&child, 1, "finish");
+    h.wait_states(&child, &["completed", "completed"]).await;
+    let inputs: Vec<String> =
+        sqlx::query_scalar("SELECT input_summary FROM turns WHERE session_id=? ORDER BY rowid")
+            .bind(&child)
+            .fetch_all(&h.app.db())
+            .await
+            .unwrap();
+    assert_eq!(inputs, ["first prompt", "edited second prompt"]);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn dashboard_fork_of_the_first_turn_starts_with_empty_history() {
+    let h = Harness::new().await;
+    let source = h.create("original prompt").await;
+    h.gate(&source, 1, "start");
+    h.gate(&source, 1, "finish");
+    let turns = h.wait_states(&source, &["completed"]).await;
+    let outcome = h
+        .app
+        .session_commands()
+        .fork_session(
+            &source,
+            pontia_agent_control::sessions::ForkSessionRequest {
+                operation_id: "edit-first".into(),
+                turn_id: turns[0].0.clone(),
+            },
+        )
+        .await
+        .unwrap();
+    let child = outcome.session_id.unwrap();
+    assert!(h.turns(&child).await.is_empty());
+
+    h.submit(&child, "edited prompt").await;
+    h.gate(&child, 1, "start");
+    h.gate(&child, 1, "finish");
+    h.wait_states(&child, &["completed"]).await;
+    let inputs: Vec<String> =
+        sqlx::query_scalar("SELECT input_summary FROM turns WHERE session_id=?")
+            .bind(&child)
+            .fetch_all(&h.app.db())
+            .await
+            .unwrap();
+    assert_eq!(inputs, ["edited prompt"]);
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn replayed_start_without_a_turn_id_returns_the_allocated_claude_turn() {
     use pontia_agent_control::ReportedFact;
     use pontia_core::domain::EventType;

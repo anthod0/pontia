@@ -1,5 +1,6 @@
 mod auth;
 mod connection;
+mod fork;
 mod history;
 pub mod install;
 mod instructions;
@@ -211,6 +212,24 @@ impl Adapter {
     }
 }
 impl ClientSession for Adapter {
+    fn fork_session<'a>(
+        &'a self,
+        events: EventIngestService,
+        session: &'a str,
+        turn: &'a str,
+    ) -> ClientOperation<'a, NativeSessionFork> {
+        Box::pin(async move { self.fork_bound_session(events, session, turn).await })
+    }
+
+    fn adopt_fork<'a>(
+        &'a self,
+        events: EventIngestService,
+        session: &'a str,
+        fork: &'a NativeSessionFork,
+    ) -> ClientOperation<'a, String> {
+        Box::pin(async move { self.adopt_bound_fork(events, session, fork).await })
+    }
+
     fn provision<'a>(
         &'a self,
         events: EventIngestService,
@@ -245,6 +264,7 @@ impl ClientSession for Adapter {
                 config_dir,
                 model: request.model,
                 resume: None,
+                native_session_id: None,
                 interactions: self.interactions.get().cloned().ok_or_else(unavailable)?,
                 state: Default::default(),
                 connection: Default::default(),

@@ -14,7 +14,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         timeline: true,
         topology: false,
         branch_control: false,
-        fork_session: false,
+        fork_session: true,
         reasoning_effort_control: true,
         manual_compaction: true,
         compaction_events: true,

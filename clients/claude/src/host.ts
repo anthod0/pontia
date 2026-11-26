@@ -12,6 +12,7 @@ import { Compaction } from "./compaction.js";
 import { Input } from "./input.js";
 import { Interactions } from "./interactions.js";
 import { FactError, InputFacts, type Emit, type ResultDiagnostic } from "./facts.js";
+import { forkHistory, type HistoryForkResult } from "./fork.js";
 
 export type SessionMode = "default" | "yolo" | "restricted";
 
@@ -64,6 +65,7 @@ export class Host {
       model?: string;
       reasoning_effort?: string;
       resume?: string;
+      native_session_id?: string;
       system_prompt?: string;
     } & ({ mode: "restricted"; pontia_home: string } | { mode?: "default" | "yolo" }),
     private readonly emit: Emit,
@@ -113,6 +115,9 @@ export class Host {
           ? { effort: this.options.reasoning_effort as Options["effort"] }
           : {}),
         ...(this.options.resume ? { resume: this.options.resume } : {}),
+        ...(!this.options.resume && this.options.native_session_id
+          ? { sessionId: this.options.native_session_id }
+          : {}),
         ...(this.options.system_prompt
           ? {
               systemPrompt: {
@@ -164,6 +169,28 @@ export class Host {
         this.fail("sdk_start_failed");
         throw new ControlError("unknown", "sdk_start_failed");
       }
+    }
+  }
+
+  async fork(targetMessageId: string, messageIds: string[]): Promise<HistoryForkResult> {
+    if (!this.acceptsControl() || !this.native)
+      throw new ControlError("rejected", "execution_unavailable");
+    try {
+      return await forkHistory(
+        this.native,
+        targetMessageId,
+        messageIds,
+        this.options.cwd,
+      );
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        ["source_unavailable", "fork_target_unavailable", "fork_identity_unchanged"].includes(
+          error.message,
+        )
+      )
+        throw new ControlError("rejected", error.message);
+      throw new ControlError("unknown", "fork_unconfirmed");
     }
   }
 
@@ -408,7 +435,8 @@ export class Host {
       if (
         !message.session_id ||
         (this.native && message.session_id !== this.native) ||
-        (this.options.resume && message.session_id !== this.options.resume)
+        (this.options.resume && message.session_id !== this.options.resume) ||
+        (this.options.native_session_id && message.session_id !== this.options.native_session_id)
       )
         throw new Error("native_identity_mismatch");
       if (!this.native) {

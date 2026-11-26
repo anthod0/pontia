@@ -17,6 +17,7 @@ export interface Bootstrap {
   model?: string;
   reasoning_effort?: string;
   resume?: string;
+  native_session_id?: string;
   system_prompt?: string;
   mode: SessionMode;
 }
@@ -48,6 +49,8 @@ export function bootstrap(value: unknown): Bootstrap {
   if (data.model !== undefined) result.model = string(data.model);
   if (data.reasoning_effort !== undefined) result.reasoning_effort = string(data.reasoning_effort);
   if (data.resume !== undefined) result.resume = string(data.resume);
+  if (data.native_session_id !== undefined)
+    result.native_session_id = string(data.native_session_id);
   return result;
 }
 
@@ -143,6 +146,14 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
         case "set_reasoning_effort":
           await host.setReasoningEffort(string(request.reasoning_effort));
           break;
+        case "fork":
+          return {
+            status: "accepted",
+            ...(await host.fork(
+              string(request.target_message_id),
+              (request.message_ids as unknown[]).map(string),
+            )),
+          };
         case "interrupt":
           await host.interrupt(string(request.input_id));
           break;

@@ -188,6 +188,9 @@ impl Adapter {
                     resume: binding
                         .as_ref()
                         .map(|binding| binding.client_session_key.clone()),
+                    native_session_id: binding
+                        .as_ref()
+                        .map(|binding| binding.client_session_key.clone()),
                     state: Default::default(),
                     connection: Default::default(),
                     interactions: app.interactions(),

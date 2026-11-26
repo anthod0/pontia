@@ -54,6 +54,9 @@ pub(crate) async fn launch(
     if let Some(resume) = &peer.resume {
         bootstrap["resume"] = json!(resume);
     }
+    if let Some(native) = &peer.native_session_id {
+        bootstrap["native_session_id"] = json!(native);
+    }
     let mut input = tempfile::tempfile()?;
     writeln!(input, "{bootstrap}")?;
     input.rewind()?;

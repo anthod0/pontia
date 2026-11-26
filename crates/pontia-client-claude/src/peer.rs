@@ -51,6 +51,7 @@ pub(crate) struct Peer {
     pub config_dir: PathBuf,
     pub model: Option<String>,
     pub resume: Option<String>,
+    pub native_session_id: Option<String>,
     pub state: Mutex<State>,
     pub interactions: pontia_agent_control::interactions::InteractionService,
     pub connection: RwLock<Option<Arc<Connection>>>,
