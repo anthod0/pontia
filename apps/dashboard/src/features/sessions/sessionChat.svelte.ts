@@ -42,6 +42,9 @@ import {
 import { isExecutingSessionState, isTerminalSession } from "$lib/sessionState";
 import { fromStore } from "svelte/store";
 import { untrack } from "svelte";
+import { createQuery } from "@tanstack/svelte-query";
+import { creationOptionCatalog } from "../../queries/modelCatalog";
+import { sessionCreationOption } from "../../components/chat/modelEffort";
 export function createSessionChat(routeSessionId: () => string | null) {
   const device = useDeviceRuntime();
   const deviceScope = dashboardScope();
@@ -98,7 +101,6 @@ export function createSessionChat(routeSessionId: () => string | null) {
   let inboxActionMessageId = $state.raw<string | null>(null);
   let actionError = $state.raw<string | null>(null);
   let reasoningEffortBusy = $state.raw(false);
-  let reasoningEffortError = $state.raw<string | null>(null);
   let reasoningEffortSessionId = "";
   let compactionEvents = $state.raw<EventView[]>([]);
   let requestedCompaction = $state.raw<string | null>(null);
@@ -186,6 +188,29 @@ export function createSessionChat(routeSessionId: () => string | null) {
     selectedSessionId && sessionDetailValue.current?.session.session_id === selectedSessionId
       ? sessionDetailValue.current.session
       : null,
+  );
+
+  const creationOptionsQuery = createQuery(
+    () => ({
+      queryKey: [device.id, "session-creation-options"],
+      queryFn: ({ signal }) => device.api.listSessionCreationOptions({ signal }),
+      enabled: selectedSession?.capabilities.reasoning_effort_control === true,
+    }),
+    () => device.queryClient,
+  );
+  const selectedCreationOption = $derived(
+    selectedSession?.capabilities.reasoning_effort_control === true
+      ? sessionCreationOption(selectedSession, creationOptionsQuery.data ?? [])
+      : undefined,
+  );
+  const reasoningEffortCatalog = createQuery(
+    () =>
+      creationOptionCatalog(device, selectedCreationOption, selectedSession?.workspace_id ?? ""),
+    () => device.queryClient,
+  );
+  const reasoningEfforts = $derived(
+    reasoningEffortCatalog.data?.models.find((model) => model.id === selectedSession?.model)
+      ?.reasoning_efforts ?? [],
   );
 
   const controlDetails = $derived(selectedSession ? clientControlDetails(selectedSession) : null);
@@ -891,7 +916,6 @@ export function createSessionChat(routeSessionId: () => string | null) {
     actionError = null;
     branchActionError = null;
     reasoningEffortBusy = false;
-    reasoningEffortError = null;
     reasoningEffortSessionId = "";
     if (selectedSessionId) {
       autofocusComposer = claimChatEntryAutofocus(`${device.id}:/chat/${selectedSessionId}`);
@@ -1083,16 +1107,19 @@ export function createSessionChat(routeSessionId: () => string | null) {
     )
       return;
     const sessionId = selectedSessionId;
+    const commandInput = chatDraftValue.current;
     reasoningEffortBusy = true;
-    reasoningEffortError = null;
+    actionError = null;
     reasoningEffortSessionId = sessionId;
     try {
       await setSessionReasoningEffort(sessionId, reasoningEffort);
+      if (selectedSessionId === sessionId && chatDraftValue.current === commandInput)
+        clearChatDraft();
     } catch (error) {
       if (selectedSessionId === sessionId) {
         reasoningEffortBusy = false;
         reasoningEffortSessionId = "";
-        reasoningEffortError = error instanceof Error ? error.message : String(error);
+        actionError = error instanceof Error ? error.message : String(error);
       }
     }
   }
@@ -1314,6 +1341,18 @@ export function createSessionChat(routeSessionId: () => string | null) {
   const commands: ChatCommand[] = $derived(
     selectedSession
       ? [
+          ...reasoningEfforts.map((effort): ChatCommand => ({
+            name: `/reasoning ${effort.id}`,
+            description:
+              effort.description ||
+              tValue.current("effort.commandDescription", { value: effort.name }),
+            disabledReason: reasoningEffortBusy
+              ? tValue.current("effort.changing")
+              : effort.id === selectedSession.reasoning_effort
+                ? tValue.current("effort.current", { value: effort.name })
+                : undefined,
+            run: () => void changeSelectedReasoningEffort(effort.id),
+          })),
           {
             name: "/compact",
             description: tValue.current("compaction.description"),
@@ -1387,7 +1426,6 @@ export function createSessionChat(routeSessionId: () => string | null) {
       return canSend;
     },
     cancelPendingInboxMessage,
-    changeSelectedReasoningEffort,
     chatDraft,
     compactSelectedSession,
     get compactedHistoryNotice() {
@@ -1440,12 +1478,6 @@ export function createSessionChat(routeSessionId: () => string | null) {
     },
     get rulerTurns() {
       return rulerTurns;
-    },
-    get reasoningEffortBusy() {
-      return reasoningEffortBusy;
-    },
-    get reasoningEffortError() {
-      return reasoningEffortError;
     },
     scrollChatToBottom,
     get selectedCompaction() {

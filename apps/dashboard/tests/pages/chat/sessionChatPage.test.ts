@@ -16,6 +16,7 @@ import type { CreateSessionResult, SessionView, TurnView } from "../../../src/ap
 const { rememberOptimisticMessage } = testDevice.optimisticChat;
 const { queryClient } = testDevice;
 const { sessionKeys } = testDevice.sessionQueries;
+const { chatDraft } = testDevice.chatDraft;
 const api = testDevice.api;
 import { stubWrappedComposer } from "../../components/wrappedComposer";
 
@@ -114,21 +115,21 @@ function prepareReasoningEffortSession(): SessionView {
   return selected;
 }
 
-test("keeps the confirmed reasoning effort visible until the session event reports the actual value", async () => {
+test("keeps the confirmed reasoning effort in slash commands until the session event reports the actual value", async () => {
   const selected = prepareReasoningEffortSession();
   render(SessionChatPage);
 
-  const trigger = await screen.findByRole("button", { name: "Reasoning effort: Medium" });
-  await fireEvent.click(trigger);
-  await fireEvent.click(await screen.findByRole("option", { name: /High/ }));
+  const input = await screen.findByPlaceholderText("Follow up…");
+  await waitFor(() => expect(api.listAgentClientModels).toHaveBeenCalled());
+  await userEvent.type(input, "/reasoning high");
+  await fireEvent.click(await screen.findByRole("button", { name: "Change reasoning effort" }));
 
   await waitFor(() =>
     expect(mocks.setSessionReasoningEffort).toHaveBeenCalledWith("session-1", "high"),
   );
-  expect(screen.getByRole("button", { name: "Reasoning effort: Medium" })).toHaveAttribute(
-    "aria-busy",
-    "true",
-  );
+  await waitFor(() => expect(input).toHaveTextContent(""));
+  await userEvent.type(input, "/reasoning medium");
+  expect(screen.getByRole("button", { name: "Change reasoning effort" })).toBeDisabled();
 
   mocks.loadSessionDetail.mockReset().mockImplementationOnce(async () => {
     const detail = {
@@ -153,27 +154,28 @@ test("keeps the confirmed reasoning effort visible until the session event repor
     });
   }
 
+  chatDraft.set("/reasoning low");
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Reasoning effort: Low" })).toHaveAttribute(
-      "aria-busy",
-      "false",
-    ),
+    expect(screen.getByRole("button", { name: "Change reasoning effort" })).toBeDisabled(),
   );
 });
 
-test("reports a rejected reasoning effort change and keeps the confirmed value selectable", async () => {
+test("reports a rejected reasoning effort slash command and preserves it for retry", async () => {
   prepareReasoningEffortSession();
   mocks.setSessionReasoningEffort.mockRejectedValueOnce(new Error("control unavailable"));
   render(SessionChatPage);
 
-  await fireEvent.click(await screen.findByRole("button", { name: "Reasoning effort: Medium" }));
-  await fireEvent.click(await screen.findByRole("option", { name: /High/ }));
+  const input = await screen.findByPlaceholderText("Follow up…");
+  await waitFor(() => expect(api.listAgentClientModels).toHaveBeenCalled());
+  await userEvent.type(input, "/reasoning high");
+  await fireEvent.click(await screen.findByRole("button", { name: "Change reasoning effort" }));
 
   expect(await screen.findByRole("alert")).toHaveTextContent("control unavailable");
-  expect(screen.getByRole("button", { name: "Reasoning effort: Medium" })).toBeEnabled();
+  expect(input).toHaveTextContent("/reasoning high");
+  expect(screen.getByRole("button", { name: "Change reasoning effort" })).toBeEnabled();
 });
 
-test("hides reasoning effort control when the session does not expose the capability", async () => {
+test("hides reasoning effort slash commands when the session does not expose the capability", async () => {
   const selected = session({ model: "model-a", reasoning_effort: "medium" });
   mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
   mocks.pathParams = { sessionId: "session-1" };
@@ -181,11 +183,13 @@ test("hides reasoning effort control when the session does not expose the capabi
 
   render(SessionChatPage);
 
-  await screen.findByPlaceholderText("Follow up…");
-  expect(screen.queryByRole("button", { name: /Reasoning effort:/ })).not.toBeInTheDocument();
+  const input = await screen.findByPlaceholderText("Follow up…");
+  await userEvent.type(input, "/reasoning high");
+  expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+  expect(mocks.setSessionReasoningEffort).not.toHaveBeenCalled();
 });
 
-test("exposes reasoning effort control in the mobile session footer", async () => {
+test("executes reasoning effort slash commands in the mobile session composer", async () => {
   const originalMatchMedia = window.matchMedia;
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({
     matches: query.includes("max-width"),
@@ -201,8 +205,10 @@ test("exposes reasoning effort control in the mobile session footer", async () =
 
   try {
     render(SessionChatPage);
-    await fireEvent.click(await screen.findByRole("button", { name: "Reasoning effort: Medium" }));
-    await fireEvent.click(await screen.findByRole("option", { name: /High/ }));
+    const input = await screen.findByPlaceholderText("Follow up…");
+    await waitFor(() => expect(api.listAgentClientModels).toHaveBeenCalled());
+    await userEvent.type(input, "/reasoning high");
+    await fireEvent.click(await screen.findByRole("button", { name: "Change reasoning effort" }));
 
     await waitFor(() =>
       expect(mocks.setSessionReasoningEffort).toHaveBeenCalledWith("session-1", "high"),

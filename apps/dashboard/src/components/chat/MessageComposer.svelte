@@ -16,6 +16,7 @@
   import PushPinSlashIcon from 'phosphor-svelte/lib/PushPinSlashIcon'
   import ArchiveIcon from 'phosphor-svelte/lib/ArchiveIcon'
   import BoxArrowUpIcon from 'phosphor-svelte/lib/BoxArrowUpIcon'
+  import GaugeIcon from 'phosphor-svelte/lib/GaugeIcon'
   import DotsThreeVerticalIcon from 'phosphor-svelte/lib/DotsThreeVerticalIcon'
   import ComposerAddMenu from './ComposerAddMenu.svelte'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
@@ -103,6 +104,7 @@
   let uploadPicker = $state<{ choose: () => void } | null>(null)
   let fullscreenUploadPicker = $state<{ choose: () => void } | null>(null)
   function commandActionFor(item: ChatCommand): { label: string; icon: typeof NotePencilIcon } {
+    if (item.name.startsWith('/reasoning ')) return { label: $t('effort.change'), icon: GaugeIcon }
     switch (item.name) {
       case '/new': return { label: $t('chat.new'), icon: NotePencilIcon }
       case '/rename': return { label: $t('common.rename'), icon: PencilSimpleIcon }
@@ -112,6 +114,7 @@
       case '/pin': return item.active ? { label: $t('sessions.unpin'), icon: PushPinSlashIcon } : { label: $t('sessions.pin'), icon: PushPinIcon }
       case '/archive': return item.active ? { label: $t('common.unarchive'), icon: BoxArrowUpIcon } : { label: $t('common.archive'), icon: ArchiveIcon }
     }
+    throw new Error(`Unknown chat command action: ${item.name}`)
   }
   const mentionIdentities = new Map<string, FilePickerFileView>()
   let fullscreenEditor = $state<{ focusEnd: () => void } | null>(null)

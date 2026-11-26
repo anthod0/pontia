@@ -88,6 +88,27 @@ test("selects slash commands with arrow keys, completes with Tab, and executes w
   expect(onSubmit).not.toHaveBeenCalled();
 });
 
+test("discovers and executes concrete reasoning effort commands", async () => {
+  const runLow = vi.fn();
+  const runHigh = vi.fn();
+  render(MessageComposer, {
+    value: "",
+    commands: [
+      { name: "/reasoning low", description: "Fast", run: runLow },
+      { name: "/reasoning high", description: "Deep", run: runHigh },
+    ],
+    onSubmit: vi.fn(),
+  });
+  const editor = screen.getByRole("textbox");
+  await userEvent.type(editor, "/reasoning");
+
+  await fireEvent.click(await screen.findByRole("option", { name: /\/reasoning high.*Deep/ }));
+
+  expect(editor).toHaveTextContent("/reasoning high");
+  expect(runHigh).toHaveBeenCalledOnce();
+  expect(runLow).not.toHaveBeenCalled();
+});
+
 test("Escape dismisses suggestions and a complete command still runs from the submit button", async () => {
   const items = commands();
   const onSubmit = vi.fn();

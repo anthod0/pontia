@@ -38,8 +38,6 @@
         compaction={chat.selectedCompaction}
         canSend={chat.canSend}
         autofocus={chat.autofocusComposer}
-        reasoningEffortBusy={chat.reasoningEffortBusy}
-        reasoningEffortError={chat.reasoningEffortError}
         onCancelInboxMessage={(message) => void chat.cancelPendingInboxMessage(message)}
         onRetryInboxMessage={(message) => void chat.retryFailedInboxMessage(message)}
         onDismissInboxMessage={(message) => void chat.dismissFailedInboxMessage(message)}
@@ -47,7 +45,6 @@
         onInterrupt={() => void chat.interruptSelectedSession()}
         onFocus={() => void chat.refreshCurrentSessionGitStatus()}
         onRefreshGitStatus={() => void chat.refreshCurrentSessionGitStatus()}
-        onReasoningEffortChange={(effort) => void chat.changeSelectedReasoningEffort(effort)}
       />
     {/if}
   {/snippet}
