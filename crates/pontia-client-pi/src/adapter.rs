@@ -21,12 +21,10 @@ pub fn registration(tui_command: Option<String>) -> ClientRegistration {
     let environment = std::env::var("PONTIA_PI_TUI_COMMAND").ok()
         .map(|command| serde_json::json!({"tui_command": if command.trim().is_empty() { "pi" } else { &command }}))
         .unwrap_or_else(|| serde_json::json!({}));
+    let configuration = Arc::new(crate::config::PiConfiguration::new(file, environment));
     ClientRegistration {
-        auth: None,
-        configuration: Some(Arc::new(crate::config::PiConfiguration::new(
-            file,
-            environment,
-        ))),
+        auth: Some(Arc::new(crate::auth::PiAuth::new(configuration.clone()))),
+        configuration: Some(configuration),
         interactions: None,
         service: Some(Arc::new(crate::service::PiService)),
         instructions: Some(Arc::new(crate::instructions::InstructionsPolicy)),

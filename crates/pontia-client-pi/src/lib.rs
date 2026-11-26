@@ -1,4 +1,5 @@
 mod adapter;
+mod auth;
 pub mod config;
 mod facts;
 pub mod history;

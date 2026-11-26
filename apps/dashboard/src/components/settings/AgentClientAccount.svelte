@@ -62,7 +62,7 @@
         {$t('clients.account.unknown')}
       {/if}
     </Item.Description>
-    {#if !client.auth_supported && guidance?.status !== 'configured' && command}
+    {#if (!client.auth_supported || auth?.methods.length === 0) && guidance?.status !== 'configured' && command}
       <div class="mt-1 flex min-w-0 items-center gap-1 rounded-md bg-muted px-2 py-1">
         <code class="min-w-0 flex-1 truncate font-mono text-xs text-foreground" title={command}>{command}</code>
         <Button variant="ghost" size="icon-sm" class="-my-1 -mr-1" aria-label={$t('clients.account.copyCommand')} onclick={copyCommand}><CopyIcon /></Button>

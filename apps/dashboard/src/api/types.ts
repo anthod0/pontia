@@ -201,6 +201,7 @@ export interface AgentClientAuthStatus {
   account?: { label?: string; plan?: string; provider?: string; workspace?: string };
   detail?: string;
   checked_at: string;
+  methods: Array<{ id: string }>;
   supports_logout: boolean;
 }
 

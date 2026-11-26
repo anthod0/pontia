@@ -80,6 +80,41 @@ test("a client shows its settings without a configuration editor or internal rec
   expect(screen.queryByText("opaque-pi")).toBeNull();
 });
 
+test("status-only authentication keeps the terminal login command available", async () => {
+  api.listAgentClients.mockResolvedValue([
+    {
+      ...pi,
+      auth_supported: true,
+      detection: { status: "detected", detail: "/usr/bin/pi" },
+      install: {
+        supported: true,
+        provenance: "vendor_native",
+        available_actions: [],
+        methods: [],
+        auth: {
+          status: "not_configured",
+          login_command: "pi auth login openai",
+          headless_login_command: null,
+          env_vars: [],
+          docs_url: null,
+        },
+      },
+    },
+  ]);
+  api.getAgentClientAuth.mockResolvedValue({
+    state: "unauthenticated",
+    checked_at: "2026-11-26T00:00:00.000Z",
+    methods: [],
+    supports_logout: false,
+  });
+  render(AgentClientsPage);
+  expect(await screen.findByText("pi auth login openai")).toBeVisible();
+  expect(api.getAgentClientAuth).toHaveBeenCalledWith(
+    expect.objectContaining({ client_type: "pi", client_key: "default" }),
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  );
+});
+
 test("the first client is selected and the list shows one status per client, detected clients first", async () => {
   api.listAgentClients.mockResolvedValue([
     { ...peer("kiro"), name: "Kiro", detection: { status: "not_detected", detail: null } },
