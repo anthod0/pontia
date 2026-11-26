@@ -1,0 +1,130 @@
+---
+title: "Agent Harness から Coding Agent Orchestrator へ：Lead Bot + Helper と役割分割パイプラインの設計トレードオフ"
+description: "マルチエージェント開発で実際に突き当たるコンテキスト汚染・worktree 競合・承認ボトルネックを分解。tmux オーケストレーター、役割分割パイプライン、Claude Code の Subagents / Agent Teams、Pontia の Lead Bot + Helper と決定的 Workflow を比較します。"
+published: "2026-11-27"
+---
+
+ターミナルで 1 つのコーディングエージェントを動かすのは簡単です。しかし同じリポジトリ上で 3 つ、4 つを並列に動かした途端、現場の課題が一気に噴き出します。共有チェックアウト上でのファイル競合、長期セッションに溜まる古いトレースによる品質低下、そして 1 件の未回答な確認が並行作業全体を止めてしまう問題です。
+
+この記事では、まず **agent harness**（**AI harness**）と **coding agent orchestrator** の責務の境界を整理し、現場で使われている 4 つの **multi-agent orchestration** パターンを比較したうえで、並列コーディングエージェントが本当に開発時間を短縮できるかを左右する 5 つの技術課題を掘り下げます。
+
+Pontia は私たちが開発しているツールです。
+
+## Agent Harness と Coding Agent Orchestrator の違い
+
+マルチエージェント開発の議論では、単一のモデルループを包む「ハーネス」と、複数の独立したコーディング作業を束ねる「オーケストレーター」が混同されがちです。
+
+**Agent harness** は、1 つのモデル推論ループの外側にあるエンジニアリング層です。ツール実行と権限管理、実行環境の境界、セッション状態の永続化、コンテキストの圧縮（compaction）、人間の割り込み制御を担います。一次情報として次の 3 つがこの層の設計原則をよく示しています。
+
+- **[Pi](https://pi.dev)**（[GitHub リポジトリ](https://github.com/earendil-works/pi)）は、意図的にミニマルな **Pi agent harness** です。極小のシステムプロンプト、`AGENTS.md` / `SYSTEM.md` の読み込み、差し替え可能な compaction、オンデマンドの skills、拡張フックに絞り、subagent やプランモード、Todo 管理はユーザー自身のワークフローに合わせて組み合わせる設計になっています。
+- **Anthropic の [Managed Agents アーキテクチャ](https://www.anthropic.com/research/managed-agents)** は、結合しがちな 3 要素を差し替え可能なインターフェースに分離しています。追記専用のイベントログである **session**、モデル呼び出しとツールルーティングを担う **harness**、実行環境である **sandbox** です。この分離により、永続的な session とコンテキストウィンドウが別物であることが明確になります。
+- **Anthropic の [Effective Context Engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)** は、トークンが増えるにつれてモデルの注意予算（attention budget）が劣化するため、信頼できるエージェントループには compaction、構造化ノート、隔離されたサブタスク用コンテキストが不可欠だと説明しています。
+
+**Coding agent orchestrator** は、このハーネスの上に位置する層です。LangGraph や CrewAI のような汎用アプリケーション向けオーケストレーション SDK は、コード上で独自の LLM グラフや業務パイプラインを組み立てるためのもので、対象とする課題が異なります。一方、coding agent orchestrator が扱うのは、実際のシェル、コンパイラ、テストスイート、Git ブランチを直接操作するコーディングエージェント（Claude Code、Codex、Grok Build、Pi、Kiro、Google Antigravity）の並列協調です。
+
+したがって優れた coding agent orchestrator は、「チャット上のキャラクターを増やすこと」ではありません。信頼できるハーネスの上で、次の 3 つを解く仕組みです。
+
+1. **実行環境の隔離**：並列エージェントが互いのファイルや Git 状態を壊さないこと。
+2. **コンテキストの衛生管理**：各タスクが前のタスクのノイズを引きずらず、きれいな注意予算で始められること。
+3. **非同期な人間の意思決定**：1 件の判断待ちが、依存関係のない別タスクの進行を止めないこと。
+
+## 4 つのマルチエージェント・オーケストレーションパターンの比較
+
+現場で採用されているパターンは大きく 4 つに分かれます。それぞれ適した作業領域と設計上の境界があります。
+
+| パターン | 中核メカニズム | 最も向いている場面 | 主なエンジニアリング境界 |
+| --- | --- | --- | --- |
+| **手動マルチターミナル / tmux** | 1 エージェントごとに 1 tmux ウィンドウ（例：AWS CLI Agent Orchestrator） | ネイティブ端末の直接視認、最小限の抽象化、別リポジトリの並列作業 | 端末分離は Git worktree 分離ではない。同一チェックアウトの同時編集は衝突し、承認確認も手動巡回になりやすい |
+| **役割・フェーズ分割パイプライン** | 工程ごとの専任エージェント（Planner → Coder → Reviewer） | 仕様を事前に凍結でき、明示的な成果物と独立した受け入れゲートが必要な作業 | 探索的なコード変更では引き継ぎ時に暗黙の文脈が落ち、修正とレビューの往復でトークンと待機ターンが膨らむ |
+| **単一 CLI の Subagents / Agent Teams** | 1 つの純正 CLI に組み込まれた子エージェントや並列チーム（例：Claude Code） | 検索や調査のノイズを親セッションから隔離したい場合、または単一 CLI 内の並列探索 | Subagents は短命な局所タスク向け。Agent Teams は複数フルインスタンスによりトークン消費が増え、単一ベンダー内に閉じる |
+| **Lead Bot + 隔離 Helper + 決定的 Workflow** | 司令塔 Bot がモジュール単位で新規 Helper を起動し、固定工程は TOML Workflow で実行（Pontia） | 複数ネイティブ CLI を使ったオープンエンドな並列開発と、再現性が必要な定型パイプラインの併用 | 並列 Helper には明確なモジュール境界、Workflow には事前のフェーズと成果物契約が必要 |
+
+### 1. 手動マルチターミナルと tmux オーケストレーター
+
+最も身近な方法は、tmux のウィンドウやペインを複数開いてエージェントを並走させるやり方です。[AWS CLI Agent Orchestrator](https://github.com/awslabs/cli-agent-orchestrator) のようなツールは、この **Claude Code tmux orchestrator** パターンを整理し、各エージェントに専用の tmux ウィンドウを割り当てつつ `tmux attach` でネイティブ CLI にそのまま入れる透明性を保ちます。
+
+純正 TUI を最小の抽象化で使いたいときや、タスクが別々のリポジトリに分かれているときには軽快に機能します。
+
+境界が見えてくるのは、複数エージェントが同じリポジトリを触るときです。tmux が分離するのは端末セッションであって、ファイルシステムや Git 作業ツリーではありません。同じチェックアウトを共有したまま動かすと、編集の衝突やビルドキャッシュの破損、`git status` の混線が起きます。複数のペインにまたがる権限確認や質問を人の目で巡回する負荷も増えます。
+
+### 2. 役割・フェーズ分割パイプライン（Planner → Coder → Reviewer）
+
+2 つ目は工程ごとにエージェントを分けるパターンです。Anthropic の [長時間動作エージェント向けハーネス設計](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents) や [長時間アプリ構築のためのハーネス設計](https://www.anthropic.com/research/harness-design-long-running-apps) では、明示的な進捗ファイルと独立した評価ハーネスで長いタスクを安定させる設計が論じられています。コミュニティでも [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode) などが **Claude Code orchestrator** として役割分担パイプラインを実装しています。
+
+仕様を先に固定し、各工程で明確な成果物を残し、実装者とは独立した評価ゲートを通したい作業（大規模な新規構築や厳格な契約検証など）では強力なパターンです。
+
+一方、既存コードに対する探索的な改修では引き継ぎコストが表面化します。Coder が試して棄却したアプローチや、特定テストに触れなかった理由、コンパイラ制約による設計判断は、別コンテキストの Reviewer には伝わりません。結果として指摘と再説明の往復（ピンポン）が起き、トークン消費と完了までのターン数が跳ね上がります。
+
+### 3. 単一 CLI 組み込みの Subagents と Agent Teams
+
+主要 CLI 自体もオーケストレーション機能を備えつつあります。Claude Code は [Subagents](https://code.claude.com/docs/en/sub-agents) と実験的機能の [Agent Teams](https://code.claude.com/docs/en/agent-teams) という 2 つの仕組みを提供しています。
+
+- **Subagents** は、コードベース検索やログ調査などのノイズが多い局所作業を短命コンテキストに閉じ込め、要約だけを親セッションへ返します。親セッションの注意予算を守る用途に適しています。
+- **Agent Teams** は複数のフル Claude Code インスタンスを立ち上げ、共有タスクリストとメールボックスで連携させます。Claude Code だけで完結させたい並列調査や、完全に重ならないモジュール分割に向きます。フルインスタンスを並べる構造上、トークン消費はチーム規模に応じて増え、現時点では実験的機能であり単一 CLI 内に閉じた構成になります。
+
+### 4. Pontia の二軸モデル：Lead Bot + 隔離 Helper と決定的 Workflow
+
+Pontia では、進め方が途中で変化するオープンエンドな作業と、工程が固定された定型作業を明確に分けて扱います。
+
+1. **1 タスク 1 新規 Helper、完了時に即クローズして再利用しない。** デバイス上の長期アシスタントである [Bot](/docs/bots) が、独立タスクごとに新しいコンテキストの [Helper](/docs/bots/helpers) を作成します。作業完了またはキャンセル時に Bot は Helper を即座にクローズし、Session 履歴を残したままランタイムを解放します。別タスクの残骸を抱えたワーカーを再利用しない設計です。
+2. **モジュール単位のエンドツーエンド完結。** 1 つの変更を「書く人」と「レビューする人」に割らず、独立検証できるモジュール単位で Helper に任せます。調査 → 実装 → テスト実行 → セルフレビュー → ローカルコミットまでを同一コンテキストで完結させるため、テスト失敗の原因をその場で直せます。
+3. **独立した Git worktree による並列隔離。** 同一リポジトリへの並列編集では、Helper がプロジェクト元のアクティブな [Workspace](/docs/workspaces) から独自の Git worktree とブランチを作成して作業します。ディスク上の競合をブランチ統合という制御可能な工程へ変えます。
+4. **透明なネイティブ CLI と再利用可能な Agent Profile。** Helper は Claude Code、Codex、Grok Build、[Pi](/docs/agent-clients/pi)、Kiro、Google Antigravity のネイティブ CLI をそのまま動かします。実行中の Helper Session は Dashboard からいつでも開いて出力を確認したり直接指示を出したりできます。[Agent Profile](/docs/agent-profiles) を使えば、Client・モデル・reasoning effort・権限モード・システムプロンプトを専門用途ごとに再利用できます。
+5. **Todo による非同期な意思決定と共有メモリ。** 人間の判断が必要な場面では、Bot が [Bot チャット](/docs/bots/chat) に焦点を絞った Todo カードを出し、ブロックされていない他の Helper は並列で進み続けます。Todo に引用返信するだけで自動的に完了扱いになります。デバイス内の全 Bot が `USER.md` と [共有メモリ](/docs/memory) を共有するため、開発規約を毎回伝え直す手間も省けます。
+6. **固定工程を担う決定的 Workflow。** ステージ、入出力ファイル契約、完了ゲートを事前に決められる作業には [Workflow](/docs/workflows) を使います。TOML で定義した Agent Node ごとに新規 Session を起動し、宣言された Handoff 入力から 1 つの出力を作成して `pontia workflow submit` で明示提出します。一時停止・再開や、回復可能な失敗ノードからのリトライにも対応し、同じ Agent Profile をそのまま流用できます。
+
+## オーケストレーションの成否を分ける 5 つの技術課題
+
+どのパターンを選ぶにしても、実運用で差が出るのは次の 5 点です。
+
+### 1. コンテキスト汚染と注意予算
+
+1 つのワーカーセッションを複数タスクで使い回すと、トークン上限に達するはるか手前から精度が落ちます。古いスタックトレースや没にした設計案、関係ないファイル内容が注意予算を削るためです。
+
+対策はシンプルで、司令塔と実行者を分離することです。Lead Bot は意図の把握・タスク管理・判断事項の整理に徹し、実装や調査はタスク単位で新規起動した Helper に委任して完了と同時に閉じます。単一 CLI 内で作業する場合でも、検索ノイズを短命な Subagent に逃がすのが同じ原則です。
+
+### 2. 工程引き継ぎの損失とエンドツーエンド・セルフレビュー
+
+コンテキスト境界をまたぐたび、明示ファイルに書き出されなかった前提知識は失われます。
+
+まとまりのあるモジュール改修やバグ修正では、検証コマンド（テスト、型チェック、lint、ビルド）を含めて 1 つの Helper がエンドツーエンドで完結させるほうが、往復が少なく品質も安定します。独立したレビュー用コンテキストは、凍結された API 契約に対する破壊的変更チェックやセキュリティ監査など、「実装者の思い込みから切り離すこと自体に価値がある場面」に絞るのが合理的です。
+
+### 3. Git worktree による並列編集とマージのタイミング
+
+同じ作業ディレクトリを共有したまま複数エージェントを走らせると、担当ファイルを分けていてもロックファイル、ビルド成果物、コード生成、`git add` が衝突します。
+
+書き込みを伴う並列タスクには、必ず専用の Git worktree とブランチを割り当てます。Pontia では元のプロジェクト [Workspace](/docs/workspaces) から Helper を起動し、その中で専用 worktree を作らせるため、worktree ごとに Workspace を増やす必要がありません。ブランチは短命に保ち、マージ前に最新 `main` と同期して再検証し、統合後は即座に worktree と一時ブランチを削除します。
+
+### 4. 人間の承認で並列パイプライン全体を止めない設計
+
+Human-in-the-loop が破綻する典型は 2 つあります。1 つは端末ペインに埋もれた承認待ちで全体が止まる「同期ボトルネック」、もう 1 つは煩わしさから全タスクのガードレールを一律に外してしまう「無差別な自動許可」です。
+
+解決策は、**設計・仕様の意思決定**と**定型的なツール実行権限**を分けることです。
+
+- 人が判断すべき選択は非同期のキュー（Pontia では [Bot チャットの Todo](/docs/bots/chat)）に集約し、PC でもスマートフォンでも手が空いたタイミングで返答できるようにしつつ、他の Helper は止めずに走らせます。
+- ツール実行の許可レベルは [Agent Profile](/docs/agent-profiles) 単位で切り替えます。通常の確認フローを維持したい用途と、隔離 worktree やサンドボックス内で **Use YOLO mode** を明示的に有効にする用途を分離します。
+
+### 5. オープンエンドな Bot オーケストレーションと決定的 Workflow の使い分け
+
+探索的なデバッグを硬直的なパイプラインに押し込んだり、定型の多段ビルドを毎回自由チャットで回したりすると運用が歪みます。判断基準を整理すると次のとおりです。
+
+| 判断軸 | Lead Bot + 隔離 Helper | 決定的 Workflow |
+| --- | --- | --- |
+| **工程と成果物は事前に固定できるか** | いいえ。調査結果に応じて作業分割が変化する | はい。フェーズ順、Handoff ファイル名、完了条件が既知 |
+| **進め方と並列性** | 独立モジュール単位で複数 Helper を並列実行 | TOML 定義の順に Agent Node を実行し、ファイル契約で受け渡し |
+| **完了の確認方法** | Helper がローカル検証とセルフレビューを済ませて Bot へ報告 | 各 Node が宣言済み出力を書き出し `pontia workflow submit` を実行 |
+| **失敗時のリカバリ** | Bot が影響を判断し、Helper へ追加指示・Todo 化・後続タスク作成 | Dashboard で一時停止・再開、または完了済み Node を保持したまま `pontia workflow retry` |
+| **共通の基盤** | [Agent Profile](/docs/agent-profiles)、アクティブな [Workspace](/docs/workspaces)、ネイティブ CLI | 同じ [Agent Profile](/docs/agent-profiles)、アクティブな [Workspace](/docs/workspaces)、ネイティブ CLI を再利用 |
+
+現場では両者の併用が自然です。日々の機能実装、並列バグ修正、技術調査は Lead Bot + Helper に任せ、凍結された Handoff ファイルやノード単位のリトライが効く定型フローは TOML の [Workflow](/docs/workflows) として定義します。
+
+## 関連ドキュメント・記事
+
+- [Bots](/docs/bots) — 長期運用する Bot の作成と役割分担
+- [Helper の並列実行](/docs/bots/helpers) — 独立した Git worktree で複数モジュールを並列処理する
+- [Agent Profiles](/docs/agent-profiles) — Client・モデル・reasoning effort・YOLO モード・指示の組み合わせ
+- [共有メモリと USER.md](/docs/memory) — デバイス上の全 Bot で開発規約と好みを共有する
+- [Workflows](/docs/workflows) — 明示的な Handoff 契約を持つ TOML ベースの多段階実行
+- [Pi Agent Client](/docs/agent-clients/pi) — ネイティブ Pi セッションを Pontia に接続する
+- [スマートフォンから Pi コーディングエージェントを使う方法](/blog/pi-coding-agent-remote-control)
+- [Codex、Claude Code、Pi のリモート操作ツール比較](/blog/coding-agent-remote-control-alternatives)
