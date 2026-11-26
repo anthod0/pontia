@@ -61,8 +61,8 @@ impl MockAuth {
 }
 
 impl ClientAuth for MockAuth {
-    fn supports_auth(&self, key: &str) -> bool {
-        key != "antigravity"
+    fn supports_auth(&self, _: &str) -> bool {
+        true
     }
 
     fn status<'a>(
@@ -71,6 +71,9 @@ impl ClientAuth for MockAuth {
         _: &'a AuthContext,
     ) -> ClientOperation<'a, ClientAuthStatus> {
         Box::pin(async move {
+            if key == "antigravity" {
+                return Ok(ClientAuthStatus::new(AuthState::Unknown, Vec::new(), false));
+            }
             let state = self
                 .states
                 .lock()
@@ -103,6 +106,11 @@ impl ClientAuth for MockAuth {
         sink: AuthEventSink,
     ) -> ClientOperation<'a, AuthFlowHandle> {
         Box::pin(async move {
+            if key == "antigravity" {
+                return Err(Error::CapabilityUnavailable(
+                    "Antigravity login is not managed".into(),
+                ));
+            }
             if method_id != "device" {
                 return Err(Error::Domain(format!(
                     "Unsupported login method: {method_id}"
@@ -134,6 +142,11 @@ impl ClientAuth for MockAuth {
         _: &'a AuthContext,
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move {
+            if key == "antigravity" {
+                return Err(Error::CapabilityUnavailable(
+                    "Antigravity logout is not managed".into(),
+                ));
+            }
             self.logouts
                 .lock()
                 .unwrap()
@@ -355,23 +368,25 @@ async fn auth_routes_report_status_conflicts_and_errors() {
         })
         .collect();
     assert!(supported["codex/default"] && supported["acp/kiro"]);
-    assert!(!supported["acp/antigravity"]);
+    assert!(supported["acp/antigravity"]);
 
-    let unsupported = "/api/v1/agent-clients/acp/antigravity/auth";
-    let (status, body) = harness.call("GET", unsupported, "").await;
+    let probe_only = "/api/v1/agent-clients/acp/antigravity/auth";
+    let (status, body) = harness.call("GET", probe_only, "").await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["data"]["auth"]["state"], "unsupported");
+    assert_eq!(body["data"]["auth"]["state"], "unknown");
+    assert_eq!(body["data"]["auth"]["methods"], serde_json::json!([]));
+    assert_eq!(body["data"]["auth"]["supports_logout"], false);
     let (status, body) = harness
         .call(
             "POST",
-            &format!("{unsupported}/sessions"),
+            &format!("{probe_only}/sessions"),
             r#"{"method_id":"device"}"#,
         )
         .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(body["error"]["code"], "capability_unavailable");
     let (status, _) = harness
-        .call("POST", &format!("{unsupported}/logout"), "")
+        .call("POST", &format!("{probe_only}/logout"), "")
         .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     for missing in [

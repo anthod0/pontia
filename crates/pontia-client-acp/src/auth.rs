@@ -123,7 +123,7 @@ fn unsupported(key: &str) -> Error {
 
 impl ClientAuth for AcpAuth {
     fn supports_auth(&self, key: &str) -> bool {
-        matches!(key, "kiro" | "grok") && self.config.agents.get(key).is_some()
+        matches!(key, "antigravity" | "kiro" | "grok") && self.config.agents.get(key).is_some()
     }
 
     fn status<'a>(
@@ -132,6 +132,11 @@ impl ClientAuth for AcpAuth {
         context: &'a AuthContext,
     ) -> ClientOperation<'a, ClientAuthStatus> {
         Box::pin(async move {
+            if key == "antigravity" {
+                return Ok(ClientAuthStatus::new(AuthState::Unknown, Vec::new(), false).with_detail(
+                    "Antigravity does not yet support side-effect-free authentication status checks",
+                ));
+            }
             let methods = match key {
                 "kiro" => kiro::methods(),
                 "grok" => grok::methods(),

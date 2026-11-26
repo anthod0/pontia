@@ -132,11 +132,11 @@ fn output(code: i32, stdout: &str, stderr: &str) -> Output {
 }
 
 #[test]
-fn only_kiro_and_grok_are_managed() {
+fn built_in_auth_entries_are_supported() {
     let fixture = Fixture::new("exit 0");
     assert!(fixture.auth.supports_auth("kiro"));
     assert!(fixture.auth.supports_auth("grok"));
-    assert!(!fixture.auth.supports_auth("antigravity"));
+    assert!(fixture.auth.supports_auth("antigravity"));
     assert!(!fixture.auth.supports_auth("custom"));
 }
 
@@ -262,12 +262,21 @@ async fn kiro_status_runs_whoami_as_json() {
         .unwrap();
     assert_eq!(status.state, AuthState::Unknown);
     assert!(status.detail.unwrap().contains("executable not found"));
-    let unmanaged = fixture
+}
+
+#[tokio::test]
+async fn antigravity_status_is_unknown_without_running_the_client() {
+    let fixture = Fixture::new(RECORD_ARGS);
+    let status = fixture
         .auth
         .status("antigravity", &fixture.context(&[]))
         .await
         .unwrap();
-    assert_eq!(unmanaged.state, AuthState::Unsupported);
+    assert_eq!(status.state, AuthState::Unknown);
+    assert!(status.methods.is_empty());
+    assert!(!status.supports_logout);
+    assert!(status.detail.is_some());
+    assert!(!fixture.path("args").exists());
 }
 
 #[tokio::test]
