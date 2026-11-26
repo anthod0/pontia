@@ -7,12 +7,13 @@
   import { gitStatusTone, shortSha } from './gitChanges'
 
   /** The diff one commit made to one file. */
-  let { device, workspaceId, sha, file, onback }: {
+  let { device, workspaceId, sha, file, onback, onselect }: {
     device: DeviceRuntime
     workspaceId: string
     sha: string
     file: GitCommitFileTarget
-    onback: () => void
+    onback?: () => void
+    onselect: (file: GitCommitFileTarget) => void
   } = $props()
 
   // The panel recreates this view for each file and device.
@@ -22,14 +23,17 @@
   // The commit's file list is already loaded and counts the whole file, even when the diff is cut short.
   const commitQuery = queries.createWorkspaceGitCommitQuery(() => workspaceId, () => sha)
   const entry = $derived(commitQuery.data?.files.find(item => item.path === file.path))
+  const files = $derived(commitQuery.data?.files ?? [])
+  const index = $derived(files.findIndex(item => item.path === file.path))
   const diff = $derived(diffQuery.data)
 </script>
 
 <GitDiffHeader path={file.path} origPath={file.orig_path} backLabel={$t('git.backToCommit')} fetching={diffQuery.isFetching}
-  additions={entry?.binary ? null : entry?.additions} deletions={entry?.binary ? null : entry?.deletions} {onback} onrefresh={() => diffQuery.refetch()}>
+  additions={entry?.binary ? null : entry?.additions} deletions={entry?.binary ? null : entry?.deletions} {onback}
+  status={entry?.status} statusTone={entry ? gitStatusTone(entry.status) : undefined} {index} total={files.length}
+  onprevious={() => onselect(files[index - 1]!)} onnext={() => onselect(files[index + 1]!)} onrefresh={() => diffQuery.refetch()}>
   {#snippet context()}
-    {#if entry}<span class={gitStatusTone(entry.status)}>{entry.status}</span>{/if}
-    <span>{shortSha(sha)}</span>
+    <span>{$t('git.commit')} {shortSha(sha)}</span>
   {/snippet}
 </GitDiffHeader>
 <GitDiffContent path={file.path} {diff} error={diffQuery.isError ? diffQuery.error : null} onretry={() => diffQuery.refetch()} />

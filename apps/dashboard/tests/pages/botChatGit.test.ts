@@ -186,7 +186,6 @@ test("shows the chosen Workspace's commit history and forgets the commit for ano
   render(BotChatPreviewHarness, { botId: bot.bot_id });
   const panel = await openGitTab();
 
-  await fireEvent.click(await within(panel).findByRole("tab", { name: "History" }));
   await fireEvent.click(await within(panel).findByRole("button", { name: /initial commit/ }));
   expect(await within(panel).findByRole("button", { name: "README.md" })).toBeVisible();
   expect(testDevice.api.getWorkspaceGitCommits).toHaveBeenCalledWith(
@@ -203,10 +202,10 @@ test("shows the chosen Workspace's commit history and forgets the commit for ano
   await fireEvent.keyDown(picker, { key: "ArrowDown" });
   await fireEvent.keyDown(picker, { key: "Enter" });
   await within(panel).findByRole("combobox", { name: "Workspace: docs" });
-  // The history list stays chosen; the commit from the other Workspace is gone.
+  // The history list stays visible; the commit from the other Workspace is gone.
   await within(panel).findByRole("button", { name: /initial commit/ });
-  expect(within(panel).getByRole("tab", { name: "History" })).toHaveAttribute(
-    "aria-selected",
+  expect(within(panel).getByRole("button", { name: "History" })).toHaveAttribute(
+    "aria-expanded",
     "true",
   );
   expect(testDevice.api.getWorkspaceGitCommits).toHaveBeenLastCalledWith(

@@ -3,7 +3,7 @@
   import { t } from '$lib/i18n'
   import { registerShortcut } from '$lib/shortcuts/dispatch'
   import { shortcutIds, registry } from '$lib/shortcuts/registry'
-  import { messageInputShortcuts } from '$lib/shortcuts/definitions'
+  import { gitShortcuts, messageInputShortcuts } from '$lib/shortcuts/definitions'
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import ShortcutKeys from './ShortcutKeys.svelte'
   import { dashboardPath } from '$lib/dashboardRoutes'
@@ -55,6 +55,17 @@
         </div>
       {/each}
       <p class="text-xs text-muted-foreground">{$t('shortcuts.inputSuggestions')}</p>
+    </section>
+    <section class="space-y-1 border-t pt-4" aria-labelledby="git-shortcuts-title">
+      <h3 id="git-shortcuts-title" class="font-medium">{$t('git.title')}</h3>
+      {#each gitShortcuts as shortcut}
+        <div class="flex items-center justify-between gap-4 py-1.5">
+          <div class="min-w-0 text-sm">{$t(shortcut.label)}</div>
+          <div class="flex flex-wrap justify-end gap-2">
+            {#each shortcut.keyGroups as keys}<ShortcutKeys {keys} class="inline-flex shrink-0 border border-border bg-transparent" />{/each}
+          </div>
+        </div>
+      {/each}
     </section>
     <a class="justify-self-end text-sm font-medium underline underline-offset-4" href={settingsHref} onclick={customize}>{$t('shortcuts.customize')}</a>
   </Dialog.Content>

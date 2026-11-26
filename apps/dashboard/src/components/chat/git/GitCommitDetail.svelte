@@ -2,7 +2,6 @@
   import { currentLocale, number, t } from '$lib/i18n'
   import { formatDateTime } from '$lib/format'
   import { copyText } from '$lib/copyText'
-  import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon'
   import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
@@ -13,22 +12,24 @@
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import type { DeviceRuntime } from '../../../device/runtime'
   import type { GitCommitFile } from '../../../api/types'
-  import { changeDirLabel, gitStatusTone, moveRowFocus, shortSha, splitChangePath } from './gitChanges'
+  import GitFileRow from './GitFileRow.svelte'
+  import { shortSha } from './gitChanges'
 
-  /** One commit: its message and author, and the files it changed against its first parent. */
-  let { device, workspaceId, sha, onback, onopen }: {
+  let { device, workspaceId, sha, inline = false, onopen, onparent }: {
     device: DeviceRuntime
     workspaceId: string
     sha: string
-    onback?: () => void
-    onopen: (file: GitCommitFile) => void
+    inline?: boolean
+    onopen: (file: GitCommitFile, files: GitCommitFile[]) => void
+    onparent?: (sha: string) => void
   } = $props()
 
-  // The panel recreates this view for each commit and device.
+  // The panel recreates this view for each device and commit.
   // svelte-ignore state_referenced_locally
   const commitQuery = device.workspaceQueries.createWorkspaceGitCommitQuery(() => workspaceId, () => sha)
   const commit = $derived(commitQuery.data)
-  let list = $state<HTMLElement>()
+  const additions = $derived(commit?.files.reduce((total, file) => total + (file.additions ?? 0), 0) ?? 0)
+  const deletions = $derived(commit?.files.reduce((total, file) => total + (file.deletions ?? 0), 0) ?? 0)
   let copied = $state(false)
 
   async function copySha() {
@@ -37,90 +38,54 @@
   }
 </script>
 
-<header class="flex h-12 shrink-0 items-center gap-1 border-b px-2 max-lg:h-14">
-  {#if onback}  <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11" onclick={onback} aria-label={$t('git.backToHistory')} title={$t('git.backToHistory')}><ArrowLeftIcon class="size-4 max-lg:size-5" /></Button>{/if}
-  <h2 class="min-w-0 flex-1 truncate px-1 text-sm font-medium text-heading">{$t('git.commitTitle', { sha: shortSha(sha) })}</h2>
-  <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11" onclick={copySha} aria-label={$t('git.copySha')} title={$t('git.copySha')}>
-    {#if copied}<CheckIcon class="size-4 text-success max-lg:size-5" />{:else}<CopyIcon class="size-4 max-lg:size-5" />{/if}
-  </Button>
-</header>
+{#if !inline}
+  <header class="flex h-[52px] shrink-0 items-center gap-2 border-b px-2">
+    <h2 class="min-w-0 flex-1 px-1 text-[13px] font-medium text-heading">{$t('git.commit')}</h2>
+    <button type="button" class="flex h-6 items-center gap-1 rounded-full bg-muted px-2 font-mono text-[11.5px] hover:text-foreground" onclick={copySha} title={sha}>
+      {shortSha(sha)}{#if copied}<CheckIcon class="size-3 text-git-added" />{:else}<CopyIcon class="size-3" />{/if}
+    </button>
+  </header>
+{/if}
 
-<div class="min-h-0 flex-1 overflow-auto overscroll-contain">
+<div class={inline ? 'rounded-lg bg-[color-mix(in_srgb,var(--muted)_55%,var(--surface))] px-3 py-2.5' : 'min-h-0 flex-1 overflow-auto overscroll-contain'}>
   {#if commitQuery.isError}
-    <Empty.Root role="alert" class="min-h-0 p-8">
-      <Empty.Header>
-        <Empty.Media class="size-12 rounded-xl bg-destructive/10 text-destructive"><WarningCircleIcon class="size-6" /></Empty.Media>
-        <Empty.Title>{$t('git.commitFailed')}</Empty.Title>
-        <Empty.Description class="break-words font-mono text-xs">{commitQuery.error.message}</Empty.Description>
-      </Empty.Header>
-      <Empty.Content>
-        <Button variant="outline" size="sm" onclick={() => commitQuery.refetch()}><ArrowClockwiseIcon data-icon="inline-start" />{$t('common.retry')}</Button>
-      </Empty.Content>
+    <Empty.Root role="alert" class="min-h-0 p-6">
+      <Empty.Header><Empty.Media class="size-10 rounded-xl bg-destructive/10 text-destructive"><WarningCircleIcon class="size-5" /></Empty.Media><Empty.Title>{$t('git.commitFailed')}</Empty.Title><Empty.Description class="break-words font-mono text-xs">{commitQuery.error.message}</Empty.Description></Empty.Header>
+      <Empty.Content><Button variant="outline" size="sm" onclick={() => commitQuery.refetch()}><ArrowClockwiseIcon data-icon="inline-start" />{$t('common.retry')}</Button></Empty.Content>
     </Empty.Root>
   {:else if !commit}
-    <div role="status" aria-label={$t('common.loading')} class="space-y-2 p-4">
-      <Skeleton class="h-4 w-[70%]" />
-      <Skeleton class="h-3 w-[45%]" />
-      <div class="pt-3"></div>
-      {#each [60, 80, 52, 74] as width, index (index)}<Skeleton class="h-3" style="width: {width}%" />{/each}
-    </div>
+    <div role="status" aria-label={$t('common.loading')} class="space-y-2 p-3"><Skeleton class="h-4 w-[70%]" /><Skeleton class="h-3 w-[45%]" />{#each [60, 80, 52] as width}<Skeleton class="h-3" style="width: {width}%" />{/each}</div>
   {:else}
-    <section class="space-y-2 border-b px-4 py-3" aria-label={$t('git.commitMessage')}>
-      <p class="text-sm font-medium break-words text-heading">{commit.subject || $t('git.noSubject')}</p>
-      {#if commit.body}<p class="text-xs leading-5 break-words whitespace-pre-wrap text-muted-foreground">{commit.body}</p>{/if}
-      <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
-        <dt class="text-muted-foreground">{$t('git.author')}</dt>
-        <dd class="min-w-0 truncate" title={commit.author_email}>{commit.author_name}</dd>
-        <dt class="text-muted-foreground">{$t('git.date')}</dt>
-        <dd><time datetime={commit.authored_at}>{formatDateTime(commit.authored_at, $currentLocale)}</time></dd>
-        <dt class="text-muted-foreground">{$t('git.commitSha')}</dt>
-        <dd class="min-w-0 truncate font-mono" title={commit.sha}>{commit.sha}</dd>
-        {#if commit.parents.length}
-          <dt class="text-muted-foreground">{$t('git.parents')}</dt>
-          <dd class="font-mono">{commit.parents.map(shortSha).join(' ')}</dd>
+    <section class={inline ? 'space-y-2' : 'space-y-2 border-b px-4 py-3'} aria-label={$t('git.commitMessage')}>
+      {#if !inline}<p class="text-sm font-medium break-words text-heading">{commit.subject || $t('git.noSubject')}</p>{/if}
+      {#if commit.body}<p class={['text-xs leading-5 break-words whitespace-pre-wrap text-muted-foreground', inline && 'line-clamp-3']}>{commit.body}</p>{/if}
+      <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
+        {#if !inline}<span class="grid size-[18px] place-items-center rounded-full bg-muted text-[10px] font-medium text-foreground">{commit.author_name.slice(0, 1).toUpperCase()}</span><span>{commit.author_name}</span><span>·</span>{/if}
+        {#if inline}
+          <button type="button" class="flex h-5 items-center gap-1 rounded-full bg-surface px-2 font-mono text-[11px] text-foreground hover:bg-card" onclick={copySha} title={sha}>{shortSha(sha)}{#if copied}<CheckIcon class="size-3 text-git-added" />{:else}<CopyIcon class="size-3" />{/if}</button><span>·</span>
         {/if}
-      </dl>
+        {#if commit.parents.length}
+          <span>{$t('git.parents')}</span>
+          {#each commit.parents as parent}<button type="button" class="font-mono text-primary hover:underline" onclick={() => onparent?.(parent)}>{shortSha(parent)}</button>{/each}
+          <span>·</span>
+        {/if}
+        <time datetime={commit.authored_at} title={formatDateTime(commit.authored_at, $currentLocale)}>{formatDateTime(commit.authored_at, $currentLocale)}</time>
+      </div>
     </section>
 
-    <div class="flex items-center gap-2 px-4 pt-3 pb-1 text-xs font-medium text-muted-foreground">
-      <span class="text-foreground">{$t('git.changedFiles')}</span>
-      <span class="tabular-nums">{$number(commit.total)}</span>
-      {#if commit.parents.length > 1}<span class="ml-auto font-normal">{$t('git.mergeComparedWithFirstParent')}</span>{/if}
+    <div class={['flex items-center gap-2 text-xs font-medium', inline ? 'pt-3 pb-1' : 'px-4 pt-3 pb-1']}>
+      <span>{$t('git.fileCount', { count: commit.total })}</span>
+      <span class="font-mono text-[11px] text-git-added">+{additions}</span>
+      <span class="font-mono text-[11px] text-git-deleted">−{deletions}</span>
+      {#if commit.parents.length > 1}<span class="ml-auto font-normal text-muted-foreground">{$t('git.mergeComparedWithFirstParent')}</span>{/if}
     </div>
     {#if commit.files.length}
-      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-      <ul bind:this={list} class="px-2 pb-2" onkeydown={(event) => moveRowFocus(event, list!)}>
-        {#each commit.files as file (file.path)}
-          {@const parts = splitChangePath(file.path)}
-          <li>
-            <button type="button" data-git-row={file.path} onclick={() => onopen(file)}
-              class="flex h-[30px] w-full min-w-0 items-center gap-2 rounded-lg pr-2 pl-[22px] text-left text-[13px] outline-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-primary/55 focus-visible:ring-inset max-lg:h-11"
-              title={file.orig_path ? `${file.orig_path} → ${file.path}` : file.path}
-              aria-label={file.path}>
-              <span class={['w-3.5 shrink-0 text-center font-mono text-[11px] font-medium', gitStatusTone(file.status)]} aria-hidden="true">{file.status}</span>
-              <span class={['max-w-[60%] shrink-0 truncate', file.status === 'D' && 'text-muted-foreground']}>{parts.name}</span>
-              <span class="min-w-0 flex-1 truncate text-left text-xs text-muted-foreground" dir="rtl"><bdi>{changeDirLabel(file)}</bdi></span>
-              <span class="flex shrink-0 gap-1.5 font-mono text-[11px] tabular-nums">
-                {#if file.binary}<span class="text-muted-foreground">{$t('git.binary')}</span>
-                {:else}
-                  {#if file.additions}<span class="text-success">+{file.additions}</span>{/if}
-                  {#if file.deletions}<span class="text-destructive">−{file.deletions}</span>{/if}
-                {/if}
-              </span>
-            </button>
-          </li>
-        {/each}
+      <ul class={inline ? '' : 'px-2 pb-2'}>
+        {#each commit.files as file (file.path)}<li><GitFileRow {file} rowKey={`${sha}:${file.path}`} label={file.path} onopen={() => onopen(file, commit.files)} /></li>{/each}
       </ul>
-      {#if commit.truncated}
-        <p class="px-4 pb-4 text-center text-xs text-muted-foreground">{$t('git.listTruncated', { shown: commit.files.length, total: commit.total })}</p>
-      {/if}
+      {#if commit.truncated}<p class="px-4 pb-4 text-center text-xs text-muted-foreground">{$t('git.listTruncated', { shown: commit.files.length, total: commit.total })}</p>{/if}
     {:else}
-      <Empty.Root class="min-h-0 p-8">
-        <Empty.Header>
-          <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><FileDashedIcon class="size-6" /></Empty.Media>
-          <Empty.Title>{$t('git.noFilesChanged')}</Empty.Title>
-        </Empty.Header>
-      </Empty.Root>
+      <Empty.Root class="min-h-0 p-6"><Empty.Header><Empty.Media class="size-10 rounded-xl bg-muted text-muted-foreground"><FileDashedIcon class="size-5" /></Empty.Media><Empty.Title>{$t('git.noFilesChanged')}</Empty.Title></Empty.Header></Empty.Root>
     {/if}
   {/if}
 </div>

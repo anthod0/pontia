@@ -53,6 +53,11 @@
   --color-error: var(--destructive);
   --color-inactive: var(--inactive);
   --color-aqua: var(--aqua);
+  --color-git-modified: var(--git-modified);
+  --color-git-added: var(--git-added);
+  --color-git-deleted: var(--git-deleted);
+  --color-git-renamed: var(--git-renamed);
+  --color-git-conflict: var(--git-conflict);
   --color-selected: var(--selected);
   --color-border: var(--border);
   --color-input: var(--border);
@@ -106,6 +111,13 @@
   --interrupted: #b16286;
   --inactive: #7c6f64;
   --aqua: #689d6a;
+  --git-modified: #b57614;
+  --git-added: #427b58;
+  --git-deleted: #cc241d;
+  --git-renamed: #076678;
+  --git-conflict: #cc241d;
+  --diff-add: #689d6a;
+  --diff-del: #cc241d;
   --overlay: rgb(0 0 0 / 10%);
   --scrollbar-thumb: color-mix(in srgb, var(--border) 75%, transparent);
   --scrollbar-thumb-hover: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
@@ -141,11 +153,18 @@
   --interrupted: #d3869b;
   --inactive: #928374;
   --aqua: #8ec07c;
+  --git-modified: #fabd2f;
+  --git-added: #8ec07c;
+  --git-deleted: #fb4934;
+  --git-renamed: #83a598;
+  --git-conflict: #fb4934;
+  --diff-add: #8ec07c;
+  --diff-del: #fb4934;
   --overlay: rgb(0 0 0 / 50%);
 }
 
 .dark .shiki,
-.dark .shiki span {
+.dark .shiki [data-code] span {
   color: var(--shiki-dark) !important;
 }
 

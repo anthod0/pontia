@@ -2,6 +2,7 @@
   import ResponsiveSelect from '$lib/components/ui/overlay/ResponsiveSelect.svelte'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
   import FolderSimpleIcon from 'phosphor-svelte/lib/FolderSimpleIcon'
+  import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
   import GearIcon from 'phosphor-svelte/lib/GearIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -57,14 +58,15 @@
 <div class="flex min-h-0 flex-1 flex-col" onkeydown={(event) => view?.keydown(event)}>
   {#if workspace}
     {#key `${device.id}\0${workspace.workspace_id}`}
-      <GitPanel bind:this={view} {device} workspaceId={workspace.workspace_id} {git} hint={$t('bots.gitKeyboardHint')}>
+      <GitPanel bind:this={view} {device} workspaceId={workspace.workspace_id} {git}>
         {#snippet workspaceHeading()}
             <ResponsiveSelect value={workspace.workspace_id} onValueChange={choose}
-              label={$t('bots.gitWorkspace', { name: workspaceTitle(workspace) })} triggerClass="h-8 min-w-0 max-w-full rounded-full border-0 shadow-none px-2 hover:bg-muted" title={workspace.canonical_path} align="start" contentClass="w-72" itemClass="py-2" disabledOption={unavailable}
+              label={$t('bots.gitWorkspace', { name: workspaceTitle(workspace) })} triggerClass="h-7 min-w-0 max-w-full rounded-full border-0 px-2 shadow-none data-[size=default]:h-7 hover:bg-muted" title={workspace.canonical_path} align="start" contentClass="w-72" itemClass="py-2" disabledOption={unavailable}
               options={workspaces} keyOf={item => item.workspace_id} labelOf={item => workspaceTitle(item)}>
               {#snippet trigger()}
-                <FolderIcon class="size-4 text-muted-foreground" />
-                <span class="min-w-0 flex-1 truncate text-left font-medium text-heading">{workspaceTitle(workspace)}</span>
+                <FolderIcon class="size-3.5 text-muted-foreground" />
+                <span class="min-w-0 flex-1 truncate text-left text-[13px] font-medium text-heading">{workspaceTitle(workspace)}</span>
+                <CaretDownIcon class="size-3 shrink-0 text-muted-foreground" />
               {/snippet}
               {#snippet option(item)}{@render workspaceLabel(item)}{/snippet}
             </ResponsiveSelect>

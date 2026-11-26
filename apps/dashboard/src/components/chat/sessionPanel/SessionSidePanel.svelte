@@ -16,7 +16,6 @@
   import FilePreviewResizer from '../FilePreviewResizer.svelte'
   import RecentFileList from '../files/RecentFileList.svelte'
   import GitPanel from '../git/GitPanel.svelte'
-  import { workspaceTitle } from '../sessionMetadata'
   import type { SessionPanel, SessionPanelSource, SessionPanelTab } from './sessionPanelContext.svelte'
 
   let { panel, source }: { panel: SessionPanel; source: SessionPanelSource } = $props()
@@ -27,8 +26,6 @@
   // svelte-ignore state_referenced_locally
   const recentFiles = panel.recentFiles(device)
   const sessionFiles = $derived(sessionRecentFiles(recentFiles.current, source.sessionId))
-  const workspacesQuery = device.workspaceQueries.createWorkspacesQuery()
-  const workspace = $derived(workspacesQuery.data?.find(item => item.workspace_id === source.workspaceId))
   let element = $state<HTMLElement | null>(null)
   let git = $state<GitPanel>()
 
@@ -77,12 +74,7 @@
       <!-- Git is read only while the tab shows. -->
       {#if panel.tab === 'git' && source.workspaceId}
         {#key source.workspaceId}
-          <GitPanel bind:this={git} {device} workspaceId={source.workspaceId} git={panel.git} hint={$t('git.keyboardHint')}>
-            {#snippet workspaceHeading()}
-                <FolderIcon class="size-4 shrink-0 text-muted-foreground" />
-                <span class="min-w-0 flex-1 truncate text-sm font-medium text-heading" title={workspace?.canonical_path}>{workspace ? workspaceTitle(workspace) : ''}</span>
-            {/snippet}
-          </GitPanel>
+          <GitPanel bind:this={git} {device} workspaceId={source.workspaceId} git={panel.git} />
         {/key}
       {:else if !source.workspaceId}
         <Empty.Root class="min-h-0 p-8">

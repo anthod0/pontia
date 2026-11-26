@@ -12,3 +12,10 @@ export const messageInputShortcuts: { keyGroups: string[][]; label: MessageKey }
   },
   { keyGroups: [["Enter"]], label: "shortcuts.newlineAfterBackslash" },
 ];
+
+export const gitShortcuts: { keyGroups: string[][]; label: MessageKey }[] = [
+  { keyGroups: [["ArrowUp"], ["ArrowDown"]], label: "shortcuts.gitMove" },
+  { keyGroups: [["Enter"]], label: "shortcuts.gitOpen" },
+  { keyGroups: [["Escape"]], label: "shortcuts.gitBack" },
+  { keyGroups: [["["], ["]"]], label: "shortcuts.gitFiles" },
+];

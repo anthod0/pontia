@@ -24,5 +24,5 @@
 {:else if !workspaceId}<p>{$t('git.noWorkspaceDescription')}</p>
 {:else if changes.isError}<p role="alert">{changes.error.message}</p>
 {:else if !changes.data}<p role="status">{$t('common.loading')}</p>
-{:else if file}<MobileGitDiffScreen {device} {workspaceId} target={{ file }} />
+{:else if file}<MobileGitDiffScreen {device} {workspaceId} target={{ file }} files={changes.data.files} />
 {:else}<p>{$t('git.noTextChanges')}</p>{/if}

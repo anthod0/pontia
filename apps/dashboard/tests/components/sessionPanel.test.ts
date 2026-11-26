@@ -233,15 +233,13 @@ test("returns to the latest localhost page after switching tabs and reopening th
   );
 });
 
-test("lists changes by group in panel order with line counts", async () => {
+test("lists changes and history together with unstaged files combined", async () => {
   render(SessionPanelHarness);
   const panel = await openTab("Git");
 
   await within(panel).findByText("lib.rs");
-  const headings = within(panel)
-    .getAllByRole("button", { expanded: true })
-    .map((element) => element.textContent?.replace(/\s+/g, " ").trim());
-  expect(headings).toEqual(["Conflicted 1", "Staged 2", "Unstaged 1", "Untracked 1"]);
+  await within(panel).findByRole("combobox", { name: "Branch to show: main" });
+  await within(panel).findByRole("button", { name: /add history view/ });
 
   const lib = within(panel).getByRole("button", { name: "Staged: src/lib.rs" });
   expect(lib.textContent).toContain("+3");
@@ -252,9 +250,8 @@ test("lists changes by group in panel order with line counts", async () => {
   expect(within(panel).getByRole("button", { name: "Unstaged: logo.png" }).textContent).toContain(
     "Binary",
   );
-  expect(within(panel).getByRole("button", { name: "Untracked: scratch/" })).toBeDisabled();
-  expect(await within(panel).findByText("pontia")).toHaveAttribute("title", "/repo/pontia");
-  expect(within(panel).getByTitle("5 changed files")).toHaveTextContent("5");
+  expect(within(panel).getByRole("button", { name: "Conflicted: src/conflict.ts" })).toBeVisible();
+  expect(within(panel).getByRole("button", { name: "Unstaged: scratch/" })).toBeDisabled();
 });
 
 test("opens a file diff in the Git tab and returns to the list", async () => {
@@ -332,7 +329,7 @@ test("on wide screens the URL keeps the panel open on its tab without adding his
   await openTab("Git");
   expect(location.search).toBe("?panel=git");
   expect(history.length).toBe(entries);
-  expect(localStorage.length).toBe(0);
+  await fireEvent.click(await within(sidePanel()).findByRole("button", { name: /Changes 5/ }));
   first.unmount();
 
   // A reload of the same URL reopens the panel on its tab.
@@ -340,6 +337,10 @@ test("on wide screens the URL keeps the panel open on its tab without adding his
   expect(within(sidePanel()).getByRole("tab", { name: "Git" })).toHaveAttribute(
     "aria-selected",
     "true",
+  );
+  expect(await within(sidePanel()).findByRole("button", { name: /Changes 5/ })).toHaveAttribute(
+    "aria-expanded",
+    "false",
   );
   await fireEvent.click(within(sidePanel()).getByRole("button", { name: "Close" }));
   expect(location.search).toBe("");
@@ -408,7 +409,6 @@ test("before the first commit, still offers the other branches", async () => {
   });
   render(SessionPanelHarness);
   const panel = await openTab("Git");
-  await fireEvent.click(await within(panel).findByRole("tab", { name: "History" }));
   expect(await within(panel).findByText("No commits yet")).toBeVisible();
   expect(testDevice.api.getWorkspaceGitCommits).not.toHaveBeenCalled();
 
@@ -429,9 +429,7 @@ test("shows a message for a Workspace outside a Git repository", async () => {
   let sessionPanel: SessionPanel | undefined;
   render(SessionPanelHarness, { onpanel: (value: SessionPanel) => (sessionPanel = value) });
   sessionPanel!.git.diff = { path: "src/lib.rs", group: "staged" };
-  const panel = await openTab("Git");
-  expect(await screen.findByText("Not a Git repository")).toBeVisible();
-  await fireEvent.click(within(panel).getByRole("tab", { name: "History" }));
+  await openTab("Git");
   expect(await screen.findByText("Not a Git repository")).toBeVisible();
   expect(testDevice.api.getWorkspaceGitBranches).not.toHaveBeenCalled();
   expect(testDevice.api.getWorkspaceGitDiff).not.toHaveBeenCalled();
@@ -448,7 +446,7 @@ test("keeps what the Git tab opened when the same Workspace attaches again", () 
   let panel: SessionPanel | undefined;
   render(SessionPanelHarness, { onpanel: (value: SessionPanel) => (panel = value) });
   panel!.git.diff = { path: "src/lib.rs", group: "staged" };
-  panel!.git.view = "history";
+  panel!.git.historyOpen = false;
   panel!.git.chooseRef("refs/heads/feature");
   panel!.git.openCommit(sha(1));
 
@@ -459,12 +457,12 @@ test("keeps what the Git tab opened when the same Workspace attaches again", () 
   expect(panel!.git.diff).toEqual({ path: "src/lib.rs", group: "staged" });
   expect(panel!.git.commit).toBe(sha(1));
 
-  // Another Workspace keeps the chosen list but forgets the branch, commit and diff.
+  // Another Workspace forgets the branch, commit, diff, and section state.
   panel!.attach({ ...source, workspaceId: "workspace-2" });
   expect(panel!.git.diff).toBeNull();
   expect(panel!.git.ref).toBeNull();
   expect(panel!.git.commit).toBeNull();
-  expect(panel!.git.view).toBe("history");
+  expect(panel!.git.historyOpen).toBe(true);
 });
 
 test("opens history when the changes request fails", async () => {
@@ -474,19 +472,13 @@ test("opens history when the changes request fails", async () => {
   render(SessionPanelHarness);
   const panel = await openTab("Git");
   await within(panel).findByRole("alert");
-  await fireEvent.click(within(panel).getByRole("tab", { name: "History" }));
   await within(panel).findByRole("button", { name: /add history view/ });
 });
 
 test("reads a chosen branch's history and a commit's file diffs without checking out", async () => {
   render(SessionPanelHarness);
   const panel = await openTab("Git");
-  // History is read only once it shows.
-  await within(panel).findByRole("tab", { name: "History" });
-  expect(testDevice.api.getWorkspaceGitBranches).not.toHaveBeenCalled();
-  await fireEvent.click(within(panel).getByRole("tab", { name: "History" }));
-
-  // The checked-out branch shows first.
+  // History loads alongside changes, and the checked-out branch shows first.
   await within(panel).findByRole("button", { name: /add history view/ });
   expect(testDevice.api.getWorkspaceGitCommits).toHaveBeenCalledWith(
     "workspace-1",
@@ -495,7 +487,6 @@ test("reads a chosen branch's history and a commit's file diffs without checking
     expect.anything(),
   );
   const picker = within(panel).getByRole("combobox", { name: "Branch to show: main" });
-  expect(picker).toHaveTextContent("Current");
 
   // More history loads on request, from the tip the first page read.
   await fireEvent.click(within(panel).getByRole("button", { name: "Load more" }));
@@ -546,16 +537,14 @@ test("reads a chosen branch's history and a commit's file diffs without checking
   );
   expect(within(panel).getByText("+3")).toBeVisible();
 
-  // Esc steps back to the commit, then to the history, with focus on the row it came from.
+  // Esc steps back to the expanded commit and restores focus to its file row.
   await fireEvent.keyDown(panel, { key: "Escape" });
   await waitFor(() =>
     expect(within(panel).getByRole("button", { name: "src/lib.rs" })).toBe(document.activeElement),
   );
-  await fireEvent.keyDown(panel, { key: "Escape" });
-  await waitFor(() =>
-    expect(within(panel).getByRole("button", { name: /feature commit/ })).toBe(
-      document.activeElement,
-    ),
+  expect(within(panel).getByRole("button", { name: /feature commit/ })).toHaveAttribute(
+    "aria-expanded",
+    "true",
   );
   expect(
     within(panel).getByRole("combobox", { name: "Branch to show: origin/feature" }),
