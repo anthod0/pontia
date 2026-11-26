@@ -1,7 +1,7 @@
 use super::ClientOperation;
-use crate::EventIngestService;
+use crate::{EventIngestService, interactions::InteractionResponse};
 
-/// Resolves a choice using a client-owned, connection-bound native association.
+/// Resolves an interaction using a client-owned, connection-bound native association.
 /// Success means the native response has been written, not merely queued.
 pub trait ClientInteractions: Send + Sync {
     fn resolve<'a>(
@@ -9,6 +9,6 @@ pub trait ClientInteractions: Send + Sync {
         events: EventIngestService,
         session: &'a str,
         interaction: &'a str,
-        option: &'a str,
+        response: &'a InteractionResponse,
     ) -> ClientOperation<'a, ()>;
 }

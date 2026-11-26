@@ -79,7 +79,9 @@ export function createInteractions(sessionId: () => string) {
     submitting = new Set(submitting).add(interaction.interaction_id);
     error = null;
     try {
-      const result = await respondInteraction(session, interaction.interaction_id, key);
+      const result = await respondInteraction(session, interaction.interaction_id, {
+        option_key: key,
+      });
       if (current === generation) recordResult(result);
     } catch (cause) {
       if (current !== generation) return;

@@ -3,6 +3,7 @@ import { ApiError } from "./errors";
 
 import type {
   Interaction,
+  InteractionResponse,
   ForkSessionOutcome,
   AgentClientModels,
   AgentClientView,
@@ -526,14 +527,14 @@ export function createApi(device: DeviceRuntime) {
   async function respondInteraction(
     session: string,
     id: string,
-    option_key: string,
+    response: InteractionResponse,
   ): Promise<Interaction> {
     return (
       await request<{ interaction: Interaction }>(
         `/sessions/${encodeURIComponent(session)}/interactions/${encodeURIComponent(id)}/response`,
         {
           method: "PUT",
-          body: { option_key },
+          body: response,
           idempotency: false,
           retryNetworkErrors: false,
         },

@@ -16,7 +16,8 @@ mod transport;
 use peer::{Input, Peer};
 use pontia_agent_control::{
     AgentControl, EventIngestService, client_contract::*, clients::ClientRegistration,
-    control::InputReceipt, runtime::ControlTarget, turns::InputIntent,
+    control::InputReceipt, interactions::InteractionResponse, runtime::ControlTarget,
+    turns::InputIntent,
 };
 use pontia_core::{Error, Result};
 use pontia_runtime::RuntimeStartRequest;
@@ -505,14 +506,14 @@ impl ClientInteractions for Adapter {
         _events: EventIngestService,
         session: &'a str,
         interaction: &'a str,
-        option: &'a str,
+        response: &'a InteractionResponse,
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move {
             if self.stopped.load(Ordering::Acquire) {
                 return Err(unavailable());
             }
             let peer = self.peer(session).await?;
-            interactions::resolve(&peer, interaction, option).await
+            interactions::resolve(&peer, interaction, response.choice_option_key()?).await
         })
     }
 }

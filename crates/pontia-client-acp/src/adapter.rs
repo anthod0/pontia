@@ -23,6 +23,7 @@ use pontia_agent_control::{
     },
     clients::ClientRegistration,
     control::InputReceipt,
+    interactions::InteractionResponse,
     runtime::ControlTarget,
     turns::InputIntent,
 };
@@ -782,11 +783,11 @@ impl ClientInteractions for AcpAdapter {
         _events: EventIngestService,
         session: &'a str,
         interaction: &'a str,
-        option: &'a str,
+        response: &'a InteractionResponse,
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move {
             let peer = self.peer(session).await?;
-            crate::interactions::resolve(&peer, interaction, option).await
+            crate::interactions::resolve(&peer, interaction, response.choice_option_key()?).await
         })
     }
 }

@@ -109,7 +109,7 @@ async fn options_validation_is_left_to_application_without_removing_relational_c
             .await
             .is_err()
     );
-    sqlx::query("UPDATE interactions SET state='resolved', response_option_key='allow', resolved_at='2026-01-01T00:01:00Z' WHERE interaction_id='interaction'").execute(&pool).await.unwrap();
+    sqlx::query("UPDATE interactions SET state='resolved', response='{\"option_key\":\"allow\"}', resolved_at='2026-01-01T00:01:00Z' WHERE interaction_id='interaction'").execute(&pool).await.unwrap();
     let state: String =
         sqlx::query_scalar("SELECT state FROM interactions WHERE interaction_id='interaction'")
             .fetch_one(&pool)

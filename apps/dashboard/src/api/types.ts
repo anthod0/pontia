@@ -828,15 +828,21 @@ export interface Interaction {
   interaction_id: string;
   session_id: string;
   turn_id: string | null;
-  type: "choice";
+  type: "choice" | "multi_select" | "text";
   state: "pending" | "resolving" | "resolved" | "expired";
   title: string;
   description: string | null;
   options: { key: string; label: string; intent: "positive" | "negative" }[];
-  response: { option_key: string } | null;
+  allows_custom_text?: boolean;
+  response: InteractionResponse | null;
   requested_at: string;
   resolved_at: string | null;
 }
+
+export type InteractionResponse =
+  | { option_key?: string; custom_text?: string }
+  | { option_keys: string[]; custom_text?: string }
+  | { text: string };
 
 export interface CreateSessionInput {
   reasoning_effort?: string;

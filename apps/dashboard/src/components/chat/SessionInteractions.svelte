@@ -21,7 +21,7 @@
               {/each}
             </div>
           {:else if interaction.state === 'resolved'}
-            <p role="status">{$t('interaction.responseSent')} {interaction.options.find(o => o.key === interaction.response?.option_key)?.label}</p>
+            <p role="status">{$t('interaction.responseSent')} {interaction.options.find(o => o.key === (interaction.response && 'option_key' in interaction.response ? interaction.response.option_key : undefined))?.label}</p>
           {:else if interaction.state === 'expired'}
             <p role="status">{$t('interaction.unavailable')}</p>
           {:else}

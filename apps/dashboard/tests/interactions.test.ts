@@ -85,7 +85,9 @@ test("renders untrusted text safely and submits only the selected arbitrary opti
   expect(container.querySelector("img, script")).toBeNull();
   await fireEvent.click(button);
   expect(button).toBeDisabled();
-  expect(mocks.respond).toHaveBeenCalledExactlyOnceWith("session-1", "choice-1", "execute-once");
+  expect(mocks.respond).toHaveBeenCalledExactlyOnceWith("session-1", "choice-1", {
+    option_key: "execute-once",
+  });
   resolve({ ...interaction(), state: "resolved", response: { option_key: "execute-once" } });
   await waitFor(() => expect(screen.queryByRole("button", { name: "Proceed now" })).toBeNull());
 });
@@ -196,5 +198,7 @@ test("submits a long permission scope by its option key", async () => {
   });
   render(SessionInteractions, { sessionId: "session-1" });
   await fireEvent.click(await screen.findByRole("button", { name: option.label }));
-  expect(mocks.respond).toHaveBeenCalledExactlyOnceWith("session-1", "choice-1", "allow_always");
+  expect(mocks.respond).toHaveBeenCalledExactlyOnceWith("session-1", "choice-1", {
+    option_key: "allow_always",
+  });
 });

@@ -8,8 +8,8 @@ use pontia_agent_control::{
     client_contract::{ClientInteractions, ClientOperation, test_registration},
     clients::ClientRegistry,
     interactions::{
-        ChoiceInteractionRequest, Interaction, InteractionIntent, InteractionOption,
-        InteractionState,
+        ChoiceInteractionRequest, Interaction, InteractionInput, InteractionIntent,
+        InteractionOption, InteractionRequest, InteractionResponse, InteractionState,
     },
 };
 use pontia_application::AppState;
@@ -32,7 +32,7 @@ impl ClientInteractions for Resolver {
         _: EventIngestService,
         _: &'a str,
         _: &'a str,
-        _: &'a str,
+        _: &'a InteractionResponse,
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move {
             self.calls.fetch_add(1, Ordering::SeqCst);
@@ -137,9 +137,104 @@ impl Fixture {
             .await
             .unwrap()
     }
+    async fn register_input(&self, key: &str, input: InteractionInput) -> Interaction {
+        self.app
+            .control()
+            .interactions()
+            .register(InteractionRequest {
+                authorization_digest: "a".repeat(64),
+                report_key: key.into(),
+                blocked: None,
+                session_id: self.session.clone(),
+                turn_id: None,
+                title: "Question".into(),
+                description: None,
+                input,
+            })
+            .await
+            .unwrap()
+    }
     fn path(&self, id: &str) -> String {
         format!("/api/v1/sessions/{}/interactions/{id}", self.session)
     }
+}
+
+#[tokio::test]
+async fn extended_inputs_validate_and_store_type_specific_responses() {
+    let f = Fixture::new().await;
+    let options = f.choice("unused").options;
+    let multi = f
+        .register_input(
+            "multi",
+            InteractionInput::MultiSelect {
+                options: options.clone(),
+                allows_custom_text: true,
+            },
+        )
+        .await;
+    let multi_path = format!("{}/response", f.path(&multi.interaction_id));
+    let (status, _) = request(
+        f.app.clone(),
+        "PUT",
+        &multi_path,
+        Some(json!({"option_keys":["proceed-once","proceed-once"]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    f.resolver.release.add_permits(1);
+    let (status, body) = request(
+        f.app.clone(),
+        "PUT",
+        &multi_path,
+        Some(json!({"option_keys":["proceed-once"],"custom_text":"Details"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body["data"]["interaction"]["response"],
+        json!({"option_keys":["proceed-once"],"custom_text":"Details"})
+    );
+
+    let text = f.register_input("text", InteractionInput::Text).await;
+    let text_path = format!("{}/response", f.path(&text.interaction_id));
+    let (status, _) = request(f.app.clone(), "PUT", &text_path, Some(json!({"text":"  "}))).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    f.resolver.release.add_permits(1);
+    let (status, body) = request(
+        f.app.clone(),
+        "PUT",
+        &text_path,
+        Some(json!({"text":"Free-form answer"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body["data"]["interaction"]["response"],
+        json!({"text":"Free-form answer"})
+    );
+
+    let choice = f
+        .register_input(
+            "custom-choice",
+            InteractionInput::Choice {
+                options,
+                allows_custom_text: true,
+            },
+        )
+        .await;
+    f.resolver.release.add_permits(1);
+    let (status, body) = request(
+        f.app.clone(),
+        "PUT",
+        &format!("{}/response", f.path(&choice.interaction_id)),
+        Some(json!({"custom_text":"Another option"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body["data"]["interaction"]["response"],
+        json!({"custom_text":"Another option"})
+    );
 }
 async fn request(
     app: AppState,
@@ -462,7 +557,10 @@ async fn restart_preserves_confirmed_requests_and_expires_unconfirmed_requests_a
         .await
         .unwrap();
     assert_eq!(history.state, InteractionState::Resolved);
-    assert_eq!(history.response.unwrap().option_key, "proceed-once");
+    assert_eq!(
+        history.response.unwrap(),
+        InteractionResponse::choice("proceed-once")
+    );
 }
 
 #[tokio::test]

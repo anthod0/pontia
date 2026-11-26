@@ -4,6 +4,7 @@ use pontia_agent_control::{
     AgentControl, CreateSessionRequest, SubmitInboxMessageRequest,
     client_contract::ClientServicePhase,
     clients::{ClientRegistry, ClientServiceTasks},
+    interactions::InteractionResponse,
 };
 use pontia_client_acp::identity;
 use pontia_client_acp::{ACP_MAX_CAPABILITIES, AcpAgentDefinition, AcpAgents, AcpLaunch};
@@ -1428,7 +1429,10 @@ async fn permission_choices_preserve_all_scopes_and_native_ids_without_blocking_
             .respond(&h.app, &session, &record.interaction_id, "different")
             .await
             .unwrap();
-        assert_eq!(repeated.response.unwrap().option_key, selected);
+        assert_eq!(
+            repeated.response.unwrap(),
+            InteractionResponse::choice(selected)
+        );
         // Leave the other two requests pending: the final prompt response must still be read.
         h.release(&format!("release-{ordinal}"));
         h.wait_turn(&session, &turn.turn_id, "completed").await;

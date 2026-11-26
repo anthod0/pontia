@@ -407,12 +407,13 @@ CREATE TABLE interactions (
   interaction_id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL REFERENCES sessions (session_id),
   turn_id TEXT REFERENCES turns (turn_id),
-  type TEXT NOT NULL CHECK (type = 'choice'),
+  type TEXT NOT NULL CHECK (type IN ('choice', 'multi_select', 'text')),
   title TEXT NOT NULL,
   description TEXT,
   options TEXT NOT NULL,
+  allows_custom_text INTEGER NOT NULL DEFAULT 0 CHECK (allows_custom_text IN (0, 1)),
   state TEXT NOT NULL CHECK (state IN ('pending', 'resolving', 'resolved', 'expired')),
-  response_option_key TEXT,
+  response TEXT,
   requested_at TEXT NOT NULL,
   resolved_at TEXT,
   report_key TEXT,
@@ -420,8 +421,8 @@ CREATE TABLE interactions (
   settlement_report_key TEXT,
   settlement_outcome TEXT,
   CHECK (
-    (state = 'resolved' AND response_option_key IS NOT NULL AND resolved_at IS NOT NULL)
-    OR (state <> 'resolved' AND response_option_key IS NULL AND resolved_at IS NULL)
+    (state = 'resolved' AND response IS NOT NULL AND resolved_at IS NOT NULL)
+    OR (state <> 'resolved' AND response IS NULL AND resolved_at IS NULL)
   )
 );
 

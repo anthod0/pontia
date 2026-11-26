@@ -26,6 +26,24 @@ pub struct InteractionOption {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub enum InteractionType {
+    Choice,
+    MultiSelect,
+    Text,
+}
+
+impl InteractionType {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Choice => "choice",
+            Self::MultiSelect => "multi_select",
+            Self::Text => "text",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum InteractionState {
     Pending,
     Resolving,
@@ -44,8 +62,43 @@ impl InteractionState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct InteractionResponse {
-    pub option_key: String,
+#[serde(untagged, deny_unknown_fields)]
+pub enum InteractionResponse {
+    Choice {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        option_key: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        custom_text: Option<String>,
+    },
+    MultiSelect {
+        option_keys: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        custom_text: Option<String>,
+    },
+    Text {
+        text: String,
+    },
+}
+
+impl InteractionResponse {
+    pub fn choice(option_key: impl Into<String>) -> Self {
+        Self::Choice {
+            option_key: Some(option_key.into()),
+            custom_text: None,
+        }
+    }
+
+    pub fn choice_option_key(&self) -> Result<&str> {
+        match self {
+            Self::Choice {
+                option_key: Some(option_key),
+                custom_text: None,
+            } => Ok(option_key),
+            _ => Err(Error::Domain(
+                "Expected a choice interaction response".into(),
+            )),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -54,11 +107,13 @@ pub struct Interaction {
     pub session_id: String,
     pub turn_id: Option<String>,
     #[serde(rename = "type")]
-    pub interaction_type: String,
+    pub interaction_type: InteractionType,
     pub state: InteractionState,
     pub title: String,
     pub description: Option<String>,
     pub options: Vec<InteractionOption>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub allows_custom_text: bool,
     pub response: Option<InteractionResponse>,
     pub requested_at: String,
     pub resolved_at: Option<String>,
@@ -98,6 +153,78 @@ pub struct ChoiceInteractionRequest {
 }
 
 #[derive(Clone)]
+pub struct InteractionRequest {
+    pub report_key: String,
+    pub authorization_digest: String,
+    pub blocked: Option<InteractionBlock>,
+    pub session_id: String,
+    pub turn_id: Option<String>,
+    pub title: String,
+    pub description: Option<String>,
+    pub input: InteractionInput,
+}
+
+#[derive(Clone)]
+pub enum InteractionInput {
+    Choice {
+        options: Vec<InteractionOption>,
+        allows_custom_text: bool,
+    },
+    MultiSelect {
+        options: Vec<InteractionOption>,
+        allows_custom_text: bool,
+    },
+    Text,
+}
+
+impl InteractionInput {
+    fn interaction_type(&self) -> InteractionType {
+        match self {
+            Self::Choice { .. } => InteractionType::Choice,
+            Self::MultiSelect { .. } => InteractionType::MultiSelect,
+            Self::Text => InteractionType::Text,
+        }
+    }
+
+    fn options(&self) -> &[InteractionOption] {
+        match self {
+            Self::Choice { options, .. } | Self::MultiSelect { options, .. } => options,
+            Self::Text => &[],
+        }
+    }
+
+    fn allows_custom_text(&self) -> bool {
+        match self {
+            Self::Choice {
+                allows_custom_text, ..
+            }
+            | Self::MultiSelect {
+                allows_custom_text, ..
+            } => *allows_custom_text,
+            Self::Text => false,
+        }
+    }
+}
+
+impl From<ChoiceInteractionRequest> for InteractionRequest {
+    fn from(request: ChoiceInteractionRequest) -> Self {
+        Self {
+            report_key: request.report_key,
+            authorization_digest: request.authorization_digest,
+            blocked: request.blocked,
+            session_id: request.session_id,
+            turn_id: request.turn_id,
+            title: request.title,
+            description: request.description,
+            input: InteractionInput::Choice {
+                options: request.options,
+                allows_custom_text: false,
+            },
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct InteractionBlock {
     pub key_prefix: String,
     pub runtime_id: Option<String>,
@@ -120,7 +247,7 @@ impl InteractionBlock {
     }
 }
 
-impl ChoiceInteractionRequest {
+impl InteractionRequest {
     pub(crate) async fn insert(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
@@ -140,16 +267,16 @@ impl ChoiceInteractionRequest {
                 ));
             }
         }
-        sqlx::query("INSERT INTO interactions(interaction_id,session_id,turn_id,type,title,description,options,state,requested_at,report_key,authorization_digest) VALUES(?,?,?,'choice',?,?,?,'pending',?,?,?)")
-            .bind(id).bind(&self.session_id).bind(&self.turn_id).bind(&self.title).bind(&self.description)
-            .bind(serde_json::to_string(&self.options)?).bind(timestamp()).bind(&self.report_key).bind(&self.authorization_digest)
+        sqlx::query("INSERT INTO interactions(interaction_id,session_id,turn_id,type,title,description,options,allows_custom_text,state,requested_at,report_key,authorization_digest) VALUES(?,?,?,?,?,?,?,?, 'pending',?,?,?)")
+            .bind(id).bind(&self.session_id).bind(&self.turn_id).bind(self.input.interaction_type().as_str()).bind(&self.title).bind(&self.description)
+            .bind(serde_json::to_string(self.input.options())?).bind(self.input.allows_custom_text()).bind(timestamp()).bind(&self.report_key).bind(&self.authorization_digest)
             .execute(&mut **tx).await?;
         Ok(())
     }
 }
 
 pub(crate) enum InteractionWrite<'a> {
-    Register(&'a ChoiceInteractionRequest, &'a str),
+    Register(&'a InteractionRequest, &'a str),
     Settle {
         id: &'a str,
         key: &'a str,
@@ -215,7 +342,8 @@ struct InteractionRow {
     description: Option<String>,
     options: String,
     state: String,
-    response_option_key: Option<String>,
+    allows_custom_text: bool,
+    response: Option<String>,
     requested_at: String,
     resolved_at: Option<String>,
 }
@@ -225,14 +353,16 @@ impl InteractionRow {
             interaction_id: self.interaction_id,
             session_id: self.session_id,
             turn_id: self.turn_id,
-            interaction_type: self.r#type,
+            interaction_type: serde_json::from_value(serde_json::Value::String(self.r#type))?,
             state: serde_json::from_value(serde_json::Value::String(self.state))?,
             title: self.title,
             description: self.description,
             options: serde_json::from_str(&self.options)?,
+            allows_custom_text: self.allows_custom_text,
             response: self
-                .response_option_key
-                .map(|option_key| InteractionResponse { option_key }),
+                .response
+                .map(|response| serde_json::from_str(&response))
+                .transpose()?,
             requested_at: self.requested_at,
             resolved_at: self.resolved_at,
         })
@@ -339,7 +469,8 @@ impl InteractionService {
             }
         });
     }
-    pub async fn register(&self, request: ChoiceInteractionRequest) -> Result<Interaction> {
+    pub async fn register(&self, request: impl Into<InteractionRequest>) -> Result<Interaction> {
+        let request = request.into();
         if request.authorization_digest.len() != 64
             || !request
                 .authorization_digest
@@ -361,13 +492,16 @@ impl InteractionService {
             }
         }
         let mut keys = std::collections::HashSet::new();
+        let options = request.input.options();
         if request.title.trim().is_empty()
-            || request.options.is_empty()
-            || request.options.iter().any(|o| {
-                o.key.trim().is_empty() || o.label.trim().is_empty() || !keys.insert(&o.key)
+            || (!matches!(&request.input, InteractionInput::Text) && options.is_empty())
+            || options.iter().any(|option| {
+                option.key.trim().is_empty()
+                    || option.label.trim().is_empty()
+                    || !keys.insert(&option.key)
             })
         {
-            return Err(Error::Domain("Invalid choice interaction".into()));
+            return Err(Error::Domain("Invalid interaction".into()));
         }
         let id = format!("interaction_{}", uuid::Uuid::now_v7());
         let result = if let Some(block) = &request.blocked {
@@ -481,10 +615,7 @@ impl InteractionService {
         Ok(Some((row.view()?, digest)))
     }
 
-    pub async fn registered(
-        &self,
-        request: &ChoiceInteractionRequest,
-    ) -> Result<Option<Interaction>> {
+    pub async fn registered(&self, request: &InteractionRequest) -> Result<Option<Interaction>> {
         let Some((stored, digest)) = self
             .registration(&request.session_id, &request.report_key)
             .await?
@@ -514,7 +645,9 @@ impl InteractionService {
             || stored.turn_id != request.turn_id
             || stored.title != request.title
             || stored.description != request.description
-            || stored.options != request.options
+            || stored.interaction_type != request.input.interaction_type()
+            || stored.options != request.input.options()
+            || stored.allows_custom_text != request.input.allows_custom_text()
             || block != expected
         {
             return Err(Error::StateConflict(format!(
@@ -631,6 +764,17 @@ impl InteractionService {
         id: &str,
         option: &str,
     ) -> std::result::Result<Interaction, InteractionError> {
+        self.respond_with(app, session, id, &InteractionResponse::choice(option))
+            .await
+    }
+
+    pub async fn respond_with(
+        &self,
+        app: &crate::AgentControl,
+        session: &str,
+        id: &str,
+        response: &InteractionResponse,
+    ) -> std::result::Result<Interaction, InteractionError> {
         let interaction = self.get(session, id).await?;
         match interaction.state {
             InteractionState::Resolved => return Ok(interaction),
@@ -644,7 +788,7 @@ impl InteractionService {
             )
             .into());
         }
-        if !interaction.options.iter().any(|o| o.key == option) {
+        if !valid_response(&interaction, response) {
             return Err(InteractionError::InvalidOption);
         }
         let claimed = sqlx::query("UPDATE interactions SET state='resolving' WHERE session_id=? AND interaction_id=? AND state='pending'").bind(session).bind(id).execute(&self.pool).await?.rows_affected() > 0;
@@ -670,7 +814,7 @@ impl InteractionService {
                     Error::CapabilityUnavailable("Interaction resolution unsupported".into())
                 })?;
             resolver
-                .resolve(app.event_ingest_service(), session, id, option)
+                .resolve(app.event_ingest_service(), session, id, response)
                 .await
         }
         .await;
@@ -683,7 +827,7 @@ impl InteractionService {
             };
         }
         let now = timestamp();
-        let updated = match sqlx::query("UPDATE interactions SET state='resolved',response_option_key=?,resolved_at=? WHERE session_id=? AND interaction_id=? AND state='resolving'").bind(option).bind(now).bind(session).bind(id).execute(&self.pool).await {
+        let updated = match sqlx::query("UPDATE interactions SET state='resolved',response=?,resolved_at=? WHERE session_id=? AND interaction_id=? AND state='resolving'").bind(serde_json::to_string(response).map_err(Error::from)?).bind(now).bind(session).bind(id).execute(&self.pool).await {
             Ok(result) => result.rows_affected(),
             Err(error) => {
                 // No replay or background coordinator: release the claim if storage
@@ -701,6 +845,46 @@ impl InteractionService {
         self.get(session, id).await
     }
 }
+
+fn valid_response(interaction: &Interaction, response: &InteractionResponse) -> bool {
+    let valid_custom_text = |text: &Option<String>| {
+        text.as_ref()
+            .is_some_and(|text| interaction.allows_custom_text && !text.trim().is_empty())
+    };
+    match (&interaction.interaction_type, response) {
+        (
+            InteractionType::Choice,
+            InteractionResponse::Choice {
+                option_key,
+                custom_text,
+            },
+        ) => {
+            let option_valid = option_key
+                .as_ref()
+                .is_some_and(|key| interaction.options.iter().any(|option| option.key == *key));
+            (option_key.is_none() || option_valid)
+                && (custom_text.is_none() || valid_custom_text(custom_text))
+                && (option_valid || valid_custom_text(custom_text))
+        }
+        (
+            InteractionType::MultiSelect,
+            InteractionResponse::MultiSelect {
+                option_keys,
+                custom_text,
+            },
+        ) => {
+            let keys: std::collections::HashSet<_> = option_keys.iter().collect();
+            keys.len() == option_keys.len()
+                && option_keys
+                    .iter()
+                    .all(|key| interaction.options.iter().any(|option| option.key == *key))
+                && (custom_text.is_none() || valid_custom_text(custom_text))
+                && (!option_keys.is_empty() || valid_custom_text(custom_text))
+        }
+        (InteractionType::Text, InteractionResponse::Text { text }) => !text.trim().is_empty(),
+        _ => false,
+    }
+}
 fn timestamp() -> String {
     let format = time::format_description::parse(
         "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:9]Z",
@@ -709,4 +893,155 @@ fn timestamp() -> String {
     time::OffsetDateTime::now_utc()
         .format(&format)
         .expect("UTC contains all timestamp components")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn interaction(interaction_type: InteractionType, allows_custom_text: bool) -> Interaction {
+        Interaction {
+            interaction_id: "interaction_test".into(),
+            session_id: "session_test".into(),
+            turn_id: None,
+            interaction_type,
+            state: InteractionState::Pending,
+            title: "Question".into(),
+            description: None,
+            options: vec![
+                InteractionOption {
+                    key: "first".into(),
+                    label: "First".into(),
+                    intent: InteractionIntent::Positive,
+                },
+                InteractionOption {
+                    key: "second".into(),
+                    label: "Second".into(),
+                    intent: InteractionIntent::Negative,
+                },
+            ],
+            allows_custom_text,
+            response: None,
+            requested_at: "2026-11-27T00:00:00Z".into(),
+            resolved_at: None,
+        }
+    }
+
+    #[test]
+    fn choice_response_preserves_the_existing_json_shape() {
+        let response: InteractionResponse =
+            serde_json::from_value(json!({"option_key": "first"})).unwrap();
+        assert_eq!(response, InteractionResponse::choice("first"));
+        assert_eq!(
+            serde_json::to_value(response).unwrap(),
+            json!({"option_key": "first"})
+        );
+    }
+
+    #[test]
+    fn extended_responses_round_trip() {
+        for value in [
+            json!({"custom_text": "Something else"}),
+            json!({"option_key": "first", "custom_text": "With details"}),
+            json!({"option_keys": ["first", "second"], "custom_text": "Other"}),
+            json!({"text": "A free-form answer"}),
+        ] {
+            let response: InteractionResponse = serde_json::from_value(value.clone()).unwrap();
+            assert_eq!(serde_json::to_value(response).unwrap(), value);
+        }
+    }
+
+    #[test]
+    fn interaction_types_round_trip_without_changing_existing_choice_json() {
+        let choice = serde_json::to_value(interaction(InteractionType::Choice, false)).unwrap();
+        assert_eq!(choice["type"], "choice");
+        assert!(choice.get("allows_custom_text").is_none());
+        let decoded: Interaction = serde_json::from_value(choice).unwrap();
+        assert_eq!(decoded.interaction_type, InteractionType::Choice);
+        assert!(!decoded.allows_custom_text);
+
+        let multi = serde_json::to_value(interaction(InteractionType::MultiSelect, true)).unwrap();
+        assert_eq!(multi["type"], "multi_select");
+        assert_eq!(multi["allows_custom_text"], true);
+    }
+
+    #[test]
+    fn validates_choice_responses_against_options_and_custom_text_capability() {
+        let choice = interaction(InteractionType::Choice, true);
+        assert!(valid_response(
+            &choice,
+            &InteractionResponse::choice("first")
+        ));
+        assert!(valid_response(
+            &choice,
+            &InteractionResponse::Choice {
+                option_key: None,
+                custom_text: Some("Another answer".into()),
+            }
+        ));
+        assert!(!valid_response(
+            &choice,
+            &InteractionResponse::choice("missing")
+        ));
+        assert!(!valid_response(
+            &interaction(InteractionType::Choice, false),
+            &InteractionResponse::Choice {
+                option_key: None,
+                custom_text: Some("Another answer".into()),
+            }
+        ));
+    }
+
+    #[test]
+    fn validates_multi_select_responses_as_unique_known_choices() {
+        let multi = interaction(InteractionType::MultiSelect, true);
+        assert!(valid_response(
+            &multi,
+            &InteractionResponse::MultiSelect {
+                option_keys: vec!["first".into(), "second".into()],
+                custom_text: None,
+            }
+        ));
+        assert!(valid_response(
+            &multi,
+            &InteractionResponse::MultiSelect {
+                option_keys: vec![],
+                custom_text: Some("Another answer".into()),
+            }
+        ));
+        assert!(!valid_response(
+            &multi,
+            &InteractionResponse::MultiSelect {
+                option_keys: vec!["first".into(), "first".into()],
+                custom_text: None,
+            }
+        ));
+        assert!(!valid_response(
+            &multi,
+            &InteractionResponse::MultiSelect {
+                option_keys: vec![],
+                custom_text: None,
+            }
+        ));
+    }
+
+    #[test]
+    fn validates_text_responses_as_non_blank_text() {
+        let text = interaction(InteractionType::Text, false);
+        assert!(valid_response(
+            &text,
+            &InteractionResponse::Text {
+                text: "Answer".into()
+            }
+        ));
+        assert!(!valid_response(
+            &text,
+            &InteractionResponse::Text { text: "  ".into() }
+        ));
+        assert!(!valid_response(
+            &text,
+            &InteractionResponse::choice("first")
+        ));
+    }
 }

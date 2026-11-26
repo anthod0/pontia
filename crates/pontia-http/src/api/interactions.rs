@@ -7,7 +7,7 @@ use axum::{
     },
     http::StatusCode,
 };
-use pontia_agent_control::interactions::{InteractionError, InteractionState};
+use pontia_agent_control::interactions::{InteractionError, InteractionResponse, InteractionState};
 use pontia_application::AppState;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -45,12 +45,6 @@ pub struct InteractionQuery {
     limit: Option<i64>,
     cursor: Option<String>,
 }
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ResponseRequest {
-    option_key: String,
-}
-
 pub async fn list_interactions(
     State(app): State<AppState>,
     Path(session): Path<String>,
@@ -82,10 +76,10 @@ pub async fn get_interaction(
 pub async fn respond_interaction(
     State(app): State<AppState>,
     Path((session, id)): Path<(String, String)>,
-    body: Result<Json<ResponseRequest>, JsonRejection>,
+    body: Result<Json<InteractionResponse>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let Json(body) = body.map_err(|e| ApiError::invalid_request(e.to_string()))?;
     Ok(ok(
-        json!({"interaction": app.control().interactions().respond(app.control(),&session,&id,&body.option_key).await?}),
+        json!({"interaction": app.control().interactions().respond_with(app.control(),&session,&id,&body).await?}),
     ))
 }

@@ -11,6 +11,7 @@ use pontia_agent_control::{
         ClientOperation, GenericTestClient, InProcessClient, test_registration,
     },
     clients::ClientRegistry,
+    interactions::InteractionResponse,
 };
 use pontia_bot::{
     conversation::{ConversationService, ConversationUpdate, Reply, ReplyRequest, WorkStatus},
@@ -176,8 +177,9 @@ impl ClientInteractions for Client {
         events: EventIngestService,
         session: &'a str,
         interaction: &'a str,
-        option: &'a str,
+        response: &'a InteractionResponse,
     ) -> ClientOperation<'a, ()> {
+        let option = response.choice_option_key().unwrap();
         self.interaction_responses.lock().unwrap().push((
             session.to_owned(),
             interaction.to_owned(),

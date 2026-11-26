@@ -13,6 +13,7 @@ use pontia_agent_control::{
         ClientRegistration, ClientSession, ClientSessionDetails, NativeEventEvidence,
     },
     control::InputReceipt,
+    interactions::InteractionResponse,
     runtime::ControlTarget,
     turns::InputIntent,
 };
@@ -144,7 +145,7 @@ impl pontia_agent_control::client_contract::ClientInteractions for CodexClient {
         events: EventIngestService,
         session: &'a str,
         interaction: &'a str,
-        option: &'a str,
+        response: &'a InteractionResponse,
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move {
             let service = CodexService::new(events);
@@ -177,7 +178,13 @@ impl pontia_agent_control::client_contract::ClientInteractions for CodexClient {
                     "Codex thread was unloaded".into(),
                 ));
             }
-            crate::service::interactions::resolve(&connection, session, interaction, option).await
+            crate::service::interactions::resolve(
+                &connection,
+                session,
+                interaction,
+                response.choice_option_key()?,
+            )
+            .await
         })
     }
 }
