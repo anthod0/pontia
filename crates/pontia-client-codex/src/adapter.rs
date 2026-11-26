@@ -253,6 +253,18 @@ impl ClientSession for CodexClient {
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move { CodexService::new(events).interrupt(target, turn).await })
     }
+    fn set_reasoning_effort<'a>(
+        &'a self,
+        events: EventIngestService,
+        target: &'a ControlTarget,
+        reasoning_effort: &'a str,
+    ) -> ClientOperation<'a, ()> {
+        Box::pin(async move {
+            CodexService::new(events)
+                .set_reasoning_effort(target, reasoning_effort)
+                .await
+        })
+    }
     fn compact<'a>(
         &'a self,
         events: EventIngestService,
@@ -314,6 +326,34 @@ impl ClientSession for CodexClient {
                     .binding_for_session(session)
                     .await?
                     .is_some())
+        })
+    }
+    fn reasoning_effort_control_available<'a>(
+        &'a self,
+        pool: SqlitePool,
+        session: &'a str,
+    ) -> ClientOperation<'a, bool> {
+        Box::pin(async move {
+            let Some(runtime) = CodexRuntime::for_session(&pool, session).await? else {
+                return Ok(false);
+            };
+            let Ok(connection) = runtime.connection().await else {
+                return Ok(false);
+            };
+            let Some(binding) = pontia_agent_control::AgentBindingService::new(pool)
+                .binding_for_session(session)
+                .await?
+            else {
+                return Ok(false);
+            };
+            Ok(
+                runtime.subscription(session).await == Some(SubscriptionState::Available)
+                    && !connection
+                        .unloaded_threads
+                        .lock()
+                        .await
+                        .contains_key(&binding.client_session_key),
+            )
         })
     }
     fn details<'a>(

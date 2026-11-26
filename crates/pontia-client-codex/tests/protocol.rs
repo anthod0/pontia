@@ -99,6 +99,64 @@ async fn disconnect_after_sending_input_returns_uncertainty_without_retry() {
 }
 
 #[tokio::test]
+async fn reasoning_effort_waits_for_the_native_settings_confirmation() {
+    let root = tempfile::tempdir().unwrap();
+    let socket = root.path().join("server.sock");
+    let listener = UnixListener::bind(&socket).unwrap();
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut wire = accept_async(stream).await.unwrap();
+        let init: Value =
+            serde_json::from_str(wire.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+        wire.send(Message::Text(
+            json!({"id":init["id"],"result":{"userAgent":"codex/test","codexHome":"/tmp","platformFamily":"unix","platformOs":"linux"}}).to_string().into(),
+        ))
+        .await
+        .unwrap();
+        wire.next().await.unwrap().unwrap();
+        let request: Value =
+            serde_json::from_str(wire.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+        assert_eq!(request["method"], "thread/settings/update");
+        assert_eq!(
+            request["params"],
+            json!({"threadId":"thread","effort":"high"})
+        );
+        wire.send(Message::Text(
+            json!({"id":request["id"],"result":{}}).to_string().into(),
+        ))
+        .await
+        .unwrap();
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        wire.send(Message::Text(
+            json!({"method":"thread/settings/updated","params":{"threadId":"thread","threadSettings":{"model":"model","effort":"low"}}}).to_string().into(),
+        ))
+        .await
+        .unwrap();
+    });
+    let connection = Connection::connect(&socket).await.unwrap();
+    let mut events = connection.events.subscribe();
+    connection
+        .call(
+            "thread/settings/update",
+            json!({"threadId":"thread","effort":"high"}),
+        )
+        .await
+        .unwrap();
+    assert!(
+        timeout(Duration::from_millis(30), events.recv())
+            .await
+            .is_err()
+    );
+    let confirmation = timeout(Duration::from_secs(1), events.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(confirmation["method"], "thread/settings/updated");
+    assert_eq!(confirmation["params"]["threadSettings"]["effort"], "low");
+    server.await.unwrap();
+}
+
+#[tokio::test]
 async fn native_rejection_is_distinct_from_an_unconfirmed_request() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("socket");

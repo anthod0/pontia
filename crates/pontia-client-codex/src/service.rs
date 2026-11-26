@@ -328,6 +328,28 @@ impl CodexService {
         Ok(())
     }
 
+    pub(crate) async fn set_reasoning_effort(
+        &self,
+        target: &pontia_agent_control::runtime::ControlTarget,
+        reasoning_effort: &str,
+    ) -> Result<()> {
+        let session = &target.session_id;
+        let runtime = self.runtime(session).await?;
+        let _operation = runtime.lock_session(session).await;
+        self.confirm_control_connection(target, &runtime).await?;
+        let binding = self.binding(session).await?;
+        runtime
+            .connection()
+            .await?
+            .call(
+                "thread/settings/update",
+                json!({"threadId":binding.client_session_key,"effort":reasoning_effort}),
+            )
+            .await?;
+        runtime.current_guard().await?;
+        Ok(())
+    }
+
     pub(crate) async fn resume(
         &self,
         target: &pontia_agent_control::runtime::ControlTarget,

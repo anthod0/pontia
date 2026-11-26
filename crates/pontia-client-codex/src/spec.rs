@@ -16,7 +16,7 @@ pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
     topology: false,
     branch_control: false,
     fork_session: true,
-    reasoning_effort_control: false,
+    reasoning_effort_control: true,
     manual_compaction: true,
     compaction_events: true,
     compaction_history: true,

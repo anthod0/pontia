@@ -17,6 +17,7 @@ struct Fixture {
     turns: Arc<Mutex<Vec<Value>>>,
     configuration: Arc<Mutex<Value>>,
     thread_requests: Arc<Mutex<Vec<Value>>>,
+    settings_requests: Arc<Mutex<Vec<Value>>>,
     thread_name: Arc<Mutex<Value>>,
     notifications: tokio::sync::mpsc::UnboundedSender<Value>,
     server: JoinHandle<()>,
@@ -59,6 +60,8 @@ impl Fixture {
         let server_configuration = configuration.clone();
         let thread_requests = Arc::new(Mutex::new(Vec::new()));
         let server_thread_requests = thread_requests.clone();
+        let settings_requests = Arc::new(Mutex::new(Vec::new()));
+        let server_settings_requests = settings_requests.clone();
         let thread_name = Arc::new(Mutex::new(Value::Null));
         let server_thread_name = thread_name.clone();
         let (notifications, mut notification_rx) = tokio::sync::mpsc::unbounded_channel::<Value>();
@@ -147,6 +150,10 @@ impl Fixture {
                         server_inputs.lock().await.push(request["params"].clone());
                         json!({"turn":{"id":"turn-one"}})
                     }
+                    "thread/settings/update" => {
+                        server_settings_requests.lock().await.push(request.clone());
+                        json!({})
+                    }
                     "model/list" => {
                         json!({"data":[{"model":"model-one","displayName":"Model One","description":"test","hidden":false,"isDefault":true,"supportedReasoningEfforts":[]}],"nextCursor":null})
                     }
@@ -221,6 +228,7 @@ impl Fixture {
             turns,
             configuration,
             thread_requests,
+            settings_requests,
             thread_name,
             notifications,
             server,
@@ -321,6 +329,131 @@ async fn reasoning_effort_applies_only_at_launch_and_tracks_native_settings() {
         wait_for(&mut events, EventType::SessionReasoningEffortUpdated, None).await;
         assert_eq!(observed().await.as_deref(), effort);
     }
+    shutdown.send(true).unwrap();
+    observer.await.unwrap();
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
+async fn running_sessions_apply_only_native_confirmed_reasoning_effort() {
+    use pontia_core::domain::EventType;
+
+    let fixture = Fixture::create(None, "default", Some("medium")).await;
+    assert!(
+        !fixture
+            .app
+            .queries()
+            .get_session(&fixture.session)
+            .await
+            .unwrap()
+            .unwrap()
+            .capabilities
+            .reasoning_effort_control
+    );
+    fixture.dispatch_first_input().await;
+    assert!(
+        fixture
+            .app
+            .queries()
+            .get_session(&fixture.session)
+            .await
+            .unwrap()
+            .unwrap()
+            .capabilities
+            .reasoning_effort_control
+    );
+    let runtime = CodexRuntime::for_session(&fixture.app.db(), &fixture.session)
+        .await
+        .unwrap()
+        .unwrap();
+    runtime
+        .connection()
+        .await
+        .unwrap()
+        .unloaded_threads
+        .lock()
+        .await
+        .insert("thread-one".into(), 1);
+    assert!(
+        !fixture
+            .app
+            .queries()
+            .get_session(&fixture.session)
+            .await
+            .unwrap()
+            .unwrap()
+            .capabilities
+            .reasoning_effort_control
+    );
+    runtime
+        .connection()
+        .await
+        .unwrap()
+        .unloaded_threads
+        .lock()
+        .await
+        .remove("thread-one");
+    let (shutdown, observer) = fixture.start_observer().await;
+    let before: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM events WHERE session_id=? AND event_type='session.reasoning_effort_updated'",
+    )
+    .bind(&fixture.session)
+    .fetch_one(&fixture.app.db())
+    .await
+    .unwrap();
+
+    fixture
+        .app
+        .session_commands()
+        .set_reasoning_effort(
+            &fixture.session,
+            pontia_agent_control::SetSessionReasoningEffortRequest {
+                reasoning_effort: "high".into(),
+            },
+        )
+        .await
+        .unwrap();
+    let request = fixture.settings_requests.lock().await[0].clone();
+    assert_eq!(request["method"], "thread/settings/update");
+    assert_eq!(
+        request["params"],
+        json!({"threadId":"thread-one","effort":"high"})
+    );
+    let unconfirmed = fixture
+        .app
+        .queries()
+        .get_session(&fixture.session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(unconfirmed.reasoning_effort.as_deref(), Some("medium"));
+    let after_request: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM events WHERE session_id=? AND event_type='session.reasoning_effort_updated'",
+    )
+    .bind(&fixture.session)
+    .fetch_one(&fixture.app.db())
+    .await
+    .unwrap();
+    assert_eq!(after_request, before);
+
+    let mut events = fixture.app.agent_events().subscribe();
+    fixture
+        .notifications
+        .send(json!({
+            "method":"thread/settings/updated",
+            "params":{"threadId":"thread-one","threadSettings":{"model":"model-one","effort":"low"}}
+        }))
+        .unwrap();
+    wait_for(&mut events, EventType::SessionReasoningEffortUpdated, None).await;
+    let confirmed = fixture
+        .app
+        .queries()
+        .get_session(&fixture.session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(confirmed.reasoning_effort.as_deref(), Some("low"));
+
     shutdown.send(true).unwrap();
     observer.await.unwrap();
     fixture.shutdown().await;
