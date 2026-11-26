@@ -79,6 +79,22 @@ impl Peer {
         )
         .await
     }
+
+    pub async fn terminate_failed(&self, error: &Error) -> Result<()> {
+        self.state.lock().await.connection_error = Some(error.to_string());
+        let terminated = self.relay.terminate().await;
+        self.stop().await;
+        let recorded = crate::peer::runtime_event(
+            &self.events,
+            &self.session,
+            &self.runtime,
+            pontia_agent_control::PontiaEventType::RuntimeExited,
+            json!({"reason":"startup_failed","failure":{"message":error.to_string()}}),
+        )
+        .await;
+        terminated?;
+        recorded
+    }
 }
 
 pub(crate) async fn restore(

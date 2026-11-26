@@ -78,7 +78,7 @@ pub(crate) async fn send(
             .map_err(protocol_error)?;
         if let Err(error) = peer.receipts.wait(key).await {
             if matches!(error, Error::ControlUnknown(_)) {
-                peer.invalidate(&mut state);
+                peer.invalidate(&mut state, &error);
             }
             return Err(error);
         }
@@ -244,7 +244,10 @@ pub(crate) async fn send(
                 }
             }
             if matches!(result, Err(Error::ControlUnknown(_))) {
-                result_peer.invalidate(&mut state);
+                result_peer.invalidate(
+                    &mut state,
+                    result.as_ref().expect_err("checked control error"),
+                );
             }
             let result = match result {
                 Ok(()) => result_peer.remember(&state, None).await,
@@ -255,7 +258,7 @@ pub(crate) async fn send(
         })
         .map_err(protocol_error)?;
     if let Err(error) = peer.receipts.wait(key).await {
-        peer.invalidate(&mut state);
+        peer.invalidate(&mut state, &error);
         return Err(error);
     }
     drop(state);

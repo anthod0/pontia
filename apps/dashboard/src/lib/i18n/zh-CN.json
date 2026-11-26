@@ -323,6 +323,8 @@
   "chat.waitingHistory": "等待原生历史记录",
   "chat.conversationUnavailable": "对话历史不可用",
   "chat.noConversationHistory": "此会话的对话历史不可用。",
+  "chat.clientConnectionFailed": "Agent 连接失败",
+  "chat.clientReconnecting": "正在重新连接 Agent…",
   "chat.resendFailed": "点击重新发送",
   "chat.retryHistory": "重新加载历史记录",
   "chat.loadingHistory": "正在等待原生历史记录…",

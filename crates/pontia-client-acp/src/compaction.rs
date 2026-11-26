@@ -50,8 +50,8 @@ pub(crate) async fn request(peer: &Peer, operation: String) -> Result<()> {
         peer.receipts.wait(key).await
     }
     .await;
-    if sent.is_err() {
-        peer.invalidate(&mut state);
+    if let Err(error) = &sent {
+        peer.invalidate(&mut state, error);
     }
     sent
 }

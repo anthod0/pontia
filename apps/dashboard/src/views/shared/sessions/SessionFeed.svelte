@@ -51,6 +51,21 @@
       )}
     </p>
   {/if}
+  {#if chat.controlDetails?.diagnostic}
+    <Alert.Root
+      variant={chat.controlDetails.diagnostic.kind === 'error' ? 'destructive' : 'default'}
+      role={chat.controlDetails.diagnostic.kind === 'error' ? 'alert' : 'status'}
+      class="mx-auto w-full max-w-[760px]"
+    >
+      <WarningCircleIcon class="size-4" />
+      <Alert.Title>
+        {$t(chat.controlDetails.diagnostic.kind === 'error' ? 'chat.clientConnectionFailed' : 'chat.clientReconnecting')}
+      </Alert.Title>
+      {#if chat.controlDetails.diagnostic.message}
+        <Alert.Description>{chat.controlDetails.diagnostic.message}</Alert.Description>
+      {/if}
+    </Alert.Root>
+  {/if}
   {#if selectedSession && chat.controlDetails && (selectedSession.capabilities.accept_task || chat.controlDetails.unavailableReason) && (chat.controlDetails.unavailableReason || chat.controlDetails.profile?.error || !chat.sessionSupportsTimeline(selectedSession))}
     <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
       {#if chat.controlDetails.unavailableReason}

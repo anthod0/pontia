@@ -44,6 +44,7 @@ pub(crate) struct SessionState {
     pub ready: bool,
     pub blocked: bool,
     reconnect_needed: bool,
+    pub connection_error: Option<String>,
     pub agent: AgentBounds,
     pub negotiated: Negotiated,
     pub system_prompt: Option<SystemPrompt>,
@@ -330,6 +331,7 @@ impl Peer {
             ready: false,
             blocked: false,
             reconnect_needed: false,
+            connection_error: None,
             native: None,
             capabilities: None,
             agent: owner.agent,
@@ -407,6 +409,7 @@ impl Peer {
         let permission_log_session = session.clone();
         let model_events = events.clone();
         let model_session = session.clone();
+        let connection_state = state.clone();
         tokio::spawn(async move {
             {
                 let io = agent_client_protocol::Client
@@ -485,7 +488,13 @@ impl Peer {
                 );
                 tokio::pin!(io);
                 tokio::select! {
-                    result = &mut io => { if let Err(error) = result { tracing::warn!(%session, %error, "ACP connection ended"); } }
+                    result = &mut io => {
+                        if let Err(error) = result {
+                            let error = protocol_error(error).to_string();
+                            tracing::warn!(%session, %error, "ACP connection ended");
+                            connection_state.lock().await.connection_error = Some(error);
+                        }
+                    }
                     _ = stopping.changed() => {}
                 }
             } // Drop in-flight handlers before cleanup takes their state lock.
@@ -502,7 +511,7 @@ impl Peer {
             if flush && let Some(writer) = events.timeline_cache_writer() {
                 writer.flush(&session, None).await;
             }
-            let (permissions, recover) = {
+            let (permissions, recover, connection_error) = {
                 let mut state = task_state.lock().await;
                 let recover =
                     state.ready && !state.closing && (state.current || state.reconnect_needed);
@@ -510,7 +519,11 @@ impl Peer {
                 state.capabilities = None;
                 state.kiro_receipts.clear();
                 state.active = None;
-                (std::mem::take(&mut state.permissions), recover)
+                (
+                    std::mem::take(&mut state.permissions),
+                    recover,
+                    state.connection_error.clone(),
+                )
             };
             let waiting = permissions
                 .keys()
@@ -541,7 +554,12 @@ impl Peer {
                     &session,
                     &task_runtime,
                     PontiaEventType::RuntimeExited,
-                    json!({"reason":"peer_exited"}),
+                    match connection_error {
+                        Some(message) => {
+                            json!({"reason":"connection_failed","failure":{"message":message}})
+                        }
+                        None => json!({"reason":"peer_exited"}),
+                    },
                 )
                 .await
             {
@@ -907,7 +925,7 @@ impl Peer {
             .map_err(|_| Error::ControlUnknown("ACP history response was lost".into()))?
     }
 
-    pub fn invalidate(&self, state: &mut SessionState) {
+    pub fn invalidate(&self, state: &mut SessionState, error: &Error) {
         // Native protocol failures fence execution; controller loss alone leaves it running.
         if !self.relay.rpc.is_closed()
             && let Err(error) =
@@ -916,6 +934,7 @@ impl Peer {
             tracing::warn!(session=%self.session, %error, "ACP protocol failure could not stop the process");
         }
         state.reconnect_needed = true;
+        state.connection_error = Some(error.to_string());
         state.current = false;
         state.capabilities = None;
         self.stop.send_replace(true);
@@ -1053,8 +1072,9 @@ pub(crate) async fn finish(
         return Ok(());
     }
     if let Err(error) = result {
-        peer.invalidate(&mut state);
-        return Err(protocol_error(error));
+        let error = protocol_error(error);
+        peer.invalidate(&mut state, &error);
+        return Err(error);
     }
     Ok(())
 }

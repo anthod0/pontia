@@ -3454,6 +3454,49 @@ test("refreshes independent control health and disables input without ending an 
   }
 });
 
+test("shows ACP reconnection diagnostics in the session feed", async () => {
+  const selected = session({
+    session_id: "session-acp-reconnecting",
+    client_type: "acp",
+    capabilities: { timeline: true },
+    acp: {
+      connection: "reconnecting",
+      connection_error: "ACP operation could not be confirmed: native stream closed",
+    },
+  });
+  window.history.pushState({}, "", `/dashboard/chat/${selected.session_id}`);
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+
+  render(SessionChatPage);
+
+  const status = await screen.findByRole("status");
+  expect(status).toHaveTextContent("native stream closed");
+});
+
+test("shows ACP startup failure diagnostics as an alert", async () => {
+  const selected = session({
+    session_id: "session-acp-failed",
+    client_type: "acp",
+    state: "error",
+    capabilities: {},
+    acp: {
+      connection: "failed",
+      connection_error: "ACP executable not found: missing-agent",
+    },
+  });
+  window.history.pushState({}, "", `/dashboard/chat/${selected.session_id}`);
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+
+  render(SessionChatPage);
+
+  const alert = await screen.findByRole("alert");
+  expect(alert).toHaveTextContent("missing-agent");
+});
+
 test("closes the old live output stream when navigating to another Session", async () => {
   const first = session({
     session_id: "session-1",

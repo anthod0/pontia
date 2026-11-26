@@ -250,7 +250,7 @@ impl ClientSession for AcpAdapter {
                         &request.session_id,
                         &runtime,
                         PontiaEventType::RuntimeExited,
-                        json!({"reason":"executable_unavailable"}),
+                        json!({"reason":"executable_unavailable","failure":{"message":error.to_string()}}),
                     )
                     .await?;
                     return Err(error);
@@ -285,7 +285,7 @@ impl ClientSession for AcpAdapter {
                         &request.session_id,
                         &runtime,
                         PontiaEventType::RuntimeExited,
-                        json!({"reason":"spawn_failed"}),
+                        json!({"reason":"spawn_failed","failure":{"message":error.to_string()}}),
                     )
                     .await?;
                     return Err(error);
@@ -326,7 +326,9 @@ impl ClientSession for AcpAdapter {
             let params = match setup {
                 Ok(params) => params,
                 Err(error) => {
-                    let _ = peer.terminate().await;
+                    if let Err(termination_error) = peer.terminate_failed(&error).await {
+                        tracing::warn!(session=%request.session_id, %termination_error, "ACP failed startup cleanup failed");
+                    }
                     return Err(error);
                 }
             };
@@ -502,7 +504,7 @@ impl ClientSession for AcpAdapter {
             })
             .map_err(peer::protocol_error)?;
             if let Err(error) = peer.receipts.wait(key).await {
-                peer.invalidate(&mut state);
+                peer.invalidate(&mut state, &error);
                 return Err(error);
             }
             state.refresh_capabilities();
@@ -745,8 +747,67 @@ impl ClientSession for AcpAdapter {
                     .get(id)
                     .map_or(id.as_str(), |agent| &agent.name)
             });
+            let session_state: String =
+                sqlx::query_scalar("SELECT state FROM sessions WHERE session_id = ?")
+                    .bind(session)
+                    .fetch_one(&pool)
+                    .await?;
+            let runtime_state: Option<String> = sqlx::query_scalar(
+                "SELECT state FROM session_runtimes WHERE session_id = ? AND role = 'acp' LIMIT 1",
+            )
+            .bind(session)
+            .fetch_optional(&pool)
+            .await?;
+            let peer = self.peers.lock().await.get(session).cloned();
+            let (connection, in_memory_error) = match peer {
+                Some(peer) => {
+                    let state = peer.state.lock().await;
+                    (
+                        if state.current && state.ready {
+                            "connected"
+                        } else {
+                            "reconnecting"
+                        },
+                        state.connection_error.clone(),
+                    )
+                }
+                None if session_state == "exited" => ("exited", None),
+                None if session_state == "error" => ("failed", None),
+                None => ("reconnecting", None),
+            };
+            let persisted_error: Option<String> = sqlx::query_scalar(
+                r#"SELECT json_extract(payload, '$.failure.message')
+                   FROM events
+                   WHERE session_id = ?
+                     AND event_type IN ('runtime.exited', 'session.error')
+                     AND json_extract(payload, '$.failure.message') IS NOT NULL
+                     AND rowid > COALESCE((
+                         SELECT MAX(rowid) FROM events
+                         WHERE session_id = ? AND event_type = 'runtime.ready'
+                     ), 0)
+                   ORDER BY rowid DESC
+                   LIMIT 1"#,
+            )
+            .bind(session)
+            .bind(session)
+            .fetch_optional(&pool)
+            .await?
+            .flatten();
+            let error = in_memory_error.or(persisted_error);
+            let connection = if error.is_some() && connection != "connected" {
+                if session_state == "error"
+                    || session_state == "exited"
+                    || runtime_state.as_deref() == Some("exited")
+                {
+                    "failed"
+                } else {
+                    "reconnecting"
+                }
+            } else {
+                connection
+            };
             Ok(ClientSessionDetails {
-                data: json!({"agent_id":agent_id,"name":name,"agent_info":agent_info,"system_prompt_injected":system_prompt_injected}),
+                data: json!({"agent_id":agent_id,"name":name,"agent_info":agent_info,"system_prompt_injected":system_prompt_injected,"connection":connection,"connection_error":error}),
             })
         })
     }

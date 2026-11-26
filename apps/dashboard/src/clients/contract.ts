@@ -4,6 +4,10 @@ export interface ClientControlDetails {
   connection: string;
   refreshWhileActive?: boolean;
   unavailableReason?: string | null;
+  diagnostic?: {
+    kind: "reconnecting" | "error";
+    message?: string | null;
+  } | null;
   profile?: {
     profile_id?: string;
     version?: string;

@@ -32,4 +32,27 @@ describe("registered dashboard clients", () => {
     expect(clientSessionLabel(session("acp", { acp }))).toBe("Antigravity");
     expect(clientSessionLabel(session("acp", { acp: { agent_id: "custom" } }))).toBe("custom");
   });
+  it("maps ACP connection diagnostics into the shared dashboard status", () => {
+    expect(
+      clientControlDetails(
+        session("acp", {
+          acp: {
+            connection: "reconnecting",
+            connection_error: "native protocol stream closed",
+          },
+        }),
+      ),
+    ).toMatchObject({
+      connection: "reconnecting",
+      refreshWhileActive: true,
+      diagnostic: { kind: "reconnecting", message: "native protocol stream closed" },
+    });
+    expect(
+      clientControlDetails(
+        session("acp", {
+          acp: { connection: "failed", connection_error: "agent executable was not found" },
+        }),
+      )?.diagnostic,
+    ).toEqual({ kind: "error", message: "agent executable was not found" });
+  });
 });

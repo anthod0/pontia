@@ -194,6 +194,9 @@ def prompt(request, ordinal, cancellation):
             send({"method":"session/update","params":{"sessionId":native_id,"_meta":{"promptId":native},"update":update}})
             send({"method":"_x.ai/session_notification","params":{"sessionId":native_id,"update":{"sessionUpdate":"turn_completed","prompt_id":native,"stop_reason":"end_turn"}}})
         return
+    if os.environ.get("ACP_PROMPT_ERROR") == "1":
+        send({"id": request["id"], "error": {"code": -32603, "message": "Native prompt failed: model unavailable"}})
+        return
     response(request, {"stopReason": reason})
     if os.environ.get("ACP_RESULT_MARKER") == "1":
         (root / f"result-written-{ordinal}").touch()

@@ -512,6 +512,95 @@ async fn explicit_retry_after_rejected_initialization_reuses_the_only_runtime() 
 }
 
 #[tokio::test]
+async fn session_details_report_startup_failure_reason() {
+    let h = Harness::with_command(&[], "/missing/acp-agent").await;
+    assert!(h.create("first").await.is_err());
+    let session: String = sqlx::query_scalar("SELECT session_id FROM sessions")
+        .fetch_one(&h.app.db())
+        .await
+        .unwrap();
+
+    let view = h
+        .app
+        .queries()
+        .get_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(view.client_details["acp"]["connection"], "failed");
+    assert!(
+        view.client_details["acp"]["connection_error"]
+            .as_str()
+            .unwrap()
+            .contains("ACP executable not found")
+    );
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn session_details_report_controller_reconnection() {
+    let mut h = Harness::new(&[]).await;
+    let session = h.create("first").await.unwrap();
+
+    h.stop_transport().await;
+    let view = h
+        .app
+        .queries()
+        .get_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(view.client_details["acp"]["connection"], "reconnecting");
+    assert!(view.client_details["acp"]["connection_error"].is_null());
+    h.start_transport().await;
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn session_details_keep_protocol_failure_reason_while_reconnecting() {
+    let h = Harness::new(&[("ACP_PROMPT_ERROR", "1")]).await;
+    let session = h.create("first").await.unwrap();
+    h.release("hold-load");
+    let turn = h
+        .app
+        .turn_commands()
+        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .await
+        .unwrap()
+        .unwrap();
+    h.release("update-1");
+    h.release("release-1");
+
+    let view = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let view = h
+                .app
+                .queries()
+                .get_session(&session)
+                .await
+                .unwrap()
+                .unwrap();
+            if view.client_details["acp"]["connection"] == "reconnecting"
+                && view.client_details["acp"]["connection_error"]
+                    .as_str()
+                    .is_some_and(|message| message.contains("model unavailable"))
+            {
+                break view;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("protocol failure diagnostic must become visible");
+
+    assert_eq!(view.current_turn_id.as_deref(), Some(turn.turn_id.as_str()));
+    h.release("release-load");
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn close_fences_late_updates_without_fabricating_an_active_turn_result() {
     let h = Harness::new(&[("ACP_UPDATE_AFTER_CLOSE", "1")]).await;
     let session = h.create("first").await.unwrap();
