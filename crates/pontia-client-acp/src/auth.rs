@@ -41,7 +41,7 @@ impl AcpAuth {
             vars: &vars,
             pontia_home: &context.pontia_home,
         }
-        .executable(&launch.command)
+        .executable_with_path(&launch.command, launch.env.get("PATH").map(String::as_str))
         .map_err(Error::CapabilityUnavailable)?
         .ok_or_else(|| {
             Error::CapabilityUnavailable(format!("{} executable not found", launch.command))

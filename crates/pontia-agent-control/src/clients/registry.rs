@@ -1,3 +1,4 @@
+use crate::client_contract::install::ClientInstaller;
 use crate::client_contract::{
     AgentClientSpec, ClientData, ClientLauncher, ClientService, ClientServicePhase, ClientSession,
     InProcessClient, TimelineBoundaryBackend, TurnTimelineBackend,
@@ -57,8 +58,11 @@ impl ClientServiceTasks {
     }
 }
 
+type Installers = HashMap<(&'static str, &'static str), Arc<dyn ClientInstaller>>;
+
 #[derive(Clone)]
 pub struct ClientRegistry {
+    installers: Arc<Installers>,
     entries: Arc<HashMap<&'static str, ClientRegistration>>,
     registration_order: Arc<Vec<&'static str>>,
     integrations: Arc<HashMap<&'static str, Arc<dyn crate::client_contract::ClientIntegration>>>,
@@ -67,6 +71,7 @@ pub struct ClientRegistry {
 impl Default for ClientRegistry {
     fn default() -> Self {
         Self {
+            installers: Arc::default(),
             entries: Arc::new(HashMap::new()),
             registration_order: Arc::new(Vec::new()),
             integrations: Arc::new(HashMap::new()),
@@ -75,6 +80,15 @@ impl Default for ClientRegistry {
 }
 
 impl ClientRegistry {
+    pub fn register_installer(&mut self, installer: Arc<dyn ClientInstaller>) {
+        Arc::make_mut(&mut self.installers)
+            .insert((installer.client_type(), installer.client_key()), installer);
+    }
+
+    pub fn installer(&self, client: &str, key: &str) -> Option<Arc<dyn ClientInstaller>> {
+        self.installers.get(&(client, key)).cloned()
+    }
+
     pub fn register_integration(
         &mut self,
         integration: Arc<dyn crate::client_contract::ClientIntegration>,
@@ -269,5 +283,42 @@ impl ClientRegistry {
 
     pub fn boundaries(&self, client: &str) -> Option<TimelineBoundaryBackend> {
         self.data(client).map(|data| data.boundaries())
+    }
+}
+
+#[cfg(test)]
+mod install_tests {
+    use super::*;
+    use crate::client_contract::{DetectionContext, install::InstallSpec};
+    use pontia_runtime::client_operations::InstallOperation;
+
+    struct Installer(&'static str);
+
+    impl ClientInstaller for Installer {
+        fn client_type(&self) -> &'static str {
+            "test"
+        }
+        fn client_key(&self) -> &'static str {
+            self.0
+        }
+        fn inspect(&self, _: &DetectionContext<'_>) -> InstallSpec {
+            unreachable!()
+        }
+        fn install(&self, _: &str, _: &mut InstallOperation) -> std::io::Result<()> {
+            unreachable!()
+        }
+    }
+
+    #[test]
+    fn installers_are_registered_per_client_type_and_key() {
+        let mut registry = ClientRegistry::default();
+        for key in ["first", "second"] {
+            registry.register_installer(Arc::new(Installer(key)));
+        }
+        for key in ["first", "second"] {
+            assert_eq!(registry.installer("test", key).unwrap().client_key(), key);
+        }
+        assert!(registry.installer("other", "first").is_none());
+        assert!(registry.installer("test", "missing").is_none());
     }
 }

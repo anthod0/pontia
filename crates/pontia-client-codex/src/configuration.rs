@@ -72,9 +72,7 @@ impl ClientConfiguration for CodexConfiguration {
         context: &'a DetectionContext<'_>,
     ) -> ClientOperation<'a, Option<String>> {
         Box::pin(async move {
-            let Ok(path) =
-                crate::setup::resolve_executable(context.vars.get("PATH").map(String::as_str))
-            else {
+            let Ok(path) = crate::setup::resolve_executable(context.search_path()) else {
                 return Ok(None);
             };
             Ok(context.cli_version(&path, "codex-cli ").await)

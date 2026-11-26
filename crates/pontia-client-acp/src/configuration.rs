@@ -102,7 +102,9 @@ impl ClientConfiguration for AcpConfiguration {
                 vars: &vars,
                 pontia_home: context.pontia_home,
             };
-            let Ok(Some(path)) = context.executable(&launch.command) else {
+            let Ok(Some(path)) = context
+                .executable_with_path(&launch.command, launch.env.get("PATH").map(String::as_str))
+            else {
                 return Ok(None);
             };
             Ok(context.cli_version(&path, prefix).await)
@@ -114,18 +116,12 @@ impl ClientConfiguration for AcpConfiguration {
         effective: &Value,
         context: &pontia_agent_control::client_contract::DetectionContext<'_>,
     ) -> pontia_agent_control::client_contract::ClientDetection {
-        use pontia_agent_control::client_contract::{ClientDetection, DetectionContext};
+        use pontia_agent_control::client_contract::ClientDetection;
         let config: AcpLaunch = match serde_json::from_value(effective.clone()) {
             Ok(config) => config,
             Err(error) => return ClientDetection::unknown(error.to_string()),
         };
-        let mut vars = context.vars.clone();
-        vars.extend(config.env);
-        DetectionContext {
-            vars: &vars,
-            pontia_home: context.pontia_home,
-        }
-        .command(&config.command)
+        context.command_with_path(&config.command, config.env.get("PATH").map(String::as_str))
     }
     fn keys(&self) -> Vec<String> {
         self.agents.ids().map(str::to_owned).collect()

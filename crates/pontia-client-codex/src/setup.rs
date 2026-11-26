@@ -293,7 +293,11 @@ pub fn inspect<R: CommandRunner + ?Sized>(
         return Err("Codex automatic startup is supported only on Linux and macOS".to_string());
     }
 
-    let executable = resolve_executable(vars.get("PATH").map(String::as_str))?;
+    let executable = resolve_executable(pontia_runtime::executable::effective_search_path(
+        vars.get("PATH").map(OsStr::new),
+        Some(user_home),
+        vars.get("PONTIA_HOME").map(Path::new),
+    ))?;
     let home = resolve_codex_home(vars, user_home)?;
     let service_user = current_service_user(runner)?;
     let environment = codex_environment(&home)?;
@@ -579,35 +583,22 @@ pub(crate) fn detect(
     context: &pontia_agent_control::client_contract::DetectionContext<'_>,
 ) -> pontia_agent_control::client_contract::ClientDetection {
     use pontia_agent_control::client_contract::ClientDetection;
-    match find_executable(context.vars.get("PATH").map(String::as_str)) {
+    match find_executable(context.search_path()) {
         Ok(Some(path)) => ClientDetection::detected(path.display().to_string()),
         Ok(None) => ClientDetection::not_detected(),
         Err(error) => ClientDetection::unknown(error),
     }
 }
 
-pub(crate) fn resolve_executable(search_path: Option<&str>) -> Result<PathBuf, String> {
+pub(crate) fn resolve_executable(search_path: Vec<PathBuf>) -> Result<PathBuf, String> {
     find_executable(search_path)?
         .ok_or_else(|| "Codex must be installed and executable on PATH".to_string())
 }
 
-fn find_executable(search_path: Option<&str>) -> Result<Option<PathBuf>, String> {
-    let path = search_path
-        .filter(|path| !path.trim().is_empty())
-        .ok_or_else(|| "PATH must be set to locate the Codex executable".to_string())?;
-    let current_dir = env::current_dir()
-        .map_err(|error| format!("failed to resolve the current directory: {error}"))?;
-    for directory in env::split_paths(path) {
-        let candidate = if directory.is_absolute() {
-            directory.join("codex")
-        } else {
-            current_dir.join(directory).join("codex")
-        };
-        if pontia_runtime::executable::is_executable(&candidate)? && !shim::is_shim(&candidate)? {
-            return Ok(Some(candidate));
-        }
-    }
-    Ok(None)
+fn find_executable(search_path: Vec<PathBuf>) -> Result<Option<PathBuf>, String> {
+    pontia_runtime::executable::find_matching("codex", search_path, |path| {
+        Ok(!shim::is_shim(path)?)
+    })
 }
 
 fn resolve_codex_home(vars: &HashMap<String, String>, user_home: &Path) -> Result<PathBuf, String> {

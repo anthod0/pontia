@@ -226,8 +226,9 @@ pub(super) async fn connect_background(
         Err(error) if error.kind() == ErrorKind::NotFound => {}
         Err(error) => return Err(protocol_error(error)),
     }
-    let executable = crate::setup::resolve_executable(std::env::var("PATH").ok().as_deref())
-        .map_err(protocol_error)?;
+    let executable =
+        crate::setup::resolve_executable(pontia_runtime::executable::inherited_search_path(None))
+            .map_err(protocol_error)?;
     let log = pontia_core::private_fs::append_log(&directory.parent().unwrap().join("runtime.log"))
         .map_err(protocol_error)?;
     let mut command =

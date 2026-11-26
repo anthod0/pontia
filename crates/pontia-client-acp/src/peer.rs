@@ -259,13 +259,12 @@ pub(crate) fn resolve_command(config: &AcpLaunch, cwd: &Path) -> Result<AcpLaunc
     } else if command.components().count() > 1 {
         vec![cwd.join(command)]
     } else {
-        let path = config
-            .env
-            .get("PATH")
-            .map(std::ffi::OsString::from)
-            .or_else(|| std::env::var_os("PATH"))
-            .unwrap_or_default();
-        std::env::split_paths(&path)
+        let directories = match config.env.get("PATH") {
+            Some(path) => std::env::split_paths(path).collect(),
+            None => pontia_runtime::executable::inherited_search_path(None),
+        };
+        directories
+            .into_iter()
             .map(|entry| cwd.join(entry).join(command))
             .collect()
     };

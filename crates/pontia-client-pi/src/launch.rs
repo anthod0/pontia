@@ -38,6 +38,17 @@ impl ClientLauncher for PiLauncher {
         request: ClientLaunchRequest<'_>,
     ) -> Result<pontia_runtime::RuntimeStartResult> {
         let mut runtime = request.runtime;
+        if !runtime.environment.contains_key("PATH") {
+            let path = std::env::join_paths(pontia_runtime::executable::inherited_search_path(
+                Some(request.root),
+            ))
+            .map_err(|error| Error::Domain(error.to_string()))?;
+            runtime.environment.insert(
+                "PATH".into(),
+                path.into_string()
+                    .map_err(|_| Error::Domain("PATH is not UTF-8".into()))?,
+            );
+        }
         let command = runtime.start_command.take().unwrap_or_else(|| {
             let command = std::env::var("PONTIA_PI_TUI_COMMAND")
                 .ok()

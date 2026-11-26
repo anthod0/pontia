@@ -43,8 +43,7 @@ async fn connect(context: &AuthContext) -> Result<Arc<Connection>> {
     let runtime = match CodexRuntime::ensure(&context.pontia_home, CodexServerTarget::User).await {
         Ok(runtime) => runtime,
         Err(user) => {
-            if crate::setup::resolve_executable(context.vars.get("PATH").map(String::as_str))
-                .is_err()
+            if crate::setup::resolve_executable(context.detection_context().search_path()).is_err()
             {
                 return Err(user);
             }

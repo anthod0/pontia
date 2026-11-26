@@ -1,6 +1,7 @@
 pub mod auth;
 mod channel;
 mod detection;
+pub mod install;
 pub use detection::{ClientDetection, DetectionContext, DetectionStatus};
 mod launch_file;
 pub mod version;
