@@ -6,8 +6,6 @@ published: "2026-11-11"
 
 [Pi](https://pi.dev) is a minimal terminal coding agent. Its sessions run in a terminal on your machine, so a long task is easy to start and hard to check on once you leave the desk. This article covers the ways to reach a Pi session from a phone or another computer.
 
-Pontia is the tool we build.
-
 ## The short answer
 
 Pi has no official remote or mobile client.

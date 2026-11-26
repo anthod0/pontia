@@ -148,7 +148,7 @@ export default function (pi: ExtensionAPI) {
 
 通知告诉你 Agent 需要你，但你仍然需要一种回应的方式。在手机上通过 SSH，你需要连接 tmux、向上滚动找到提示，然后在全屏 TUI 中输入。[从手机访问编程 Agent 服务器](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)介绍了这种设置的网络部分。
 
-我们开发的工具 [Pontia](/docs/how-it-works) 会在手机浏览器中显示 Codex 审批请求，并提供 **Allow** 和 **Deny** 按钮，还会将 Pi 会话以聊天形式实时显示。
+[Pontia](/docs/how-it-works) 会在手机浏览器中显示 Codex 审批请求，并提供 **Allow** 和 **Deny** 按钮，还会将 Pi 会话以聊天形式实时显示。
 
 ## 相关文章
 

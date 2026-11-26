@@ -14,7 +14,7 @@ published: "2026-11-27"
 
 一方で Grok Build は標準の ACP サーバー（`grok agent stdio`）を内蔵しているため、ACP 対応のローカルコントロールプレーン（[Pontia](/docs/agent-clients/grok) など）を組み合わせれば、コードと実行環境を自分のマシンに残したまま、エンドツーエンド暗号化されたリレー経由でスマートフォンやブラウザーからローカルの `grok` セッションを操作できます。
 
-Pontia は私たちが開発しているツールです。本記事の Grok Build、Grok Bot、Claude Code、Codex CLI に関する記述は、すべて 2026 年 11 月 27 日時点で公式ドキュメントおよび公式 changelog から直接確認しています。
+本記事の Grok Build、Grok Bot、Claude Code、Codex CLI に関する記述は、すべて 2026 年 11 月 27 日時点で公式ドキュメントおよび公式 changelog から直接確認しています。
 
 ## Grok Build CLI のインストールと 3 つの認証ルート
 

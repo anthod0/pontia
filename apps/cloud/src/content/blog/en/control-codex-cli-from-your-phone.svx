@@ -6,8 +6,6 @@ published: "2026-11-11"
 
 Codex CLI runs on the machine that has your repositories, toolchains, and credentials. Long tasks often stop on an approval prompt while you are away from that terminal. This article compares the ways to reach a running Codex session from a phone and which one fits which setup.
 
-Pontia is the tool we build.
-
 ## The short answer
 
 | Your situation | Best fit |

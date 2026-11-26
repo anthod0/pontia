@@ -8,8 +8,6 @@ Running a single coding agent in a terminal is straightforward. Running three or
 
 This article draws a clean line between an **agent harness** and a **coding agent orchestrator**, compares the four orchestration patterns engineers use in practice, and examines the five technical constraints that determine whether multi-agent orchestration actually saves engineering time.
 
-Pontia is the tool we build.
-
 ## Agent harness vs. coding agent orchestrator
 
 Discussions about multi-agent coding often blur two distinct layers: the harness that wraps a single model loop, and the orchestrator that coordinates several independent coding runs.

@@ -6,8 +6,6 @@ published: "2026-11-11"
 
 O Codex CLI roda na máquina que tem seus repositórios, toolchains e credenciais. Tarefas longas muitas vezes param em um pedido de aprovação enquanto você está longe desse terminal. Este artigo compara as formas de acessar uma Session do Codex em execução pelo celular e qual delas combina com cada configuração.
 
-O Pontia é a ferramenta que nós desenvolvemos.
-
 ## A resposta curta
 
 | Sua situação | Melhor opção |

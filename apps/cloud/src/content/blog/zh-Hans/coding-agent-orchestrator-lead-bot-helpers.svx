@@ -8,8 +8,6 @@ published: "2026-11-27"
 
 本文先厘清 **agent harness**（或 **AI harness**）与 **coding agent orchestrator** 的分层边界，客观对比一线工程团队常用的四种 **多 agent 编排**（multi-agent orchestration）模式，最后拆透五个决定 **agent 编排** 是否真正省时的硬核工程问题。
 
-Pontia 是我们开发的工具。
-
 ## 先厘清概念：Agent Harness vs. Coding Agent Orchestrator
 
 讨论 **Claude Code 编排** 或多 agent 协作时，很多人把两层截然不同的工程设施混为一谈：包裹单个模型循环的 harness，以及调度多个独立编程任务的 orchestrator。

@@ -11,7 +11,7 @@ O servidor não precisa ser uma VPS. Uma máquina em casa ou um mini PC sobrando
 ## A resposta curta
 
 1. Crie um usuário dedicado, sem privilégios de root, para os agentes e faça login em cada agente como esse usuário.
-2. Instale e inicialize o [Pontia](https://pontia.dev), a ferramenta que nós desenvolvemos, com `npx @pontia/cli init`.
+2. Instale e inicialize o [Pontia](https://pontia.dev) com `npx @pontia/cli init`.
 3. Abra [app.pontia.dev](https://app.pontia.dev) no celular.
 
 O Pontia mantém as sessões rodando depois que você faz logout e conecta o servidor ao seu celular por um relay criptografado de ponta a ponta, sem nenhuma porta de entrada aberta. O controle remoto pelo app móvel do ChatGPT, da OpenAI, não roda diretamente em um servidor Linux. Ele precisa do app desktop do ChatGPT em um host Mac ou Windows que fique ligado e acesse o servidor por SSH.

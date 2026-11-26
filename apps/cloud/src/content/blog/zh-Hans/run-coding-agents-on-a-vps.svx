@@ -11,7 +11,7 @@ published: "2026-11-11"
 ## 简短回答
 
 1. 为 Agent 创建一个专用的非 root 用户，并以该用户身份登录每个 Agent。
-2. 用 `npx @pontia/cli init` 安装并初始化 [Pontia](https://pontia.dev)，这是我们开发的工具。
+2. 用 `npx @pontia/cli init` 安装并初始化 [Pontia](https://pontia.dev)。
 3. 在手机上打开 [app.pontia.dev](https://app.pontia.dev)。
 
 Pontia 在你注销后保持 Session 运行，并通过端到端加密的中继把服务器连接到你的手机，无需开放入站端口。OpenAI 的 ChatGPT 移动端远程控制无法直接在 Linux 服务器上运行。它需要一台保持唤醒的 Mac 或 Windows 主机运行 ChatGPT 桌面应用，并通过 SSH 连接服务器。

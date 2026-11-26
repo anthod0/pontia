@@ -14,7 +14,7 @@ published: "2026-11-27"
 
 好在 Grok Build 原生提供标准的 `grok agent stdio` ACP 接口。要从手机或任意浏览器远程控制本机 Grok Build CLI，只需接入支持 ACP 的本机控制面——例如 [Pontia](/docs/agent-clients/grok)——由它在本机 Workspace 中拉起 `grok agent stdio` 会话，并通过端到端加密中继把会话接到桌面与手机浏览器。
 
-Pontia 是我们开发的工具。文中关于 Grok Build、Grok Bot、Claude Code 与 Codex CLI 的全部事实均在 2026 年 11 月 27 日对照官方文档与更新日志一手核验。
+文中关于 Grok Build、Grok Bot、Claude Code 与 Codex CLI 的全部事实均在 2026 年 11 月 27 日对照官方文档与更新日志一手核验。
 
 ## Grok Build CLI 安装与三路认证实操
 

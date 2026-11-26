@@ -148,7 +148,7 @@ Se isso importa para o seu trabalho, escolha uma destas opções:
 
 Uma notificação diz que um agente precisa de você. Você ainda precisa de uma forma de responder. Via SSH pelo celular, você se conecta ao tmux, rola para trás para encontrar o prompt e digita em uma TUI em tela cheia. [Acesse um servidor de agente de programação pelo celular](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents) aborda a parte de rede dessa configuração.
 
-O [Pontia](/docs/how-it-works), a ferramenta que nós desenvolvemos, mostra os pedidos de aprovação do Codex em um navegador no celular com os botões **Allow** e **Deny** e transmite as sessões do Pi como chats.
+O [Pontia](/docs/how-it-works) mostra os pedidos de aprovação do Codex em um navegador no celular com os botões **Allow** e **Deny** e transmite as sessões do Pi como chats.
 
 ## Relacionados
 

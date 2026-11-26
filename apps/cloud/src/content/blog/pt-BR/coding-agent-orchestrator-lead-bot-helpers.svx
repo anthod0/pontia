@@ -8,8 +8,6 @@ Rodar um único agente de código no terminal é simples. Rodar três ou quatro 
 
 Este artigo separa com clareza o papel de um **agent harness** do papel de um **coding agent orchestrator**, compara os quatro padrões de **multi-agent orchestration** usados na prática e analisa os cinco problemas de engenharia que decidem se agentes em paralelo realmente economizam tempo.
 
-O Pontia é a ferramenta que nós desenvolvemos.
-
 ## Agent harness vs. coding agent orchestrator
 
 Discussões sobre orquestração de agentes de código costumam misturar duas camadas distintas: o harness que envolve um único loop de modelo e o orquestrador que coordena várias execuções independentes no código.

@@ -14,7 +14,7 @@ Boa parte da confusão vem do **Grok Bot** ([docs.x.ai/grok-bot/overview](https:
 
 Como o Grok Build expõe um transporte ACP de primeira classe (`grok agent stdio`), você ainda pode controlar sessões locais do `grok` pelo celular ou navegador sem mover o repositório para a nuvem. Basta conectar um plano de controle local compatível com ACP — como o [Pontia](/docs/agent-clients/grok) — que inicia `grok agent stdio` dentro da sua Workspace local e conecta a sessão ao navegador por um relay com criptografia de ponta a ponta.
 
-O Pontia é a ferramenta que desenvolvemos. Todos os fatos abaixo sobre Grok Build, Grok Bot, Claude Code e Codex CLI foram verificados na documentação oficial e nos changelogs em 27 de novembro de 2026.
+Todos os fatos abaixo sobre Grok Build, Grok Bot, Claude Code e Codex CLI foram verificados na documentação oficial e nos changelogs em 27 de novembro de 2026.
 
 ## Instalar o Grok Build CLI e escolher o fluxo de autenticação
 

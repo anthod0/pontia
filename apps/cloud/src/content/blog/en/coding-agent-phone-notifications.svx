@@ -148,7 +148,7 @@ If that matters for your work, choose one of these:
 
 A notification tells you that an agent needs you. You still need a way to answer. Over SSH from a phone, you attach to tmux, scroll back to find the prompt, and type into a full-screen TUI. [Reach a coding agent server from your phone](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents) covers the networking side of that setup.
 
-[Pontia](/docs/how-it-works), the tool we build, shows Codex approval requests in a phone browser with **Allow** and **Deny** buttons and streams Pi sessions as chats.
+[Pontia](/docs/how-it-works) shows Codex approval requests in a phone browser with **Allow** and **Deny** buttons and streams Pi sessions as chats.
 
 ## Related
 

@@ -11,7 +11,7 @@ published: "2026-11-11"
 ## 結論
 
 1. エージェント専用の非 root ユーザーを作成し、そのユーザーとして各エージェントにサインインします。
-2. 私たちが開発しているツール [Pontia](https://pontia.dev) を `npx @pontia/cli init` でインストールして初期化します。
+2. [Pontia](https://pontia.dev) を `npx @pontia/cli init` でインストールして初期化します。
 3. スマートフォンで [app.pontia.dev](https://app.pontia.dev) を開きます。
 
 Pontia はログアウト後も Session を動かし続け、エンドツーエンドで暗号化されたリレーを通じてサーバーとスマートフォンをつなぎます。受信用のポートを開く必要はありません。OpenAI の ChatGPT モバイルのリモートコントロールは、Linux サーバー上で直接は動作しません。スリープせずに動き続け、SSH でサーバーに接続する Mac または Windows ホスト上の ChatGPT デスクトップアプリが必要です。

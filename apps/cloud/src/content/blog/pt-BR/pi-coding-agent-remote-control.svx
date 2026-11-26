@@ -6,8 +6,6 @@ published: "2026-11-11"
 
 O [Pi](https://pi.dev) é um agente de programação minimalista para terminal. As sessões dele rodam em um terminal na sua máquina, então uma tarefa longa é fácil de iniciar e difícil de acompanhar quando você sai da mesa. Este artigo mostra as formas de acessar uma sessão do Pi pelo celular ou por outro computador.
 
-O Pontia é a ferramenta que nós desenvolvemos.
-
 ## A resposta curta
 
 O Pi não tem um cliente remoto ou móvel oficial.

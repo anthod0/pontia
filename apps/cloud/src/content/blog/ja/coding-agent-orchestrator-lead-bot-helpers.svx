@@ -8,8 +8,6 @@ published: "2026-11-27"
 
 この記事では、まず **agent harness**（**AI harness**）と **coding agent orchestrator** の責務の境界を整理し、現場で使われている 4 つの **multi-agent orchestration** パターンを比較したうえで、並列コーディングエージェントが本当に開発時間を短縮できるかを左右する 5 つの技術課題を掘り下げます。
 
-Pontia は私たちが開発しているツールです。
-
 ## Agent Harness と Coding Agent Orchestrator の違い
 
 マルチエージェント開発の議論では、単一のモデルループを包む「ハーネス」と、複数の独立したコーディング作業を束ねる「オーケストレーター」が混同されがちです。

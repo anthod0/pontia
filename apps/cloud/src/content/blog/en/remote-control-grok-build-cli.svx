@@ -14,7 +14,7 @@ Part of the confusion comes from **Grok Bot**, a separate xAI product documented
 
 Because Grok Build exposes a native ACP transport (`grok agent stdio`), you can still control local `grok` sessions from a phone or browser without handing your code to a cloud VM. You connect a local ACP-capable control plane—such as [Pontia](/docs/agent-clients/grok)—which launches `grok agent stdio` directly inside your local Workspace and streams the session to a browser Dashboard over an end-to-end encrypted relay.
 
-Pontia is the tool we build. Every claim below about Grok Build, Grok Bot, Claude Code, and Codex CLI was verified against official documentation and release changelogs on November 27, 2026.
+Every claim below about Grok Build, Grok Bot, Claude Code, and Codex CLI was verified against official documentation and release changelogs on November 27, 2026.
 
 ## Install Grok Build CLI and choose an authentication path
 
