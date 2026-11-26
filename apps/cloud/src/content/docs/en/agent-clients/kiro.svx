@@ -1,0 +1,84 @@
+<svelte:head>
+	<title>Kiro Agent Client — Pontia</title>
+	<meta name="description" content="Install Kiro and control Kiro CLI sessions remotely with Pontia." />
+</svelte:head>
+
+# Kiro Agent Client
+
+Pontia runs Kiro through the Kiro CLI's ACP server. You can start a Kiro Session on your device, control it from the Remote Dashboard, answer tool requests, and resume its native conversation history.
+
+## Install Kiro
+
+Open **Settings → Agent Clients → Kiro** and choose **Install**. Pontia uses Kiro's official installer, verifies `kiro-cli --version`, and enables the Client. The installer supports Linux and macOS on x86-64 and Arm64 and requires Bash, `curl` or `wget`, `unzip`, and the platform's SHA-256 tool.
+
+To install from the device terminal instead, run:
+
+```sh
+pontia client install kiro
+```
+
+If Kiro is already installed, make sure `kiro-cli` is on the Pontia service user's `PATH`, then enable it:
+
+```sh
+pontia client enable kiro
+```
+
+Pontia starts each Session with `kiro-cli acp --agent-engine=v3` in its Workspace.
+
+## Sign in
+
+The first-client guide in the Remote Dashboard offers two device-code methods:
+
+- **Kiro Free (AWS Builder ID)** opens the Builder ID authorization flow.
+- **Kiro Pro (IAM Identity Center)** asks for the HTTPS identity-provider URL and AWS Region before opening the authorization flow.
+
+Open the displayed page on any device and enter the code. From a device terminal, you can use Kiro's normal login flow:
+
+```sh
+kiro-cli login
+```
+
+On a headless or remote host, force the device flow:
+
+```sh
+kiro-cli login --use-device-flow
+```
+
+Run the login as the same operating-system user that runs Pontia. Kiro also accepts `KIRO_API_KEY` from the Pontia service environment. After changing the service environment or `PATH`, run `pontia up` so the managed service receives the new values.
+
+## Control Kiro remotely
+
+In [New chat](https://app.pontia.dev/), select a Workspace, choose **Kiro**, and select a model or the Client default. The Dashboard streams the conversation and work steps and presents Kiro's tool requests for one-time approval.
+
+Send another message during a running Turn to steer Kiro when its active version offers steering. You can also queue a follow-up for the next Turn or interrupt the active Turn. Reopening the Session restores its timeline from Kiro's native history.
+
+Kiro reports estimated context usage. When the Session is idle or interrupted, choose **Compact context** or send `/compact`; manual and automatic compaction checkpoints appear in the timeline.
+
+## Choose a model and reasoning effort
+
+Pontia reads Kiro's model catalog for the selected Workspace. The model picker lists the available models and the reasoning-effort choices advertised for each model. Keeping **Client default** follows Kiro's current default and still exposes its published effort choices.
+
+The Session header shows the effective model and reasoning effort reported by Kiro.
+
+## Use Kiro for Bots, helpers, and Workflows
+
+You can select Kiro when creating a Bot. Bot Sessions, memory retrieval, and Dreaming use a dedicated `pontia-restricted` Kiro agent with file reading and shell commands. Kiro receives the Session's instructions and can share requested files as Dashboard attachments.
+
+A Bot's general helper inherits the Bot's Kiro model and reasoning effort. For a specialist helper, create an **Agent Profile** that selects Kiro, a model, an optional reasoning effort, and its instructions. The Bot can then launch that profile with `pontia bot helper create --profile-id ID`.
+
+The same Agent Profile can run a Workflow node by setting `execution_profile_id` in its TOML definition:
+
+```toml
+[[nodes]]
+type = "agent"
+phase = "Research"
+title = "Kiro researcher"
+instructions = "Inspect the project and prepare the requested handoff."
+inputs = []
+output = "research.md"
+execution_profile_id = "kiro-researcher"
+```
+
+Enable **YOLO** on an Agent Profile when that helper or Workflow node should use Kiro's usual tools, MCP servers, and skills without approval prompts. Ordinary API-created Sessions can select `default`, `yolo`, or `restricted` with the `mode` field described in [Agent Clients](/docs/agent-clients#client-credentials-and-permissions).
+
+See [Troubleshooting](/docs/troubleshooting) if Kiro is not detected or a Session does not start.

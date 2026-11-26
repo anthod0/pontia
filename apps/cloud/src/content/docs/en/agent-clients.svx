@@ -14,11 +14,11 @@ Pontia includes these Agent Clients:
 | [Pi](/docs/agent-clients/pi) | `pi` and `tmux` | Pontia's Pi plugin |
 | [Codex](/docs/codex) | A Codex CLI with app-server daemon support | Per-user Codex daemon startup, launcher, and shell PATH |
 | [Claude Code](/docs/agent-clients/claude) | Node.js LTS, npm, and Claude Code authentication | The `@pontia/claude-client` package from npm |
-| Google Antigravity | `agy` | Enable in Agent Clients (ACP) |
-| Grok Build | `grok` | Enable in Agent Clients (ACP) |
-| Kiro | `kiro-cli` | Sign in with `kiro-cli login` |
+| [Google Antigravity](/docs/agent-clients/antigravity) | `agy` | Built-in ACP integration |
+| [Grok Build](/docs/agent-clients/grok) | `grok` | Built-in ACP integration |
+| [Kiro](/docs/agent-clients/kiro) | `kiro-cli` | Built-in ACP integration |
 
-Choose Antigravity or Kiro for a Bot, memory retrieval, or dreaming to use its restricted agent with file reading, terminal commands, and web search. Helpers working in a Workspace use the selected client’s usual tools and permission prompts.
+Grok Build, Antigravity, and Kiro can run ordinary Sessions, Bots, helpers, memory tasks, and Workflow nodes. Their individual guides cover installation, authentication, remote controls, model settings, and restricted execution.
 
 ## Choose Clients during initialization
 
@@ -30,30 +30,6 @@ pontia init
 
 The initializer checks your selected Clients before applying the configuration. Pi is selected by default; Codex and `claude-agent` are optional. Selected Clients are enabled for new Sessions.
 
-## Use Kiro in a Session
-
-Install `kiro-cli` on the PATH of the user running Pontia and run `kiro-cli login` as that user. Enable Kiro in **Settings → Agent Clients** or run `pontia client enable kiro`.
-
-Select Kiro and a model when creating a Session. You can approve a tool request for one use, steer a running turn when Kiro offers steering, queue a follow-up for the next turn, and resume a conversation with its timeline.
-
-You can view estimated context usage, compact an idle Session, and see automatic and manual compaction checkpoints in the timeline.
-
-Kiro follows Session instructions for sharing files as attachments. You can assign a Kiro Agent Profile with a system prompt to a Workflow node.
-
-<h2 id="enable-an-acp-agent">Enable Grok Build</h2>
-
-Install Grok Build so that `grok` is on the Pontia service user’s PATH. Pontia launches it with `grok agent stdio`. Enable Grok Build under **Settings → Agent Clients** in the Dashboard, or run:
-
-```sh
-pontia client enable grok
-```
-
-In an idle or interrupted Grok session, use `/compact` in the Dashboard to compress the conversation context. You can continue in the same session and see compaction checkpoints in its timeline.
-
-In restricted Sessions, Grok Build keeps its terminal and read tools. Its dedicated tools for file edits, media output, worktrees, subagents, workflows, scheduling, background tasks, monitoring, and MCP tool calls are disabled. Restricted Sessions also turn off automatic skill discovery.
-
-Send a message to a busy Grok Session, Bot, or helper to add instructions at the next tool or model transition. Grok finishes its current work. If the turn has passed its last transition, Grok runs the message as a follow-up turn.
-
 Run `pontia setup pi`, `pontia setup codex`, or `pontia setup claude` to install or repair a local integration. Omit the Client to select interactively. Setup also enables the Client.
 
 In the Dashboard, open **Settings → Agent Clients**, select Pi, Codex, or Claude Code, and click **Initialize** to perform the same setup on that device. The page shows the latest setup output and result, including after reconnecting.
@@ -64,7 +40,7 @@ The Dashboard presents the controls supported by the selected Client, such as in
 
 A Pontia Session is durably associated with one client-native conversation identity after binding. Reopening the same native conversation continues the existing Session; a new native conversation belongs to a new Session.
 
-## Client credentials and permissions
+<h2 id="client-credentials-and-permissions">Client credentials and permissions</h2>
 
 Each Client uses its own credentials, sandbox, and local permissions. Sign in to each Client and verify that it can perform the intended work before starting the integration.
 

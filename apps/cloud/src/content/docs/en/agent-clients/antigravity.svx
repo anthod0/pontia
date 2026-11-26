@@ -1,0 +1,73 @@
+<svelte:head>
+	<title>Antigravity Agent Client — Pontia</title>
+	<meta name="description" content="Install Google Antigravity and control agy sessions remotely with Pontia." />
+</svelte:head>
+
+# Google Antigravity Agent Client
+
+Pontia runs Google Antigravity through the `agy` CLI's ACP server. You can start an Antigravity Session on your device, follow and control it from the Remote Dashboard, answer permission requests, and resume its native conversation history.
+
+## Install Antigravity
+
+Open **Settings → Agent Clients → Antigravity** and choose **Install**. Pontia uses Google's official installer, verifies `agy --version`, and enables the Client. The installer supports Linux and macOS on x86-64 and Arm64 and requires Bash plus `curl` or `wget`.
+
+To install from the device terminal instead, run:
+
+```sh
+pontia client install antigravity
+```
+
+If `agy` is already installed, make sure it is on the Pontia service user's `PATH`, then enable it:
+
+```sh
+pontia client enable antigravity
+```
+
+Pontia starts each Session with `agy acp` in its Workspace.
+
+## Sign in
+
+Run Antigravity as the same operating-system user that runs Pontia and complete its interactive login:
+
+```sh
+agy
+```
+
+This command is also the sign-in path shown for a headless Pontia device. After changing the service user's `PATH`, run `pontia up` so the managed service receives the new value.
+
+Restricted Bot and background Sessions use Pontia-managed Antigravity settings and reuse the default OAuth token at `~/.gemini/antigravity-cli/antigravity-oauth-token`. Signing in with `agy` as the Pontia service user therefore authorizes both ordinary and restricted Sessions.
+
+## Control Antigravity remotely
+
+In [New chat](https://app.pontia.dev/), select a Workspace, choose **Antigravity**, and select a model or the Client default. The Dashboard streams Antigravity's conversation and work steps and presents permission requests for you to answer from another computer or phone.
+
+Send another message during a running Turn to steer Antigravity. You can also queue a follow-up for the next Turn or interrupt the active Turn. Reopening the Session restores its timeline from Antigravity's native history.
+
+## Choose a model and reasoning effort
+
+Pontia reads Antigravity's model catalog for the selected Workspace. The model picker lists the available models and the reasoning-effort choices advertised for each model. Keeping **Client default** follows Antigravity's current default and still exposes its published effort choices.
+
+The Session header shows the effective model and reasoning effort reported by Antigravity.
+
+## Use Antigravity for Bots, helpers, and Workflows
+
+You can select Antigravity when creating a Bot. Bot Sessions, memory retrieval, and Dreaming use a dedicated `pontia-restricted` agent with file reading and shell commands. The restricted Session receives the Bot or task instructions and uses the service user's default OAuth login.
+
+A Bot's general helper inherits the Bot's Antigravity model and reasoning effort. For a specialist helper, create an **Agent Profile** that selects Antigravity, a model, an optional reasoning effort, and its instructions. The Bot can then launch that profile with `pontia bot helper create --profile-id ID`.
+
+The same Agent Profile can run a Workflow node by setting `execution_profile_id` in its TOML definition:
+
+```toml
+[[nodes]]
+type = "agent"
+phase = "Implementation"
+title = "Antigravity implementer"
+instructions = "Implement the accepted change and write the result."
+inputs = []
+output = "result.md"
+execution_profile_id = "antigravity-implementer"
+```
+
+Enable **YOLO** on an Agent Profile when that helper or Workflow node should use Antigravity's usual tools, MCP servers, and skills without approval prompts. Ordinary API-created Sessions can select `default`, `yolo`, or `restricted` with the `mode` field described in [Agent Clients](/docs/agent-clients#client-credentials-and-permissions).
+
+See [Troubleshooting](/docs/troubleshooting) if `agy` is not detected or a Session does not start.

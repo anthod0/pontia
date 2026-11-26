@@ -1,0 +1,73 @@
+<svelte:head>
+	<title>Antigravity Agent Client — Pontia</title>
+	<meta name="description" content="安装 Google Antigravity，并通过 Pontia 远程控制 agy Session。" />
+</svelte:head>
+
+# Google Antigravity Agent Client
+
+Pontia 通过 `agy` CLI 的 ACP 服务运行 Google Antigravity。你可以在设备上启动 Antigravity Session，通过 Remote Dashboard 查看和控制任务、处理权限请求，并继续客户端原生对话历史。
+
+## 安装 Antigravity
+
+打开 **Settings → Agent Clients → Antigravity**，选择 **Install**。Pontia 会运行 Google 官方安装程序，验证 `agy --version`，然后启用该 Client。安装程序支持 x86-64 和 Arm64 架构的 Linux 与 macOS，需要 Bash 以及 `curl` 或 `wget`。
+
+也可以在设备终端中安装：
+
+```sh
+pontia client install antigravity
+```
+
+如果已安装 `agy`，请确保运行 Pontia 服务的用户能从 `PATH` 找到它，然后启用该 Client：
+
+```sh
+pontia client enable antigravity
+```
+
+Pontia 会在 Workspace 中使用 `agy acp` 启动每个 Session。
+
+## 登录
+
+以运行 Pontia 的同一操作系统用户启动 Antigravity，并完成交互式登录：
+
+```sh
+agy
+```
+
+对于 headless Pontia 设备，界面显示的登录方式也是这条命令。修改服务用户的 `PATH` 后，运行 `pontia up`，让托管服务接收新值。
+
+受限 Bot 和后台 Session 使用 Pontia 管理的 Antigravity 设置，并复用 `~/.gemini/antigravity-cli/antigravity-oauth-token` 中的默认 OAuth token。因此，以 Pontia 服务用户运行 `agy` 登录后，普通和受限 Session 都可以使用该认证。
+
+## 远程控制 Antigravity
+
+在 [New chat](https://app.pontia.dev/) 中选择 Workspace 和 **Antigravity**，再选择模型或沿用 Client 默认值。Dashboard 会实时显示 Antigravity 的对话与工作步骤，并让你从另一台电脑或手机处理权限请求。
+
+Turn 运行时可以再发一条消息来 steering Antigravity。你也可以把消息排到下一 Turn，或中断当前 Turn。重新打开 Session 后，Pontia 会从 Antigravity 的原生历史恢复时间线。
+
+## 选择模型和思考深度
+
+Pontia 会读取 Antigravity 针对所选 Workspace 提供的模型目录。模型选择器会列出可用模型，以及每个模型公布的 reasoning effort 选项。保留 **Client default** 会跟随 Antigravity 当前的默认模型，同时仍可选择该模型提供的 effort 档位。
+
+Session 顶部会显示 Antigravity 报告的实际模型和 reasoning effort。
+
+## 在 Bot、helper 和 Workflow 中使用 Antigravity
+
+创建 Bot 时可以选择 Antigravity。Bot Session、记忆检索和 Dreaming 使用专用的 `pontia-restricted` Agent，并提供文件读取和 shell 命令。受限 Session 会接收 Bot 或任务指令，并使用服务用户的默认 OAuth 登录。
+
+Bot 的通用 helper 会继承该 Bot 的 Antigravity 模型和 reasoning effort。如需专用 helper，可创建一个选择 Antigravity、模型、可选 reasoning effort 和任务指令的 **Agent Profile**。Bot 随后可以通过 `pontia bot helper create --profile-id ID` 启动该 Profile。
+
+在 Workflow TOML 定义中设置 `execution_profile_id`，即可让同一个 Agent Profile 运行节点：
+
+```toml
+[[nodes]]
+type = "agent"
+phase = "Implementation"
+title = "Antigravity implementer"
+instructions = "Implement the accepted change and write the result."
+inputs = []
+output = "result.md"
+execution_profile_id = "antigravity-implementer"
+```
+
+如果 helper 或 Workflow 节点需要使用 Antigravity 的常规工具、MCP Server 和 skill 并跳过审批，可在 Agent Profile 中启用 **YOLO**。通过 API 创建的普通 Session 可以用 `mode` 字段选择 `default`、`yolo` 或 `restricted`；详见 [Agent Client](/docs/agent-clients#client-credentials-and-permissions)。
+
+如果未检测到 `agy` 或 Session 无法启动，请参阅[故障排查](/docs/troubleshooting)。

@@ -1,0 +1,73 @@
+<svelte:head>
+	<title>Agent Client Antigravity — Pontia</title>
+	<meta name="description" content="Instale o Google Antigravity e controle sessões do agy remotamente com o Pontia." />
+</svelte:head>
+
+# Agent Client Google Antigravity
+
+O Pontia executa o Google Antigravity pelo servidor ACP do CLI `agy`. Você pode iniciar uma Session do Antigravity no seu dispositivo, acompanhar e controlar o trabalho pelo Remote Dashboard, responder a pedidos de permissão e retomar o histórico de conversa nativo.
+
+## Instalar o Antigravity
+
+Abra **Settings → Agent Clients → Antigravity** e escolha **Install**. O Pontia usa o instalador oficial do Google, verifica `agy --version` e habilita o Client. O instalador funciona em Linux e macOS, nas arquiteturas x86-64 e Arm64, e requer Bash e `curl` ou `wget`.
+
+Para instalar pelo terminal do dispositivo, execute:
+
+```sh
+pontia client install antigravity
+```
+
+Se o `agy` já estiver instalado, deixe-o no `PATH` do usuário que executa o serviço Pontia e habilite o Client:
+
+```sh
+pontia client enable antigravity
+```
+
+O Pontia inicia cada Session com `agy acp` no Workspace correspondente.
+
+## Entrar na conta
+
+Execute o Antigravity como o mesmo usuário do sistema operacional que executa o Pontia e conclua o login interativo:
+
+```sh
+agy
+```
+
+Esse também é o método de login exibido em um dispositivo Pontia headless. Depois de alterar o `PATH` do usuário do serviço, execute `pontia up` para passar o novo valor ao serviço gerenciado.
+
+Sessions restritas de Bot e tarefas em segundo plano usam configurações do Antigravity gerenciadas pelo Pontia e reutilizam o token OAuth padrão em `~/.gemini/antigravity-cli/antigravity-oauth-token`. Assim, entrar com `agy` como o usuário do serviço Pontia autoriza tanto Sessions comuns quanto restritas.
+
+## Controlar o Antigravity remotamente
+
+Em [New chat](https://app.pontia.dev/), selecione um Workspace, escolha **Antigravity** e selecione um modelo ou o padrão do Client. O Dashboard transmite a conversa e as etapas de trabalho do Antigravity e permite responder aos pedidos de permissão em outro computador ou celular.
+
+Envie outra mensagem durante um Turn para direcionar o Antigravity. Você também pode colocar uma continuação na fila do próximo Turn ou interromper o Turn ativo. Ao reabrir a Session, o Pontia restaura a linha do tempo a partir do histórico nativo do Antigravity.
+
+## Escolher modelo e nível de raciocínio
+
+O Pontia lê o catálogo de modelos do Antigravity para o Workspace selecionado. O seletor mostra os modelos disponíveis e as opções de reasoning effort publicadas para cada modelo. **Client default** segue o padrão atual do Antigravity e também oferece as opções de effort publicadas para esse modelo.
+
+O cabeçalho da Session mostra o modelo e o reasoning effort efetivos informados pelo Antigravity.
+
+## Usar o Antigravity em Bots, helpers e Workflows
+
+Você pode selecionar o Antigravity ao criar um Bot. Sessions de Bot, recuperação de memória e Dreaming usam um Agent `pontia-restricted` dedicado, com leitura de arquivos e comandos de shell. A Session restrita recebe as instruções do Bot ou da tarefa e usa o login OAuth padrão do usuário do serviço.
+
+O helper geral de um Bot herda o modelo e o reasoning effort do Antigravity configurados no Bot. Para um helper especializado, crie um **Agent Profile** que selecione Antigravity, um modelo, um reasoning effort opcional e suas instruções. O Bot pode iniciar esse Profile com `pontia bot helper create --profile-id ID`.
+
+O mesmo Agent Profile pode executar um nó ao definir `execution_profile_id` no TOML do Workflow:
+
+```toml
+[[nodes]]
+type = "agent"
+phase = "Implementation"
+title = "Antigravity implementer"
+instructions = "Implement the accepted change and write the result."
+inputs = []
+output = "result.md"
+execution_profile_id = "antigravity-implementer"
+```
+
+Ative **YOLO** no Agent Profile quando o helper ou nó de Workflow deve usar as ferramentas, servidores MCP e skills habituais do Antigravity sem pedidos de aprovação. Sessions comuns criadas pela API podem escolher `default`, `yolo` ou `restricted` no campo `mode`, descrito em [Agent Clients](/docs/agent-clients#client-credentials-and-permissions).
+
+Consulte [Solução de problemas](/docs/troubleshooting) se o `agy` não for detectado ou a Session não iniciar.

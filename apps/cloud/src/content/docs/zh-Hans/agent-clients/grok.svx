@@ -1,0 +1,81 @@
+<svelte:head>
+	<title>Grok Build Agent Client — Pontia</title>
+	<meta name="description" content="安装 Grok Build，并通过 Pontia 远程控制 Grok CLI Session。" />
+</svelte:head>
+
+# Grok Build Agent Client
+
+Pontia 通过 Grok CLI 的 ACP 服务运行 Grok Build。你可以在设备上启动 Grok Session，通过 Remote Dashboard 查看任务进展、处理权限请求和中断任务，并在之后继续同一段对话。
+
+## 安装 Grok Build
+
+打开 **Settings → Agent Clients → Grok Build**，选择 **Install**。Pontia 会运行 xAI 官方安装程序，验证 `grok --version`，然后启用该 Client。安装程序支持 x86-64 和 Arm64 架构的 Linux 与 macOS，需要 Bash 以及 `curl` 或 `wget`。
+
+也可以在设备终端中安装：
+
+```sh
+pontia client install grok
+```
+
+如果已通过其他方式安装 Grok，请确保运行 Pontia 服务的用户能从 `PATH` 找到 `grok`，然后启用它：
+
+```sh
+pontia client enable grok
+```
+
+Pontia 会在 Workspace 中使用 `grok agent stdio` 启动每个 Session。
+
+## 登录
+
+Remote Dashboard 的首次 Client 引导可以启动 Grok 设备码登录。在任意设备上打开显示的授权页面，输入设备码；授权完成后返回引导即可。
+
+也可以在桌面终端中运行：
+
+```sh
+grok login
+```
+
+在 headless 主机或远程主机上，直接使用设备码流程：
+
+```sh
+grok login --device-auth
+```
+
+请以运行 Pontia 的同一操作系统用户执行登录。Grok 也可以从 Pontia 服务环境读取 `XAI_API_KEY`。修改服务环境或 `PATH` 后，运行 `pontia up`，让托管服务接收新值。
+
+## 远程控制 Grok
+
+在 [New chat](https://app.pontia.dev/) 中选择 Workspace 和 **Grok Build**，再选择模型或沿用 Client 默认值。Dashboard 会实时显示 Grok 的回复与工作步骤，并让你从另一台电脑或手机处理权限请求。
+
+Grok 工作时，可以再发一条消息，在下一次工具或模型切换时补充指令。Grok 会带着新指令继续当前 Turn；如果当前 Turn 已经过了最后一次切换，Pontia 会把消息作为后续 Turn 交付。你也可以中断当前 Turn，再发送下一项任务。
+
+Session 空闲或已中断时，选择 **Compact context** 或发送 `/compact`。Pontia 会保留当前 Session，并在时间线中加入上下文压缩记录。
+
+## 选择模型和思考深度
+
+Pontia 会读取 Grok 针对所选 Workspace 提供的模型目录。模型选择器会列出可用模型，以及每个模型公布的 reasoning effort 选项。保留 **Client default** 会跟随 Grok 当前的默认模型；如果该模型提供 effort 档位，也可以在启动 Session 前从同一选择器中指定。
+
+Session 顶部会显示 Grok 报告的实际模型和 reasoning effort。
+
+## 在 Bot、helper 和 Workflow 中使用 Grok
+
+创建 Bot 时可以选择 Grok Build。Bot Session、记忆检索和 Dreaming 使用 Pontia 的 Grok 受限 Profile，并以免审批方式提供文件读取和终端命令。
+
+Bot 的通用 helper 会继承该 Bot 的 Grok 模型和 reasoning effort。如需专用 helper，可创建一个选择 Grok Build、模型、可选 reasoning effort 和任务指令的 **Agent Profile**。Bot 随后可以通过 `pontia bot helper create --profile-id ID` 启动该 Profile。
+
+同一个 Agent Profile 也可以运行 Workflow 节点。在 Workflow 定义中填写其 ID：
+
+```toml
+[[nodes]]
+type = "agent"
+phase = "Review"
+title = "Grok reviewer"
+instructions = "Review the current changes and write the findings."
+inputs = []
+output = "review.md"
+execution_profile_id = "grok-reviewer"
+```
+
+如果 helper 或 Workflow 节点需要使用 Grok 的常规工具并跳过审批，可在 Agent Profile 中启用 **YOLO**。通过 API 创建的普通 Session 可以用 `mode` 字段选择 `default`、`yolo` 或 `restricted`；详见 [Agent Client](/docs/agent-clients#client-credentials-and-permissions)。
+
+如果未检测到可执行文件或 Session 无法启动，请参阅[故障排查](/docs/troubleshooting)。

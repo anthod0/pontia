@@ -14,11 +14,11 @@ Pontia には次の Agent Client が含まれています。
 | [Pi](/docs/agent-clients/pi) | `pi` と `tmux` | Pontia の Pi プラグイン |
 | [Codex](/docs/codex) | app-server デーモンに対応した Codex CLI | ユーザーごとの Codex デーモンの起動、ランチャー、シェルの PATH |
 | [Claude Code](/docs/agent-clients/claude) | Node.js LTS、npm、Claude Code の認証 | npm の `@pontia/claude-client` パッケージ |
-| Google Antigravity | `agy` | Agent Clients で有効にする (ACP) |
-| Grok Build | `grok` | Agent Clients で有効にする (ACP) |
-| Kiro | `kiro-cli` | `kiro-cli login` でログイン |
+| [Google Antigravity](/docs/agent-clients/antigravity) | `agy` | 組み込み ACP 連携 |
+| [Grok Build](/docs/agent-clients/grok) | `grok` | 組み込み ACP 連携 |
+| [Kiro](/docs/agent-clients/kiro) | `kiro-cli` | 組み込み ACP 連携 |
 
-Bot、メモリ検索、Dreaming で Antigravity または Kiro を選ぶと、専用のエージェントがファイルの読み取り、端末コマンド、ウェブ検索を行います。Workspace で作業する helper は選択したクライアントの通常のツールと承認設定を使用します。
+Grok Build、Antigravity、Kiro は、通常の Session、Bot、helper、メモリタスク、Workflow ノードで利用できます。各ガイドで、インストール、認証、リモート操作、モデル設定、制限付き実行について説明します。
 
 ## 初期化時に Client を選択する
 
@@ -30,30 +30,6 @@ pontia init
 
 初期化ツールは、設定を適用する前に選択した Client を確認します。Pi はデフォルトで選択されており、Codex と `claude-agent` は任意です。選択した Client は新しい Session で有効になります。
 
-## セッションで Kiro を使う
-
-Pontia のサービスユーザーの PATH に `kiro-cli` をインストールし、そのユーザーで `kiro-cli login` を実行します。**Settings → Agent Clients** で Kiro を有効にするか、`pontia client enable kiro` を実行します。
-
-セッション作成時に Kiro とモデルを選択します。ツールの使用を一度だけ許可したり、Kiro が対応している場合は実行中のターンに指示を追加したり、次のターンにメッセージを予約したりできます。セッションを再開すると、タイムラインで会話を確認できます。
-
-コンテキスト使用量の推定値を確認し、待機中のセッションを手動で圧縮できます。自動圧縮と手動圧縮のチェックポイントはタイムラインに表示されます。
-
-Kiro はセッションの指示に従ってファイルを添付できます。ワークフローのノードで、システムプロンプトを設定した Kiro の Agent Profile を使用できます。
-
-<h2 id="enable-an-acp-agent">Grok Build を有効にする</h2>
-
-Grok Build をインストールし、Pontia のサービスユーザーの PATH に `grok` を追加します。Pontia は `grok agent stdio` で起動します。Dashboard の **Settings → Agent Clients** で Grok Build を有効にするか、次を実行します。
-
-```sh
-pontia client enable grok
-```
-
-Grok のセッションが待機中または中断中のときは、Dashboard で `/compact` を使って会話のコンテキストを圧縮できます。圧縮後も同じセッションで会話を続けられます。圧縮した位置はタイムラインに表示されます。
-
-制限付きの Grok Build Session ではターミナルと読み取りツールを利用できます。ファイル編集、メディア保存、ワークツリー、サブエージェント、ワークフロー、スケジュール、バックグラウンドタスク、監視、MCP 呼び出し用の Grok 専用ツールは無効になります。スキルの自動検出も無効になります。
-
-実行中の Grok セッション、Bot、ヘルパーに追加の指示を送れます。Grok は次にツールやモデルを切り替えるときに指示を受け取り、作業を続けます。そのターンで最後の切り替えが済んでいれば、次のターンで指示を実行します。
-
 ローカルの連携をインストールまたは修復するには、`pontia setup pi`、`pontia setup codex`、`pontia setup claude` を実行します。Client を省略すると対話形式で選択できます。セットアップでは Client も有効になります。
 
 Dashboard の **Settings → Agent Clients** で Pi、Codex、Claude Code を選び、**Initialize** をクリックすると、そのデバイスで同じセットアップを実行できます。最新のセットアップの出力と結果は、再接続後も確認できます。
@@ -64,7 +40,7 @@ Dashboard には、中断、履歴の分岐、キューに入れた配信など�
 
 Pontia の Session は、バインド後、クライアントネイティブの会話 ID のひとつと永続的に関連付けられます。同じネイティブの会話を再び開くと既存の Session が続き、新しいネイティブの会話は新しい Session に属します。
 
-## Client の認証情報と権限
+<h2 id="client-credentials-and-permissions">Client の認証情報と権限</h2>
 
 各 Client は、独自の認証情報、サンドボックス、ローカルの権限を使用します。連携を始める前に、各 Client にサインインし、目的の作業を実行できることを確認してください。
 
