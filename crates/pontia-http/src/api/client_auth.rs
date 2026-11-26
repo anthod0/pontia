@@ -63,6 +63,18 @@ pub async fn get_client_auth(
     Ok(ok(json!({ "auth": status })))
 }
 
+pub async fn probe_client_auth(
+    State(state): State<AppState>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let probe = state
+        .control()
+        .client_auth()
+        .probe_statuses_once()
+        .await
+        .map_err(api_error)?;
+    Ok(ok(json!({ "auth_probe": probe })))
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StartRequest {

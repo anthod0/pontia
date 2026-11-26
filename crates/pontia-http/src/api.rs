@@ -18,7 +18,8 @@ mod client_auth;
 pub(crate) use client_auth::no_store;
 pub use client_auth::{
     cancel_client_auth_session, get_client_auth, get_client_auth_session, logout_client_auth,
-    start_client_auth_session, stream_client_auth_session, submit_client_auth_input,
+    probe_client_auth, start_client_auth_session, stream_client_auth_session,
+    submit_client_auth_input,
 };
 mod auth;
 mod authentication;

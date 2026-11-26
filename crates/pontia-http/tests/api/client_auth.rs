@@ -1,6 +1,9 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
     time::Duration,
 };
 
@@ -48,6 +51,7 @@ struct MockAuth {
     states: Mutex<HashMap<String, AuthState>>,
     sinks: Mutex<HashMap<String, AuthEventSink>>,
     logouts: Mutex<Vec<(String, Option<String>)>>,
+    probes: AtomicUsize,
 }
 
 impl MockAuth {
@@ -71,6 +75,7 @@ impl ClientAuth for MockAuth {
         _: &'a AuthContext,
     ) -> ClientOperation<'a, ClientAuthStatus> {
         Box::pin(async move {
+            self.probes.fetch_add(1, Ordering::SeqCst);
             if key == "antigravity" {
                 return Ok(ClientAuthStatus::new(AuthState::Unknown, Vec::new(), false));
             }
@@ -493,6 +498,62 @@ async fn auth_routes_report_status_conflicts_and_errors() {
     let (status, body) = harness.call("POST", &input, r#"{"type":"confirm"}"#).await;
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(body["error"]["code"], "auth_session_already_settled");
+}
+
+#[tokio::test]
+async fn auth_probe_is_authenticated_no_store_and_runs_only_once() {
+    const PROBE: &str = "/api/v1/agent-clients/auth-probe";
+    let harness = harness().await;
+    harness.mock.set_state("default", AuthState::Authenticated);
+
+    let unauthorized = harness
+        .router
+        .clone()
+        .oneshot(Request::builder().uri(PROBE).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(harness.mock.probes.load(Ordering::SeqCst), 0);
+
+    let (status, body) = harness.call("GET", PROBE, "").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"]["auth_probe"]["first_probe"], true);
+    let entries = body["data"]["auth_probe"]["agent_clients"]
+        .as_array()
+        .unwrap();
+    assert!(entries.iter().any(|entry| {
+        entry["client_type"] == "codex"
+            && entry["client_key"] == "default"
+            && entry["auth"]["state"] == "authenticated"
+    }));
+    assert!(entries.iter().any(|entry| {
+        entry["client_type"] == "acp"
+            && entry["client_key"] == "antigravity"
+            && entry["auth"]["state"] == "unknown"
+    }));
+    let first_probe_count = harness.mock.probes.load(Ordering::SeqCst);
+    assert!(first_probe_count > 0);
+    assert!(
+        harness
+            ._home
+            .path()
+            .join("state/agent-client-auth-probed")
+            .is_file()
+    );
+
+    let (status, body) = harness.call("GET", PROBE, "").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"]["auth_probe"]["first_probe"], false);
+    assert!(
+        body["data"]["auth_probe"]["agent_clients"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        harness.mock.probes.load(Ordering::SeqCst),
+        first_probe_count
+    );
 }
 
 #[tokio::test]

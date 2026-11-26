@@ -8,5 +8,5 @@ mod sanitize;
 #[cfg(test)]
 mod tests;
 
-pub use manager::ClientAuthService;
+pub use manager::{ClientAuthProbe, ClientAuthProbeEntry, ClientAuthService};
 pub use sanitize::{sanitize_output, strip_ansi};

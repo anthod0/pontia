@@ -180,6 +180,15 @@ impl AgentClientService {
     }
 
     pub async fn list(&self, context: &DetectionContext<'_>) -> Result<Vec<AgentClientDetails>> {
+        let identities = self.identities().await?;
+        let mut result = Vec::new();
+        for (client, key) in identities {
+            result.push(self.get(&client, &key, context).await?);
+        }
+        Ok(result)
+    }
+
+    pub(crate) async fn identities(&self) -> Result<BTreeSet<(String, String)>> {
         let mut identities = BTreeSet::new();
         for entry in self.clients.registrations() {
             if let Some(configuration) = &entry.configuration {
@@ -191,11 +200,7 @@ impl AgentClientService {
         for row in self.repository.list().await? {
             identities.insert((row.client_type, row.client_key));
         }
-        let mut result = Vec::new();
-        for (client, key) in identities {
-            result.push(self.get(&client, &key, context).await?);
-        }
-        Ok(result)
+        Ok(identities)
     }
 
     pub async fn get(

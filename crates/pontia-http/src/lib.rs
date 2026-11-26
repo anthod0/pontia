@@ -113,6 +113,10 @@ fn client_auth_router() -> Router<HttpState> {
     const SESSION: &str =
         "/api/v1/agent-clients/{client_type}/{client_key}/auth/sessions/{session_id}";
     Router::new()
+        .route(
+            "/api/v1/agent-clients/auth-probe",
+            get(api::probe_client_auth),
+        )
         .route(CLIENT, get(api::get_client_auth))
         .route(
             &format!("{CLIENT}/sessions"),

@@ -33,6 +33,7 @@ struct Mock {
     inputs: Arc<Mutex<Vec<AuthInput>>>,
     cancels: Arc<AtomicUsize>,
     logouts: AtomicUsize,
+    probes: AtomicUsize,
     logout_gate: Option<Arc<Notify>>,
 }
 
@@ -57,6 +58,7 @@ impl ClientAuth for Mock {
         _: &'a AuthContext,
     ) -> ClientOperation<'a, ClientAuthStatus> {
         Box::pin(async move {
+            self.probes.fetch_add(1, Ordering::SeqCst);
             let state = self
                 .state
                 .lock()
@@ -146,6 +148,7 @@ struct Fixture {
     mock: Arc<Mock>,
     repository: SqliteAgentClientRepository,
     shutdown: ShutdownSignal,
+    home: tempfile::TempDir,
 }
 
 async fn fixture_with(mock: Mock, limits: Limits) -> Fixture {
@@ -167,17 +170,19 @@ async fn fixture_with(mock: Mock, limits: Limits) -> Fixture {
     let mut clients = ClientRegistry::default();
     clients.register(registration);
     let shutdown = ShutdownSignal::default();
+    let home = tempfile::tempdir().unwrap();
     Fixture {
         service: ClientAuthService::with_limits(
             pool,
             clients,
-            std::env::temp_dir(),
+            home.path().to_path_buf(),
             shutdown.clone(),
             limits,
         ),
         mock,
         repository,
         shutdown,
+        home,
     }
 }
 
@@ -249,6 +254,40 @@ async fn one_login_runs_per_client_entry_while_entries_run_in_parallel() {
         .await
         .unwrap_err();
     assert_eq!(conflict_code(error), "auth_session_in_progress");
+}
+
+#[tokio::test]
+async fn status_probe_runs_once_and_persists_the_marker() {
+    let fixture = fixture().await;
+    fixture.mock.set_state(AuthState::Authenticated);
+
+    let first = fixture.service.probe_statuses_once().await.unwrap();
+    assert!(first.first_probe);
+    assert_eq!(
+        first
+            .agent_clients
+            .iter()
+            .map(|entry| (entry.client_key.as_str(), entry.auth.state))
+            .collect::<Vec<_>>(),
+        vec![
+            ("default", AuthState::Authenticated),
+            ("other", AuthState::Authenticated),
+            ("unsupported", AuthState::Unsupported),
+        ]
+    );
+    assert_eq!(fixture.mock.probes.load(Ordering::SeqCst), 2);
+    assert!(
+        fixture
+            .home
+            .path()
+            .join("state/agent-client-auth-probed")
+            .is_file()
+    );
+
+    let second = fixture.service.probe_statuses_once().await.unwrap();
+    assert!(!second.first_probe);
+    assert!(second.agent_clients.is_empty());
+    assert_eq!(fixture.mock.probes.load(Ordering::SeqCst), 2);
 }
 
 #[tokio::test]

@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    fs::OpenOptions,
     path::PathBuf,
     sync::{Arc, Mutex, MutexGuard, Once, Weak},
     time::Duration,
@@ -7,9 +8,10 @@ use std::{
 
 use pontia_core::{Error, Result};
 use pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository;
+use serde::Serialize;
 use sqlx::SqlitePool;
 use tokio::{
-    sync::{broadcast, mpsc, watch},
+    sync::{Mutex as AsyncMutex, broadcast, mpsc, watch},
     task::JoinSet,
     time::Instant,
 };
@@ -38,6 +40,20 @@ const STATUS_RETRY_DELAY: Duration = Duration::from_millis(300);
 const EVENT_CAPACITY: usize = 64;
 const MIN_PROVIDER_TTL_SECS: u64 = 60;
 const MAX_PROVIDER_TTL_SECS: u64 = 900;
+const PROBE_MARKER: &str = "state/agent-client-auth-probed";
+
+#[derive(Debug, Serialize)]
+pub struct ClientAuthProbe {
+    pub first_probe: bool,
+    pub agent_clients: Vec<ClientAuthProbeEntry>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ClientAuthProbeEntry {
+    pub client_type: String,
+    pub client_key: String,
+    pub auth: ClientAuthStatus,
+}
 
 #[derive(Clone, Copy)]
 pub(super) struct Limits {
@@ -164,6 +180,7 @@ struct Inner {
     shutdown: ShutdownSignal,
     limits: Limits,
     reaper: Once,
+    probe: AsyncMutex<()>,
 }
 
 impl ClientAuthService {
@@ -192,6 +209,7 @@ impl ClientAuthService {
                 shutdown,
                 limits,
                 reaper: Once::new(),
+                probe: AsyncMutex::new(()),
             }),
         }
     }
@@ -271,6 +289,61 @@ impl ClientAuthService {
         };
         status.active_session_id = self.active_session(client, key);
         Ok(status)
+    }
+
+    pub async fn probe_statuses_once(&self) -> Result<ClientAuthProbe> {
+        let _probe = self.inner.probe.lock().await;
+        let marker = self.inner.pontia_home.join(PROBE_MARKER);
+        if marker.try_exists()? {
+            return Ok(ClientAuthProbe {
+                first_probe: false,
+                agent_clients: Vec::new(),
+            });
+        }
+
+        let identities = AgentClientService::new(self.inner.db.clone(), self.inner.clients.clone())
+            .identities()
+            .await?;
+
+        let mut tasks = JoinSet::new();
+        for (client_type, client_key) in identities {
+            let service = self.clone();
+            tasks.spawn(async move {
+                let auth = service.status(&client_type, &client_key).await?;
+                Ok::<_, Error>(ClientAuthProbeEntry {
+                    client_type,
+                    client_key,
+                    auth,
+                })
+            });
+        }
+        let mut agent_clients = Vec::new();
+        while let Some(result) = tasks.join_next().await {
+            agent_clients.push(result.map_err(|error| {
+                Error::Domain(format!("Authentication probe failed: {error}"))
+            })??);
+        }
+        agent_clients.sort_by(|left, right| {
+            (&left.client_type, &left.client_key).cmp(&(&right.client_type, &right.client_key))
+        });
+
+        pontia_core::private_fs::directory(marker.parent().expect("probe marker parent"))?;
+        match pontia_core::private_fs::open(
+            &marker,
+            OpenOptions::new().write(true).create_new(true),
+        ) {
+            Ok(_) => Ok(ClientAuthProbe {
+                first_probe: true,
+                agent_clients,
+            }),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                Ok(ClientAuthProbe {
+                    first_probe: false,
+                    agent_clients: Vec::new(),
+                })
+            }
+            Err(error) => Err(error.into()),
+        }
     }
 
     pub async fn start_login(
