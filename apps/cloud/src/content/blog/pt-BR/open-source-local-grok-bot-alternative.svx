@@ -1,0 +1,101 @@
+---
+title: "Alternativas open source ao Grok Bot: VMs na nuvem vs orquestração local de CLIs"
+description: "Uma comparação de arquitetura entre xAI Grok Bot, Claude Code, Codex e alternativas open source ao Grok Bot, incluindo OpenBot, rakazo, OpenMausBot, Orca, Suparagent, PiBot e Pontia."
+published: "2026-11-27"
+---
+
+Desde agosto de 2026, quem pesquisa por **Grok Bot** geralmente está procurando o colega de IA persistente em nuvem da xAI (`Grok Bot` e `Team Bots`), e não os pesos abertos dos modelos Grok nem o **Grok Build** (a CLI local de agente de código da xAI). Ao avaliar uma opção **Grok Bot open source** ou uma **alternativa ao Grok Bot** auto-hospedada (Grok Bot alternative), a decisão principal não é qual interface de chat se parece mais, mas onde o agente executa e qual é a unidade de isolamento do trabalho.
+
+O Pontia é a ferramenta que desenvolvemos. Todos os fatos sobre o xAI Grok Bot e os projetos open source de terceiros vêm da documentação oficial e dos repositórios públicos no GitHub, verificados em 27 de novembro de 2026. Como esses projetos mudam com frequência, consulte os links primários para confirmar o estado atual.
+
+## O que o Grok Bot oficial da xAI realmente é
+
+Segundo a documentação oficial da xAI ([Get started](https://docs.x.ai/grok-bot/get-started), [Computer and apps](https://docs.x.ai/grok-bot/computer-and-apps), [Security](https://docs.x.ai/grok-bot/security), [Security FAQ](https://docs.x.ai/grok-bot/security-faq), [Teams and enterprises](https://docs.x.ai/grok-bot/teams-and-enterprises) e [x.ai pricing](https://x.ai/pricing)), o Grok Bot gira em torno de um computador persistente na nuvem, e não de um processo local no terminal:
+
+- **Modelo de execução:** Cada usuário recebe uma Firecracker microVM persistente hospedada nos Estados Unidos. Vários bots do mesmo usuário compartilham as sessões de login do navegador, o sistema de arquivos e as credenciais de linha de comando desse computador; o que fica separado entre bots é a persona e a tela de cada um. Os aplicativos de desktop e celular atuam como thin clients, permitindo que as tarefas continuem na nuvem quando seu notebook hiberna ou desliga. O Grok Bot também oferece um modo opcional de execução local (com aprovação comando a comando por padrão) e delegação para computadores independentes do Cursor Cloud Agent.
+- **Planos e portas de entrada:** As duas páginas oficiais da xAI descrevem o acesso por ângulos complementares, então vale apresentar ambas lado a lado. A página [x.ai/pricing](https://x.ai/pricing) lista Free ($0), Plus ($8), Premium ($30), Super ($100) e Ultra ($200), incluindo o Grok Bot a partir do Premium com uma cota semanal compartilhada entre Chat, Imagine, Voice e Cursor. Em paralelo, a documentação de [Teams and enterprises](https://docs.x.ai/grok-bot/teams-and-enterprises) informa que o acesso individual está incluído em planos pagos do Cursor, contas vinculadas ao SuperGrok ou assentos self-serve do Grok Business.
+- **Escolha de modelos:** A documentação da xAI afirma explicitamente que não há seletor de modelo voltado ao usuário. O Grok Bot escolhe o modelo automaticamente, a combinação de serviços pode mudar e as allowlists de modelos de equipe não se aplicam ao Grok Bot.
+- **Equipes e aprovação:** Suporta bots pessoais e Team Bots compartilhados, além de uma verificação independente chamada Auto Review para ações sensíveis. No plano Enterprise, há aplicação obrigatória de políticas e logs de ações via OpenTelemetry.
+
+## Grok Bot vs Claude e Grok Bot vs Codex
+
+Na prática, quem pesquisa **Grok Bot vs Claude** ou **Grok Bot vs Codex** raramente está comparando benchmarks isolados de modelos. O contraste real é entre dois formatos de produto:
+
+- **Colega em computador persistente na nuvem (Grok Bot):** Uma VM remota sempre ligada, com navegador e ambiente de trabalho próprios, controlada por thin clients no desktop e no celular. Faz sentido quando você quer um ambiente gerenciado na nuvem que segue trabalhando com sua máquina local desligada.
+- **CLIs locais de programação no terminal (Claude Code, Codex, Grok Build):** Agentes que rodam diretamente sobre o seu repositório local, compiladores, Docker, bancos de dados de teste e assinaturas que você já paga.
+
+No dia a dia de engenharia de software, muitas pessoas querem a coordenação persistente de tarefas, o paralelismo e o acesso pelo celular típicos de um bot, mantendo o código, os servidores locais e as assinaturas de CLI na própria máquina ou VPS. As alternativas open source ao Grok Bot cobrem essa lacuna por meio de duas rotas arquiteturais bem definidas.
+
+## Duas rotas open source de alternativa ao Grok Bot
+
+Os projetos open source se dividem claramente em dois grupos: **Rota A**, que leva o computador em nuvem/contêiner para a sua própria infraestrutura (em geral com chaves de API próprias), e **Rota B**, que orquestra diretamente as CLIs locais na sua máquina ou VPS (reaproveitando assinaturas existentes).
+
+| Projeto | Rota | Execução e isolamento | Modelos e credenciais | Acesso remoto / celular | Licença |
+| --- | --- | --- | --- | --- | --- |
+| [xAI Grok Bot](https://docs.x.ai/grok-bot/get-started) | VM gerenciada na nuvem | Firecracker microVM nos EUA por usuário; modo local opcional e delegação ao Cursor Cloud Agent | Roteamento automático; planos xAI / Cursor | Thin clients de desktop e celular | Proprietária |
+| [CopilotKit/OpenBot](https://github.com/CopilotKit/OpenBot) | VM auto-hospedada | Computador por bot via sandboxes K8s ou Daytona / E2B / Modal | Chaves de API OpenAI, Claude ou Gemini | Workspace web auto-hospedado | Template MIT; Intelligence sob licença separada |
+| [elie222/rakazo](https://github.com/elie222/rakazo) | VM auto-hospedada | Docker Compose; computador por bot via Docker, E2B ou Daytona | Chaves de API próprias | Interface web auto-hospedada | Open source (ver repositório) |
+| [milind-soni/OpenMausBot](https://github.com/milind-soni/OpenMausBot) | Híbrido local + nuvem | Combina Claude / Codex locais com computadores em nuvem por bot | CLIs locais + computador em nuvem | App de chat | Apache-2.0 |
+| [stablyai/orca](https://github.com/stablyai/orca) | Orquestração local de CLIs | Worktrees locais, via SSH, servidor remoto ou VM na nuvem | Reutiliza assinaturas de CLI existentes | Pareamento com celular para aprovações | MIT |
+| [Anil-matcha/suparagent](https://github.com/Anil-matcha/suparagent) | CLI local + Docker opcional | Motor local (Claude / Codex / Cursor CLI ou API) + computador Docker opcional | Assinaturas de CLI ou chaves de API | Pareamento com celular para aprovações | Open source (ver repositório) |
+| [w01fb0ss/PiBot](https://github.com/w01fb0ss/PiBot) | Electron local-first | Baseado em Pi com `sandbox-runtime` da Anthropic | Credenciais dos provedores do Pi | App Android + relay auto-hospedável | Apache-2.0 |
+| [Pontia](https://github.com/anthod0/pontia) | Orquestração local de CLIs | Daemon local (`pontiad`) + git worktrees isolados por tarefa na Workspace | Reutiliza Claude Code, Codex, Pi, Grok Build, Kiro e Antigravity | PWA no navegador via Edge oficial ou auto-hospedado com E2E | Apache-2.0 |
+
+### Rota A: VMs e contêineres auto-hospedados
+
+Os projetos da Rota A reproduzem o modelo de "um computador por bot" na infraestrutura que você controla, normalmente com suas próprias chaves de API:
+
+- **[OpenBot](https://github.com/CopilotKit/OpenBot) (`CopilotKit/OpenBot`):** Workspace auto-hospedado que provisiona um computador por bot em sandboxes Kubernetes ou provedores como Daytona, E2B e Modal, usando chaves de API da OpenAI, Claude ou Gemini. Vale conferir a divisão de licenças antes de subir em produção: o template da aplicação é MIT, mas a camada Intelligence tem licença separada (gratuita para uso pessoal local e licença comercial para produção em Kubernetes).
+- **[rakazo](https://github.com/elie222/rakazo) (`elie222/rakazo`):** Auto-hospedado com Docker Compose, entregando um computador isolado por bot em Docker ou em sandboxes como E2B e Daytona, com chaves de API próprias.
+- **[OpenMausBot](https://github.com/milind-soni/OpenMausBot) (`milind-soni/OpenMausBot`):** Aplicativo de chat sob licença Apache-2.0 que reúne execuções locais de Claude e Codex junto com computadores em nuvem por bot na mesma interface.
+
+A Rota A atende bem equipes que precisam de contêineres efêmeros por bot e automação de navegador no próprio cluster ou provedor de sandbox, com orçamento previsto para chaves de API e computação em nuvem.
+
+### Rota B: Orquestração local de CLIs
+
+Os projetos da Rota B rodam diretamente na sua máquina Linux/macOS ou em uma VPS e coordenam as CLIs de código que você já instalou e autenticou:
+
+- **[Orca](https://github.com/stablyai/orca) (`stablyai/orca`):** IDE de desktop sob licença MIT que reaproveita suas assinaturas de CLI, trabalha com worktrees locais, via SSH, em servidor remoto ou em VM na nuvem, pareia com o celular para aprovações e alterna entre interface de chat e CLI bruta.
+- **[Suparagent](https://github.com/Anil-matcha/suparagent) (`Anil-matcha/suparagent`):** Fica no meio-termo entre as duas rotas: o motor roda localmente (Claude, Codex ou Cursor CLI, ou API), o computador Docker isolado é opcional e o pareamento com o celular cuida das aprovações.
+- **[PiBot](https://github.com/w01fb0ss/PiBot) (`w01fb0ss/PiBot`):** Aplicativo Electron local-first sob licença Apache-2.0 construído sobre o Pi, combinando o `sandbox-runtime` da Anthropic, cliente Android e um relay auto-hospedável.
+- **[Pontia](https://github.com/anthod0/pontia) (Apache-2.0):** Um daemon local de plano de controle (`pontiad`) combinado com um Dashboard web para desktop e celular (`app.pontia.dev`, instalável como app). Em vez de mover o desenvolvimento para uma VM na nuvem, o Pontia transforma suas CLIs locais em um espaço persistente de múltiplos agentes:
+  - **Bots persistentes e Helpers em paralelo com git worktree:** Um [Bot](/docs/bots) de longo prazo divide tarefas independentes entre [Helpers](/docs/bots/helpers) dedicados (uma Session isolada por tarefa). Quando vários helpers modificam o mesmo repositório em paralelo, o Bot inicia na Workspace original e orienta cada helper a criar seu próprio git worktree e branch, avançando sem conflitos de checkout.
+  - **Acesso direto às Sessions nativas da CLI:** Cada helper é uma Session durável vinculada à conversa nativa da CLI. Você pode abrir qualquer Helper Session a partir do status do Bot ou do link relacionado para acompanhar a execução, enviar correções ou assumir diretamente.
+  - **Agent Profiles por função entre 6 CLIs:** Os [Agent Profiles](/docs/agent-profiles) reutilizáveis combinam qualquer um dos 6 Agent Clients suportados — Claude Code, Codex, Pi, [Grok Build](/docs/agent-clients/grok), Kiro e Google Antigravity — com modelo, esforço de raciocínio opcional, modo de permissões e instruções de papel.
+  - **Ciclo assíncrono de decisões e memória compartilhada:** O [chat do Bot](/docs/bots/chat) acompanha decisões pendentes por meio de todos, respostas com citação e cadeia de contexto entre tarefas paralelas. Todos os Bots do dispositivo compartilham [memórias e o `USER.md`](/docs/memory), com o Dreaming organizando o contexto duradouro em segundo plano e pedindo esclarecimento via Bot quando algo fica ambíguo.
+  - **Acesso remoto com criptografia E2E e Previews ao vivo:** O tráfego remoto entre navegador e dispositivo usa criptografia de ponta a ponta na camada de aplicação (X25519 HPKE + ChaCha20-Poly1305) validada pelo próprio dispositivo ([Segurança](/docs/security)), funciona com Edge oficial ou [Edge auto-hospedado](/docs/self-hosted-edge) e exibe arquivos locais e servidores `localhost` diretamente no painel lateral de [Previews](/docs/previews).
+
+## Cinco perguntas de arquitetura que definem a escolha
+
+Responder a estas cinco perguntas técnicas esclarece a escolha muito mais rápido do que comparar capturas de tela.
+
+### 1. Qual é a unidade de isolamento de que você precisa?
+
+No xAI Grok Bot, o isolamento é uma Firecracker microVM nos EUA por usuário: separa o bot do seu notebook, mas vários bots do mesmo usuário compartilham sessões de navegador, arquivos e credenciais de CLI dentro dessa VM. Soluções como OpenBot e rakazo isolam no nível de contêiner ou sandbox por bot.
+
+Na orquestração local de CLIs como Pontia e Orca, a unidade de isolamento para desenvolvimento paralelo é o **git worktree** na sua própria máquina ou VPS. Cada helper trabalha em sua própria branch e cópia de trabalho, mantendo acesso direto a caches de compilação, contêineres Docker, bancos de teste e servidores locais — sem reconstruir seu ambiente em uma imagem de nuvem.
+
+### 2. Como você quer estruturar assinatura e custos?
+
+Se você já paga assinaturas de Claude Code, Codex ou Grok Build, a orquestração local permite reutilizar esses logins em hardware que você já tem (sua estação de trabalho ou uma VPS Linux simples). Já o Grok Bot oficial cobra por meio de uma cota semanal agrupada, enquanto ferramentas de VM auto-hospedada como OpenBot e rakazo somam custo por token das chaves de API ao custo de computação do cluster ou sandbox.
+
+### 3. Roteamento automático de modelos ou controle por função?
+
+A documentação da xAI informa que o Grok Bot escolhe modelos automaticamente sem seletor para o usuário e fora das allowlists de modelos da equipe. Isso reduz a configuração inicial quando você busca um assistente único gerenciado.
+
+Quando o seu fluxo ganha qualidade ao combinar ferramentas diferentes por etapa — por exemplo, um modelo e esforço de raciocínio para pesquisa e arquitetura, outro para implementação paralela e [Grok Build](/docs/agent-clients/grok) ou Codex para correções pontuais — os [Agent Profiles](/docs/agent-profiles) do Pontia permitem padronizar especialidades entre as 6 CLIs suportadas e reutilizá-las em Bots, Helpers e Workflows.
+
+### 4. Tela remota ou Sessions nativas de CLI inspecionáveis?
+
+Bots em computador na nuvem priorizam uma tela de desktop ou navegador remoto acompanhada de mensagens de chat. Orquestradores locais mantêm a CLI nativa em primeiro plano: no Orca você alterna entre chat e CLI bruta; no Pontia cada Helper é uma Session nativa que pode ser aberta a qualquer momento para inspecionar chamadas de ferramentas, diffs e histórico, ao lado dos [Previews](/docs/previews) de arquivos locais e servidores `localhost`.
+
+### 5. Por onde passam código, credenciais e aprovações no celular?
+
+No xAI Grok Bot, código, sessões de navegador e credenciais de CLI ficam na microVM na nuvem nos EUA. Com um daemon local e relay criptografado como o Pontia, o código e as credenciais de CLI permanecem no seu dispositivo ou VPS, a comunicação entre navegador e dispositivo usa criptografia E2E na camada de aplicação verificada pelo dispositivo ([Segurança](/docs/security)) e você pode hospedar um [Edge próprio](/docs/self-hosted-edge) quando quiser controlar também a rota de retransmissão.
+
+## Qual rota combina com cada perfil de desenvolvimento
+
+- **Você quer um computador gerenciado na nuvem, sem operação própria, com sessões de navegador ativas mesmo com o notebook desligado, além de Team Bots e controles Enterprise:** o xAI Grok Bot atende diretamente esse modelo.
+- **Você quer sandboxes por bot no seu próprio cluster Kubernetes ou host Docker usando chaves de API:** avalie a Rota A — [OpenBot](https://github.com/CopilotKit/OpenBot) (verificando a licença da camada Intelligence para produção em Kubernetes), [rakazo](https://github.com/elie222/rakazo) ou [OpenMausBot](https://github.com/milind-soni/OpenMausBot) se quiser unir CLIs locais e computadores em nuvem.
+- **Você prefere uma IDE de desktop centrada em worktrees com aprovações pelo celular:** avalie o [Orca](https://github.com/stablyai/orca), ou o [Suparagent](https://github.com/Anil-matcha/suparagent) se quiser um motor local com isolamento opcional em Docker.
+- **Você quer um ambiente open source, local-first e multiagente que reaproveita suas instalações de Claude Code, Codex, Pi, Grok Build, Kiro e Antigravity na própria máquina ou VPS:** comece pelo [Pontia](/docs/bots) — delegue [Helpers](/docs/bots/helpers) em paralelo com git worktrees, defina papéis com [Agent Profiles](/docs/agent-profiles), use [Grok Build](/docs/agent-clients/grok) junto com suas outras CLIs e acompanhe tudo no desktop ou celular com [criptografia E2E](/docs/security) por um Edge oficial ou [auto-hospedado](/docs/self-hosted-edge).

@@ -1,0 +1,101 @@
+---
+title: "オープンソースの Grok Bot 代替を比較: セルフホスト VM か、ローカル CLI オーケストレーションか"
+description: "xAI Grok Bot、Claude Code、Codex と、OpenBot・rakazo・OpenMausBot・Orca・Suparagent・PiBot・Pontia などのオープンソース Grok Bot 代替をアーキテクチャ視点で比較します。"
+published: "2026-11-27"
+---
+
+2026 年 8 月以降、開発者が **Grok Bot** を検索するとき、多くの場合はオープンウェイトのモデルではなく、またローカル端末向けのコーディングエージェント CLI である **Grok Build** でもなく、xAI の永続クラウド AI 同僚（`Grok Bot` / `Team Bots`）を指しています。オープンソースの **Grok Bot 代替**（Grok Bot alternative）を選ぶとき、最も重要なのはチャット画面の見た目ではなく、エージェントがどこで実行され、どの単位で作業を分離するかというアーキテクチャです。
+
+Pontia は私たちが開発しているツールです。xAI Grok Bot および各オープンソースプロジェクトに関する記述は、2026 年 11 月 27 日時点で公式ドキュメントと公開 GitHub リポジトリから直接確認した内容に基づいています。いずれも更新が速いため、最新仕様は一次リンク先で確認してください。
+
+## xAI 公式 Grok Bot の実態
+
+xAI の公式ドキュメント（[Get started](https://docs.x.ai/grok-bot/get-started)、[Computer and apps](https://docs.x.ai/grok-bot/computer-and-apps)、[Security](https://docs.x.ai/grok-bot/security)、[Security FAQ](https://docs.x.ai/grok-bot/security-faq)、[Teams and enterprises](https://docs.x.ai/grok-bot/teams-and-enterprises)、[x.ai pricing](https://x.ai/pricing)）によると、Grok Bot はローカルの端末プロセスではなく、永続的なクラウドコンピューターを中核に設計されています。
+
+- **実行形態:** ユーザーごとに米国リージョン上の永続 Firecracker microVM が 1 台割り当てられます。同じユーザーの複数 Bot は、そのコンピューターのブラウザーのログイン状態、ファイルシステム、CLI 認証情報を共有し、分離されるのは各 Bot のペルソナと画面です。デスクトップとモバイルのアプリはシンクライアントとして動作するため、ローカル PC がスリープまたはシャットダウンしてもクラウド側の作業は継続します。さらに、オプションのローカル実行モード（デフォルトはコマンドごとの承認）や、独立した Cursor Cloud Agent コンピューターへの委任も備えています。
+- **料金と利用経路:** xAI の 2 つの公式ページで記述の切り口が異なるため、並記して確認するのが確実です。[x.ai/pricing](https://x.ai/pricing) には Free（$0）、Plus（$8）、Premium（$30）、Super（$100）、Ultra（$200）が並び、Grok Bot は Premium 以上に含まれ、Chat・Imagine・Voice・Cursor と週間利用枠を共有します。一方、[Teams and enterprises](https://docs.x.ai/grok-bot/teams-and-enterprises) のドキュメントでは、個人アクセスは有料の Cursor プラン、連携済みの SuperGrok アカウント、またはセルフサーブの Grok Business シートに含まれると説明されています。
+- **モデル選択:** 公式ドキュメントに、ユーザー向けのモデルセレクターは存在しないと明記されています。Grok Bot が自動でモデルを選択し、背後のモデル構成は変わり得るうえ、チームのモデル allowlist は Grok Bot には適用されません。
+- **チームと承認:** 個人用 Bot と共有 Team Bot に対応し、機密操作に対する独立した Auto Review チェックを備えます。Enterprise プランではポリシー強制や OpenTelemetry のアクションログが利用できます。
+
+## Grok Bot vs Claude / Grok Bot vs Codex の本質
+
+**Grok Bot vs Claude** や **Grok Bot vs Codex** を検索する開発者の関心は、単発プロンプトのベンチマーク比較ではありません。比較しているのは 2 つの異なる製品形態です。
+
+- **永続クラウドコンピューター型の同僚（Grok Bot）:** ブラウザーとデスクトップ環境を備えた常時稼働のリモート VM を、デスクトップ・モバイルのシンクライアントから操作します。ローカルマシンがオフラインでもクラウド上で動かし続けたい用途に向きます。
+- **ローカル端末のコーディング CLI（Claude Code、Codex、Grok Build）:** 手元のリポジトリ、コンパイラ、Docker、ローカル DB、既存のサブスクリプションの上でそのまま動作します。
+
+日々のソフトウェア開発では、Bot 型の継続的なタスク調整・並列実行・スマートフォンからの確認を取り入れつつ、実行環境と認証情報は自分のマシンや VPS に残したいケースが多くあります。オープンソースの Grok Bot 代替は、この要求に対して大きく 2 つのアーキテクチャ路線に分かれています。
+
+## オープンソース Grok Bot 代替の 2 つの路線
+
+現在のオープンソース実装は、**路線 A（セルフホスト型クラウド / コンテナー VM）**と、**路線 B（ローカル CLI オーケストレーション）**の 2 つに整理できます。
+
+| プロジェクト | 路線 | 実行と分離の単位 | モデルと認証情報 | リモート / モバイル | ライセンス |
+| --- | --- | --- | --- | --- | --- |
+| [xAI Grok Bot](https://docs.x.ai/grok-bot/get-started) | マネージドクラウド VM | ユーザーごとに米国 Firecracker microVM。ローカルモードや Cursor Cloud Agent 委任あり | 自動モデルルーティング。xAI / Cursor プランに付属 | デスクトップ・モバイルのシンクライアント | プロプライエタリ |
+| [CopilotKit/OpenBot](https://github.com/CopilotKit/OpenBot) | セルフホスト VM | Bot ごとのコンピューター（K8s サンドボックス、Daytona / E2B / Modal） | OpenAI / Claude / Gemini の API キー | セルフホスト Web ワークスペース | テンプレートは MIT、Intelligence は別ライセンス |
+| [elie222/rakazo](https://github.com/elie222/rakazo) | セルフホスト VM | Docker Compose。Bot ごとのコンピューター（Docker または E2B / Daytona） | 自分の API キー | セルフホスト Web UI | オープンソース（リポジトリ参照） |
+| [milind-soni/OpenMausBot](https://github.com/milind-soni/OpenMausBot) | ローカル + クラウド混合 | ローカルの Claude / Codex と Bot ごとのクラウドコンピューターを統合 | ローカル CLI + クラウドコンピューター | チャットアプリ | Apache-2.0 |
+| [stablyai/orca](https://github.com/stablyai/orca) | ローカル CLI オーケストレーション | ローカル / SSH / リモートサーバー / クラウド VM の worktree | 既存の CLI サブスクリプションを再利用 | スマートフォンとのペアリング承認 | MIT |
+| [Anil-matcha/suparagent](https://github.com/Anil-matcha/suparagent) | ローカル CLI + 任意 Docker | ローカルエンジン（Claude / Codex / Cursor CLI または API）+ 任意の Docker コンピューター | CLI サブスクリプションまたは API キー | スマートフォンとのペアリング承認 | オープンソース（リポジトリ参照） |
+| [w01fb0ss/PiBot](https://github.com/w01fb0ss/PiBot) | ローカルファースト Electron | Pi ベース + Anthropic `sandbox-runtime` | Pi プロバイダー認証情報 | Android クライアント + セルフホスト可能なリレー | Apache-2.0 |
+| [Pontia](https://github.com/anthod0/pontia) | ローカル CLI オーケストレーション | ローカルデーモン（`pontiad`）+ 元 Workspace 内のタスク別 git worktree | Claude Code・Codex・Pi・Grok Build・Kiro・Antigravity を再利用 | E2E 暗号化された公式 / セルフホスト Edge 経由のブラウザー PWA | Apache-2.0 |
+
+### 路線 A: セルフホスト型クラウド / コンテナー VM
+
+「Bot ごとに専用コンピューターを持たせる」設計を自前のインフラに移し、多くは自分の API キーで動かす路線です。
+
+- **[OpenBot](https://github.com/CopilotKit/OpenBot)（`CopilotKit/OpenBot`）:** Kubernetes サンドボックスや Daytona・E2B・Modal を使って Bot ごとのコンピューターを立ち上げるセルフホストワークスペースで、OpenAI・Claude・Gemini の API キーを利用します。導入前にライセンス構成を確認してください。アプリテンプレートは MIT ですが、Intelligence 層は別ライセンス（個人ローカル利用は無料、Kubernetes の本番運用には商用ライセンスが必要）です。
+- **[rakazo](https://github.com/elie222/rakazo)（`elie222/rakazo`）:** Docker Compose でセルフホストでき、Docker や E2B・Daytona などのサンドボックス上に Bot ごとの独立したコンピューターを用意し、自分の API キーで動作します。
+- **[OpenMausBot](https://github.com/milind-soni/OpenMausBot)（`milind-soni/OpenMausBot`）:** ローカルの Claude / Codex と Bot ごとのクラウドコンピューターを 1 つのチャットアプリに統合した Apache-2.0 プロジェクトです。
+
+自社クラスターやクラウドサンドボックス上に Bot ごとの分離コンテナーとブラウザー環境を用意し、API キー課金で運用したいチームに適合します。
+
+### 路線 B: ローカル CLI オーケストレーション
+
+自分の Linux / macOS マシンや VPS 上で直接動かし、すでに契約・ログイン済みの Claude Code、Codex、Grok Build などの CLI をそのまま活用する路線です。
+
+- **[Orca](https://github.com/stablyai/orca)（`stablyai/orca`）:** 既存の CLI サブスクリプションを再利用する MIT ライセンスのデスクトップ IDE です。ローカル・SSH・リモートサーバー・クラウド VM の worktree に対応し、スマートフォンとのペアリング承認や、チャット UI と生の CLI の切り替えができます。
+- **[Suparagent](https://github.com/Anil-matcha/suparagent)（`Anil-matcha/suparagent`）:** 両路線の中間に位置します。エンジンはローカルで動き（Claude / Codex / Cursor CLI または API）、隔離用 Docker コンピューターは任意で追加でき、スマートフォンでのペアリング承認に対応します。
+- **[PiBot](https://github.com/w01fb0ss/PiBot)（`w01fb0ss/PiBot`）:** Pi を基盤とする Apache-2.0 のローカルファースト Electron アプリで、Anthropic の `sandbox-runtime`、Android クライアント、セルフホスト可能なリレーを組み合わせています。
+- **[Pontia](https://github.com/anthod0/pontia)（Apache-2.0）:** ローカルのコントロールプレーンデーモン（`pontiad`）と、デスクトップ・モバイルの両ブラウザーで使える Dashboard（`app.pontia.dev`、アプリとしてインストール可能）を組み合わせ、手元のコーディング CLI を永続的なマルチエージェント環境へ拡張します。
+  - **常駐 Bot と並列 git worktree の Helper:** 常駐する [Bot](/docs/bots) が独立した作業を 1 タスク 1 分離の [Helper](/docs/bots/helpers) に切り出します。同一リポジトリを並列編集するときは、元の Workspace から開始し、各 Helper に専用の git worktree とブランチを作らせて衝突なく進めます。
+  - **ネイティブ CLI Session の直接閲覧と引き継ぎ:** 各 Helper はネイティブ CLI 会話に紐づいた永続 Session です。Bot のステータスやリンクから任意の Helper Session をいつでも開き、リアルタイムの作業を確認したり、直接追加指示を出して引き継いだりできます。
+  - **6 つの CLI を役割別に組み合わせる Agent Profile:** 再利用可能な [Agent Profiles](/docs/agent-profiles) により、対応する 6 つの Agent Client（Claude Code、Codex、Pi、[Grok Build](/docs/agent-clients/grok)、Kiro、Google Antigravity）ごとにモデル、reasoning effort、権限モード、役割プロンプトを定義し、Bot・Helper・Workflow に割り当てられます。
+  - **非同期の判断ループとデバイス内共有メモリ:** [Bot チャット](/docs/bots/chat)の Todo、引用返信、関連メッセージのコンテキストで複数の並列タスクの判断事項を整理します。同じデバイスの全 Bot は[メモリと `USER.md`](/docs/memory) を共有し、定期的な Dreaming が長期コンテキストを整理しつつ、曖昧な点は Bot を通して確認します。
+  - **E2E 暗号化されたリモートアクセスとリアルタイムプレビュー:** リモート通信はブラウザーとデバイス間でアプリケーション層のエンドツーエンド暗号化（X25519 HPKE + ChaCha20-Poly1305）を行い、デバイス自身が認可を検証します（[セキュリティ](/docs/security)）。公式 Edge に加え[セルフホスト Edge](/docs/self-hosted-edge) も運用でき、サイドパネルの[プレビュー](/docs/previews)からローカルファイルや `localhost` の開発サーバーをそのまま表示できます。
+
+## 選定を決める 5 つのアーキテクチャ上の問い
+
+ツールの見た目よりも、次の 5 つの技術的な問いに答えるほうが選定は速く正確になります。
+
+### 1. 分離の単位をどこに置くか
+
+xAI Grok Bot の分離単位はユーザーごとの米国 Firecracker microVM です。ローカル PC からは分離されますが、同じユーザーの複数 Bot はその VM 内のブラウザーログイン状態、ファイル、CLI 認証情報を共有します。OpenBot や rakazo などのセルフホスト VM は Bot ごとのコンテナー / サンドボックス単位で分離します。
+
+Pontia や Orca のようなローカル CLI オーケストレーションでは、並列コーディングの分離単位は手元のマシンや VPS 上の **git worktree** です。各 Helper が専用のブランチと作業ツリーを持ちながら、ローカルのコンパイラキャッシュ、Docker、テスト DB、開発サーバーをそのまま使えるため、クラウドイメージ上に開発環境を作り直す手間がありません。
+
+### 2. サブスクリプションとコスト構造をどう設計するか
+
+すでに Claude Code、Codex、Grok Build のサブスクリプションを契約しているなら、ローカル CLI オーケストレーションはそのログイン状態を自分の開発機や手頃な Linux VPS 上でそのまま活かせます。一方、公式 Grok Bot はバンドルされた週間利用枠で課金され、OpenBot や rakazo のようなセルフホスト VM 路線ではトークンごとの API キー費用とクラスター / サンドボックスの計算コストを組み合わせる形になります。
+
+### 3. モデル選定を自動任せにするか、役割別に指定するか
+
+xAI の公式ドキュメントには、Grok Bot にモデルセレクターはなく自動でモデルを選ぶこと、チーム allowlist は適用されないことが明記されています。設定項目を最小限にしたい場合には分かりやすい設計です。
+
+調査・設計・実装・レビューで得意なクライアントやモデルを使い分けたい開発フローでは、Pontia の [Agent Profiles](/docs/agent-profiles) を使い、[Grok Build](/docs/agent-clients/grok)、Claude Code、Codex など 6 つの CLI それぞれにモデル・reasoning effort・指示を割り当てて使い分けられます。
+
+### 4. リモート画面か、中身を見て引き継げるネイティブ CLI Session か
+
+クラウドコンピューター型はリモートデスクトップやブラウザー画面の見やすさが強みです。ローカル CLI オーケストレーション型はネイティブ CLI をそのまま扱えます。Orca はチャット UI と生の CLI を切り替えられ、Pontia はすべての Helper のネイティブ CLI Session を直接開いてツール呼び出し・差分・履歴を確認・引き継ぎでき、サイドパネルの[プレビュー](/docs/previews)でローカルファイルや `localhost` サーバーも確認できます。
+
+### 5. モバイル承認とデータの経路をどこに通すか
+
+xAI Grok Bot ではコード、ブラウザーセッション、CLI 認証情報が米国リージョンのクラウド VM に置かれます。Pontia のようなローカルデーモンと暗号化リレーの構成では、コードと CLI 認証情報を自分のデバイスや VPS に置いたまま、ブラウザーとデバイス間をアプリケーション層で E2E 暗号化し（[セキュリティ](/docs/security)）、必要に応じて[セルフホスト Edge](/docs/self-hosted-edge) で中継経路まで自社・個人管理できます。
+
+## 開発者のユースケース別おすすめ
+
+- **ローカル PC を閉じたあとも動き続けるマネージドなクラウドコンピューターと、Team Bots・エンタープライズ監査をそのまま使いたい場合:** xAI Grok Bot がそのまま合致する構成です。
+- **自社の Kubernetes クラスターや Docker ホスト上に Bot ごとのサンドボックスを立て、API キーで運用したい場合:** 路線 A の [OpenBot](https://github.com/CopilotKit/OpenBot)（Kubernetes 本番利用時は Intelligence ライセンスを確認）や [rakazo](https://github.com/elie222/rakazo)、ローカル CLI とクラウドコンピューターを併用したい場合は [OpenMausBot](https://github.com/milind-soni/OpenMausBot) を検討してください。
+- **デスクトップ IDE 中心で worktree とモバイル承認を扱いたい場合:** [Orca](https://github.com/stablyai/orca) や、ローカルエンジンに任意の Docker 分離を組み合わせられる [Suparagent](https://github.com/Anil-matcha/suparagent) が候補になります。
+- **既存の Claude Code・Codex・Pi・Grok Build・Kiro・Antigravity をそのまま活かし、自分のマシンや VPS 上でオープンソースかつローカルファーストに複数エージェントを並列運用したい場合:** [Pontia](/docs/bots) から始めてみてください。独立した git worktree で動く [Helper](/docs/bots/helpers)、役割別の [Agent Profiles](/docs/agent-profiles)、[Grok Build](/docs/agent-clients/grok) を含む 6 クライアント連携、[E2E 暗号化](/docs/security)と[セルフホスト Edge](/docs/self-hosted-edge) をまとめて利用できます。

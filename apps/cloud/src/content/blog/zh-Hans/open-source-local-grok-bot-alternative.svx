@@ -1,0 +1,101 @@
+---
+title: "Grok Bot 开源平替怎么选：自托管云 VM 与本机 CLI 编排的架构对比"
+description: "面向开发者的 Grok Bot、Claude Code、Codex 与主流 Grok Bot 开源替代方案深度对比，涵盖 OpenBot、rakazo、OpenMausBot、Orca、Suparagent、PiBot 与 Pontia 的隔离、计费、模型与安全路径分析。"
+published: "2026-11-27"
+---
+
+2026 年 8 月以后，开发者搜索 **Grok Bot** 时，绝大多数情况下指的是 xAI 的持久化云端 AI 同事（`Grok Bot` / `Team Bots`），而不是开源模型权重，也不同于运行在本机终端里的编码代理 CLI **Grok Build**。如果你在找 **Grok Bot 开源**方案或可自部署的 **Grok Bot 开源平替**（Grok Bot alternative），真正决定体验的不是聊天界面长得多像，而是 Agent 跑在哪里、以什么粒度做隔离。
+
+Pontia 是我们开发的工具。文中关于 xAI Grok Bot 及第三方开源项目的全部事实均来自官方文档与公开 GitHub 仓库，核验时间为 2026 年 11 月 27 日。相关项目迭代较快，建议通过一手链接确认最新状态。
+
+## xAI 官方 Grok Bot 的真实架构
+
+根据 xAI 官方文档（[Get started](https://docs.x.ai/grok-bot/get-started)、[Computer and apps](https://docs.x.ai/grok-bot/computer-and-apps)、[Security](https://docs.x.ai/grok-bot/security)、[Security FAQ](https://docs.x.ai/grok-bot/security-faq)、[Teams and enterprises](https://docs.x.ai/grok-bot/teams-and-enterprises) 与 [x.ai pricing](https://x.ai/pricing)），Grok Bot 的核心是一台持久化云端电脑，而不是本机终端进程：
+
+- **运行形态：** 每个用户在云端拥有一台位于美国区的持久化 Firecracker microVM。同一用户的多个 Bot 共用这台电脑的浏览器登录态、文件系统与命令行凭据，Bot 之间隔离的是各自的人格与屏幕。桌面端和手机端都是瘦客户端，本机关机或休眠后，云端任务仍会继续运行。此外，它也提供可选的本地执行模式（默认逐条批准），并支持把编码任务委托给独立的 Cursor Cloud Agent 电脑。
+- **计费与入口：** xAI 两份官方页面的口径侧重点不同，这里并列呈现。`x.ai/pricing` 列出 Free（$0）、Plus（$8）、Premium（$30）、Super（$100）和 Ultra（$200）五档，Grok Bot 从 Premium 起列入，与 Chat、Imagine、Voice、Cursor 共享每周用量池；与此同时，Teams & Enterprises 文档说明个人访问权限包含在付费 Cursor 计划、关联的 SuperGrok 账号或自助 Grok Business 席位中。
+- **模型选择：** 官方文档明确写到 Grok Bot 不提供面向用户的模型选择器，由 Grok Bot 自行选择模型，底层服务组合会随时间变化，且团队模型 allowlist 不作用于 Grok Bot。
+- **团队与审核：** 支持个人 Bot 与共享 Team Bot，并为敏感操作提供独立的 Auto Review 审核；Enterprise 方案支持强制策略执行与 OpenTelemetry 动作日志。
+
+## Grok Bot vs Claude 与 Grok Bot vs Codex 在比什么
+
+开发者搜索 **grok bot vs claude** 或 **grok bot vs codex** 时，往往不是在比较单轮代码生成跑分，而是在比较两种截然不同的产品形态：
+
+- **持久化云端电脑同事（Grok Bot）：** 一台常驻云端的远程 VM，自带浏览器与完整桌面环境，配合桌面和手机瘦客户端随时查看。适合希望任务在云端全天候运行、不依赖本机开机的场景。
+- **本机终端编码 CLI（Claude Code、Codex、Grok Build）：** 直接运行在你自己的代码仓库、本地编译器、Docker、数据库与既有订阅之上，不需要把开发环境搬到云端。
+
+对日常工程开发来说，很多人既想要 Bot 形态的持久化任务协调、并行推进和手机远程交互，又希望代码和执行留在自己机器或 VPS 上，并继续复用已有的本地 CLI 订阅。**Grok Bot 开源平替**正是为了解决这个问题，目前清晰地分化出两条架构路线。
+
+## 开源 Grok Bot 平替的两条技术路线
+
+主流开源项目主要分成两派：**路线 A** 把“云端电脑”搬到自己的容器或云沙箱基础设施上（通常自带 API key）；**路线 B** 直接在本机或 VPS 上编排已有的编码 CLI（复用既有订阅）。
+
+| 项目 | 架构路线 | 执行与隔离单位 | 模型与凭据 | 远程 / 手机端 | 许可证 |
+| --- | --- | --- | --- | --- | --- |
+| [xAI Grok Bot](https://docs.x.ai/grok-bot/get-started) | 托管云端 VM | 每用户一台美国区 Firecracker microVM；可选本地模式与 Cursor Cloud Agent 委托 | 自动选模型；捆绑 xAI / Cursor 订阅 | 桌面与手机瘦客户端 | 闭源 |
+| [CopilotKit/OpenBot](https://github.com/CopilotKit/OpenBot) | 自托管云 / 容器 VM | 每 Bot 独立电脑（K8s 沙箱或 Daytona / E2B / Modal） | OpenAI / Claude / Gemini API key | 自托管 Web 工作区 | 模板 MIT；Intelligence 单独许可 |
+| [elie222/rakazo](https://github.com/elie222/rakazo) | 自托管云 / 容器 VM | Docker Compose，每 Bot 独立电脑（Docker 或 E2B / Daytona） | 自带 API key | 自托管 Web UI | 开源（见仓库） |
+| [milind-soni/OpenMausBot](https://github.com/milind-soni/OpenMausBot) | 本机 + 云电脑混合 | 在一个聊天应用中结合本地 Claude / Codex 与每 Bot 云电脑 | 本地 CLI + 云电脑配置 | 聊天应用 | Apache-2.0 |
+| [stablyai/orca](https://github.com/stablyai/orca) | 本机 CLI 编排 | 本机 / SSH / 远程服务器或云 VM worktree | 复用已有 CLI 订阅 | 手机配对审批 | MIT |
+| [Anil-matcha/suparagent](https://github.com/Anil-matcha/suparagent) | 本机 CLI + 可选 Docker | 本机引擎（Claude / Codex / Cursor CLI 或 API）+ 可选 Docker 隔离电脑 | CLI 订阅或 API key | 手机配对审批 | 开源（见仓库） |
+| [w01fb0ss/PiBot](https://github.com/w01fb0ss/PiBot) | 本机优先 Electron | 基于 Pi，配 Anthropic `sandbox-runtime` | Pi 提供商凭据 | Android 客户端 + 可自托管 relay | Apache-2.0 |
+| [Pontia](https://github.com/anthod0/pontia) | 本机 CLI 编排 | 本机守护进程（`pontiad`）+ 原 Workspace 内按任务建独立 git worktree | 复用 Claude Code、Codex、Pi、Grok Build、Kiro、Antigravity | 浏览器 PWA，经 E2E 加密的官方或自托管 Edge | Apache-2.0 |
+
+### 路线 A：自托管云 / 容器 VM 路线
+
+这条路线把“每个 Bot 一台独立电脑”的模式搬到你自己的服务器或沙箱服务上，通常需要自带模型 API key：
+
+- **[OpenBot](https://github.com/CopilotKit/OpenBot)（`CopilotKit/OpenBot`）：** 自托管工作区加每 Bot 独立电脑（支持 Kubernetes 沙箱，或接入 Daytona、E2B、Modal），调用 OpenAI、Claude 或 Gemini API key。选型时需留意许可证拆分：应用模板采用 MIT 协议，但 Intelligence 层使用独立许可证（个人本机使用免费，Kubernetes 生产部署需要商业许可）。
+- **[rakazo](https://github.com/elie222/rakazo)（`elie222/rakazo`）：** 通过 Docker Compose 自托管，为每个 Bot 分配独立电脑（本地 Docker 或 E2B、Daytona 等沙箱），使用自带 API key。
+- **[OpenMausBot](https://github.com/milind-soni/OpenMausBot)（`milind-soni/OpenMausBot`）：** Apache-2.0 许可的聊天应用，把本地 Claude / Codex 会话与每 Bot 云电脑放进同一个界面里协同使用。
+
+如果你看重的是“每个 Bot 拥有独立容器沙箱与浏览器环境”，并且已经在团队内维护 Kubernetes、Docker 或沙箱服务与 API key 预算，路线 A 会非常贴合需求。
+
+### 路线 B：本机 CLI 编排路线
+
+这条路线直接跑在你自己的 Linux / macOS 开发机或 VPS 上，复用你已经安装并登录好的 Claude Code、Codex、Grok Build 等 CLI：
+
+- **[Orca](https://github.com/stablyai/orca)（`stablyai/orca`）：** MIT 许可的桌面 IDE，复用自有 CLI 订阅，支持本机、SSH、远程服务器或云 VM worktree，支持手机配对审批，并可在聊天界面与原始 CLI 之间随时切换。
+- **[Suparagent](https://github.com/Anil-matcha/suparagent)（`Anil-matcha/suparagent`）：** 处于两条路线的中间位置——编排引擎运行在本机（支持 Claude / Codex / Cursor CLI 或 API），隔离的 Docker 电脑按需启用，支持手机配对审批。
+- **[PiBot](https://github.com/w01fb0ss/PiBot)（`w01fb0ss/PiBot`）：** Apache-2.0 许可的本机优先 Electron 应用，基于 Pi 构建，配合 Anthropic 的 `sandbox-runtime`、Android 客户端和可自托管 relay。
+- **[Pontia](https://github.com/anthod0/pontia)（Apache-2.0）：** 本机控制面守护进程（`pontiad`）搭配桌面与手机浏览器 Dashboard（`app.pontia.dev`，可安装为应用），把本机已有的多个编码 CLI 组织成持续协作的工作台：
+  - **常驻 Bot 与并行 git worktree Helper：** 常驻 [Bot](/docs/bots) 把独立任务拆分给一任务一隔离的 [Helper](/docs/bots/helpers)。多个 Helper 并行改动同一代码库时，Bot 会从原项目 Workspace 启动，让每个 Helper 在其中新建独立 git worktree 与分支，互不覆盖工作副本。
+  - **随时打开并接管原生 CLI 会话：** 每个 Helper 都是绑定到原生 CLI 对话的持久 Session。你可以随时从 Bot 状态栏或会话链接点开任何 Helper，查看实时执行过程、追加指令或直接接管。
+  - **按角色组合 6 个已支持 CLI：** 通过可复用的 [Agent 配置（Agent Profiles）](/docs/agent-profiles)，将 Claude Code、Codex、Pi、[Grok Build](/docs/agent-clients/grok)、Kiro、Google Antigravity 6 个客户端与指定模型、思考深度、权限模式和角色提示词组合，按需派给 Bot、Helper 或 Workflow 节点。
+  - **异步决策闭环与跨 Bot 共享记忆：** [Bot 对话](/docs/bots/chat)通过 Todo、精准引用和关联上下文链跟踪待决事项；同一设备上的所有 Bot 共享[记忆与 `USER.md`](/docs/memory)，由后台 Dreaming 定期整理长期上下文，遇到歧义时主动通过 Bot 向你确认。
+  - **应用层 E2E 加密、自托管 Edge 与实时预览：** 远程访问采用浏览器到设备的应用层端到端加密（X25519 HPKE + ChaCha20-Poly1305），由目标设备校验授权（[安全](/docs/security)），支持官方或[自托管 Edge](/docs/self-hosted-edge) 中继；对话侧栏内置[实时预览](/docs/previews)，可直接打开本机文件与 `localhost` 开发服务（远程访问时经所选 Edge 路由）。
+
+## 开发者选型的 5 个核心架构问题
+
+比起对比界面截图，下面 5 个工程问题更能帮你快速判断哪条路线适合自己的工作流。
+
+### 1. 你需要的隔离单位是什么？
+
+在 xAI Grok Bot 中，隔离边界是“每用户一台美国区 Firecracker microVM”——它把 Bot 与你的本地电脑隔开，但同一用户的多个 Bot 会共享这台 VM 里的浏览器登录态、文件和命令行凭据。OpenBot、rakazo 这类自托管方案则以“每 Bot 独立容器 / 沙箱”作为隔离单位。
+
+在 Pontia、Orca 等本机 CLI 编排方案中，并行开发的隔离单位是本机或 VPS 上的 **git worktree**。每个 Helper 在独立分支和工作副本中推进，同时直接复用本地编译器缓存、Docker 容器、测试数据库和开发服务器，无需在云镜像里重新搭建整套本地环境。
+
+### 2. 订阅和成本结构怎么算？
+
+如果你已经在为 Claude Code、Codex 或 Grok Build 订阅付费，本机 CLI 编排可以直接复用这些本机登录态，只需跑在自己的开发机或一台常规 Linux VPS 上。相对地，官方 Grok Bot 走捆绑式每周用量池，而 OpenBot、rakazo 等自托管 VM 路线需要同时承担按 token 计费的 API key 账单和容器 / 云沙箱算力成本。
+
+### 3. 你想让系统黑盒选模型，还是按角色指定模型与客户端？
+
+xAI 官方文档明确说明 Grok Bot 不提供模型选择器，由系统自动决定底层模型组合，且团队模型 allowlist 不生效。如果你只想要一个开箱即用、免去调参的通用助手，这种省心设计很直接。
+
+如果你的工程任务天然需要分工——比如调研与架构设计用一套模型和思考深度，并发编码用另一套，或者把 [Grok Build](/docs/agent-clients/grok) 与 Claude Code、Codex 混合使用——Pontia 的 [Agent 配置](/docs/agent-profiles)能为不同角色固化客户端、模型、思考深度和系统提示词，让 Bot 按任务边界精准派发。
+
+### 4. 你需要云端屏幕，还是透明可接管的原生 CLI 会话？
+
+云电脑路线强调把浏览器和桌面屏幕呈现出来，适合偏图形界面或跨 Web 应用的操作。本机 CLI 编排路线则把原生编码 CLI 放在一等公民位置：Orca 支持在聊天 UI 和原始 CLI 之间切换，Pontia 允许你随时点进任意 Helper 的原生 CLI Session 查看工具调用、diff 和对话历史并直接接管，同时在侧栏[预览](/docs/previews)本机文件与 `localhost` 开发服务。
+
+### 5. 手机审批与数据路径怎么走？
+
+使用 xAI Grok Bot 时，代码、浏览器登录态和命令行凭据位于美国区云端 microVM。采用本机守护进程配合加密中继（如 Pontia）时，代码与 CLI 凭据始终留在本机或自己的 VPS 上，浏览器与设备之间的 Dashboard 通信采用应用层端到端加密（[安全](/docs/security)），需要自主掌控中继路径时还可以部署[自托管 Edge](/docs/self-hosted-edge)。
+
+## 按开发者场景做选择
+
+- **希望零运维获得一台常驻云端电脑，本机关机后浏览器和后台任务仍继续跑，并需要 Team Bots 与企业策略审计：** xAI Grok Bot 直接匹配这种形态。
+- **希望在自有 Kubernetes 集群或 Docker 主机上为每个 Bot 分配独立沙箱，并以 API key 驱动：** 优先评估路线 A——[OpenBot](https://github.com/CopilotKit/OpenBot)（部署到 Kubernetes 生产环境前注意核对其 Intelligence 许可证）、[rakazo](https://github.com/elie222/rakazo)，或需要同时使用本地 CLI 与云电脑时考虑 [OpenMausBot](https://github.com/milind-soni/OpenMausBot)。
+- **偏好桌面 IDE 形态、围绕 worktree 工作并配合手机审批：** 可以考察 [Orca](https://github.com/stablyai/orca)；如果希望以本机引擎为主、按需挂载 Docker 隔离电脑，可以看 [Suparagent](https://github.com/Anil-matcha/suparagent)。
+- **希望用开源、本机优先的方式复用现有的 Claude Code、Codex、Pi、Grok Build、Kiro 与 Antigravity 订阅，在自己的机器或 VPS 上长期跑多 Agent 协作：** 从 [Pontia](/docs/bots) 开始——用 [Helper](/docs/bots/helpers) 在独立 git worktree 中并发推进，用 [Agent 配置](/docs/agent-profiles)按角色编排 [Grok Build](/docs/agent-clients/grok) 等 6 个客户端，并通过[端到端加密](/docs/security)的官方或[自托管 Edge](/docs/self-hosted-edge) 随时在桌面和手机上查看与审批。

@@ -1,0 +1,101 @@
+---
+title: "Open-source Grok Bot alternatives: cloud VMs vs local CLI orchestration"
+description: "An architectural comparison of xAI Grok Bot, Claude Code, Codex, and open-source Grok Bot alternatives including OpenBot, rakazo, OpenMausBot, Orca, Suparagent, PiBot, and Pontia."
+published: "2026-11-27"
+---
+
+Since August 2026, searching for **Grok Bot** mostly points to xAI's persistent cloud AI coworker (`Grok Bot` and `Team Bots`), rather than xAI's open-weight model releases or **Grok Build** (xAI's local terminal coding-agent CLI). If you are looking for a **Grok Bot open source** option or a self-hosted **Grok Bot alternative**, the first decision is not which chat UI looks closest—it is where the agent actually executes and how it isolates work.
+
+Pontia is the tool we build. All facts about xAI Grok Bot and third-party open-source projects come from their official documentation and public GitHub repositories, verified on November 27, 2026. These projects ship quickly, so follow the primary links to confirm current behavior.
+
+## What xAI Grok Bot actually is
+
+According to xAI's documentation ([Get started](https://docs.x.ai/grok-bot/get-started), [Computer and apps](https://docs.x.ai/grok-bot/computer-and-apps), [Security](https://docs.x.ai/grok-bot/security), [Security FAQ](https://docs.x.ai/grok-bot/security-faq), [Teams and enterprises](https://docs.x.ai/grok-bot/teams-and-enterprises), and [x.ai pricing](https://x.ai/pricing)), Grok Bot is built around a persistent cloud computer rather than a local terminal process:
+
+- **Runtime model:** Each user gets a persistent US-hosted Firecracker microVM. Multiple bots belonging to the same user share that computer's browser login sessions, filesystem, and CLI credentials, while each bot keeps its own persona and screen. Desktop and mobile apps act as thin clients, so cloud work continues after your laptop sleeps or shuts down. Grok Bot also offers an optional local execution mode (defaulting to per-command approval) and can delegate coding work to separate Cursor Cloud Agent computers.
+- **Plans and entry points:** xAI's two official pages describe access slightly differently, so it is worth reading both directly. [x.ai/pricing](https://x.ai/pricing) lists Free ($0), Plus ($8), Premium ($30), Super ($100), and Ultra ($200), placing Grok Bot from Premium upward with a weekly usage pool shared across Chat, Imagine, Voice, and Cursor. Alongside that, the [Teams and enterprises](https://docs.x.ai/grok-bot/teams-and-enterprises) documentation notes that individual access is included with paid Cursor plans, linked SuperGrok accounts, or self-serve Grok Business seats.
+- **Model selection:** xAI's docs state that Grok Bot has no user-facing model selector. It chooses models automatically, the underlying model mix can change over time, and team model allowlists do not apply to Grok Bot.
+- **Teams and review:** Supports personal bots and shared Team Bots, backed by an independent Auto Review check for sensitive actions. Enterprise plans add policy enforcement and OpenTelemetry action logging.
+
+## Grok Bot vs Claude and Grok Bot vs Codex
+
+Most developers searching **Grok Bot vs Claude** or **Grok Bot vs Codex** are not comparing single-prompt model benchmarks. They are comparing two different product architectures:
+
+- **Persistent cloud-computer coworker (Grok Bot):** An always-on remote VM with its own browser, desktop environment, and thin mobile/desktop client. Best suited when you want a managed cloud environment that keeps running while your local machine is offline.
+- **Local terminal coding CLIs (Claude Code, Codex, Grok Build):** Agents that run directly inside your local repository, compiler toolchain, Docker daemon, local databases, and existing subscriptions.
+
+For day-to-day software engineering, many teams want the persistent task coordination, parallel execution, and phone access of a bot workflow while keeping execution inside their own repos, dev servers, and local CLI subscriptions. That gap is what open-source Grok Bot alternatives address—through two distinct architectural routes.
+
+## Two open-source Grok Bot alternative architectures
+
+Open-source projects in this space split cleanly into two camps: self-hosted cloud/container VMs (bringing the cloud-computer model onto your own infrastructure) and local CLI orchestration (coordinating your existing coding CLIs on your own machine or VPS).
+
+| Project | Route | Execution & isolation | Models & credentials | Remote / mobile | License |
+| --- | --- | --- | --- | --- | --- |
+| [xAI Grok Bot](https://docs.x.ai/grok-bot/get-started) | Hosted cloud VM | US Firecracker microVM per user; optional local mode & Cursor Cloud Agent delegation | Automatic model routing; bundled xAI / Cursor plans | Thin desktop & mobile clients | Proprietary |
+| [CopilotKit/OpenBot](https://github.com/CopilotKit/OpenBot) | Self-hosted VM | Per-bot computer via K8s sandboxes or Daytona / E2B / Modal | OpenAI, Claude, or Gemini API keys | Self-hosted web workspace | MIT template; separate Intelligence license |
+| [elie222/rakazo](https://github.com/elie222/rakazo) | Self-hosted VM | Docker Compose; per-bot computer via Docker, E2B, or Daytona | BYO API keys | Self-hosted web UI | Open source (see repo) |
+| [milind-soni/OpenMausBot](https://github.com/milind-soni/OpenMausBot) | Hybrid VM + local | Combines local Claude / Codex runs with per-bot cloud computers | Local CLIs + cloud computer setup | Chat application | Apache-2.0 |
+| [stablyai/orca](https://github.com/stablyai/orca) | Local CLI orchestration | Local, SSH, remote server, or cloud VM worktrees | Reuses existing CLI subscriptions | Phone pairing for approvals | MIT |
+| [Anil-matcha/suparagent](https://github.com/Anil-matcha/suparagent) | Local CLI + optional Docker | Local engine (Claude / Codex / Cursor CLI or API) + optional Docker computer | CLI subscriptions or API keys | Phone pairing for approvals | Open source (see repo) |
+| [w01fb0ss/PiBot](https://github.com/w01fb0ss/PiBot) | Local-first Electron | Local Pi agent with Anthropic `sandbox-runtime` | Pi provider credentials | Android client + self-hostable relay | Apache-2.0 |
+| [Pontia](https://github.com/anthod0/pontia) | Local CLI orchestration | Local daemon (`pontiad`) + parallel per-task git worktrees in your Workspace | Reuses Claude Code, Codex, Pi, Grok Build, Kiro, and Antigravity | Browser PWA over E2E encrypted official or self-hosted Edge | Apache-2.0 |
+
+### Route A: Self-hosted cloud and container VMs
+
+Projects in Route A replicate the "each bot gets its own computer" model on infrastructure you control, typically funded with your own model API keys:
+
+- **[OpenBot](https://github.com/CopilotKit/OpenBot) (`CopilotKit/OpenBot`):** A self-hosted workspace that provisions a computer per bot using Kubernetes sandboxes or hosted sandbox providers (Daytona, E2B, or Modal), powered by OpenAI, Claude, or Gemini API keys. Check the licensing split before deploying to production: the application template is MIT, while the Intelligence layer uses a separate license that is free for personal local use and requires a commercial license for Kubernetes production deployments.
+- **[rakazo](https://github.com/elie222/rakazo) (`elie222/rakazo`):** Self-hosted with Docker Compose, giving each bot an isolated computer backed by Docker or sandbox providers such as E2B and Daytona, using your own API keys.
+- **[OpenMausBot](https://github.com/milind-soni/OpenMausBot) (`milind-soni/OpenMausBot`):** An Apache-2.0 chat app that bridges local Claude and Codex runs with per-bot cloud computers in one interface.
+
+Route A fits teams that specifically want ephemeral, container-isolated bot computers with browser automation on their own cluster or sandbox provider and are comfortable billing usage through API keys and sandbox compute.
+
+### Route B: Local CLI orchestration
+
+Projects in Route B keep execution directly on your own Linux/macOS workstation or VPS and coordinate the coding CLIs you already have installed and signed in:
+
+- **[Orca](https://github.com/stablyai/orca) (`stablyai/orca`):** An MIT-licensed desktop IDE that reuses existing CLI subscriptions, works across local, SSH, remote server, or cloud VM worktrees, pairs with a phone for approvals, and lets you switch between a chat UI and the raw CLI.
+- **[Suparagent](https://github.com/Anil-matcha/suparagent) (`Anil-matcha/suparagent`):** Sits between the two routes: the orchestration engine runs locally against Claude, Codex, or Cursor CLI (or APIs), an isolated Docker computer is optional, and a paired phone handles approvals.
+- **[PiBot](https://github.com/w01fb0ss/PiBot) (`w01fb0ss/PiBot`):** An Apache-2.0 local-first Electron app built on Pi, combining Anthropic's `sandbox-runtime`, an Android client, and a self-hostable relay.
+- **[Pontia](https://github.com/anthod0/pontia) (Apache-2.0):** A local control-plane daemon (`pontiad`) paired with a desktop and mobile browser Dashboard (`app.pontia.dev`, installable as an app). Rather than replacing your local coding CLIs with a cloud VM, Pontia turns your existing CLIs into a persistent multi-agent workspace:
+  - **Persistent Bots and parallel git-worktree Helpers:** A long-lived [Bot](/docs/bots) splits independent tasks across focused [Helpers](/docs/bots/helpers) (one isolated Session per task). When parallel helpers edit the same repository, the Bot starts from the original Workspace and has each helper create its own git worktree and branch so work progresses concurrently without checkout collisions.
+  - **Direct access to native CLI Sessions:** Every helper is a durable Session bound to its native CLI conversation. You can open any Helper Session directly from the Bot status or link to inspect live output, steer it, or take over.
+  - **Role-based Agent Profiles across 6 CLIs:** Reusable [Agent Profiles](/docs/agent-profiles) pair any of the 6 supported Agent Clients—Claude Code, Codex, Pi, [Grok Build](/docs/agent-clients/grok), Kiro, and Google Antigravity—with a chosen model, optional reasoning effort, permission mode, and system instructions.
+  - **Async decisions and shared device memory:** [Bot chat](/docs/bots/chat) tracks pending questions as todos with quoted replies and linked message context across parallel tasks. All Bots on a device share [memories and `USER.md`](/docs/memory), with periodic Dreaming organizing durable context and asking a Bot to clarify ambiguities.
+  - **End-to-end encrypted remote access and live Previews:** Remote Dashboard traffic uses application-layer E2E encryption (X25519 HPKE + ChaCha20-Poly1305) verified directly by the device ([Security](/docs/security)), works through an official or [self-hosted Edge](/docs/self-hosted-edge) relay, and opens local files and `localhost` dev servers directly in side-panel [Previews](/docs/previews).
+
+## Five architectural questions that decide the right tool
+
+Before committing to a hosted bot or self-hosting a stack, answer these five engineering questions. They matter more than surface UI features.
+
+### 1. What is your unit of isolation?
+
+In xAI Grok Bot, isolation is a US-hosted Firecracker microVM per user: it separates your bot from your local laptop, while multiple bots for the same user share that VM's browser sessions, filesystem, and CLI credentials. Self-hosted VM platforms such as OpenBot and rakazo isolate at the per-bot container or sandbox level.
+
+In local CLI orchestration tools like Pontia and Orca, the unit of isolation for parallel coding work is the **git worktree** inside your existing machine or VPS. Each helper works on its own branch and working directory while keeping native access to your local compiler caches, Docker containers, test databases, and dev servers—without rebuilding your dev environment inside a fresh cloud image.
+
+### 2. How do you want to pay for compute and tokens?
+
+If you already pay for Claude Code, Codex, or Grok Build subscriptions, running local CLI orchestration lets you reuse those existing logins on hardware you already own (a workstation or a modest Linux VPS). By contrast, hosted Grok Bot bills through a bundled weekly usage pool, and self-hosted VM tools such as OpenBot or rakazo combine per-token API key spend with cluster or sandbox VM compute.
+
+### 3. Do you want automatic model routing or per-role control?
+
+Grok Bot hides model selection behind automatic routing; xAI explicitly documents that users do not pick models and team allowlists do not apply. That lowers configuration overhead when you want a single managed assistant.
+
+If your engineering workflow benefits from matching tools to tasks—for example, using one model and reasoning depth for architecture review, another for parallel coding, and [Grok Build](/docs/agent-clients/grok) or Codex for targeted fixes—Pontia's [Agent Profiles](/docs/agent-profiles) let you define reusable specialties across all 6 supported CLIs and assign them to Bots, Helpers, or Workflows.
+
+### 4. Do you want a remote screen or inspectable native CLI sessions?
+
+Cloud-computer bots emphasize a remote desktop or browser screen paired with chat updates. Local CLI orchestrators keep the underlying CLI first-class: in Orca you can flip between chat and raw CLI, and in Pontia every Helper corresponds to an inspectable native CLI Session you can open at any time, alongside side-panel [Previews](/docs/previews) of local files, diffs, and `localhost` dev servers.
+
+### 5. Where should code, credentials, and mobile approvals travel?
+
+With xAI Grok Bot, project files, browser sessions, and CLI credentials live on a US-hosted cloud VM. With a local daemon plus E2E relay like Pontia, code and CLI credentials stay on your own device or VPS, browser-to-device traffic is encrypted at the application layer and verified by the device ([Security](/docs/security)), and you can deploy a [self-hosted Edge](/docs/self-hosted-edge) relay on your own server if you want full control over the relay path.
+
+## Which route fits your workflow
+
+- **You want a managed, zero-ops cloud computer with browser sessions that stay online after your laptop shuts down:** xAI Grok Bot fits that model directly, including Team Bots and Enterprise policy controls.
+- **You want per-bot container sandboxes on your own Kubernetes cluster or Docker host with API keys:** Look at Route A—[OpenBot](https://github.com/CopilotKit/OpenBot) (reviewing its Intelligence license for Kubernetes production), [rakazo](https://github.com/elie222/rakazo), or [OpenMausBot](https://github.com/milind-soni/OpenMausBot) if you want local CLI plus cloud computers together.
+- **You want a desktop IDE focused on worktrees with phone approvals:** Look at [Orca](https://github.com/stablyai/orca), or [Suparagent](https://github.com/Anil-matcha/suparagent) if you want optional Docker isolation alongside local CLIs.
+- **You want an open-source, local-first multi-agent workspace that reuses your existing Claude Code, Codex, Pi, Grok Build, Kiro, and Antigravity setups on your own machine or VPS:** Start with [Pontia](/docs/bots)—delegate parallel git-worktree [Helpers](/docs/bots/helpers), specialize roles with [Agent Profiles](/docs/agent-profiles), connect [Grok Build](/docs/agent-clients/grok) alongside your other CLIs, and inspect work securely from desktop or phone over an official or [self-hosted Edge](/docs/self-hosted-edge).
