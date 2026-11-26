@@ -1,5 +1,5 @@
 import { isValidDeviceHandle } from "../../../lib/deviceHandle";
-import { isEdgePort, isPublicHostname } from "./edgeEndpoint";
+import { isEdgePort, isPublicEdgeHost } from "./edgeEndpoint";
 
 const CLOUD_ORIGIN = "https://pontia.dev";
 const PUBLIC_DASHBOARD_ORIGIN = "https://app.pontia.dev";
@@ -84,6 +84,7 @@ function parseEdgeOrigin(value: unknown): string {
   } catch {
     throw new CloudRequestError("Cloud returned an invalid device target.");
   }
+  const hostname = url.hostname.startsWith("[") ? url.hostname.slice(1, -1) : url.hostname;
   if (
     value !== url.origin ||
     url.protocol !== "https:" ||
@@ -92,8 +93,8 @@ function parseEdgeOrigin(value: unknown): string {
     url.pathname !== "/" ||
     url.search ||
     url.hash ||
-    !isPublicHostname(url.hostname) ||
-    NON_EDGE_HOSTS.has(url.hostname) ||
+    !isPublicEdgeHost(hostname) ||
+    NON_EDGE_HOSTS.has(hostname) ||
     !isEdgePort(Number(url.port || 443))
   ) {
     throw new CloudRequestError("Cloud returned an invalid device target.");

@@ -18,10 +18,15 @@ pub fn validate_edge_port(port: u16) -> Result<(), String> {
 }
 
 pub fn tunnel_url(hostname: &str, port: u16) -> String {
-    if port == 443 {
-        format!("wss://{hostname}/tunnel")
+    let host = if hostname.contains(':') {
+        format!("[{hostname}]")
     } else {
-        format!("wss://{hostname}:{port}/tunnel")
+        hostname.to_owned()
+    };
+    if port == 443 {
+        format!("wss://{host}/tunnel")
+    } else {
+        format!("wss://{host}:{port}/tunnel")
     }
 }
 
@@ -42,5 +47,18 @@ mod tests {
         for value in ["0", "65536", "-1", "dns", "25", "6000"] {
             assert!(parse_edge_port(value).is_err());
         }
+    }
+
+    #[test]
+    fn tunnel_urls_bracket_ipv6_addresses() {
+        assert_eq!(tunnel_url("8.8.8.8", 443), "wss://8.8.8.8/tunnel");
+        assert_eq!(
+            tunnel_url("2606:4700:4700::1111", 443),
+            "wss://[2606:4700:4700::1111]/tunnel"
+        );
+        assert_eq!(
+            tunnel_url("2606:4700:4700::1111", 8443),
+            "wss://[2606:4700:4700::1111]:8443/tunnel"
+        );
     }
 }

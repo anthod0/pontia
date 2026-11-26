@@ -1,7 +1,7 @@
 use std::{fs, path::Path};
 
 use anyhow::{Context, Result};
-use pontia_tunnel::endpoint::is_public_hostname;
+use pontia_tunnel::endpoint::{is_public_host, is_public_hostname};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 
@@ -44,8 +44,8 @@ impl ServiceConfig {
         .context("edge service config is invalid")?;
         validate_edge_port(config.port).map_err(anyhow::Error::msg)?;
         anyhow::ensure!(
-            is_public_hostname(&config.hostname),
-            "configured edge hostname is not a public DNS name"
+            is_public_host(&config.hostname),
+            "configured edge host is not a public DNS name or unicast IP address"
         );
         if let Some(base) = &config.preview_base_hostname {
             anyhow::ensure!(
@@ -86,10 +86,14 @@ pub fn hostname_from_tunnel_url(tunnel_url: &str) -> Result<String> {
             && url.fragment().is_none(),
         "Cloud returned a non-canonical tunnel URL"
     );
-    let hostname = url.domain().context("tunnel URL has no DNS hostname")?;
+    let serialized_host = url.host_str().context("tunnel URL has no host")?;
+    let hostname = serialized_host
+        .strip_prefix('[')
+        .and_then(|host| host.strip_suffix(']'))
+        .unwrap_or(serialized_host);
     anyhow::ensure!(
-        is_public_hostname(hostname) && url.as_str() == tunnel_url,
-        "tunnel URL has an invalid edge hostname"
+        is_public_host(hostname) && url.as_str() == tunnel_url,
+        "tunnel URL has an invalid edge host"
     );
     Ok(hostname.to_owned())
 }
@@ -104,6 +108,8 @@ mod tests {
         let path = root.path().join("config.json");
         for (hostname, port, acme_challenge, preview) in [
             ("edge.example.com", 443, AcmeChallenge::Http01, None),
+            ("8.8.8.8", 443, AcmeChallenge::Http01, None),
+            ("2606:4700:4700::1111", 8443, AcmeChallenge::Http01, None),
             ("edge.example.com", 8443, AcmeChallenge::Http01, None),
             (
                 "sg.edge.pontia.dev",
@@ -172,6 +178,8 @@ mod tests {
         for config in [
             r#"{"hostname":"localhost"}"#,
             r#"{"hostname":"127.0.0.1"}"#,
+            r#"{"hostname":"10.0.0.1"}"#,
+            r#"{"hostname":"2001:db8::1"}"#,
             r#"{"hostname":"edge.internal"}"#,
             r#"{"hostname":"edge.example.com","preview_base_hostname":"preview.local"}"#,
         ] {
@@ -190,6 +198,11 @@ mod tests {
                 "brave-atlas.edge.pontia.dev",
             ),
             ("wss://relay.pontia.run/tunnel", "relay.pontia.run"),
+            ("wss://8.8.8.8/tunnel", "8.8.8.8"),
+            (
+                "wss://[2606:4700:4700::1111]:8443/tunnel",
+                "2606:4700:4700::1111",
+            ),
         ] {
             assert_eq!(hostname_from_tunnel_url(url).unwrap(), hostname);
         }

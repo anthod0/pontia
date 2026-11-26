@@ -351,9 +351,26 @@ test("Pontia domains can be entered like any other domain", async () => {
   }
 });
 
+test("public IP addresses can be entered without a domain", async () => {
+  const event = await authenticatedEvent(ownerId);
+  for (const hostname of ["8.8.8.8", "2606:4700:4700::1111"]) {
+    const result = (await issueDeployment(deploymentRequest(event, hostname))) as {
+      deployment: { hostname: string };
+    };
+    expect(result.deployment.hostname).toBe(hostname);
+  }
+});
+
 test("invalid and already registered hostnames are rejected with the entered value", async () => {
   const event = await authenticatedEvent(ownerId);
-  for (const hostname of ["", "localhost", "10.0.0.1", "nas.local", "https://edge.example.com"]) {
+  for (const hostname of [
+    "",
+    "localhost",
+    "10.0.0.1",
+    "2001:db8::1",
+    "nas.local",
+    "https://edge.example.com",
+  ]) {
     expect(await issueDeployment(deploymentRequest(event, hostname))).toMatchObject({
       status: 400,
       data: { hostname: hostname.trim().toLowerCase() },

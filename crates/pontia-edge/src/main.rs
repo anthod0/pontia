@@ -55,7 +55,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Initialize this edge for its domain, obtain a certificate, and install its service.
+    /// Initialize this edge endpoint, obtain a certificate, and install its service.
     Init(InitArgs),
     /// Retry the last incomplete initialization.
     Retry,
@@ -207,23 +207,30 @@ async fn init_with_output<W: Write + ?Sized>(args: PendingInit, output: &mut W) 
                 "Let's Encrypt HTTP-01 validation requires public TCP port 80 to reach this server.",
             )?;
         }
-        status(output, &format!("Checking public DNS for {hostname}..."))?;
-        let addresses = public_addresses(&hostname).await.with_context(|| {
-            format!(
-                "point an A or AAAA record for {hostname} to this server's public IP address, then run `sudo pontia-edge retry`"
-            )
-        })?;
-        status(
-            output,
-            &format!(
-                "{hostname} resolves to {}.",
-                addresses
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-        )?;
+        let addresses = if hostname.parse::<std::net::IpAddr>().is_ok() {
+            status(output, &format!("Checking public IP address {hostname}..."))?;
+            public_addresses(&hostname).await?
+        } else {
+            status(output, &format!("Checking public DNS for {hostname}..."))?;
+            let addresses = public_addresses(&hostname).await.with_context(|| {
+                format!(
+                    "point an A or AAAA record for {hostname} to this server's public IP address, then run `sudo pontia-edge retry`"
+                )
+            })?;
+            status(
+                output,
+                &format!(
+                    "{hostname} resolves to {}.",
+                    addresses
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            )?;
+            addresses
+        };
+        debug_assert!(!addresses.is_empty());
         if reusable_certificate(Path::new(TLS_PATH), &hostname).await {
             status(output, "Reusing the saved TLS certificate.")?;
         } else {
@@ -335,7 +342,7 @@ async fn wait_for_confirmation<C: EdgeConfirmationClient>(
     status(
         output,
         &format!(
-            "Waiting for Pontia Cloud to verify domain ownership over HTTPS (up to {})...",
+            "Waiting for Pontia Cloud to verify endpoint ownership over HTTPS (up to {})...",
             format_duration(retry_delay * attempts as u32)
         ),
     )?;
@@ -732,7 +739,6 @@ mod tests {
         .to_string();
         let output = String::from_utf8(output).unwrap();
 
-        assert!(output.contains("Waiting for Pontia Cloud to verify domain ownership"));
         assert!(error.contains("HTTP 422 Unprocessable Entity"));
         assert!(error.contains("ownership_verification_failed"));
         assert!(!output.contains("secret-ticket"));

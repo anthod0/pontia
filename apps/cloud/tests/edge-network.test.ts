@@ -3,11 +3,11 @@ import { base64url, generateKeyPair, jwtVerify } from "jose";
 import {
   CloudflareDnsProvider,
   edgeApiOrigin,
-  edgeHostname,
+  edgeHost,
   isGlobalUnicastIp,
   isGlobalUnicastIpv4,
   isLegacyEdgeDnsOwner,
-  isValidEdgeHostname,
+  isValidEdgeHost,
   managedEdgeHostname,
   ownershipMessage,
   probeEdgeHealth,
@@ -44,11 +44,20 @@ test("accepts any public DNS name, including Pontia domains", () => {
     "relay.pontia.run",
     "edge.example.test",
   ]) {
-    expect(isValidEdgeHostname(hostname)).toBeTrue();
+    expect(isValidEdgeHost(hostname)).toBeTrue();
   }
 });
 
-test("rejects IP literals, single labels, and local or special-use names", () => {
+test("accepts public IP literals and rejects private or special-use addresses", () => {
+  for (const address of ["8.8.8.8", "192.0.0.9", "2606:4700:4700::1111"]) {
+    expect(isValidEdgeHost(address)).toBeTrue();
+  }
+  for (const address of ["10.0.0.1", "127.0.0.1", "192.0.2.1", "::1", "2001:db8::1"]) {
+    expect(isValidEdgeHost(address)).toBeFalse();
+  }
+});
+
+test("rejects single labels and local or special-use names", () => {
   for (const hostname of [
     "",
     "example",
@@ -63,7 +72,6 @@ test("rejects IP literals, single labels, and local or special-use names", () =>
     "hidden.onion",
     "name.alt",
     "127.0.0.1",
-    "8.8.8.8",
     "0x7f.1",
     "::1",
     "[2001:db8::1]",
@@ -82,13 +90,18 @@ test("rejects IP literals, single labels, and local or special-use names", () =>
     42,
     null,
   ]) {
-    expect(isValidEdgeHostname(hostname)).toBeFalse();
+    expect(isValidEdgeHost(hostname)).toBeFalse();
   }
 });
 
-test("extracts only canonical tunnel URLs for public hostnames", () => {
-  expect(edgeHostname(identity.tunnelUrl)).toBe("brave-atlas.edge.pontia.dev");
-  expect(edgeHostname("wss://edge.example.com:8443/tunnel")).toBe("edge.example.com");
+test("extracts only canonical tunnel URLs for public hosts", () => {
+  expect(edgeHost(identity.tunnelUrl)).toBe("brave-atlas.edge.pontia.dev");
+  expect(edgeHost("wss://edge.example.com:8443/tunnel")).toBe("edge.example.com");
+  expect(edgeHost("wss://8.8.8.8/tunnel")).toBe("8.8.8.8");
+  expect(edgeHost("wss://[2606:4700:4700::1111]:8443/tunnel")).toBe("2606:4700:4700::1111");
+  expect(edgeApiOrigin("wss://[2606:4700:4700::1111]:8443/tunnel")).toBe(
+    "https://[2606:4700:4700::1111]:8443",
+  );
   expect(edgeApiOrigin("wss://edge.example.com:8443/tunnel")).toBe("https://edge.example.com:8443");
   expect(edgeApiOrigin("wss://two.parts.edge.pontia.dev/tunnel")).toBe(
     "https://two.parts.edge.pontia.dev",
@@ -104,7 +117,7 @@ test("extracts only canonical tunnel URLs for public hostnames", () => {
     "wss://nas.local/tunnel",
     "wss://intranet/tunnel",
   ]) {
-    expect(edgeHostname(invalid)).toBeNull();
+    expect(edgeHost(invalid)).toBeNull();
     expect(edgeApiOrigin(invalid)).toBeNull();
   }
   expect(edgeApiOrigin("wss://edge.example.com:443/tunnel")).toBeNull();
@@ -243,6 +256,19 @@ test("DNS-over-HTTPS preflight requires public A or AAAA answers only", async ()
   await expect(
     resolvesToPublicAddresses("edge.example.com", async () => new Response("", { status: 502 })),
   ).rejects.toThrow();
+});
+
+test("public IP deployments bypass DNS-over-HTTPS", async () => {
+  expect(
+    await resolvesToPublicAddresses("8.8.8.8", async () => {
+      throw new Error("must not query DNS");
+    }),
+  ).toBe("public");
+  expect(
+    await resolvesToPublicAddresses("2606:4700:4700::1111", async () => {
+      throw new Error("must not query DNS");
+    }),
+  ).toBe("public");
 });
 
 // crates/pontia-edge/src/ownership.rs computes the same vector.

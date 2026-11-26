@@ -439,7 +439,8 @@ fn validate_tunnel_url(value: &str, public_endpoints_only: bool) -> Result<Url> 
     let url = Url::parse(value).map_err(|_| Error::Protocol("invalid tunnel URL"))?;
     let public_host = match url.host() {
         Some(url::Host::Domain(hostname)) => endpoint::is_public_hostname(hostname),
-        Some(_) => false,
+        Some(url::Host::Ipv4(address)) => endpoint::is_public_ip(&address.to_string()),
+        Some(url::Host::Ipv6(address)) => endpoint::is_public_ip(&address.to_string()),
         None => return Err(Error::Protocol("tunnel URL has no host")),
     };
     if url.scheme() != "wss"
@@ -452,7 +453,7 @@ fn validate_tunnel_url(value: &str, public_endpoints_only: bool) -> Result<Url> 
         || url.fragment().is_some()
     {
         return Err(Error::Protocol(
-            "tunnel URL must be wss://public-hostname[:safe-port]/tunnel",
+            "tunnel URL must be wss://public-host[:safe-port]/tunnel",
         ));
     }
     Ok(url)
@@ -525,12 +526,16 @@ mod tests {
             "wss://sg.edge.pontia.dev/tunnel",
             "wss://pontia.dev/tunnel",
             "wss://edge.pontia.run/tunnel",
+            "wss://8.8.8.8/tunnel",
+            "wss://[2606:4700:4700::1111]:8443/tunnel",
         ] {
             assert!(validate_tunnel_url(value, true).is_ok(), "{value}");
         }
         for value in [
             "wss://127.0.0.1/tunnel",
             "wss://[::1]/tunnel",
+            "wss://192.0.2.1/tunnel",
+            "wss://[2001:db8::1]/tunnel",
             "wss://localhost/tunnel",
             "wss://edge.localhost/tunnel",
             "wss://printer.local/tunnel",

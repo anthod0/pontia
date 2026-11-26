@@ -3,7 +3,7 @@ import { isEdgePort } from "$lib/edge-port";
 import { environment } from "$lib/server/auth/http";
 import { logDeploymentEvent } from "$lib/server/deployment-observability";
 import { confirmEdgeDeployment, type OwnershipVerification } from "$lib/server/edge-deployment";
-import { resolvesToPublicAddresses, verifyEdgeOwnership } from "$lib/server/edge-network";
+import { edgeHost, resolvesToPublicAddresses, verifyEdgeOwnership } from "$lib/server/edge-network";
 import { remoteDatabase } from "$lib/server/remote-access/http";
 import type { RequestHandler } from "./$types";
 
@@ -66,7 +66,7 @@ export const POST: RequestHandler = async (event) => {
       input.port,
     );
     if (result.status === "created" || result.status === "existing") {
-      const hostname = new URL(result.edge.tunnelUrl).hostname;
+      const hostname = edgeHost(result.edge.tunnelUrl)!;
       logDeploymentEvent("info", {
         event: "edge_registration_succeeded",
         stage: "registration_commit",

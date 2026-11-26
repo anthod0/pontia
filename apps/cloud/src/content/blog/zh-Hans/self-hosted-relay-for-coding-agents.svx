@@ -99,7 +99,7 @@ Happy 的自托管服务器走得更远：它把账户记录和加密的会话�
 
 ### 部署 Pontia Edge
 
-你需要一台带有 systemd 和公网 IP 地址的公网 Linux 服务器、一个你拥有控制权的域名，以及对外开放的 TCP 80 和 443 端口。将域名指向服务器，然后在 [Edge 设置](/settings/edges)中选择**部署 Edge**，输入该域名，并在服务器上运行一次性命令。该命令会安装签名的 `pontia-edge` 版本，为你的域名获取 Let's Encrypt 证书，并启动服务。之后在注册设备时选择该 Edge。详情请参阅[自托管 Edge](/docs/self-hosted-edge)。
+你需要一台带有 systemd 和公网 IPv4 或 IPv6 地址的公网 Linux 服务器，并对外开放 TCP 80 和 443 端口。在 [Edge 设置](/settings/edges)中选择**部署 Edge**，输入该公网 IP 地址或指向它的域名，然后在服务器上运行一次性命令。该命令会安装签名的 `pontia-edge` 版本，为该地址获取 Let's Encrypt 证书，并启动服务。之后在注册设备时选择该 Edge。详情请参阅[自托管 Edge](/docs/self-hosted-edge)。
 
 ## 评估任何远程控制方案时要问的问题
 

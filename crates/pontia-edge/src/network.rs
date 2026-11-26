@@ -6,6 +6,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use hickory_resolver::{TokioResolver, config::LookupIpStrategy};
+use pontia_tunnel::endpoint::is_public_ip;
 use socket2::{Domain, Protocol, Socket, Type};
 
 /// Use the DNS servers configured by the OS, without pinning an external provider.
@@ -23,42 +24,18 @@ pub fn system_dns_resolver() -> Result<TokioResolver> {
 }
 
 pub fn is_global_unicast(address: IpAddr) -> bool {
-    match address {
-        IpAddr::V4(address) => is_global_unicast_ipv4(address),
-        IpAddr::V6(address) => is_global_unicast_ipv6(address),
-    }
-}
-
-fn is_global_unicast_ipv4(address: Ipv4Addr) -> bool {
-    let [a, b, c, d] = address.octets();
-    !(a == 0
-        || a == 10
-        || a == 127
-        || a >= 224
-        || (a == 100 && (64..=127).contains(&b))
-        || (a == 169 && b == 254)
-        || (a == 172 && (16..=31).contains(&b))
-        || (a == 192 && b == 0 && c == 0 && d != 9 && d != 10)
-        || (a == 192 && b == 0 && c == 2)
-        || (a == 192 && b == 88 && c == 99)
-        || (a == 192 && b == 168)
-        || (a == 198 && (b == 18 || b == 19))
-        || (a == 198 && b == 51 && c == 100)
-        || (a == 203 && b == 0 && c == 113))
-}
-
-/// Allocated global unicast space (2000::/3) without special-purpose or address-embedding blocks.
-fn is_global_unicast_ipv6(address: Ipv6Addr) -> bool {
-    let [a, b, ..] = address.segments();
-    a & 0xe000 == 0x2000
-        && !(a == 0x2001 && b < 0x0200)
-        && !(a == 0x2001 && b == 0x0db8)
-        && a != 0x2002
-        && !(a == 0x3fff && b < 0x1000)
+    is_public_ip(&address.to_string())
 }
 
 /// Checks the public DNS records for an edge hostname before requesting a certificate.
 pub async fn public_addresses(hostname: &str) -> Result<Vec<IpAddr>> {
+    if let Ok(address) = hostname.parse::<IpAddr>() {
+        anyhow::ensure!(
+            is_global_unicast(address),
+            "{hostname} is not a public unicast IP address"
+        );
+        return Ok(vec![address]);
+    }
     let resolver = system_dns_resolver()?;
     let lookup = tokio::time::timeout(
         Duration::from_secs(10),

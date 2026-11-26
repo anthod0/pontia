@@ -20,9 +20,9 @@ beforeAll(async () => {
 });
 afterEach(() => mock.restore());
 
-async function deploymentTicket() {
+async function deploymentTicket(host = hostname) {
   await database.db.insert(users).values({ id: "network-owner" });
-  const result = await issueEdgeDeployment(database.db, "network-owner", hostname, {
+  const result = await issueEdgeDeployment(database.db, "network-owner", host, {
     now: () => new Date("2099-01-01T00:00:00.000Z"),
     randomBytes: () => new Uint8Array(32).fill(72),
     edgeId: () => edgeId,
@@ -150,6 +150,28 @@ test("a verified ownership proof registers the edge on its own domain", async ()
   expect(retry.status).toBe(200);
   expect(requests).toEqual([]);
   expect(limits).toEqual([edgeId]);
+});
+
+test("a public IPv6 address skips DNS and registers with a bracketed authority", async () => {
+  const address = "2606:4700:4700::1111";
+  const ticket = await deploymentTicket(address);
+  const requests: string[] = [];
+  spyOn(globalThis, "fetch").mockImplementation((async (input: string, init: RequestInit) => {
+    const url = new URL(String(input));
+    requests.push(url.toString());
+    expect(url.hostname).toBe(`[${address}]`);
+    return genuineEdge(url, init);
+  }) as typeof fetch);
+
+  const response = await call(event({ ticket, service_credential: credential, port: 8443 }));
+
+  expect(response.status).toBe(200);
+  expect((await response.json()) as unknown).toEqual({
+    edge_id: edgeId,
+    hostname: address,
+    tunnel_url: `wss://[${address}]:8443/tunnel`,
+  });
+  expect(requests).toEqual([`https://[${address}]:8443/__pontia/verify-ownership`]);
 });
 
 test("rate limiting stops confirmation before any outbound request", async () => {

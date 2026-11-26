@@ -36,7 +36,7 @@ pub trait EnrollmentClient {
 
 #[allow(async_fn_in_trait)]
 pub trait EdgeConfirmationClient {
-    /// Asks Cloud to verify domain ownership over HTTPS and register the edge.
+    /// Asks Cloud to verify endpoint ownership over HTTPS and register the edge.
     async fn confirm(&self, ticket: &str, credential: &str, port: u16) -> Result<String>;
 }
 

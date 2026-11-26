@@ -17,5 +17,6 @@ export function isEdgePort(value: unknown): value is number {
 }
 
 export function edgeAuthority(hostname: string, port: number): string {
-  return port === 443 ? hostname : `${hostname}:${port}`;
+  const host = hostname.includes(":") ? `[${hostname}]` : hostname;
+  return port === 443 ? host : `${host}:${port}`;
 }

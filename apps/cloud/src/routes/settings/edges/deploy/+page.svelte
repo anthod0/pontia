@@ -54,7 +54,7 @@
         autocomplete="off"
         autocapitalize="none"
         spellcheck={false}
-        placeholder="edge.example.com"
+        placeholder="edge.example.com or 1.2.3.4"
         maxlength={253}
         value={form && "hostname" in form ? form.hostname : ""}
         aria-invalid={form?.error ? true : undefined}

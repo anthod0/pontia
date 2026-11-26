@@ -49,7 +49,7 @@ fn authority(req: &Request, port: u16) -> Result<Authority, StatusCode> {
         .map_err(|_| StatusCode::BAD_REQUEST)?;
     let uri = req.uri().authority();
     if hosts.next().is_some()
-        || matches!((&header, uri), (Some(a), Some(b)) if !a.host().eq_ignore_ascii_case(b.host()))
+        || matches!((&header, uri), (Some(a), Some(b)) if !authority_host(a).eq_ignore_ascii_case(authority_host(b)))
     {
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -67,6 +67,14 @@ fn authority(req: &Request, port: u16) -> Result<Authority, StatusCode> {
         .or(header)
         .or_else(|| uri.cloned())
         .ok_or(StatusCode::BAD_REQUEST)
+}
+
+fn authority_host(authority: &Authority) -> &str {
+    authority
+        .host()
+        .strip_prefix('[')
+        .and_then(|host| host.strip_suffix(']'))
+        .unwrap_or_else(|| authority.host())
 }
 
 pub(super) fn router(
@@ -99,7 +107,7 @@ async fn dispatch(State(hosts): State<Hosts>, req: Request) -> Response {
         Ok(auth) => auth,
         Err(status) => return status.into_response(),
     };
-    let host = auth.host().to_ascii_lowercase();
+    let host = authority_host(&auth).to_ascii_lowercase();
     if host.eq_ignore_ascii_case(&hosts.control_hostname) {
         let mut response = hosts.control.oneshot(req).await.unwrap();
         response.headers_mut().insert(
@@ -375,6 +383,31 @@ mod tests {
             ("https://a/", vec!["a"], Ok("a")),
             ("https://a:443/", vec!["A"], Ok("a:443")),
             ("https://a/", vec!["a:444"], Err(StatusCode::NOT_FOUND)),
+            (
+                "/",
+                vec!["[2606:4700:4700::1111]"],
+                Ok("[2606:4700:4700::1111]"),
+            ),
+            (
+                "/",
+                vec!["[2606:4700:4700::1111]:443"],
+                Ok("[2606:4700:4700::1111]:443"),
+            ),
+            (
+                "https://[2606:4700:4700::1111]/",
+                vec![],
+                Ok("[2606:4700:4700::1111]"),
+            ),
+            (
+                "https://[2606:4700:4700::1111]:443/",
+                vec!["[2606:4700:4700::1111]"],
+                Ok("[2606:4700:4700::1111]:443"),
+            ),
+            (
+                "https://[2606:4700:4700::1111]:444/",
+                vec![],
+                Err(StatusCode::NOT_FOUND),
+            ),
         ] {
             let mut req = Request::builder().uri(uri);
             for value in hosts {
@@ -387,6 +420,17 @@ mod tests {
                     .map_err(|s| *s),
                 expected
             );
+        }
+    }
+
+    #[test]
+    fn authority_host_removes_ipv6_brackets_for_control_routing() {
+        for (authority, expected) in [
+            ("edge.example.com:443", "edge.example.com"),
+            ("[2606:4700:4700::1111]", "2606:4700:4700::1111"),
+            ("[2606:4700:4700::1111]:443", "2606:4700:4700::1111"),
+        ] {
+            assert_eq!(authority_host(&authority.parse().unwrap()), expected);
         }
     }
 }

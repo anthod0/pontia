@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Deploy a self-hosted Edge directly on a public IPv4 or IPv6 address with an automatically renewed Let's Encrypt short-lived certificate.
+
 ## [0.9.5] - 2026-11-26
 
 ### Added

@@ -4,7 +4,7 @@ import { v7 as uuidv7 } from "uuid";
 import { sha256Base64url } from "./crypto";
 import type { Database } from "./db";
 import { edgeTickets, edges } from "./db/schema";
-import { edgeHostname, isValidEdgeHostname } from "./edge-network";
+import { edgeHost, isValidEdgeHost } from "./edge-network";
 import { issueEdgeTicket, parseEdgeTicket, type EdgeTicketDependencies } from "./edge-tickets";
 import { parseEdgeCredential } from "./remote-access/resources";
 import { isUuidV7 } from "./uuid";
@@ -29,7 +29,7 @@ export function decodeDeploymentPayload(value: unknown): DeploymentPayload | nul
   const keys = Object.keys(value);
   if (keys.length !== 1 || keys[0] !== "hostname") return null;
   const hostname = (value as Record<string, unknown>).hostname;
-  return isValidEdgeHostname(hostname) ? { hostname } : null;
+  return isValidEdgeHost(hostname) ? { hostname } : null;
 }
 
 function shellQuote(value: string) {
@@ -46,9 +46,10 @@ function tunnelUrl(hostname: string, port: number) {
 
 /** Any registered endpoint on this hostname, regardless of its port. */
 function registeredHostname(hostname: string) {
+  const authority = edgeAuthority(hostname, 443);
   return or(
     eq(edges.tunnelUrl, tunnelUrl(hostname, 443)),
-    like(edges.tunnelUrl, `wss://${hostname}:%/tunnel`),
+    like(edges.tunnelUrl, `wss://${authority}:%/tunnel`),
   );
 }
 
@@ -66,7 +67,7 @@ export async function issueEdgeDeployment(
   hostname: string,
   dependencies: DeploymentDependencies = defaultDependencies,
 ): Promise<DeploymentIssue> {
-  if (!isValidEdgeHostname(hostname)) return { status: "invalid" };
+  if (!isValidEdgeHost(hostname)) return { status: "invalid" };
   if (await db.select({ id: edges.id }).from(edges).where(registeredHostname(hostname)).get()) {
     return { status: "conflict" };
   }
@@ -141,7 +142,7 @@ async function completedDeployment(db: Database, deployment: DeploymentAuthoriza
     edge.userId !== deployment.userId ||
     edge.accessScope !== "private" ||
     edge.serviceCredentialHash !== deployment.serviceCredentialHash ||
-    edgeHostname(edge.tunnelUrl) !== deployment.hostname
+    edgeHost(edge.tunnelUrl) !== deployment.hostname
   ) {
     return null;
   }

@@ -41,8 +41,7 @@ export type EdgeHealth =
 
 type HttpFetcher = (input: string, init: RequestInit) => Promise<Response>;
 
-/** A canonical lowercase public DNS name with at least two labels and no IP literal. */
-export function isValidEdgeHostname(value: unknown): value is string {
+function isValidEdgeHostname(value: string): boolean {
   if (typeof value !== "string" || value.length === 0 || value.length > 253) return false;
   const labels = value.split(".");
   const topLevel = labels.at(-1) ?? "";
@@ -54,7 +53,16 @@ export function isValidEdgeHostname(value: unknown): value is string {
   );
 }
 
-export function edgeHostname(tunnelUrl: string): string | null {
+/** A canonical public DNS name or public unicast IP address. */
+export function isValidEdgeHost(value: unknown): value is string {
+  return typeof value === "string" && (isValidEdgeHostname(value) || isGlobalUnicastIp(value));
+}
+
+function urlHostname(parsed: URL) {
+  return parsed.hostname.startsWith("[") ? parsed.hostname.slice(1, -1) : parsed.hostname;
+}
+
+export function edgeHost(tunnelUrl: string): string | null {
   let parsed: URL;
   try {
     parsed = new URL(tunnelUrl);
@@ -69,15 +77,15 @@ export function edgeHostname(tunnelUrl: string): string | null {
     parsed.pathname !== "/tunnel" ||
     parsed.search !== "" ||
     parsed.hash !== "" ||
-    !isValidEdgeHostname(parsed.hostname)
+    !isValidEdgeHost(urlHostname(parsed))
   ) {
     return null;
   }
-  return parsed.hostname;
+  return urlHostname(parsed);
 }
 
 export function edgeApiOrigin(tunnelUrl: string): string | null {
-  const hostname = edgeHostname(tunnelUrl);
+  const hostname = edgeHost(tunnelUrl);
   if (!hostname) return null;
   const authority = edgeAuthority(hostname, Number(new URL(tunnelUrl).port || 443));
   if (tunnelUrl !== `wss://${authority}/tunnel`) return null;
@@ -91,7 +99,7 @@ export function managedEdgeHostname(edge: {
 }): string | null {
   if (edge.dnsLabel === null || !DNS_LABEL.test(edge.dnsLabel)) return null;
   const hostname = `${edge.dnsLabel}.${EDGE_ZONE}`;
-  return edgeHostname(edge.tunnelUrl) === hostname ? hostname : null;
+  return edgeHost(edge.tunnelUrl) === hostname ? hostname : null;
 }
 
 /** Existing edges whose DNS records Pontia manages; unset or empty allows nobody. */
@@ -169,6 +177,7 @@ export async function resolvesToPublicAddresses(
   hostname: string,
   fetcher: HttpFetcher,
 ): Promise<PublicDnsResult> {
+  if (isGlobalUnicastIp(hostname)) return "public";
   const answers = await Promise.all(
     (["A", "AAAA"] as const).map(async (type) => {
       const response = await fetcher(
@@ -273,7 +282,7 @@ export async function verifyEdgeOwnership(
     crypto.getRandomValues(new Uint8Array(length)),
 ): Promise<boolean> {
   const { edgeId, hostname, port, credentialSecret } = challenge;
-  if (!isValidEdgeHostname(hostname) || !isEdgePort(port)) return false;
+  if (!isValidEdgeHost(hostname) || !isEdgePort(port)) return false;
   const bytes = randomBytes(32);
   if (bytes.length !== 32) throw new Error("nonce generator returned the wrong length");
   const nonce = base64url.encode(bytes);

@@ -35,3 +35,57 @@ export function isPublicHostname(value: string): boolean {
     !RESERVED_TOP_LEVEL_LABELS.has(topLevel)
   );
 }
+
+function isPublicIpv4(value: string): boolean {
+  const parts = value.split(".");
+  if (parts.length !== 4 || parts.some((part) => !/^(?:0|[1-9][0-9]{0,2})$/.test(part))) {
+    return false;
+  }
+  const [a, b, c, d] = parts.map(Number);
+  if ([a, b, c, d].some((part) => part > 255)) return false;
+  return !(
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    a >= 224 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 0 && c === 0 && d !== 9 && d !== 10) ||
+    (a === 192 && b === 0 && c === 2) ||
+    (a === 192 && b === 88 && c === 99) ||
+    (a === 192 && b === 168) ||
+    (a === 198 && (b === 18 || b === 19)) ||
+    (a === 198 && b === 51 && c === 100) ||
+    (a === 203 && b === 0 && c === 113)
+  );
+}
+
+function ipv6Segments(value: string): number[] | null {
+  if (!/^[0-9a-f:]+$/.test(value) || value.split("::").length > 2) return null;
+  const [head, tail] = value.includes("::") ? value.split("::") : [value, undefined];
+  const left = head === "" ? [] : head.split(":");
+  const right = tail === undefined || tail === "" ? [] : tail.split(":");
+  const missing = 8 - left.length - right.length;
+  if (tail === undefined ? missing !== 0 : missing < 1) return null;
+  const groups = [...left, ...Array<string>(tail === undefined ? 0 : missing).fill("0"), ...right];
+  if (groups.some((group) => !/^[0-9a-f]{1,4}$/.test(group))) return null;
+  return groups.map((group) => Number.parseInt(group, 16));
+}
+
+function isPublicIpv6(value: string): boolean {
+  const segments = ipv6Segments(value);
+  if (!segments) return false;
+  const [a, b] = segments;
+  return (
+    (a & 0xe000) === 0x2000 &&
+    !(a === 0x2001 && b < 0x0200) &&
+    !(a === 0x2001 && b === 0x0db8) &&
+    a !== 0x2002 &&
+    !(a === 0x3fff && b < 0x1000)
+  );
+}
+
+export function isPublicEdgeHost(value: string): boolean {
+  return isPublicHostname(value) || isPublicIpv4(value) || isPublicIpv6(value);
+}

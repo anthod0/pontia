@@ -43,8 +43,14 @@ function ticketFrom(command: string) {
   return match[1];
 }
 
-test("deployment payload decoding accepts only one public hostname", () => {
-  for (const name of [hostname, "sg.edge.pontia.dev", "relay.pontia.run"]) {
+test("deployment payload decoding accepts one public domain or IP address", () => {
+  for (const name of [
+    hostname,
+    "sg.edge.pontia.dev",
+    "relay.pontia.run",
+    "8.8.8.8",
+    "2606:4700:4700::1111",
+  ]) {
     expect(decodeDeploymentPayload({ hostname: name })).toEqual({ hostname: name });
   }
   for (const invalid of [
@@ -54,6 +60,7 @@ test("deployment payload decoding accepts only one public hostname", () => {
     { name: "brave-atlas" },
     { hostname: "localhost" },
     { hostname: "10.0.0.1" },
+    { hostname: "2001:db8::1" },
     { hostname: "Edge.Example.com" },
     { hostname, extra: true },
   ]) {
@@ -87,9 +94,9 @@ test("issuing a deployment binds the hostname to a one-hour ticket and copyable 
   expect(JSON.stringify(stored)).not.toContain(ticket);
 });
 
-test("issuing rejects invalid hostnames and hostnames already registered on any port", async () => {
+test("issuing rejects invalid hosts and hosts already registered on any port", async () => {
   await database.db.insert(users).values({ id: "user-owner" });
-  for (const invalid of ["", "localhost", "edge.local", "8.8.8.8", "Edge.Example.com"]) {
+  for (const invalid of ["", "localhost", "edge.local", "10.0.0.1", "Edge.Example.com"]) {
     expect(await issueEdgeDeployment(database.db, "user-owner", invalid, dependencies())).toEqual({
       status: "invalid",
     });
@@ -109,6 +116,16 @@ test("issuing rejects invalid hostnames and hostnames already registered on any 
       .status,
   ).toBe("issued");
   expect(await database.db.select().from(edgeTickets)).toHaveLength(1);
+});
+
+test("issuing and enrolling IPv6 uses a bracketed tunnel authority", async () => {
+  const address = "2606:4700:4700::1111";
+  const deployment = await issuedDeployment(address);
+  const ticket = ticketFrom(deployment.command);
+  expect(await enrollEdge(database.db, ticket, credential)).toEqual({
+    status: "authorized",
+    edge: { edgeId, name: address, tunnelUrl: `wss://[${address}]/tunnel` },
+  });
 });
 
 test("enrollment is retryable authorization and does not register or consume the deployment", async () => {

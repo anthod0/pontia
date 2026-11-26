@@ -1,5 +1,7 @@
 //! Public edge endpoint rules shared by devices and edges.
 
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+
 /// Fetch Standard bad ports, plus ports the control-plane runtime cannot reach.
 pub const UNSAFE_PORTS: &[u16] = &[
     1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95, 101, 102,
@@ -38,6 +40,50 @@ pub fn is_public_hostname(value: &str) -> bool {
         && labels.iter().all(|label| valid_label(label))
         && valid_top_level_label(top_level)
         && !RESERVED_TOP_LEVEL_LABELS.contains(top_level)
+}
+
+/// Returns whether a string is a public unicast IPv4 or IPv6 address.
+pub fn is_public_ip(value: &str) -> bool {
+    value.parse().is_ok_and(is_global_unicast)
+}
+
+/// Returns whether a string is a public DNS hostname or unicast IP address.
+pub fn is_public_host(value: &str) -> bool {
+    is_public_hostname(value) || is_public_ip(value)
+}
+
+fn is_global_unicast(address: IpAddr) -> bool {
+    match address {
+        IpAddr::V4(address) => is_global_unicast_ipv4(address),
+        IpAddr::V6(address) => is_global_unicast_ipv6(address),
+    }
+}
+
+fn is_global_unicast_ipv4(address: Ipv4Addr) -> bool {
+    let [a, b, c, d] = address.octets();
+    !(a == 0
+        || a == 10
+        || a == 127
+        || a >= 224
+        || (a == 100 && (64..=127).contains(&b))
+        || (a == 169 && b == 254)
+        || (a == 172 && (16..=31).contains(&b))
+        || (a == 192 && b == 0 && c == 0 && d != 9 && d != 10)
+        || (a == 192 && b == 0 && c == 2)
+        || (a == 192 && b == 88 && c == 99)
+        || (a == 192 && b == 168)
+        || (a == 198 && (b == 18 || b == 19))
+        || (a == 198 && b == 51 && c == 100)
+        || (a == 203 && b == 0 && c == 113))
+}
+
+fn is_global_unicast_ipv6(address: Ipv6Addr) -> bool {
+    let [a, b, ..] = address.segments();
+    a & 0xe000 == 0x2000
+        && !(a == 0x2001 && b < 0x0200)
+        && !(a == 0x2001 && b == 0x0db8)
+        && a != 0x2002
+        && !(a == 0x3fff && b < 0x1000)
 }
 
 fn valid_label(label: &str) -> bool {
@@ -118,6 +164,27 @@ mod tests {
             &long_name,
         ] {
             assert!(!is_public_hostname(name), "accepted {name}");
+        }
+    }
+
+    #[test]
+    fn accepts_only_public_unicast_ip_hosts() {
+        for address in ["8.8.8.8", "192.0.0.9", "2606:4700:4700::1111"] {
+            assert!(is_public_ip(address), "rejected {address}");
+            assert!(is_public_host(address), "rejected {address}");
+        }
+        for address in [
+            "10.0.0.1",
+            "100.64.0.1",
+            "127.0.0.1",
+            "192.0.2.1",
+            "::1",
+            "2001:db8::1",
+            "fc00::1",
+            "[2606:4700:4700::1111]",
+        ] {
+            assert!(!is_public_ip(address), "accepted {address}");
+            assert!(!is_public_host(address), "accepted {address}");
         }
     }
 

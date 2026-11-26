@@ -135,6 +135,9 @@ test.each([
   "https://dev.pontia.dev",
   "https://relay.pontia.run",
   "https://pontia.run",
+  "https://8.8.8.8",
+  "https://[2606:4700:4700::1111]",
+  "https://[2606:4700:4700::1111]:8443",
 ])("accepts the self-hosted edge origin %s", async (origin) => {
   vi.stubGlobal(
     "fetch",
@@ -153,6 +156,7 @@ test.each([
   { edge_api_origin: "http://edge.example.com" },
   { edge_api_origin: "https://edge.example.com:25" },
   { edge_api_origin: "https://edge.example.com:6000" },
+  { edge_api_origin: "https://10.0.0.1" },
   { edge_api_origin: "https://203.0.113.10" },
   { edge_api_origin: "https://[2001:db8::1]" },
   { edge_api_origin: "https://localhost" },

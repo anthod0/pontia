@@ -329,9 +329,14 @@ async fn issue_http(
 ) -> Result<IssuedCertificate> {
     let mut tokens = Vec::new();
     let result = tokio::time::timeout(Duration::from_secs(180), async {
-        let identifier = Identifier::Dns(hostname.to_owned());
+        let (identifier, profile) = http_identifier(hostname);
+        let identifiers = [identifier];
+        let mut new_order = NewOrder::new(&identifiers);
+        if let Some(profile) = profile {
+            new_order = new_order.profile(profile);
+        }
         let mut order = account
-            .new_order(&NewOrder::new(&[identifier]))
+            .new_order(&new_order)
             .await
             .context("failed to create ACME order")?;
         let mut authorizations = order.authorizations();
@@ -365,6 +370,13 @@ async fn issue_http(
     result
 }
 
+fn http_identifier(hostname: &str) -> (Identifier, Option<&'static str>) {
+    match hostname.parse() {
+        Ok(address) => (Identifier::Ip(address), Some("shortlived")),
+        Err(_) => (Identifier::Dns(hostname.to_owned()), None),
+    }
+}
+
 pub async fn issue_and_save<I: CertificateIssuer>(
     issuer: &I,
     hostname: &str,
@@ -393,6 +405,28 @@ mod tests {
     use std::{fs, os::unix::fs::PermissionsExt, sync::Mutex};
 
     use super::*;
+
+    #[test]
+    fn public_ip_orders_use_the_short_lived_profile() {
+        assert_eq!(
+            http_identifier("8.8.8.8"),
+            (
+                Identifier::Ip("8.8.8.8".parse().unwrap()),
+                Some("shortlived")
+            )
+        );
+        assert_eq!(
+            http_identifier("2606:4700:4700::1111"),
+            (
+                Identifier::Ip("2606:4700:4700::1111".parse().unwrap()),
+                Some("shortlived")
+            )
+        );
+        assert_eq!(
+            http_identifier("edge.example.com"),
+            (Identifier::Dns("edge.example.com".to_owned()), None)
+        );
+    }
 
     struct FakeIssuer(Mutex<Vec<String>>);
 
