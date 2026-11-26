@@ -760,7 +760,14 @@ export type ManagedToolUseInput =
   | { type: "edit"; path: string; edits_count: number }
   | { type: "write"; path: string }
   | { type: "bash"; command: string; timeout?: number | null }
-  | { type: "file_changes"; changes: ManagedFileChange[] };
+  | { type: "file_changes"; changes: ManagedFileChange[] }
+  | { type: "plan"; entries: ManagedPlanEntry[] };
+
+export interface ManagedPlanEntry {
+  content: string;
+  priority: string;
+  status: string;
+}
 
 export interface ManagedFileChange {
   path: string;

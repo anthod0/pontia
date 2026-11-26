@@ -838,6 +838,7 @@
   "chat.writeFile": "Write file",
   "chat.runCommand": "Run command",
   "chat.changeFiles": "Change files",
+  "chat.plan": "Plan",
   "chat.fileCount": "{operation} {count, plural, one {# file} other {# files}}",
   "chat.partialOutput": " · partial / truncated",
   "chat.truncated": " · truncated",

@@ -388,7 +388,7 @@ async fn native_cancel_does_not_prove_unblocked_and_prompt_terminal_clears_remai
                 .description
                 .as_ref()
                 .unwrap()
-                .ends_with("request:unanswered-1")
+                .contains("request:unanswered-1")
         })
         .unwrap();
     h.wait_interaction_state(

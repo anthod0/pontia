@@ -273,6 +273,8 @@ export function managedToolUseTitle(
       return translate("chat.runCommand");
     case "file_changes":
       return translate("chat.changeFiles");
+    case "plan":
+      return translate("chat.plan");
   }
 }
 
@@ -289,6 +291,8 @@ export function managedToolUseContent(toolUse: ManagedToolUse): string {
       return input.command;
     case "file_changes":
       return input.changes.map((change) => change.path).join("\n");
+    case "plan":
+      return input.entries.map((entry) => entry.content).join("\n");
   }
 }
 

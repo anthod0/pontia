@@ -5,6 +5,10 @@ use pontia_agent_control::{
     LiveOutputPublishOutcome, LiveOutputService, LiveOutputSnapshotReplacement, LiveOutputSource,
     LiveOutputUpdate, LiveReasoningBound, LiveToolOutcome, LiveToolPhase, LiveToolResult,
     LiveToolStatus,
+    client_contract::raw_transcripts::{
+        ManagedFileChange, ManagedFileOperation, ManagedPlanEntry, ManagedToolUse,
+        ManagedToolUseInput,
+    },
     live_output::{MAX_ITEMS_PER_STREAM, apply_update},
 };
 use pontia_core::{Error, Result};
@@ -86,6 +90,7 @@ pub(crate) async fn publish(
             }
         }
         Some("tool_call" | "tool_call_update") => publisher.tool(update).await?,
+        Some("plan") => publisher.plan(update).await?,
         _ => {}
     }
     Ok(())
@@ -179,6 +184,7 @@ impl Publisher<'_> {
         let Some(call_id) = update["toolCallId"].as_str() else {
             return Ok(());
         };
+        self.move_plan_from_call_id(call_id).await?;
         // `kind` is a category, not a concrete tool protocol. In particular it
         // must never opt a call into managed bash/read/edit/write rendering.
         let name = update["name"].as_str().or_else(|| update["title"].as_str());
@@ -191,6 +197,7 @@ impl Publisher<'_> {
             let LiveOutputItem::ToolCall {
                 tool_name,
                 arguments,
+                managed_tool_use,
                 ..
             } = &mut items[index]
             else {
@@ -198,9 +205,15 @@ impl Publisher<'_> {
             };
             if let Some(name) = name {
                 *tool_name = name.into();
+                if let Some(managed) = managed_tool_use {
+                    managed.tool_name = name.into();
+                }
             }
             if let Some(input) = update.get("rawInput") {
                 *arguments = input.clone();
+            }
+            if update.get("content").is_some() {
+                *managed_tool_use = managed_tool_use_from_update(tool_name, update).map(Box::new);
             }
             if items != self.items {
                 // There is deliberately no public call-update event. Preserve
@@ -210,6 +223,7 @@ impl Publisher<'_> {
         } else {
             let Some(name) = name else { return Ok(()) };
             let arguments = update.get("rawInput").cloned().unwrap_or(Value::Null);
+            let managed_tool_use = managed_tool_use_from_update(name, update);
             // Local item IDs cannot collide with arbitrary native call IDs or text.
             let item_id = format!("tool-{}", self.prompt.sequence);
             self.send(LiveOutputUpdate::ToolCall {
@@ -217,7 +231,7 @@ impl Publisher<'_> {
                 call_id: call_id.into(),
                 tool_name: name.into(),
                 arguments,
-                managed_tool_use: None,
+                managed_tool_use,
             })
             .await?;
             if !self.items.iter().any(|item| matches!(item, LiveOutputItem::ToolCall { call_id: id, .. } if id == call_id)) {
@@ -292,6 +306,49 @@ impl Publisher<'_> {
         Ok(())
     }
 
+    async fn plan(&mut self, update: &Value) -> Result<()> {
+        let arguments = serde_json::json!({"entries": update["entries"]});
+        let managed_tool_use = plan_tool_use(update);
+        if let Some(index) = self.items.iter().position(is_plan_item) {
+            let mut items = self.items.clone();
+            let LiveOutputItem::ToolCall {
+                arguments: current_arguments,
+                managed_tool_use: current_tool_use,
+                ..
+            } = &mut items[index]
+            else {
+                unreachable!()
+            };
+            *current_arguments = arguments;
+            *current_tool_use = Some(Box::new(managed_tool_use));
+            return self.snapshot(items).await;
+        }
+        self.send(LiveOutputUpdate::ToolCall {
+            item_id: format!("plan-{}", self.prompt.sequence),
+            call_id: available_plan_call_id(&self.items, None, None),
+            tool_name: PLAN_TOOL_NAME.into(),
+            arguments,
+            managed_tool_use: Some(managed_tool_use),
+        })
+        .await
+    }
+
+    async fn move_plan_from_call_id(&mut self, native_call_id: &str) -> Result<()> {
+        let Some(index) = self.items.iter().position(|item| {
+            matches!(item, LiveOutputItem::ToolCall { call_id, .. } if call_id == native_call_id)
+                && is_plan_item(item)
+        }) else {
+            return Ok(());
+        };
+        let mut items = self.items.clone();
+        let replacement = available_plan_call_id(&items, Some(index), Some(native_call_id));
+        let LiveOutputItem::ToolCall { call_id, .. } = &mut items[index] else {
+            unreachable!()
+        };
+        *call_id = replacement;
+        self.snapshot(items).await
+    }
+
     async fn snapshot(&mut self, items: Vec<LiveOutputItem>) -> Result<()> {
         let outcome = self
             .output
@@ -364,6 +421,104 @@ impl Publisher<'_> {
             }
             LiveOutputPublishOutcome::SnapshotRequired { .. } => Err(invalidated()),
         }
+    }
+}
+
+pub(crate) fn managed_tool_use_from_update(name: &str, update: &Value) -> Option<ManagedToolUse> {
+    let changes = update["content"]
+        .as_array()?
+        .iter()
+        .filter(|item| item["type"] == "diff")
+        .map(|item| {
+            let path = item["path"].as_str()?;
+            let old_text = item.get("oldText").and_then(Value::as_str);
+            let new_text = item["newText"].as_str()?;
+            Some(ManagedFileChange {
+                path: path.into(),
+                operation: if old_text.is_some() {
+                    ManagedFileOperation::Update
+                } else {
+                    ManagedFileOperation::Add
+                },
+                move_path: None,
+                diff: whole_file_diff(path, old_text, new_text),
+            })
+        })
+        .collect::<Option<Vec<_>>>()?;
+    (!changes.is_empty()).then(|| ManagedToolUse {
+        tool_name: name.into(),
+        input: ManagedToolUseInput::FileChanges { changes },
+    })
+}
+
+fn whole_file_diff(path: &str, old_text: Option<&str>, new_text: &str) -> String {
+    let old_lines = old_text.map_or(0, |text| text.lines().count());
+    let new_lines = new_text.lines().count();
+    let mut diff = format!("--- {path}\n+++ {path}\n@@ -1,{old_lines} +1,{new_lines} @@\n");
+    if let Some(old_text) = old_text {
+        append_diff_text(&mut diff, '-', old_text);
+    }
+    append_diff_text(&mut diff, '+', new_text);
+    diff
+}
+
+fn append_diff_text(diff: &mut String, prefix: char, text: &str) {
+    for line in text.split_inclusive('\n') {
+        diff.push(prefix);
+        diff.push_str(line);
+        if !line.ends_with('\n') {
+            diff.push('\n');
+        }
+    }
+    if !text.is_empty() && !text.ends_with('\n') {
+        diff.push_str("\\ No newline at end of file\n");
+    }
+}
+
+pub(crate) const PLAN_TOOL_NAME: &str = "plan";
+
+fn is_plan_item(item: &LiveOutputItem) -> bool {
+    matches!(item, LiveOutputItem::ToolCall { managed_tool_use: Some(tool), .. }
+        if matches!(tool.input, ManagedToolUseInput::Plan { .. }))
+}
+
+fn available_plan_call_id(
+    items: &[LiveOutputItem],
+    excluded: Option<usize>,
+    reserved: Option<&str>,
+) -> String {
+    for ordinal in 0_u64.. {
+        let candidate = if ordinal == 0 {
+            "acp-plan".into()
+        } else {
+            format!("acp-plan-{ordinal}")
+        };
+        if reserved != Some(candidate.as_str()) && !items.iter().enumerate().any(|(index, item)| {
+            Some(index) != excluded
+                && matches!(item, LiveOutputItem::ToolCall { call_id, .. } if call_id == &candidate)
+        }) {
+            return candidate;
+        }
+    }
+    unreachable!()
+}
+
+pub(crate) fn plan_tool_use(update: &Value) -> ManagedToolUse {
+    let entries = update["entries"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| {
+            Some(ManagedPlanEntry {
+                content: entry["content"].as_str()?.into(),
+                priority: entry["priority"].as_str()?.into(),
+                status: entry["status"].as_str()?.into(),
+            })
+        })
+        .collect();
+    ManagedToolUse {
+        tool_name: PLAN_TOOL_NAME.into(),
+        input: ManagedToolUseInput::Plan { entries },
     }
 }
 

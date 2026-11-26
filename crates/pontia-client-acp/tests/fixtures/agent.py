@@ -132,7 +132,12 @@ def prompt(request, ordinal, cancellation):
         for request_id in request_ids:
             send({"id": request_id, "method": "session/request_permission", "params": {
                 "sessionId": "other-session" if os.environ.get("ACP_WRONG_SESSION") == "1" else native_id,
-                "toolCall": {"toolCallId": "same-tool", "title": f"<script>untrusted</script> request:{request_id}", "rawInput": {"secret": "do-not-persist"}},
+                "toolCall": {
+                    "toolCallId": "same-tool",
+                    "title": f"<script>untrusted</script> request:{request_id}",
+                    "rawInput": {"command": "cargo test -p pontia-client-acp", "cwd": "/workspace"},
+                    "locations": [{"path": "/workspace/src/main.rs", "line": 42}],
+                },
                 "options": options,
             }})
     if os.environ.get("ACP_NATIVE_CANCEL") == "1":

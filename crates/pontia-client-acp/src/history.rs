@@ -29,6 +29,7 @@ pub(crate) struct Message {
     pub interjection: bool,
     pub(crate) raw_result: bool,
     pub(crate) tool: Option<(String, Option<String>)>,
+    pub(crate) managed_tool_use: Option<ManagedToolUse>,
 }
 
 impl Message {
@@ -119,6 +120,10 @@ pub(crate) fn collect(
         collect_tool(messages, update);
         return Ok(());
     }
+    if update["sessionUpdate"] == "plan" {
+        collect_plan(messages, update);
+        return Ok(());
+    }
     let role = match update["sessionUpdate"].as_str() {
         Some("user_message_chunk") => "user",
         Some("agent_message_chunk") => "assistant",
@@ -168,7 +173,10 @@ fn collect_tool(messages: &mut Vec<Message>, update: &Value) {
     let Some(id) = update["toolCallId"].as_str() else {
         return;
     };
-    let matches_id = |message: &Message| message.tool.as_ref().is_some_and(|(call, _)| call == id);
+    move_plan_from_call_id(messages, id);
+    let matches_id = |message: &Message| {
+        !is_plan_message(message) && message.tool.as_ref().is_some_and(|(call, _)| call == id)
+    };
     let status = update["status"].as_str();
     let title = update["title"].as_str();
     let call = messages
@@ -188,11 +196,25 @@ fn collect_tool(messages: &mut Vec<Message>, update: &Value) {
             }
             merged_status.clone_from(current);
         }
+        if update.get("content").is_some() {
+            let name = update["name"]
+                .as_str()
+                .or_else(|| {
+                    call.managed_tool_use
+                        .as_ref()
+                        .map(|tool| tool.tool_name.as_str())
+                })
+                .or(title)
+                .unwrap_or(&call.text);
+            call.managed_tool_use = crate::live_output::managed_tool_use_from_update(name, update);
+        }
     } else if let Some(title) = title {
+        let name = update["name"].as_str().unwrap_or(title);
         messages.push(Message {
             role: "tool_call",
             text: title.into(),
             tool: Some((id.into(), status.map(str::to_owned))),
+            managed_tool_use: crate::live_output::managed_tool_use_from_update(name, update),
             ..Default::default()
         });
     }
@@ -236,6 +258,72 @@ fn collect_tool(messages: &mut Vec<Message>, update: &Value) {
             ..Default::default()
         });
     }
+}
+
+fn collect_plan(messages: &mut Vec<Message>, update: &Value) {
+    if let Some(plan) = messages
+        .iter_mut()
+        .rev()
+        .take_while(|message| message.role != "user")
+        .find(|message| is_plan_message(message))
+    {
+        plan.managed_tool_use = Some(crate::live_output::plan_tool_use(update));
+        return;
+    }
+    messages.push(Message {
+        role: "tool_call",
+        text: crate::live_output::PLAN_TOOL_NAME.into(),
+        tool: Some((available_plan_call_id(messages, None, None), None)),
+        managed_tool_use: Some(crate::live_output::plan_tool_use(update)),
+        ..Default::default()
+    });
+}
+
+fn is_plan_message(message: &Message) -> bool {
+    matches!(
+        message.managed_tool_use.as_ref().map(|tool| &tool.input),
+        Some(ManagedToolUseInput::Plan { .. })
+    )
+}
+
+fn move_plan_from_call_id(messages: &mut [Message], native_call_id: &str) {
+    let Some(index) = messages.iter().position(|message| {
+        is_plan_message(message)
+            && message
+                .tool
+                .as_ref()
+                .is_some_and(|(id, _)| id == native_call_id)
+    }) else {
+        return;
+    };
+    let replacement = available_plan_call_id(messages, Some(index), Some(native_call_id));
+    messages[index].tool.as_mut().unwrap().0 = replacement;
+}
+
+fn available_plan_call_id(
+    messages: &[Message],
+    excluded: Option<usize>,
+    reserved: Option<&str>,
+) -> String {
+    for ordinal in 0_u64.. {
+        let candidate = if ordinal == 0 {
+            "acp-plan".into()
+        } else {
+            format!("acp-plan-{ordinal}")
+        };
+        if reserved != Some(candidate.as_str())
+            && !messages.iter().enumerate().any(|(index, message)| {
+                Some(index) != excluded
+                    && message
+                        .tool
+                        .as_ref()
+                        .is_some_and(|(id, _)| id == &candidate)
+            })
+        {
+            return candidate;
+        }
+    }
+    unreachable!()
 }
 
 #[derive(Default)]
@@ -725,7 +813,7 @@ fn render(
                 occurred_at: None,
                 content_preview: text.into(),
                 call_id: message.tool.as_ref().map(|(id, _)| id.clone()),
-                managed_tool_use: None,
+                managed_tool_use: message.managed_tool_use.clone(),
             },
         });
     }
@@ -902,6 +990,76 @@ mod tests {
                 ("tool_result", Some("a"), Some("completed"), "one\ntwo"),
             ]
         );
+    }
+
+    #[test]
+    fn replay_preserves_diff_calls_and_the_latest_plan() {
+        let mut messages = Vec::new();
+        append(&mut messages, "user", "go");
+        for update in [
+            json!({"sessionUpdate":"tool_call","toolCallId":"edit","name":"edit_file","title":"Edit file","content":[
+                {"type":"diff","path":"/workspace/main.rs","oldText":"old\n","newText":"new\n"}
+            ]}),
+            json!({"sessionUpdate":"plan","entries":[
+                {"content":"Inspect","priority":"high","status":"pending"}
+            ]}),
+            json!({"sessionUpdate":"plan","entries":[
+                {"content":"Inspect","priority":"high","status":"completed"},
+                {"content":"Test","priority":"medium","status":"in_progress"}
+            ]}),
+        ] {
+            collect(&mut messages, &update, None).unwrap();
+        }
+
+        let timeline = render(&messages, 0, 2, Some("turn"), None).unwrap();
+        assert_eq!(timeline.len(), 3);
+        assert_eq!(
+            serde_json::to_value(&timeline[1].item.managed_tool_use).unwrap(),
+            json!({"tool_name":"edit_file","input":{"type":"file_changes","changes":[{
+                "path":"/workspace/main.rs",
+                "operation":"update",
+                "diff":"--- /workspace/main.rs\n+++ /workspace/main.rs\n@@ -1,1 +1,1 @@\n-old\n+new\n"
+            }]}})
+        );
+        assert_eq!(
+            serde_json::to_value(&timeline[2].item.managed_tool_use).unwrap(),
+            json!({"tool_name":"plan","input":{"type":"plan","entries":[
+                {"content":"Inspect","priority":"high","status":"completed"},
+                {"content":"Test","priority":"medium","status":"in_progress"}
+            ]}})
+        );
+    }
+
+    #[test]
+    fn replay_scopes_plans_to_turns_and_avoids_native_call_ids() {
+        let mut messages = Vec::new();
+        append(&mut messages, "user", "one");
+        collect(
+            &mut messages,
+            &json!({"sessionUpdate":"plan","entries":[
+                {"content":"First turn","priority":"high","status":"completed"}
+            ]}),
+            None,
+        )
+        .unwrap();
+        append(&mut messages, "user", "two");
+        for update in [
+            json!({"sessionUpdate":"plan","entries":[
+                {"content":"Second turn","priority":"medium","status":"in_progress"}
+            ]}),
+            json!({"sessionUpdate":"tool_call","toolCallId":"acp-plan","title":"Native call"}),
+        ] {
+            collect(&mut messages, &update, None).unwrap();
+        }
+
+        let first = render(&messages, 0, 3, Some("first"), None).unwrap();
+        let second = render(&messages, 3, 6, Some("second"), None).unwrap();
+        assert_eq!(first.len(), 2);
+        assert_eq!(second.len(), 3);
+        assert_eq!(first[1].item.content_preview, "plan");
+        assert_eq!(second[1].item.content_preview, "plan");
+        assert_ne!(second[1].item.call_id, second[2].item.call_id);
+        assert_eq!(second[2].item.content_preview, "Native call");
     }
 
     #[test]

@@ -1475,7 +1475,7 @@ async fn permission_choices_preserve_all_scopes_and_native_ids_without_blocking_
                 record
                     .description
                     .as_ref()
-                    .is_some_and(|text| text.ends_with(&locator))
+                    .is_some_and(|text| text.contains(&locator))
             })
             .unwrap();
         assert_eq!(
@@ -1492,8 +1492,10 @@ async fn permission_choices_preserve_all_scopes_and_native_ids_without_blocking_
             ]
         );
         let public = serde_json::to_string(record).unwrap();
-        assert!(!public.contains("do-not-persist"));
         assert!(!public.contains("requestId"));
+        assert!(public.contains("cargo test -p pontia-client-acp"));
+        assert!(public.contains("/workspace/src/main.rs:42"));
+        assert!(public.contains("\\\"cwd\\\": \\\"/workspace\\\""));
         assert!(matches!(
             h.app
                 .interactions()

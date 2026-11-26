@@ -161,12 +161,7 @@ pub(crate) async fn register(
         return Ok(());
     };
     // Tool data is untrusted plain text, never markup or executable instructions.
-    // Do not copy raw tool input/output (which can contain secrets) into the record.
-    let description = request
-        .tool_call
-        .fields
-        .title
-        .filter(|title| !title.trim().is_empty());
+    let description = permission_description(&request.tool_call.fields);
     let registration = ChoiceInteractionRequest {
         report_key: crate::transport::frame_key(request.meta.as_ref())?,
         authorization_digest: request
@@ -264,6 +259,51 @@ pub(crate) async fn register(
         }
     });
     Ok(())
+}
+
+fn permission_description(fields: &ToolCallUpdateFields) -> Option<String> {
+    let mut sections = Vec::new();
+    if let Some(title) = fields
+        .title
+        .as_deref()
+        .filter(|title| !title.trim().is_empty())
+    {
+        sections.push(title.to_owned());
+    }
+    if let Some(input) = fields.raw_input.as_ref() {
+        if let Some(command) = input.get("command").and_then(Value::as_str) {
+            sections.push(format!("Command:\n{command}"));
+            let mut parameters = input.clone();
+            parameters.as_object_mut().unwrap().remove("command");
+            if !parameters.as_object().unwrap().is_empty() {
+                sections.push(format!(
+                    "Parameters:\n{}",
+                    serde_json::to_string_pretty(&parameters).unwrap()
+                ));
+            }
+        } else {
+            sections.push(format!(
+                "Parameters:\n{}",
+                serde_json::to_string_pretty(input).unwrap()
+            ));
+        }
+    }
+    if let Some(locations) = fields
+        .locations
+        .as_ref()
+        .filter(|locations| !locations.is_empty())
+    {
+        let files = locations
+            .iter()
+            .map(|location| match location.line {
+                Some(line) => format!("{}:{line}", location.path.display()),
+                None => location.path.display().to_string(),
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        sections.push(format!("Files:\n{files}"));
+    }
+    (!sections.is_empty()).then(|| sections.join("\n\n"))
 }
 
 fn choice_options(

@@ -321,11 +321,96 @@ async fn unassociated_and_non_display_notifications_do_not_create_live_content()
         notification(json!({"sessionUpdate":"tool_call_update","toolCallId":"unknown","status":"failed","content":text("orphan"),"rawOutput":"orphan"})),
         notification(json!({"sessionUpdate":"agent_thought_chunk","content":{"type":"image","data":"","mimeType":"image/png"}})),
         notification(json!({"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":""}})),
-        notification(json!({"sessionUpdate":"plan","entries":[]})),
         json!({"sessionId":"wrong","update":{"sessionUpdate":"tool_call","toolCallId":"wrong","title":"Wrong"}}),
     ]]).await;
     step(&h, 0).await;
     assert!(h.app.live_output().snapshot(&session, &turn).is_none());
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn diff_content_is_preserved_as_managed_file_changes() {
+    let (h, session, turn) = start(vec![vec![notification(json!({
+        "sessionUpdate":"tool_call",
+        "toolCallId":"edit-1",
+        "name":"edit_file",
+        "title":"Edit file",
+        "content":[
+            {"type":"diff","path":"/workspace/existing.rs","oldText":"fn old() {}\n","newText":"fn new() {}\n"},
+            {"type":"diff","path":"/workspace/new.rs","newText":"fn added() {}\n"},
+            {"type":"diff","path":"/workspace/no-newline.rs","oldText":"old","newText":"new"}
+        ]
+    }))]]).await;
+
+    step(&h, 0).await;
+    assert_eq!(
+        tool(&snapshot(&h, &session, &turn), "edit-1")["managed_tool_use"],
+        json!({
+            "tool_name":"edit_file",
+            "input":{"type":"file_changes","changes":[
+                {
+                    "path":"/workspace/existing.rs",
+                    "operation":"update",
+                    "diff":"--- /workspace/existing.rs\n+++ /workspace/existing.rs\n@@ -1,1 +1,1 @@\n-fn old() {}\n+fn new() {}\n"
+                },
+                {
+                    "path":"/workspace/new.rs",
+                    "operation":"add",
+                    "diff":"--- /workspace/new.rs\n+++ /workspace/new.rs\n@@ -1,0 +1,1 @@\n+fn added() {}\n"
+                },
+                {
+                    "path":"/workspace/no-newline.rs",
+                    "operation":"update",
+                    "diff":"--- /workspace/no-newline.rs\n+++ /workspace/no-newline.rs\n@@ -1,1 +1,1 @@\n-old\n\\ No newline at end of file\n+new\n\\ No newline at end of file\n"
+                }
+            ]}
+        })
+    );
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn plan_updates_replace_the_visible_managed_plan() {
+    let (h, session, turn) = start(vec![
+        vec![notification(json!({"sessionUpdate":"plan","entries":[
+            {"content":"Inspect ACP handling","priority":"high","status":"in_progress"},
+            {"content":"Add coverage","priority":"medium","status":"pending"}
+        ]}))],
+        vec![notification(json!({"sessionUpdate":"plan","entries":[
+            {"content":"Inspect ACP handling","priority":"high","status":"completed"},
+            {"content":"Add coverage","priority":"medium","status":"in_progress"}
+        ]}))],
+        vec![notification(
+            json!({"sessionUpdate":"tool_call","toolCallId":"acp-plan","title":"Native call"}),
+        )],
+    ])
+    .await;
+
+    step(&h, 0).await;
+    let first = snapshot(&h, &session, &turn);
+    let plan = tool(&first, "acp-plan");
+    assert_eq!(plan["tool_name"], "plan");
+    assert_eq!(
+        plan["managed_tool_use"]["input"]["entries"][0]["status"],
+        "in_progress"
+    );
+
+    step(&h, 1).await;
+    let updated = snapshot(&h, &session, &turn);
+    assert_eq!(updated["items"].as_array().unwrap().len(), 1);
+    assert_eq!(tool(&updated, "acp-plan")["item_id"], plan["item_id"]);
+    assert_eq!(
+        tool(&updated, "acp-plan")["managed_tool_use"]["input"]["entries"],
+        json!([
+            {"content":"Inspect ACP handling","priority":"high","status":"completed"},
+            {"content":"Add coverage","priority":"medium","status":"in_progress"}
+        ])
+    );
+    step(&h, 2).await;
+    let collided = snapshot(&h, &session, &turn);
+    assert_eq!(collided["items"].as_array().unwrap().len(), 2);
+    assert_eq!(tool(&collided, "acp-plan")["tool_name"], "Native call");
+    assert_eq!(tool(&collided, "acp-plan-1")["tool_name"], "plan");
     h.stop().await;
 }
 

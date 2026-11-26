@@ -255,6 +255,35 @@ test("maps timeline items into primary chat messages with assistant thought step
   ]);
 });
 
+test("projects managed plans into plan activity steps", () => {
+  const messages = timelineItemsToChatMessages([
+    timelineItem({
+      item_id: "plan-1",
+      kind: "tool_call",
+      role: "assistant",
+      title: "plan",
+      call_id: "acp-plan",
+      managed_tool_use: {
+        tool_name: "plan",
+        input: {
+          type: "plan",
+          entries: [
+            { content: "Inspect ACP handling", priority: "high", status: "completed" },
+            { content: "Add coverage", priority: "medium", status: "in_progress" },
+          ],
+        },
+      },
+    }),
+  ]);
+
+  expect(messages[0].thoughtSteps?.[0]).toMatchObject({
+    kind: "tool_call",
+    title: "Plan",
+    content: "Inspect ACP handling\nAdd coverage",
+    callId: "acp-plan",
+  });
+});
+
 test("merges tool results into their calls by call id", () => {
   const messages = timelineItemsToChatMessages([
     timelineItem({

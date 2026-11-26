@@ -838,6 +838,7 @@
   "chat.writeFile": "写入文件",
   "chat.runCommand": "运行命令",
   "chat.changeFiles": "修改文件",
+  "chat.plan": "计划",
   "chat.fileCount": "{operation} {count} 个文件",
   "chat.partialOutput": " · 部分内容 / 已截断",
   "chat.truncated": " · 已截断",

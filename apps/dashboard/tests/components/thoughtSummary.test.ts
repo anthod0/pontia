@@ -428,3 +428,39 @@ test("active work names its latest step and completed work counts its steps", as
   await rerender({ steps, active: false });
   expect(trigger).toHaveTextContent("2 steps");
 });
+
+test("managed plans show every entry and its current state", async () => {
+  const user = userEvent.setup();
+  render(ThoughtSummary, {
+    props: {
+      steps: [
+        step({
+          id: "plan",
+          kind: "tool_call",
+          title: "Plan",
+          content: "Inspect ACP handling\nAdd coverage\nRun checks",
+          managedToolUse: {
+            tool_name: "plan",
+            input: {
+              type: "plan",
+              entries: [
+                { content: "Inspect ACP handling", priority: "high", status: "completed" },
+                { content: "Add coverage", priority: "medium", status: "in_progress" },
+                { content: "Run checks", priority: "low", status: "pending" },
+              ],
+            },
+          },
+        }),
+      ],
+    },
+  });
+
+  await user.click(screen.getByRole("button", { name: "Show agent work steps" }));
+  for (const [entry, status] of [
+    ["Inspect ACP handling", "completed"],
+    ["Add coverage", "in_progress"],
+    ["Run checks", "pending"],
+  ]) {
+    expect(screen.getByRole("listitem", { name: `${entry}: ${status}` })).toBeVisible();
+  }
+});

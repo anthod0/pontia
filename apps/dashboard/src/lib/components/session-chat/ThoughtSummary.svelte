@@ -9,6 +9,7 @@
   import ThoughtExecution from './ThoughtExecution.svelte'
   import ThoughtFallbackStep from './ThoughtFallbackStep.svelte'
   import ThoughtFileStep from './ThoughtFileStep.svelte'
+  import ThoughtPlanStep from './ThoughtPlanStep.svelte'
   import { managedToolUseTitle } from '../../session-chat/sessionChat'
   import type { SessionChatThoughtStep } from '../../session-chat/sessionChat'
 
@@ -118,6 +119,8 @@
                 <ThoughtExecution {step} />
               {/if}
             </ThoughtFileStep>
+          {:else if step.kind === 'tool_call' && step.managedToolUse?.input.type === 'plan'}
+            <ThoughtPlanStep entries={step.managedToolUse.input.entries} connected={hasConnectorAfter(index)} />
           {:else if step.kind === 'file_group'}
             <ThoughtFileStep operation={step.operation} files={step.files} results={step.results} connected={hasConnectorAfter(index)}>
               {#each step.steps as fileStep (fileStep.id)}

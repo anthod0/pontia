@@ -159,6 +159,17 @@ pub enum ManagedToolUseInput {
     FileChanges {
         changes: Vec<ManagedFileChange>,
     },
+    Plan {
+        entries: Vec<ManagedPlanEntry>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ManagedPlanEntry {
+    pub content: String,
+    pub priority: String,
+    pub status: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
