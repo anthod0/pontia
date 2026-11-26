@@ -1,3 +1,4 @@
+mod auth;
 mod connection;
 mod history;
 pub mod install;
@@ -44,7 +45,7 @@ pub fn registration_with_host(host: Option<PathBuf>) -> ClientRegistration {
         context: Arc::new(OnceLock::new()),
     });
     ClientRegistration {
-        auth: None,
+        auth: Some(Arc::new(auth::ClaudeAuth::default())),
         configuration: Some(Arc::new(Configuration {
             host: adapter.host.clone(),
         })),
