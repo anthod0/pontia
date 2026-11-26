@@ -1,0 +1,84 @@
+<svelte:head>
+	<title>Kiro Agent Client — Pontia</title>
+	<meta name="description" content="安装 Kiro，并通过 Pontia 远程控制 Kiro CLI Session。" />
+</svelte:head>
+
+# Kiro Agent Client
+
+Pontia 通过 Kiro CLI 的 ACP 服务运行 Kiro。你可以在设备上启动 Kiro Session，通过 Remote Dashboard 控制任务、处理工具请求，并继续客户端原生对话历史。
+
+## 安装 Kiro
+
+打开 **Settings → Agent Clients → Kiro**，选择 **Install**。Pontia 会运行 Kiro 官方安装程序，验证 `kiro-cli --version`，然后启用该 Client。安装程序支持 x86-64 和 Arm64 架构的 Linux 与 macOS，需要 Bash、`curl` 或 `wget`、`unzip`，以及当前平台的 SHA-256 工具。
+
+也可以在设备终端中安装：
+
+```sh
+pontia client install kiro
+```
+
+如果已安装 Kiro，请确保运行 Pontia 服务的用户能从 `PATH` 找到 `kiro-cli`，然后启用它：
+
+```sh
+pontia client enable kiro
+```
+
+Pontia 会在 Workspace 中使用 `kiro-cli acp --agent-engine=v3` 启动每个 Session。
+
+## 登录
+
+Remote Dashboard 的首次 Client 引导提供两种设备码登录方式：
+
+- **Kiro Free (AWS Builder ID)** 会打开 Builder ID 授权流程。
+- **Kiro Pro (IAM Identity Center)** 会先要求填写 HTTPS 身份提供商 URL 和 AWS Region，再打开授权流程。
+
+在任意设备上打开显示的页面并输入设备码。也可以在设备终端中使用 Kiro 的常规登录流程：
+
+```sh
+kiro-cli login
+```
+
+在 headless 主机或远程主机上，强制使用设备码流程：
+
+```sh
+kiro-cli login --use-device-flow
+```
+
+请以运行 Pontia 的同一操作系统用户执行登录。Kiro 也可以从 Pontia 服务环境读取 `KIRO_API_KEY`。修改服务环境或 `PATH` 后，运行 `pontia up`，让托管服务接收新值。
+
+## 远程控制 Kiro
+
+在 [New chat](https://app.pontia.dev/) 中选择 Workspace 和 **Kiro**，再选择模型或沿用 Client 默认值。Dashboard 会实时显示对话与工作步骤，并提供 Kiro 工具请求的单次批准操作。
+
+Turn 运行时可以再发一条消息；当当前 Kiro 版本提供 steering 时，这条消息会插入当前 Turn。你也可以把消息排到下一 Turn，或中断当前 Turn。重新打开 Session 后，Pontia 会从 Kiro 的原生历史恢复时间线。
+
+Kiro 会报告估算的上下文用量。Session 空闲或已中断时，选择 **Compact context** 或发送 `/compact`；手动和自动压缩记录都会显示在时间线中。
+
+## 选择模型和思考深度
+
+Pontia 会读取 Kiro 针对所选 Workspace 提供的模型目录。模型选择器会列出可用模型，以及每个模型公布的 reasoning effort 选项。保留 **Client default** 会跟随 Kiro 当前的默认模型，同时仍可选择该模型提供的 effort 档位。
+
+Session 顶部会显示 Kiro 报告的实际模型和 reasoning effort。
+
+## 在 Bot、helper 和 Workflow 中使用 Kiro
+
+创建 Bot 时可以选择 Kiro。Bot Session、记忆检索和 Dreaming 使用专用的 `pontia-restricted` Kiro Agent，并提供文件读取和 shell 命令。Kiro 会接收 Session 指令，并可按要求把文件作为 Dashboard 附件发送。
+
+Bot 的通用 helper 会继承该 Bot 的 Kiro 模型和 reasoning effort。如需专用 helper，可创建一个选择 Kiro、模型、可选 reasoning effort 和任务指令的 **Agent Profile**。Bot 随后可以通过 `pontia bot helper create --profile-id ID` 启动该 Profile。
+
+在 Workflow TOML 定义中设置 `execution_profile_id`，即可让同一个 Agent Profile 运行节点：
+
+```toml
+[[nodes]]
+type = "agent"
+phase = "Research"
+title = "Kiro researcher"
+instructions = "Inspect the project and prepare the requested handoff."
+inputs = []
+output = "research.md"
+execution_profile_id = "kiro-researcher"
+```
+
+如果 helper 或 Workflow 节点需要使用 Kiro 的常规工具、MCP Server 和 skill 并跳过审批，可在 Agent Profile 中启用 **YOLO**。通过 API 创建的普通 Session 可以用 `mode` 字段选择 `default`、`yolo` 或 `restricted`；详见 [Agent Client](/docs/agent-clients#client-credentials-and-permissions)。
+
+如果未检测到 Kiro 或 Session 无法启动，请参阅[故障排查](/docs/troubleshooting)。

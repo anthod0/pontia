@@ -14,11 +14,11 @@ O Pontia inclui estes Agent Clients:
 | [Pi](/docs/agent-clients/pi) | `pi` e `tmux` | Plugin do Pi do Pontia |
 | [Codex](/docs/codex) | Um Codex CLI com suporte ao daemon app-server | Inicialização do daemon do Codex por usuário, launcher e PATH do shell |
 | [Claude Code](/docs/agent-clients/claude) | Node.js LTS, npm e autenticação do Claude Code | O pacote `@pontia/claude-client` do npm |
-| Google Antigravity | `agy` | Ative em Agent Clients (ACP) |
-| Grok Build | `grok` | Ative em Agent Clients (ACP) |
-| Kiro | `kiro-cli` | Faça login com `kiro-cli login` |
+| [Google Antigravity](/docs/agent-clients/antigravity) | `agy` | Integração ACP nativa |
+| [Grok Build](/docs/agent-clients/grok) | `grok` | Integração ACP nativa |
+| [Kiro](/docs/agent-clients/kiro) | `kiro-cli` | Integração ACP nativa |
 
-Selecione o Antigravity ou o Kiro para um Bot, para recuperar memórias ou para Dreaming. O agente restrito pode ler arquivos, executar comandos no terminal e pesquisar na web. Helpers em um Workspace usam as ferramentas e as permissões habituais do cliente selecionado.
+Grok Build, Antigravity e Kiro podem executar Sessions comuns, Bots, helpers, tarefas de memória e nós de Workflow. Os guias individuais explicam instalação, autenticação, controles remotos, modelos e execução restrita.
 
 ## Escolha os Clients durante a inicialização
 
@@ -30,30 +30,6 @@ pontia init
 
 O inicializador verifica os Clients selecionados antes de aplicar a configuração. O Pi vem selecionado por padrão; Codex e `claude-agent` são opcionais. Os Clients selecionados ficam ativados para novas Sessions.
 
-## Usar o Kiro em uma sessão
-
-Instale `kiro-cli` no PATH do usuário que executa o Pontia e execute `kiro-cli login` como esse usuário. Ative o Kiro em **Settings → Agent Clients** ou execute `pontia client enable kiro`.
-
-Selecione o Kiro e um modelo ao criar a sessão. Você pode aprovar uma ferramenta para um único uso, enviar instruções durante o turno quando o Kiro permitir ou enfileirar uma mensagem para o próximo turno e reabrir a sessão para consultar a conversa na linha do tempo.
-
-Você pode consultar o uso estimado do contexto, compactar uma sessão ociosa e ver na linha do tempo os pontos de compactação automática e manual.
-
-O Kiro segue as instruções da sessão para compartilhar arquivos como anexos. Você pode usar um Agent Profile do Kiro com um prompt de sistema em um nó de Workflow.
-
-<h2 id="enable-an-acp-agent">Ativar o Grok Build</h2>
-
-Instale o Grok Build e confira se `grok` está no PATH do usuário que executa o serviço Pontia. O Pontia o inicia com `grok agent stdio`. Ative o Grok Build em **Settings → Agent Clients** no Dashboard ou execute:
-
-```sh
-pontia client enable grok
-```
-
-Em uma sessão do Grok ociosa ou interrompida, use `/compact` no Dashboard para compactar o contexto da conversa. Você pode continuar na mesma sessão e ver os pontos de compactação na linha do tempo.
-
-No modo restrito, o Grok Build mantém o terminal e as ferramentas de leitura. As ferramentas nativas do Grok para edição de arquivos, gravação de mídia, worktrees, subagentes, workflows, agendamento, tarefas em segundo plano, monitoramento e chamadas MCP ficam desativadas. O modo restrito também desativa a descoberta automática de skills.
-
-Envie instruções a uma sessão, Bot ou auxiliar do Grok durante um turno. O Grok recebe a mensagem na próxima troca de ferramenta ou chamada ao modelo e continua o trabalho. Se a última troca já ocorreu, o Grok executa a mensagem em um novo turno.
-
 Execute `pontia setup pi`, `pontia setup codex` ou `pontia setup claude` para instalar ou reparar uma integração local. Omita o Client para selecioná-lo de forma interativa. O setup também ativa o Client.
 
 No Dashboard, abra **Settings → Agent Clients**, selecione Pi, Codex ou Claude Code e clique em **Initialize** para executar a mesma configuração nesse dispositivo. A página mostra a saída e o resultado do último setup, inclusive após reconectar.
@@ -64,7 +40,7 @@ O Dashboard apresenta os controles suportados pelo Client selecionado, como inte
 
 Depois da vinculação, uma Session do Pontia fica associada de forma permanente a uma identidade de conversa nativa do cliente. Reabrir a mesma conversa nativa continua a Session existente; uma nova conversa nativa pertence a uma nova Session.
 
-## Credenciais e permissões dos Clients
+<h2 id="client-credentials-and-permissions">Credenciais e permissões dos Clients</h2>
 
 Cada Client usa suas próprias credenciais, sandbox e permissões locais. Entre em cada Client e verifique se ele consegue fazer o trabalho pretendido antes de iniciar a integração.
 

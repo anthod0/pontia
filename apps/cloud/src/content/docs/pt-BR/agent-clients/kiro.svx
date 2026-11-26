@@ -1,0 +1,84 @@
+<svelte:head>
+	<title>Agent Client Kiro — Pontia</title>
+	<meta name="description" content="Instale o Kiro e controle sessões do Kiro CLI remotamente com o Pontia." />
+</svelte:head>
+
+# Agent Client Kiro
+
+O Pontia executa o Kiro pelo servidor ACP do Kiro CLI. Você pode iniciar uma Session do Kiro no seu dispositivo, controlá-la pelo Remote Dashboard, responder a solicitações de ferramentas e retomar o histórico de conversa nativo.
+
+## Instalar o Kiro
+
+Abra **Settings → Agent Clients → Kiro** e escolha **Install**. O Pontia usa o instalador oficial do Kiro, verifica `kiro-cli --version` e habilita o Client. O instalador funciona em Linux e macOS, nas arquiteturas x86-64 e Arm64, e requer Bash, `curl` ou `wget`, `unzip` e a ferramenta SHA-256 da plataforma.
+
+Para instalar pelo terminal do dispositivo, execute:
+
+```sh
+pontia client install kiro
+```
+
+Se o Kiro já estiver instalado, deixe `kiro-cli` no `PATH` do usuário que executa o serviço Pontia e habilite o Client:
+
+```sh
+pontia client enable kiro
+```
+
+O Pontia inicia cada Session com `kiro-cli acp --agent-engine=v3` no Workspace correspondente.
+
+## Entrar na conta
+
+O guia inicial de Clients no Remote Dashboard oferece dois métodos por código de dispositivo:
+
+- **Kiro Free (AWS Builder ID)** abre o fluxo de autorização do Builder ID.
+- **Kiro Pro (IAM Identity Center)** solicita a URL HTTPS do provedor de identidade e a Região AWS antes de abrir o fluxo de autorização.
+
+Abra a página exibida em qualquer aparelho e digite o código. No terminal do dispositivo, você pode usar o login normal do Kiro:
+
+```sh
+kiro-cli login
+```
+
+Em um host headless ou remoto, force o fluxo de dispositivo:
+
+```sh
+kiro-cli login --use-device-flow
+```
+
+Execute o login como o mesmo usuário do sistema operacional que executa o Pontia. O Kiro também aceita `KIRO_API_KEY` no ambiente do serviço Pontia. Depois de alterar o ambiente do serviço ou o `PATH`, execute `pontia up` para passar os novos valores ao serviço gerenciado.
+
+## Controlar o Kiro remotamente
+
+Em [New chat](https://app.pontia.dev/), selecione um Workspace, escolha **Kiro** e selecione um modelo ou o padrão do Client. O Dashboard transmite a conversa e as etapas de trabalho e apresenta as solicitações de ferramentas do Kiro para aprovação única.
+
+Envie outra mensagem durante um Turn para direcionar o Kiro quando a versão ativa oferecer steering. Você também pode colocar uma continuação na fila do próximo Turn ou interromper o Turn ativo. Ao reabrir a Session, o Pontia restaura a linha do tempo a partir do histórico nativo do Kiro.
+
+O Kiro informa uma estimativa do uso de contexto. Quando a Session estiver ociosa ou interrompida, escolha **Compact context** ou envie `/compact`; os pontos de compactação manuais e automáticos aparecem na linha do tempo.
+
+## Escolher modelo e nível de raciocínio
+
+O Pontia lê o catálogo de modelos do Kiro para o Workspace selecionado. O seletor mostra os modelos disponíveis e as opções de reasoning effort publicadas para cada modelo. **Client default** segue o padrão atual do Kiro e também oferece as opções de effort publicadas para esse modelo.
+
+O cabeçalho da Session mostra o modelo e o reasoning effort efetivos informados pelo Kiro.
+
+## Usar o Kiro em Bots, helpers e Workflows
+
+Você pode selecionar o Kiro ao criar um Bot. Sessions de Bot, recuperação de memória e Dreaming usam um Agent `pontia-restricted` dedicado, com leitura de arquivos e comandos de shell. O Kiro recebe as instruções da Session e pode compartilhar os arquivos solicitados como anexos do Dashboard.
+
+O helper geral de um Bot herda o modelo e o reasoning effort do Kiro configurados no Bot. Para um helper especializado, crie um **Agent Profile** que selecione Kiro, um modelo, um reasoning effort opcional e suas instruções. O Bot pode iniciar esse Profile com `pontia bot helper create --profile-id ID`.
+
+O mesmo Agent Profile pode executar um nó ao definir `execution_profile_id` no TOML do Workflow:
+
+```toml
+[[nodes]]
+type = "agent"
+phase = "Research"
+title = "Kiro researcher"
+instructions = "Inspect the project and prepare the requested handoff."
+inputs = []
+output = "research.md"
+execution_profile_id = "kiro-researcher"
+```
+
+Ative **YOLO** no Agent Profile quando o helper ou nó de Workflow deve usar as ferramentas, servidores MCP e skills habituais do Kiro sem pedidos de aprovação. Sessions comuns criadas pela API podem escolher `default`, `yolo` ou `restricted` no campo `mode`, descrito em [Agent Clients](/docs/agent-clients#client-credentials-and-permissions).
+
+Consulte [Solução de problemas](/docs/troubleshooting) se o Kiro não for detectado ou a Session não iniciar.

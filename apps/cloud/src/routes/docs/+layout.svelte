@@ -37,6 +37,9 @@
 				{ href: '/docs/dashboard', title: m.docs_dashboard },
 				{ href: '/docs/agent-clients', title: m.agent_clients },
 				{ href: '/docs/codex', title: () => 'Codex' },
+				{ href: '/docs/agent-clients/grok', title: m.agent_client_grok },
+				{ href: '/docs/agent-clients/kiro', title: m.agent_client_kiro },
+				{ href: '/docs/agent-clients/antigravity', title: m.agent_client_antigravity },
 				{ href: '/docs/workspaces', title: m.docs_workspaces },
 				{ href: '/docs/workflows', title: m.docs_workflows }
 			]

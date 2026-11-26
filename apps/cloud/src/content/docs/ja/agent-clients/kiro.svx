@@ -1,0 +1,84 @@
+<svelte:head>
+	<title>Kiro Agent Client — Pontia</title>
+	<meta name="description" content="Kiro をインストールし、Pontia から Kiro CLI Session をリモート操作します。" />
+</svelte:head>
+
+# Kiro Agent Client
+
+Pontia は Kiro CLI の ACP サーバーを通じて Kiro を実行します。デバイス上で Kiro Session を開始し、Remote Dashboard から操作し、ツールリクエストに応答して、ネイティブの会話履歴を再開できます。
+
+## Kiro をインストールする
+
+**Settings → Agent Clients → Kiro** を開き、**Install** を選択します。Pontia は Kiro の公式インストーラーを実行し、`kiro-cli --version` を確認して Client を有効にします。インストーラーは x86-64 と Arm64 の Linux および macOS に対応し、Bash、`curl` または `wget`、`unzip`、各プラットフォームの SHA-256 ツールが必要です。
+
+デバイスのターミナルからインストールする場合は、次を実行します。
+
+```sh
+pontia client install kiro
+```
+
+Kiro をインストール済みの場合は、Pontia サービスユーザーの `PATH` から `kiro-cli` を実行できるようにして、有効化します。
+
+```sh
+pontia client enable kiro
+```
+
+Pontia は各 Session を Workspace 内で `kiro-cli acp --agent-engine=v3` により起動します。
+
+## サインインする
+
+Remote Dashboard の初回 Client ガイドには、2 つのデバイスコード認証方法があります。
+
+- **Kiro Free (AWS Builder ID)** は Builder ID の認証フローを開きます。
+- **Kiro Pro (IAM Identity Center)** は、HTTPS の ID プロバイダー URL と AWS Region を入力してから認証フローを開きます。
+
+任意のデバイスで表示されたページを開き、コードを入力します。デバイスのターミナルでは、Kiro の通常のログインフローも利用できます。
+
+```sh
+kiro-cli login
+```
+
+ヘッドレスホストやリモートホストでは、デバイスフローを指定します。
+
+```sh
+kiro-cli login --use-device-flow
+```
+
+Pontia を実行する OS ユーザーと同じユーザーでサインインしてください。Kiro は Pontia サービス環境の `KIRO_API_KEY` も利用できます。サービス環境や `PATH` を変更した後は `pontia up` を実行し、管理サービスに新しい値を反映します。
+
+## Kiro をリモート操作する
+
+[New chat](https://app.pontia.dev/) で Workspace と **Kiro** を選び、モデルまたは Client のデフォルトを選択します。Dashboard には会話と作業ステップがリアルタイムで表示され、Kiro のツールリクエストを 1 回だけ承認できます。
+
+実行中の Turn にメッセージを送ると、利用中の Kiro バージョンが steering を提供している場合は現在の Turn に指示を追加できます。次の Turn にメッセージをキューイングしたり、現在の Turn を中断したりすることもできます。Session を再び開くと、Kiro のネイティブ履歴からタイムラインが復元されます。
+
+Kiro は推定コンテキスト使用量を報告します。Session がアイドル状態または中断状態のときは、**Compact context** を選ぶか `/compact` を送信します。手動と自動の圧縮チェックポイントがタイムラインに表示されます。
+
+## モデルと推論レベルを選ぶ
+
+Pontia は選択した Workspace 用の Kiro モデルカタログを読み取ります。モデルピッカーには利用可能なモデルと、各モデルが公開する reasoning effort が表示されます。**Client default** を選ぶと Kiro の現在のデフォルトに従い、そのモデルの effort も選択できます。
+
+Session ヘッダーには、Kiro が報告した実際のモデルと reasoning effort が表示されます。
+
+## Bot、helper、Workflow で Kiro を使う
+
+Bot の作成時に Kiro を選択できます。Bot Session、メモリ取得、Dreaming では、ファイル読み取りとシェルコマンドを備えた専用の `pontia-restricted` Kiro Agent が使われます。Kiro は Session の指示を受け取り、要求されたファイルを Dashboard の添付ファイルとして共有できます。
+
+Bot の汎用 helper は、その Bot の Kiro モデルと reasoning effort を引き継ぎます。専門 helper には、Kiro、モデル、任意の reasoning effort、指示を指定した **Agent Profile** を作成します。Bot は `pontia bot helper create --profile-id ID` でその Profile を起動できます。
+
+Workflow の TOML 定義で `execution_profile_id` を設定すると、同じ Agent Profile でノードを実行できます。
+
+```toml
+[[nodes]]
+type = "agent"
+phase = "Research"
+title = "Kiro researcher"
+instructions = "Inspect the project and prepare the requested handoff."
+inputs = []
+output = "research.md"
+execution_profile_id = "kiro-researcher"
+```
+
+helper または Workflow ノードで Kiro の通常のツール、MCP サーバー、skill を承認なしで使う場合は、Agent Profile で **YOLO** を有効にします。API で作成する通常の Session は、[Agent Client](/docs/agent-clients#client-credentials-and-permissions)で説明する `mode` フィールドにより `default`、`yolo`、`restricted` を選択できます。
+
+Kiro が検出されない場合や Session が起動しない場合は、[トラブルシューティング](/docs/troubleshooting)を参照してください。

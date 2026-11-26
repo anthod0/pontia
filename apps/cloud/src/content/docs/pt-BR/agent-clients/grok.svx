@@ -1,0 +1,81 @@
+<svelte:head>
+	<title>Agent Client Grok Build — Pontia</title>
+	<meta name="description" content="Instale o Grok Build e controle sessões do Grok CLI remotamente com o Pontia." />
+</svelte:head>
+
+# Agent Client Grok Build
+
+O Pontia executa o Grok Build pelo servidor ACP do Grok CLI. Você pode iniciar uma Session do Grok no seu dispositivo, acompanhar o trabalho pelo Remote Dashboard, responder a pedidos de permissão, interromper o agente e continuar a mesma conversa depois.
+
+## Instalar o Grok Build
+
+Abra **Settings → Agent Clients → Grok Build** e escolha **Install**. O Pontia usa o instalador oficial da xAI, verifica `grok --version` e habilita o Client. O instalador funciona em Linux e macOS, nas arquiteturas x86-64 e Arm64, e requer Bash e `curl` ou `wget`.
+
+Para instalar pelo terminal do dispositivo, execute:
+
+```sh
+pontia client install grok
+```
+
+Se o Grok já foi instalado por outro método, deixe `grok` no `PATH` do usuário que executa o serviço Pontia e habilite o Client:
+
+```sh
+pontia client enable grok
+```
+
+O Pontia inicia cada Session com `grok agent stdio` no Workspace correspondente.
+
+## Entrar na conta
+
+O guia inicial de Clients no Remote Dashboard pode iniciar o login do Grok por código de dispositivo. Abra a página de autorização exibida em qualquer aparelho, digite o código e volte ao guia quando a autorização terminar.
+
+Em um terminal com ambiente gráfico, você também pode executar:
+
+```sh
+grok login
+```
+
+Em um host headless ou remoto, use diretamente o fluxo de dispositivo:
+
+```sh
+grok login --device-auth
+```
+
+Execute o login como o mesmo usuário do sistema operacional que executa o Pontia. O Grok também aceita `XAI_API_KEY` no ambiente do serviço Pontia. Depois de alterar o ambiente do serviço ou o `PATH`, execute `pontia up` para passar os novos valores ao serviço gerenciado.
+
+## Controlar o Grok remotamente
+
+Em [New chat](https://app.pontia.dev/), selecione um Workspace, escolha **Grok Build** e selecione um modelo ou o padrão do Client. O Dashboard transmite as respostas e etapas de trabalho do Grok e permite responder aos pedidos de permissão em outro computador ou celular.
+
+Enquanto o Grok trabalha, envie outra mensagem para acrescentar instruções na próxima transição de ferramenta ou modelo. O Grok continua o Turn atual com as novas instruções; se a última transição já tiver passado, o Pontia entrega a mensagem como um Turn seguinte. Você também pode interromper o Turn ativo e enviar a próxima solicitação.
+
+Quando a Session estiver ociosa ou interrompida, escolha **Compact context** ou envie `/compact`. O Pontia mantém a Session aberta e adiciona o ponto de compactação à linha do tempo.
+
+## Escolher modelo e nível de raciocínio
+
+O Pontia lê o catálogo de modelos do Grok para o Workspace selecionado. O seletor mostra os modelos disponíveis e as opções de reasoning effort publicadas para cada modelo. **Client default** segue o padrão atual do Grok; quando esse modelo publica níveis de effort, você também pode escolher um antes de iniciar a Session.
+
+O cabeçalho da Session mostra o modelo e o reasoning effort efetivos informados pelo Grok.
+
+## Usar o Grok em Bots, helpers e Workflows
+
+Você pode selecionar o Grok Build ao criar um Bot. Sessions de Bot, recuperação de memória e Dreaming usam o Profile restrito do Grok fornecido pelo Pontia, com leitura de arquivos e comandos de terminal sem pedidos de aprovação.
+
+O helper geral de um Bot herda o modelo e o reasoning effort do Grok configurados no Bot. Para um helper especializado, crie um **Agent Profile** que selecione Grok Build, um modelo, um reasoning effort opcional e suas instruções. O Bot pode iniciar esse Profile com `pontia bot helper create --profile-id ID`.
+
+O mesmo Agent Profile pode executar um nó de Workflow. Informe o ID na definição:
+
+```toml
+[[nodes]]
+type = "agent"
+phase = "Review"
+title = "Grok reviewer"
+instructions = "Review the current changes and write the findings."
+inputs = []
+output = "review.md"
+execution_profile_id = "grok-reviewer"
+```
+
+Ative **YOLO** no Agent Profile quando o helper ou nó de Workflow deve usar as ferramentas habituais do Grok sem pedidos de aprovação. Sessions comuns criadas pela API podem escolher `default`, `yolo` ou `restricted` no campo `mode`, descrito em [Agent Clients](/docs/agent-clients#client-credentials-and-permissions).
+
+Consulte [Solução de problemas](/docs/troubleshooting) se o executável não for detectado ou a Session não iniciar.

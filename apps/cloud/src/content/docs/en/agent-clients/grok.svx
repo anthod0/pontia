@@ -1,0 +1,81 @@
+<svelte:head>
+	<title>Grok Build Agent Client — Pontia</title>
+	<meta name="description" content="Install Grok Build and control Grok CLI sessions remotely with Pontia." />
+</svelte:head>
+
+# Grok Build Agent Client
+
+Pontia runs Grok Build through the Grok CLI's ACP server. You can start a Grok Session on your device, follow its work from the Remote Dashboard, answer permission requests, interrupt it, and continue the same conversation later.
+
+## Install Grok Build
+
+Open **Settings → Agent Clients → Grok Build** and choose **Install**. Pontia uses xAI's official installer, verifies `grok --version`, and enables the Client. The installer supports Linux and macOS on x86-64 and Arm64 and requires Bash plus `curl` or `wget`.
+
+To install from the device terminal instead, run:
+
+```sh
+pontia client install grok
+```
+
+If Grok is already installed by another method, make sure `grok` is on the Pontia service user's `PATH`, then enable it:
+
+```sh
+pontia client enable grok
+```
+
+Pontia starts each Session with `grok agent stdio` in its Workspace.
+
+## Sign in
+
+The first-client guide in the Remote Dashboard can start Grok's device-code login. Open the displayed authorization page on any device, enter the code, and return to the guide after authorization completes.
+
+From a desktop terminal, you can also run:
+
+```sh
+grok login
+```
+
+On a headless or remote host, use the device flow directly:
+
+```sh
+grok login --device-auth
+```
+
+Run the command as the same operating-system user that runs Pontia. Grok also accepts `XAI_API_KEY` from the Pontia service environment. After changing the service environment or `PATH`, run `pontia up` so the managed service receives the new values.
+
+## Control Grok remotely
+
+In [New chat](https://app.pontia.dev/), select a Workspace, choose **Grok Build**, and select a model or the Client default. The Dashboard streams Grok's replies and work steps and shows permission requests for you to answer from another computer or phone.
+
+While Grok is working, send another message to add instructions at its next tool or model transition. Grok continues the current Turn with the new instructions; when the last transition has already passed, Pontia delivers the message as a follow-up Turn. You can also interrupt the active Turn and then send the next request.
+
+When the Session is idle or interrupted, choose **Compact context** or send `/compact`. Pontia keeps the Session open and adds the compaction checkpoint to its timeline.
+
+## Choose a model and reasoning effort
+
+Pontia reads Grok's model catalog for the selected Workspace. The model picker lists the available models and the reasoning-effort choices advertised for each model. Keeping **Client default** follows Grok's current default; when that model publishes effort levels, the same picker lets you choose one before starting the Session.
+
+The Session header shows the effective model and reasoning effort reported by Grok.
+
+## Use Grok for Bots, helpers, and Workflows
+
+You can select Grok Build when creating a Bot. Bot Sessions, memory retrieval, and Dreaming use Pontia's restricted Grok profile, which provides file reading and terminal commands without approval prompts.
+
+A Bot's general helper inherits the Bot's Grok model and reasoning effort. For a specialist helper, create an **Agent Profile** that selects Grok Build, a model, an optional reasoning effort, and its instructions. The Bot can then launch that profile with `pontia bot helper create --profile-id ID`.
+
+The same Agent Profile can run a Workflow node. Set its ID in the Workflow definition:
+
+```toml
+[[nodes]]
+type = "agent"
+phase = "Review"
+title = "Grok reviewer"
+instructions = "Review the current changes and write the findings."
+inputs = []
+output = "review.md"
+execution_profile_id = "grok-reviewer"
+```
+
+Enable **YOLO** on an Agent Profile when that helper or Workflow node should use Grok's usual tools without approval prompts. Ordinary API-created Sessions can select `default`, `yolo`, or `restricted` with the `mode` field described in [Agent Clients](/docs/agent-clients#client-credentials-and-permissions).
+
+See [Troubleshooting](/docs/troubleshooting) if the executable is not detected or a Session does not start.

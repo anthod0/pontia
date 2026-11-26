@@ -14,11 +14,11 @@ Pontia 包含以下 Agent Client：
 | [Pi](/docs/agent-clients/pi) | `pi` 和 `tmux` | Pontia 的 Pi 插件 |
 | [Codex](/docs/codex) | 支持 app-server 守护进程的 Codex CLI | 按用户启动的 Codex 守护进程、启动器和 shell PATH |
 | [Claude Code](/docs/agent-clients/claude) | Node.js LTS、npm 以及 Claude Code 认证 | 来自 npm 的 `@pontia/claude-client` 包 |
-| Google Antigravity | `agy` | 在 Agent Clients 中启用（ACP） |
-| Grok Build | `grok` | 在 Agent Clients 中启用 (ACP) |
-| Kiro | `kiro-cli` | 使用 `kiro-cli login` 登录 |
+| [Google Antigravity](/docs/agent-clients/antigravity) | `agy` | 内置 ACP 集成 |
+| [Grok Build](/docs/agent-clients/grok) | `grok` | 内置 ACP 集成 |
+| [Kiro](/docs/agent-clients/kiro) | `kiro-cli` | 内置 ACP 集成 |
 
-Bot、记忆检索和 Dreaming 可以选择 Antigravity 或 Kiro，使用受限 agent 读取文件、运行终端命令和搜索网页。Workspace 中的普通 helper 使用所选客户端原有的工具和审批方式。
+Grok Build、Antigravity 和 Kiro 都可以运行普通 Session、Bot、helper、记忆任务和 Workflow 节点。每个独立指南分别介绍安装、认证、远程控制、模型设置和受限执行方式。
 
 ## 在初始化时选择 Client
 
@@ -30,30 +30,6 @@ pontia init
 
 初始化程序会在应用配置之前检查你选择的 Client。Pi 默认选中；Codex 和 `claude-agent` 为可选项。选中的 Client 会为新的 Session 启用。
 
-## 在会话中使用 Kiro
-
-安装 `kiro-cli`，确保运行 Pontia 的用户能在 PATH 中找到它，并以该用户身份执行 `kiro-cli login`。在 **Settings → Agent Clients** 中启用 Kiro，或运行 `pontia client enable kiro`。
-
-新建会话时选择 Kiro 和模型。你可以单次批准工具请求，在 Kiro 提供插话功能时向当前轮次补充指令，也可以把后续消息排到下一轮。重新打开会话后可以查看时间线。
-
-你可以查看估算的上下文用量，在会话空闲时手动压缩，并在时间线上查看自动和手动压缩的检查点。
-
-Kiro 可按会话指令以附件形式分享文件。你可以在 Workflow 节点中使用带系统提示词的 Kiro Agent Profile。
-
-<h2 id="enable-an-acp-agent">启用 Grok Build</h2>
-
-安装 Grok Build，并确保 Pontia 服务用户能在 PATH 中找到 `grok`。Pontia 使用 `grok agent stdio` 启动它。在 Dashboard 的 **Settings → Agent Clients** 中启用 Grok Build，或运行：
-
-```sh
-pontia client enable grok
-```
-
-Grok 会话空闲或已中断时，可以在 Dashboard 中使用 `/compact` 压缩对话上下文。压缩后可以在同一会话中继续对话，并在时间线上查看压缩记录。
-
-受限模式下，Grok Build保留终端和读取工具，关闭 Grok 专门用于编辑文件、媒体落盘、工作树、子 Agent、工作流、定时、后台任务、监控和调用 MCP 的工具。此模式还会关闭技能自动发现。
-
-向运行中的 Grok 会话、Bot 或助手发送消息，Grok 会在下次切换工具或模型时接收补充指令，并继续当前任务。如果已经错过本轮最后一次切换，消息会作为下一轮任务执行。
-
 运行 `pontia setup pi`、`pontia setup codex` 或 `pontia setup claude` 来安装或修复本地集成。省略 Client 名称即可交互式选择。Setup 也会启用该 Client。
 
 也可以在 Dashboard 的 **设置 → Agent Clients** 中选择 Pi、Codex 或 Claude Code，点击 **初始化**，在该设备上执行相同的配置。页面会显示最近一次初始化的输出和结果，重新连接后仍可查看。
@@ -64,7 +40,7 @@ Dashboard 会显示所选 Client 支持的控制功能，例如中断、历史�
 
 Pontia Session 在绑定后会与一个客户端原生对话身份持久关联。重新打开同一个原生对话会继续现有的 Session；新的原生对话则属于新的 Session。
 
-## Client 凭据和权限
+<h2 id="client-credentials-and-permissions">Client 凭据和权限</h2>
 
 每个 Client 使用自己的凭据、沙箱和本地权限。在开始集成之前，请登录每个 Client 并确认它能完成预期的工作。
 
