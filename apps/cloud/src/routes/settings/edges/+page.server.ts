@@ -1,5 +1,5 @@
 import { fail, redirect, type RequestEvent } from "@sveltejs/kit";
-import { and, asc, eq, ne } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { currentLogin, environment } from "$lib/server/auth/http";
 import { database } from "$lib/server/db";
 import { m } from "$lib/paraglide/messages";
@@ -39,7 +39,7 @@ export const load: PageServerLoad = async (event) => {
     authenticated.db
       .select(edgeFields)
       .from(edges)
-      .where(and(eq(edges.accessScope, "public"), ne(edges.userId, authenticated.user.user_id)))
+      .where(eq(edges.accessScope, "public"))
       .orderBy(asc(edges.name), asc(edges.id)),
   ]);
   return { user: authenticated.user, ownedEdges, publicEdges };

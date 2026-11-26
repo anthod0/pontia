@@ -92,7 +92,7 @@ test("a user without edges receives empty owned and public lists", async () => {
   expect(result.publicEdges).toEqual([]);
 });
 
-test("the page separates owned and public edges in stable order without credentials", async () => {
+test("the page includes owned public edges in both lists in stable order without credentials", async () => {
   const event = await authenticatedEvent(ownerId);
   await database.db.insert(users).values({ id: "user-other" });
   const createdAt = "2026-01-01T00:00:00.000Z";
@@ -101,6 +101,7 @@ test("the page separates owned and public edges in stable order without credenti
       { id: "edge-z", userId: ownerId, name: "Tokyo" },
       { id: "edge-b", userId: ownerId, name: "Singapore" },
       { id: "edge-a", userId: ownerId, name: "Singapore" },
+      { id: "edge-owned-public", userId: ownerId, name: "Shared", accessScope: "public" as const },
       { id: "edge-private", userId: "user-other", name: "Private" },
       { id: "edge-public", userId: "user-other", name: "Public", accessScope: "public" as const },
     ].map((edge) => ({
@@ -113,6 +114,12 @@ test("the page separates owned and public edges in stable order without credenti
   );
   const result = await loadEdges(event);
   expect(result.ownedEdges).toEqual([
+    {
+      id: "edge-owned-public",
+      name: "Shared",
+      tunnelUrl: "wss://edge-owned-public.example/tunnel",
+      createdAt,
+    },
     {
       id: "edge-a",
       name: "Singapore",
@@ -137,6 +144,12 @@ test("the page separates owned and public edges in stable order without credenti
       id: "edge-public",
       name: "Public",
       tunnelUrl: "wss://edge-public.example/tunnel",
+      createdAt,
+    },
+    {
+      id: "edge-owned-public",
+      name: "Shared",
+      tunnelUrl: "wss://edge-owned-public.example/tunnel",
       createdAt,
     },
   ]);

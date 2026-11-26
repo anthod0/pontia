@@ -19,7 +19,7 @@
 
   onMount(() => {
     const controller = new AbortController();
-    const edgeIds = [...data.ownedEdges, ...data.publicEdges].map((edge) => edge.id);
+    const edgeIds = new Set([...data.ownedEdges, ...data.publicEdges].map((edge) => edge.id));
 
     void fetch("/settings/edges/health", {
       headers: { Accept: "application/json" },
