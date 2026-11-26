@@ -386,6 +386,18 @@ impl ClientControlService {
         .await
     }
 
+    pub async fn set_reasoning_effort(
+        &self,
+        session_id: &str,
+        runtime_id: &str,
+        reasoning_effort: &str,
+    ) -> Result<()> {
+        self.request(session_id, runtime_id, false, |channel| async move {
+            channel.set_reasoning_effort(reasoning_effort).await
+        })
+        .await
+    }
+
     async fn request<T, F: Future<Output = Result<T>>>(
         &self,
         session_id: &str,

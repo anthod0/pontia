@@ -50,6 +50,32 @@ async fn identity_conflicts_cannot_replace_a_current_channel() {
 }
 
 #[tokio::test]
+async fn reasoning_effort_control_uses_the_current_connection() {
+    let (_, _root, control) = fixture().await;
+    let current = channel();
+    control
+        .attach(
+            "test-channel",
+            "session",
+            "original",
+            "native",
+            current.clone(),
+        )
+        .await
+        .unwrap();
+
+    control
+        .set_reasoning_effort("session", "original", "high")
+        .await
+        .unwrap();
+
+    assert_eq!(
+        current.reasoning_efforts.lock().unwrap().as_slice(),
+        ["high"]
+    );
+}
+
+#[tokio::test]
 async fn replacement_during_submission_returns_unknown_without_replaying_input() {
     let (pool, _root, control) = fixture().await;
     let old = Arc::new(Channel {

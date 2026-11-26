@@ -45,6 +45,7 @@ pub(crate) fn clients() -> super::ClientRegistry {
 #[derive(Default)]
 pub(crate) struct Channel {
     pub input: std::sync::Mutex<Vec<String>>,
+    pub reasoning_efforts: std::sync::Mutex<Vec<String>>,
     pub closed: AtomicBool,
     pub delayed: bool,
     pub next_error: std::sync::Mutex<Option<pontia_core::Error>>,
@@ -60,6 +61,15 @@ impl Channel {
     }
 }
 impl ClientControlChannel for Channel {
+    fn set_reasoning_effort<'a>(&'a self, reasoning_effort: &'a str) -> ClientControlOperation<'a> {
+        Box::pin(async move {
+            self.reasoning_efforts
+                .lock()
+                .unwrap()
+                .push(reasoning_effort.into());
+            Ok(())
+        })
+    }
     fn steer<'a>(
         &'a self,
         input: &'a str,

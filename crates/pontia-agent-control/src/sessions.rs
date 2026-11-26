@@ -19,10 +19,12 @@ mod commands;
 mod compaction;
 mod fork;
 pub mod instructions;
+mod reasoning_effort;
 pub use fork::{ForkSessionOutcome, ForkSessionRequest};
 mod models;
 pub use compaction::CompactionAccepted;
 pub use models::{ReasoningEffortOption, SessionModel};
+pub use reasoning_effort::SetSessionReasoningEffortRequest;
 mod lifecycle;
 mod runtime_binding;
 

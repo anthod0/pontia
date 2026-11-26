@@ -156,6 +156,19 @@ pub async fn compact_session(
     }
 }
 
+pub async fn set_session_reasoning_effort(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+    Json(request): Json<pontia_agent_control::SetSessionReasoningEffortRequest>,
+) -> Result<Response, ApiError> {
+    state
+        .control()
+        .session_commands()
+        .set_reasoning_effort(&session_id, request)
+        .await?;
+    Ok((StatusCode::ACCEPTED, ok(json!({"accepted":true}))).into_response())
+}
+
 pub async fn interrupt_session(
     State(state): State<AppState>,
     headers: HeaderMap,

@@ -59,7 +59,7 @@ pub use sessions::{
 };
 pub use sessions::{
     CreateSessionOutcome, CreateSessionRequest, InitialTaskRequest, SessionCommandService,
-    UpdateSessionRequest,
+    SetSessionReasoningEffortRequest, UpdateSessionRequest,
 };
 pub use turns::TurnCommandService;
 pub use views::{

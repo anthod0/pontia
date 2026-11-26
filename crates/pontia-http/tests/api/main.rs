@@ -23,6 +23,7 @@ mod runtime_lifecycle;
 mod session_create;
 mod session_inbox;
 mod session_overview;
+mod session_reasoning_effort;
 mod session_workspace_linking;
 mod shutdown;
 mod support;

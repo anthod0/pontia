@@ -369,6 +369,10 @@ fn external_api_router(state: HttpState) -> Router {
             post(api::compact_session),
         )
         .route(
+            "/api/v1/sessions/{session_id}/reasoning-effort",
+            axum::routing::patch(api::set_session_reasoning_effort),
+        )
+        .route(
             "/api/v1/sessions/{session_id}/interrupt",
             post(api::interrupt_session),
         )

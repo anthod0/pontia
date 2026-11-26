@@ -8,6 +8,7 @@ mod connections;
 pub use connections::{ClientControlService, NativeHistoryConnection};
 mod compaction;
 mod lifecycle;
+mod reasoning_effort;
 pub(crate) use lifecycle::discard_unbound_runtime;
 mod channel;
 mod registry;

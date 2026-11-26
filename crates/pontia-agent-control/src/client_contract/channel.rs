@@ -21,6 +21,16 @@ pub trait ClientControlChannel: Send + Sync {
             ))
         })
     }
+    fn set_reasoning_effort<'a>(
+        &'a self,
+        _reasoning_effort: &'a str,
+    ) -> ClientControlOperation<'a> {
+        Box::pin(async {
+            Err(pontia_core::Error::CapabilityUnavailable(
+                "Reasoning effort control is unsupported".into(),
+            ))
+        })
+    }
     fn available(&self) -> bool;
     fn process_id(&self) -> Option<u32> {
         None

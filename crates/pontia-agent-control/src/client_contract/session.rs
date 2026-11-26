@@ -120,6 +120,18 @@ pub trait ClientSession: Send + Sync {
             ))
         })
     }
+    fn set_reasoning_effort<'a>(
+        &'a self,
+        _events: EventIngestService,
+        _target: &'a ControlTarget,
+        _reasoning_effort: &'a str,
+    ) -> ClientOperation<'a, ()> {
+        Box::pin(async {
+            Err(pontia_core::Error::CapabilityUnavailable(
+                "Reasoning effort control is unsupported".into(),
+            ))
+        })
+    }
     fn capabilities<'a>(
         &'a self,
         _session: &'a str,
@@ -129,6 +141,13 @@ pub trait ClientSession: Send + Sync {
     }
     fn available<'a>(&'a self, pool: SqlitePool, session: &'a str) -> ClientOperation<'a, bool>;
     fn manual_compaction_available<'a>(
+        &'a self,
+        pool: SqlitePool,
+        session: &'a str,
+    ) -> ClientOperation<'a, bool> {
+        self.available(pool, session)
+    }
+    fn reasoning_effort_control_available<'a>(
         &'a self,
         pool: SqlitePool,
         session: &'a str,
