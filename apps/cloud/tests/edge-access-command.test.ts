@@ -17,15 +17,16 @@ async function changeAccess(
   target: AccessScope,
   answer: string,
   exists = true,
+  tunnelUrl = "wss://edge.example.com/tunnel",
 ) {
   const db = new Database(":memory:");
   try {
     db.exec(`CREATE TABLE edges (
       id TEXT PRIMARY KEY, name TEXT, tunnel_url TEXT, access_scope TEXT, updated_at TEXT
     )`);
-    const insert = db.prepare("INSERT INTO edges VALUES (?, 'edge', 'wss://edge', ?, 'before')");
-    if (exists) insert.run(EDGE_ID, initial);
-    insert.run(OTHER_ID, initial);
+    const insert = db.prepare("INSERT INTO edges VALUES (?, 'edge', ?, ?, 'before')");
+    if (exists) insert.run(EDGE_ID, tunnelUrl, initial);
+    insert.run(OTHER_ID, "wss://other.example.com/tunnel", initial);
     let confirmations = 0;
     let closed = false;
     const errors: string[] = [];
@@ -46,8 +47,8 @@ async function changeAccess(
             accessScope: row.access_scope,
           } satisfies EdgeRecord;
         },
-        async setEdgeAccess(edgeId, scope) {
-          db.query(buildSetAccessSql(edgeId, scope)).all();
+        async setEdgeAccess(edgeId, expectedTunnelUrl, scope) {
+          db.query(buildSetAccessSql(edgeId, expectedTunnelUrl, scope)).all();
         },
       },
       prompter: {
@@ -117,6 +118,47 @@ describe("edge access command", () => {
     expect(outcome.edge).toBeNull();
     expect(outcome.other).toEqual({ access_scope: "public", updated_at: "before" });
     expect(outcome.closed).toBe(true);
+  });
+
+  test.each([
+    "wss://8.8.8.8/tunnel",
+    "wss://8.8.8.8:8443/tunnel",
+    "wss://[2606:4700:4700::1111]/tunnel",
+    "wss://[2606:4700:4700::1111]:8443/tunnel",
+  ])("keeps an IP-address edge private: %s", async (tunnelUrl) => {
+    const outcome = await changeAccess("private", "public", "yes", true, tunnelUrl);
+
+    expect(outcome.result).toBe(1);
+    expect(outcome.confirmations).toBe(0);
+    expect(outcome.errors).toHaveLength(1);
+    expect(outcome.edge).toEqual({ access_scope: "private", updated_at: "before" });
+    expect(outcome.closed).toBe(true);
+  });
+
+  test("allows an existing public IP-address edge to be made private", async () => {
+    const outcome = await changeAccess("public", "private", "yes", true, "wss://8.8.8.8/tunnel");
+
+    expect(outcome.result).toBe(0);
+    expect(outcome.confirmations).toBe(1);
+    expect(outcome.edge).toEqual({
+      access_scope: "private",
+      updated_at: expect.not.stringMatching(/^before$/),
+    });
+  });
+
+  test("reports an existing public IP-address edge as invalid", async () => {
+    const outcome = await changeAccess(
+      "public",
+      "public",
+      "yes",
+      true,
+      "wss://[2606:4700:4700::1111]/tunnel",
+    );
+
+    expect(outcome.result).toBe(1);
+    expect(outcome.confirmations).toBe(0);
+    expect(outcome.errors).toHaveLength(1);
+    expect(outcome.edge).toEqual({ access_scope: "public", updated_at: "before" });
   });
 
   for (const args of [

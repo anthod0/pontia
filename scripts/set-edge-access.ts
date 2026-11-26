@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { dirname, join } from "node:path";
+import { isIP } from "node:net";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
@@ -20,7 +21,7 @@ export interface EdgeRecord {
 
 export interface D1Client {
   findEdge(edgeId: string): Promise<EdgeRecord | null>;
-  setEdgeAccess(edgeId: string, accessScope: AccessScope): Promise<void>;
+  setEdgeAccess(edgeId: string, tunnelUrl: string, accessScope: AccessScope): Promise<void>;
 }
 
 export interface Prompter {
@@ -68,15 +69,32 @@ export function buildEdgeLookupSql(edgeId: string): string {
   ].join("\n");
 }
 
-export function buildSetAccessSql(edgeId: string, accessScope: AccessScope): string {
+export function buildSetAccessSql(
+  edgeId: string,
+  tunnelUrl: string,
+  accessScope: AccessScope,
+): string {
   return [
     "UPDATE edges",
     `SET access_scope = ${sqlString(accessScope)},`,
     "    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
-    `WHERE id = ${sqlString(edgeId)} AND access_scope <> ${sqlString(accessScope)}`,
+    `WHERE id = ${sqlString(edgeId)}`,
+    `  AND tunnel_url = ${sqlString(tunnelUrl)}`,
+    `  AND access_scope <> ${sqlString(accessScope)}`,
     "RETURNING id, access_scope;",
     "",
   ].join("\n");
+}
+
+function edgeUsesIpAddress(tunnelUrl: string): boolean {
+  let hostname: string;
+  try {
+    hostname = new URL(tunnelUrl).hostname;
+  } catch {
+    throw new Error("The edge has an invalid tunnel URL.");
+  }
+  const unbracketed = hostname.startsWith("[") ? hostname.slice(1, -1) : hostname;
+  return isIP(unbracketed) !== 0;
 }
 
 interface WranglerResult {
@@ -135,8 +153,8 @@ export class WranglerD1Client implements D1Client {
     return parseEdgeRow(result.results[0]);
   }
 
-  async setEdgeAccess(edgeId: string, accessScope: AccessScope): Promise<void> {
-    const result = await this.execute(buildSetAccessSql(edgeId, accessScope));
+  async setEdgeAccess(edgeId: string, tunnelUrl: string, accessScope: AccessScope): Promise<void> {
+    const result = await this.execute(buildSetAccessSql(edgeId, tunnelUrl, accessScope));
     if (!Array.isArray(result.results) || result.results.length !== 1) {
       throw new Error(
         "The edge changed before its access could be updated; no update was confirmed.",
@@ -212,6 +230,10 @@ export async function runCommand(
     write(`  Current scope: ${edge.accessScope}`);
     write(`  Target scope: ${input.accessScope}`);
 
+    if (input.accessScope === "public" && edgeUsesIpAddress(edge.tunnelUrl)) {
+      throw new Error("An edge using an IP address as its host must remain private.");
+    }
+
     if (edge.accessScope === input.accessScope) {
       write(`\nThis edge is already ${input.accessScope}. No database changes were made.`);
       return 0;
@@ -227,7 +249,7 @@ export async function runCommand(
       return 0;
     }
 
-    await d1.setEdgeAccess(input.edgeId, input.accessScope);
+    await d1.setEdgeAccess(input.edgeId, edge.tunnelUrl, input.accessScope);
     write(`\nEdge is now ${input.accessScope}.`);
     return 0;
   } catch (error) {
