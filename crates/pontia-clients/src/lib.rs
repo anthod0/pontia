@@ -37,7 +37,7 @@ pub fn registration(config: &AppConfig) -> ClientRegistry {
     let mut clients = ClientRegistry::default();
     let sources = &config.client_configuration;
     let mut pi = pontia_client_pi::registration(None);
-    pi.configuration = Some(Arc::new(pontia_client_pi::config::PiConfiguration::new(
+    let pi_configuration = Arc::new(pontia_client_pi::config::PiConfiguration::new(
         sources
             .runtime_file
             .get("pi")
@@ -48,7 +48,10 @@ pub fn registration(config: &AppConfig) -> ClientRegistry {
             .get("pi")
             .cloned()
             .unwrap_or_else(|| serde_json::json!({})),
-    )));
+    ));
+    pi.configuration = Some(pi_configuration.clone());
+    clients.register_installer(pi_configuration);
+    clients.register_installer(Arc::new(pontia_client_codex::install::CodexInstaller));
     clients.register(pi);
     clients.register(pontia_client_codex::registration());
     clients.register(pontia_client_claude::registration());

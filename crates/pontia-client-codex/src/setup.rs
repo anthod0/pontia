@@ -595,7 +595,7 @@ pub(crate) fn resolve_executable(search_path: Vec<PathBuf>) -> Result<PathBuf, S
         .ok_or_else(|| "Codex must be installed and executable on PATH".to_string())
 }
 
-fn find_executable(search_path: Vec<PathBuf>) -> Result<Option<PathBuf>, String> {
+pub(crate) fn find_executable(search_path: Vec<PathBuf>) -> Result<Option<PathBuf>, String> {
     pontia_runtime::executable::find_matching("codex", search_path, |path| {
         Ok(!shim::is_shim(path)?)
     })

@@ -2,6 +2,7 @@ mod adapter;
 pub mod config;
 mod facts;
 pub mod history;
+mod install;
 mod instructions;
 pub mod ipc;
 mod lifecycle;

@@ -14,3 +14,6 @@ pontia-version.workspace = true
 serde_json.workspace = true
 pontia-client-acp = { version = "0.0.0", path = "../pontia-client-acp" }
 pontia-client-claude = { path = "../pontia-client-claude" }
+
+[dev-dependencies]
+tempfile = "3"

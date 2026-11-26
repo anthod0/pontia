@@ -2,6 +2,7 @@ mod adapter;
 mod auth;
 pub mod configuration;
 mod history;
+pub mod install;
 pub mod instructions;
 mod proxy;
 pub mod rollout;
