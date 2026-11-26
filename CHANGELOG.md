@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.7] - 2026-11-27
+
+### Added
+
+- Change the reasoning effort of a running Session with a slash command for Codex, Claude, Pi, and compatible ACP clients.
+- Fork Claude Sessions while preserving their conversation history.
+- Claude Sessions stream reasoning and show structured tool activity. ACP Sessions preserve permission requests, diffs, and plans and report connection diagnostics in the conversation.
+- Preview MDX and SVX files as Markdown, including Markdown frontmatter.
+- Self-hosted Edges using an IP address can proxy localhost previews.
+
+### Changed
+
+- Session interactions can carry multiple kinds of input.
+- Dashboard notifications use a clearer layout and shared visual styling.
+
+### Fixed
+
+- Claude Sessions recover correctly after abnormal exits.
+- ACP Session history preserves reasoning when replayed.
+- Switching devices keeps the open Dashboard side panel and its selected tab.
+- IP certificate Edges remain private, and Edge responses prevent search indexing.
+
 ## [0.9.6] - 2026-11-27
 
 ### Added
@@ -1348,7 +1370,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.9.6...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.9.7...HEAD
+[0.9.7]: https://github.com/anthod0/pontia/compare/v0.9.6...v0.9.7
 [0.9.6]: https://github.com/anthod0/pontia/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/anthod0/pontia/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/anthod0/pontia/compare/v0.9.3...v0.9.4
