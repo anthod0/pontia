@@ -122,8 +122,12 @@ pub(crate) fn collect(
     let role = match update["sessionUpdate"].as_str() {
         Some("user_message_chunk") => "user",
         Some("agent_message_chunk") => "assistant",
+        Some("agent_thought_chunk") => "thinking",
         _ => return Ok(()),
     };
+    if update.pointer("/content/type").and_then(Value::as_str) != Some("text") {
+        return Ok(());
+    }
     let text = update
         .pointer("/content/text")
         .and_then(Value::as_str)
@@ -638,7 +642,9 @@ fn render(
 ) -> Result<Vec<TurnTimelineItem>> {
     let mut position = 0;
     let mut items = Vec::new();
-    let has_tools = messages.iter().any(|m| m.tool.is_some());
+    let has_steps = messages
+        .iter()
+        .any(|message| message.tool.is_some() || message.role == "thinking");
     for (order, message) in messages.iter().enumerate() {
         let offset = position;
         if message.role == "context_compaction" {
@@ -700,7 +706,7 @@ fn render(
                 // Timeline consumers use item IDs as ordering keys when ACP
                 // provides no timestamp. Preserve numeric native order lexically.
                 item_id: if message.role != "user"
-                    && (has_tools || order > 0 && messages[order - 1].role == "context_compaction")
+                    && (has_steps || order > 0 && messages[order - 1].role == "context_compaction")
                 {
                     format!("acp:{:020}:assistant:{order:020}", start.max(offset))
                 } else {
@@ -708,10 +714,10 @@ fn render(
                 },
                 kind: message.role.into(),
                 raw_kind: None,
-                role: if message.role == "tool_result" {
-                    "tool"
-                } else {
-                    message.role
+                role: match message.role {
+                    "tool_result" => "tool",
+                    "thinking" => "assistant",
+                    role => role,
                 }
                 .into(),
                 title: (message.role == "tool_call").then(|| message.text.clone()),
@@ -770,6 +776,94 @@ impl TurnTimelineReader for ProtocolOnly {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn replay_renders_agent_thought_chunks_as_thinking() {
+        let mut messages = Vec::new();
+        collect(
+            &mut messages,
+            &json!({"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"go"}}),
+            None,
+        )
+        .unwrap();
+        collect(
+            &mut messages,
+            &json!({"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"inspect"}}),
+            None,
+        )
+        .unwrap();
+
+        let timeline = render(&messages, 0, 2, Some("turn"), None).unwrap();
+        assert_eq!(timeline[1].item.kind, "thinking");
+        assert_eq!(timeline[1].item.role, "assistant");
+        assert_eq!(timeline[1].item.content_preview, "inspect");
+    }
+
+    #[test]
+    fn replay_merges_consecutive_thought_and_text_chunks_separately() {
+        let mut messages = Vec::new();
+        for update in [
+            json!({"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"go"}}),
+            json!({"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"inspect "}}),
+            json!({"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"files"}}),
+            json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"done "}}),
+            json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"now"}}),
+        ] {
+            collect(&mut messages, &update, None).unwrap();
+        }
+
+        let timeline = render(&messages, 0, 2, Some("turn"), None).unwrap();
+        assert!(
+            timeline
+                .windows(2)
+                .all(|pair| pair[0].item.item_id < pair[1].item.item_id)
+        );
+        let entries: Vec<_> = timeline
+            .iter()
+            .map(|entry| {
+                (
+                    entry.item.kind.as_str(),
+                    entry.item.role.as_str(),
+                    entry.item.content_preview.as_str(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            entries,
+            [
+                ("user", "user", "go"),
+                ("thinking", "assistant", "inspect files"),
+                ("assistant", "assistant", "done now"),
+            ]
+        );
+    }
+
+    #[test]
+    fn replay_skips_non_text_content_blocks() {
+        let mut messages = Vec::new();
+        for update in [
+            json!({"sessionUpdate":"user_message_chunk","content":{"type":"image","data":"abc","mimeType":"image/png"}}),
+            json!({"sessionUpdate":"agent_message_chunk","content":{"type":"audio","data":"abc","mimeType":"audio/wav"}}),
+            json!({"sessionUpdate":"agent_thought_chunk","content":{"type":"resource","resource":{"uri":"file:///tmp/a"}}}),
+            json!({"sessionUpdate":"agent_message_chunk","content":{"type":"resource_link","uri":"file:///tmp/a","name":"a"}}),
+            json!({"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"go"}}),
+            json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"done"}}),
+        ] {
+            collect(&mut messages, &update, None).unwrap();
+        }
+
+        let timeline = render(&messages, 0, 2, Some("turn"), None).unwrap();
+        assert_eq!(
+            timeline
+                .iter()
+                .map(|entry| (
+                    entry.item.kind.as_str(),
+                    entry.item.content_preview.as_str()
+                ))
+                .collect::<Vec<_>>(),
+            [("user", "go"), ("assistant", "done")]
+        );
+    }
 
     #[test]
     fn standard_tool_updates_render_call_state_and_separate_results() {
