@@ -2,6 +2,7 @@ import {
   query,
   type Options,
   type Query,
+  type EffortLevel,
   type SDKMessage,
   type SDKAssistantMessage,
   type SDKPartialAssistantMessage,
@@ -16,7 +17,12 @@ export type SessionMode = "default" | "yolo" | "restricted";
 
 export type QueryFactory = (args: Parameters<typeof query>[0]) => Pick<
   Query,
-  typeof Symbol.asyncIterator | "interrupt" | "close" | "supportedModels" | "getContextUsage"
+  | typeof Symbol.asyncIterator
+  | "interrupt"
+  | "close"
+  | "supportedModels"
+  | "getContextUsage"
+  | "applyFlagSettings"
 > & {
   // The SDK exposes get_settings on Query at runtime, outside its public typings.
   getSettings?: () => Promise<{ applied: { effort: string | null } }>;
@@ -49,6 +55,7 @@ export class Host {
   private closing = false;
   private closed = false;
   private usedInputs = new Set<string>();
+  private changingReasoningEffort = false;
 
   constructor(
     private readonly options: {
@@ -172,6 +179,30 @@ export class Host {
       parent_tool_use_id: null,
       message: { role: "user", content: "/compact" },
     });
+  }
+
+  async setReasoningEffort(reasoningEffort: string): Promise<void> {
+    if (!isEffortLevel(reasoningEffort))
+      throw new ControlError("rejected", "reasoning_effort_unavailable");
+    if (this.changingReasoningEffort)
+      throw new ControlError("rejected", "reasoning_effort_change_busy");
+    if (!this.acceptsControl() || !this.execution || !this.native)
+      throw new ControlError("rejected", "execution_unavailable");
+    this.changingReasoningEffort = true;
+    try {
+      await this.execution.applyFlagSettings({ effortLevel: reasoningEffort });
+      if (!this.acceptsControl())
+        throw new ControlError("unknown", "reasoning_effort_change_unconfirmed");
+      const applied = await this.appliedReasoningEffort();
+      if (!this.acceptsControl())
+        throw new ControlError("unknown", "reasoning_effort_change_unconfirmed");
+      this.emit({ kind: "reasoning_effort", reasoning_effort: applied });
+    } catch (error) {
+      if (error instanceof ControlError) throw error;
+      throw new ControlError("unknown", "reasoning_effort_change_unconfirmed");
+    } finally {
+      this.changingReasoningEffort = false;
+    }
   }
 
   steer(target: string, id: string, text: string): void {
@@ -390,10 +421,8 @@ export class Host {
         void this.reportContextUsage();
       }
       try {
-        const settings = await this.execution!.getSettings!();
-        const effort = settings.applied.effort;
-        if (effort === null || typeof effort === "string")
-          this.emit({ kind: "reasoning_effort", reasoning_effort: effort });
+        const effort = await this.appliedReasoningEffort();
+        this.emit({ kind: "reasoning_effort", reasoning_effort: effort });
       } catch {
         if (!this.closing) console.error("Claude reasoning effort query failed");
       }
@@ -441,4 +470,17 @@ export class Host {
         this.observeReply(message);
     }
   }
+
+  private async appliedReasoningEffort(): Promise<EffortLevel | null> {
+    const settings = await this.execution?.getSettings?.();
+    const effort = settings?.applied?.effort;
+    if (effort !== null && !isEffortLevel(effort)) throw new Error("invalid_applied_effort");
+    return effort;
+  }
+}
+
+const effortLevels = ["low", "medium", "high", "xhigh", "max"] as const;
+
+function isEffortLevel(value: unknown): value is EffortLevel {
+  return typeof value === "string" && effortLevels.includes(value as EffortLevel);
 }

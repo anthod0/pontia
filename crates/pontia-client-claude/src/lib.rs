@@ -367,7 +367,36 @@ impl ClientSession for Adapter {
                 .map(|_| ())
         })
     }
+    fn set_reasoning_effort<'a>(
+        &'a self,
+        events: EventIngestService,
+        target: &'a ControlTarget,
+        reasoning_effort: &'a str,
+    ) -> ClientOperation<'a, ()> {
+        Box::pin(async move {
+            let peer = self.target(&events, target).await?;
+            let connection = peer.connection()?;
+            ClientControlChannel::set_reasoning_effort(connection.as_ref(), reasoning_effort).await
+        })
+    }
     fn manual_compaction_available<'a>(
+        &'a self,
+        _: SqlitePool,
+        session: &'a str,
+    ) -> ClientOperation<'a, bool> {
+        Box::pin(async move {
+            let Ok(peer) = self.peer(session).await else {
+                return Ok(false);
+            };
+            let state = peer.state.lock().await;
+            Ok(state.native.is_some()
+                && state.unavailable.is_none()
+                && !state.closed
+                && !state.closing
+                && !self.stopped.load(Ordering::Acquire))
+        })
+    }
+    fn reasoning_effort_control_available<'a>(
         &'a self,
         _: SqlitePool,
         session: &'a str,

@@ -140,6 +140,9 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
         case "compact":
           host.compact(string(request.operation_id));
           break;
+        case "set_reasoning_effort":
+          await host.setReasoningEffort(string(request.reasoning_effort));
+          break;
         case "interrupt":
           await host.interrupt(string(request.input_id));
           break;

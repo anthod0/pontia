@@ -88,6 +88,41 @@ test("passes the requested effort to the SDK and reports the applied effort on e
   );
 });
 
+test("changes effort through the SDK and reports only the applied effort", async (t) => {
+  const { fixture, events, host } = setup();
+  t.after(() => host.close());
+  await assert.rejects(host.setReasoningEffort("high"), rejects("execution_unavailable"));
+  host.submit(first, "task");
+  fixture.messages.push(init());
+  await settle();
+  fixture.onApplyFlagSettings(async () => fixture.setEffort("low"));
+  await host.setReasoningEffort("max");
+  assert.deepEqual(fixture.appliedEfforts, ["max"]);
+  assert.deepEqual(events.at(-1), { kind: "reasoning_effort", reasoning_effort: "low" });
+  await assert.rejects(
+    host.setReasoningEffort("minimal"),
+    rejects("reasoning_effort_unavailable"),
+  );
+  assert.deepEqual(fixture.appliedEfforts, ["max"]);
+});
+
+test("does not report an effort when the SDK cannot confirm the change", async (t) => {
+  const { fixture, events, host } = setup();
+  t.after(() => host.close());
+  host.submit(first, "task");
+  fixture.messages.push(init());
+  await settle();
+  const reported = events.filter((event) => event.kind === "reasoning_effort").length;
+  fixture.onApplyFlagSettings(async () => {
+    throw new Error("SDK rejected effort");
+  });
+  await assert.rejects(
+    host.setReasoningEffort("high"),
+    rejects("reasoning_effort_change_unconfirmed"),
+  );
+  assert.equal(events.filter((event) => event.kind === "reasoning_effort").length, reported);
+});
+
 for (const mode of ["default", "yolo", "restricted"] as const) {
   for (const resume of [undefined, native]) {
     test(`SDK options for ${mode} mode on ${resume ? "resume" : "start"}`, async (t) => {

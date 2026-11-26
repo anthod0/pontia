@@ -161,6 +161,28 @@ test(
   },
 );
 
+test("reasoning effort control reports the SDK-confirmed value", { timeout: 5000 }, async (t) => {
+  const h = await setup(t);
+  await h.command({ method: "input", input_id: first, text: "task" });
+  h.fixture.messages.push(init());
+  await h.wait(() => h.facts.some((fact) => fact.event.kind === "reasoning_effort"));
+  h.fixture.onApplyFlagSettings(async () => h.fixture.setEffort("low"));
+  assert.equal(
+    (await h.command({ method: "set_reasoning_effort", reasoning_effort: "max" })).status,
+    "accepted",
+  );
+  await h.wait(
+    () =>
+      h.facts.filter((fact) => fact.event.kind === "reasoning_effort").at(-1)?.event
+        .reasoning_effort === "low",
+  );
+  assert.deepEqual(h.fixture.appliedEfforts, ["max"]);
+  assert.equal(
+    (await h.command({ method: "set_reasoning_effort", reasoning_effort: "minimal" })).status,
+    "rejected",
+  );
+});
+
 test(
   "an executing SDK survives reconnect and completes on the replacement connection",
   { timeout: 5000 },

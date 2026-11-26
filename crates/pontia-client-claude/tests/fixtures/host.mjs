@@ -196,6 +196,14 @@ if (process.argv[2] === "history-info") {
         compacting = request.operation_id;
         event({ kind: "compaction", phase: "started", data: {operation_id: compacting, trigger: "manual"} });
         send({ type: "response", id: request.id, status: "accepted" });
+      } else if (request.method === "set_reasoning_effort") {
+        if (!["low", "medium", "high", "xhigh", "max"].includes(request.reasoning_effort)) {
+          send({ type: "response", id: request.id, status: "rejected" });
+          return;
+        }
+        const applied = request.reasoning_effort === "max" ? "low" : request.reasoning_effort;
+        event({ kind: "reasoning_effort", reasoning_effort: applied });
+        send({ type: "response", id: request.id, status: "accepted" });
       } else if (request.method === "steer") {
         if (!active?.started || request.target_input_id !== active.id) {
           send({ type: "response", id: request.id, status: "rejected" });

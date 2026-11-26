@@ -171,6 +171,15 @@ impl ClientControlChannel for Connection {
                 .map(|_| ())
         })
     }
+    fn set_reasoning_effort<'a>(&'a self, reasoning_effort: &'a str) -> ClientControlOperation<'a> {
+        Box::pin(async move {
+            self.request(
+                json!({"method":"set_reasoning_effort", "reasoning_effort":reasoning_effort}),
+            )
+            .await
+            .map(|_| ())
+        })
+    }
     fn shutdown(&self) -> ClientControlOperation<'_> {
         Box::pin(async { self.request(json!({"method":"close"})).await.map(|_| ()) })
     }

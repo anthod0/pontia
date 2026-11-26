@@ -375,6 +375,11 @@ test(
       assert.ok(JSON.stringify(toolResults[0]!.content).includes("isolated tool result marker"));
       const native = host.status().native_session_id;
       assert.ok(native);
+      await host.setReasoningEffort("low");
+      assert.deepEqual(
+        events.filter((event) => event.kind === "reasoning_effort").at(-1),
+        { kind: "reasoning_effort", reasoning_effort: "low" },
+      );
       await finish(host, randomUUID(), "Second isolated task", "fixture answer", "allow");
       assert.equal(latestUsage()?.used_tokens, 16710);
       assert.ok(requests[2]!.model.includes("haiku"));

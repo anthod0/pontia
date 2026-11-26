@@ -756,6 +756,54 @@ async fn resume_uses_the_effort_reported_by_the_host() {
 }
 
 #[tokio::test]
+async fn running_sessions_change_reasoning_effort_to_the_host_reported_value() {
+    let h = Harness::new().await;
+    let session = h.create("change effort").await;
+    h.wait_inputs(&session, 1).await;
+    h.wait_session(&session, "idle").await;
+    let capabilities = h
+        .app
+        .queries()
+        .get_session(&session)
+        .await
+        .unwrap()
+        .unwrap()
+        .capabilities;
+    assert!(capabilities.reasoning_effort_control);
+    h.app
+        .session_commands()
+        .set_reasoning_effort(
+            &session,
+            pontia_agent_control::SetSessionReasoningEffortRequest {
+                reasoning_effort: "max".into(),
+            },
+        )
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let view = h
+                .app
+                .queries()
+                .get_session(&session)
+                .await
+                .unwrap()
+                .unwrap();
+            if view.reasoning_effort.as_deref() == Some("low") {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(h.wire(&session).iter().any(|frame| {
+        frame["method"] == "set_reasoning_effort" && frame["reasoning_effort"] == "max"
+    }));
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn exited_sessions_read_and_resume_their_own_history_in_a_shared_workspace() {
     let h = Harness::new().await;
     let a = h.create("alpha history").await;
@@ -2538,6 +2586,17 @@ async fn first_ready_reconnects_before_commit_and_after_a_lost_receipt() {
         let h = Harness::new().await;
         let session = h.create(input).await;
         h.wait_inputs(&session, 1).await;
+        if input == "hold first ready" {
+            let capabilities = h
+                .app
+                .queries()
+                .get_session(&session)
+                .await
+                .unwrap()
+                .unwrap()
+                .capabilities;
+            assert!(!capabilities.reasoning_effort_control);
+        }
         if starting {
             sqlx::query("UPDATE sessions SET state='starting' WHERE session_id=?")
                 .bind(&session)
