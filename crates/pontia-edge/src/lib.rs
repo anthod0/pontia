@@ -25,9 +25,10 @@ use std::{sync::Arc, time::Duration};
 
 use axum::{
     Router,
-    extract::{DefaultBodyLimit, State},
-    http::HeaderMap,
-    middleware,
+    extract::{DefaultBodyLimit, Request, State},
+    http::{HeaderMap, HeaderValue},
+    middleware::{self, Next},
+    response::Response,
     routing::{get, post},
 };
 use axum_server::tls_rustls::RustlsConfig;
@@ -170,10 +171,20 @@ impl Edge {
             .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
             .with_state(self.clone());
         preview::router(self.clone(), control, hostname, port, preview_base)
+            .layer(middleware::from_fn(disallow_indexing))
     }
 
     pub fn shutdown(&self) {
         self.pending.close();
         self.shutdown.send_replace(true);
     }
+}
+
+pub(crate) async fn disallow_indexing(request: Request, next: Next) -> Response {
+    let mut response = next.run(request).await;
+    response.headers_mut().insert(
+        "x-robots-tag",
+        HeaderValue::from_static("noindex, nofollow, noarchive, nosnippet"),
+    );
+    response
 }

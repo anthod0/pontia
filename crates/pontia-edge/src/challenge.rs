@@ -5,6 +5,7 @@ use axum::{
     Router,
     extract::{Path, State},
     http::StatusCode,
+    middleware,
     response::IntoResponse,
     routing::get,
 };
@@ -96,6 +97,7 @@ pub(crate) fn router(responses: ChallengeResponses) -> Router {
     Router::new()
         .route("/.well-known/acme-challenge/{token}", get(acme_challenge))
         .with_state(responses)
+        .layer(middleware::from_fn(crate::disallow_indexing))
 }
 
 async fn acme_challenge(
@@ -126,29 +128,29 @@ mod tests {
             .pool_max_idle_per_host(0)
             .build()
             .unwrap();
+        let response = client
+            .get(format!("http://{address}/.well-known/acme-challenge/token"))
+            .send()
+            .await
+            .unwrap();
         assert_eq!(
-            client
-                .get(format!("http://{address}/.well-known/acme-challenge/token"))
-                .send()
-                .await
-                .unwrap()
-                .text()
-                .await
-                .unwrap(),
-            "authorization"
+            response.headers()["x-robots-tag"],
+            "noindex, nofollow, noarchive, nosnippet"
         );
+        assert_eq!(response.text().await.unwrap(), "authorization");
         for path in [
             "/.well-known/acme-challenge/other",
             &format!("/.well-known/pontia-edge-address/{}", "A".repeat(43)),
         ] {
+            let response = client
+                .get(format!("http://{address}{path}"))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
             assert_eq!(
-                client
-                    .get(format!("http://{address}{path}"))
-                    .send()
-                    .await
-                    .unwrap()
-                    .status(),
-                StatusCode::NOT_FOUND
+                response.headers()["x-robots-tag"],
+                "noindex, nofollow, noarchive, nosnippet"
             );
         }
         server.stop().await.unwrap();

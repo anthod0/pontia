@@ -15,6 +15,7 @@ use tokio_tungstenite::{
 use uuid::Uuid;
 
 const DASHBOARD: &str = "https://app.pontia.dev";
+const ROBOTS_POLICY: &str = "noindex, nofollow, noarchive, nosnippet";
 const TYP: &str = "pontia-preview+jwt";
 
 struct Preview {
@@ -263,6 +264,7 @@ async fn proxies_control_named_paths_streams_and_app_cookies() {
                     .header(header::SET_COOKIE, "a=1; Domain = .pontia.run; Secure")
                     .header(header::SET_COOKIE, "__HoSt-pontia_preview=bad; Path=/")
                     .header(header::SET_COOKIE, "b=2")
+                    .header("x-robots-tag", "index, follow")
                     .body(req.into_body())
                     .unwrap()
             }
@@ -294,6 +296,7 @@ async fn proxies_control_named_paths_streams_and_app_cookies() {
         .await
         .unwrap();
     assert_eq!(r.status(), 200);
+    assert_eq!(r.headers()["x-robots-tag"], ROBOTS_POLICY);
     assert_eq!(
         r.headers()
             .get_all(header::SET_COOKIE)
@@ -481,6 +484,7 @@ async fn websocket_waits_for_device_and_relays_negotiated_messages() {
         }
         let (mut ws, r) = result.unwrap();
         assert_eq!(r.headers()[header::SEC_WEBSOCKET_PROTOCOL], "vite-hmr");
+        assert_eq!(r.headers()["x-robots-tag"], ROBOTS_POLICY);
         if path == "/oversized" {
             let close = tokio::time::timeout(std::time::Duration::from_secs(2), ws.next())
                 .await
