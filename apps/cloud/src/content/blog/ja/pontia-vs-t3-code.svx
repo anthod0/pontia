@@ -1,0 +1,86 @@
+---
+title: "Pontia vs T3 Code: 2 つのオープンソース coding agent コントロールプレーンの設計と選定比較"
+description: "オープンソースの coding agent コントロールプレーンである Pontia と T3 Code（t3code v0.1.13）を設計面から比較。常駐 Lead Bot とマルチスレッド worktree、T3 Connect のリモート接続とエンドツーエンド暗号化 Edge リレー、モバイル・プレビュー体験、T3 Code 代替としての選び方を整理します。"
+published: "2026-11-27"
+---
+
+[Pontia](https://github.com/anthod0/pontia)（Apache-2.0）と [T3 Code](https://github.com/pingdotgg/t3code)（`t3code`、MIT ソースコード＋[`TRADEMARK.md`](https://github.com/pingdotgg/t3code/blob/main/TRADEMARK.md) の商標規定）は、どちらも独自のハーネスではなく、オープンソースのローカル coding agent コントロールプレーンです。すでに手元のマシンにインストール・認証済みのエージェント CLI をそのまま起動するため、リポジトリ、開発ツール、モデルの認証情報はホスト上に残ります。
+
+Pontia は私たちが開発しているプロジェクトです。本記事の T3 Code に関する記述はすべて、2026 年 11 月 27 日時点で安定版 `v0.1.13`（2026 年 11 月 26 日リリース）および公式リポジトリの一次ドキュメントをもとに確認しています。T3 Code 代替を検討している場合や、両者のどちらを選ぶか迷っている場合、日々の使い勝手を分けるのは機能の数ではなく次の 5 つの設計判断です。
+
+## 主な違いの一覧
+
+| 観点 | [T3 Code](https://github.com/pingdotgg/t3code)（`v0.1.13`） | [Pontia](/docs/how-it-works) |
+| --- | --- | --- |
+| ライセンス | MIT ソースコード（[`TRADEMARK.md`](https://github.com/pingdotgg/t3code/blob/main/TRADEMARK.md) で商標利用を規定） | Apache-2.0 |
+| ホストとクライアント | macOS、Windows、Linux、サーバー上のローカルサーバー。Electron デスクトップアプリ、`app.t3.codes` Web アプリ、ネイティブ iOS/Android アプリ | Linux（systemd user、x86_64/ARM64）と macOS 13.5+（LaunchAgent）の `pontiad` デーモン。デスクトップ・スマートフォン共通のブラウザー Dashboard（`app.pontia.dev`、Web アプリとしてインストール可能） |
+| 導入手順 | デスクトップアプリまたは CLI サーバーセットアップ | `npx @pontia/cli init` の 1 コマンド |
+| オーケストレーション | マルチスレッド並列ワークベンチ。スレッドごとの Git worktree・ブランチ、ローカル SQLite 履歴、途中のモデル切替・エージェント引き継ぎ、beta 版 Workflows / Linked environments | 領域ごとに常駐する [Lead Bot](/docs/bots) が並列 [Helper](/docs/bots/helpers) へ委任し、いつでもネイティブセッションを確認・引き継ぎ可能。共有メモリ・`USER.md` と決定論的な TOML [Workflow](/docs/workflows) |
+| 対応エージェント | 組み込み 10 プロバイダー＋任意の ACP Registry / ローカル ACP コマンド | 深く統合された 6 つの [Agent Client](/docs/agent-clients)＋再利用可能な [Agent Profile](/docs/agent-profiles) |
+| リモート接続と信頼境界 | **T3 Connect**（Clerk 認証＋ホスト側 `cloudflared` アウトバウンドトンネル＋DPoP ブートストラップ、3 ホストまで無料）、LAN ペアリング、Tailscale HTTPS、デスクトップ管理 SSH | ブラウザーとデバイス間でアプリケーション層の X25519 HPKE + ChaCha20-Poly1305 エンドツーエンド暗号化。公式または[セルフホスト Edge](/docs/self-hosted-edge) を外向き HTTPS のみで利用 |
+| 開発・プレビューの重心 | turn 単位・ブランチ単位の diff、複数 forge 対応 PR/stacks/review guides、マルチリポジトリ対応、ホストブラウザーのタブ配信と preview tunnel | 非同期 Todo 承認フロー、関連 Context 追跡、サイドパネルでのコード/Markdown/HTML/JSON/YAML/CSV/画像[プレビュー](/docs/previews)、Git パネル、WebSocket 対応のローカル localhost ライブプレビュー |
+
+## 1. マルチスレッド手動ワークベンチ vs. 常駐 Lead Bot＋透過的な Helper
+
+最も大きな設計の違いは、並列に動く複数のエージェントをどう束ねるかにあります。
+
+**T3 Code** は、エンジニアが直接操作するマルチスレッド・ワークベンチです。単一リポジトリはもちろん `v0.1.12` から対応したマルチリポジトリ構成でも並列スレッドを立ち上げられ、各スレッドに専用の Git worktree とブランチが割り当てられ、履歴はローカル SQLite に保存されます。会話の途中でモデルを切り替えたり、別のエージェントへタスクを引き継いだりでき、`v0.1.12` 以降は Linked environments（beta）やスケジュール・webhook・承認・同時実行プールを備えた Workflows（beta）も提供されています。
+
+**Pontia** は、個々の CLI セッションの上に常駐の調整レイヤーを置きます。実装・製品企画・リリース運用といった担当領域ごとに長期稼働する [Bot](/docs/bots) を作成し、継続する 1 本の会話から仕事を任せます。Bot は独立した作業をクリーンな [Helper セッション](/docs/bots/helpers) として並列に起動し、同じリポジトリを編集する際は各 Helper に個別の Git worktree とブランチを割り当てます。重要なのは、すべての Helper が実体のあるネイティブ CLI セッションである点です。実行中の Helper をいつでも開いてツール実行を確認したり直接指示を出したりでき、終われば Lead Bot の会話で結果を受け取れます。手順と成果物が定まっている定型処理には、決定論的な TOML [Workflow](/docs/workflows) を使えます。
+
+端的に言えば、T3 Code は並列スレッドすべての操縦席に自分が座るスタイルであり、Pontia は常駐 Lead Bot に分解・追跡・統合を任せつつ、裏側の Helper セッションの透明性と直接介入権を保つスタイルです。
+
+## 2. リモートの信頼境界: T3 Connect vs. Pontia Edge
+
+どちらもホスト側のインバウンドポートを開けずにリモート操作できますが、ネットワーク経路と暗号化の信頼境界は異なります。
+
+**T3 Code のリモートアクセス**（[`remote-access.md`](https://github.com/pingdotgg/t3code/blob/main/docs/user/remote-access.md)、[`06_t3-connect.md`](https://github.com/pingdotgg/t3code/blob/main/docs/internals/06_t3-connect.md)）では、LAN 直接ペアリング、Tailscale HTTPS、デスクトップ管理の SSH、そしてマネージドの **T3 Connect** の 4 つを選べます。T3 Connect は Clerk の認証、ホスト上の `cloudflared` アウトバウンドトンネル、DPoP に紐づくワンタイムブートストラップ（任意のデバイス承認ショートコードにも対応）を組み合わせます。relay Worker はブートストラップとトンネル割り当てを担当し、通常の HTTP/WebSocket セッションのデータ経路には入りません。アプリ自体は無料で、T3 Connect は無料枠で 3 ホスト（T3 Chat Pro で 10 ホスト、Premier で 100 ホスト）まで使えます。マネージドなトンネル経路を避けたい場合は、LAN ペアリング、Tailscale HTTPS、SSH に切り替えられます。
+
+**Pontia** は、接続の認可と暗号化データの転送を分離しています（[セキュリティ](/docs/security)）。Pontia Cloud はサインイン、デバイス登録、短命の署名付きケーパビリティ発行のみを担い、ブラウザーと `pontiad` の間ではアプリケーション層の **X25519 HPKE + ChaCha20-Poly1305** によるエンドツーエンド暗号化セッション（認証済みリクエスト ID とリプレイ検出付き）を確立します。Pontia Cloud も中継する Edge ノードも Dashboard API の平文を見ることはなく、Edge に見えるのはルーティングのメタデータと通信サイズ・タイミングだけです。ホスト側の通信はポート 443 または 8443 への標準的な外向き HTTPS/WSS 1 本で完結するため、社内ファイアウォールや Clash・sing-box などの TUN プロキシ環境でも扱いやすく、公式 Edge のほかに自身のパブリック Linux サーバーへ[セルフホスト Edge](/docs/self-hosted-edge)（ドメインまたはパブリック IP 直接＋Let's Encrypt 証明書）を配置できます。中継モデルの詳細は[コーディングエージェントのリモートはエンドツーエンドで暗号化されていますか？](/blog/self-hosted-relay-for-coding-agents)を参照してください。
+
+## 3. エージェント対応の幅 vs. 役割特化の Agent Profile
+
+**T3 Code** は対応エージェントの広さが強みです。Claude Code、Codex、Cursor、OpenCode、Grok Build、Antigravity、Kiro、Pi、Muse Code、fx の 10 個の組み込みプロバイダーに加え、ACP Registry やローカルの ACP コマンドで動く任意のエージェントを扱えます。Cursor、OpenCode、Muse Code、fx や独自の ACP エージェントを横断して使う場合や、タスク途中で別エージェントへ引き継ぎたい場合に強みを発揮します。
+
+**Pontia** は 6 つの [Agent Client](/docs/agent-clients)（Claude Code、Codex、Pi、Grok Build、Kiro、Google Antigravity）との深い統合に焦点を当てています。各 Client はネイティブの会話 ID、認証情報、サンドボックス、操作系をそのまま保持し、`pontia client install` による導入や、Codex・Grok Build・Kiro 向けの Dashboard 上からの Device Code サインインに対応します。その上に再利用可能な [Agent Profile](/docs/agent-profiles) を備え、Client・モデル・reasoning effort・権限モード・システムプロンプトを Researcher・Architect・Coder・Reviewer といった役割として定義できます。Bot は説明文をもとに Helper に最適な Profile を自動で選び、Workflow も同じ Profile をノード単位で再利用します。
+
+## 4. モバイル体験とライブプレビュー
+
+`t3 code mobile` やスマートフォンからのエージェント操作を探すとき、重要なのは外出先で判断を止めないことと、成果物をすぐ目視確認できることです。
+
+**T3 Code** はデスクトップ版 Electron と `app.t3.codes` に加え、ネイティブの iOS / Android アプリと[モバイルプッシュ通知](https://github.com/pingdotgg/t3code/blob/main/docs/user/mobile-notifications.md)を提供します。動作確認では、ホスト側ブラウザーのタブを Web やモバイルへストリーミングでき、preview tunnel やスマートフォンからリモート `localhost` を開く機能も備えています。
+
+**Pontia** はデスクトップ・スマートフォン双方を単一のブラウザー Dashboard（[app.pontia.dev](https://app.pontia.dev)）で提供し、アプリストア不要ですぐ使え、Web アプリとしてホーム画面に追加できます。モバイルには全 Bot の判断待ちを集約する **Todo** タブがあり、引用返信やワンタップで Helper のブロックを解消し、複数タスクが並走していても関連メッセージの文脈をたどれます（[Bot チャット](/docs/bots/chat)）。成果物の確認には[プレビュー](/docs/previews)のサイドパネルが使えます。構文ハイライト付きコード、相対リンクをたどれる Markdown、ソース表示切替付きサンドボックス HTML、ソート可能な CSV/TSV テーブル、展開・折りたたみ可能な JSON/YAML ツリー、画像ライトボックスに加え、Git 変更パネルとローカル `localhost` のライブプレビュー（WebSocket / HMR 対応、デスクトップ幅と 375 px モバイル幅の切替）を会話の横に並べて確認できます。リモート接続時は、選択した Edge 経由で期限付きの `pontia.run` プレビュー URL からローカル開発サーバーへ安全に接続します。
+
+## 5. マルチ forge の Git ワークベンチ vs. 長期メモリと非同期意思決定ループ
+
+数日から数週間にわたる継続開発では、コンテキストと変更履歴の積み上げ方にも違いが出ます。
+
+**T3 Code** はリポジトリ中心の Git ワークベンチとして完成度が高く（[`source-control.md`](https://github.com/pingdotgg/t3code/blob/main/docs/user/source-control.md)）、turn ごとの diff やベースブランチに対する diff、GitHub・GitLab・Forgejo・Gitea・Bitbucket・Azure DevOps といった複数 forge へのコミット・プッシュ・PR 作成、PR watch、stacks、review guides を備えます。5 本の worktree ブランチを並行して進め、turn 単位で diff を見ながら PR スタックをマージしていくリズムに最適です。
+
+**Pontia** はデバイス横断の長期コンテキストと非同期の協働ループに重心を置いています。同一デバイス上の全 Bot が[共有メモリと `USER.md`](/docs/memory) を参照するため、好みの言語、設計方針、共通ルールを一度記せば新しい Bot や Helper にも引き継がれます。バックグラウンドの **Dreaming** が未整理のメモリを定期的に統合・関連付け、曖昧な点があれば推測で進めず担当 Bot を通じてあなたに確認を求めます。非同期 Todo、テキスト選択やファイルの引用、領域ごとの Bot 分担と組み合わさることで、スレッドごとに前提を説明し直さず開発を続けられます。
+
+## どちらを選ぶべきか
+
+どちらもオープンソースであり、ローカルのコードやエージェント CLI をそのまま使うためロックインはありません。日々の進め方に合わせて選ぶのが確実です。
+
+**T3 Code が向いているケース:**
+
+- プッシュ通知付きのネイティブデスクトップアプリや iOS / Android アプリを使いたい。
+- macOS / Linux に加えて Windows ホストでも動かしたい、または Cursor、OpenCode、Muse Code、fx や任意の ACP エージェントを使いたい。
+- 複数 worktree ブランチの直接操作、turn / branch 単位の diff 確認、複数 forge（GitHub / GitLab / Forgejo / Gitea / Bitbucket / Azure DevOps）での PR・stacks 運用、スレッド途中のエージェント引き継ぎを中心に据えたい。
+- 3 ホストまで無料の T3 Connect、LAN / Tailscale / SSH 直結、ホストブラウザータブのストリーミングを手軽に使いたい。
+
+**Pontia が向いているケース:**
+
+- 領域ごとに常駐する Lead Bot へ仕事を委任し、いつでも中身を開いて直接操作できる並列 Helper セッション、役割別 Agent Profile、決定論的 TOML Workflow を組み合わせて回したい。
+- ブラウザーとデバイス間のアプリケーション層エンドツーエンド暗号化（X25519 HPKE + ChaCha20-Poly1305）、外向き HTTPS のみの通信、必要に応じたセルフホスト Edge の運用を重視する。
+- Linux（ヘッドレスサーバーを含む systemd user）または macOS 13.5+ で、`npx @pontia/cli init` の 1 コマンド導入とインストール不要のブラウザー Dashboard（デスクトップ・モバイル）を好む。
+- デバイス内の Bot 間で共有される長期メモリ、`USER.md`、バックグラウンド Dreaming、モバイルでの非同期 Todo 承認、そしてファイル・Git 変更・WebSocket 対応 `localhost` のサイドパネルプレビューを活用したい。
+
+## 参考リンク
+
+- [T3 Code GitHub リポジトリ（`v0.1.13`）](https://github.com/pingdotgg/t3code)、[Remote Access](https://github.com/pingdotgg/t3code/blob/main/docs/user/remote-access.md)、[T3 Connect 内部設計](https://github.com/pingdotgg/t3code/blob/main/docs/internals/06_t3-connect.md)、[Source Control](https://github.com/pingdotgg/t3code/blob/main/docs/user/source-control.md)
+- [Pontia GitHub リポジトリ](https://github.com/anthod0/pontia)、[はじめに](/docs/getting-started)
+- Pontia ドキュメント: [Bots](/docs/bots)、[Helper を並列実行](/docs/bots/helpers)、[Agent Clients](/docs/agent-clients)、[Agent Profile](/docs/agent-profiles)、[共有メモリと `USER.md`](/docs/memory)、[プレビュー](/docs/previews)、[セキュリティ](/docs/security)
+- 関連する比較記事: [Codex、Claude Code、Pi のリモートコントロール比較](/blog/coding-agent-remote-control-alternatives)、[コーディングエージェントのリモートはエンドツーエンドで暗号化されていますか？](/blog/self-hosted-relay-for-coding-agents)

@@ -1,0 +1,86 @@
+---
+title: "Pontia vs T3 Code：两款开源 coding agent 控制面的架构与选型对比"
+description: "面向一线工程师的 Pontia 与 T3 Code（t3code v0.1.13）开源 coding agent 控制面深度对比，涵盖常驻 Lead Bot 与多线程 worktree、T3 Connect 远程访问与端到端加密 Edge 中继、手机端与本地预览体验，以及作为 T3 Code 替代方案时的选型建议。"
+published: "2026-11-27"
+---
+
+[Pontia](https://github.com/anthod0/pontia)（Apache-2.0）与 [T3 Code](https://github.com/pingdotgg/t3code)（`t3code`，MIT 源码加 [`TRADEMARK.md`](https://github.com/pingdotgg/t3code/blob/main/TRADEMARK.md) 商标条款）都定位于开源的本机 coding agent 控制面，而不是另起炉灶的独立 harness。两者都直接拉起本机已安装、已登录的 agent CLI，让代码仓库、本地工具链与模型凭据始终留在你掌控的设备上。
+
+Pontia 是我们开发的项目。文中关于 T3 Code 的事实均于 2026 年 11 月 27 日对照其稳定版 `v0.1.13`（发布于 2026 年 11 月 26 日）及官方仓库一手文档核验。如果你正在评估 T3 Code 替代方案，或者在这两款控制面之间做技术选型，真正决定日常体验的不是功能列表长短，而是以下五个架构取舍。
+
+## 核心对比一览
+
+| 维度 | [T3 Code](https://github.com/pingdotgg/t3code)（`v0.1.13`） | [Pontia](/docs/how-it-works) |
+| --- | --- | --- |
+| 开源协议 | MIT 源码（[`TRADEMARK.md`](https://github.com/pingdotgg/t3code/blob/main/TRADEMARK.md) 规定商标限制） | Apache-2.0 |
+| 主机与客户端形态 | macOS、Windows、Linux 及服务器本机 server；Electron 桌面端、`app.t3.codes` Web 端、原生 iOS/Android App | Linux（systemd user，x86_64/ARM64）与 macOS 13.5+（LaunchAgent）守护进程 `pontiad`；桌面/手机浏览器访问 `app.pontia.dev`（可安装为 Web 应用） |
+| 起步方式 | 桌面端安装或 CLI 启动服务 | 一行命令 `npx @pontia/cli init` |
+| 编排模型 | 多线程并行工作台，每线程独立 Git worktree 与分支，本地 SQLite 存历史；支持会话中途换模型与交接 agent，含 beta 版 Workflows 与 Linked environments | 按领域常驻的 [Lead Bot](/docs/bots) 拆解任务并并行调度可随时查看/接管的 [Helper](/docs/bots/helpers)，配合共享记忆、`USER.md` 与确定性 TOML [Workflow](/docs/workflows) |
+| Agent 覆盖 | 10 个内置 provider + 任意 ACP Registry 或本地 ACP 命令 | 6 个深度集成 [Agent Client](/docs/agent-clients) + 可复用 [Agent 配置（Profiles）](/docs/agent-profiles) |
+| 远程连接与信任边界 | **T3 Connect**（Clerk 身份 + 本机 `cloudflared` 出站 tunnel + DPoP 引导，3 台主机免费），另支持 LAN 配对、Tailscale HTTPS 与桌面托管 SSH | 浏览器与设备之间采用应用层 X25519 HPKE + ChaCha20-Poly1305 端到端加密，经官方或[自托管 Edge](/docs/self-hosted-edge) 仅走标准出站 HTTPS |
+| 协作与预览重心 | 按 turn / branch 查看 diff、多 forge PR/stacks/review guides、多仓库项目、主机浏览器页签流式预览与 preview tunnel | 异步 Todo 决策流、关联 Context 追踪、侧栏代码/Markdown/HTML/JSON/YAML/CSV/图片[预览](/docs/previews)、Git 变更面板、带 WebSocket 的本地 localhost 实时预览 |
+
+## 1. 多线程手控工作台 vs. 常驻 Lead Bot 编排与透明 Helper
+
+两款工具最根本的分歧，在于工程师如何管理并发推进的多项任务。
+
+**T3 Code** 是一套面向直接操控的多线程工作台。你在仓库（以及 `v0.1.12` 起支持的多仓库项目）上并行开启多个线程，每个线程自动获得独立的 Git worktree 与分支，线程历史保存在本地 SQLite 中。执行中途你可以直接切换模型，或者把任务交接给另一个 agent。从 `v0.1.12` 起，T3 Code 还引入了 Linked environments（beta）以及支持定时、webhook、审批节点与并发池的 Workflows（beta）。
+
+**Pontia** 在原生 CLI 会话之上增加了一层常驻编排。你可以按领域创建长期协作的 [Bot](/docs/bots)（例如分别负责代码实现、产品规划或发布运维），在一段持续对话里随时派活；Bot 会把复杂需求拆分成边界清晰、彼此独立的 [Helper 会话](/docs/bots/helpers) 并行推进，需要修改同一仓库时各自拉出独立 Git worktree 与分支。关键在于所有 Helper 都是完全透明的原生 CLI 会话——你随时可以点开任意正在执行的 Helper 查看工具调用细节或直接接管，再回到 Lead Bot 的汇总对话中继续决策。对于步骤固定、输入输出明确的流程，Pontia 还提供确定性的 TOML [Workflow](/docs/workflows)。
+
+简而言之：T3 Code 让你亲自坐进每个并行线程的驾驶舱；Pontia 让常驻 Lead Bot 替你消化并行拆解与汇总协调的负担，同时保留对底层每个 Helper 会话的完整可见性与直接干预权。
+
+## 2. 远程信任边界：T3 Connect vs. Pontia Edge
+
+两者都不需要你在主机上开放公网入站端口就能远程控制 coding agent，但网络路径与加密信任边界的设计各不相同。
+
+**T3 Code 远程访问**（[`remote-access.md`](https://github.com/pingdotgg/t3code/blob/main/docs/user/remote-access.md)、[`06_t3-connect.md`](https://github.com/pingdotgg/t3code/blob/main/docs/internals/06_t3-connect.md)）提供四条路径：局域网直接配对、Tailscale HTTPS、桌面端托管 SSH，以及开箱即用的 **T3 Connect**。T3 Connect 结合 Clerk 身份认证、主机侧本机 `cloudflared` 出站 tunnel 与 DPoP 绑定的一次性引导流程（可选开启设备审批短码）；其中 relay Worker 负责引导与 tunnel 分配，不位于常规 HTTP/WebSocket 会话数据路径之中。应用本体免费，T3 Connect 免费版包含 3 台主机（T3 Chat Pro 为 10 台，Premier 为 100 台）。希望绕开托管 Cloudflare 隧道路径时，可以直接改走 LAN 配对、Tailscale HTTPS 或 SSH。
+
+**Pontia** 把远程授权与密文传输彻底解耦（详见[安全文档](/docs/security)）。Pontia Cloud 仅负责账号登录、设备注册和签发短时能力凭证；浏览器与设备上的 `pontiad` 之间建立应用层 **X25519 HPKE + ChaCha20-Poly1305** 端到端加密会话，并附带认证请求 ID 与防重放追踪。无论是 Pontia Cloud 还是中继 Edge 节点，都看不到 Dashboard API 明文——Edge 只能看到路由元数据、密文体积与时序。由于主机侧仅建立一条标准出站 HTTPS/WSS 连接（443 或 8443 端口），它在企业防火墙以及 Clash、sing-box 等 TUN 代理环境下也能按普通域名规则稳定工作。你可以直接使用官方 Edge，也可以在自己的公网 Linux 服务器上部署[自托管 Edge](/docs/self-hosted-edge)（支持绑定域名或直接使用公网 IP 签发 Let's Encrypt 证书）。关于中继安全模型的进一步拆解，可参考[你的编程 Agent 远程方案是端到端加密的吗？](/blog/self-hosted-relay-for-coding-agents)。
+
+## 3. Agent 覆盖广度 vs. 面向角色的 Agent 配置（Profiles）
+
+**T3 Code** 主打广泛的 provider 兼容：内置 10 个主流 provider（Claude Code、Codex、Cursor、OpenCode、Grok Build、Antigravity、Kiro、Pi、Muse Code、fx），同时支持任意 ACP Registry 或本地 ACP 命令，并允许在会话中途切换模型或交接给另一个 agent。如果你的日常开发重度依赖 Cursor、OpenCode、Muse Code、fx 或自研 ACP agent，T3 Code 能一次性全部纳入统一界面。
+
+**Pontia** 聚焦 6 个深度集成的 [Agent Client](/docs/agent-clients)：Claude Code、Codex、Pi、Grok Build、Kiro 与 Google Antigravity。每个 Client 都保留自身原生会话标识、凭据、沙箱与实时控制能力；通过 `pontia client install` 可一键安装，Codex、Grok Build 与 Kiro 还支持在浏览器 Dashboard 中通过 Device Code 远程登录。在此之上，Pontia 提供可复用的 [Agent 配置（Agent Profiles）](/docs/agent-profiles)——把特定 Client、模型、思考深度（reasoning effort）、权限模式与系统提示词封装成“研究员”“架构师”“编码者”“审查者”等角色。Bot 在派发 Helper 时会根据角色描述自动挑选合适的配置，Workflow 也能按节点直接复用同一套角色配置。
+
+## 4. 移动端体验与本地实时预览
+
+很多工程师搜索 `t3 code mobile` 或手机端远程控制方案时，核心诉求就两个：离开电脑后能否快速推进卡点，以及能否直观验收页面和产物。
+
+**T3 Code** 在客户端形态上投入很重：除了 Electron 桌面端和 `app.t3.codes` Web 端，还提供原生 iOS 与 Android 应用并内置[手机推送通知](https://github.com/pingdotgg/t3code/blob/main/docs/user/mobile-notifications.md)。在可视化验收方面，T3 Code 支持将主机浏览器页签流式传输到 Web 或手机端、提供 preview tunnel，并支持在手机上直接打开远端 `localhost`。
+
+**Pontia** 将桌面端与手机端体验统一在浏览器 Dashboard（[app.pontia.dev](https://app.pontia.dev)）中，无需下载安装独立客户端，打开即用且可安装为桌面/手机 Web 应用。手机端设有跨 Bot 聚合的 **Todo** 标签页，Bot 或 Helper 需要你拍板时会形成待办项，引用回复即可自动关闭，并可通过“查看上下文”沿引用与关联链快速回溯多任务脉络（见 [Bot 对话](/docs/bots/chat)）。在交付物验收上，Pontia 的[本地预览](/docs/previews)侧栏可直接渲染本机代码高亮、支持相对链接跳转的 Markdown、带源码切换的沙箱 HTML、可排序的 CSV/TSV 表格、可折叠展开的 JSON/YAML 树与图片灯箱，并配备 Git 变更面板与本机 `localhost` 开发服务实时预览（原生支持 WebSocket 热重载与桌面/375 px 手机宽度切换；远程访问时通过受控的限时 `pontia.run` 地址经所选 Edge 转发到本机端口）。
+
+## 5. 多 forge Git 工作台 vs. 跨会话长期记忆与异步闭环
+
+把视角拉长到数天甚至数周的持续开发，两者的信息沉淀方式也截然不同。
+
+**T3 Code** 的核心强项是以代码仓库为中心的 Git 工作台（[`source-control.md`](https://github.com/pingdotgg/t3code/blob/main/docs/user/source-control.md)）：支持按每个 turn 以及相对 base 分支查看 diff，直接提交、推送并创建 PR，覆盖 GitHub、GitLab、Forgejo、Gitea、Bitbucket、Azure DevOps 等多种代码托管平台（forge），还内置 PR watch、stacked branches 与 review guides。如果你的工作节奏是同时开 5 个 worktree 分支、逐 turn 审查 diff 并把一串依赖 PR 推进合入，T3 Code 正是为此打磨的。
+
+**Pontia** 更强调跨会话、跨多天的上下文延续与异步协作闭环。同一台设备上的所有 Bot 共享[长期记忆与 `USER.md`](/docs/memory)——你的长期编码规范、语言偏好与固定工作约定只需沉淀一次，新建 Bot 和派出的 Helper 都会自动遵守。后台的 **Dreaming** 机制会定期整理待处理记忆、串联相关线索；遇到模糊证据时，它会让相关 Bot 主动向你确认，而不是自行猜测。结合异步 Todo、精准划词/文件引用以及按领域划分的多 Bot 分工，Pontia 让长期工程上下文不断积累，而不是每次新开线程都从零解释背景。
+
+## 选型建议：你更适合哪一个？
+
+两款产品都是开源控制面，且都把代码和 agent CLI 完整留在你的本机，不存在厂商锁定。你可以直接按自己的核心工作流来选：
+
+**更适合选择 T3 Code 的场景：**
+
+- 你偏好原生桌面端与原生 iOS/Android App，并需要开箱即用的移动端推送通知。
+- 你需要在 Windows 主机（同时兼顾 macOS/Linux）上运行，或者依赖 Cursor、OpenCode、Muse Code、fx 以及自定义 ACP agent。
+- 你的核心习惯是亲自操作多线程 Git worktree、逐 turn/branch 看 diff、管理多 forge（GitHub/GitLab/Forgejo/Gitea/Bitbucket/Azure DevOps）PR 与 stacks，并在线程中途交接给其他 agent。
+- 你希望直接用托管的 T3 Connect（3 台主机免费）、局域网/Tailscale/SSH 直连以及主机浏览器页签流式预览。
+
+**更适合选择 Pontia 的场景：**
+
+- 你希望把任务交给按领域常驻的 Lead Bot，由它拆解并并行调度透明可接管的 Helper 会话，同时配合角色化的 Agent Profiles 与确定性 TOML Workflow。
+- 你非常在意远程信任边界，需要浏览器与设备间的应用层端到端加密（X25519 HPKE + ChaCha20-Poly1305）、纯标准出站 HTTPS 连接（适配企业网络与代理环境），以及按需部署自托管 Edge 中继的能力。
+- 你的主力环境是 Linux（systemd user，含无头 VPS）或 macOS 13.5+，希望一行 `npx @pontia/cli init` 起步，并在零安装的桌面/手机浏览器中完成全部操作。
+- 你看重同设备跨 Bot 的长期记忆、`USER.md`、后台 Dreaming 整理、手机端异步 Todo 决策流，以及在侧栏直接预览本机文件、Git 变更与带热重载的 `localhost` 开发服务。
+
+## 参考资料与延伸阅读
+
+- [T3 Code GitHub 仓库（`v0.1.13`）](https://github.com/pingdotgg/t3code)、[远程访问文档](https://github.com/pingdotgg/t3code/blob/main/docs/user/remote-access.md)、[T3 Connect 内部设计](https://github.com/pingdotgg/t3code/blob/main/docs/internals/06_t3-connect.md) 与 [源码控制文档](https://github.com/pingdotgg/t3code/blob/main/docs/user/source-control.md)
+- [Pontia GitHub 仓库](https://github.com/anthod0/pontia) 与[快速开始](/docs/getting-started)
+- Pontia 文档：[Bots](/docs/bots)、[并行运行 Helper](/docs/bots/helpers)、[Agent Clients](/docs/agent-clients)、[Agent 配置](/docs/agent-profiles)、[共享记忆与 `USER.md`](/docs/memory)、[本地预览](/docs/previews)、[安全架构](/docs/security)
+- 相关对比：[Codex、Claude Code 和 Pi 的远程控制对比](/blog/coding-agent-remote-control-alternatives) 与[你的编程 Agent 远程方案是端到端加密的吗？](/blog/self-hosted-relay-for-coding-agents)

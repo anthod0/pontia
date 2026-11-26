@@ -1,0 +1,86 @@
+---
+title: "Pontia vs T3 Code: comparing two open-source coding agent control planes"
+description: "An engineering comparison of Pontia and T3 Code (t3code v0.1.13) as a coding agent control plane and T3 Code alternative: Lead Bots vs multi-thread worktrees, T3 Connect vs E2E encrypted Edge relays, remote and mobile workflows, previews, and when to choose each."
+published: "2026-11-27"
+---
+
+Both [Pontia](https://github.com/anthod0/pontia) (Apache-2.0) and [T3 Code](https://github.com/pingdotgg/t3code) (`t3code`, MIT source with [trademark terms](https://github.com/pingdotgg/t3code/blob/main/TRADEMARK.md)) are open-source coding agent control planes rather than standalone harnesses. Instead of replacing your CLI tools, both launch the coding agents already installed and authenticated on your machine, keeping source code, local tools, and provider credentials on the host.
+
+Pontia is the project we build. All details about T3 Code in this guide were verified against stable release `v0.1.13` (released November 26, 2026) and its primary repository documentation on November 27, 2026. If you are evaluating a T3 Code alternative—or deciding which control plane fits your day-to-day workflow—the practical differences come down to five architectural choices.
+
+## Side by side
+
+| Dimension | [T3 Code](https://github.com/pingdotgg/t3code) (`v0.1.13`) | [Pontia](/docs/how-it-works) |
+| --- | --- | --- |
+| License | MIT source ([`TRADEMARK.md`](https://github.com/pingdotgg/t3code/blob/main/TRADEMARK.md) covers brand use) | Apache-2.0 |
+| Host & clients | Local server on macOS, Windows, Linux, and remote servers; Electron desktop app, `app.t3.codes` web app, native iOS & Android apps | `pontiad` daemon on Linux (systemd user, x86_64/ARM64) and macOS 13.5+ (LaunchAgents); `app.pontia.dev` browser Dashboard on desktop & mobile, installable as a web app |
+| Quick start | Desktop installer or CLI server setup | One-command `npx @pontia/cli init` |
+| Orchestration model | Multi-thread parallel workbench, per-thread Git worktree & branch, local SQLite thread store, mid-thread model switch & agent handoff, plus beta Workflows & Linked environments | Long-lived domain [Bots](/docs/bots) delegating to parallel, inspectable [Helpers](/docs/bots/helpers), shared memory & `USER.md`, plus deterministic TOML [Workflows](/docs/workflows) |
+| Agent coverage | 10 built-in providers + any ACP Registry or local ACP command | 6 deeply integrated [Agent Clients](/docs/agent-clients) + reusable [Agent Profiles](/docs/agent-profiles) |
+| Remote access | **T3 Connect** (Clerk + host `cloudflared` tunnel + DPoP bootstrap; free for 3 hosts), plus LAN pairing, Tailscale HTTPS, and desktop-managed SSH | Application-layer X25519 HPKE + ChaCha20-Poly1305 end-to-end encryption over official or [self-hosted Edge](/docs/self-hosted-edge) relays via outbound HTTPS |
+| Git & preview focus | Per-turn & branch diffs, multi-forge PRs/stacks/review guides, multi-repo projects, host browser tab streaming & preview tunnels | Async Todo queue, linked context chains, side-panel code/Markdown/HTML/JSON/YAML/CSV/image [Previews](/docs/previews), Git panel, live localhost preview with WebSockets |
+
+## 1. Multi-thread workbench vs. Lead Bot orchestration with inspectable Helpers
+
+The biggest architectural split is how you supervise concurrent agent work.
+
+**T3 Code** is built as a direct multi-thread workbench. You open parallel threads against a repository—or across multi-repo projects introduced in `v0.1.12`—and each thread runs in its own Git worktree and branch while thread history stays in local SQLite. During a session, you can switch models mid-thread or hand off the task to another agent. Starting with `v0.1.12`, T3 Code also adds Linked environments (beta) and Workflows (beta) with schedules, webhooks, approval gates, and concurrency pools.
+
+**Pontia** adds a persistent coordination layer above individual CLI sessions. You set up long-lived domain [Bots](/docs/bots)—for example, one Bot for implementation, another for product planning or release operations—that hold ongoing conversations and split larger requests into clean, focused [Helper sessions](/docs/bots/helpers) running in parallel. When several Helpers edit the same repository, the Bot assigns each one its own Git worktree and branch from the active Workspace. Every Helper remains a real, native CLI session: you can open any running Helper at any moment to inspect live tool activity or steer it directly, then return to the Lead Bot's summary. For repeatable pipelines with fixed stages and explicit file handoffs, Pontia pairs Bots with deterministic TOML [Workflows](/docs/workflows).
+
+In short: T3 Code puts you in the cockpit of every parallel thread; Pontia lets a Lead Bot absorb coordination overhead while keeping every underlying Helper session transparent and directly steerable.
+
+## 2. Remote trust boundary: T3 Connect vs. Pontia Edge
+
+Both tools expose your local machine for remote coding without opening inbound firewall ports, but they draw the network and cryptographic trust boundary differently.
+
+**T3 Code remote access** ([`remote-access.md`](https://github.com/pingdotgg/t3code/blob/main/docs/user/remote-access.md), [`06_t3-connect.md`](https://github.com/pingdotgg/t3code/blob/main/docs/internals/06_t3-connect.md)) gives you four transport options: direct LAN pairing, Tailscale HTTPS, desktop-managed SSH, and **T3 Connect**. T3 Connect combines Clerk identity, a host-side outbound `cloudflared` tunnel, and a DPoP-bound one-time bootstrap (with optional short-code device approval). The T3 Connect relay Worker coordinates bootstrap and tunnel allocation and stays out of the ordinary HTTP/WebSocket session data path. The app itself is free, and T3 Connect covers up to 3 hosts on the free tier (10 hosts on T3 Chat Pro, 100 on Premier). When you want to keep traffic off the hosted Cloudflare tunnel path, LAN pairing, Tailscale HTTPS, or SSH connect directly.
+
+**Pontia** separates connection authorization from encrypted session traffic ([Security](/docs/security)). Pontia Cloud handles account sign-in, device registration, and short-lived signed capability tokens. Between the browser and `pontiad`, an application-layer **X25519 HPKE + ChaCha20-Poly1305** session encrypts every Dashboard API request and response, with authenticated request IDs and bounded replay tracking. Neither Pontia Cloud nor the Edge relay sees Dashboard API plaintext—the Edge only observes routing metadata, payload sizes, and timing. Because the host opens a standard outbound HTTPS/WSS connection on port 443 or 8443, it works smoothly through corporate firewalls and TUN-mode proxies like Clash or sing-box. You can use an official Edge or deploy a [self-hosted Edge](/docs/self-hosted-edge) on your own public Linux server, either on a domain or directly on a public IP address. See [Is your coding agent remote end-to-end encrypted?](/blog/self-hosted-relay-for-coding-agents) for a deeper breakdown of relay threat models.
+
+## 3. Agent coverage vs. role-specialized Agent Profiles
+
+**T3 Code** optimizes for broad provider coverage. Out of the box it supports 10 built-in providers—Claude Code, Codex, Cursor, OpenCode, Grok Build, Antigravity, Kiro, Pi, Muse Code, and fx—plus any agent from the ACP Registry or a local ACP command. If your team switches frequently across Cursor, OpenCode, Muse Code, fx, or custom ACP harnesses, or wants to hand off a thread from one provider to another mid-task, T3 Code covers that breadth directly.
+
+**Pontia** concentrates on deep integration with 6 [Agent Clients](/docs/agent-clients): Claude Code, Codex, Pi, Grok Build, Kiro, and Google Antigravity. Each Client runs with its own native session identity, credentials, sandbox, and live controls, with one-step installation (`pontia client install`) and browser-based Device Code sign-in for Codex, Grok Build, and Kiro. On top of those Clients, Pontia introduces reusable [Agent Profiles](/docs/agent-profiles)—each bundling a Client, model, reasoning effort, permissions mode, and system prompt for a specialty such as Researcher, Architect, Coder, or Reviewer. Bots read Profile descriptions and automatically choose the right Client and model when spawning Helpers, and Workflows assign the same Profiles per node.
+
+## 4. Mobile workflow and live previews
+
+Engineers searching for `t3 code mobile` or a browser-based coding agent remote usually care about two things: how quickly they can unblock an agent from a phone, and how cleanly they can inspect rendered output.
+
+**T3 Code** ships dedicated native iOS and Android apps alongside its Electron desktop app and `app.t3.codes` web client, complete with native [mobile notifications](https://github.com/pingdotgg/t3code/blob/main/docs/user/mobile-notifications.md). For visual verification, T3 Code can stream a host browser tab to web or mobile, open preview tunnels, and reach remote `localhost` services from a phone.
+
+**Pontia** delivers its entire Desktop and Mobile experience through one browser Dashboard at [app.pontia.dev](https://app.pontia.dev), installable as a web app with no app-store install. On mobile, a dedicated **Todo** tab aggregates pending decisions across all Bots so you can unblock Helpers with a quoted reply or a single tap, and follow linked message context chains without losing track of concurrent work ([Bot chat](/docs/bots/chat)). For reviewing output alongside the conversation, Pontia's [Previews](/docs/previews) open project files directly in the side panel—syntax-highlighted code, rendered Markdown with relative links, sandboxed HTML with source toggle, sortable CSV/TSV tables, expandable JSON/YAML trees, and lightbox images—alongside a Git changes panel and live `localhost` app preview with WebSocket/HMR support and a desktop vs. 375 px mobile width switch. When accessed remotely, Pontia routes local web-app previews over a time-limited `pontia.run` preview URL through your selected Edge.
+
+## 5. Git PR workbench vs. long-term memory and async decision loop
+
+Finally, look at what persists across days of engineering work.
+
+**T3 Code** excels as a Git-first execution workbench ([`source-control.md`](https://github.com/pingdotgg/t3code/blob/main/docs/user/source-control.md)). You get per-turn diffs and full branch diffs against base, commit/push/PR flows across multiple forges (GitHub, GitLab, Forgejo, Gitea, Bitbucket, and Azure DevOps), PR watch, stacked branches, and review guides. If your day revolves around managing five parallel worktree branches and driving PR stacks through multi-forge CI and code review, T3 Code is tailored for that exact loop.
+
+**Pontia** focuses on cross-session continuity and asynchronous collaboration across a device. Every Bot on a device shares [durable memories and `USER.md`](/docs/memory), storing your standing preferences, architecture conventions, and explicit rules once so newly created Bots and Helpers inherit them automatically. Background **Dreaming** periodically reviews pending memories, links related observations, and asks a relevant Bot to clarify ambiguous evidence with you rather than guessing. Paired with Bot chat Todos, quoted file or text selections, and per-domain Bot separation, Pontia turns multi-day engineering projects into a continuous async loop where context accumulates instead of resetting on each thread.
+
+## Which one should you choose?
+
+Both projects are open source, keep your agent CLIs and repositories local, and avoid locking you into a hosted IDE. The right fit depends on how you prefer to work:
+
+**Choose T3 Code if:**
+
+- You want native desktop, iOS, and Android apps with built-in mobile push notifications.
+- You run agents on Windows hosts alongside macOS and Linux, or rely on Cursor, OpenCode, Muse Code, fx, or arbitrary ACP agents.
+- Your workflow centers on hands-on multi-thread Git worktrees, per-turn and branch diffs, PR stacks, and multi-forge PR automation (GitHub, GitLab, Forgejo, Gitea, Bitbucket, Azure DevOps).
+- You want managed T3 Connect out of the box (free up to 3 hosts), direct LAN/Tailscale/SSH pairing, and host browser tab streaming.
+
+**Choose Pontia if:**
+
+- You want long-lived domain Bots that coordinate parallel, transparent Helper sessions you can inspect or take over directly—complemented by role-based Agent Profiles and deterministic TOML Workflows.
+- Application-layer end-to-end encryption (X25519 HPKE + ChaCha20-Poly1305) between browser and device, outbound HTTPS-only networking, and the option to self-host an Edge relay matter for your security model or proxy/VPN setup.
+- You work on Linux (systemd user, including headless servers) or macOS 13.5+ and want one-command setup (`npx @pontia/cli init`) with a zero-install desktop and mobile browser Dashboard.
+- You value cross-Bot long-term memory, `USER.md`, background Dreaming, an async Todo approval workflow on mobile, and built-in side-panel previews for project files, Git changes, and live `localhost` dev servers.
+
+## References and further reading
+
+- [T3 Code GitHub repository (`v0.1.13`)](https://github.com/pingdotgg/t3code), [Remote Access](https://github.com/pingdotgg/t3code/blob/main/docs/user/remote-access.md), [T3 Connect internals](https://github.com/pingdotgg/t3code/blob/main/docs/internals/06_t3-connect.md), and [Source Control](https://github.com/pingdotgg/t3code/blob/main/docs/user/source-control.md)
+- [Pontia GitHub repository](https://github.com/anthod0/pontia) and [Getting started](/docs/getting-started)
+- Pontia docs: [Bots](/docs/bots), [Helpers](/docs/bots/helpers), [Agent Clients](/docs/agent-clients), [Agent Profiles](/docs/agent-profiles), [Shared memory and `USER.md`](/docs/memory), [Previews](/docs/previews), and [Security](/docs/security)
+- Related comparisons: [Remote control for Codex, Claude Code, and Pi: Happy, T3 Code, Pontia, and more compared](/blog/coding-agent-remote-control-alternatives) and [Is your coding agent remote end-to-end encrypted?](/blog/self-hosted-relay-for-coding-agents)
