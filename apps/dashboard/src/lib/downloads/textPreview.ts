@@ -78,7 +78,9 @@ const languages: Record<string, string> = {
   sql: "sql",
   svelte: "svelte",
   md: "markdown",
+  mdx: "markdown",
   markdown: "markdown",
+  svx: "markdown",
 };
 
 export function textFileLanguage(path: string): string {

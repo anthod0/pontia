@@ -31,6 +31,21 @@ test("an attached text file opens in the file preview panel", async () => {
   expect(request.searchParams.get("path")).toBe("/tmp/out/notes.md");
 });
 
+test.each(["article.mdx", "article.svx"])(
+  "%s renders as Markdown and exposes its source",
+  async (name) => {
+    const source = "# Article\n\n**Rendered** content.\n";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(source)));
+    render(SharedFilePreviewHarness, { paths: [`/tmp/${name}`] });
+    await fireEvent.click(screen.getByRole("button", { name: `Preview ${name}` }));
+    const panel = within(screen.getByRole("complementary"));
+    expect(await panel.findByRole("heading", { name: "Article" })).toBeVisible();
+    expect(panel.getByText("Rendered").tagName).toBe("STRONG");
+    await fireEvent.click(panel.getByRole("tab", { name: "Source" }));
+    expect(panel.getByRole("tabpanel", { name: "Source" }).textContent).toBe(source);
+  },
+);
+
 test.each(["demo.html", "demo.HTM"])(
   "opens %s in a sandbox and switches to source",
   async (name) => {

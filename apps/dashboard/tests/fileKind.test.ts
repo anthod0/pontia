@@ -3,6 +3,8 @@ import { canPreviewText } from "../src/components/chat/fileKind";
 
 test.each([
   "notes.md",
+  "article.mdx",
+  "article.svx",
   "build.log",
   "data.json",
   "config.YAML",

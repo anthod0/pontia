@@ -54,7 +54,7 @@ const kinds: [string[], FileKind][] = [
     { icon: FileDocIcon, tone: "bg-primary/12 text-primary", text: false },
   ],
   [
-    ["txt", "md", "markdown", "log"],
+    ["txt", "md", "mdx", "markdown", "svx", "log"],
     { icon: FileTextIcon, tone: "bg-primary/12 text-primary", text: true },
   ],
   [

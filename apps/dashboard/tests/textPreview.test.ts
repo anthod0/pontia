@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { readTextPreview } from "../src/lib/downloads/textPreview";
+import { readTextPreview, textFileLanguage } from "../src/lib/downloads/textPreview";
 
 const FILE_PREVIEW_LIMIT = 5 * 1024 * 1024;
 
@@ -49,4 +49,8 @@ test.each([new Uint8Array([0, 1]), new Uint8Array([0xff]), new Uint8Array([0xe4,
 
 test("accepts an empty file", async () => {
   expect(await readTextPreview(new Response(""))).toBe("");
+});
+
+test.each(["article.mdx", "article.SVX"])("classifies %s as Markdown", (path) => {
+  expect(textFileLanguage(path)).toBe("markdown");
 });
