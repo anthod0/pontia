@@ -15,7 +15,7 @@ Pontia は私たちが開発しているプロジェクトです。本記事の 
 | ライセンス | MIT ソースコード（[`TRADEMARK.md`](https://github.com/pingdotgg/t3code/blob/main/TRADEMARK.md) で商標利用を規定） | Apache-2.0 |
 | ホストとクライアント | macOS、Windows、Linux、サーバー上のローカルサーバー。Electron デスクトップアプリ、`app.t3.codes` Web アプリ、ネイティブ iOS/Android アプリ | Linux（systemd user、x86_64/ARM64）と macOS 13.5+（LaunchAgent）の `pontiad` デーモン。デスクトップ・スマートフォン共通のブラウザー Dashboard（`app.pontia.dev`、Web アプリとしてインストール可能） |
 | 導入手順 | デスクトップアプリまたは CLI サーバーセットアップ | `npx @pontia/cli init` の 1 コマンド |
-| オーケストレーション | マルチスレッド並列ワークベンチ。スレッドごとの Git worktree・ブランチ、ローカル SQLite 履歴、途中のモデル切替・エージェント引き継ぎ、beta 版 Workflows / Linked environments | 領域ごとに常駐する [Lead Bot](/docs/bots) が並列 [Helper](/docs/bots/helpers) へ委任し、いつでもネイティブセッションを確認・引き継ぎ可能。共有メモリ・`USER.md` と決定論的な TOML [Workflow](/docs/workflows) |
+| オーケストレーション | マルチスレッド並列ワークベンチ。スレッドごとの Git worktree・ブランチ、ローカル SQLite 履歴、途中のモデル切替・エージェント引き継ぎ、beta 版 Workflows / Linked environments | 領域ごとに常駐する [Lead Bot](/docs/bots) が並列 [Helper](/docs/bots/helpers) へ委任し、いつでもネイティブセッションを確認・引き継ぎ可能。共有メモリと `USER.md` に対応 |
 | 対応エージェント | 組み込み 10 プロバイダー＋任意の ACP Registry / ローカル ACP コマンド | 深く統合された 6 つの [Agent Client](/docs/agent-clients)＋再利用可能な [Agent Profile](/docs/agent-profiles) |
 | リモート接続と信頼境界 | **T3 Connect**（Clerk 認証＋ホスト側 `cloudflared` アウトバウンドトンネル＋DPoP ブートストラップ、3 ホストまで無料）、LAN ペアリング、Tailscale HTTPS、デスクトップ管理 SSH | ブラウザーとデバイス間でアプリケーション層の X25519 HPKE + ChaCha20-Poly1305 エンドツーエンド暗号化。公式または[セルフホスト Edge](/docs/self-hosted-edge) を外向き HTTPS のみで利用 |
 | 開発・プレビューの重心 | turn 単位・ブランチ単位の diff、複数 forge 対応 PR/stacks/review guides、マルチリポジトリ対応、ホストブラウザーのタブ配信と preview tunnel | 非同期 Todo 承認フロー、関連 Context 追跡、サイドパネルでのコード/Markdown/HTML/JSON/YAML/CSV/画像[プレビュー](/docs/previews)、Git パネル、WebSocket 対応のローカル localhost ライブプレビュー |
@@ -26,7 +26,7 @@ Pontia は私たちが開発しているプロジェクトです。本記事の 
 
 **T3 Code** は、エンジニアが直接操作するマルチスレッド・ワークベンチです。単一リポジトリはもちろん `v0.1.12` から対応したマルチリポジトリ構成でも並列スレッドを立ち上げられ、各スレッドに専用の Git worktree とブランチが割り当てられ、履歴はローカル SQLite に保存されます。会話の途中でモデルを切り替えたり、別のエージェントへタスクを引き継いだりでき、`v0.1.12` 以降は Linked environments（beta）やスケジュール・webhook・承認・同時実行プールを備えた Workflows（beta）も提供されています。
 
-**Pontia** は、個々の CLI セッションの上に常駐の調整レイヤーを置きます。実装・製品企画・リリース運用といった担当領域ごとに長期稼働する [Bot](/docs/bots) を作成し、継続する 1 本の会話から仕事を任せます。Bot は独立した作業をクリーンな [Helper セッション](/docs/bots/helpers) として並列に起動し、同じリポジトリを編集する際は各 Helper に個別の Git worktree とブランチを割り当てます。重要なのは、すべての Helper が実体のあるネイティブ CLI セッションである点です。実行中の Helper をいつでも開いてツール実行を確認したり直接指示を出したりでき、終われば Lead Bot の会話で結果を受け取れます。手順と成果物が定まっている定型処理には、決定論的な TOML [Workflow](/docs/workflows) を使えます。
+**Pontia** は、個々の CLI セッションの上に常駐の調整レイヤーを置きます。実装・製品企画・リリース運用といった担当領域ごとに長期稼働する [Bot](/docs/bots) を作成し、継続する 1 本の会話から仕事を任せます。Bot は独立した作業をクリーンな [Helper セッション](/docs/bots/helpers) として並列に起動し、同じリポジトリを編集する際は各 Helper に個別の Git worktree とブランチを割り当てます。重要なのは、すべての Helper が実体のあるネイティブ CLI セッションである点です。実行中の Helper をいつでも開いてツール実行を確認したり直接指示を出したりでき、終われば Lead Bot の会話で結果を受け取れます。
 
 端的に言えば、T3 Code は並列スレッドすべての操縦席に自分が座るスタイルであり、Pontia は常駐 Lead Bot に分解・追跡・統合を任せつつ、裏側の Helper セッションの透明性と直接介入権を保つスタイルです。
 
@@ -42,7 +42,7 @@ Pontia は私たちが開発しているプロジェクトです。本記事の 
 
 **T3 Code** は対応エージェントの広さが強みです。Claude Code、Codex、Cursor、OpenCode、Grok Build、Antigravity、Kiro、Pi、Muse Code、fx の 10 個の組み込みプロバイダーに加え、ACP Registry やローカルの ACP コマンドで動く任意のエージェントを扱えます。Cursor、OpenCode、Muse Code、fx や独自の ACP エージェントを横断して使う場合や、タスク途中で別エージェントへ引き継ぎたい場合に強みを発揮します。
 
-**Pontia** は 6 つの [Agent Client](/docs/agent-clients)（Claude Code、Codex、Pi、Grok Build、Kiro、Google Antigravity）との深い統合に焦点を当てています。各 Client はネイティブの会話 ID、認証情報、サンドボックス、操作系をそのまま保持し、`pontia client install` による導入や、Codex・Grok Build・Kiro 向けの Dashboard 上からの Device Code サインインに対応します。その上に再利用可能な [Agent Profile](/docs/agent-profiles) を備え、Client・モデル・reasoning effort・権限モード・システムプロンプトを Researcher・Architect・Coder・Reviewer といった役割として定義できます。Bot は説明文をもとに Helper に最適な Profile を自動で選び、Workflow も同じ Profile をノード単位で再利用します。
+**Pontia** は 6 つの [Agent Client](/docs/agent-clients)（Claude Code、Codex、Pi、Grok Build、Kiro、Google Antigravity）との深い統合に焦点を当てています。各 Client はネイティブの会話 ID、認証情報、サンドボックス、操作系をそのまま保持し、`pontia client install` による導入や、Codex・Grok Build・Kiro 向けの Dashboard 上からの Device Code サインインに対応します。その上に再利用可能な [Agent Profile](/docs/agent-profiles) を備え、Client・モデル・reasoning effort・権限モード・システムプロンプトを Researcher・Architect・Coder・Reviewer といった役割として定義できます。Bot は説明文をもとに Helper に最適な Profile を自動で選びます。
 
 ## 4. モバイル体験とライブプレビュー
 
@@ -73,7 +73,7 @@ Pontia は私たちが開発しているプロジェクトです。本記事の 
 
 **Pontia が向いているケース:**
 
-- 領域ごとに常駐する Lead Bot へ仕事を委任し、いつでも中身を開いて直接操作できる並列 Helper セッション、役割別 Agent Profile、決定論的 TOML Workflow を組み合わせて回したい。
+- 領域ごとに常駐する Lead Bot へ仕事を委任し、いつでも中身を開いて直接操作できる並列 Helper セッションと役割別 Agent Profile を組み合わせて回したい。
 - ブラウザーとデバイス間のアプリケーション層エンドツーエンド暗号化（X25519 HPKE + ChaCha20-Poly1305）、外向き HTTPS のみの通信、必要に応じたセルフホスト Edge の運用を重視する。
 - Linux（ヘッドレスサーバーを含む systemd user）または macOS 13.5+ で、`npx @pontia/cli init` の 1 コマンド導入とインストール不要のブラウザー Dashboard（デスクトップ・モバイル）を好む。
 - デバイス内の Bot 間で共有される長期メモリ、`USER.md`、バックグラウンド Dreaming、モバイルでの非同期 Todo 承認、そしてファイル・Git 変更・WebSocket 対応 `localhost` のサイドパネルプレビューを活用したい。

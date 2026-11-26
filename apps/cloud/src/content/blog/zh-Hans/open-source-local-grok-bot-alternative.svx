@@ -61,7 +61,7 @@ Pontia 是我们开发的工具。文中关于 xAI Grok Bot 及第三方开源�
 - **[Pontia](https://github.com/anthod0/pontia)（Apache-2.0）：** 本机控制面守护进程（`pontiad`）搭配桌面与手机浏览器 Dashboard（`app.pontia.dev`，可安装为应用），把本机已有的多个编码 CLI 组织成持续协作的工作台：
   - **常驻 Bot 与并行 git worktree Helper：** 常驻 [Bot](/docs/bots) 把独立任务拆分给一任务一隔离的 [Helper](/docs/bots/helpers)。多个 Helper 并行改动同一代码库时，Bot 会从原项目 Workspace 启动，让每个 Helper 在其中新建独立 git worktree 与分支，互不覆盖工作副本。
   - **随时打开并接管原生 CLI 会话：** 每个 Helper 都是绑定到原生 CLI 对话的持久 Session。你可以随时从 Bot 状态栏或会话链接点开任何 Helper，查看实时执行过程、追加指令或直接接管。
-  - **按角色组合 6 个已支持 CLI：** 通过可复用的 [Agent 配置（Agent Profiles）](/docs/agent-profiles)，将 Claude Code、Codex、Pi、[Grok Build](/docs/agent-clients/grok)、Kiro、Google Antigravity 6 个客户端与指定模型、思考深度、权限模式和角色提示词组合，按需派给 Bot、Helper 或 Workflow 节点。
+  - **按角色组合 6 个已支持 CLI：** 通过可复用的 [Agent 配置（Agent Profiles）](/docs/agent-profiles)，将 Claude Code、Codex、Pi、[Grok Build](/docs/agent-clients/grok)、Kiro、Google Antigravity 6 个客户端与指定模型、思考深度、权限模式和角色提示词组合，按需分配给 Bot 或 Helper。
   - **异步决策闭环与跨 Bot 共享记忆：** [Bot 对话](/docs/bots/chat)通过 Todo、精准引用和关联上下文链跟踪待决事项；同一设备上的所有 Bot 共享[记忆与 `USER.md`](/docs/memory)，由后台 Dreaming 定期整理长期上下文，遇到歧义时主动通过 Bot 向你确认。
   - **应用层 E2E 加密、自托管 Edge 与实时预览：** 远程访问采用浏览器到设备的应用层端到端加密（X25519 HPKE + ChaCha20-Poly1305），由目标设备校验授权（[安全](/docs/security)），支持官方或[自托管 Edge](/docs/self-hosted-edge) 中继；对话侧栏内置[实时预览](/docs/previews)，可直接打开本机文件与 `localhost` 开发服务（远程访问时经所选 Edge 路由）。
 

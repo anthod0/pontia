@@ -15,7 +15,7 @@ Pontia 是我们开发的项目。文中关于 T3 Code 的事实均于 2026 年 
 | 开源协议 | MIT 源码（[`TRADEMARK.md`](https://github.com/pingdotgg/t3code/blob/main/TRADEMARK.md) 规定商标限制） | Apache-2.0 |
 | 主机与客户端形态 | macOS、Windows、Linux 及服务器本机 server；Electron 桌面端、`app.t3.codes` Web 端、原生 iOS/Android App | Linux（systemd user，x86_64/ARM64）与 macOS 13.5+（LaunchAgent）守护进程 `pontiad`；桌面/手机浏览器访问 `app.pontia.dev`（可安装为 Web 应用） |
 | 起步方式 | 桌面端安装或 CLI 启动服务 | 一行命令 `npx @pontia/cli init` |
-| 编排模型 | 多线程并行工作台，每线程独立 Git worktree 与分支，本地 SQLite 存历史；支持会话中途换模型与交接 agent，含 beta 版 Workflows 与 Linked environments | 按领域常驻的 [Lead Bot](/docs/bots) 拆解任务并并行调度可随时查看/接管的 [Helper](/docs/bots/helpers)，配合共享记忆、`USER.md` 与确定性 TOML [Workflow](/docs/workflows) |
+| 编排模型 | 多线程并行工作台，每线程独立 Git worktree 与分支，本地 SQLite 存历史；支持会话中途换模型与交接 agent，含 beta 版 Workflows 与 Linked environments | 按领域常驻的 [Lead Bot](/docs/bots) 拆解任务并并行调度可随时查看/接管的 [Helper](/docs/bots/helpers)，配合共享记忆与 `USER.md` |
 | Agent 覆盖 | 10 个内置 provider + 任意 ACP Registry 或本地 ACP 命令 | 6 个深度集成 [Agent Client](/docs/agent-clients) + 可复用 [Agent 配置（Profiles）](/docs/agent-profiles) |
 | 远程连接与信任边界 | **T3 Connect**（Clerk 身份 + 本机 `cloudflared` 出站 tunnel + DPoP 引导，3 台主机免费），另支持 LAN 配对、Tailscale HTTPS 与桌面托管 SSH | 浏览器与设备之间采用应用层 X25519 HPKE + ChaCha20-Poly1305 端到端加密，经官方或[自托管 Edge](/docs/self-hosted-edge) 仅走标准出站 HTTPS |
 | 协作与预览重心 | 按 turn / branch 查看 diff、多 forge PR/stacks/review guides、多仓库项目、主机浏览器页签流式预览与 preview tunnel | 异步 Todo 决策流、关联 Context 追踪、侧栏代码/Markdown/HTML/JSON/YAML/CSV/图片[预览](/docs/previews)、Git 变更面板、带 WebSocket 的本地 localhost 实时预览 |
@@ -26,7 +26,7 @@ Pontia 是我们开发的项目。文中关于 T3 Code 的事实均于 2026 年 
 
 **T3 Code** 是一套面向直接操控的多线程工作台。你在仓库（以及 `v0.1.12` 起支持的多仓库项目）上并行开启多个线程，每个线程自动获得独立的 Git worktree 与分支，线程历史保存在本地 SQLite 中。执行中途你可以直接切换模型，或者把任务交接给另一个 agent。从 `v0.1.12` 起，T3 Code 还引入了 Linked environments（beta）以及支持定时、webhook、审批节点与并发池的 Workflows（beta）。
 
-**Pontia** 在原生 CLI 会话之上增加了一层常驻编排。你可以按领域创建长期协作的 [Bot](/docs/bots)（例如分别负责代码实现、产品规划或发布运维），在一段持续对话里随时派活；Bot 会把复杂需求拆分成边界清晰、彼此独立的 [Helper 会话](/docs/bots/helpers) 并行推进，需要修改同一仓库时各自拉出独立 Git worktree 与分支。关键在于所有 Helper 都是完全透明的原生 CLI 会话——你随时可以点开任意正在执行的 Helper 查看工具调用细节或直接接管，再回到 Lead Bot 的汇总对话中继续决策。对于步骤固定、输入输出明确的流程，Pontia 还提供确定性的 TOML [Workflow](/docs/workflows)。
+**Pontia** 在原生 CLI 会话之上增加了一层常驻编排。你可以按领域创建长期协作的 [Bot](/docs/bots)（例如分别负责代码实现、产品规划或发布运维），在一段持续对话里随时派活；Bot 会把复杂需求拆分成边界清晰、彼此独立的 [Helper 会话](/docs/bots/helpers) 并行推进，需要修改同一仓库时各自拉出独立 Git worktree 与分支。关键在于所有 Helper 都是完全透明的原生 CLI 会话——你随时可以点开任意正在执行的 Helper 查看工具调用细节或直接接管，再回到 Lead Bot 的汇总对话中继续决策。
 
 简而言之：T3 Code 让你亲自坐进每个并行线程的驾驶舱；Pontia 让常驻 Lead Bot 替你消化并行拆解与汇总协调的负担，同时保留对底层每个 Helper 会话的完整可见性与直接干预权。
 
@@ -42,7 +42,7 @@ Pontia 是我们开发的项目。文中关于 T3 Code 的事实均于 2026 年 
 
 **T3 Code** 主打广泛的 provider 兼容：内置 10 个主流 provider（Claude Code、Codex、Cursor、OpenCode、Grok Build、Antigravity、Kiro、Pi、Muse Code、fx），同时支持任意 ACP Registry 或本地 ACP 命令，并允许在会话中途切换模型或交接给另一个 agent。如果你的日常开发重度依赖 Cursor、OpenCode、Muse Code、fx 或自研 ACP agent，T3 Code 能一次性全部纳入统一界面。
 
-**Pontia** 聚焦 6 个深度集成的 [Agent Client](/docs/agent-clients)：Claude Code、Codex、Pi、Grok Build、Kiro 与 Google Antigravity。每个 Client 都保留自身原生会话标识、凭据、沙箱与实时控制能力；通过 `pontia client install` 可一键安装，Codex、Grok Build 与 Kiro 还支持在浏览器 Dashboard 中通过 Device Code 远程登录。在此之上，Pontia 提供可复用的 [Agent 配置（Agent Profiles）](/docs/agent-profiles)——把特定 Client、模型、思考深度（reasoning effort）、权限模式与系统提示词封装成“研究员”“架构师”“编码者”“审查者”等角色。Bot 在派发 Helper 时会根据角色描述自动挑选合适的配置，Workflow 也能按节点直接复用同一套角色配置。
+**Pontia** 聚焦 6 个深度集成的 [Agent Client](/docs/agent-clients)：Claude Code、Codex、Pi、Grok Build、Kiro 与 Google Antigravity。每个 Client 都保留自身原生会话标识、凭据、沙箱与实时控制能力；通过 `pontia client install` 可一键安装，Codex、Grok Build 与 Kiro 还支持在浏览器 Dashboard 中通过 Device Code 远程登录。在此之上，Pontia 提供可复用的 [Agent 配置（Agent Profiles）](/docs/agent-profiles)——把特定 Client、模型、思考深度（reasoning effort）、权限模式与系统提示词封装成“研究员”“架构师”“编码者”“审查者”等角色。Bot 在派发 Helper 时会根据角色描述自动挑选合适的配置。
 
 ## 4. 移动端体验与本地实时预览
 
@@ -73,7 +73,7 @@ Pontia 是我们开发的项目。文中关于 T3 Code 的事实均于 2026 年 
 
 **更适合选择 Pontia 的场景：**
 
-- 你希望把任务交给按领域常驻的 Lead Bot，由它拆解并并行调度透明可接管的 Helper 会话，同时配合角色化的 Agent Profiles 与确定性 TOML Workflow。
+- 你希望把任务交给按领域常驻的 Lead Bot，由它拆解并并行调度透明可接管的 Helper 会话，同时配合角色化的 Agent Profiles。
 - 你非常在意远程信任边界，需要浏览器与设备间的应用层端到端加密（X25519 HPKE + ChaCha20-Poly1305）、纯标准出站 HTTPS 连接（适配企业网络与代理环境），以及按需部署自托管 Edge 中继的能力。
 - 你的主力环境是 Linux（systemd user，含无头 VPS）或 macOS 13.5+，希望一行 `npx @pontia/cli init` 起步，并在零安装的桌面/手机浏览器中完成全部操作。
 - 你看重同设备跨 Bot 的长期记忆、`USER.md`、后台 Dreaming 整理、手机端异步 Todo 决策流，以及在侧栏直接预览本机文件、Git 变更与带热重载的 `localhost` 开发服务。

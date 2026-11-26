@@ -128,7 +128,7 @@ pontia remote enable
 
 真实项目里，把整个代码库锁死在单个 CLI 上往往不是最优解。深度规划与架构设计、并发编码实现、代码库检索以及跨模型独立审查各有侧重，很多开发者本身也同时订阅或配额覆盖了多家工具。
 
-借助 Pontia 的 [Agent Profiles（Agent 配置）](/docs/agent-profiles)、[Bot](/docs/bots) 与并行 [Helper](/docs/bots/helpers) 以及持久化 [Workflow](/docs/workflows)，你可以在同一个 [Workspace](/docs/workspaces) 里让 Grok Build、Claude Code 和 Codex 各司其职。
+借助 Pontia 的 [Agent Profiles（Agent 配置）](/docs/agent-profiles)以及 [Bot](/docs/bots) 与并行 [Helper](/docs/bots/helpers)，你可以在同一个 [Workspace](/docs/workspaces) 里让 Grok Build、Claude Code 和 Codex 各司其职。
 
 ### 1. 用 Agent Profile 固化角色能力
 
@@ -137,7 +137,7 @@ pontia remote enable
 - **Profile ID**（例如 `architect`、`coder`、`grok-reviewer`）；
 - **Description**：写明该角色负责的任务范围与边界，供 Bot 派活时判断；
 - **Client**、**Model** 以及可选的 **reasoning effort**；
-- **Use YOLO mode**：需要该专用 Helper 或 Workflow 节点免审批使用常规工具时开启；
+- **Use YOLO mode**：需要该专用 Helper 免审批使用常规工具时开启；
 - **System prompt**：沉淀该角色的工作准则。
 
 这样就可以把一个 Profile 设为 Claude Code 或 Codex 负责方案设计与主干实现，另一个 Profile 设为 Grok Build（`grok-reviewer`）专门做变更审查与边界检查，再配一个轻量的检索 Profile 负责代码调研。
@@ -154,38 +154,7 @@ pontia bot helper create --profile-id grok-reviewer
 
 当多个 Helper 需要同时修改同一代码库时，Bot 会从原项目 Workspace 启动，并要求每个 Helper 在其中新建独立的 Git worktree 与分支，互不覆盖工作副本。每个 Helper 都是原生 CLI Session，你随时可以从手机或桌面点开查看工具调用、追加指令或查看 Diff。
 
-### 3. 用 Workflow 固化跨客户端流水线
-
-对于阶段、输入与交付物都明确的可重复流程（如“实现 → 跨客户端审查”），直接写一份 TOML [Workflow](/docs/workflows)，通过 `execution_profile_id` 为每个 Agent 节点绑定对应 Profile：
-
-```toml
-title = "跨客户端实现与审查"
-cwd = "."
-
-[[handoffs]]
-name = "spec.md"
-source = "./spec.md"
-
-[[nodes]]
-type = "agent"
-phase = "Implementation"
-title = "Implement feature"
-instructions = "Implement the approved spec and run the relevant test suite."
-execution_profile_id = "coder"
-inputs = ["spec.md"]
-output = "implementation.md"
-
-[[nodes]]
-type = "agent"
-phase = "Review"
-title = "Grok reviewer"
-instructions = "Review the current changes against the spec and write the findings."
-execution_profile_id = "grok-reviewer"
-inputs = ["spec.md", "implementation.md"]
-output = "review.md"
-```
-
-通过 `pontia workflow run ./workflow.toml` 启动后，即可在 Dashboard 中跟踪各阶段状态与对应 Session。如果需要通过 External API 创建普通 Session，也可以直接用 `mode` 字段选择 `default`、`yolo` 或 `restricted`（详见 [Agent Clients](/docs/agent-clients#client-credentials-and-permissions)）。
+如果需要通过 External API 创建普通 Session，也可以直接用 `mode` 字段选择 `default`、`yolo` 或 `restricted`（详见 [Agent Clients](/docs/agent-clients#client-credentials-and-permissions)）。
 
 ## 参考资料与延伸阅读
 
@@ -197,5 +166,5 @@ output = "review.md"
 - [Claude Code 工作原理文档](https://code.claude.com/docs/en/how-claude-code-works)
 - [Pontia Grok Build Agent Client 指南](/docs/agent-clients/grok)
 - [Pontia 远程访问](/docs/remote-access) 与 [安全架构](/docs/security)
-- [Pontia Agent Profiles](/docs/agent-profiles)、[Bots](/docs/bots)、[并行 Helpers](/docs/bots/helpers) 与 [Workflows](/docs/workflows)
+- [Pontia Agent Profiles](/docs/agent-profiles)、[Bots](/docs/bots) 与 [并行 Helpers](/docs/bots/helpers)
 - [Grok Bot 开源平替怎么选：自托管云 VM 与本机 CLI 编排的架构对比](/blog/open-source-local-grok-bot-alternative)

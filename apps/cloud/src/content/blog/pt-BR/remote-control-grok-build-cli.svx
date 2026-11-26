@@ -128,7 +128,7 @@ Resumo objetivo:
 
 Você não precisa apostar o repositório inteiro em uma única CLI. Planejamento e revisão profunda, implementação paralela, pesquisa de código e revisão cruzada se beneficiam de modelos e ferramentas diferentes — além de permitirem aproveitar assinaturas ou cotas que você já mantém em mais de um provedor.
 
-Com [Agent Profiles](/docs/agent-profiles), [Bots](/docs/bots) com [Helpers](/docs/bots/helpers) em paralelo e [Workflows](/docs/workflows) duráveis no Pontia, Grok Build, Claude Code e Codex trabalham lado a lado na mesma [Workspace](/docs/workspaces).
+Com [Agent Profiles](/docs/agent-profiles) e [Bots](/docs/bots) com [Helpers](/docs/bots/helpers) em paralelo no Pontia, Grok Build, Claude Code e Codex trabalham lado a lado na mesma [Workspace](/docs/workspaces).
 
 ### 1. Crie Agent Profiles por especialidade
 
@@ -137,7 +137,7 @@ Em **Settings → Agent Profiles**, padronize cada função combinando:
 - **Profile ID** (por exemplo, `architect`, `coder`, `grok-reviewer`);
 - **Description**, informando ao Bot que tipo de tarefa esse papel assume e quais limites respeita;
 - **Client**, **Model** e **reasoning effort** opcional;
-- **Use YOLO mode**, quando aquele helper especializado ou nó de Workflow deve executar ferramentas habituais sem pedir aprovação;
+- **Use YOLO mode**, quando aquele helper especializado deve executar ferramentas habituais sem pedir aprovação;
 - **System prompt** com as diretrizes do papel.
 
 Assim você pode manter um Profile em Claude Code ou Codex para arquitetura e implementação, outro em Grok Build (`grok-reviewer`) dedicado a revisão de diffs e casos de borda, e um Profile focado em pesquisa de código.
@@ -154,38 +154,7 @@ pontia bot helper create --profile-id grok-reviewer
 
 Quando vários helpers alteram o mesmo repositório ao mesmo tempo, o Bot parte da Workspace ativa e orienta cada helper a criar seu próprio Git worktree e branch, evitando conflitos de checkout. Cada Helper permanece como uma Session nativa que você pode abrir pelo celular ou desktop para acompanhar ferramentas, ajustar instruções ou inspecionar diffs.
 
-### 3. Padronize fluxos repetíveis com um Workflow
-
-Para pipelines com etapas e entregas definidas — como implementação seguida de revisão por outro cliente — escreva um [Workflow](/docs/workflows) em TOML vinculando cada nó a um `execution_profile_id`:
-
-```toml
-title = "Feature delivery with cross-client review"
-cwd = "."
-
-[[handoffs]]
-name = "spec.md"
-source = "./spec.md"
-
-[[nodes]]
-type = "agent"
-phase = "Implementation"
-title = "Implement feature"
-instructions = "Implement the approved spec and run the relevant test suite."
-execution_profile_id = "coder"
-inputs = ["spec.md"]
-output = "implementation.md"
-
-[[nodes]]
-type = "agent"
-phase = "Review"
-title = "Grok reviewer"
-instructions = "Review the current changes against the spec and write the findings."
-execution_profile_id = "grok-reviewer"
-inputs = ["spec.md", "implementation.md"]
-output = "review.md"
-```
-
-Execute com `pontia workflow run ./workflow.toml` e acompanhe cada fase e Session pelo Dashboard. Se você cria Sessions comuns via External API, também pode definir `default`, `yolo` ou `restricted` pelo campo `mode` ([Agent Clients](/docs/agent-clients#client-credentials-and-permissions)).
+Se você cria Sessions comuns via External API, também pode definir `default`, `yolo` ou `restricted` pelo campo `mode` ([Agent Clients](/docs/agent-clients#client-credentials-and-permissions)).
 
 ## Fontes primárias e leitura relacionada
 
@@ -197,5 +166,5 @@ Execute com `pontia workflow run ./workflow.toml` e acompanhe cada fase e Sessio
 - [How Claude Code works](https://code.claude.com/docs/en/how-claude-code-works)
 - [Guia do Agent Client Grok Build no Pontia](/docs/agent-clients/grok)
 - [Acesso remoto](/docs/remote-access) e [Segurança](/docs/security) no Pontia
-- [Agent Profiles](/docs/agent-profiles), [Bots](/docs/bots), [Helpers em paralelo](/docs/bots/helpers) e [Workflows](/docs/workflows)
+- [Agent Profiles](/docs/agent-profiles), [Bots](/docs/bots) e [Helpers em paralelo](/docs/bots/helpers)
 - [Alternativas open source ao Grok Bot: VMs na nuvem vs orquestração local de CLIs](/blog/open-source-local-grok-bot-alternative)

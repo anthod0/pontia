@@ -1,12 +1,12 @@
 ---
 title: "从 Agent Harness 到 Coding Agent Orchestrator：Lead Bot + Helper 与角色流水线的工程权衡"
-description: "拆解多 agent 编排落地时真正会撞上的工程问题：agent harness 与 coding agent orchestrator 的分层边界，对比 tmux 编排、角色流水线、Claude Code Subagents/Agent Teams 与 Pontia 的 Lead Bot + 隔离 Helper 和确定性 Workflow。"
+description: "拆解多 agent 编排落地时真正会撞上的工程问题：agent harness 与 coding agent orchestrator 的分层边界，对比 tmux 编排、角色流水线、Claude Code Subagents/Agent Teams 与 Pontia 的 Lead Bot + 隔离 Helper。"
 published: "2026-11-27"
 ---
 
 在终端里跑一个 coding agent 很简单。但在同一个代码仓库里并行跑三四个 agent，工程问题很快就会暴露出来：多个进程共享同一个工作树互相覆盖文件，长会话积累大量过时上下文拖垮输出质量，一个悬而未决的审批或提问卡住整条开发节奏。
 
-本文先厘清 **agent harness**（或 **AI harness**）与 **coding agent orchestrator** 的分层边界，客观对比一线工程团队常用的四种 **多 agent 编排**（multi-agent orchestration）模式，最后拆透五个决定 **agent 编排** 是否真正省时的硬核工程问题。
+本文先厘清 **agent harness**（或 **AI harness**）与 **coding agent orchestrator** 的分层边界，客观对比一线工程团队常用的四种 **多 agent 编排**（multi-agent orchestration）模式，最后拆透四个决定 **agent 编排** 是否真正省时的硬核工程问题。
 
 ## 先厘清概念：Agent Harness vs. Coding Agent Orchestrator
 
@@ -35,7 +35,7 @@ published: "2026-11-27"
 | **手工多开 / tmux 编排** | 每个 agent 占一个 tmux 窗格或窗口（如 AWS CLI Agent Orchestrator） | 需要直接看终端输出、尽量少封装、跨仓库并行实验 | 终端隔离不等于 Git worktree 隔离；共享目录并发修改容易碰撞，审批与状态需要人工切窗口轮询 |
 | **角色/阶段拆分流水线** | 按阶段拆分独立 agent：Planner → Coder → Reviewer | 规格必须前置冻结、产出明确阶段工件、需要独立验收门禁的任务 | 探索性修改同一批代码时交接易丢隐含上下文，触发编写—审查反复打乒乓，token 与等待轮次倍增 |
 | **单 CLI 内置 Subagents 与 Agent Teams** | 单个原厂 CLI 内的子代理或多实例协作（如 Claude Code） | 把搜索/日志排查留在短命上下文，或在单一工具内并行探索互不重叠模块 | Subagents 偏短命局部子任务；多实例 Agent Teams 会成倍放大 token 开销，且限定在单一原厂生态内 |
-| **Lead Bot + 端到端隔离 Helper + 确定性 Workflow** | 主控 Bot 按模块派发全新隔离 Helper 闭环交付，固定流程走 TOML Workflow（Pontia） | 开放式研发任务多路并行、混用不同原厂 CLI，以及需要阶段门禁的固定流水线 | 并行 Helper 需要划分清晰的模块边界；Workflow 需要提前约定阶段与输入输出文件 |
+| **Lead Bot + 端到端隔离 Helper** | 主控 Bot 按模块派发全新隔离 Helper 闭环交付（Pontia） | 开放式研发任务多路并行、混用不同原厂 CLI | 并行 Helper 需要划分清晰的模块边界与验证命令，确保各自独立交付 |
 
 ### 1. 手工多开与 tmux 编排
 
@@ -60,20 +60,19 @@ published: "2026-11-27"
 - **Subagents** 把高噪音的局部动作——大范围代码搜索、日志排查、文档核对——放进短命上下文，只把提炼后的摘要交回主会话。它非常适合在不离开单 CLI 的前提下保护主会话的注意力预算。
 - **Agent Teams** 会拉起多个完整的 Claude Code 实例，通过共享任务列表和消息邮箱协作，适合并行调研或模块完全互不重叠的拆分。由于每个成员都是完整实例，token 开销会随并发数成倍增长；同时它目前属于实验功能，且绑定在 Claude Code 单一客户端内部。
 
-### 4. Pontia 的双轨实践：Lead Bot + 端到端隔离 Helper，加上确定性 Workflow
+### 4. Pontia 的实践：Lead Bot + 端到端隔离 Helper
 
-Pontia 把多 agent 编排分成两条互补轨道：开放式任务交给 **Lead Bot + 隔离 Helper**，步骤固定的流水线交给 **Workflow**。
+在 Pontia 中，多 agent 编排围绕常驻 Lead Bot 与按任务新建的隔离 Helper 展开：
 
 1. **一任务一全新隔离 Helper，用完即关不复用。** 设备上的 [Bot](/docs/bots) 作为长期主控助手，每接到一项独立任务就新建一个干净上下文的 [Helper](/docs/bots/helpers)。任务完成或取消后，Bot 会立即关闭该 Helper——释放运行态资源，同时完整保留 Session 历史可供回看——而不是把上一项任务的脏上下文留给下一个任务复用。
 2. **按完整模块拆分，端到端闭环交付。** Lead Bot 不把同一个改动拆成“A 写代码、B 做审查”，而是横向切分成可独立验收的完整模块。每个 Helper 在同一上下文内完成“调研 → 实现 → 跑测试与检查 → 自审 → 本地提交”。测试报错时，写下代码的上下文直接定位并修完，消除阶段交接损耗。
 3. **独立 Git worktree 并发隔离。** 需要并发修改同一仓库时，Helper 从项目原激活的 [Workspace](/docs/workspaces) 启动，并在其中自建独立的 Git worktree 与分支。并行改动在磁盘和分支层面彼此隔离，验证通过后再干净合并。
 4. **透明原生 CLI + 可复用 Agent 配置（Agent Profiles）。** Helper 跑的是你本机安装的原厂 CLI——Claude Code、Codex、Grok Build、[Pi](/docs/agent-clients/pi)、Kiro 和 Google Antigravity——沿用各自凭据、本地工具和原生会话记录。你可以随时在 Dashboard 里点开任意 Helper Session 查看工具输出或直接接管；也可以通过 [Agent 配置](/docs/agent-profiles) 为不同专长固化 Client、模型、思考深度、权限模式和系统提示词。
 5. **Todo 异步人类决策 + 跨 Bot 共享记忆。** 需要你拍板时，Bot 会在 [Bot 对话](/docs/bots/chat) 中把问题收束成清晰的 Todo 卡片，其他未阻塞的 Helper 继续并行推进；引用回复该 Todo 即可自动关闭。设备上的所有 Bot 共享 `USER.md` 与 [共享记忆](/docs/memory)，长期规范和偏好无需每次重申。
-6. **确定性 Workflow 承接固定流程。** 当任务的阶段、交接文件和门禁条件可以提前写死时，使用 [Workflow](/docs/workflows) 以 TOML 定义按序执行的 Agent Node：每个节点启动全新 Session、读取声明的 Handoff 输入、写入唯一输出并用 `pontia workflow submit` 显式提交，支持暂停/恢复以及针对可恢复失败节点的原地重试，同时直接复用同一套 Agent 配置。
 
-## 拆透一线工程师最关心的 5 个硬核问题
+## 拆透一线工程师最关心的 4 个硬核问题
 
-无论选哪种工具，下面五个问题直接决定多 agent 编排是提效还是添乱。
+无论选哪种工具，下面四个问题直接决定多 agent 编排是提效还是添乱。
 
 ### 1. 上下文污染与注意力预算
 
@@ -105,27 +104,12 @@ Pontia 把多 agent 编排分成两条互补轨道：开放式任务交给 **Lea
 - 真正需要人判断的取舍，收束进异步决策队列——在 Pontia 中是 [Bot 对话的 Todo 列表](/docs/bots/chat)，在电脑或手机上按条回复即可，未阻塞的 Helper 照常并行推进。
 - 工具执行权限则按任务专长在 [Agent 配置](/docs/agent-profiles) 中精细化控制：需要保守确认的 Profile 保持默认模式，面向隔离 worktree 或沙箱环境的自动化 Profile 则显式开启**使用 YOLO 模式**，而不是一刀切。
 
-### 5. 什么时候用开放式 Bot 编排，什么时候用确定性 Workflow
-
-很多团队踩坑是因为试图用一种抽象硬套所有任务：拿死板流水线做探索性排障，或者拿自由对话硬撑重复性的多阶段发布。把两条轨道区分开后，选型会非常直接：
-
-| 判断维度 | Lead Bot + 隔离 Helper | 确定性 Workflow |
-| --- | --- | --- |
-| **步骤与产物能否提前写死？** | 不能——调研结果会动态改变实现拆分 | 能——阶段顺序、Handoff 文件名和验收点预先明确 |
-| **并发与推进方式** | 按完整模块横向并行派发多个 Helper | 按 TOML 定义顺序推进 Agent Node，显式文件契约交接 |
-| **完成判定方式** | Helper 本地验证、自审并向 Bot 汇报结果 | 节点写入声明的输出文件并执行 `pontia workflow submit` |
-| **失败后的恢复路径** | Bot 评估影响、向 Helper 补充指令、发 Todo 或派后续任务 | 在 Dashboard 暂停/恢复，或执行 `pontia workflow retry` 续跑失败节点并保留已提交节点 |
-| **共享底座** | 共用 [Agent 配置](/docs/agent-profiles)、活跃 [Workspace](/docs/workspaces) 与原厂 CLI | 共用同一套 [Agent 配置](/docs/agent-profiles)、活跃 [Workspace](/docs/workspaces) 与原厂 CLI |
-
-实际开发里两者配合最顺手：日常功能迭代、并发修 Bug 和技术调研交给 Lead Bot + 并行 Helper；而固定步骤的多阶段产出或需要显式检查点重试的流程，写成 TOML [Workflow](/docs/workflows) 跑。
-
 ## 相关文章与文档
 
 - [Bots](/docs/bots) — 创建长期 Bot 并用多个 Bot 分工
 - [并行运行 Helper](/docs/bots/helpers) — 用独立 Git worktree 并行推进多个模块
 - [Agent 配置](/docs/agent-profiles) — 组合 Client、模型、思考深度、YOLO 模式与系统提示词
 - [共享记忆与 USER.md](/docs/memory) — 在多个 Bot 之间保持长期规范一致
-- [Workflows](/docs/workflows) — 用 TOML 编排带显式 Handoff 契约的多阶段节点
 - [Pi Agent Client](/docs/agent-clients/pi) — 将原生 Pi 会话接入 Pontia
 - [如何在手机上使用 Pi coding agent](/blog/pi-coding-agent-remote-control)
 - [Codex、Claude Code 与 Pi 远程控制方案对比](/blog/coding-agent-remote-control-alternatives)

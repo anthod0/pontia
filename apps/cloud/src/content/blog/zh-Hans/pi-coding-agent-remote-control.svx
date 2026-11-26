@@ -37,7 +37,7 @@ tmux attach -t SESSION_NAME
 
 Pi 继续在你的机器上运行，使用它自己的提供商凭据和配置。浏览器和你的机器通过 Pontia 的中继建立端到端加密的会话，中继只转发密文。你的机器主动向外连接，因此不需要开放任何入站端口。
 
-Pontia 支持 Linux 和 macOS 13.5 或更高版本，包括无头服务器。除了单个 Session，[Workflow](/docs/workflows) 可以把一个大型任务作为一系列 Pi Session 来运行，每个 Session 都有全新的上下文和明确的 Handoff 文件。
+Pontia 支持 Linux 和 macOS 13.5 或更高版本，包括无头服务器。除了单个 Session，你还可以通过 [Bot](/docs/bots) 在独立上下文与 Git worktree 中并行调度多个 Pi [Helper](/docs/bots/helpers)。
 
 ### 设置
 

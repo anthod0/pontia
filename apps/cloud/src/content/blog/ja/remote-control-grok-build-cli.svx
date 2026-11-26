@@ -128,7 +128,7 @@ pontia remote enable
 
 実際の開発では「どれか 1 つだけを選ぶ」必要はありません。深い設計や計画、並列実装、コードベースの調査、別モデルによる独立レビューでは得意分野が異なり、複数のサブスクリプションや利用枠を使い分けたいケースも一般的です。
 
-Pontia の [Agent Profiles](/docs/agent-profiles)、[Bot](/docs/bots) と並列 [Helper](/docs/bots/helpers)、そして永続的な [Workflow](/docs/workflows) を使えば、同じ [Workspace](/docs/workspaces) 内で Grok Build・Claude Code・Codex を役割ごとに組み合わせて運用できます。
+Pontia の [Agent Profiles](/docs/agent-profiles) と [Bot](/docs/bots)・並列 [Helper](/docs/bots/helpers) を使えば、同じ [Workspace](/docs/workspaces) 内で Grok Build・Claude Code・Codex を役割ごとに組み合わせて運用できます。
 
 ### 1. 役割ごとの Agent Profile を定義する
 
@@ -137,7 +137,7 @@ Pontia の [Agent Profiles](/docs/agent-profiles)、[Bot](/docs/bots) と並列 
 - **Profile ID**（例: `architect`、`coder`、`grok-reviewer`）
 - **Description**：この役割が担当する仕事と境界（Bot が委任先を選ぶ際の判断材料）
 - **Client**、**Model**、任意の **reasoning effort**
-- **Use YOLO mode**：専門 Helper や Workflow ノードで承認プロンプトなしに通常ツールを使わせたい場合に有効化
+- **Use YOLO mode**：専門 Helper で承認プロンプトなしに通常ツールを使わせたい場合に有効化
 - **System prompt**：その役割専用の作業ルール
 
 たとえば、設計と実装の Profile を Claude Code や Codex に割り当て、差分レビューとエッジケース検証の Profile（`grok-reviewer`）を Grok Build に割り当てる、といった分担ができます。
@@ -154,38 +154,7 @@ pontia bot helper create --profile-id grok-reviewer
 
 複数の Helper が同じリポジトリを並行して編集する場合は、元のプロジェクト Workspace から開始し、各 Helper に独立した Git worktree とブランチを作らせることで競合を防ぎます。すべての Helper はネイティブ CLI Session のまま保持されるため、スマホやデスクトップからいつでも開いて進捗確認・追加指示・差分確認ができます。
 
-### 3. 反復する工程を Workflow に定義する
-
-調査・実装・クロスレビューのように工程と入出力が定まっている作業は、TOML の [Workflow](/docs/workflows) に記述し、各 Agent ノードへ `execution_profile_id` を紐づけます：
-
-```toml
-title = "Feature delivery with cross-client review"
-cwd = "."
-
-[[handoffs]]
-name = "spec.md"
-source = "./spec.md"
-
-[[nodes]]
-type = "agent"
-phase = "Implementation"
-title = "Implement feature"
-instructions = "Implement the approved spec and run the relevant test suite."
-execution_profile_id = "coder"
-inputs = ["spec.md"]
-output = "implementation.md"
-
-[[nodes]]
-type = "agent"
-phase = "Review"
-title = "Grok reviewer"
-instructions = "Review the current changes against the spec and write the findings."
-execution_profile_id = "grok-reviewer"
-inputs = ["spec.md", "implementation.md"]
-output = "review.md"
-```
-
-`pontia workflow run ./workflow.toml` で起動すれば、各フェーズとノードの Session を Dashboard から追跡できます。External API から通常の Session を作成する場合も、`mode` フィールドで `default`・`yolo`・`restricted` を指定できます（[Agent Clients](/docs/agent-clients#client-credentials-and-permissions)）。
+External API から通常の Session を作成する場合も、`mode` フィールドで `default`・`yolo`・`restricted` を指定できます（[Agent Clients](/docs/agent-clients#client-credentials-and-permissions)）。
 
 ## 一次資料と関連ガイド
 
@@ -197,5 +166,5 @@ output = "review.md"
 - [How Claude Code works](https://code.claude.com/docs/en/how-claude-code-works)
 - [Pontia Grok Build Agent Client ガイド](/docs/agent-clients/grok)
 - [Pontia リモートアクセス](/docs/remote-access)と[セキュリティ](/docs/security)
-- [Pontia Agent Profiles](/docs/agent-profiles)・[Bots](/docs/bots)・[並列 Helpers](/docs/bots/helpers)・[Workflows](/docs/workflows)
+- [Pontia Agent Profiles](/docs/agent-profiles)・[Bots](/docs/bots)・[並列 Helpers](/docs/bots/helpers)
 - [オープンソースの Grok Bot 代替を比較: セルフホスト VM か、ローカル CLI オーケストレーションか](/blog/open-source-local-grok-bot-alternative)

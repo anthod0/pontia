@@ -61,7 +61,7 @@ xAI の公式ドキュメント（[Get started](https://docs.x.ai/grok-bot/get-s
 - **[Pontia](https://github.com/anthod0/pontia)（Apache-2.0）:** ローカルのコントロールプレーンデーモン（`pontiad`）と、デスクトップ・モバイルの両ブラウザーで使える Dashboard（`app.pontia.dev`、アプリとしてインストール可能）を組み合わせ、手元のコーディング CLI を永続的なマルチエージェント環境へ拡張します。
   - **常駐 Bot と並列 git worktree の Helper:** 常駐する [Bot](/docs/bots) が独立した作業を 1 タスク 1 分離の [Helper](/docs/bots/helpers) に切り出します。同一リポジトリを並列編集するときは、元の Workspace から開始し、各 Helper に専用の git worktree とブランチを作らせて衝突なく進めます。
   - **ネイティブ CLI Session の直接閲覧と引き継ぎ:** 各 Helper はネイティブ CLI 会話に紐づいた永続 Session です。Bot のステータスやリンクから任意の Helper Session をいつでも開き、リアルタイムの作業を確認したり、直接追加指示を出して引き継いだりできます。
-  - **6 つの CLI を役割別に組み合わせる Agent Profile:** 再利用可能な [Agent Profiles](/docs/agent-profiles) により、対応する 6 つの Agent Client（Claude Code、Codex、Pi、[Grok Build](/docs/agent-clients/grok)、Kiro、Google Antigravity）ごとにモデル、reasoning effort、権限モード、役割プロンプトを定義し、Bot・Helper・Workflow に割り当てられます。
+  - **6 つの CLI を役割別に組み合わせる Agent Profile:** 再利用可能な [Agent Profiles](/docs/agent-profiles) により、対応する 6 つの Agent Client（Claude Code、Codex、Pi、[Grok Build](/docs/agent-clients/grok)、Kiro、Google Antigravity）ごとにモデル、reasoning effort、権限モード、役割プロンプトを定義し、Bot や Helper に割り当てられます。
   - **非同期の判断ループとデバイス内共有メモリ:** [Bot チャット](/docs/bots/chat)の Todo、引用返信、関連メッセージのコンテキストで複数の並列タスクの判断事項を整理します。同じデバイスの全 Bot は[メモリと `USER.md`](/docs/memory) を共有し、定期的な Dreaming が長期コンテキストを整理しつつ、曖昧な点は Bot を通して確認します。
   - **E2E 暗号化されたリモートアクセスとリアルタイムプレビュー:** リモート通信はブラウザーとデバイス間でアプリケーション層のエンドツーエンド暗号化（X25519 HPKE + ChaCha20-Poly1305）を行い、デバイス自身が認可を検証します（[セキュリティ](/docs/security)）。公式 Edge に加え[セルフホスト Edge](/docs/self-hosted-edge) も運用でき、サイドパネルの[プレビュー](/docs/previews)からローカルファイルや `localhost` の開発サーバーをそのまま表示できます。
 

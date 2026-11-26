@@ -128,7 +128,7 @@ Key takeaways from this comparison:
 
 In practice, you rarely need to lock an entire repository to a single coding CLI. Different tasks reward different strengths—deep architectural review, parallel implementation branches, rapid codebase search, or independent second-opinion code review—and you may already hold subscriptions or quotas across more than one provider.
 
-Pontia lets you keep Grok Build, Claude Code, and Codex CLI active in the same [Workspace](/docs/workspaces) and assign each tool a clear role using [Agent Profiles](/docs/agent-profiles), [Bots](/docs/bots) with parallel [Helpers](/docs/bots/helpers), and durable [Workflows](/docs/workflows).
+Pontia lets you keep Grok Build, Claude Code, and Codex CLI active in the same [Workspace](/docs/workspaces) and assign each tool a clear role using [Agent Profiles](/docs/agent-profiles) and [Bots](/docs/bots) with parallel [Helpers](/docs/bots/helpers).
 
 ### 1. Define reusable Agent Profiles
 
@@ -137,7 +137,7 @@ In **Settings → Agent Profiles**, create a Profile for each specialty by combi
 - **Profile ID** (for example, `architect`, `coder`, `grok-reviewer`);
 - **Description** stating what tasks belong to this role and what boundary it respects;
 - **Client**, **Model**, and optional **reasoning effort**;
-- **Use YOLO mode** when that specialist helper or Workflow node should run its usual tools without approval prompts;
+- **Use YOLO mode** when that specialist helper should run its usual tools without approval prompts;
 - **System prompt** with role-specific rules.
 
 For example, you might keep one Profile on Claude Code or Codex for deep architecture planning and implementation, another Profile on Grok Build (`grok-reviewer`) focused on diff review and edge-case checks, and a lightweight researcher Profile for codebase exploration.
@@ -154,38 +154,7 @@ pontia bot helper create --profile-id grok-reviewer
 
 When several helpers modify the same repository at once, the Bot starts from the active project Workspace and instructs each helper to create its own Git worktree and branch so edits run concurrently without checkout collisions. Every Helper remains a native Session you can open directly from your phone or desktop to inspect live tool output, steer, or review diffs.
 
-### 3. Codify repeatable pipelines in a Workflow
-
-For repeatable multi-stage processes—such as discovery, implementation, and cross-client review—define a TOML [Workflow](/docs/workflows) that binds each Agent Node to an `execution_profile_id`:
-
-```toml
-title = "Feature delivery with cross-client review"
-cwd = "."
-
-[[handoffs]]
-name = "spec.md"
-source = "./spec.md"
-
-[[nodes]]
-type = "agent"
-phase = "Implementation"
-title = "Implement feature"
-instructions = "Implement the approved spec and run the relevant test suite."
-execution_profile_id = "coder"
-inputs = ["spec.md"]
-output = "implementation.md"
-
-[[nodes]]
-type = "agent"
-phase = "Review"
-title = "Grok reviewer"
-instructions = "Review the current changes against the spec and write the findings."
-execution_profile_id = "grok-reviewer"
-inputs = ["spec.md", "implementation.md"]
-output = "review.md"
-```
-
-Run it with `pontia workflow run ./workflow.toml` and track each phase and Node Session from the Dashboard. If you drive Pontia programmatically through the External API, ordinary Sessions can also pick `default`, `yolo`, or `restricted` via the `mode` field ([Agent Clients](/docs/agent-clients#client-credentials-and-permissions)).
+If you drive Pontia programmatically through the External API, ordinary Sessions can also pick `default`, `yolo`, or `restricted` via the `mode` field ([Agent Clients](/docs/agent-clients#client-credentials-and-permissions)).
 
 ## Primary sources and further reading
 
@@ -197,5 +166,5 @@ Run it with `pontia workflow run ./workflow.toml` and track each phase and Node 
 - [How Claude Code works](https://code.claude.com/docs/en/how-claude-code-works)
 - [Pontia Grok Build Agent Client guide](/docs/agent-clients/grok)
 - [Pontia Remote access](/docs/remote-access) and [Security](/docs/security)
-- [Pontia Agent Profiles](/docs/agent-profiles), [Bots](/docs/bots), [Helpers](/docs/bots/helpers), and [Workflows](/docs/workflows)
+- [Pontia Agent Profiles](/docs/agent-profiles), [Bots](/docs/bots), and [Helpers](/docs/bots/helpers)
 - [Open-source Grok Bot alternatives: cloud VMs vs local CLI orchestration](/blog/open-source-local-grok-bot-alternative)

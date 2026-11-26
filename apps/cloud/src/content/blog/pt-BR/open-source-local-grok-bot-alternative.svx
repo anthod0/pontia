@@ -83,7 +83,7 @@ Se você já paga assinaturas de Claude Code, Codex ou Grok Build, a orquestraç
 
 A documentação da xAI informa que o Grok Bot escolhe modelos automaticamente sem seletor para o usuário e fora das allowlists de modelos da equipe. Isso reduz a configuração inicial quando você busca um assistente único gerenciado.
 
-Quando o seu fluxo ganha qualidade ao combinar ferramentas diferentes por etapa — por exemplo, um modelo e esforço de raciocínio para pesquisa e arquitetura, outro para implementação paralela e [Grok Build](/docs/agent-clients/grok) ou Codex para correções pontuais — os [Agent Profiles](/docs/agent-profiles) do Pontia permitem padronizar especialidades entre as 6 CLIs suportadas e reutilizá-las em Bots, Helpers e Workflows.
+Quando o seu fluxo ganha qualidade ao combinar ferramentas diferentes por etapa — por exemplo, um modelo e esforço de raciocínio para pesquisa e arquitetura, outro para implementação paralela e [Grok Build](/docs/agent-clients/grok) ou Codex para correções pontuais — os [Agent Profiles](/docs/agent-profiles) do Pontia permitem padronizar especialidades entre as 6 CLIs suportadas e reutilizá-las em Bots e Helpers.
 
 ### 4. Tela remota ou Sessions nativas de CLI inspecionáveis?
 

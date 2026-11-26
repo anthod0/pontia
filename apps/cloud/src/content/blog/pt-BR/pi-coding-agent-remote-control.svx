@@ -37,7 +37,7 @@ tmux attach -t SESSION_NAME
 
 O Pi continua rodando na sua máquina com as próprias credenciais de provedor e a própria configuração. O navegador e a sua máquina estabelecem uma sessão criptografada de ponta a ponta por meio do relay do Pontia, que apenas encaminha texto cifrado. A sua máquina se conecta para fora, então não precisa de nenhuma porta de entrada aberta.
 
-O Pontia oferece suporte ao Linux e ao macOS 13.5 ou posterior, incluindo servidores headless. Além de sessões individuais, os [Workflows](/docs/workflows) executam uma tarefa grande como uma sequência de sessões do Pi, cada uma com um contexto novo e arquivos de handoff explícitos.
+O Pontia oferece suporte ao Linux e ao macOS 13.5 ou posterior, incluindo servidores headless. Além de sessões individuais, os [Bots](/docs/bots) coordenam múltiplos [Helpers](/docs/bots/helpers) do Pi em paralelo, cada um em seu próprio contexto e Git worktree.
 
 ### Configuração
 

@@ -1,12 +1,12 @@
 ---
 title: "From Agent Harness to Coding Agent Orchestrator: Lead Bot + Helpers vs. Role-Split Pipelines"
-description: "Why multi-agent coding breaks down without task isolation and context hygiene. Compares tmux orchestrators, role-split pipelines, Claude Code Subagents and Agent Teams, and Pontia's Lead Bot + Helpers and deterministic Workflows."
+description: "Why multi-agent coding breaks down without task isolation and context hygiene. Compares tmux orchestrators, role-split pipelines, Claude Code Subagents and Agent Teams, and Pontia's Lead Bot + isolated Helpers."
 published: "2026-11-27"
 ---
 
 Running a single coding agent in a terminal is straightforward. Running three or four in parallel on the same repository breaks down quickly: shared checkouts collide, long-lived sessions accumulate stale traces, and one unanswered question stalls work that could have kept moving.
 
-This article draws a clean line between an **agent harness** and a **coding agent orchestrator**, compares the four orchestration patterns engineers use in practice, and examines the five technical constraints that determine whether multi-agent orchestration actually saves engineering time.
+This article draws a clean line between an **agent harness** and a **coding agent orchestrator**, compares the four orchestration patterns engineers use in practice, and examines the four technical constraints that determine whether multi-agent orchestration actually saves engineering time.
 
 ## Agent harness vs. coding agent orchestrator
 
@@ -35,7 +35,7 @@ Most engineering teams coordinating parallel coding agents land on one of four p
 | **Manual terminals / tmux** | One agent CLI per tmux pane or window (for example, AWS CLI Agent Orchestrator) | Direct terminal visibility, minimal abstraction, fast local experiments | Terminal separation is not Git worktree isolation; shared checkouts collide and approvals require checking panes manually |
 | **Role- / stage-split pipelines** | Dedicated agents per phase: Planner → Coder → Reviewer | Frozen specs, explicit stage artifacts, independent acceptance gates | Handoff loses implicit context during exploratory edits, causing coder–reviewer ping-pong and higher token/turn overhead |
 | **Single-CLI Subagents & Agent Teams** | Built-in subagents or peer instances inside one vendor CLI (for example, Claude Code) | Keeping noisy search out of a parent session, or parallel exploration inside one tool | Subagents stay scoped to short subtasks; multi-instance teams multiply token cost and stay inside one vendor's CLI |
-| **Lead Bot + isolated Helpers + Workflows** | One coordinator dispatching fresh end-to-end Helpers per module, plus TOML Workflows for fixed stages (Pontia) | Mixed open-ended engineering tasks across native CLIs, plus repeatable multi-stage pipelines | Requires clear module boundaries for parallel Helpers and upfront stage contracts for Workflows |
+| **Lead Bot + isolated Helpers** | One coordinator dispatching fresh end-to-end Helpers per module (Pontia) | Open-ended engineering tasks in parallel across native CLIs | Requires clear module boundaries and verification commands so each Helper can deliver independently |
 
 ### 1. Manual multi-terminal and tmux orchestrators
 
@@ -60,20 +60,19 @@ Vendor CLIs increasingly ship built-in orchestration primitives. Claude Code doc
 - **Subagents** isolate localized, noisy operations—codebase search, log triage, documentation lookups—in a short-lived context and return only a distilled summary to the main session. They are well suited for protecting the main session's attention budget without leaving the CLI.
 - **Agent Teams** launch multiple full Claude Code instances coordinated through a shared task list and inter-agent messaging. They fit parallel investigation or cleanly separated modules when you want everything inside Claude Code. Because each teammate runs a full context and session loop, token usage scales linearly with team size, and the feature remains experimental and scoped to Claude Code rather than mixing different agent clients.
 
-### 4. Pontia's dual-track model: Lead Bot + Helpers, plus deterministic Workflows
+### 4. Pontia's model: Lead Bot + isolated Helpers
 
-In Pontia, multi-agent orchestration splits into two tracks based on whether the execution path is open-ended or fixed ahead of time:
+In Pontia, multi-agent orchestration centers on a long-lived Lead Bot coordinating fresh, isolated Helpers:
 
 1. **One fresh isolated Helper per task, closed when done.** A [Bot](/docs/bots) acts as a long-lived coordinator on your machine and creates a new [Helper](/docs/bots/helpers) for each independent task. When the task finishes or is cancelled, the Bot closes the Helper immediately—releasing the active runtime while keeping the Session transcript inspectable—instead of recycling an idle worker carrying residue from earlier work.
 2. **Complete module ownership, end to end.** Instead of handing a single code change through separate writer and reviewer agents, the Lead Bot splits work horizontally into self-contained units. Each Helper investigates the codebase, implements the change, runs tests and checks, performs its own review, and makes a clean local commit. When a test fails, the same context that wrote the code fixes it directly.
 3. **Independent Git worktrees for parallel edits.** Helpers launch from the project's active [Workspace](/docs/workspaces) and create their own Git worktree and branch when concurrent changes touch the same repository. Parallel work stays isolated on disk until each branch is verified and merged.
 4. **Transparent native CLIs and reusable Agent Profiles.** Helpers run native coding agents—Claude Code, Codex, Grok Build, [Pi](/docs/agent-clients/pi), Kiro, and Google Antigravity—using each tool's own credentials, configuration, and session history. You can open any Helper Session in the Dashboard to watch tool output or steer it directly, and use [Agent Profiles](/docs/agent-profiles) to pair a specialty with the right Client, model, reasoning effort, permissions mode, and system prompt.
 5. **Asynchronous Todo decisions and shared memory.** When a Bot needs your judgment before proceeding, it marks a focused question as a Todo in [Bot chat](/docs/bots/chat) while unblocked Helpers keep running. A quoted reply closes the Todo automatically. Across every Bot on the device, `USER.md` and [shared memory](/docs/memory) retain standing preferences and project conventions so you do not restate them for every task.
-6. **Deterministic Workflows for fixed processes.** When stages, file handoffs, and completion points are known upfront, [Workflows](/docs/workflows) run TOML-defined Agent Nodes sequentially—each in a fresh Session with explicit Handoff files, `pontia workflow submit` checkpoints, pause/resume controls, and targeted retry on recoverable failures—reusing the exact same Agent Profiles.
 
-## Five engineering problems that decide whether orchestration works
+## Four engineering problems that decide whether orchestration works
 
-Across all four patterns, the same five failure modes determine whether parallel coding agents accelerate delivery or create cleanup work.
+Across all four patterns, the same four failure modes determine whether parallel coding agents accelerate delivery or create cleanup work.
 
 ### 1. Context pollution and attention budgets
 
@@ -105,27 +104,12 @@ The cleaner design separates **product or architectural decisions** from **routi
 - Route real decisions into an asynchronous queue—in Pontia, [Bot chat Todos](/docs/bots/chat)—so each question is captured as a focused card you can answer from desktop or phone while independent Helpers keep making progress.
 - Control tool approval per specialty with [Agent Profiles](/docs/agent-profiles): keep default approval policies where you want them, and enable **Use YOLO mode** explicitly on Profiles intended for unattended execution inside isolated worktrees or sandboxed environments.
 
-### 5. Choosing between open-ended Bot orchestration and deterministic Workflows
-
-Engineers often try to force every problem into one orchestration primitive—either writing rigid pipelines for exploratory debugging, or using free-form chat for a repeatable multi-step build. Separating the two makes both simpler:
-
-| Question | Lead Bot + Helpers | Deterministic Workflow |
-| --- | --- | --- |
-| **Are stages and outputs fixed upfront?** | No—scope and subtasks evolve as investigation uncovers facts | Yes—phases, Handoff file names, and order are known ahead of time |
-| **How does work fan out?** | Parallel Helpers owning independent modules concurrently | Sequential Agent Nodes with explicit input/output file contracts |
-| **How is progress verified?** | Each Helper runs local checks, self-reviews, and reports to the Bot | Each Node writes its declared Handoff file and runs `pontia workflow submit` |
-| **How do failures recover?** | Bot inspects impact, steers the Helper, opens a Todo, or spawns follow-up work | Pause/resume in the Dashboard, or `pontia workflow retry` on the failed Node while keeping earlier submitted Nodes intact |
-| **Shared building blocks** | Uses [Agent Profiles](/docs/agent-profiles), active [Workspaces](/docs/workspaces), and native CLIs | Reuses the same [Agent Profiles](/docs/agent-profiles), active [Workspaces](/docs/workspaces), and native CLIs |
-
-In practice, teams use both side by side: a Lead Bot with parallel Helpers for daily feature work, bug fixes, and research; and a TOML [Workflow](/docs/workflows) whenever a repeatable multi-stage delivery benefits from frozen Handoff files and checkpointed retries.
-
 ## Related
 
 - [Bots](/docs/bots) — create long-lived Bots and divide ongoing responsibilities
 - [Run Helpers in parallel](/docs/bots/helpers) — delegate independent modules with isolated Git worktrees
 - [Agent Profiles](/docs/agent-profiles) — combine Client, model, reasoning effort, YOLO mode, and instructions
 - [Shared memory and USER.md](/docs/memory) — keep preferences consistent across Bots
-- [Workflows](/docs/workflows) — run durable TOML-defined Agent Nodes with explicit Handoffs
 - [Pi Agent Client](/docs/agent-clients/pi) — connect native Pi sessions to Pontia
 - [How to use Pi coding agent from your phone](/blog/pi-coding-agent-remote-control)
 - [Remote control for Codex, Claude Code, and Pi compared](/blog/coding-agent-remote-control-alternatives)

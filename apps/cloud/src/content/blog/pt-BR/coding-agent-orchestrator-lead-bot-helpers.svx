@@ -1,12 +1,12 @@
 ---
 title: "Do Agent Harness ao Coding Agent Orchestrator: Lead Bot + Helpers vs. pipelines por papéis"
-description: "Por que a orquestração multiagente de código falha sem isolamento de tarefas e higiene de contexto. Compara orquestradores em tmux, pipelines por estágio, Subagents e Agent Teams do Claude Code, e o modelo do Pontia com Lead Bot + Helpers e Workflows determinísticos."
+description: "Por que a orquestração multiagente de código falha sem isolamento de tarefas e higiene de contexto. Compara orquestradores em tmux, pipelines por estágio, Subagents e Agent Teams do Claude Code, e o modelo do Pontia com Lead Bot + Helpers isolados."
 published: "2026-11-27"
 ---
 
 Rodar um único agente de código no terminal é simples. Rodar três ou quatro em paralelo no mesmo repositório começa a quebrar rápido: checkouts compartilhados colidem, sessões longas acumulam rastros obsoletos e uma única pergunta sem resposta trava tarefas que poderiam continuar avançando.
 
-Este artigo separa com clareza o papel de um **agent harness** do papel de um **coding agent orchestrator**, compara os quatro padrões de **multi-agent orchestration** usados na prática e analisa os cinco problemas de engenharia que decidem se agentes em paralelo realmente economizam tempo.
+Este artigo separa com clareza o papel de um **agent harness** do papel de um **coding agent orchestrator**, compara os quatro padrões de **multi-agent orchestration** usados na prática e analisa os quatro problemas de engenharia que decidem se agentes em paralelo realmente economizam tempo.
 
 ## Agent harness vs. coding agent orchestrator
 
@@ -35,7 +35,7 @@ Equipes de engenharia que rodam múltiplos agentes de código costumam adotar um
 | **Terminais manuais / tmux** | Um CLI de agente por painel ou janela do tmux (ex.: AWS CLI Agent Orchestrator) | Visibilidade direta do terminal, abstração mínima, experimentos rápidos ou repositórios separados | Isolamento de terminal não é isolamento de Git worktree; checkouts compartilhados colidem e aprovações exigem checar janelas manualmente |
 | **Pipelines por papel/estágio** | Agentes dedicados por etapa: Planner → Coder → Reviewer | Especificações congeladas, artefatos formais entre etapas e portões independentes de aceite | Em alterações exploratórias no mesmo código, a passagem de bastão perde contexto implícito e gera ping-pong entre código e revisão |
 | **Subagents e Agent Teams em um único CLI** | Subagentes ou instâncias paralelas dentro de um mesmo CLI (ex.: Claude Code) | Manter buscas ruidosas fora da sessão principal ou explorar módulos sem sobreposição no mesmo CLI | Subagents focam subtarefas curtas; equipes com múltiplas instâncias multiplicam tokens e permanecem restritas a um único fornecedor |
-| **Lead Bot + Helpers isolados + Workflows** | Coordenador que cria Helpers novos de ponta a ponta por módulo, somado a Workflows TOML para etapas fixas (Pontia) | Tarefas abertas em paralelo com vários CLIs nativos, junto de pipelines repetíveis com contratos de arquivo | Exige fatiar módulos com fronteiras claras para Helpers paralelos e definir contratos prévios para Workflows |
+| **Lead Bot + Helpers isolados** | Coordenador que cria Helpers novos de ponta a ponta por módulo (Pontia) | Tarefas abertas em paralelo com vários CLIs nativos | Exige fatiar módulos com fronteiras claras e comandos de verificação para cada Helper entregar com autonomia |
 
 ### 1. Múltiplos terminais manuais e orquestradores em tmux
 
@@ -60,20 +60,19 @@ CLIs de agentes também passaram a oferecer primitivas próprias de coordenaçã
 - **Subagents** isolam trabalho local barulhento—buscas amplas no repositório, triagem de logs, leitura de documentação—em um contexto efêmero e devolvem apenas o resumo para a sessão principal, preservando o orçamento de atenção dela.
 - **Agent Teams** sobem múltiplas instâncias completas do Claude Code coordenadas por lista compartilhada de tarefas e troca de mensagens. São úteis para investigação paralela ou módulos sem sobreposição dentro do próprio Claude Code. Como cada membro mantém uma instância completa, o uso de tokens cresce proporcionalmente ao número de agentes, e o recurso segue experimental e restrito ao ecossistema do Claude Code.
 
-### 4. O modelo de duas trilhas do Pontia: Lead Bot + Helpers e Workflows determinísticos
+### 4. O modelo do Pontia: Lead Bot + Helpers isolados
 
-No Pontia, a orquestração multiagente segue duas trilhas complementares, conforme a tarefa seja aberta ou tenha etapas fixas:
+No Pontia, a orquestração multiagente gira em torno de um Lead Bot persistente coordenando Helpers novos e isolados:
 
 1. **Um Helper novo e isolado por tarefa, fechado ao concluir.** Um [Bot](/docs/bots) atua como coordenador de longo prazo na sua máquina e cria um [Helper](/docs/bots/helpers) dedicado com contexto limpo para cada tarefa independente. Quando a tarefa termina ou é cancelada, o Bot fecha o Helper imediatamente—liberando o runtime e preservando o histórico da Session—em vez de reutilizar um worker ocioso carregado de contexto antigo.
 2. **Responsabilidade de ponta a ponta por módulo.** Em vez de dividir a mesma alteração entre um agente que escreve e outro que revisa, o Lead Bot fatia o trabalho horizontalmente em módulos verificáveis. Cada Helper investiga o código, implementa, executa testes e checagens, faz a própria revisão e gera um commit local limpo. Se um teste falhar, o mesmo contexto que escreveu o código corrige o problema direto na fonte.
 3. **Isolamento concorrente com Git worktrees.** Quando várias tarefas modificam o mesmo repositório, cada Helper inicia na [Workspace](/docs/workspaces) ativa do projeto e cria seu próprio Git worktree e branch. As mudanças ficam isoladas em disco até passarem na verificação e seguirem para um merge controlado.
 4. **CLIs nativos transparentes e Agent Profiles reutilizáveis.** Os Helpers executam os CLIs nativos instalados na máquina—Claude Code, Codex, Grok Build, [Pi](/docs/agent-clients/pi), Kiro e Google Antigravity—com suas próprias credenciais e histórico. Você pode abrir qualquer Helper Session no Dashboard para acompanhar comandos ou assumir o controle direto, além de configurar [Agent Profiles](/docs/agent-profiles) combinando Client, modelo, esforço de raciocínio, modo de permissões e prompt de sistema para cada especialidade.
 5. **Decisões assíncronas via Todo e memória compartilhada.** Quando precisa de uma decisão sua, o Bot destaca a pergunta como um Todo no [chat do Bot](/docs/bots/chat), enquanto Helpers não bloqueados continuam rodando. Responder citando o Todo fecha o item automaticamente. Entre todos os Bots do dispositivo, `USER.md` e a [memória compartilhada](/docs/memory) preservam regras e preferências duradouras sem repetição.
-6. **Workflows determinísticos para processos repetíveis.** Quando fases, arquivos de entrada/saída e critérios de entrega são conhecidos de antemão, os [Workflows](/docs/workflows) executam Agent Nodes definidos em TOML em ordem—cada nó em uma Session nova, com Handoffs explícitos, submissão via `pontia workflow submit`, pausa/retomada e retry no nó com falha recuperável—reutilizando os mesmos Agent Profiles.
 
-## Cinco problemas de engenharia que definem se a orquestração funciona
+## Quatro problemas de engenharia que definem se a orquestração funciona
 
-Independentemente da ferramenta, os mesmos cinco pontos determinam se múltiplos agentes aceleram a entrega ou geram retrabalho.
+Independentemente da ferramenta, os mesmos quatro pontos determinam se múltiplos agentes aceleram a entrega ou geram retrabalho.
 
 ### 1. Poluição de contexto e orçamento de atenção
 
@@ -105,27 +104,12 @@ A separação mais saudável divide **decisões de produto e arquitetura** de **
 - Direcione decisões reais para uma fila assíncrona—no Pontia, os [Todos do chat do Bot](/docs/bots/chat)—onde cada dúvida vira um cartão objetivo que você responde no computador ou no celular enquanto os outros Helpers continuam produzindo.
 - Ajuste permissões de ferramenta por especialidade usando [Agent Profiles](/docs/agent-profiles): mantenha o modo padrão onde faz sentido e ative **Usar modo YOLO** explicitamente apenas em Profiles pensados para execução autônoma em worktrees isolados ou sandboxes.
 
-### 5. Quando escolher orquestração aberta com Bot e quando usar Workflow determinístico
-
-Muitos problemas surgem ao tentar encaixar qualquer tarefa em uma única abstração—usando pipelines rígidos para depuração exploratória ou chat livre para uma entrega repetível de várias etapas. A divisão entre as duas trilhas deixa a escolha objetiva:
-
-| Critério | Lead Bot + Helpers isolados | Workflow determinístico |
-| --- | --- | --- |
-| **As etapas e saídas são fixas antes de começar?** | Não—o escopo e as subtarefas evoluem conforme a investigação avança | Sim—fases, arquivos de Handoff e ordem são definidos previamente |
-| **Como o trabalho escala?** | Helpers em paralelo cuidando de módulos independentes ao mesmo tempo | Agent Nodes sequenciais em TOML conectados por contratos explícitos de arquivo |
-| **Como o término é verificado?** | Cada Helper roda testes locais, revisa o diff e reporta ao Bot | Cada nó grava seu arquivo de saída declarado e executa `pontia workflow submit` |
-| **Recuperação em caso de falha** | O Bot avalia o impacto, orienta o Helper, abre um Todo ou cria nova tarefa | Pausa/retomada no Dashboard ou `pontia workflow retry` no nó com falha mantendo nós anteriores |
-| **Base compartilhada** | Usa [Agent Profiles](/docs/agent-profiles), [Workspaces](/docs/workspaces) ativas e CLIs nativos | Reutiliza os mesmos [Agent Profiles](/docs/agent-profiles), [Workspaces](/docs/workspaces) ativas e CLIs nativos |
-
-Na prática, os dois modelos trabalham juntos: Lead Bot + Helpers paralelos para desenvolvimento diário, correção de bugs e pesquisa técnica; [Workflows](/docs/workflows) em TOML sempre que um processo repetível se beneficia de Handoffs congelados e retomada por etapa.
-
 ## Relacionados
 
 - [Bots](/docs/bots) — crie Bots de longo prazo e divida frentes de trabalho
 - [Execute Helpers em paralelo](/docs/bots/helpers) — delegue módulos independentes com Git worktrees isolados
 - [Agent Profiles](/docs/agent-profiles) — combine Client, modelo, esforço de raciocínio, modo YOLO e instruções
 - [Memória compartilhada e USER.md](/docs/memory) — mantenha preferências consistentes entre todos os Bots
-- [Workflows](/docs/workflows) — rode Agent Nodes duráveis definidos em TOML com Handoffs explícitos
 - [Agent Client Pi](/docs/agent-clients/pi) — conecte sessões nativas do Pi ao Pontia
 - [Como usar o Pi coding agent pelo celular](/blog/pi-coding-agent-remote-control)
 - [Comparativo de controle remoto para Codex, Claude Code e Pi](/blog/coding-agent-remote-control-alternatives)

@@ -37,7 +37,7 @@ tmux attach -t SESSION_NAME
 
 Pi は自分のマシン上で、Pi 自身のプロバイダー認証情報と設定を使って動き続けます。ブラウザとマシンは Pontia のリレーを通じてエンドツーエンド暗号化された Session を確立し、リレーは暗号文を転送するだけです。マシンは外向きに接続するため、受信ポートを開く必要はありません。
 
-Pontia は Linux と macOS 13.5 以降をサポートしており、ヘッドレスサーバーでも使えます。単一の Session だけでなく、[Workflow](/docs/workflows) を使えば、大きなタスクを一連の Pi Session として実行できます。各 Session は新しいコンテキストと明示的な Handoff ファイルを持ちます。
+Pontia は Linux と macOS 13.5 以降をサポートしており、ヘッドレスサーバーでも使えます。単一の Session だけでなく、[Bot](/docs/bots) を使って独立したコンテキストと Git worktree で複数の Pi [Helper](/docs/bots/helpers) を並列に調整できます。
 
 ### セットアップ
 

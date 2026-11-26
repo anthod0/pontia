@@ -83,7 +83,7 @@ If you already pay for Claude Code, Codex, or Grok Build subscriptions, running 
 
 Grok Bot hides model selection behind automatic routing; xAI explicitly documents that users do not pick models and team allowlists do not apply. That lowers configuration overhead when you want a single managed assistant.
 
-If your engineering workflow benefits from matching tools to tasks—for example, using one model and reasoning depth for architecture review, another for parallel coding, and [Grok Build](/docs/agent-clients/grok) or Codex for targeted fixes—Pontia's [Agent Profiles](/docs/agent-profiles) let you define reusable specialties across all 6 supported CLIs and assign them to Bots, Helpers, or Workflows.
+If your engineering workflow benefits from matching tools to tasks—for example, using one model and reasoning depth for architecture review, another for parallel coding, and [Grok Build](/docs/agent-clients/grok) or Codex for targeted fixes—Pontia's [Agent Profiles](/docs/agent-profiles) let you define reusable specialties across all 6 supported CLIs and assign them to Bots and Helpers.
 
 ### 4. Do you want a remote screen or inspectable native CLI sessions?
 
