@@ -669,16 +669,31 @@ async fn restricted_session_merges_rules_and_retains_policy_on_resume() {
 }
 
 #[tokio::test]
-async fn unverified_model_types_fail_before_native_session_creation() {
+async fn externally_injected_models_are_allowed_in_restricted_sessions() {
     let h = Harness::new(&[("ACP_MODELS", "flat")]).await;
-    for (model, kind) in [
-        ("deep", "codex"),
-        ("fast", "grok-build-orchestrator"),
-        ("unclassified", "grok-build-plan"),
-    ] {
-        std::fs::write(h.root.path().join("model-kind"), kind).unwrap();
-        assert!(restricted_request(&h, model).await.is_err());
-    }
+    std::fs::write(h.root.path().join("model.txt"), "third-party").unwrap();
+    restricted_request(&h, "third-party").await.unwrap();
+    assert_eq!(h.requests("session/new"), 1);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn catalog_models_without_agent_types_are_allowed_in_restricted_sessions() {
+    let h = Harness::new(&[("ACP_MODELS", "flat")]).await;
+    std::fs::write(h.root.path().join("model.txt"), "unclassified").unwrap();
+    restricted_request(&h, "unclassified").await.unwrap();
+    assert_eq!(h.requests("session/new"), 1);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn catalog_models_with_incompatible_agent_types_fail_before_native_session_creation() {
+    let h = Harness::new(&[("ACP_MODELS", "flat")]).await;
+    std::fs::write(h.root.path().join("model-kind"), "grok-build-orchestrator").unwrap();
+    assert!(matches!(
+        restricted_request(&h, "fast").await,
+        Err(Error::CapabilityUnavailable(_))
+    ));
     assert_eq!(h.requests("session/new"), 0);
     assert_eq!(h.requests("session/prompt"), 0);
     h.stop().await;

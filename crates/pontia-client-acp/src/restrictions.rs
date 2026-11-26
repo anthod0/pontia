@@ -57,7 +57,7 @@ impl AgentProfile {
         let id = requested
             .or_else(|| catalog["currentModelId"].as_str())
             .ok_or_else(|| Error::CapabilityUnavailable("ACP default model unavailable".into()))?;
-        let allowed = catalog["availableModels"]
+        let incompatible = catalog["availableModels"]
             .as_array()
             .and_then(|models| {
                 models
@@ -65,10 +65,10 @@ impl AgentProfile {
                     .find(|model| model["modelId"].as_str() == Some(id))
             })
             .and_then(|model| model.pointer(self.agent_type_path)?.as_str())
-            .is_some_and(|kind| self.allowed_types.contains(&kind));
-        if !allowed {
+            .is_some_and(|kind| !self.allowed_types.contains(&kind));
+        if incompatible {
             return Err(Error::CapabilityUnavailable(format!(
-                "ACP model {id} lacks a verified type for restricted Sessions"
+                "ACP model {id} has an incompatible type for restricted Sessions"
             )));
         }
         Ok(id.to_owned())
