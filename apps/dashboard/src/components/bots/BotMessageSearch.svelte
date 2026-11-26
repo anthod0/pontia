@@ -142,7 +142,7 @@
               onclick={() => selectFile(message, file)} data-search-file={file.path}>
               <span class="grid size-10 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted text-muted-foreground">
                 <!-- Uploads are temporary files the Bot's file Session may not read. -->
-                {#if file.media_kind === 'image' && !user && fileSessionId}<QuoteThumbnail sessionId={fileSessionId} path={file.path} class="size-full" />
+                {#if file.media_kind === 'image' && !user && fileSessionId}<QuoteThumbnail sessionId={fileSessionId} path={file.path} class="size-full" lazy />
                 {:else if file.media_kind === 'image'}<ImageIcon class="size-5" />
                 {:else}<FileIcon class="size-5" />{/if}
               </span>

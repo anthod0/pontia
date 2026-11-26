@@ -306,6 +306,8 @@ test("lists every file without search text and keeps the type while text and tab
 });
 
 test("previews reply images through the file Session but never uploads", async () => {
+  vi.stubGlobal("IntersectionObserver", VisibleObserver);
+  mockFileInfo();
   serve([latest], [], { session_id: "s", workspace: "/work" });
   serveFiles();
   const preview = vi.spyOn(testDevice.previews, "imageUrl").mockResolvedValue("blob:image");
@@ -323,6 +325,38 @@ test("previews reply images through the file Session but never uploads", async (
     "/work/plot.png",
   ]);
   expect(preview.mock.calls.every(([session]) => session === "s")).toBe(true);
+  vi.unstubAllGlobals();
+});
+
+test("does not download image search previews before they enter the viewport", async () => {
+  class HiddenObserver {
+    observe() {}
+    disconnect() {}
+  }
+  vi.stubGlobal("IntersectionObserver", HiddenObserver);
+  serve([latest], [], { session_id: "s", workspace: "/work" });
+  const images = Array.from({ length: 20 }, (_, index) => {
+    const path = `/work/image-${index}.png`;
+    return {
+      ...message(index + 10, "bot_reply", `![image](${path})`),
+      attachments: [attachment("markdown_link", path)],
+    };
+  });
+  vi.spyOn(testDevice.api, "searchBotMessages").mockResolvedValue({
+    messages: images,
+    next_before: null,
+  });
+  const info = vi.spyOn(testDevice.fileApi, "pathFileInfo");
+  const preview = vi.spyOn(testDevice.previews, "imageUrl");
+  const { panel } = await openSearch();
+
+  await fireEvent.click(panel.getByRole("radio", { name: "Images" }));
+  const results = await panel.findByRole("list", { name: "Search results" });
+
+  expect(within(results).getAllByRole("button")).toHaveLength(20);
+  expect(info).not.toHaveBeenCalled();
+  expect(preview).not.toHaveBeenCalled();
+  vi.unstubAllGlobals();
 });
 
 test("jumps to an attached file, or to the message a linked file is in", async () => {
