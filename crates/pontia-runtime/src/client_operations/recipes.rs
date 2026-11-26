@@ -198,9 +198,19 @@ impl InstallOperation {
                 command.env(key, value);
             }
         }
+        self.run_logged(command.env("CI", "1").env("NO_COLOR", "1"))
+    }
+
+    pub fn run_setup(&self, command: &mut Command) -> io::Result<()> {
+        if self.phase() != Phase::SettingUp {
+            return Err(io::Error::other("Setup requires the setting_up phase"));
+        }
+        self.run_logged(command)
+    }
+
+    fn run_logged(&self, command: &mut Command) -> io::Result<()> {
+        self.checkpoint()?;
         let mut child = command
-            .env("CI", "1")
-            .env("NO_COLOR", "1")
             .stdin(Stdio::null())
             .stdout(self.log.try_clone()?)
             .stderr(self.log.try_clone()?)

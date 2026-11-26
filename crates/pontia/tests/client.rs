@@ -229,3 +229,30 @@ fn missing_or_conflicting_target_selectors_are_rejected() {
         assert!(output.stdout.is_empty());
     }
 }
+
+#[test]
+fn install_discovery_and_unknown_selectors_work_offline() {
+    let root = tempfile::tempdir().unwrap();
+    let install = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_pontia"))
+            .args(["client", "install"])
+            .args(args)
+            .env("PONTIA_HOME", root.path())
+            .output()
+            .unwrap()
+    };
+    let list = install(&["--list"]);
+    assert!(
+        list.status.success(),
+        "{}",
+        String::from_utf8_lossy(&list.stderr)
+    );
+    assert!(
+        serde_json::from_slice::<Value>(&list.stdout)
+            .unwrap()
+            .is_array()
+    );
+    assert!(!install(&["no-such-client", "--yes"]).status.success());
+    assert!(!install(&["--list", "no-such-client"]).status.success());
+    assert!(!root.path().join("state/client-operations").exists());
+}

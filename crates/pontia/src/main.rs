@@ -113,6 +113,8 @@ enum Command {
         client: Option<String>,
     },
     #[command(hide = true)]
+    InstallSetup { client: String },
+    #[command(hide = true)]
     SetupWorker {
         client: String,
         operation_id: uuid::Uuid,
@@ -260,6 +262,15 @@ async fn execute(command: Command) -> Result<bool, String> {
         Command::Setup { client } => {
             let vars = env::vars().collect();
             setup::run_interactive(client.as_deref(), &vars, &RealInitPlatform)?;
+            Ok(true)
+        }
+        Command::InstallSetup { client } => {
+            setup::installed(
+                &client,
+                &mut std::io::stdout(),
+                &env::vars().collect(),
+                &RealInitPlatform,
+            )?;
             Ok(true)
         }
         Command::SetupWorker {

@@ -1002,3 +1002,24 @@ fn failed_settings_read_does_not_fall_back_to_recommended_clients() {
             .any(|event| event == "install-pi")
     );
 }
+
+#[test]
+fn post_install_setup_configures_integration_without_enabling_it() {
+    let root = tempfile::tempdir().unwrap();
+    let platform = FakePlatform::default();
+    pontia::setup::installed(
+        "codex",
+        &mut Vec::new(),
+        &vars(root.path(), &root.path().join("pontia")),
+        &platform,
+    )
+    .unwrap();
+    assert!(platform.enabled.borrow().is_empty());
+    assert!(
+        platform
+            .events
+            .borrow()
+            .iter()
+            .any(|event| event.starts_with("initialize-codex:"))
+    );
+}

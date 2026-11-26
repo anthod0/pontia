@@ -4,8 +4,10 @@ use pontia_config::AppConfig;
 use reqwest::Method;
 use serde_json::{Value, json};
 
+mod install;
+
 const CLIENT_HELP: &str = "\
-Requires a running service. Output is JSON, except for 'list' without --json.
+Management commands other than install require a running service. Output is JSON, except for 'list' without --json.
 
 For Client setup, see https://pontia.dev/docs/agent-clients.md";
 
@@ -24,6 +26,8 @@ enum ClientCommandKind {
         #[arg(long)]
         json: bool,
     },
+    /// Install a registered Agent Client locally
+    Install(install::Options),
     /// Show one entry
     Show(Target),
     /// Allow new Sessions to use an entry
@@ -154,6 +158,7 @@ pub async fn run(command: ClientCommand, config: &AppConfig) -> Result<String, S
     let result = match command.command {
         ClientCommandKind::List { json: false } => return Ok(table(&api.list().await?)),
         ClientCommandKind::List { json: true } => json!({"agent_clients": api.list().await?}),
+        ClientCommandKind::Install(options) => install::run(options, config.clone()).await?,
         command => manage(&api, command).await?,
     };
     serde_json::to_string_pretty(&result).map_err(|error| error.to_string())
@@ -192,7 +197,7 @@ fn table(entries: &[AgentClientDetails]) -> String {
 
 async fn manage(api: &ClientApi, command: ClientCommandKind) -> Result<Value, String> {
     let target = match &command {
-        ClientCommandKind::List { .. } => unreachable!(),
+        ClientCommandKind::List { .. } | ClientCommandKind::Install(_) => unreachable!(),
         ClientCommandKind::Show(target)
         | ClientCommandKind::Enable(target)
         | ClientCommandKind::Disable(target)
@@ -238,6 +243,6 @@ async fn manage(api: &ClientApi, command: ClientCommandKind) -> Result<Value, St
             )
             .await
         }
-        ClientCommandKind::List { .. } => unreachable!(),
+        ClientCommandKind::List { .. } | ClientCommandKind::Install(_) => unreachable!(),
     }
 }

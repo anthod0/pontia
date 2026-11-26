@@ -19,6 +19,7 @@ pub enum Phase {
     Preflight,
     Installing,
     Verifying,
+    SettingUp,
     Done,
 }
 
@@ -154,6 +155,10 @@ impl InstallOperation {
         Ok(state.cancel_requested)
     }
 
+    pub fn phase(&self) -> Phase {
+        self.state.phase
+    }
+
     pub fn checkpoint(&self) -> io::Result<()> {
         if self.requested()? {
             return Err(io::Error::new(
@@ -169,7 +174,9 @@ impl InstallOperation {
         self.checkpoint()?;
         if !matches!(
             (self.state.phase, next),
-            (Phase::Preflight, Phase::Installing) | (Phase::Installing, Phase::Verifying)
+            (Phase::Preflight, Phase::Installing)
+                | (Phase::Installing, Phase::Verifying)
+                | (Phase::Verifying, Phase::SettingUp)
         ) {
             return Err(io::Error::other("Invalid install phase transition"));
         }
@@ -227,7 +234,7 @@ pub fn run(
     } else if let Err(error) = result {
         operation.state.status = Status::Failed;
         operation.state.error = Some(error.to_string());
-    } else if operation.state.phase != Phase::Verifying {
+    } else if !matches!(operation.state.phase, Phase::Verifying | Phase::SettingUp) {
         operation.state.status = Status::Failed;
         operation.state.error = Some("Install finished before verification".into());
     } else {

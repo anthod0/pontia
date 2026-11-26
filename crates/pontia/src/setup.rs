@@ -53,7 +53,15 @@ pub fn run<R: BufRead, W: Write, P: SetupPlatform>(
     vars: &HashMap<String, String>,
     platform: &P,
 ) -> Result<(), String> {
-    run_with_selector(client, input, output, vars, platform, line_agent_selection)
+    run_with_selector(
+        client,
+        input,
+        output,
+        vars,
+        platform,
+        true,
+        line_agent_selection,
+    )
 }
 
 pub fn run_interactive<P: SetupPlatform>(
@@ -67,7 +75,25 @@ pub fn run_interactive<P: SetupPlatform>(
         &mut io::stdout().lock(),
         vars,
         platform,
+        true,
         interactive_agent_selection,
+    )
+}
+
+pub fn installed<P: SetupPlatform>(
+    client: &str,
+    output: &mut impl Write,
+    vars: &HashMap<String, String>,
+    platform: &P,
+) -> Result<(), String> {
+    run_with_selector(
+        Some(client),
+        &mut io::empty(),
+        output,
+        vars,
+        platform,
+        false,
+        line_agent_selection,
     )
 }
 
@@ -77,6 +103,7 @@ fn run_with_selector<R, W, P, S>(
     output: &mut W,
     vars: &HashMap<String, String>,
     platform: &P,
+    enable: bool,
     select: S,
 ) -> Result<(), String>
 where
@@ -155,6 +182,9 @@ where
         terminal::success("Pontia service configuration verified")
     )
     .map_err(|error| error.to_string())?;
+    if !enable {
+        return Ok(());
+    }
     for client in selected.iter().map(|&index| &integrations[index]) {
         platform
             .enable_client(&config, client.client_type(), client.client_key())
