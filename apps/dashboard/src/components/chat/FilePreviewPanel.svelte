@@ -3,11 +3,11 @@
   import { t } from '$lib/i18n'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Tabs from '$lib/components/ui/tabs/index.js'
-  import MessageResponse from '$lib/components/ai-elements/message/message-response.svelte'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import DelimitedTablePreview from './DelimitedTablePreview.svelte'
+  import MarkdownFilePreview from './MarkdownFilePreview.svelte'
   import StructuredFilePreview from './StructuredFilePreview.svelte'
   import DeviceProvider from '../../device/DeviceProvider.svelte'
   import { type FilePreviewTarget } from './filePreviewContext'
@@ -127,7 +127,7 @@ const preview = untrack(() => createFilePreview(target, openFile))
         {:else}
           {#key target.device}
             <DeviceProvider device={target.device}>
-              <MessageResponse content={preview.text} markdown sessionId={target.sessionId} linkBase={preview.path} class="h-auto" />
+              <MarkdownFilePreview content={preview.text} sessionId={target.sessionId} linkBase={preview.path} />
             </DeviceProvider>
           {/key}
         {/if}
