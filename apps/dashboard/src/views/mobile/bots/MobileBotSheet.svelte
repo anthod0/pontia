@@ -15,7 +15,7 @@
     dismiss={() => (open = false)}
     aria-describedby={undefined}
   >
-    {#if title}<div class={['flex shrink-0 items-center gap-2 py-3 pr-14', fixed ? 'border-b px-4' : 'px-0']}><Sheet.Title class="text-lg font-semibold">{title}</Sheet.Title>{#if subtitle}<span class="truncate text-[13px] text-muted-foreground">{subtitle}</span>{/if}</div>{/if}
+    {#if title}<div class={['flex shrink-0 items-center gap-2 py-3 pr-14', fixed ? 'border-b px-4' : 'px-0']}><Sheet.Title class="text-lg font-semibold">{title}</Sheet.Title>{#if subtitle}<span class="truncate text-13 text-muted-foreground">{subtitle}</span>{/if}</div>{/if}
     <div class={['min-h-0 overflow-auto overscroll-contain pb-3', fixed && 'flex flex-1 flex-col pb-0']}>{@render children()}</div>
   </BottomSheet>
 </Sheet.Root>

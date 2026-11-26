@@ -77,7 +77,7 @@
         <MagnifyingGlassIcon class="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input class="pr-8 pl-8" placeholder={$t('memory.searchPlaceholder')} aria-label={$t('memory.search')} value={search} oninput={(event) => onSearch(event.currentTarget.value)} />
         {#if search}
-          <button type="button" class="absolute top-1/2 right-1.5 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={$t('common.clear')} onclick={clearSearch}><XIcon class="size-3.5" /></button>
+          <button type="button" class="absolute top-1/2 right-1.5 -translate-y-1/2 rounded-tooltip p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={$t('common.clear')} onclick={clearSearch}><XIcon class="size-3.5" /></button>
         {/if}
       </div>
       <p class="shrink-0 text-sm text-muted-foreground" aria-live="polite">{query ? $t('memory.resultCount', { count: total }) : $t('memory.count', { count: total })}</p>
@@ -96,7 +96,7 @@
         {#each items as memory (memory.id)}
           {@const workspace = workspaceName(memory.workspace_id)}
           <li class="space-y-1 px-1 py-3 sm:px-2">
-            <p class="whitespace-pre-wrap">{#each highlight(memory.content) as part}{#if part.match}<mark class="rounded-sm bg-primary/15 px-0.5 text-foreground">{part.text}</mark>{:else}{part.text}{/if}{/each}</p>
+            <p class="whitespace-pre-wrap">{#each highlight(memory.content) as part}{#if part.match}<mark class="rounded-tooltip bg-primary/15 px-0.5 text-foreground">{part.text}</mark>{:else}{part.text}{/if}{/each}</p>
             <p class="truncate text-sm text-muted-foreground">
               {$t(memoryKindLabel(memory.kind))}{#if workspace}{' · '}{workspace}{/if}{' · '}<time datetime={memory.updated_at} title={formatDateTime(memory.updated_at, $currentLocale)}>{formatRelativeTime(memory.updated_at, $currentLocale)}</time>
             </p>

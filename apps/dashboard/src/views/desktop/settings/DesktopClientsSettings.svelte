@@ -54,7 +54,7 @@
                 <div class="flex-1 space-y-1.5">
                   <Skeleton class="h-3.5" style="width: {width}px" /><Skeleton class="h-2.5" style="width: {width + 120}px" />
                 </div>
-                <Skeleton class="h-[18px] w-8 rounded-full" />
+                <Skeleton class="h-[18px] w-8 rounded-action" />
               </div>
             {/each}
           </div>
@@ -73,7 +73,7 @@
               {#each list as client (client.id)}
                 <button
                   type="button"
-                  class="flex min-h-13 w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/60 aria-[current=true]:bg-muted"
+                  class="flex min-h-13 w-full items-center gap-2.5 rounded-item px-3 py-2 text-left transition-colors hover:bg-muted/60 aria-[current=true]:bg-muted"
                   aria-current={settings.selected?.id === client.id ? 'true' : undefined}
                   onclick={() => settings.select(client)}
                 >

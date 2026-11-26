@@ -16,7 +16,7 @@
   containerAriaLabel={$t('common.notifications')}
   closeButtonAriaLabel={$t('common.closeNotification')}
   style="--normal-bg: var(--color-popover); --normal-text: var(--color-popover-foreground); --normal-border: var(--color-border);"
-  toastOptions={{ classes: { toast: '!rounded-lg !shadow-none !font-sans' } }}
+  toastOptions={{ classes: { toast: '!rounded-item !shadow-none !font-sans' } }}
   {...restProps}
   theme={$resolvedTheme}
 >

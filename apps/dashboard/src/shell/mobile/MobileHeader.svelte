@@ -20,10 +20,10 @@
         {#if switchDevice}<CaretDownIcon class="shrink-0" />{/if}
       </span>
     {/if}
-    <span class={['block truncate font-semibold text-heading', device ? 'text-[22px]' : 'text-lg']}>{title}</span>
+    <span class={['block truncate font-semibold text-heading', device ? 'text-22' : 'text-lg']}>{title}</span>
     {#if subtitle}<small class="block truncate text-muted-foreground">{subtitle}</small>{/if}
   {/snippet}
   {#if customTitle}{@render customTitle()}{:else if switchDevice}<button class="min-h-11 min-w-0 text-left" onclick={switchDevice}>{@render heading()}</button>
-  {:else}<h1 class={['min-w-0', back && 'mobile-glass rounded-full px-4 py-2']}>{@render heading()}</h1>{/if}
+  {:else}<h1 class={['min-w-0', back && 'mobile-glass rounded-chip px-4 py-2']}>{@render heading()}</h1>{/if}
   <div class="ml-auto flex shrink-0">{@render action?.()}</div>
 </header>

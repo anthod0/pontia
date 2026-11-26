@@ -39,7 +39,7 @@
     {@const summary = node.kind === 'array' ? '[' + count + ']' : '{' + count + '}'}
     {@const open = overrides.get(node) ?? expandAll ?? (node === root)}
     {#if count}
-      <button type="button" aria-expanded={open} class="flex min-h-8 max-w-full items-center gap-1.5 rounded px-1 text-left hover:bg-muted focus-visible:outline-primary" onclick={() => overrides.set(node, !open)}>
+      <button type="button" aria-expanded={open} class="flex min-h-8 max-w-full items-center gap-1.5 rounded-tooltip px-1 text-left hover:bg-muted focus-visible:outline-primary" onclick={() => overrides.set(node, !open)}>
         <CaretRightIcon class={['size-3 shrink-0 text-muted-foreground', open && 'rotate-90']} />
         {@render key()}<span class="text-muted-foreground">{summary}</span>
       </button>

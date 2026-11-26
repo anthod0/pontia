@@ -77,8 +77,8 @@
   )
 
   const row = 'min-h-14 flex-nowrap gap-3 rounded-none px-0 py-2.5'
-  const title = $derived(cn('text-heading', mobile && 'text-[15px]'))
-  const description = $derived(cn('line-clamp-none break-words text-xs [overflow-wrap:anywhere]', mobile && 'text-[13px] leading-[18px]'))
+  const title = $derived(cn('text-heading', mobile && 'text-15'))
+  const description = $derived(cn('line-clamp-none break-words text-xs [overflow-wrap:anywhere]', mobile && 'text-13 leading-[18px]'))
   const button = $derived(cn(mobile && 'h-9 px-3 text-sm'))
 
   function openConfirmation(method: AgentClientInstallMethod | null = preferred) {
@@ -184,7 +184,7 @@
           {/each}
         </ol>
         {#if latestLine}
-          <p class={cn('truncate rounded-md bg-muted px-2 py-1 font-mono text-xs', operation.status === 'failed' && 'text-destructive')} aria-live="off" title={latestLine}>{latestLine}</p>
+          <p class={cn('truncate rounded-item bg-muted px-2 py-1 font-mono text-xs', operation.status === 'failed' && 'text-destructive')} aria-live="off" title={latestLine}>{latestLine}</p>
         {/if}
         {#if settings.installConnectionError}
           <p class="text-warning">{$t('clients.install.reconnecting')}</p>
@@ -252,7 +252,7 @@
     {#if methods.length > 1}
       <RadioGroup.Root bind:value={selectedMethodId} class="gap-2">
         {#each methods as method (method.id)}
-          <label class={cn('flex cursor-pointer items-start gap-3 rounded-lg border p-3', selectedMethodId === method.id && 'border-primary bg-primary/5', !method.ready && 'cursor-not-allowed opacity-55')}>
+          <label class={cn('flex cursor-pointer items-start gap-3 rounded-item border p-3', selectedMethodId === method.id && 'border-primary bg-primary/5', !method.ready && 'cursor-not-allowed opacity-55')}>
             <RadioGroup.Item value={method.id} disabled={!method.ready} class="mt-0.5" />
             <span class="min-w-0 flex-1">
               <span class="flex items-center gap-2 text-sm font-medium text-heading">{method.label}{#if method.recommended}<Badge variant="secondary">{$t('clients.install.recommended')}</Badge>{/if}</span>
@@ -298,7 +298,7 @@
       </div>
     </Dialog.Header>
     <div class="relative min-h-0">
-      <pre bind:this={outputNode} onscroll={updateFollowing} class="max-h-[60vh] min-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-mono text-xs leading-5">{operation?.output}</pre>
+      <pre bind:this={outputNode} onscroll={updateFollowing} class="max-h-[60vh] min-h-48 overflow-auto whitespace-pre-wrap break-words rounded-item bg-muted p-3 font-mono text-xs leading-5">{operation?.output}</pre>
       {#if !following}<Button variant="outline" size="sm" class="absolute right-3 bottom-3 shadow-md" onclick={jumpToLatest}>{$t('clients.install.jumpLatest')}</Button>{/if}
     </div>
   </ResponsiveDialog>

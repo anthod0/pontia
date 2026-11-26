@@ -94,7 +94,7 @@
   {#if browser.view === 'active'}
     {#each browser.activeWorkspaces.filter((workspace) => workspace.availability.status === 'available') as workspace (workspace.workspace_id)}
       {@const location = browser.workspaceLocation(workspace)}
-      <div class="relative overflow-hidden rounded-xl">
+      <div class="relative overflow-hidden rounded-item">
         <div inert={revealed !== workspace.workspace_id} class="absolute inset-y-0 right-0 flex w-40">
           <button
             class="flex-1 bg-muted"
@@ -154,7 +154,7 @@
         </div>
         <Button
           variant="secondary"
-          class="h-11 rounded-xl px-3"
+          class="h-11 rounded-item px-3"
           disabled={browser.actionsDisabled}
           onclick={() => browser.deleteRegisteredWorkspace(workspace.workspace_id)}
           >{$t('workspaces.revoke')}</Button
@@ -162,7 +162,7 @@
       </div>
     {:else}<p class="py-4">{$t('workspaces.noneUnavailable')}</p>{/each}
   {:else}
-    <div class="rounded-2xl border bg-card px-3">
+    <div class="rounded-panel border bg-card px-3">
       <div class="flex items-center gap-2 border-b py-1">
         <button
           class="mobile-icon disabled:opacity-40"
@@ -200,17 +200,17 @@
             >
             <Button
               variant="secondary"
-              class="h-11 rounded-xl px-3"
+              class="h-11 rounded-item px-3"
               disabled={browser.actionsDisabled}
               onclick={() => browser.togglePath(entry.path, browser.workspaceForEntry(entry))}
               >{$t(entry.is_workspace ? 'workspaces.deactivate' : 'workspaces.activate')}</Button
             >
           </div>
         {:else}<p class="py-4">{$t('workspaces.noSubdirectories')}</p>{/each}
-        <div class="sticky bottom-0 flex items-center gap-2 rounded-b-2xl bg-card py-3">
+        <div class="sticky bottom-0 flex items-center gap-2 rounded-b-panel bg-card py-3">
           <span class="min-w-0 flex-1 truncate font-mono text-xs">{browser.listing.canonical_path}</span><Button
             disabled={browser.actionsDisabled}
-            class="h-11 rounded-xl px-3"
+            class="h-11 rounded-item px-3"
             onclick={() => browser.listing && browser.togglePath(browser.listing.path, browser.currentWorkspace)}
             >{$t(browser.currentWorkspace ? 'workspaces.deactivateCurrent' : 'workspaces.activateCurrent')}</Button
           >

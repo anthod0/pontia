@@ -18,7 +18,7 @@
     {@const showHeading = groups.length > 1 || group.group === 'conflicted'}
     <div class="py-0.5">
       {#if showHeading}
-        <div class={['grid h-[26px] grid-cols-[16px_minmax(0,1fr)] items-center gap-x-2 px-2 text-[11.5px] font-medium text-muted-foreground max-lg:h-8', group.group === 'conflicted' && 'text-(--git-conflict)']}>
+        <div class={['grid h-[26px] grid-cols-[16px_minmax(0,1fr)] items-center gap-x-2 px-2 text-11 font-medium text-muted-foreground max-lg:h-8', group.group === 'conflicted' && 'text-(--git-conflict)']}>
           {#if group.group === 'conflicted'}<WarningCircleIcon aria-hidden="true" class="size-[13px]" />{:else}<span></span>{/if}
           <span>{$t(group.label)} <span class="font-normal tabular-nums">{$number(group.files.length)}</span></span>
         </div>

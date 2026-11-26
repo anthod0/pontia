@@ -48,7 +48,7 @@
       </Tabs.List>
       <div class="flex shrink-0 items-center gap-1">
         {@render fullscreenButton()}
-        <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => panel.close()}><CaretRightIcon class="size-4 max-lg:size-5" /></Button>
+        <Button variant="ghost" size="icon-circle-sm" class="p-0 max-lg:size-11" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => panel.close()}><CaretRightIcon class="size-4 max-lg:size-5" /></Button>
       </div>
     </header>
     <Tabs.Content value="preview" class="flex min-h-0 flex-col">
@@ -63,7 +63,7 @@
       {:else}
         <Empty.Root class="min-h-0 p-8">
           <Empty.Header>
-            <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><FileTextIcon class="size-6" /></Empty.Media>
+            <Empty.Media class="size-12 rounded-item bg-muted text-muted-foreground"><FileTextIcon class="size-6" /></Empty.Media>
             <Empty.Title>{$t('files.noneOpen')}</Empty.Title>
             <Empty.Description>{$t('files.noneOpenDescription')}</Empty.Description>
           </Empty.Header>
@@ -79,7 +79,7 @@
       {:else if !source.workspaceId}
         <Empty.Root class="min-h-0 p-8">
           <Empty.Header>
-            <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><FolderIcon class="size-6" /></Empty.Media>
+            <Empty.Media class="size-12 rounded-item bg-muted text-muted-foreground"><FolderIcon class="size-6" /></Empty.Media>
             <Empty.Title>{$t('workspaces.noWorkspace')}</Empty.Title>
             <Empty.Description>{$t('git.noWorkspaceDescription')}</Empty.Description>
           </Empty.Header>

@@ -70,7 +70,7 @@
   }
 </script>
 
-<div class="relative overflow-hidden rounded-xl">
+<div class="relative overflow-hidden rounded-item">
   <div aria-hidden={!open} inert={!open} class="absolute inset-y-0 right-0 flex w-[152px]">
     {#if !session.archived_at}<button class="flex-1 bg-selected text-primary" disabled={busy} onclick={pin}
         >{$t(session.pinned_at ? 'sessions.unpin' : 'sessions.pin')}</button

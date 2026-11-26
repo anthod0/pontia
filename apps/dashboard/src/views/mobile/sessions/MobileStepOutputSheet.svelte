@@ -17,7 +17,7 @@
     <Sheet.Title class="truncate py-3 pr-10 font-semibold"
       >{step.managedToolUse ? managedToolUseTitle(step.managedToolUse, $t) : step.title}</Sheet.Title
     >
-    <div class="overflow-auto rounded-xl bg-muted p-3 text-xs">
+    <div class="overflow-auto rounded-item bg-muted p-3 text-xs">
       <pre class="whitespace-pre-wrap break-words">{step.content}</pre>
       {#if step.executionStatus}<ThoughtExecution {step} />{:else if step.result}<pre
           class="mt-3 whitespace-pre-wrap break-words">{step.result.content}</pre>{/if}

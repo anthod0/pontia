@@ -176,11 +176,11 @@
 </script>
 
 {#snippet badge(corner = false)}
-  {#if count > 0}<Badge class={['h-4 min-w-4 rounded-full px-1 text-[0.625rem] tabular-nums', corner && 'pointer-events-none absolute -top-1 -right-1']}>{count > 99 ? '99+' : count}</Badge>{/if}
+  {#if count > 0}<Badge class={['h-4 min-w-4 rounded-chip px-1 text-10 tabular-nums', corner && 'pointer-events-none absolute -top-1 -right-1']}>{count > 99 ? '99+' : count}</Badge>{/if}
 {/snippet}
 
 {#snippet sidebarButton()}
-  <Button variant="ghost" size="icon" class={['pointer-events-auto mr-3 relative size-8 rounded-full p-0 ring-1 ring-foreground/10', panel.open ? 'bg-muted text-heading' : 'bg-popover']}
+  <Button variant="ghost" size="icon-circle" class={['pointer-events-auto mr-3 relative size-8 p-0 ring-1 ring-foreground/10', panel.open ? 'bg-muted text-heading' : 'bg-popover']}
     aria-label={count > 0 ? $t('bots.sidebarWithTodos', { count }) : $t('nav.sidebar')} title={$t('nav.sidebar')} aria-pressed={panel.open} onclick={() => { void (panel.open ? panel.close() : panel.show()) }}>
     <SidebarSimpleIcon class="size-4 -scale-x-100" />{@render badge(true)}
   </Button>
@@ -189,7 +189,7 @@
 {#snippet empty(files: boolean)}
   <Empty.Root class="min-h-0 p-8">
     <Empty.Header>
-      <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground">
+      <Empty.Media class="size-12 rounded-item bg-muted text-muted-foreground">
         {#if files}<FileTextIcon class="size-6" />{:else}<TreeStructureIcon class="size-6" />{/if}
       </Empty.Media>
       <Empty.Title>{$t(files ? 'files.noneOpen' : 'bots.noSelection')}</Empty.Title>
@@ -199,13 +199,13 @@
 {/snippet}
 
 {#snippet todoCard(message: BotMessage)}
-  <li class="rounded-xl border bg-background p-3">
-    <button type="button" class="block w-full rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring" onclick={() => jump(message.id)}>
+  <li class="rounded-item border bg-background p-3">
+    <button type="button" class="block w-full rounded-item text-left outline-none focus-visible:ring-2 focus-visible:ring-ring" onclick={() => jump(message.id)}>
       <span class="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
         {#if message.kind === 'user_input'}{$t('bots.you')}{:else}<BotAvatar shape={bot.avatar_shape} color={bot.avatar_color} class="size-4" />{bot.name}{/if}
         <MessageTime value={message.created_at} class="px-0" />
       </span>
-      <span class="line-clamp-3 text-[13px] leading-5 [overflow-wrap:anywhere]">{todoSummary(message)}</span>
+      <span class="line-clamp-3 text-13 leading-5 [overflow-wrap:anywhere]">{todoSummary(message)}</span>
     </button>
     <div class="mt-2 flex items-center gap-1 touch-target:flex-wrap touch-target:gap-2 touch-target:[&>button]:min-h-11 touch-target:[&>button]:min-w-11">
       <Button variant="ghost" size="xs" onclick={() => viewContext(message.id)}><TreeStructureIcon />{$t('bots.context')}</Button>
@@ -216,7 +216,7 @@
     {#if reply?.message.id === message.id}
       {@const current = reply}
       <PromptInput.Root id="bot-todo-reply-box-{message.id}" class="mt-2 p-3" aria-label={$t('bots.reply')} onSubmit={() => submitReply(current)}>
-        <PromptInput.Textarea {@attach node => node.focus()} bind:value={current.text} placeholder={$t('bots.message')} aria-label={$t('bots.message')} readonly={current.sending} onkeydown={(event: KeyboardEvent) => replyKeydown(event, current)} class="p-0 text-[13px]" />
+        <PromptInput.Textarea {@attach node => node.focus()} bind:value={current.text} placeholder={$t('bots.message')} aria-label={$t('bots.message')} readonly={current.sending} onkeydown={(event: KeyboardEvent) => replyKeydown(event, current)} class="p-0 text-13" />
         <PromptInput.Toolbar class="justify-end gap-1 px-0 pt-2 pb-0">
           <Button variant="ghost" size="xs" disabled={current.sending} onclick={closeReply}>{$t('common.cancel')}</Button>
           <PromptInput.Submit class="h-6 touch-target:min-h-11 gap-1 px-2.5 text-xs" busy={current.sending} disabled={!current.text.trim()} />
@@ -240,7 +240,7 @@
       </Tabs.List>
       <div class="flex shrink-0 items-center gap-1">
         {@render fullscreenButton()}
-        <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11 pointer-coarse:size-11" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => panel.close()}><CaretRightIcon /></Button>
+        <Button variant="ghost" size="icon-circle-sm" class="p-0 max-lg:size-11 pointer-coarse:size-11" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => panel.close()}><CaretRightIcon /></Button>
       </div>
     </header>
     <Tabs.Content value="preview" class="flex min-h-0 flex-col">
@@ -296,7 +296,7 @@
                 </ul>
               {:else}
                 <Empty.Root class="min-h-0 p-6"><Empty.Header>
-                  <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><CheckCircleIcon class="size-6" /></Empty.Media>
+                  <Empty.Media class="size-12 rounded-item bg-muted text-muted-foreground"><CheckCircleIcon class="size-6" /></Empty.Media>
                   <Empty.Title>{$t('bots.noTodos')}</Empty.Title>
                 </Empty.Header></Empty.Root>
               {/if}

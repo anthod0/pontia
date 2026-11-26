@@ -299,7 +299,7 @@
   {/if}
   <PromptInput.Body class={compact ? `col-start-2 ${hasPrefix ? 'row-start-3' : 'row-start-2'}` : undefined} onpastecapture={pasteFiles}>
     <div bind:this={inlineInput} class="relative">
-      <ChatCommandInput bind:this={editor} id={inputId} bind:value {hasPrefix} {onRemovePrefix} {commands} onCommand={controller.executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? `min-h-0 py-2 text-base sm:text-[13.5px] ${compact ? 'px-0' : 'pl-3 pr-10 sm:pr-3'}` : 'min-h-[52px] px-4 py-3 text-base sm:text-[13.5px]'} />
+      <ChatCommandInput bind:this={editor} id={inputId} bind:value {hasPrefix} {onRemovePrefix} {commands} onCommand={controller.executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? `min-h-0 py-2 text-base sm:text-13 ${compact ? 'px-0' : 'pl-3 pr-10 sm:pr-3'}` : 'min-h-[52px] px-4 py-3 text-base sm:text-13'} />
       {#if fullscreen && !compact}
         <Button type="button" variant="ghost" size="icon-sm" class="absolute right-1 top-1 sm:hidden" aria-label={$t('chat.expandComposer')} onclick={() => void openFullscreen()}>
           <ArrowsOutIcon class="size-4" />

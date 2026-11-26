@@ -71,7 +71,7 @@
 			<div
 				data-sidebar="sidebar"
 				data-slot="sidebar-inner"
-				class="bg-sidebar group-data-[variant=floating]:ring-sidebar-border group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-none group-data-[variant=floating]:ring-1 flex size-full overflow-hidden"
+				class="bg-sidebar group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:rounded-item group-data-[variant=floating]:border group-data-[variant=floating]:shadow-none flex size-full overflow-hidden"
 			>
 				<!-- Content keeps its target width while the container animates, so text is clipped instead of rewrapped.
 				     This wrapper is not positioned, so the absolutely positioned rail is not clipped. -->

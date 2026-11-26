@@ -96,7 +96,7 @@
       {#snippet option(workspace)}
         <div class="flex min-w-0 flex-col">
           <span class="truncate">{workspaceTitle(workspace)}</span>
-          <span class="truncate font-mono text-[11px] text-muted-foreground">{workspace.display_path}</span>
+          <span class="truncate font-mono text-11 text-muted-foreground">{workspace.display_path}</span>
         </div>
       {/snippet}
     </ResponsiveSelect>

@@ -60,7 +60,7 @@
         <Sidebar.GroupContent>
           <Sidebar.Menu>
             <Sidebar.MenuItem>
-              <Sidebar.MenuButton class="h-9 text-[13px] text-sidebar-foreground/70" tooltipContent={$t('nav.backToChat')} onclick={backToChat}>
+              <Sidebar.MenuButton class="h-9 text-13 text-sidebar-foreground/70" tooltipContent={$t('nav.backToChat')} onclick={backToChat}>
                 <ArrowLeftIcon />
                 <span>{$t('nav.backToChat')}</span>
               </Sidebar.MenuButton>
@@ -104,7 +104,7 @@
     <Sidebar.Menu>
       <Sidebar.MenuItem>
         <Sidebar.MenuButton
-          class="h-9 px-3 text-[13px]"
+          class="h-9 px-3 text-13"
           tooltipContent={$t('settings.title')}
           disabled={settingsDisabled}
           onclick={onSettings}

@@ -40,17 +40,17 @@
 
 {#if !inline}
   <header class="flex h-[52px] shrink-0 items-center gap-2 border-b px-2">
-    <h2 class="min-w-0 flex-1 px-1 text-[13px] font-medium text-heading">{$t('git.commit')}</h2>
-    <button type="button" class="flex h-6 items-center gap-1 rounded-full bg-muted px-2 font-mono text-[11.5px] hover:text-foreground" onclick={copySha} title={sha}>
+    <h2 class="min-w-0 flex-1 px-1 text-13 font-medium text-heading">{$t('git.commit')}</h2>
+    <button type="button" class="flex h-6 items-center gap-1 rounded-chip bg-muted px-2 font-mono text-11 hover:text-foreground" onclick={copySha} title={sha}>
       {shortSha(sha)}{#if copied}<CheckIcon class="size-3 text-git-added" />{:else}<CopyIcon class="size-3" />{/if}
     </button>
   </header>
 {/if}
 
-<div class={inline ? 'rounded-lg bg-[color-mix(in_srgb,var(--muted)_55%,var(--surface))] px-3 py-2.5' : 'min-h-0 flex-1 overflow-auto overscroll-contain'}>
+<div class={inline ? 'rounded-item bg-[color-mix(in_srgb,var(--muted)_55%,var(--surface))] px-3 py-2.5' : 'min-h-0 flex-1 overflow-auto overscroll-contain'}>
   {#if commitQuery.isError}
     <Empty.Root role="alert" class="min-h-0 p-6">
-      <Empty.Header><Empty.Media class="size-10 rounded-xl bg-destructive/10 text-destructive"><WarningCircleIcon class="size-5" /></Empty.Media><Empty.Title>{$t('git.commitFailed')}</Empty.Title><Empty.Description class="break-words font-mono text-xs">{commitQuery.error.message}</Empty.Description></Empty.Header>
+      <Empty.Header><Empty.Media class="size-10 rounded-item bg-destructive/10 text-destructive"><WarningCircleIcon class="size-5" /></Empty.Media><Empty.Title>{$t('git.commitFailed')}</Empty.Title><Empty.Description class="break-words font-mono text-xs">{commitQuery.error.message}</Empty.Description></Empty.Header>
       <Empty.Content><Button variant="outline" size="sm" onclick={() => commitQuery.refetch()}><ArrowClockwiseIcon data-icon="inline-start" />{$t('common.retry')}</Button></Empty.Content>
     </Empty.Root>
   {:else if !commit}
@@ -60,9 +60,9 @@
       {#if !inline}<p class="text-sm font-medium break-words text-heading">{commit.subject || $t('git.noSubject')}</p>{/if}
       {#if commit.body}<p class={['text-xs leading-5 break-words whitespace-pre-wrap text-muted-foreground', inline && 'line-clamp-3']}>{commit.body}</p>{/if}
       <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
-        {#if !inline}<span class="grid size-[18px] place-items-center rounded-full bg-muted text-[10px] font-medium text-foreground">{commit.author_name.slice(0, 1).toUpperCase()}</span><span>{commit.author_name}</span><span>·</span>{/if}
+        {#if !inline}<span class="grid size-[18px] place-items-center rounded-full bg-muted text-10 font-medium text-foreground">{commit.author_name.slice(0, 1).toUpperCase()}</span><span>{commit.author_name}</span><span>·</span>{/if}
         {#if inline}
-          <button type="button" class="flex h-5 items-center gap-1 rounded-full bg-surface px-2 font-mono text-[11px] text-foreground hover:bg-card" onclick={copySha} title={sha}>{shortSha(sha)}{#if copied}<CheckIcon class="size-3 text-git-added" />{:else}<CopyIcon class="size-3" />{/if}</button><span>·</span>
+          <button type="button" class="flex h-5 items-center gap-1 rounded-chip bg-surface px-2 font-mono text-11 text-foreground hover:bg-card" onclick={copySha} title={sha}>{shortSha(sha)}{#if copied}<CheckIcon class="size-3 text-git-added" />{:else}<CopyIcon class="size-3" />{/if}</button><span>·</span>
         {/if}
         {#if commit.parents.length}
           <span>{$t('git.parents')}</span>
@@ -75,8 +75,8 @@
 
     <div class={['flex items-center gap-2 text-xs font-medium', inline ? 'pt-3 pb-1' : 'px-4 pt-3 pb-1']}>
       <span>{$t('git.fileCount', { count: commit.total })}</span>
-      <span class="font-mono text-[11px] text-git-added">+{additions}</span>
-      <span class="font-mono text-[11px] text-git-deleted">−{deletions}</span>
+      <span class="font-mono text-11 text-git-added">+{additions}</span>
+      <span class="font-mono text-11 text-git-deleted">−{deletions}</span>
       {#if commit.parents.length > 1}<span class="ml-auto font-normal text-muted-foreground">{$t('git.mergeComparedWithFirstParent')}</span>{/if}
     </div>
     {#if commit.files.length}
@@ -85,7 +85,7 @@
       </ul>
       {#if commit.truncated}<p class="px-4 pb-4 text-center text-xs text-muted-foreground">{$t('git.listTruncated', { shown: commit.files.length, total: commit.total })}</p>{/if}
     {:else}
-      <Empty.Root class="min-h-0 p-6"><Empty.Header><Empty.Media class="size-10 rounded-xl bg-muted text-muted-foreground"><FileDashedIcon class="size-5" /></Empty.Media><Empty.Title>{$t('git.noFilesChanged')}</Empty.Title></Empty.Header></Empty.Root>
+      <Empty.Root class="min-h-0 p-6"><Empty.Header><Empty.Media class="size-10 rounded-item bg-muted text-muted-foreground"><FileDashedIcon class="size-5" /></Empty.Media><Empty.Title>{$t('git.noFilesChanged')}</Empty.Title></Empty.Header></Empty.Root>
     {/if}
   {/if}
 </div>

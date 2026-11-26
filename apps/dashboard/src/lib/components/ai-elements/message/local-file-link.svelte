@@ -79,7 +79,7 @@
 
 <Button
   variant="link"
-  class="inline h-auto rounded-sm p-0 align-baseline font-normal whitespace-normal underline"
+  class="inline h-auto rounded-tooltip p-0 align-baseline font-normal whitespace-normal underline"
   title={title || path}
   aria-label={$t(image ? 'files.enlargeNamed' : previewable ? 'files.previewNamed' : 'files.downloadNamed', { name })}
   onclick={open}

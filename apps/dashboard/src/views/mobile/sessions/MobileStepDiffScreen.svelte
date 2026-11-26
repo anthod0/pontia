@@ -18,7 +18,7 @@
 </script>
 
 {#if patch}
-  <div class="h-full overflow-auto font-mono text-[11px] leading-5">
+  <div class="h-full overflow-auto font-mono text-11 leading-5">
     <pre class="min-w-max">{#each patch.split('\n') as line, i (i)}<span class={['block',line.startsWith('+') && 'bg-success/12',line.startsWith('-') && 'bg-destructive/12']}>{line || ' '}</span>{/each}</pre>
   </div>
 {:else if !workspaceId}<p>{$t('git.noWorkspaceDescription')}</p>

@@ -24,11 +24,11 @@
     {@const clientName = templateClientName(template, clients)}
     {@const Icon = templateIcon(template)}
     <button type="button" aria-pressed={selected === template.id} onclick={() => onchoose(template)}
-      class="group/card flex w-64 shrink-0 snap-start flex-col gap-2 rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:border-primary/60 hover:bg-muted/40 focus-visible:ring-3 focus-visible:ring-ring/50 aria-pressed:border-primary aria-pressed:bg-selected sm:w-auto sm:min-w-0">
+      class="group/card flex w-64 shrink-0 snap-start flex-col gap-2 rounded-item border bg-card p-3 text-left transition-colors outline-none hover:border-primary/60 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring/50 aria-pressed:border-primary aria-pressed:bg-selected sm:w-auto sm:min-w-0">
       <span class="flex min-w-0 items-center gap-2.5">
-        <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-foreground group-aria-pressed/card:bg-background"><Icon class="size-4" /></span>
+        <span class="flex size-8 shrink-0 items-center justify-center rounded-item bg-muted text-foreground group-aria-pressed/card:bg-background"><Icon class="size-4" /></span>
         <span class="min-w-0 flex-1 truncate text-sm font-medium text-heading">{text.name}</span>
-        {#if template.use_yolo}<span class="inline-flex h-5 shrink-0 items-center rounded-md border px-1.5 text-[0.7rem] font-medium text-muted-foreground">YOLO</span>{/if}
+        {#if template.use_yolo}<span class="inline-flex h-5 shrink-0 items-center rounded-item border px-1.5 text-11 font-medium text-muted-foreground">YOLO</span>{/if}
         {#if selected === template.id}<CheckIcon class="size-4 shrink-0 text-primary" />{/if}
       </span>
       <span class="line-clamp-2 min-h-8 text-xs leading-4 text-muted-foreground">{text.description}</span>

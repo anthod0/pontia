@@ -84,12 +84,12 @@
   {#if settingsPath}
     <h1 class="px-6 text-base font-semibold text-heading">{settingsTitle}</h1>
   {:else if title || currentBot}
-    <div class={['flex min-w-0 items-center gap-1', chatPath && 'pointer-events-auto h-8 rounded-full bg-popover px-1 ring-1 ring-foreground/10']}>
+    <div class={['flex min-w-0 items-center gap-1', chatPath && 'pointer-events-auto h-8 rounded-chip bg-popover px-1 border border-border']}>
     {#if botId && currentBot}
       <h1 class="mx-1 min-w-0 max-w-80">
         <button
           type="button"
-          class="flex w-full min-w-0 items-center gap-1.5 rounded-full px-2 text-left text-sm font-normal text-heading focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none py-0.5"
+          class="flex w-full min-w-0 items-center gap-1.5 rounded-chip px-2 text-left text-sm font-normal text-heading focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none py-0.5"
           title={$t('bots.edit')}
           aria-haspopup="dialog"
           onclick={() => { botSettingsOpen = true }}
@@ -102,7 +102,7 @@
       <h1 class="mx-1 min-w-0 max-w-80">
         <button
           type="button"
-          class="group flex w-full min-w-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-left text-sm font-normal text-heading focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          class="group flex w-full min-w-0 items-center gap-1.5 rounded-chip px-2 py-0.5 text-left text-sm font-normal text-heading focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           title={$t('common.renameNamed', { name: title })}
           onclick={openRenameDialog}
         >

@@ -41,7 +41,7 @@
   <div class="divide-y" data-testid={testId}>
     {#each items as session (session.session_id)}
       {@const acpAgentId = (session.acp as { agent_id?: string } | undefined)?.agent_id}
-      <button type="button" class="w-full rounded-xl px-1 py-3 text-left transition hover:bg-muted/50 sm:px-2" onclick={() => openSession(session.session_id)}>
+      <button type="button" class="w-full rounded-item px-1 py-3 text-left transition hover:bg-muted/50 sm:px-2" onclick={() => openSession(session.session_id)}>
         <div class="flex min-w-0 items-start gap-3">
           <ClientIcon clientType={session.client_type} {acpAgentId} class="mt-0.5 size-8" />
           <div class="flex min-w-0 flex-1 items-start justify-between gap-3">

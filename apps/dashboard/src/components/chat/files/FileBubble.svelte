@@ -20,9 +20,9 @@
   } = $props()
 </script>
 
-<div use:observeFile={state} {...itemProps} class={['w-80 max-w-full rounded-2xl transition-shadow', highlighted && 'ring-2 ring-primary/50', itemProps.class]} data-shared-file={state.file.path}>
+<div use:observeFile={state} {...itemProps} class={['w-80 max-w-full rounded-panel transition-shadow', highlighted && 'ring-2 ring-primary/50', itemProps.class]} data-shared-file={state.file.path}>
   {#if state.showImage}
-    <figure class="overflow-hidden rounded-2xl bg-muted">
+    <figure class="overflow-hidden rounded-panel bg-muted">
       {#if state.imageUrl}
         <button type="button" class="block w-full outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset" onclick={onenlarge} aria-label={$t('files.enlargeNamed', { name: state.file.name })}>
           <img src={state.imageUrl} alt={state.file.name} class="max-h-72 w-full object-cover" />
@@ -36,6 +36,6 @@
       </figcaption>
     </figure>
   {:else}
-    <FileRow {itemActions} {state} class="rounded-2xl bg-muted p-2.5" />
+    <FileRow {itemActions} {state} class="rounded-panel bg-muted p-2.5" />
   {/if}
 </div>

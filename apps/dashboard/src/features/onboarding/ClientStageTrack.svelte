@@ -10,7 +10,7 @@
 <ol class="grid min-w-0 grid-cols-3 text-xs" aria-label={label}>
   {#each stages as stage, index (stage.label)}
     <li class={cn('flex min-w-0 items-start', stage.state === 'action' && 'font-medium text-warning', stage.state === 'busy' && 'text-primary', (stage.state === 'unknown' || stage.state === 'pending') && 'text-muted-foreground')}>
-      <span class={cn('flex size-3.5 items-center justify-center rounded-full border text-[9px] leading-none', stage.state === 'complete' && 'border-success bg-success text-white', stage.state === 'action' && 'border-warning bg-warning text-white', stage.state === 'busy' && 'border-primary', (stage.state === 'unknown' || stage.state === 'pending') && 'border-muted-foreground/60')} aria-hidden="true">
+      <span class={cn('flex size-3.5 items-center justify-center rounded-full border text-10 leading-none', stage.state === 'complete' && 'border-success bg-success text-white', stage.state === 'action' && 'border-warning bg-warning text-white', stage.state === 'busy' && 'border-primary', (stage.state === 'unknown' || stage.state === 'pending') && 'border-muted-foreground/60')} aria-hidden="true">
         {#if stage.state === 'complete'}<CheckIcon class="size-2.5" weight="bold" />
         {:else if stage.state === 'action'}!
         {:else if stage.state === 'unknown'}?

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { t } from '$lib/i18n'
+  import { Button } from '$lib/components/ui/button/index.js'
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
   import type { SharedFileState } from './sharedFileState.svelte'
 
@@ -11,6 +12,6 @@
   }
 </script>
 
-<button type="button" class="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-background px-3 text-xs font-medium text-foreground ring-1 ring-border outline-none transition-colors enabled:hover:bg-primary-solid enabled:hover:text-primary-foreground enabled:hover:ring-primary-solid focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50" disabled={!available.length} onclick={downloadAll} aria-label={$t('files.downloadAllNamed', { count: available.length })}>
+<Button variant="outline" class="shrink-0 px-3 text-xs enabled:hover:border-primary-solid enabled:hover:bg-primary-solid enabled:hover:text-primary-foreground" disabled={!available.length} onclick={downloadAll} aria-label={$t('files.downloadAllNamed', { count: available.length })}>
   <DownloadSimpleIcon class="size-3.5" weight="bold" />{$t('files.downloadAll')}
-</button>
+</Button>

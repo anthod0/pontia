@@ -63,7 +63,7 @@
             <div class="px-2 py-1 text-xs text-muted-foreground">{groupOf(item)}</div>
           {/if}
           <button type="button" aria-pressed={value === keyOf(item)} disabled={disabledOption?.(item)} onclick={() => choose(item)}
-            class="flex min-h-12 w-full items-center gap-2 rounded-md px-2 text-left text-base hover:bg-muted focus-visible:bg-muted disabled:opacity-50">
+            class="flex min-h-12 w-full items-center gap-2 rounded-item px-2 text-left text-base hover:bg-muted focus-visible:bg-muted disabled:opacity-50">
             {@render option(item)}
             {#if value === keyOf(item)}<CheckIcon class="ml-auto size-5 shrink-0 text-primary" />{/if}
           </button>

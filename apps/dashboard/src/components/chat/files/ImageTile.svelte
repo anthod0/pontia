@@ -37,7 +37,7 @@
     </button>
   {:else if state.missing}
     <div class="absolute inset-0 grid place-items-center text-muted-foreground" role="img" aria-label={`${name}: ${$t('files.missing')}`}>
-      <div class="flex flex-col items-center gap-1 px-2 text-center"><FileXIcon class="size-6" /><span class="text-[11px] leading-4">{$t('files.missing')}</span></div>
+      <div class="flex flex-col items-center gap-1 px-2 text-center"><FileXIcon class="size-6" /><span class="text-11 leading-4">{$t('files.missing')}</span></div>
     </div>
   {:else}
     {#if state.imageUrl}
@@ -48,7 +48,7 @@
       <!-- The preview could not load, or the file is no longer an image. -->
       <div class="absolute inset-0 flex flex-col items-center justify-center gap-1 px-2 text-center text-muted-foreground">
         <WarningCircleIcon class="size-6" />
-        {#if !failed && !state.receiving}<span class="line-clamp-2 text-[11px] leading-4 [overflow-wrap:anywhere]">{state.failure ?? $t('files.previewNotImage')}</span>{/if}
+        {#if !failed && !state.receiving}<span class="line-clamp-2 text-11 leading-4 [overflow-wrap:anywhere]">{state.failure ?? $t('files.previewNotImage')}</span>{/if}
       </div>
     {:else}
       <Skeleton class="absolute inset-0 rounded-none" role="status" aria-label={$t('files.loadingPreview')} />
@@ -57,11 +57,11 @@
       <div class="pointer-events-none absolute inset-0 grid place-items-center bg-black/25">
         <div class="pointer-events-auto"><FileAction {state} look="overlay" /></div>
       </div>
-      {#if state.percent !== null}<span class="pointer-events-none absolute bottom-1.5 left-1.5 rounded-md bg-black/55 px-1.5 py-0.5 text-[11px] font-medium text-white tabular-nums">{Math.floor(state.percent)}%</span>{/if}
+      {#if state.percent !== null}<span class="pointer-events-none absolute bottom-1.5 left-1.5 rounded-item bg-black/55 px-1.5 py-0.5 text-11 font-medium text-white tabular-nums">{Math.floor(state.percent)}%</span>{/if}
     {:else if failed}
       <div class={['pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1.5 px-2 text-center', state.imageUrl ? 'text-white' : 'text-destructive']}>
         <button type="button" class="pointer-events-auto inline-flex size-9 shrink-0 items-center justify-center rounded-full p-0 bg-black/55 text-white outline-none backdrop-blur-sm hover:bg-black/70 focus-visible:ring-2 focus-visible:ring-ring" onclick={() => state.download()} aria-label={$t('downloads.retryNamed', { name })} title={state.failure ?? undefined}><ArrowClockwiseIcon class="size-4" /></button>
-        <span class="text-[11px] font-medium">{$t('downloads.failed')}</span>
+        <span class="text-11 font-medium">{$t('downloads.failed')}</span>
       </div>
     {:else}
       <div class={['absolute right-1.5 bottom-1.5 transition-opacity', state.imageUrl && 'opacity-0 group-hover/tile:opacity-100 group-focus-within/tile:opacity-100 pointer-coarse:hidden']}><FileAction {state} look="overlay" /></div>

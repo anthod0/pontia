@@ -17,8 +17,8 @@
     "check": "bun scripts/check-remote-access-boundaries.ts && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --tsgo --incremental && bun check --no-script -p tsconfig.node.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "oxlint --deny-warnings",
-    "lint:fix": "oxlint --deny-warnings --fix"
+    "lint": "bun scripts/check-semantic-radii.ts && oxlint --deny-warnings",
+    "lint:fix": "bun scripts/check-semantic-radii.ts && oxlint --deny-warnings --fix"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.3.0",

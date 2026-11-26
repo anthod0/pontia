@@ -47,7 +47,7 @@
     <DropdownMenu.Portal>
       {#if open}<div aria-hidden="true" class="fixed inset-0 z-(--layer-menu) bg-overlay"></div>{/if}
       <Menu.ContentStatic {onCloseAutoFocus} preventScroll aria-label={label} style={keepClearOf ? sheetStyle : undefined}
-        class="bottom-sheet fixed inset-x-0 z-(--layer-menu) rounded-t-2xl border-t bg-popover px-3 text-popover-foreground outline-none [&_[role^=menuitem]]:min-h-12 [&_[role^=menuitem]]:text-base">
+        class="bottom-sheet fixed inset-x-0 z-(--layer-menu) rounded-t-sheet border-t bg-popover px-3 text-popover-foreground outline-none [&_[role^=menuitem]]:min-h-12 [&_[role^=menuitem]]:text-base">
         <SheetHandle dismiss={() => open = false} />
         <div class="flex items-center justify-between gap-2 px-1">
           <span class="truncate font-semibold">{label}</span>

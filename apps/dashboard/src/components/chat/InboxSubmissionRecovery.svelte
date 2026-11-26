@@ -22,7 +22,7 @@
 </script>
 
 {#if submissions.length}
-  <section class="mb-2 rounded-lg border bg-background p-3 text-sm" aria-label={$t('inbox.unconfirmed')}>
+  <section class="mb-2 rounded-item border bg-background p-3 text-sm" aria-label={$t('inbox.unconfirmed')}>
     <p class="font-medium">{$t('inbox.unknownReceipt')}</p>
     <p class="text-xs text-muted-foreground">{$t('inbox.recoverHint')}</p>
     {#each submissions as submission (submission.messageId)}

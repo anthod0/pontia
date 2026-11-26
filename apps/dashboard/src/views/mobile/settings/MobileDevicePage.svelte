@@ -19,19 +19,19 @@
   })
 </script>
 
-<div class="my-3 flex items-center gap-4 rounded-2xl border bg-card p-4">
+<div class="my-3 flex items-center gap-4 rounded-panel border bg-card p-4">
   <DesktopIcon class="size-8 shrink-0 text-primary" />
   <div class="min-w-0">
     <p class="truncate font-semibold">{host.activeDevice?.name}</p>
     <small>{$t(deviceStateLabel[host.activeDevice?.state ?? 'offline'])}</small>
   </div>
   {#if host.canSwitchDevice}<button
-      class="ml-auto min-h-11 rounded-full bg-muted px-4"
+      class="ml-auto min-h-11 rounded-chip bg-muted px-4"
       onclick={switchDevice}>{$t('devices.switch')}</button
     >{/if}
 </div>
 <h2 class="mb-2 text-sm font-medium text-muted-foreground">{$t('settings.title')}</h2>
-<nav class="divide-y overflow-hidden rounded-2xl border bg-card px-3" aria-label={$t('settings.sections')}>
+<nav class="divide-y overflow-hidden rounded-panel border bg-card px-3" aria-label={$t('settings.sections')}>
   {#each settingsSections.filter(section => !section.desktopOnly) as section (section.path)}
     <button class="mobile-row" onclick={() => navigate(section.path)}
       ><section.icon />{$t(section.label)}<CaretRightIcon class="ml-auto text-muted-foreground" /></button
@@ -39,7 +39,7 @@
   {/each}
 </nav>
 {#if $downloads.length}<button
-    class="mobile-row mt-4 rounded-2xl border bg-card px-3"
+    class="mobile-row mt-4 rounded-panel border bg-card px-3"
     onclick={() => (downloadsOpen = true)}
     ><DownloadIcon />{$t('downloads.title')}{#if activeCount}<small
         >{$t('downloads.activeCount', { count: activeCount })}</small

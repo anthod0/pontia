@@ -63,7 +63,7 @@
   {#if fileDrop.dragging && fileDrop.target}
     {@const inputBottom = Math.max(0, window.innerHeight - inputBox.top)}
     <div class="pointer-events-none fixed top-0 left-0 right-0 z-45 bg-background/70 backdrop-blur-[3px] transition-[left] duration-200 ease-linear md:left-[var(--sidebar-width)] lg:right-[var(--file-preview-width,0px)] group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)]" style:bottom={`${inputBottom}px`}></div>
-    <div class={['pointer-events-none fixed z-45 flex items-center gap-3 rounded-xl border-[1.5px] border-dashed px-3.5 py-3 shadow-sm', unavailableReason ? 'border-muted-foreground/40 bg-muted' : 'border-primary/55 bg-selected']} style:left={`${inputBox.left}px`} style:width={`${inputBox.width}px`} style:bottom={`${inputBottom + 8}px`}>
+    <div class={['pointer-events-none fixed z-45 flex items-center gap-3 rounded-item border-[1.5px] border-dashed px-3.5 py-3 shadow-sm', unavailableReason ? 'border-muted-foreground/40 bg-muted' : 'border-primary/55 bg-selected']} style:left={`${inputBox.left}px`} style:width={`${inputBox.width}px`} style:bottom={`${inputBottom + 8}px`}>
       <span class={['grid size-9 shrink-0 place-items-center rounded-full', unavailableReason ? 'bg-background text-inactive' : 'bg-primary/14 text-primary']}>
         <FileArrowUpIcon class="size-5" weight="duotone" />
       </span>

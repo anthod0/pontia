@@ -22,7 +22,7 @@
 </script>
 
 {#if settings.error && !settings.loadFailed}
-  <p role="alert" class="mb-4 flex items-center gap-2 text-[13px] text-destructive">
+  <p role="alert" class="mb-4 flex items-center gap-2 text-13 text-destructive">
     <WarningCircleIcon class="size-4 shrink-0" />{settings.error}
   </p>
 {/if}
@@ -37,17 +37,17 @@
     {/each}
   </div>
 {:else if settings.loadFailed}
-  <div role="alert" class="flex items-center gap-2 text-[13px] text-destructive">
+  <div role="alert" class="flex items-center gap-2 text-13 text-destructive">
     <WarningCircleIcon class="size-4 shrink-0" />
     <span class="min-w-0 flex-1">{settings.error}</span>
     <Button variant="ghost" class="-mr-3 h-9 px-3 text-sm" onclick={settings.refresh}>{$t('common.retry')}</Button>
   </div>
 {:else}
-  <p class="mb-6 text-[13px] leading-[1.45] text-muted-foreground">{$t('clients.pageDescription')}</p>
+  <p class="mb-6 text-13 leading-[1.45] text-muted-foreground">{$t('clients.pageDescription')}</p>
   <nav aria-label={$t('clients.title')}>
     {#each settings.groups as [detection, list] (detection)}
       <section class="mb-7">
-        <h2 class="mb-0.5 text-[13px] leading-[18px] font-medium text-muted-foreground">
+        <h2 class="mb-0.5 text-13 leading-[18px] font-medium text-muted-foreground">
           {$t(`clients.group.${detection}`, { count: list.length })}
         </h2>
         <Item.Group class="gap-0">
@@ -73,8 +73,8 @@
                     />
                   </Item.Media>
                   <Item.Content class="min-w-0 gap-0.5 text-left">
-                    <Item.Title class="text-[15px] text-heading">{client.name}</Item.Title>
-                    <ClientStatus class="text-[13px]" status={clientStatus(client, settings.operationFor(client), settings.installOperationFor(client))} />
+                    <Item.Title class="text-15 text-heading">{client.name}</Item.Title>
+                    <ClientStatus class="text-13" status={clientStatus(client, settings.operationFor(client), settings.installOperationFor(client))} />
                   </Item.Content>
                   <CaretRightIcon class="size-4 shrink-0 text-muted-foreground" />
                 </button>
@@ -96,7 +96,7 @@
     onclick={settings.refresh}
     ><ArrowClockwiseIcon class={settings.refreshing ? 'animate-spin' : undefined} /></Button
   >{/snippet}
-{#snippet detail()}{#if settings.error}<p role="alert" class="mb-3 text-[13px] text-destructive">
+{#snippet detail()}{#if settings.error}<p role="alert" class="mb-3 text-13 text-destructive">
       {settings.error}
     </p>{/if}{#if settings.selected}<ClientSettingsGroups
       {settings}

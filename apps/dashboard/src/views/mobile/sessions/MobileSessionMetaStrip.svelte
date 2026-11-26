@@ -9,7 +9,7 @@
 
 <div class="flex touch-pan-x gap-1.5 overflow-x-auto py-1">
   {#each items as item (item.key)}<button
-      class="mobile-glass max-w-48 shrink-0 truncate rounded-full px-3 py-1 font-mono text-xs"
+      class="mobile-glass max-w-48 shrink-0 truncate rounded-chip px-3 py-1 font-mono text-xs"
       aria-label={item.label + ': ' + item.value}
       onclick={() => {
         open = true

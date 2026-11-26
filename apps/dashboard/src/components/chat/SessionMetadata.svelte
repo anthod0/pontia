@@ -41,7 +41,7 @@
 
 <div data-testid="session-metadata" class="relative min-w-0 flex-1">
   <Popover.Root bind:open={sessionDetailsOpen}>
-    <Popover.Trigger onclick={onRefreshGitStatus} class="flex touch-target:min-h-11 h-7 w-fit max-w-full min-w-0 items-center rounded-md px-1.5 text-left font-mono text-[11px] outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring" aria-label={$t('chat.detailsSummary', { summary: metadataSummary })}>
+    <Popover.Trigger onclick={onRefreshGitStatus} class="flex touch-target:min-h-11 h-7 w-fit max-w-full min-w-0 items-center rounded-item px-1.5 text-left font-mono text-11 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring" aria-label={$t('chat.detailsSummary', { summary: metadataSummary })}>
       <span data-chat-session-details-summary class="block min-w-0 flex-1 truncate">
         {#each visibleFields as field, index (field.key)}
           {#if index > 0}<span class="mx-1.5 inline-block h-2.5 border-l align-middle" aria-hidden="true"></span>{/if}

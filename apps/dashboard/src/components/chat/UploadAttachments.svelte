@@ -84,7 +84,7 @@
       {@const thumbnail = item.thumbnailUrl}
       {@const failed = item.status === 'failed'}
       <li class="relative size-16 shrink-0" title={tooltip(item)}>
-        <div class={['relative size-full overflow-hidden rounded-xl', failed ? 'bg-destructive/10' : 'bg-muted']}>
+        <div class={['relative size-full overflow-hidden rounded-item', failed ? 'bg-destructive/10' : 'bg-muted']}>
           {#if item.secret}
             <SecretChip secret={item.secret} {failed} />
           {:else if thumbnail}
@@ -94,7 +94,7 @@
             {@const ext = extension(item.name)}
             <div class={['flex size-full flex-col items-center justify-center gap-1', failed ? 'text-destructive' : kind === unknownKind ? 'text-muted-foreground' : kind.tone]}>
               <Icon class="size-6" />
-              {#if ext}<span class="max-w-full truncate px-1 text-[10px] font-semibold uppercase leading-none tracking-wide">{ext}</span>{/if}
+              {#if ext}<span class="max-w-full truncate px-1 text-10 font-semibold uppercase leading-none tracking-wide">{ext}</span>{/if}
             </div>
           {/if}
           {#if item.status === 'hashing'}
@@ -108,10 +108,10 @@
                 <circle cx="18" cy="18" r="15" fill="none" stroke-width="3" class="stroke-foreground/15" />
                 <circle cx="18" cy="18" r="15" fill="none" stroke-width="3" stroke-linecap="round" class="stroke-primary transition-[stroke-dashoffset]" pathLength="100" stroke-dasharray="100" stroke-dashoffset={100 - value} />
               </svg>
-              <span class="col-start-1 row-start-1 text-[10px] font-semibold tabular-nums leading-none">{value}%</span>
+              <span class="col-start-1 row-start-1 text-10 font-semibold tabular-nums leading-none">{value}%</span>
             </div>
           {:else if item.status === 'select' || failed}
-            <div class={['absolute inset-0 flex items-center justify-center gap-1 rounded-xl', failed ? 'bg-destructive/15 ring-1 ring-inset ring-destructive/70' : 'bg-background/60']}>
+            <div class={['absolute inset-0 flex items-center justify-center gap-1 rounded-item', failed ? 'bg-destructive/15 ring-1 ring-inset ring-destructive/70' : 'bg-background/60']}>
               {#if !item.recreate}
                 <Button type="button" size="icon-sm" variant="ghost" class={overlayButton} {disabled} aria-label={$t('files.retryUpload', { name: displayName(item) })} title={$t('common.retry')} onclick={() => retry(item)}><ArrowClockwiseIcon class="size-3.5" weight="bold" /></Button>
                 {#if !item.secret && !item.file}<Button type="button" size="icon-sm" variant="ghost" class={overlayButton} {disabled} aria-label={$t('files.selectNamed', { name: displayName(item) })} title={$t('files.select')} onclick={() => choose(item)}><FolderOpenIcon class="size-3.5" weight="bold" /></Button>{/if}

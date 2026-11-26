@@ -37,7 +37,7 @@
 
 <span use:observe class={['grid shrink-0 place-items-center', className]}>
   {#if url}
-    <img src={url} alt="" class="size-full rounded object-cover" data-quote-thumbnail />
+    <img src={url} alt="" class="size-full rounded-tooltip object-cover" data-quote-thumbnail />
   {:else}
     <FileIcon class="size-3.5 shrink-0" />
   {/if}

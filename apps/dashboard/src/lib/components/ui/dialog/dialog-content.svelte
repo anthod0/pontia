@@ -29,7 +29,7 @@
 		bind:ref
 		data-slot="dialog-content"
 		class={cn(
-			"bg-popover text-popover-foreground data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 ring-foreground/10 grid max-w-[calc(100%-2rem)] gap-4 rounded-(--radius-panel) p-4 text-sm ring-1 duration-100 sm:max-w-sm fixed top-[calc(var(--visual-viewport-top,0px)+var(--visual-viewport-height)/2)] max-h-[calc(var(--visual-viewport-height)-2rem)] overflow-y-auto overscroll-contain left-1/2 z-(--layer-modal) w-full -translate-x-1/2 -translate-y-1/2 outline-none",
+			"bg-popover text-popover-foreground data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 border-border grid max-w-[calc(100%-2rem)] gap-4 rounded-panel p-4 text-sm border duration-100 sm:max-w-sm fixed top-[calc(var(--visual-viewport-top,0px)+var(--visual-viewport-height)/2)] max-h-[calc(var(--visual-viewport-height)-2rem)] overflow-y-auto overscroll-contain left-1/2 z-(--layer-modal) w-full -translate-x-1/2 -translate-y-1/2 outline-none",
 			className
 		)}
 		{...restProps}

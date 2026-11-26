@@ -30,10 +30,10 @@
 </script>
 
 <header class="flex h-[52px] shrink-0 items-center gap-2 border-b px-2">
-  {#if onback}<Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11" onclick={onback} aria-label={backLabel} title={backLabel}><ArrowLeftIcon class="size-4 max-lg:size-5" /></Button>{/if}
+  {#if onback}<Button variant="ghost" size="icon-circle-sm" class="p-0 max-lg:size-11" onclick={onback} aria-label={backLabel} title={backLabel}><ArrowLeftIcon class="size-4 max-lg:size-5" /></Button>{/if}
   <div class="min-w-0 flex-1" title={origPath ? `${origPath} → ${path}` : path}>
-    <h2 class="flex min-w-0 items-center gap-1.5 truncate text-[13px] font-medium text-heading">{#if status}<span class={['font-mono text-[11px]', statusTone]}>{status}</span>{/if}<span class="truncate">{parts.name}</span></h2>
-    <div class="flex min-w-0 items-center gap-1 text-[11.5px] text-muted-foreground">
+    <h2 class="flex min-w-0 items-center gap-1.5 truncate text-13 font-medium text-heading">{#if status}<span class={['font-mono text-11', statusTone]}>{status}</span>{/if}<span class="truncate">{parts.name}</span></h2>
+    <div class="flex min-w-0 items-center gap-1 text-11 text-muted-foreground">
       {@render context()}
       {#if index !== undefined && total}<span aria-hidden="true">·</span><span class="tabular-nums">{$t('git.filePosition', { index: index + 1, total })}</span>{/if}
       {#if origPath || parts.dir}
@@ -49,10 +49,10 @@
     </span>
   {/if}
   {#if total && total > 1}
-    <Button variant="ghost" size="icon-sm" class="rounded-full p-0" disabled={index === 0} onclick={onprevious} aria-label={$t('git.previousFile')} title={$t('git.previousFile')}><CaretUpIcon class="size-4" /></Button>
-    <Button variant="ghost" size="icon-sm" class="rounded-full p-0" disabled={index === total - 1} onclick={onnext} aria-label={$t('git.nextFile')} title={$t('git.nextFile')}><CaretDownIcon class="size-4" /></Button>
+    <Button variant="ghost" size="icon-circle-sm" class="p-0" disabled={index === 0} onclick={onprevious} aria-label={$t('git.previousFile')} title={$t('git.previousFile')}><CaretUpIcon class="size-4" /></Button>
+    <Button variant="ghost" size="icon-circle-sm" class="p-0" disabled={index === total - 1} onclick={onnext} aria-label={$t('git.nextFile')} title={$t('git.nextFile')}><CaretDownIcon class="size-4" /></Button>
   {/if}
-  <Button variant="ghost" size="icon-sm" class="rounded-full p-0 max-lg:size-11" disabled={fetching} onclick={onrefresh} aria-label={$t('common.refresh')} title={$t('common.refresh')}>
+  <Button variant="ghost" size="icon-circle-sm" class="p-0 max-lg:size-11" disabled={fetching} onclick={onrefresh} aria-label={$t('common.refresh')} title={$t('common.refresh')}>
     <ArrowClockwiseIcon class={['size-4 max-lg:size-5', fetching && 'animate-spin']} />
   </Button>
 </header>

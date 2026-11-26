@@ -49,7 +49,7 @@
   {#if error}
     <Empty.Root role="alert" class="min-h-0 p-8">
       <Empty.Header>
-        <Empty.Media class="size-12 rounded-xl bg-destructive/10 text-destructive"><WarningCircleIcon class="size-6" /></Empty.Media>
+        <Empty.Media class="size-12 rounded-item bg-destructive/10 text-destructive"><WarningCircleIcon class="size-6" /></Empty.Media>
         <Empty.Title>{$t('git.diffFailed')}</Empty.Title>
         <Empty.Description class="break-words font-mono text-xs">{error.message}</Empty.Description>
       </Empty.Header>
@@ -60,20 +60,20 @@
   {:else if !diff}
     <div role="status" aria-label={$t('git.loadingDiff')} class="space-y-2.5 p-4">
       {#each skeletonLines as width, index (index)}
-        <Skeleton class="h-3 rounded-sm" style="width: {width}%; {width ? '' : 'visibility: hidden'}" />
+        <Skeleton class="h-3 rounded-tooltip" style="width: {width}%; {width ? '' : 'visibility: hidden'}" />
       {/each}
     </div>
   {:else if diff.binary}
     <Empty.Root class="min-h-0 p-8">
       <Empty.Header>
-        <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><BinaryIcon class="size-6" /></Empty.Media>
+        <Empty.Media class="size-12 rounded-item bg-muted text-muted-foreground"><BinaryIcon class="size-6" /></Empty.Media>
         <Empty.Title>{$t('git.binaryFile')}</Empty.Title>
       </Empty.Header>
     </Empty.Root>
   {:else if !diff.hunks.length}
     <Empty.Root class="min-h-0 p-8">
       <Empty.Header>
-        <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><FileDashedIcon class="size-6" /></Empty.Media>
+        <Empty.Media class="size-12 rounded-item bg-muted text-muted-foreground"><FileDashedIcon class="size-6" /></Empty.Media>
         <Empty.Title>{$t('git.noTextChanges')}</Empty.Title>
       </Empty.Header>
     </Empty.Root>

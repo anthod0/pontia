@@ -71,7 +71,7 @@
 {#snippet fullscreenButton()}
   {#if !mobile.current}
     {@const label = $t(fullscreen ? 'nav.restoreSplitView' : 'nav.expandPanel')}
-    <Button variant="ghost" size="icon-sm" class="rounded-full p-0 pointer-coarse:size-11" aria-label={label} title={label} onclick={() => fullscreen = !fullscreen}>
+    <Button variant="ghost" size="icon-circle-sm" class="p-0 pointer-coarse:size-11" aria-label={label} title={label} onclick={() => fullscreen = !fullscreen}>
       {#if fullscreen}<CornersInIcon />{:else}<CornersOutIcon />{/if}
     </Button>
   {/if}

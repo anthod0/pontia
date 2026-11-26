@@ -28,19 +28,19 @@
 <div use:observeFile={state} class={['flex items-center gap-2', state.missing && 'opacity-80', className]} data-file-row {...rest}>
   {#snippet icon()}
     {#if state.missing}
-      <div class="grid size-11 shrink-0 place-items-center rounded-xl bg-background text-muted-foreground"><FileXIcon class="size-6" /></div>
+      <div class="grid size-11 shrink-0 place-items-center rounded-item bg-background text-muted-foreground"><FileXIcon class="size-6" /></div>
     {:else}
-      <div class={['grid size-11 shrink-0 place-items-center rounded-xl', kind.tone]}><kind.icon class="size-6" weight="duotone" /></div>
+      <div class={['grid size-11 shrink-0 place-items-center rounded-item', kind.tone]}><kind.icon class="size-6" weight="duotone" /></div>
     {/if}
   {/snippet}
   {#if thumbnail}
     <div class="flex min-w-0 flex-1 items-center gap-3">
       {#if state.imageUrl}
-        <button type="button" class="shrink-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring" onclick={onenlarge} aria-label={$t('files.enlargeNamed', { name: state.file.name })}>
-          <img src={state.imageUrl} alt={state.file.name} class="size-11 rounded-xl object-cover" />
+        <button type="button" class="shrink-0 rounded-item outline-none focus-visible:ring-2 focus-visible:ring-ring" onclick={onenlarge} aria-label={$t('files.enlargeNamed', { name: state.file.name })}>
+          <img src={state.imageUrl} alt={state.file.name} class="size-11 rounded-item object-cover" />
         </button>
       {:else}
-        <Skeleton class="size-11 shrink-0 rounded-xl" role="status" aria-label={$t('files.loadingPreview')} />
+        <Skeleton class="size-11 shrink-0 rounded-item" role="status" aria-label={$t('files.loadingPreview')} />
       {/if}
       <div class="min-w-0 flex-1"><FileDetails {state} /></div>
     </div>
@@ -50,7 +50,7 @@
       <div class="min-w-0 flex-1"><FileDetails {state} /></div>
     </div>
   {:else}
-    <button type="button" class="-m-1 flex min-w-0 flex-1 items-center gap-3 rounded-xl p-1 text-left outline-none hover:bg-background/60 focus-visible:ring-2 focus-visible:ring-ring" onclick={() => preview.open({ device, sessionId: state.sessionId, path: state.file.path })} aria-label={$t('files.previewNamed', { name: state.file.name })}>
+    <button type="button" class="-m-1 flex min-w-0 flex-1 items-center gap-3 rounded-item p-1 text-left outline-none hover:bg-background/60 focus-visible:ring-2 focus-visible:ring-ring" onclick={() => preview.open({ device, sessionId: state.sessionId, path: state.file.path })} aria-label={$t('files.previewNamed', { name: state.file.name })}>
       {@render icon()}
       <div class="min-w-0 flex-1"><FileDetails {state} /></div>
     </button>

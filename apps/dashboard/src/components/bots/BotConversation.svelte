@@ -34,7 +34,7 @@
 {/snippet}
 
 {#snippet todoButton()}
-  <button type="button" class={['inline-flex shrink-0 items-center justify-center self-end rounded-md outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring',
+  <button type="button" class={['inline-flex shrink-0 items-center justify-center self-end rounded-item outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring',
     mobile ? 'min-h-11 min-w-11 gap-1 text-xs font-medium text-primary' : 'size-7']}
     aria-label={$t('bots.todos')} title={$t('bots.todos')} onclick={ontodos}>
     {#if mobile}<span aria-hidden="true">●</span>{$t('bots.todos')}

@@ -50,7 +50,7 @@
 {#snippet workspaceLabel(item: WorkspaceView)}
   <div class="flex min-w-0 flex-1 flex-col text-left">
     <span class="truncate">{workspaceTitle(item)}</span>
-    <span class="truncate font-mono text-[11px] text-muted-foreground">{item.display_path}</span>
+    <span class="truncate font-mono text-11 text-muted-foreground">{item.display_path}</span>
   </div>
 {/snippet}
 
@@ -61,11 +61,11 @@
       <GitPanel bind:this={view} {device} workspaceId={workspace.workspace_id} {git}>
         {#snippet workspaceHeading()}
             <ResponsiveSelect value={workspace.workspace_id} onValueChange={choose}
-              label={$t('bots.gitWorkspace', { name: workspaceTitle(workspace) })} triggerClass="h-7 min-w-0 max-w-full rounded-full border-0 px-2 shadow-none data-[size=default]:h-7 hover:bg-muted" title={workspace.canonical_path} align="start" contentClass="w-72" itemClass="py-2" disabledOption={unavailable}
+              label={$t('bots.gitWorkspace', { name: workspaceTitle(workspace) })} triggerClass="h-7 min-w-0 max-w-full rounded-chip border-0 px-2 shadow-none data-[size=default]:h-7 hover:bg-muted" title={workspace.canonical_path} align="start" contentClass="w-72" itemClass="py-2" disabledOption={unavailable}
               options={workspaces} keyOf={item => item.workspace_id} labelOf={item => workspaceTitle(item)}>
               {#snippet trigger()}
                 <FolderIcon class="size-3.5 text-muted-foreground" />
-                <span class="min-w-0 flex-1 truncate text-left text-[13px] font-medium text-heading">{workspaceTitle(workspace)}</span>
+                <span class="min-w-0 flex-1 truncate text-left text-13 font-medium text-heading">{workspaceTitle(workspace)}</span>
                 <CaretDownIcon class="size-3 shrink-0 text-muted-foreground" />
               {/snippet}
               {#snippet option(item)}{@render workspaceLabel(item)}{/snippet}
@@ -77,12 +77,12 @@
     <div role="alert" class="p-3 text-sm">{$t('workspaces.loadFailedMessage')} <Button variant="ghost" size="xs" onclick={() => workspacesQuery.refetch()}>{$t('common.retry')}</Button></div>
   {:else if !workspacesQuery.data}
     <div role="status" aria-label={$t('common.loading')} class="space-y-2 p-3">
-      {#each [0, 1, 2] as index (index)}<Skeleton class="h-14 rounded-lg" />{/each}
+      {#each [0, 1, 2] as index (index)}<Skeleton class="h-14 rounded-item" />{/each}
     </div>
   {:else if !workspaces.length}
     <Empty.Root class="min-h-0 p-8">
       <Empty.Header>
-        <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><FolderIcon class="size-6" /></Empty.Media>
+        <Empty.Media class="size-12 rounded-item bg-muted text-muted-foreground"><FolderIcon class="size-6" /></Empty.Media>
         <Empty.Title>{$t('workspaces.empty')}</Empty.Title>
         <Empty.Description>{$t('bots.gitNoWorkspaces')}</Empty.Description>
       </Empty.Header>
@@ -98,8 +98,8 @@
         {#each workspaces as item (item.workspace_id)}
           <li>
             <button type="button" disabled={unavailable(item)} title={item.canonical_path} onclick={() => choose(item.workspace_id)}
-              class="flex w-full items-center gap-3 rounded-lg p-2 text-left text-sm outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50">
-              <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground"><FolderSimpleIcon class="size-5" weight="duotone" /></span>
+              class="flex w-full items-center gap-3 rounded-item p-2 text-left text-sm outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50">
+              <span class="grid size-9 shrink-0 place-items-center rounded-item bg-muted text-muted-foreground"><FolderSimpleIcon class="size-5" weight="duotone" /></span>
               {@render workspaceLabel(item)}
               {#if unavailable(item)}<span class="ml-auto flex shrink-0 items-center gap-1 text-xs text-muted-foreground"><WarningCircleIcon class="size-3.5" />{$t('common.unavailable')}</span>{/if}
             </button>

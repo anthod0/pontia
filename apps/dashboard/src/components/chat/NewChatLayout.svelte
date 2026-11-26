@@ -14,7 +14,7 @@
     {:else}
       <div>
         <PontiaMascot class="mx-auto mb-4 size-20" />
-        <h1 class="mb-2 text-[28px] font-semibold tracking-tight text-heading">{$t('chat.startSessionTitle')}</h1>
+        <h1 class="mb-2 text-28 font-semibold tracking-tight text-heading">{$t('chat.startSessionTitle')}</h1>
         <p class="text-sm text-foreground">{$t('chat.startDescription')}</p>
       </div>
     {/if}

@@ -14,12 +14,12 @@
     {#each filters as filter (filter)}
       <Tabs.Trigger
         value={filter}
-        class="h-full min-w-0 flex-initial px-0 text-[15px] text-muted-foreground aria-selected:font-semibold aria-selected:text-heading after:bg-primary group-data-[orientation=horizontal]/tabs:after:-bottom-px"
+        class="h-full min-w-0 flex-initial px-0 text-15 text-muted-foreground aria-selected:font-semibold aria-selected:text-heading after:bg-primary group-data-[orientation=horizontal]/tabs:after:-bottom-px"
       ><span class="truncate">{$t(`common.${filter}`)}</span></Tabs.Trigger>
     {/each}
   </Tabs.List>
   <button
-    class="flex min-w-12 max-w-33 items-center gap-1 text-[13px] {workspace ? 'font-medium text-primary' : 'text-muted-foreground'}"
+    class="flex min-w-12 max-w-33 items-center gap-1 text-13 {workspace ? 'font-medium text-primary' : 'text-muted-foreground'}"
     aria-haspopup="dialog"
     title={workspace || $t('workspaces.all')}
     onclick={open}

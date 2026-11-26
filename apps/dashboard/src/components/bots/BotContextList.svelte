@@ -212,7 +212,7 @@
   {#if error}
     <Empty.Root class="min-h-full p-8" role="alert">
       <Empty.Header>
-        <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><WarningCircleIcon class="size-6" /></Empty.Media>
+        <Empty.Media class="size-12 rounded-item bg-muted text-muted-foreground"><WarningCircleIcon class="size-6" /></Empty.Media>
         <Empty.Title>{$t('bots.contextLoadFailed')}</Empty.Title>
         <Empty.Description>{error.message}</Empty.Description>
       </Empty.Header>
@@ -223,18 +223,18 @@
   {:else}
     <div class={['mx-auto pb-8', fullscreen && 'max-w-[848px] pb-16']}>
       <div class={['sticky top-0 z-20 bg-surface px-2.5', mobile && 'hidden bg-background', fullscreen && 'px-6']} data-context-summary>
-        <div class={['flex items-center gap-2 px-3 pt-3 pb-2 text-[13px] text-muted-foreground', fullscreen && 'text-sm']}>
+        <div class={['flex items-center gap-2 px-3 pt-3 pb-2 text-13 text-muted-foreground', fullscreen && 'text-sm']}>
           <TreeStructureIcon class="size-4" />
           <span>{$t('bots.contextCount', { count: messages.length })}{#if range} · {range}{/if}</span>
         </div>
         {#if truncated}
-          <div class="mb-2 flex items-start gap-2 rounded-[10px] bg-muted px-3 py-2 text-[13px] leading-[1.55] text-muted-foreground">
+          <div class="mb-2 flex items-start gap-2 rounded-item bg-muted px-3 py-2 text-13 leading-[1.55] text-muted-foreground">
             <InfoIcon class="mt-0.5 size-4 shrink-0" /><span>{$t('bots.contextTruncated')}</span>
           </div>
         {/if}
       </div>
       {#if mobile && truncated}
-        <div class="mx-4 mt-2 flex items-start gap-2 rounded-[10px] bg-muted px-3 py-2 text-[13px] leading-[1.55] text-muted-foreground">
+        <div class="mx-4 mt-2 flex items-start gap-2 rounded-item bg-muted px-3 py-2 text-13 leading-[1.55] text-muted-foreground">
           <InfoIcon class="mt-0.5 size-4 shrink-0" /><span>{$t('bots.contextTruncated')}</span>
         </div>
       {/if}
@@ -263,18 +263,18 @@
             {#if message !== messages.at(-1)}<span aria-hidden="true" class={['absolute top-11 -bottom-2 left-[33.5px] w-px bg-border', fullscreen && 'left-[49.5px]', mobile && 'left-[39.5px]']}></span>{/if}
             <article class={['relative grid grid-cols-[1.5rem_minmax(0,1fr)] gap-3', fullscreen && 'grid-cols-[1.75rem_minmax(0,1fr)]']} aria-label={`${user ? $t('bots.you') : bot.name} ${message.created_at}`}>
               <span class={['relative z-10 grid size-6 shrink-0 place-items-center rounded-full', fullscreen && 'size-7', current ? 'bg-selected' : mobile ? 'bg-background' : 'bg-surface']}>
-                {#if user}<span aria-hidden="true" class={['grid size-6 place-items-center rounded-full bg-border text-[11px] font-semibold text-heading', fullscreen && 'size-7 text-xs']}>{$t('bots.you').slice(0, 1)}</span>
+                {#if user}<span aria-hidden="true" class={['grid size-6 place-items-center rounded-full bg-border text-11 font-semibold text-heading', fullscreen && 'size-7 text-xs']}>{$t('bots.you').slice(0, 1)}</span>
                 {:else}<BotAvatar shape={bot.avatar_shape} color={bot.avatar_color} class={fullscreen ? 'size-7' : 'size-6'} />{/if}
               </span>
               <div class="min-w-0">
                 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
                 <header class={['flex min-h-6 items-center gap-2 text-sm', expanded && isClamped && 'cursor-pointer']} onclick={(event) => headerClick(event, message.id)}>
                   <span class="min-w-0 font-semibold text-heading [overflow-wrap:anywhere]">{user ? $t('bots.you') : bot.name}</span>
-                  <MessageTime value={message.created_at} class="px-0 text-[13px] whitespace-nowrap tabular-nums" />
-                  {#if current}<Badge variant="secondary" class="h-5 rounded-md bg-primary/14 px-1.5 text-xs font-medium text-primary">{$t('bots.contextCurrent')}</Badge>{/if}
-                  {#if message.todo?.state === 'open'}<Badge variant="secondary" class="h-5 rounded-md bg-primary/14 px-1.5 text-xs font-medium text-primary">{$t('bots.todos')}</Badge>
+                  <MessageTime value={message.created_at} class="px-0 text-13 whitespace-nowrap tabular-nums" />
+                  {#if current}<Badge variant="secondary" class="h-5 rounded-item bg-primary/14 px-1.5 text-xs font-medium text-primary">{$t('bots.contextCurrent')}</Badge>{/if}
+                  {#if message.todo?.state === 'open'}<Badge variant="secondary" class="h-5 rounded-item bg-primary/14 px-1.5 text-xs font-medium text-primary">{$t('bots.todos')}</Badge>
                   {:else if message.todo?.state === 'done'}<span class="inline-flex items-center gap-1 text-xs text-muted-foreground"><CheckCircleIcon class="size-3" />{$t('bots.todoDone')}</span>{/if}
-                  {#if message.status === 'failed'}<Badge variant="secondary" class="h-5 rounded-md bg-destructive/12 px-1.5 text-xs font-medium text-destructive">{$t('bots.sendFailed')}</Badge>{/if}
+                  {#if message.status === 'failed'}<Badge variant="secondary" class="h-5 rounded-item bg-destructive/12 px-1.5 text-xs font-medium text-destructive">{$t('bots.sendFailed')}</Badge>{/if}
                   <Tooltip.Root>
                     <Tooltip.Trigger>
                       {#snippet child({ props })}
@@ -283,7 +283,7 @@
                           variant="ghost"
                           size="sm"
                           class={[
-                            'ml-auto h-7 shrink-0 gap-1 rounded-full px-2.5 text-[13px] font-normal text-muted-foreground touch-target:h-11 touch-target:px-3 touch-target:text-sm hover:text-heading',
+                            'ml-auto h-7 shrink-0 gap-1 rounded-chip px-2.5 text-13 font-normal text-muted-foreground touch-target:h-11 touch-target:px-3 touch-target:text-sm hover:text-heading',
                             current && 'hover:bg-primary/14',
                           ]}
                           aria-label={$t('bots.locateInChat', { name: user ? $t('bots.you') : bot.name, time: formatRangeTime(message.created_at) })}
@@ -297,7 +297,7 @@
                 <div
                   id={`bot-context-body-${message.id}`}
                   class={[
-                    'mt-1 text-[15px] leading-[1.75] text-foreground [overflow-wrap:anywhere]',
+                    'mt-1 text-15 leading-[1.75] text-foreground [overflow-wrap:anywhere]',
                     (fullscreen || mobile) && 'text-base',
                     fullscreen && 'leading-[1.8]',
                     mobile && 'leading-[1.7]',
@@ -328,7 +328,7 @@
                   <Button
                     variant="link"
                     size="sm"
-                    class="mt-0.5 h-7 gap-1 px-0 text-[13px] font-medium touch-target:h-9 touch-target:text-sm"
+                    class="mt-0.5 h-7 gap-1 px-0 text-13 font-medium touch-target:h-9 touch-target:text-sm"
                     aria-expanded={expanded}
                     aria-controls={`bot-context-body-${message.id}`}
                     onclick={() => toggle(message.id, !expanded)}
@@ -339,7 +339,7 @@
           </li>
         {/each}
       </ol>
-      {#if messages.length === 1}<p class="px-4 pt-4 text-center text-[13px] text-muted-foreground">{$t('bots.noRelated')}</p>{/if}
+      {#if messages.length === 1}<p class="px-4 pt-4 text-center text-13 text-muted-foreground">{$t('bots.noRelated')}</p>{/if}
     </div>
   {/if}
   </div>

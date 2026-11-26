@@ -12,7 +12,7 @@
 <div class="text-center">
   <div role={status.mood === 'loading' ? 'status' : 'alert'}>
     <PontiaMascot mood={status.mood} class="mx-auto mb-4 size-20" />
-    <h1 class="mb-2 text-[28px] font-semibold tracking-tight text-heading">{status.title}</h1>
+    <h1 class="mb-2 text-28 font-semibold tracking-tight text-heading">{status.title}</h1>
     <p class="text-sm text-foreground">{status.description}</p>
   </div>
   {#if action}<div class="mt-5">{@render action()}</div>{/if}

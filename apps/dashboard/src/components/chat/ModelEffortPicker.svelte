@@ -161,7 +161,7 @@
     event.preventDefault()
   }
 
-  const tagClass = 'inline-flex h-[18px] shrink-0 items-center rounded-sm px-1.5 text-[10.5px] font-medium'
+  const tagClass = 'inline-flex h-[18px] shrink-0 items-center rounded-tooltip px-1.5 text-10 font-medium'
   const triggerClass = $derived(variant === 'toolbar'
     ? cn(selectTriggerClass, targetSegmentClass, 'md:max-w-56')
     : cn(selectTriggerClass, 'w-full gap-2'))
@@ -201,7 +201,7 @@
 {#snippet meter(index: number, count: number, active: boolean)}
   <span aria-hidden="true" class="mt-1 inline-flex h-3 w-[22px] shrink-0 items-end gap-0.5">
     {#each meterBars(index, count) as lit, bar (bar)}
-      <i class={cn('w-[3px] rounded-[1px]', lit ? (active ? 'bg-primary' : 'bg-muted-foreground') : 'bg-border')} style:height={`${4 + bar * 2.6}px`}></i>
+      <i class={cn('w-[3px] rounded-item', lit ? (active ? 'bg-primary' : 'bg-muted-foreground') : 'bg-border')} style:height={`${4 + bar * 2.6}px`}></i>
     {/each}
   </span>
 {/snippet}
@@ -212,7 +212,7 @@
       <MagnifyingGlassIcon class="size-3.5 shrink-0" aria-hidden="true" />
       <input role="combobox" aria-expanded="true" aria-controls={`${uid}-models`} aria-activedescendant={activeId} aria-label={$t('model.search')}
         placeholder={$t('model.searchPlaceholder')} bind:value={search} onkeydown={keydown}
-        class="h-full min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground" />
+        class="h-full min-w-0 flex-1 bg-transparent text-13 text-foreground outline-none placeholder:text-muted-foreground" />
       <Kbd class="font-mono">{client.name}</Kbd>
     </div>
     <div role="listbox" id={`${uid}-models`} aria-label={$t('model.available')} class="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1">
@@ -223,23 +223,23 @@
           {@const isSelected = row.key === model && (row.clientDefault || Boolean(selected))}
           {#if !row.clientDefault && index === (allowDefault && !search ? 1 : 0)}
             {#if allowDefault && !search}<div class="mx-2 my-1 h-px bg-border"></div>{/if}
-            {#if allowDefault || search}<div class="px-2 pt-2 pb-1 text-[11px] font-medium text-muted-foreground">{search ? $t('model.matches', { count: matchCount }) : $t('model.allModels')}</div>{/if}
+            {#if allowDefault || search}<div class="px-2 pt-2 pb-1 text-11 font-medium text-muted-foreground">{search ? $t('model.matches', { count: matchCount }) : $t('model.allModels')}</div>{/if}
           {/if}
           <!-- Options are navigated from the search combobox via aria-activedescendant. -->
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <div role="option" id={`${uid}-model-${index}`} aria-selected={isSelected} aria-label={row.clientDefault ? $t('model.default') : row.model.name} tabindex="-1"
-            class={cn('flex min-h-10 cursor-default items-center gap-2 rounded-sm px-2 py-1.5', row.key === activeRow?.key && 'bg-muted')}
+            class={cn('flex min-h-10 cursor-default items-center gap-2 rounded-tooltip px-2 py-1.5', row.key === activeRow?.key && 'bg-muted')}
             onpointermove={() => { if (highlight !== row.key || column !== 'models') { highlight = row.key; column = 'models' } }}
             onpointerdown={(event) => event.preventDefault()} onclick={() => chooseModel(row)}>
             <span class="min-w-0 flex-1">
-              <span class={cn('flex items-center gap-1.5 text-[13px] font-medium', isSelected ? 'text-primary' : 'text-heading')}>
+              <span class={cn('flex items-center gap-1.5 text-13 font-medium', isSelected ? 'text-primary' : 'text-heading')}>
                 <span class="truncate">{row.clientDefault ? $t('model.default') : row.model.name}</span>
                 {#if !row.clientDefault && row.model.id === defaultModel?.id}<span class={cn(tagClass, 'bg-muted text-muted-foreground')}>{$t('model.defaultTag')}</span>{/if}
               </span>
               {#if row.clientDefault}
-                {#if row.model}<span class="block truncate text-[11px] text-muted-foreground">{$t('model.defaultCurrent', { name: row.model.name })}</span>{/if}
+                {#if row.model}<span class="block truncate text-11 text-muted-foreground">{$t('model.defaultCurrent', { name: row.model.name })}</span>{/if}
               {:else}
-                <span class="block truncate font-mono text-[11px] text-muted-foreground">{row.model.id}</span>
+                <span class="block truncate font-mono text-11 text-muted-foreground">{row.model.id}</span>
               {/if}
             </span>
             {#if isSelected && (choices.length || effort)}
@@ -268,7 +268,7 @@
           {#if index === 1}<div class="mx-2 my-1 h-px bg-border"></div>{/if}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <div role="option" id={`${uid}-effort-${index}`} aria-selected={isSelected} aria-label={option?.name ?? $t('effort.default')} tabindex="-1"
-            class={cn('flex cursor-default items-start gap-2.5 rounded-sm px-2 py-[7px]', isSelected ? 'bg-selected' : column === 'efforts' && effortHighlight === choice && 'bg-muted')}
+            class={cn('flex cursor-default items-start gap-2.5 rounded-tooltip px-2 py-[7px]', isSelected ? 'bg-selected' : column === 'efforts' && effortHighlight === choice && 'bg-muted')}
             onpointermove={() => { if (effortHighlight !== choice || column !== 'efforts') { effortHighlight = choice; column = 'efforts' } }}
             onpointerdown={(event) => event.preventDefault()} onclick={() => chooseEffort(activeRow, choice)}>
             {#if option}
@@ -277,13 +277,13 @@
               <span class="mt-0.5 inline-flex w-[22px] shrink-0 justify-center text-muted-foreground"><SparkleIcon class="size-[13px]" aria-hidden="true" /></span>
             {/if}
             <span class="min-w-0 flex-1">
-              <span class={cn('flex items-center gap-1.5 text-[13px] font-medium', option && 'font-mono', isSelected ? 'text-primary' : 'text-heading')}>
+              <span class={cn('flex items-center gap-1.5 text-13 font-medium', option && 'font-mono', isSelected ? 'text-primary' : 'text-heading')}>
                 {option?.name ?? $t('effort.default')}
                 {#if option && option.id === activeModel?.default_reasoning_effort}<span class={cn(tagClass, 'bg-muted font-sans text-muted-foreground')}>{$t('effort.modelDefaultTag')}</span>{/if}
               </span>
-              {#if option?.description}<span class="mt-px block text-[11.5px] leading-snug text-muted-foreground">{option.description}</span>
+              {#if option?.description}<span class="mt-px block text-11 leading-snug text-muted-foreground">{option.description}</span>
               {:else if !option}
-                <span class="mt-px block text-[11.5px] leading-snug text-muted-foreground">
+                <span class="mt-px block text-11 leading-snug text-muted-foreground">
                   {#if activeModel?.default_reasoning_effort}{$t('effort.followModel', { value: optionName(activeModel, activeModel.default_reasoning_effort) })}{:else}{$t('effort.clientDefault')}{/if}
                 </span>
               {/if}
@@ -294,14 +294,14 @@
       </div>
     {:else if activeRow}
       <div class="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
-        <span class="grid size-9 place-items-center rounded-lg bg-muted text-muted-foreground"><GaugeIcon class="size-4" aria-hidden="true" /></span>
-        <p class="text-[13px] font-medium text-heading">{$t('effort.unsupported')}</p>
+        <span class="grid size-9 place-items-center rounded-item bg-muted text-muted-foreground"><GaugeIcon class="size-4" aria-hidden="true" /></span>
+        <p class="text-13 font-medium text-heading">{$t('effort.unsupported')}</p>
         <p class="max-w-52 text-xs leading-normal text-muted-foreground">{$t('effort.unsupportedDescription', { name: rowName(activeRow) })}</p>
       </div>
     {:else}
       <div class="flex-1"></div>
     {/if}
-    <div class="flex h-8 shrink-0 items-center gap-3 border-t px-3 text-[11px] text-muted-foreground">
+    <div class="flex h-8 shrink-0 items-center gap-3 border-t px-3 text-11 text-muted-foreground">
       <span class="inline-flex items-center gap-1"><Kbd>↑↓</Kbd>{$t('model.title')}</span>
       <span class="inline-flex items-center gap-1"><Kbd>←→</Kbd>{$t('effort.short')}</span>
       <span class="inline-flex items-center gap-1"><Kbd>↵</Kbd>{$t('common.confirm')}</span>
@@ -323,7 +323,7 @@
       </Sheet.Close>
     </div>
   </div>
-  <div class="mx-4 mb-2 flex h-10 shrink-0 items-center gap-2 rounded-md border px-3 text-muted-foreground focus-within:border-primary">
+  <div class="mx-4 mb-2 flex h-10 shrink-0 items-center gap-2 rounded-item border px-3 text-muted-foreground focus-within:border-primary">
     <MagnifyingGlassIcon class="size-4 shrink-0" aria-hidden="true" />
     <input type="search" aria-label={$t('model.search')} placeholder={$t('model.searchPlaceholder')} bind:value={search}
       class="h-full min-w-0 flex-1 bg-transparent text-base text-foreground outline-none placeholder:text-muted-foreground" />
@@ -334,10 +334,10 @@
       {#each rows as row (row.key)}
         {@const isSelected = row.key === model && (row.clientDefault || Boolean(selected))}
         <div role="option" aria-selected={isSelected} aria-label={row.clientDefault ? $t('model.default') : row.model.name} tabindex="0"
-          class={cn('flex min-h-14 cursor-default items-center gap-2 rounded-md px-3 py-2 outline-none focus-visible:bg-muted', isSelected && 'bg-selected')}
+          class={cn('flex min-h-14 cursor-default items-center gap-2 rounded-item px-3 py-2 outline-none focus-visible:bg-muted', isSelected && 'bg-selected')}
           onclick={() => selectMobileModel(row)} onkeydown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectMobileModel(row) } }}>
           <span class="min-w-0 flex-1">
-            <span class={cn('flex items-center gap-1.5 text-[15px] font-medium', isSelected ? 'text-primary' : 'text-heading')}>
+            <span class={cn('flex items-center gap-1.5 text-15 font-medium', isSelected ? 'text-primary' : 'text-heading')}>
               <span class="truncate">{row.clientDefault ? $t('model.default') : row.model.name}</span>
               {#if !row.clientDefault && row.model.id === defaultModel?.id}<span class={cn(tagClass, 'bg-muted text-muted-foreground')}>{$t('model.defaultTag')}</span>{/if}
             </span>
@@ -365,7 +365,7 @@
         {#each sheetChoices as choice (choice)}
           {@const option = sheetModel?.reasoning_efforts?.find((entry) => entry.id === choice)}
           <button type="button" role="radio" aria-checked={effort === choice}
-            class={cn('grid h-11 min-w-0 place-items-center truncate rounded-md px-2.5 text-[13px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring', option && 'font-mono',
+            class={cn('grid h-11 min-w-0 place-items-center truncate rounded-item px-2.5 text-13 font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring', option && 'font-mono',
               effort === choice ? 'bg-primary-solid text-primary-foreground' : 'bg-muted text-heading')}
             onclick={() => effort = choice}>{option?.name ?? $t('effort.default')}</button>
         {/each}
@@ -379,7 +379,7 @@
         {/if}
       </p>
     {:else}
-      <div class="flex h-10 items-center gap-2 rounded-md border border-dashed px-3 text-[13px] text-muted-foreground">
+      <div class="flex h-10 items-center gap-2 rounded-item border border-dashed px-3 text-13 text-muted-foreground">
         <InfoIcon class="size-[15px] shrink-0" aria-hidden="true" />
         <span class="min-w-0 truncate">{$t('effort.unsupportedNamed', { name: selectedRow ? rowName(selectedRow) : triggerName })}</span>
       </div>

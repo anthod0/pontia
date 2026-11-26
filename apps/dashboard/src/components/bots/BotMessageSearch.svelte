@@ -74,7 +74,7 @@
   }
 </script>
 
-{#snippet marked(value: string)}{#each markMatches(value, query) as part}{#if part.match}<mark class="rounded-sm bg-primary/15 px-0.5 text-foreground">{part.text}</mark>{:else}{part.text}{/if}{/each}{/snippet}
+{#snippet marked(value: string)}{#each markMatches(value, query) as part}{#if part.match}<mark class="rounded-tooltip bg-primary/15 px-0.5 text-foreground">{part.text}</mark>{:else}{part.text}{/if}{/each}{/snippet}
 
 <div class="flex min-h-0 flex-1 flex-col">
   <div class="shrink-0 space-y-2 border-b p-3">
@@ -106,7 +106,7 @@
       <p role="status" class="text-sm text-muted-foreground">{$t('common.loading')}</p>
     {:else if !messages.length}
       <Empty.Root class="min-h-0 p-6"><Empty.Header>
-        <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground">
+        <Empty.Media class="size-12 rounded-item bg-muted text-muted-foreground">
           {#if filter === 'file'}<FileIcon class="size-6" />{:else if filter === 'image'}<ImageIcon class="size-6" />{:else}<MagnifyingGlassIcon class="size-6" />{/if}
         </Empty.Media>
         <Empty.Title>{noResults}</Empty.Title>
@@ -117,16 +117,16 @@
           {@const user = message.kind === 'user_input'}
           <li>
             <button type="button" aria-current={message.id === selected ? 'true' : undefined}
-              class={['flex w-full gap-2.5 rounded-xl p-2 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring', message.id === selected && 'bg-muted']}
+              class={['flex w-full gap-2.5 rounded-item p-2 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring', message.id === selected && 'bg-muted']}
               onclick={() => onselect(message.id, null)}>
-              {#if user}<span aria-hidden="true" class="grid size-5 shrink-0 place-items-center rounded-full bg-border text-[10px] font-semibold text-heading">{$t('bots.you').slice(0, 1)}</span>
+              {#if user}<span aria-hidden="true" class="grid size-5 shrink-0 place-items-center rounded-full bg-border text-10 font-semibold text-heading">{$t('bots.you').slice(0, 1)}</span>
               {:else}<BotAvatar shape={bot.avatar_shape} color={bot.avatar_color} class="size-5 shrink-0" />{/if}
               <span class="min-w-0 flex-1">
                 <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <span class="truncate font-medium text-heading">{user ? $t('bots.you') : bot.name}</span>
                   <MessageTime value={message.created_at} class="ml-auto shrink-0 px-0" />
                 </span>
-                <span class="line-clamp-3 text-[13px] leading-5 [overflow-wrap:anywhere]">{#each searchSnippet(message, query) as part}{#if part.match}<mark class="rounded-sm bg-primary/15 px-0.5 text-foreground">{part.text}</mark>{:else}{part.text}{/if}{/each}</span>
+                <span class="line-clamp-3 text-13 leading-5 [overflow-wrap:anywhere]">{#each searchSnippet(message, query) as part}{#if part.match}<mark class="rounded-tooltip bg-primary/15 px-0.5 text-foreground">{part.text}</mark>{:else}{part.text}{/if}{/each}</span>
               </span>
             </button>
           </li>
@@ -138,16 +138,16 @@
           {@const user = message.kind === 'user_input'}
           <li>
             <button type="button" aria-current={message.id === selected ? 'true' : undefined} title={file.path}
-              class={['flex w-full items-center gap-2.5 rounded-xl p-2 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring', message.id === selected && 'bg-muted']}
+              class={['flex w-full items-center gap-2.5 rounded-item p-2 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring', message.id === selected && 'bg-muted']}
               onclick={() => selectFile(message, file)} data-search-file={file.path}>
-              <span class="grid size-10 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted text-muted-foreground">
+              <span class="grid size-10 shrink-0 place-items-center overflow-hidden rounded-item border bg-muted text-muted-foreground">
                 <!-- Uploads are temporary files the Bot's file Session may not read. -->
                 {#if file.media_kind === 'image' && !user && fileSessionId}<QuoteThumbnail sessionId={fileSessionId} path={file.path} class="size-full" lazy />
                 {:else if file.media_kind === 'image'}<ImageIcon class="size-5" />
                 {:else}<FileIcon class="size-5" />{/if}
               </span>
               <span class="min-w-0 flex-1">
-                <span class="block truncate text-[13px] leading-5 font-medium text-heading">{@render marked(file.name)}</span>
+                <span class="block truncate text-13 leading-5 font-medium text-heading">{@render marked(file.name)}</span>
                 <span class="block truncate text-xs text-muted-foreground">{@render marked(file.path)}</span>
                 <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <span class="truncate">{user ? $t('bots.you') : bot.name}</span>

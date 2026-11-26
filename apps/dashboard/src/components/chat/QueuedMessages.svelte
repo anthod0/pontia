@@ -23,7 +23,7 @@
 </script>
 
 {#if visibleMessages.length}
-  <section class="mb-2 overflow-hidden rounded-lg border bg-background shadow-none" aria-label={$t('inbox.title')}>
+  <section class="mb-2 overflow-hidden rounded-item border bg-background shadow-none" aria-label={$t('inbox.title')}>
     <ul class="max-h-40 overflow-y-auto py-1">
       {#each visibleMessages as message (message.message_id)}
         {@const parts = parseUploadMessage(message.input.summary)}

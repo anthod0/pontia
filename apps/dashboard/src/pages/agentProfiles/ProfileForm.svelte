@@ -188,13 +188,13 @@
       <div class="no-scrollbar flex gap-2 overflow-x-auto md:hidden">
         {#each quickTemplates as option (option.id)}
           {@const Icon = templateIcon(option)}
-          <button type="button" class="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm aria-pressed:border-primary aria-pressed:bg-selected" aria-pressed={option.id === applied.id} onclick={() => chooseTemplate(option)}><Icon class="size-4"/>{option.text.en.name}</button>
+          <button type="button" class="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-chip border px-3 text-sm aria-pressed:border-primary aria-pressed:bg-selected" aria-pressed={option.id === applied.id} onclick={() => chooseTemplate(option)}><Icon class="size-4"/>{option.text.en.name}</button>
         {/each}
       </div>
       <p class="line-clamp-2 text-xs text-muted-foreground md:hidden">{applied.text.en.description}</p>
     {/if}
-    <div class="flex min-w-0 items-center gap-2.5 rounded-lg border bg-muted/40 px-3 py-2 {botName ? 'max-md:hidden' : ''}">
-      <span class="flex size-7 shrink-0 items-center justify-center rounded-md bg-background text-foreground"><AppliedIcon class="size-4" /></span>
+    <div class="flex min-w-0 items-center gap-2.5 rounded-item border bg-muted/40 px-3 py-2 {botName ? 'max-md:hidden' : ''}">
+      <span class="flex size-7 shrink-0 items-center justify-center rounded-item bg-background text-foreground"><AppliedIcon class="size-4" /></span>
       <p class="min-w-0 flex-1 text-sm">
         <span class="text-muted-foreground">{$t('profiles.templateApplied')}</span>
         <span class="font-medium text-heading">{applied.text.en.name}</span>{#if botName}<span class="line-clamp-2 text-xs text-muted-foreground">{applied.text.en.description}</span>{:else}<span class="text-muted-foreground max-sm:hidden">{$t('profiles.templateAppliedHint')}</span>{/if}
@@ -320,7 +320,7 @@
       <Button type="button" variant="ghost" class="text-destructive hover:text-destructive" disabled={saving} aria-label={$t('profiles.deleteNamed', { name: profile.name })} onclick={() => profile && ondelete?.(profile)}><TrashIcon data-icon="inline-start" />{$t('common.delete')}</Button>
     {/if}
     {#if oncancel}<Button class={botName ? "max-md:hidden" : undefined} type="button" variant="outline" disabled={saving} onclick={oncancel}>{$t('common.cancel')}</Button>{/if}
-    <Button type="submit" aria-disabled={resolvingTemplate || undefined} class={botName ? "max-md:h-12 max-md:w-full max-md:rounded-full" : undefined} disabled={saving || effortUnavailable || (!profile && !clients.length)}>{$t(botName ? 'common.add' : profile ? 'common.save' : 'profiles.create')}</Button>
+    <Button type="submit" aria-disabled={resolvingTemplate || undefined} class={botName ? "max-md:h-12 max-md:w-full max-md:" : undefined} disabled={saving || effortUnavailable || (!profile && !clients.length)}>{$t(botName ? 'common.add' : profile ? 'common.save' : 'profiles.create')}</Button>
   </div>
 </form>
 

@@ -49,7 +49,7 @@
         <button
           role="radio"
           aria-checked={client === o.id}
-          class="grid min-w-24 min-h-16 shrink-0 justify-items-center gap-1 rounded-xl border px-3 py-2 aria-checked:border-primary aria-checked:bg-selected"
+          class="grid min-w-24 min-h-16 shrink-0 justify-items-center gap-1 rounded-item border px-3 py-2 aria-checked:border-primary aria-checked:bg-selected"
           onclick={() => switchClient(o.id)}
         >
           <ClientIcon clientType={o.client_type} acpAgentId={o.metadata.acp_agent_id} class="size-6" />{o.name}
@@ -59,7 +59,7 @@
     {#if option?.model_catalog_key}
       <input
         type="search"
-        class="rounded-xl border px-3 py-2 text-base"
+        class="rounded-item border px-3 py-2 text-base"
         bind:value={search}
         placeholder={$t('model.searchPlaceholder')}
         aria-label={$t('model.search')}
@@ -101,7 +101,7 @@
         >
           {#each efforts as effort (effort)}
             <button
-              class="min-h-11 rounded-lg bg-muted aria-checked:bg-primary aria-checked:text-primary-foreground"
+              class="min-h-11 rounded-item bg-muted aria-checked:bg-primary aria-checked:text-primary-foreground"
               role="radio"
               aria-checked={selection.effort === effort}
               onclick={() => (selection.effort = effort)}
@@ -112,7 +112,7 @@
       {/if}
     {:else}<div class="flex-1"></div>{/if}
     <button
-      class="mt-3 min-h-11 rounded-xl bg-primary text-primary-foreground"
+      class="mt-3 min-h-11 rounded-item bg-primary text-primary-foreground"
       onclick={() => {
         chat.selectClient(client, selection.model, selection.effort)
         close()

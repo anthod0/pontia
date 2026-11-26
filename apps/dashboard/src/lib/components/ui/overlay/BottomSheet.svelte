@@ -7,7 +7,7 @@
   let { dismiss, class: className, children, ...props }: ComponentProps<typeof Sheet.Content> & { dismiss: () => void } = $props()
 </script>
 
-<Sheet.Content {...props} side="bottom" class={cn('bottom-sheet gap-0 rounded-t-2xl px-4 pt-0', className)}>
+<Sheet.Content {...props} side="bottom" class={cn('bottom-sheet gap-0 rounded-t-sheet px-4 pt-0', className)}>
   <SheetHandle {dismiss} />
   {@render children()}
 </Sheet.Content>

@@ -86,7 +86,7 @@
 {#if states.length === 1}
   <FileBubble {itemActions} state={states[0]} highlighted={highlighted === states[0].file.path} onenlarge={() => enlarge(states[0])} itemProps={stateItemProps(states[0])} />
 {:else if allImages}
-  <figure bind:this={root} class="w-80 max-w-full overflow-hidden rounded-2xl bg-muted" data-shared-files>
+  <figure bind:this={root} class="w-80 max-w-full overflow-hidden rounded-panel bg-muted" data-shared-files>
     {#if showList}
       <div class="p-1"><FileList {itemActions} {states} bind:expanded {highlighted} onenlarge={enlarge} itemProps={stateItemProps} /></div>
     {:else}
@@ -106,7 +106,7 @@
     </figcaption>
   </figure>
 {:else}
-  <div bind:this={root} class="w-80 max-w-full rounded-2xl bg-muted p-1" data-shared-files>
+  <div bind:this={root} class="w-80 max-w-full rounded-panel bg-muted p-1" data-shared-files>
     <div class="flex items-center gap-2 px-1.5 pt-0.5 pb-1">
       <FilesIcon class="size-4 shrink-0 text-muted-foreground" />
       <p class="min-w-0 flex-1 text-xs leading-4 text-muted-foreground tabular-nums">

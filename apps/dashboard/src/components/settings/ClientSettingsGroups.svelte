@@ -39,12 +39,12 @@
   const showIntegration = $derived(!!client.setup_command && client.setup.status !== 'not_required')
 
   const row = 'min-h-14 flex-nowrap gap-3 rounded-none px-0 py-2.5'
-  const title = $derived(cn('text-heading', mobile && 'text-[15px]'))
-  const description = $derived(cn('line-clamp-1 text-xs', mobile && 'text-[13px] leading-[18px]'))
+  const title = $derived(cn('text-heading', mobile && 'text-15'))
+  const description = $derived(cn('line-clamp-1 text-xs', mobile && 'text-13 leading-[18px]'))
   const wrap = 'line-clamp-none break-words [overflow-wrap:anywhere]'
   const separator = 'my-0 bg-foreground/6 dark:bg-foreground/7'
   const groupTitle = $derived(
-    cn('mb-0.5 text-xs font-medium text-muted-foreground', mobile && 'text-[13px] leading-[18px]'),
+    cn('mb-0.5 text-xs font-medium text-muted-foreground', mobile && 'text-13 leading-[18px]'),
   )
   const button = $derived(cn(mobile && 'h-9 px-3 text-sm'))
   // Borderless buttons at the row end pull their label to the same edge as switches and values.
@@ -82,7 +82,7 @@
         <Item.Root
           class={cn(
             row,
-            '-mx-3 w-auto rounded-lg px-3',
+            '-mx-3 w-auto rounded-item px-3',
             mobile ? '[a]:hover:bg-transparent [a]:active:bg-muted' : '[a]:hover:bg-muted/60',
           )}
         >
@@ -158,7 +158,7 @@
             >
           </Item.Content>
           <Item.Actions>
-            <span class={cn('font-mono text-[13px] text-foreground', mobile && 'text-sm')}>{client.version ?? '—'}</span>
+            <span class={cn('font-mono text-13 text-foreground', mobile && 'text-sm')}>{client.version ?? '—'}</span>
           </Item.Actions>
         </Item.Root>
       {/if}
@@ -268,7 +268,7 @@
     <Dialog.Content class="ring-0 shadow-lg sm:max-w-2xl" aria-describedby={undefined}>
       <Dialog.Header><Dialog.Title>{$t('clients.setupOutput')} · {client.name}</Dialog.Title></Dialog.Header>
       <pre
-        class="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-mono text-xs leading-5">{operation?.output}</pre>
+        class="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-item bg-muted p-3 font-mono text-xs leading-5">{operation?.output}</pre>
     </Dialog.Content>
   </Dialog.Root>
 {/if}

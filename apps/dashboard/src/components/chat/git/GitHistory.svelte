@@ -73,13 +73,13 @@
           {@const active = selected === commit.sha}
           <li class="relative">
             <button type="button" data-git-row={commit.sha} onclick={() => oncommit(commit.sha)} aria-expanded={inline ? active : undefined}
-              class={['group relative grid h-11 w-full min-w-0 grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-x-2 rounded-md px-2 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary/55 focus-visible:ring-inset max-lg:h-[52px]', !inline && active && 'bg-selected']}>
+              class={['group relative grid h-11 w-full min-w-0 grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-x-2 rounded-item px-2 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary/55 focus-visible:ring-inset max-lg:h-[52px]', !inline && active && 'bg-selected']}>
               <span aria-hidden="true" class={['relative z-10 mx-auto size-2 rounded-full border border-current', commit.pushed === false ? 'text-primary' : 'text-muted-foreground/60', commit.parents.length > 1 ? 'bg-surface' : 'bg-current']}>{#if commit.parents.length > 1}<GitMergeIcon class="absolute top-1/2 left-1/2 size-[13px] -translate-x-1/2 -translate-y-1/2 bg-surface" />{/if}</span>
               <span class="min-w-0">
-                <span class={['block truncate text-[13px]', active && inline && 'font-medium text-heading']}>{commit.subject || $t('git.noSubject')}</span>
-                <span class="flex items-center gap-1 text-xs text-muted-foreground"><span class="truncate">{commit.author_name}</span> · <time class="shrink-0 tabular-nums" datetime={commit.authored_at} title={formatDateTime(commit.authored_at, $currentLocale)}>{time.format(new Date(commit.authored_at))}</time>{#if commit.sha === firstPushed && upstream}<span class="ml-1 h-4 truncate rounded-full border px-1.5 font-mono text-[10.5px] leading-[14px]">{upstream}</span>{/if}</span>
+                <span class={['block truncate text-13', active && inline && 'font-medium text-heading']}>{commit.subject || $t('git.noSubject')}</span>
+                <span class="flex items-center gap-1 text-xs text-muted-foreground"><span class="truncate">{commit.author_name}</span> · <time class="shrink-0 tabular-nums" datetime={commit.authored_at} title={formatDateTime(commit.authored_at, $currentLocale)}>{time.format(new Date(commit.authored_at))}</time>{#if commit.sha === firstPushed && upstream}<span class="ml-1 h-4 truncate rounded-chip border px-1.5 font-mono text-10 leading-[14px]">{upstream}</span>{/if}</span>
               </span>
-              {#if !(inline && active)}<span class="font-mono text-[11px] text-muted-foreground group-hover:text-foreground">{shortSha(commit.sha)}</span>{/if}
+              {#if !(inline && active)}<span class="font-mono text-11 text-muted-foreground group-hover:text-foreground">{shortSha(commit.sha)}</span>{/if}
             </button>
             {#if inline && active}
               <div class="relative z-10 ml-8 pb-2"><GitCommitDetail {device} {workspaceId} sha={commit.sha} inline onopen={(file, files) => onfile(commit.sha, file, files)} onparent={oncommit} /></div>

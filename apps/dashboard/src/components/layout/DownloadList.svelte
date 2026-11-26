@@ -18,7 +18,7 @@
         {#each $downloads as task (task.id)}
           <li class="py-4">
             <div class="flex items-start gap-3">
-              <div class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+              <div class="flex size-9 shrink-0 items-center justify-center rounded-item bg-muted text-muted-foreground">
                 <FileIcon class="size-4" />
               </div>
               <div class="min-w-0 flex-1 space-y-1">

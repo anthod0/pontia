@@ -182,7 +182,7 @@
           {#if entries[item.index]}
             {@render row(entries[item.index])}
           {:else if typing}
-            <div aria-hidden="true" class="w-fit rounded-2xl bg-muted px-4 py-3 text-sm text-muted-foreground"><span class="animate-pulse">•••</span></div>
+            <div aria-hidden="true" class="w-fit rounded-panel bg-muted px-4 py-3 text-sm text-muted-foreground"><span class="animate-pulse">•••</span></div>
           {/if}
         </div>
       {/each}

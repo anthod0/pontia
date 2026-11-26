@@ -62,7 +62,7 @@
       {#each settings.profiles.data as profile (profile.profile_id)}
         <button
           type="button"
-          class="flex w-full items-start gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60 {settings.selectedId ===
+          class="flex w-full items-start gap-2.5 rounded-item px-3 py-2 text-left text-sm transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60 {settings.selectedId ===
           profile.profile_id
             ? 'bg-muted'
             : ''}"

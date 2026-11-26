@@ -19,7 +19,7 @@
 </script>
 
 <!-- max-w-sm keeps a long quote from widening a short message to full width. -->
-<button type="button" class="mb-1.5 flex w-full max-w-sm min-w-0 items-center gap-1 border-l-2 border-border pl-2.5 text-left text-[13px] leading-5 text-muted-foreground outline-none enabled:hover:border-muted-foreground enabled:hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default" aria-label={label} title={`${speaker}: ${text}`} aria-busy={busy} disabled={missing} onclick={onjump}>
+<button type="button" class="mb-1.5 flex w-full max-w-sm min-w-0 items-center gap-1 border-l-2 border-border pl-2.5 text-left text-13 leading-5 text-muted-foreground outline-none enabled:hover:border-muted-foreground enabled:hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default" aria-label={label} title={`${speaker}: ${text}`} aria-busy={busy} disabled={missing} onclick={onjump}>
   {#if image}<QuoteThumbnail sessionId={image.sessionId} path={image.path} class="size-5" />{:else if quote.kind === 'file'}<FileIcon class="size-3.5 shrink-0" />{/if}
   <span class={['min-w-0 truncate', busy && 'animate-pulse']}>{summary}</span>
 </button>

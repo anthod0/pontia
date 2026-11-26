@@ -108,7 +108,7 @@
 
 {#snippet title()}
   {#if timeline.bot}<button
-      class="mobile-glass flex min-h-11 min-w-0 items-center gap-2 rounded-full px-3"
+      class="mobile-glass flex min-h-11 min-w-0 items-center gap-2 rounded-chip px-3"
       onclick={() => (menu = true)}
     >
       <BotAvatar class="size-6" shape={timeline.bot.avatar_shape} color={timeline.bot.avatar_color} />
@@ -124,7 +124,7 @@
         onclick={() => (todos = true)}
       >
         <ListChecksIcon size={20} />
-        <span class="absolute -right-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary-solid px-1 text-[11px] font-semibold tabular-nums text-primary-foreground ring-2 ring-surface">{timeline.openTodoCount}</span>
+        <span class="absolute -right-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-chip bg-primary-solid px-1 text-11 font-semibold tabular-nums text-primary-foreground ring-2 ring-surface">{timeline.openTodoCount}</span>
       </button>
     {/if}
     <button class="mobile-icon mobile-glass" aria-label={$t('chat.actions')} onclick={() => (menu = true)}>

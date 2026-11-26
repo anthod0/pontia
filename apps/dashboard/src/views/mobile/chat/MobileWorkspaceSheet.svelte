@@ -34,7 +34,7 @@
     <Sheet.Title class="mb-4 pr-12 text-lg font-semibold">{$t('workspace.title')}</Sheet.Title>
     <input
       type="search"
-      class="mb-2 rounded-xl border px-3 py-2 text-base"
+      class="mb-2 rounded-item border px-3 py-2 text-base"
       bind:value={search}
       placeholder={$t('common.searchOptions')}
       aria-label={$t('common.searchOptions')}

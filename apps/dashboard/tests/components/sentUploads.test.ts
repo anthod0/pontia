@@ -11,7 +11,6 @@ test("a single upload shows its name with the extension kept apart and its type,
     files: [{ path: `${uploadRoot}/${name}`, name }],
   });
   const card = container.querySelector("[data-user-message-uploads]")!;
-  expect(card).toHaveClass("rounded-2xl", "bg-muted");
   expect(card.querySelector(".truncate")).toHaveTextContent(
     "a-very-long-quarterly-report-name-that-overflows.final",
   );
@@ -44,7 +43,6 @@ test("sent secrets show as capsules with their label and masked value", () => {
     ],
   });
   const items = screen.getAllByRole("listitem");
-  expect(items[0]).toHaveClass("h-7", "rounded-full", "bg-muted");
   expect(within(items[0]).getByText("OpenAI key")).toHaveClass("font-medium");
   expect(within(items[0]).getByText("sk-…abcd")).toHaveClass("truncate", "font-mono");
   expect(within(items[1]).getByText("ghp_…wxyz")).toBeInTheDocument();

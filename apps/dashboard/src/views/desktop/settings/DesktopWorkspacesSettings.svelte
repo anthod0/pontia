@@ -36,7 +36,7 @@
   }
 
   const sidebarItemClass =
-    'flex shrink-0 items-center w-full gap-2 rounded-md px-2 py-1.5 outline-none text-left whitespace-nowrap text-muted-foreground hover:bg-muted hover:text-foreground aria-[current=true]:bg-muted aria-[current=true]:font-medium aria-[current=true]:text-heading'
+    'flex shrink-0 items-center w-full gap-2 rounded-item px-2 py-1.5 outline-none text-left whitespace-nowrap text-muted-foreground hover:bg-muted hover:text-foreground aria-[current=true]:bg-muted aria-[current=true]:font-medium aria-[current=true]:text-heading'
 </script>
 
 {#snippet toolbarButton(button: ToolbarButton)}
@@ -77,7 +77,7 @@
 {/snippet}
 
 <div
-  class="mx-auto flex w-full max-w-5xl flex-col overflow-hidden rounded-2xl border bg-background text-sm shadow-sm"
+  class="mx-auto flex w-full max-w-5xl flex-col overflow-hidden rounded-panel border bg-background text-sm shadow-sm"
 >
   {#if browser.browserLoadError}
     <div class="flex min-h-56 flex-col">
@@ -99,7 +99,7 @@
         <Empty.Title>{$t('workspaces.noRoots')}</Empty.Title>
         <Empty.Description
           >{$t('workspaces.runPrefix')}
-          <code class="rounded-sm bg-muted px-1 py-0.5 text-foreground">pontia init</code>
+          <code class="rounded-tooltip bg-muted px-1 py-0.5 text-foreground">pontia init</code>
           {$t('workspaces.initSuffix')}</Empty.Description
         >
       </Empty.Header>
@@ -115,7 +115,7 @@
         })}
         <nav aria-label={$t('workspaces.currentPath')} class="min-w-0 flex-1">
           <ol
-            class="flex min-w-0 items-center overflow-x-auto rounded-md bg-muted/60 px-1 py-0.5 whitespace-nowrap"
+            class="flex min-w-0 items-center overflow-x-auto rounded-item bg-muted/60 px-1 py-0.5 whitespace-nowrap"
           >
             {#if browser.view !== 'directory'}
               {@const ViewIcon = browser.view === 'active' ? StarIcon : WarningCircleIcon}
@@ -133,7 +133,7 @@
                 <li>
                   <button
                     type="button"
-                    class="flex h-6 items-center gap-1.5 rounded px-1.5 outline-none hover:bg-background aria-[current=page]:font-medium aria-[current=page]:text-foreground text-muted-foreground"
+                    class="flex h-6 items-center gap-1.5 rounded-tooltip px-1.5 outline-none hover:bg-background aria-[current=page]:font-medium aria-[current=page]:text-foreground text-muted-foreground"
                     aria-current={index === browser.breadcrumbs.length - 1 ? 'page' : undefined}
                     title={index === 0 ? (browser.selectedRoot?.canonical_path ?? undefined) : undefined}
                     onclick={() => browser.openPath(crumb.path)}
@@ -264,10 +264,10 @@
               {#each browser.activeWorkspaces as workspace (workspace.workspace_id)}
                 {@const location = browser.workspaceLocation(workspace)}
                 {@const title = workspace.name ?? workspace.display_path}
-                <li class="group flex items-center gap-2 rounded-md pr-1 hover:bg-muted">
+                <li class="group flex items-center gap-2 rounded-item pr-1 hover:bg-muted">
                   <button
                     type="button"
-                    class="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-left outline-none disabled:cursor-default"
+                    class="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-item px-2 py-1 text-left outline-none disabled:cursor-default"
                     aria-label={$t('workspaces.openNamed', { name: title })}
                     title={location
                       ? workspace.canonical_path
@@ -318,7 +318,7 @@
           <ul class="flex-1 overflow-auto p-1" aria-label={$t('workspaces.unavailable')}>
             {#each browser.unavailableWorkspaces as workspace (workspace.workspace_id)}
               {@const title = workspace.name ?? workspace.display_path}
-              <li class="group flex items-center gap-2 rounded-md px-2 py-1 hover:bg-muted">
+              <li class="group flex items-center gap-2 rounded-item px-2 py-1 hover:bg-muted">
                 <WarningCircleIcon class="size-4.5 shrink-0 text-warning" aria-hidden="true" />
                 <div class="flex min-h-8 min-w-0 flex-1 flex-col justify-center">
                   <span class="truncate"
@@ -363,10 +363,10 @@
             <ul class="flex-1 overflow-auto p-1" aria-label={$t('workspaces.directories')}>
               {#each browser.visibleEntries as entry (entry.path)}
                 {@const entryWorkspace = browser.workspaceForEntry(entry)}
-                <li class="group flex items-center gap-2 rounded-md pr-1 hover:bg-muted">
+                <li class="group flex items-center gap-2 rounded-item pr-1 hover:bg-muted">
                   <button
                     type="button"
-                    class="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left outline-none"
+                    class="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-item px-2 text-left outline-none"
                     aria-label={$t('workspaces.openDirectoryNamed', { name: entry.name })}
                     onclick={() => browser.openPath(entry.path)}
                   >

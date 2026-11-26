@@ -20,8 +20,8 @@
 
   const guidance = $derived(client.install?.auth)
   const command = $derived(guidance?.headless_login_command ?? guidance?.login_command)
-  const title = $derived(cn('text-heading', mobile && 'text-[15px]'))
-  const description = $derived(cn('line-clamp-none break-words text-xs [overflow-wrap:anywhere]', mobile && 'text-[13px] leading-[18px]'))
+  const title = $derived(cn('text-heading', mobile && 'text-15'))
+  const description = $derived(cn('line-clamp-none break-words text-xs [overflow-wrap:anywhere]', mobile && 'text-13 leading-[18px]'))
 
   onMount(() => {
     if (!client.auth_supported) return
@@ -63,7 +63,7 @@
       {/if}
     </Item.Description>
     {#if (!client.auth_supported || auth?.methods.length === 0) && guidance?.status !== 'configured' && command}
-      <div class="mt-1 flex min-w-0 items-center gap-1 rounded-md bg-muted px-2 py-1">
+      <div class="mt-1 flex min-w-0 items-center gap-1 rounded-item bg-muted px-2 py-1">
         <code class="min-w-0 flex-1 truncate font-mono text-xs text-foreground" title={command}>{command}</code>
         <Button variant="ghost" size="icon-sm" class="-my-1 -mr-1" aria-label={$t('clients.account.copyCommand')} onclick={copyCommand}><CopyIcon /></Button>
       </div>

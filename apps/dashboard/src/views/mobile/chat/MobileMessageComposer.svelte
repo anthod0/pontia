@@ -122,7 +122,7 @@
     draft={controller.uploads}
     disabled={busy || controller.sending}
   />{/if}
-<div class="mobile-glass flex flex-col rounded-3xl p-1">
+<div class="mobile-glass flex flex-col rounded-composer p-1">
   {#if prefix}<div class="ml-12 mr-2 mt-2">{@render prefix()}</div>{/if}
   <div class="flex items-end">
     <ComposerAddMenu mobile disabled={!!controller.uploadUnavailable} onSelectFile={() => picker?.choose()} onConfirm={({value,label}) => controller.uploads?.addSecret(value,label)} onClose={focusInput}/>

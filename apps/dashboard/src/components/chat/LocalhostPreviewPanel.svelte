@@ -71,7 +71,7 @@
 {:else}
   <Empty.Root class="min-h-0 p-8">
     <Empty.Header>
-      <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><GlobeIcon class="size-6" /></Empty.Media>
+      <Empty.Media class="size-12 rounded-item bg-muted text-muted-foreground"><GlobeIcon class="size-6" /></Empty.Media>
       <Empty.Title>{$t('preview.noneOpen')}</Empty.Title>
     </Empty.Header>
   </Empty.Root>

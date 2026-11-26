@@ -243,7 +243,7 @@
     <Sidebar.GroupLabel class="sticky top-0 z-10 flex h-8 items-center gap-1 bg-sidebar p-0 pr-0.5 pl-2">
       <button
         type="button"
-        class="flex min-w-0 items-center gap-1 rounded-sm text-left font-medium hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+        class="flex min-w-0 items-center gap-1 rounded-tooltip text-left font-medium hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
         aria-expanded={sessionsOpen}
         onclick={() => (sessionsOpen = !sessionsOpen)}
       >
@@ -331,14 +331,14 @@
           {/each}
         {:else if !overviewQuery.error}
           <Sidebar.MenuItem>
-            <p class="px-2 py-1.5 text-[12.5px] leading-5 text-muted-foreground">
+            <p class="px-2 py-1.5 text-13 leading-5 text-muted-foreground">
               {$sessionScope === 'active' ? $t('sessions.noActive') : $t('sessions.noRecent')}
             </p>
           </Sidebar.MenuItem>
         {/if}
         {#if hasClosedSessions}
           <Sidebar.MenuItem>
-            <Sidebar.MenuButton class="text-[12.5px] text-muted-foreground touch-target:h-11" onclick={() => sessionScope.set('all')}>
+            <Sidebar.MenuButton class="text-13 text-muted-foreground touch-target:h-11" onclick={() => sessionScope.set('all')}>
               <ClockCounterClockwiseIcon class="size-3.5 shrink-0" />
               <span>{$t('sessions.showClosed')}</span>
             </Sidebar.MenuButton>

@@ -40,7 +40,7 @@
 {#snippet title()}
   {#if session}
     <button
-      class="mobile-glass flex min-h-11 min-w-0 items-center gap-2 rounded-full px-4 text-left"
+      class="mobile-glass flex min-h-11 min-w-0 items-center gap-2 rounded-chip px-4 text-left"
       onclick={() => (menuOpen = true)}
     >
       <strong class="truncate">{sessionChatTitle(session, $t)}</strong>

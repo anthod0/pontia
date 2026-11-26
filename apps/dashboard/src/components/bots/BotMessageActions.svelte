@@ -277,19 +277,19 @@
       {@const current = target}
       {@const preview = entryQuote(current.entry, null, current.file?.path)}
       {#if preview}
-        <Sheet.Description class="mx-2 mb-2 rounded-xl bg-muted px-3 py-2 text-[13px] leading-5"><span class="line-clamp-2 [overflow-wrap:anywhere]">{quoteSummary(preview)}</span></Sheet.Description>
+        <Sheet.Description class="mx-2 mb-2 rounded-item bg-muted px-3 py-2 text-13 leading-5"><span class="line-clamp-2 [overflow-wrap:anywhere]">{quoteSummary(preview)}</span></Sheet.Description>
       {/if}
       <div class="flex flex-col" role="menu" aria-label={$t('bots.messageActions')}>
-        <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => quote(current)}><QuoteIcon class="size-5" />{quoteLabel}</button>
+        <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-item px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => quote(current)}><QuoteIcon class="size-5" />{quoteLabel}</button>
         {#if current.file}
-          <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => download(current)}><DownloadSimpleIcon class="size-5" />{$t('files.download')}</button>
+          <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-item px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => download(current)}><DownloadSimpleIcon class="size-5" />{$t('files.download')}</button>
         {/if}
         {#if isMessage}
-          <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => void copy(current)}><CopyIcon class="size-5" />{$t('common.copy')}</button>
-          <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => viewContext(current)}><TreeStructureIcon class="size-5" />{$t('bots.viewContext')}</button>
+          <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-item px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => void copy(current)}><CopyIcon class="size-5" />{$t('common.copy')}</button>
+          <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-item px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => viewContext(current)}><TreeStructureIcon class="size-5" />{$t('bots.viewContext')}</button>
           {#if todoMessage}
             <Separator class="mx-2 my-1 data-[orientation=horizontal]:w-auto" />
-            <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" disabled={pending.includes(current.entry.id)} onclick={() => toggleTodo(current)}><ListChecksIcon class="size-5" />{$t(openTodo ? 'bots.cancelTodo' : 'bots.markTodo')}</button>
+            <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-item px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" disabled={pending.includes(current.entry.id)} onclick={() => toggleTodo(current)}><ListChecksIcon class="size-5" />{$t(openTodo ? 'bots.cancelTodo' : 'bots.markTodo')}</button>
           {/if}
         {/if}
       </div>
@@ -300,12 +300,12 @@
 {#if selection && !menuOpen && !sheetOpen}
   {@const current = selection.target}
   <div bind:clientWidth={toolbarWidth} bind:clientHeight={toolbarHeight} role="toolbar" tabindex="-1" aria-label={$t('bots.messageActions')}
-    class={['fixed z-(--layer-toolbar) flex -translate-x-1/2 gap-0.5 rounded-lg bg-popover p-0.5 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10', !stack && !selection.touch && '-translate-y-full']}
+    class={['fixed z-(--layer-toolbar) flex -translate-x-1/2 gap-0.5 rounded-item bg-popover p-0.5 text-sm text-popover-foreground shadow-md border border-border', !stack && !selection.touch && '-translate-y-full']}
     style={selectionStyle}
     onpointerdown={event => event.preventDefault()}>
-    <button type="button" class="flex pointer-coarse:min-h-11 items-center gap-1.5 rounded-md px-2.5 py-1 outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => quote(current)}><QuotesIcon class="size-4" />{$t(stack ? 'bots.quoteSelection' : 'bots.quote')}</button>
+    <button type="button" class="flex pointer-coarse:min-h-11 items-center gap-1.5 rounded-item px-2.5 py-1 outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => quote(current)}><QuotesIcon class="size-4" />{$t(stack ? 'bots.quoteSelection' : 'bots.quote')}</button>
     {#if !stack && !selection.touch}
-      <button type="button" class="flex pointer-coarse:min-h-11 items-center gap-1.5 rounded-md px-2.5 py-1 outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => void copy(current)}><CopyIcon class="size-4" />{$t('common.copy')}</button>
+      <button type="button" class="flex pointer-coarse:min-h-11 items-center gap-1.5 rounded-item px-2.5 py-1 outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => void copy(current)}><CopyIcon class="size-4" />{$t('common.copy')}</button>
     {/if}
   </div>
 {/if}

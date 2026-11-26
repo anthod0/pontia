@@ -309,7 +309,7 @@
     {#if loginSession?.step.type === 'device_code'}
       <div class="space-y-3">
         <p class="text-muted-foreground">{$t('onboarding.clients.login.waiting')}</p>
-        <div class="flex items-center gap-2 rounded-md bg-surface px-3 py-2">
+        <div class="flex items-center gap-2 rounded-item bg-surface px-3 py-2">
           <code class="flex-1 text-center font-mono text-2xl tracking-[0.16em] text-heading">{loginSession.step.user_code}</code>
           <Button variant="ghost" size="icon-sm" aria-label={$t('common.copy')} onclick={() => copyText(loginSession?.step.type === 'device_code' ? loginSession.step.user_code : '')}><CopyIcon /></Button>
         </div>
@@ -338,7 +338,7 @@
       <p class="text-muted-foreground">{selectedAuth.state === 'expired' ? $t('onboarding.clients.login.expiredStatus', { name: selected?.name ?? '' }) : $t('onboarding.clients.login.signedOutStatus', { name: selected?.name ?? '' })}</p>
       {#if selectedAuth.methods.length > 1}
         <RadioGroup.Root bind:value={selectedMethodId} class="mt-3 gap-2" onchange={() => { loginFields = {} }}>
-          {#each selectedAuth.methods as method (method.id)}<label class="flex cursor-pointer items-start gap-2 rounded-md border p-2"><RadioGroup.Item value={method.id} class="mt-0.5" /><span><span class="block text-sm font-medium">{method.label}</span>{#if method.description}<span class="block text-xs text-muted-foreground">{method.description}</span>{/if}</span></label>{/each}
+          {#each selectedAuth.methods as method (method.id)}<label class="flex cursor-pointer items-start gap-2 rounded-item border p-2"><RadioGroup.Item value={method.id} class="mt-0.5" /><span><span class="block text-sm font-medium">{method.label}</span>{#if method.description}<span class="block text-xs text-muted-foreground">{method.description}</span>{/if}</span></label>{/each}
         </RadioGroup.Root>
       {/if}
       {#if managedMethod?.start_fields.length}<div class="mt-3 space-y-3">{#each managedMethod.start_fields as field (field.name)}<label class="grid gap-1 text-sm"><span>{field.label}</span>{#if field.kind.type === 'select'}<ResponsiveSelect value={loginFields[field.name] ?? field.default_value ?? ''} onValueChange={value => loginFields[field.name] = value} label={field.label} options={fieldOptions(field)} keyOf={option => option.value} labelOf={option => option.label}>{#snippet trigger()}<span>{fieldOptionLabel(field, loginFields[field.name] ?? field.default_value ?? '')}</span>{/snippet}{#snippet option(option)}{option.label}{/snippet}</ResponsiveSelect>{:else}<Input type={field.kind.type === 'secret' ? 'password' : field.kind.type === 'url' ? 'url' : 'text'} value={loginFields[field.name] ?? field.default_value ?? ''} oninput={event => loginFields[field.name] = event.currentTarget.value} placeholder={field.placeholder} required={field.required} />{/if}{#if field.description}<span class="text-xs text-muted-foreground">{field.description}</span>{/if}</label>{/each}</div>{/if}
@@ -348,7 +348,7 @@
       <p class="text-muted-foreground" role="status">{selectedAuth?.state === 'unknown' ? $t('onboarding.clients.login.unknown', { name: selected?.name ?? '' }) : $t('onboarding.clients.login.signedOutStatus', { name: selected?.name ?? '' })}</p>
       {#if terminalCommand}
         <p class="text-sm">{$t('onboarding.clients.login.runOn', { device: deviceName })}</p>
-        <div class="flex items-center gap-2 rounded-md bg-neutral-950 px-3 py-2 text-neutral-50">
+        <div class="flex items-center gap-2 rounded-item bg-neutral-950 px-3 py-2 text-neutral-50">
           <code class="min-w-0 flex-1 overflow-x-auto font-mono text-xs">{terminalCommand}</code>
           <Button variant="ghost" size="icon-sm" class="text-neutral-50 hover:bg-white/10 hover:text-white" aria-label={$t('common.copy')} onclick={() => copyText(terminalCommand ?? '')}><CopyIcon /></Button>
         </div>
@@ -366,11 +366,11 @@
   <ResponsiveDialog mode="sheet" dismiss={dismiss} showCloseButton={false} interactOutsideBehavior="ignore" class="max-h-[calc(var(--visual-viewport-height)-54px)] gap-0 overflow-hidden p-0 sm:max-h-[740px] sm:max-w-[600px]" aria-describedby={undefined} onOpenAutoFocus={event => { if (document.activeElement?.matches('input, textarea, [contenteditable=true]')) event.preventDefault() }}>
     {#if view === 'pick'}
       <Dialog.Header class="border-b px-5 py-4 text-left">
-        <Dialog.Title class="flex items-center gap-2 text-lg"><span class="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary"><SparkleIcon class="size-5" weight="fill" /></span>{$t('onboarding.clients.title')}</Dialog.Title>
+        <Dialog.Title class="flex items-center gap-2 text-lg"><span class="flex size-8 items-center justify-center rounded-item bg-primary/10 text-primary"><SparkleIcon class="size-5" weight="fill" /></span>{$t('onboarding.clients.title')}</Dialog.Title>
       </Dialog.Header>
       <div class="min-h-0 space-y-5 overflow-y-auto px-5 py-4">
         <p class="text-sm text-muted-foreground">{$t('onboarding.clients.lead', { device: deviceName })}</p>
-        <div class={cn('flex gap-3 rounded-lg px-3 py-2.5', reason === 'unknown' ? 'bg-muted' : 'bg-warning/10')} role="status">
+        <div class={cn('flex gap-3 rounded-item px-3 py-2.5', reason === 'unknown' ? 'bg-muted' : 'bg-warning/10')} role="status">
           {#if reason === 'unknown'}<QuestionIcon class="mt-0.5 size-5 shrink-0 text-muted-foreground" />{:else}<WarningCircleIcon class="mt-0.5 size-5 shrink-0 text-warning" />{/if}
           <div><p class="font-medium text-heading">{reason === 'unknown' ? $t('onboarding.clients.reason.unknownTitle', { names: unknownNames }) : $t('onboarding.clients.reason.title')}</p><p class="mt-0.5 text-xs text-muted-foreground">{reasonText()}</p></div>
         </div>
@@ -382,7 +382,7 @@
                 <ClientIcon clientType={client.client_type} acpAgentId={client.client_key} class="mt-0.5 size-8" />
                 <div class="min-w-0 flex-1 space-y-2">
                   <div class="flex min-w-0 items-center gap-2">
-                    <div class="flex min-w-0 flex-1 items-center gap-2"><h3 class="truncate font-medium text-heading">{client.name}</h3><span class="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{authState(client)?.methods.length ? $t('onboarding.clients.login.web') : $t('onboarding.clients.login.terminal')}</span></div>
+                    <div class="flex min-w-0 flex-1 items-center gap-2"><h3 class="truncate font-medium text-heading">{client.name}</h3><span class="shrink-0 rounded-tooltip bg-muted px-1.5 py-0.5 text-10 text-muted-foreground">{authState(client)?.methods.length ? $t('onboarding.clients.login.web') : $t('onboarding.clients.login.terminal')}</span></div>
                     <Button class="shrink-0" size="sm" variant={index === 0 ? 'default' : 'outline'} onclick={() => choose(client)}>{rowAction(client)}</Button>
                   </div>
                   <ClientStageTrack stages={stages(client)} label={$t('onboarding.clients.progress')} />
@@ -395,7 +395,7 @@
         {#if installable.length}
           <section class="space-y-1"><h2 class="pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">{$t(installed.length ? 'onboarding.clients.group.installOthers' : 'onboarding.clients.group.install')}</h2>
             {#if installed.length && !installExpanded}
-              <button class="flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left hover:bg-muted/50" onclick={() => installExpanded = true}><span class="flex -space-x-2">{#each installable.slice(0, 3) as client (client.id)}<ClientIcon clientType={client.client_type} acpAgentId={client.client_key} class="size-7 rounded-full bg-popover ring-2 ring-popover" />{/each}</span><span class="min-w-0 flex-1 truncate text-sm">{installable.map(client => client.name).join(' · ')}</span><CaretDownIcon class="size-4 text-muted-foreground" /></button>
+              <button class="flex w-full items-center gap-3 rounded-item border px-3 py-3 text-left hover:bg-muted/50" onclick={() => installExpanded = true}><span class="flex -space-x-2">{#each installable.slice(0, 3) as client (client.id)}<ClientIcon clientType={client.client_type} acpAgentId={client.client_key} class="size-7 rounded-chip bg-popover ring-2 ring-popover" />{/each}</span><span class="min-w-0 flex-1 truncate text-sm">{installable.map(client => client.name).join(' · ')}</span><CaretDownIcon class="size-4 text-muted-foreground" /></button>
             {:else}
               {#each installable as client (client.id)}
                 <div class="flex items-center gap-3 border-b py-3 last:border-b-0"><ClientIcon clientType={client.client_type} acpAgentId={client.client_key} class="size-8 opacity-80" /><div class="min-w-0 flex-1"><h3 class="font-medium text-heading">{client.name}</h3><p class="truncate text-xs text-muted-foreground">{client.install?.methods.find(method => method.recommended)?.label ?? client.install?.methods[0]?.label}</p></div><Button size="sm" variant={installed.length ? 'outline' : 'default'} onclick={() => choose(client)}><DownloadSimpleIcon data-icon="inline-start" />{$t('onboarding.clients.action.install')}</Button></div>
@@ -416,7 +416,7 @@
         {:else if currentStep === 2}<Button disabled={enabling} onclick={runEnable}>{#if enabling}<CircleNotchIcon data-icon="inline-start" class="animate-spin" />{:else}<PowerIcon data-icon="inline-start" />{/if}{selected.setup.status === 'required' ? $t('onboarding.clients.action.enableSetup') : $t('onboarding.clients.action.enable')}</Button>{/if}
       </div></Dialog.Footer>
     {:else if view === 'done' && selected}
-      <div class="flex min-h-72 flex-col items-center justify-center px-6 py-10 text-center"><span class="relative"><ClientIcon clientType={selected.client_type} acpAgentId={selected.client_key} class="size-16" /><CheckCircleIcon class="absolute -right-2 -bottom-2 size-7 rounded-full bg-popover text-success" weight="fill" /></span><Dialog.Title class="mt-5 text-xl">{$t('onboarding.clients.done.title', { name: selected.name })}</Dialog.Title><Dialog.Description class="mt-2 max-w-sm">{$t('onboarding.clients.done.lead', { name: selected.name, device: deviceName })}</Dialog.Description><ul class="mt-5 space-y-2 text-left text-sm text-muted-foreground"><li>✓ {$t('onboarding.clients.install.done', { version: selected.version ?? '' })}</li><li>✓ {terminalConfirmed.includes(selected.id) ? $t('onboarding.clients.login.signedInTerminalSum') : $t('onboarding.clients.login.signedIn')}</li><li>✓ {$t('onboarding.clients.enable.done')}</li></ul></div>
+      <div class="flex min-h-72 flex-col items-center justify-center px-6 py-10 text-center"><span class="relative"><ClientIcon clientType={selected.client_type} acpAgentId={selected.client_key} class="size-16" /><CheckCircleIcon class="absolute -right-2 -bottom-2 size-7 rounded-chip bg-popover text-success" weight="fill" /></span><Dialog.Title class="mt-5 text-xl">{$t('onboarding.clients.done.title', { name: selected.name })}</Dialog.Title><Dialog.Description class="mt-2 max-w-sm">{$t('onboarding.clients.done.lead', { name: selected.name, device: deviceName })}</Dialog.Description><ul class="mt-5 space-y-2 text-left text-sm text-muted-foreground"><li>✓ {$t('onboarding.clients.install.done', { version: selected.version ?? '' })}</li><li>✓ {terminalConfirmed.includes(selected.id) ? $t('onboarding.clients.login.signedInTerminalSum') : $t('onboarding.clients.login.signedIn')}</li><li>✓ {$t('onboarding.clients.enable.done')}</li></ul></div>
       <Dialog.Footer class="border-t px-5 py-4"><Button variant="outline" onclick={() => { view = 'pick'; selectedId = null }}>{$t('onboarding.clients.done.addAnother')}</Button><Button onclick={() => { open = false; onComplete() }}>{$t(mobile.current ? 'onboarding.clients.done.setupBot' : 'onboarding.clients.done.startSession')}</Button></Dialog.Footer>
     {/if}
   </ResponsiveDialog>

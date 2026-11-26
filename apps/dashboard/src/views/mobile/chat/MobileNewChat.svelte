@@ -27,7 +27,7 @@
   const workspace = $derived(
     chat.selectedWorkspace ? workspaceTitle(chat.selectedWorkspace) : $t('workspace.title'),
   )
-  const chip = 'mobile-glass flex min-h-11 min-w-0 items-center gap-2 rounded-full px-3'
+  const chip = 'mobile-glass flex min-h-11 min-w-0 items-center gap-2 rounded-chip px-3'
 </script>
 
 <section class="flex h-full min-h-0 flex-col motion-safe:animate-in motion-safe:slide-in-from-bottom-6">

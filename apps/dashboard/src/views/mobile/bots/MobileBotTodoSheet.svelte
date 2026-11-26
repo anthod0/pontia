@@ -50,7 +50,7 @@
       {#snippet heading()}<Sheet.Title class="text-lg font-semibold">{$t('bots.todos')}</Sheet.Title>{/snippet}
       {#snippet pending()}
         {#if data.open.length}
-          <ul class="divide-y divide-border rounded-xl border bg-card px-2">
+          <ul class="divide-y divide-border rounded-item border bg-card px-2">
             {#each data.open as item (item.id)}
               <MobileBotTodoRow
                 {item} {bot}

@@ -17,9 +17,9 @@
 </script>
 
 <div class="mobile-bot-screen flex h-full flex-col">
-  <div class="mx-auto mb-2 flex rounded-full bg-muted p-1">
+  <div class="mx-auto mb-2 flex rounded-action bg-muted p-1">
     {#each ['files', 'git'] as const as key}<button
-        class="min-h-11 rounded-full px-5 aria-pressed:bg-card"
+        class="min-h-11 rounded-chip px-5 aria-pressed:bg-card"
         aria-pressed={key === tab}
         onclick={() => (tab = key)}>{$t(key === 'files' ? 'files.title' : 'git.title')}</button
       >{/each}

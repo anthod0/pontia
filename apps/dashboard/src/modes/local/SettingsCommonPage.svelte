@@ -100,7 +100,7 @@
           <span class="text-muted-foreground">{$t('connection.cursor')}</span>
           <span class="max-w-48 truncate" title={$dashboardStreamCursor ?? ''}>{$dashboardStreamCursor ?? '—'}</span>
         </div>
-        {#if $lastConnectionError}<p class="rounded-md bg-destructive/10 p-2 text-destructive">{$lastConnectionError}</p>{/if}
+        {#if $lastConnectionError}<p class="rounded-item bg-destructive/10 p-2 text-destructive">{$lastConnectionError}</p>{/if}
         <div class="flex flex-wrap gap-2 pt-2">
           <Button variant="outline" onclick={reconnect} disabled={!$token.trim()}>{$t('connection.reconnect')}</Button>
           <Button variant="ghost" onclick={stopEventStream}>{$t('connection.disconnect')}</Button>
@@ -115,8 +115,8 @@
       <Card.Description>{$t('settings.sourceDescription')}</Card.Description>
     </Card.Header>
     <Card.Content class="space-y-2 text-sm text-muted-foreground">
-      <p>{$t('settings.buildWith')} <code class="rounded-sm bg-muted px-1 py-0.5">bun run --cwd apps/dashboard build</code>.</p>
-      <p>{$t('settings.serveWith')} <code class="rounded-sm bg-muted px-1 py-0.5">[dashboard].source = "apps/dashboard/dist"</code> {$t('common.or')} <code class="rounded-sm bg-muted px-1 py-0.5">PONTIA_DASHBOARD_SOURCE=apps/dashboard/dist</code>.</p>
+      <p>{$t('settings.buildWith')} <code class="rounded-tooltip bg-muted px-1 py-0.5">bun run --cwd apps/dashboard build</code>.</p>
+      <p>{$t('settings.serveWith')} <code class="rounded-tooltip bg-muted px-1 py-0.5">[dashboard].source = "apps/dashboard/dist"</code> {$t('common.or')} <code class="rounded-tooltip bg-muted px-1 py-0.5">PONTIA_DASHBOARD_SOURCE=apps/dashboard/dist</code>.</p>
     </Card.Content>
   </Card.Root>{/if}
 </section>

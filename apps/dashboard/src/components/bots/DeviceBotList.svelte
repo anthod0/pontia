@@ -56,7 +56,7 @@
 
 <Sidebar.Group>
   <Sidebar.GroupLabel class="sticky top-0 z-10 flex h-7 items-center gap-1 bg-sidebar p-0 pr-0.5 pl-2 max-md:h-9 group-data-[collapsible=icon]:hidden">
-    <span class="text-[12.5px] font-semibold text-heading max-md:text-sm">{$t('bots.title')}</span>
+    <span class="text-13 font-semibold text-heading max-md:text-sm">{$t('bots.title')}</span>
     <span class="flex-1"></span>
     <button
       type="button"
@@ -79,9 +79,9 @@
           </Sidebar.MenuItem>
         </Sidebar.Menu>
       {:else}
-        <div class="mt-1 flex flex-col gap-2.5 rounded-lg border border-dashed p-3.5">
+        <div class="mt-1 flex flex-col gap-2.5 rounded-item border border-dashed p-3.5">
           <p class="text-sm font-semibold text-heading">{$t('bots.setupFirst')}</p>
-          <p class="text-[12.5px] leading-normal text-muted-foreground">{$t('bots.sidebarSetupDescription')}</p>
+          <p class="text-13 leading-normal text-muted-foreground">{$t('bots.sidebarSetupDescription')}</p>
           <Button class="max-md:h-11" onclick={() => { creating = true }}><PlusIcon />{$t('bots.create')}</Button>
         </div>
       {/if}
@@ -111,7 +111,7 @@
                 <span class="flex min-w-0 flex-1 flex-col gap-px group-data-[collapsible=icon]:sr-only">
                   <span class="truncate font-medium text-heading group-data-[active=true]/menu-button:font-semibold max-md:text-base">{bot.name}</span>
                   {#if working}
-                    <span class="truncate text-xs text-primary max-md:text-[13px]">{botWorkStatusLabel(status, $t)}</span>
+                    <span class="truncate text-xs text-primary max-md:text-13">{botWorkStatusLabel(status, $t)}</span>
                   {/if}
                 </span>
               </a>

@@ -24,7 +24,7 @@
 </script>
 
 {#snippet sidebarButton()}
-  <Button variant="ghost" size="icon" class={['pointer-events-auto mr-3 size-12 md:size-8 rounded-full p-0 ring-1 ring-foreground/10', pressed ? 'bg-muted text-heading' : 'bg-popover']}
+  <Button variant="ghost" size="icon-circle" class={['pointer-events-auto mr-3 size-12 md:size-8 p-0 ring-1 ring-foreground/10', pressed ? 'bg-muted text-heading' : 'bg-popover']}
     aria-label={$t('nav.sidebar')} title={$t('nav.sidebar')} aria-pressed={pressed} onclick={() => panel?.toggle()}>
     <SidebarSimpleIcon class="size-5 -scale-x-100 md:size-4" />
   </Button>

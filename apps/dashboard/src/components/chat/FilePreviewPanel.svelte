@@ -41,10 +41,10 @@ const preview = untrack(() => createFilePreview(target, openFile))
 </script>
 
 {#snippet actions()}
-      <Button variant="ghost" size="icon-sm" class={openFile ? "min-h-11 w-auto gap-2 px-4" : "rounded-full p-0"} disabled={preview.text === null} onclick={preview.copy} aria-label={$t('common.copy')} title={preview.copied ? $t('common.copied') : $t('common.copy')}>
+      <Button variant="ghost" size="icon-circle-sm" class={openFile ? "min-h-11 w-auto gap-2 px-4" : "p-0"} disabled={preview.text === null} onclick={preview.copy} aria-label={$t('common.copy')} title={preview.copied ? $t('common.copied') : $t('common.copy')}>
         {#if preview.copied}<CheckIcon class="size-4 text-primary" />{:else}<CopyIcon class="size-4" />{/if}
       {#if openFile}{$t('common.copy')}{/if}</Button>
-      <Button variant="ghost" size="icon-sm" class={openFile ? "min-h-11 w-auto gap-2 px-4" : "rounded-full p-0"} disabled={preview.receiving} onclick={preview.download} aria-label={$t('files.downloadNamed', {name: preview.name})} title={preview.receiving ? $t('files.receiving') : $t('files.download')}>
+      <Button variant="ghost" size="icon-circle-sm" class={openFile ? "min-h-11 w-auto gap-2 px-4" : "p-0"} disabled={preview.receiving} onclick={preview.download} aria-label={$t('files.downloadNamed', {name: preview.name})} title={preview.receiving ? $t('files.receiving') : $t('files.download')}>
         {#if preview.receiving}<CircleNotchIcon class="size-4 animate-spin" />{:else}<DownloadSimpleIcon class="size-4" />{/if}{#if openFile}{$t('files.download')}{/if}
       </Button>
 {/snippet}
@@ -56,7 +56,7 @@ const preview = untrack(() => createFilePreview(target, openFile))
   <Tabs.Root bind:value={preview.view} class="min-h-0 flex-1 gap-0">
     <header class="flex shrink-0 items-center gap-1 border-b px-2 py-2">
       {#if preview.canGoBack}
-        <Button variant="ghost" size="icon-sm" class="rounded-full p-0" onclick={preview.back} aria-label={$t('files.previewBack')} title={$t('files.previewBack')}><ArrowLeftIcon class="size-4" /></Button>
+        <Button variant="ghost" size="icon-circle-sm" class="p-0" onclick={preview.back} aria-label={$t('files.previewBack')} title={$t('files.previewBack')}><ArrowLeftIcon class="size-4" /></Button>
       {/if}
       <h2 class="min-w-0 flex-1 truncate text-sm font-medium" title={preview.name}>{preview.name}</h2>
       {#if preview.hasPreview && preview.text !== null && (preview.text || preview.treeFormat)}
@@ -65,9 +65,9 @@ const preview = untrack(() => createFilePreview(target, openFile))
           <Tabs.Trigger value="source" class="size-6 flex-none rounded-full p-0" aria-label={$t('files.source')} title={$t('files.source')}><CodeIcon class="size-4" /></Tabs.Trigger>
         </Tabs.List>
       {/if}
-      <Button variant="ghost" size="icon-sm" class="rounded-full p-0" disabled={preview.text === null && !preview.failure} onclick={preview.refresh} aria-label={$t('common.refresh')} title={$t('common.refresh')}><ArrowClockwiseIcon class="size-4" /></Button>
+      <Button variant="ghost" size="icon-circle-sm" class="p-0" disabled={preview.text === null && !preview.failure} onclick={preview.refresh} aria-label={$t('common.refresh')} title={$t('common.refresh')}><ArrowClockwiseIcon class="size-4" /></Button>
       {#if !openFile}{@render actions()}
-      <Button variant="ghost" size="icon-sm" class="rounded-full p-0" onclick={onclose} aria-label={$t('files.closeFile')} title={$t('files.closeFile')}><XIcon class="size-4" /></Button>{/if}
+      <Button variant="ghost" size="icon-circle-sm" class="p-0" onclick={onclose} aria-label={$t('files.closeFile')} title={$t('files.closeFile')}><XIcon class="size-4" /></Button>{/if}
     </header>
     <span class="sr-only" role="status">{preview.copied ? $t('common.copied') : preview.receiving ? $t('files.receiving') : ''}</span>
     {#if preview.task?.error}
@@ -80,7 +80,7 @@ const preview = untrack(() => createFilePreview(target, openFile))
       {@const state = failureStates[preview.failure.kind]}
       <Empty.Root role="alert" class="min-h-0 p-8">
         <Empty.Header>
-          <Empty.Media class={['size-12 rounded-xl', preview.failure.kind === 'missing' || preview.failure.kind === 'failed' ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground']}>
+          <Empty.Media class={['size-12 rounded-item', preview.failure.kind === 'missing' || preview.failure.kind === 'failed' ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground']}>
             <state.icon class="size-6" />
           </Empty.Media>
           <Empty.Title>{$t(state.title)}</Empty.Title>
@@ -97,13 +97,13 @@ const preview = untrack(() => createFilePreview(target, openFile))
     {:else if preview.text === null}
       <div role="status" aria-label={$t('files.loadingPreview')} class="min-h-0 flex-1 space-y-2.5 overflow-hidden p-4">
         {#each skeletonLines as width, index (index)}
-          <Skeleton class="h-3 rounded-sm" style="width: {width}%" />
+          <Skeleton class="h-3 rounded-tooltip" style="width: {width}%" />
         {/each}
       </div>
     {:else if preview.text === '' && !preview.treeFormat}
       <Empty.Root class="min-h-0 p-8">
         <Empty.Header>
-          <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><FileDashedIcon class="size-6" /></Empty.Media>
+          <Empty.Media class="size-12 rounded-item bg-muted text-muted-foreground"><FileDashedIcon class="size-6" /></Empty.Media>
           <Empty.Title>{$t('files.emptyFile')}</Empty.Title>
         </Empty.Header>
       </Empty.Root>

@@ -63,7 +63,7 @@
             <h2 class="text-sm font-medium text-heading">{step.title}</h2>
             <p class="text-sm text-muted-foreground">{step.description}</p>
             {#if step.command}
-              <div class="flex items-center gap-2 rounded-md bg-[#282828] py-1.5 pr-1.5 pl-3 text-[#ebdbb2]">
+              <div class="flex items-center gap-2 rounded-item bg-[#282828] py-1.5 pr-1.5 pl-3 text-[#ebdbb2]">
                 <code class="min-w-0 flex-1 font-mono text-xs leading-relaxed break-all">
                   <span class="mr-2 text-[#928374] select-none">$</span>{step.command}
                 </code>

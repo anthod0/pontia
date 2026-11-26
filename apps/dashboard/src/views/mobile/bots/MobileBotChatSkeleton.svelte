@@ -18,7 +18,7 @@
     </div>
   </div>
   <!-- Decorative placeholder matching the mobile composer; the conversation skeleton announces the loading state. -->
-  <div class="mobile-glass flex shrink-0 items-end rounded-3xl p-1" aria-hidden="true" inert>
+  <div class="mobile-glass flex shrink-0 items-end rounded-composer p-1" aria-hidden="true" inert>
     <span class="mobile-icon text-muted-foreground"><PlusIcon class="size-4" /></span>
     <span class="min-w-0 flex-1 truncate px-1 py-2.5 text-base leading-6 text-muted-foreground">{$t('bots.message')}</span>
     <span class="mobile-icon bg-primary text-primary-foreground opacity-40"><PaperPlaneTiltIcon class="size-4" /></span>

@@ -18,12 +18,12 @@
 </script>
 
 <div
-  class="relative flex min-w-0 items-center gap-1.5 pl-2.5 text-[13px] leading-5 text-muted-foreground before:absolute before:inset-y-0.5 before:left-0 before:w-0.5 before:rounded-[1px] before:bg-[color-mix(in_srgb,var(--muted-foreground)_45%,transparent)] sm:text-[12.5px]"
+  class="relative flex min-w-0 items-center gap-1.5 pl-2.5 text-13 leading-5 text-muted-foreground before:absolute before:inset-y-0.5 before:left-0 before:w-0.5 before:rounded-item before:bg-[color-mix(in_srgb,var(--muted-foreground)_45%,transparent)] sm:text-13"
   title={desktop.current ? `${speaker}: ${text}` : undefined}
   data-bot-pending-quote
 >
   <span class="max-w-[40%] shrink-0 truncate font-medium text-foreground">{speaker}</span>
-  {#if image}<QuoteThumbnail sessionId={image.sessionId} path={image.path} class="size-4 rounded-sm ring-1 ring-foreground/10" />{/if}
+  {#if image}<QuoteThumbnail sessionId={image.sessionId} path={image.path} class="size-4 rounded-tooltip border border-border" />{/if}
   <span class="min-w-0 truncate">{summary}</span>
   <button
     type="button"

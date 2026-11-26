@@ -50,7 +50,7 @@
     workspace={session.workspace}
     workspaceId={session.workspace_id}
   />{/snippet}
-<div class="my-2 overflow-hidden rounded-xl border bg-card">
+<div class="my-2 overflow-hidden rounded-item border bg-card">
   <button
     class="flex min-h-12 w-full items-center gap-2 px-3 text-left text-sm"
     aria-expanded={expanded}

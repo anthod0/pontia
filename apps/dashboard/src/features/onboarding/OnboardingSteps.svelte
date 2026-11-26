@@ -24,7 +24,7 @@
           <h3 class={cn('font-medium text-heading', step.state === 'pending' && 'text-muted-foreground')}>{step.label}</h3>
           {#if step.summary}<span class="text-xs text-success">{step.summary}</span>{/if}
         </div>
-        {#if step.content}<div class="mt-2 rounded-lg border bg-muted/35 p-3">{@render step.content()}</div>{/if}
+        {#if step.content}<div class="mt-2 rounded-item border bg-muted/35 p-3">{@render step.content()}</div>{/if}
       </div>
     </li>
   {/each}

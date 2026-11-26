@@ -102,7 +102,7 @@
     {#if !openEditor}<p class="border-t px-4 py-2 text-xs text-muted-foreground">{$t('memory.userEditHint')}</p>{/if}
   {/if}
 {/snippet}
-<div class="overflow-hidden rounded-lg border bg-background text-sm shadow-sm">
+<div class="overflow-hidden rounded-item border bg-background text-sm shadow-sm">
   {#if editing && !openEditor}{@render editor()}
   {:else if user.isError}
     <Alert.Root variant="destructive" class="m-4 w-auto"><WarningCircleIcon class="size-4" /><Alert.Description>{user.error.message}</Alert.Description></Alert.Root>

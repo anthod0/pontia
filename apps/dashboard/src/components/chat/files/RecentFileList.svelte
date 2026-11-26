@@ -24,9 +24,9 @@
       {@const name = recent.path.slice(slash + 1)}
       {@const kind = fileKindOf(name)}
       <li>
-        <button type="button" class="flex w-full items-center gap-3 rounded-lg p-2 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+        <button type="button" class="flex w-full items-center gap-3 rounded-item p-2 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
           title={recent.path} aria-label={$t('files.previewNamed', { name })} onclick={() => onopen(recent)}>
-          <span class={['grid size-9 shrink-0 place-items-center rounded-lg', kind.tone]}><kind.icon class="size-5" weight="duotone" /></span>
+          <span class={['grid size-9 shrink-0 place-items-center rounded-item', kind.tone]}><kind.icon class="size-5" weight="duotone" /></span>
           <span class="min-w-0 flex-1">
             <span class="block truncate text-sm font-medium">{name}</span>
             {#if slash > 0}<span class="block truncate text-xs text-muted-foreground" dir="rtl"><bdi>{recent.path.slice(0, slash)}</bdi></span>{/if}

@@ -165,7 +165,7 @@
 </script>
 
 {#snippet notRepository()}
-  <Empty.Root class="min-h-0 p-8"><Empty.Header><Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><FolderIcon class="size-6" /></Empty.Media><Empty.Title>{$t('git.notRepository')}</Empty.Title><Empty.Description>{$t('git.notRepositoryDescription')}</Empty.Description></Empty.Header></Empty.Root>
+  <Empty.Root class="min-h-0 p-8"><Empty.Header><Empty.Media class="size-12 rounded-item bg-muted text-muted-foreground"><FolderIcon class="size-6" /></Empty.Media><Empty.Title>{$t('git.notRepository')}</Empty.Title><Empty.Description>{$t('git.notRepositoryDescription')}</Empty.Description></Empty.Header></Empty.Root>
 {/snippet}
 
 {#snippet toolbar()}
@@ -175,17 +175,17 @@
       <span class="mx-1 h-4 w-px shrink-0 bg-border"></span>
     {/if}
     {#if status?.repo_root}
-      <div class="flex h-7 min-w-0 items-center gap-1.5 rounded-full px-2" title={branchTooltip}>
+      <div class="flex h-7 min-w-0 items-center gap-1.5 rounded-chip px-2" title={branchTooltip}>
         <GitBranchIcon class="size-3.5 shrink-0 text-muted-foreground" />
         <span class="truncate font-mono text-xs font-medium text-foreground">{branchName}</span>
         {#if status.ahead}<span class="shrink-0 font-mono text-xs text-primary">↑{status.ahead}</span>{/if}
         {#if status.behind}<span class="shrink-0 font-mono text-xs text-interrupted">↓{status.behind}</span>{/if}
       </div>
-      {#if status.upstream}<span class={['upstream min-w-0 truncate font-mono text-[11.5px] text-muted-foreground', workspaceHeading && 'bot-upstream']}>→ {status.upstream}</span>{/if}
+      {#if status.upstream}<span class={['upstream min-w-0 truncate font-mono text-11 text-muted-foreground', workspaceHeading && 'bot-upstream']}>→ {status.upstream}</span>{/if}
     {/if}
     <span class="min-w-0 flex-1"></span>
-    {#if changesQuery.dataUpdatedAt && minutes > 5}<time class="shrink-0 text-[11px] text-muted-foreground tabular-nums" datetime={new Date(changesQuery.dataUpdatedAt).toISOString()}>{$t('git.minutesAgo', { count: minutes })}</time>{/if}
-    <Button variant="ghost" size="icon-sm" class="-mr-1.5 size-7 rounded-full p-0 max-lg:size-10" disabled={fetching} onclick={refresh} aria-label={$t('common.refresh')} title={`${$t('common.refresh')} · ${$t('git.updatedMinutesAgo', { count: minutes })}`}><ArrowClockwiseIcon class={['size-4', fetching && 'animate-spin']} /></Button>
+    {#if changesQuery.dataUpdatedAt && minutes > 5}<time class="shrink-0 text-11 text-muted-foreground tabular-nums" datetime={new Date(changesQuery.dataUpdatedAt).toISOString()}>{$t('git.minutesAgo', { count: minutes })}</time>{/if}
+    <Button variant="ghost" size="icon-circle-sm" class="-mr-1.5 size-7 p-0 max-lg:size-10" disabled={fetching} onclick={refresh} aria-label={$t('common.refresh')} title={`${$t('common.refresh')} · ${$t('git.updatedMinutesAgo', { count: minutes })}`}><ArrowClockwiseIcon class={['size-4', fetching && 'animate-spin']} /></Button>
   </header>
 {/snippet}
 

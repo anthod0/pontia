@@ -115,7 +115,7 @@
   </Tabs.Content>
 </Tabs.Root>
 <button
-  class="absolute right-4 bottom-[calc(var(--mobile-tab-h)+var(--mobile-tab-gap)+14px)] flex h-13 items-center gap-2 rounded-2xl bg-primary px-5 text-primary-foreground shadow-md dark:text-background"
+  class="absolute right-4 bottom-[calc(var(--mobile-tab-h)+var(--mobile-tab-gap)+14px)] flex h-13 items-center gap-2 rounded-panel bg-primary px-5 text-primary-foreground shadow-md dark:text-background"
   onclick={() => navigate('/new', { workspace: workspace || null })}><PlusIcon />{$t('nav.newChat')}</button
 >
 {#if workspaceOpen}<MobileWorkspaceSheet

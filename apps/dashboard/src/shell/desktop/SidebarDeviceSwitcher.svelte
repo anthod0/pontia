@@ -23,7 +23,7 @@
     <Sidebar.MenuItem>
       <ResponsiveMenu label={$t('devices.title')} align="start" class="w-(--bits-dropdown-menu-anchor-width) min-w-56">
         {#snippet trigger()}
-          <Sidebar.MenuButton class="text-[13px]" aria-label={$t('devices.sidebarDevice')} title={selected ? $t(deviceStateLabel[selected.state]) : undefined}>
+          <Sidebar.MenuButton class="text-13" aria-label={$t('devices.sidebarDevice')} title={selected ? $t(deviceStateLabel[selected.state]) : undefined}>
             {#snippet child({ props })}
               <DropdownMenu.Trigger {...props}>
                 <DesktopIcon class="text-sidebar-foreground/60" />

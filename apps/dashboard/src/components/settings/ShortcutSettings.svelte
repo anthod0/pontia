@@ -63,7 +63,7 @@
     <Button variant="outline" size="sm" disabled={!shortcutIds.some(id => shortcuts.changed(id))}
       onclick={resetAll}>{$t('shortcuts.resetAll')}</Button>
   </header>
-  <div class="divide-y rounded-xl border bg-card px-5">
+  <div class="divide-y rounded-item border bg-card px-5">
     {#each shortcutIds as id (id)}
       {@const action = registry[id]}
       <div class="py-3">
@@ -93,7 +93,7 @@
         {#if recording === id}
           <p role="status" class="mt-2 text-sm text-muted-foreground">{$t(error ?? 'shortcuts.recordHint')}</p>
         {:else if pending?.id === id}
-          <div class="mt-3 flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2" role="status">
+          <div class="mt-3 flex flex-wrap items-center gap-2 rounded-item border bg-muted/40 px-3 py-2" role="status">
             <span class="mr-auto text-sm">{$t('shortcuts.conflict', { keys: formatShortcutKeys(comboKeys(pending.combo)), actions: conflicts.map(other => $t(registry[other].label)).join(', ') })}</span>
             <Button size="sm" onclick={replace}>{$t('shortcuts.replace')}</Button>
             <Button size="sm" variant="ghost" onclick={() => pending = null}>{$t('common.cancel')}</Button>
