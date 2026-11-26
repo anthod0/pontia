@@ -23,7 +23,6 @@ async function insertEdge(id: string, credentialSecret = secret, userId = "edge-
     id,
     userId,
     name: `Edge ${id}`,
-    dnsLabel: id,
     tunnelUrl: `wss://${id}.example.com/tunnel`,
     serviceCredentialHash: await hash(credentialSecret),
   });

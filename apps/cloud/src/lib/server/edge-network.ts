@@ -92,14 +92,14 @@ export function edgeApiOrigin(tunnelUrl: string): string | null {
   return `https://${authority}`;
 }
 
-/** The Pontia-managed control hostname that Cloud may write DNS records for. */
-export function managedEdgeHostname(edge: {
-  dnsLabel: string | null;
-  tunnelUrl: string;
-}): string | null {
-  if (edge.dnsLabel === null || !DNS_LABEL.test(edge.dnsLabel)) return null;
-  const hostname = `${edge.dnsLabel}.${EDGE_ZONE}`;
-  return edgeHost(edge.tunnelUrl) === hostname ? hostname : null;
+/** The Pontia-managed DNS identity derived from an edge's tunnel URL. */
+export function managedEdgeDns(tunnelUrl: string): { hostname: string; label: string } | null {
+  const hostname = edgeHost(tunnelUrl);
+  if (!hostname) return null;
+  const suffix = `.${EDGE_ZONE}`;
+  if (!hostname.endsWith(suffix)) return null;
+  const label = hostname.slice(0, -suffix.length);
+  return DNS_LABEL.test(label) ? { hostname, label } : null;
 }
 
 /** Existing edges whose DNS records Pontia manages; unset or empty allows nobody. */
@@ -581,8 +581,8 @@ export function previewDns(env: App.Platform["env"]) {
   );
 }
 
-export function previewBase(dnsLabel: string, zone: string) {
-  return `${dnsLabel}.${zone}`;
+export function previewBase(label: string, zone: string) {
+  return `${label}.${zone}`;
 }
 
 export async function probePreview(base: string, tunnelUrl: string) {

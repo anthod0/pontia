@@ -54,10 +54,7 @@ function event(
 
 async function registered(
   accessScope: "private" | "public" = "private",
-  endpoint: { dnsLabel: string | null; tunnelUrl: string } = {
-    dnsLabel: "brave-atlas",
-    tunnelUrl: `wss://${hostname}:8443/tunnel`,
-  },
+  endpoint: { tunnelUrl: string } = { tunnelUrl: `wss://${hostname}:8443/tunnel` },
 ) {
   await database.db.insert(users).values({ id: "owner" });
   await database.db.insert(edges).values({
@@ -181,7 +178,7 @@ test.each([
 );
 
 test("self-hosted edges on their own domains have no Cloud DNS or preview", async () => {
-  await registered("private", { dnsLabel: null, tunnelUrl: "wss://edge.example.com/tunnel" });
+  await registered("private", { tunnelUrl: "wss://edge.example.com/tunnel" });
   unexpectedProvider();
   for (const scope of [undefined, "preview"]) {
     const response = await call(event({ operation: "publish", value, scope }));
@@ -207,11 +204,8 @@ test.each(["public", "private"] as const)(
   },
 );
 
-test("a label that does not match the managed control hostname is rejected", async () => {
-  await registered("private", {
-    dnsLabel: "brave-atlas",
-    tunnelUrl: "wss://edge.example.com/tunnel",
-  });
+test("a tunnel outside the single-label managed zone is rejected", async () => {
+  await registered("private", { tunnelUrl: "wss://a.brave-atlas.edge.pontia.dev/tunnel" });
   unexpectedProvider();
   expect((await call(event({ operation: "publish", value }))).status).toBe(409);
   expect((await manageEdgePreview(event({}), "provision")).status).toBe(409);

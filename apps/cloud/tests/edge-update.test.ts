@@ -14,7 +14,6 @@ test("notifies reachable outdated Edges with a signed one-use challenge and cont
     id: "0199791c-6600-7000-8000-00000000000" + index,
     userId: "owner",
     name,
-    dnsLabel: name,
     serviceCredentialHash: name,
     tunnelUrl: "wss://" + name + ".edge.pontia.dev/tunnel",
   }));

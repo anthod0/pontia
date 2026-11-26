@@ -156,7 +156,7 @@ test("failed ownership checks leave the deployment unregistered and unconsumed",
   expect((await database.db.select().from(edgeTickets).get())?.consumedAt).toBeNull();
 });
 
-test("verified ownership registers an unlabeled private edge and supports response-loss retry", async () => {
+test("verified ownership registers a private edge and supports response-loss retry", async () => {
   const ticket = ticketFrom((await issuedDeployment()).command);
   let verifications = 0;
 
@@ -175,7 +175,6 @@ test("verified ownership registers an unlabeled private edge and supports respon
     userId: "user-owner",
     accessScope: "private",
     name: hostname,
-    dnsLabel: null,
     previewEnabled: 0,
     tunnelUrl: `wss://${hostname}/tunnel`,
     serviceCredentialHash: await sha256Base64url(credentialSecret),
@@ -334,34 +333,15 @@ test("wrong edge, purpose, malformed payload, and expired tickets never register
   }
 });
 
-test("unlabeled edges cannot enable previews", async () => {
+test("preview state is independent of the tunnel hostname", async () => {
   await database.db.insert(users).values({ id: "user-owner" });
-  const previewWithoutLabel = async () => {
-    await database.db.insert(edges).values({
-      id: edgeId,
-      userId: "user-owner",
-      name: hostname,
-      tunnelUrl: `wss://${hostname}/tunnel`,
-      serviceCredentialHash: "unrelated",
-      previewEnabled: 1,
-    });
-  };
-  await expect(previewWithoutLabel()).rejects.toThrow();
-  await database.db.insert(edges).values([
-    {
-      id: edgeId,
-      userId: "user-owner",
-      name: hostname,
-      tunnelUrl: `wss://${hostname}/tunnel`,
-      serviceCredentialHash: "first",
-    },
-    {
-      id: "0199791c-6600-7000-8000-000000000002",
-      userId: "user-owner",
-      name: "Second",
-      tunnelUrl: `wss://second.example.com/tunnel`,
-      serviceCredentialHash: "second",
-    },
-  ]);
-  expect(await database.db.select().from(edges)).toHaveLength(2);
+  await database.db.insert(edges).values({
+    id: edgeId,
+    userId: "user-owner",
+    name: hostname,
+    tunnelUrl: `wss://${hostname}/tunnel`,
+    serviceCredentialHash: "hash",
+    previewEnabled: 1,
+  });
+  expect((await database.db.select().from(edges).get())?.previewEnabled).toBe(1);
 });

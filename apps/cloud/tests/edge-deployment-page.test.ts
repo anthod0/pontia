@@ -106,7 +106,6 @@ test("the page includes owned public edges in both lists in stable order without
       { id: "edge-public", userId: "user-other", name: "Public", accessScope: "public" as const },
     ].map((edge) => ({
       ...edge,
-      dnsLabel: edge.id,
       tunnelUrl: `wss://${edge.id}.example/tunnel`,
       serviceCredentialHash: "secret-hash",
       createdAt,
@@ -163,7 +162,6 @@ test("the health endpoint checks only edges visible to the signed-in user", asyn
       id: "edge-owned",
       userId: ownerId,
       name: "Owned",
-      dnsLabel: "owned-edge",
       tunnelUrl: "wss://owned-edge.edge.pontia.dev/tunnel",
       serviceCredentialHash: "secret-hash",
     },
@@ -171,7 +169,6 @@ test("the health endpoint checks only edges visible to the signed-in user", asyn
       id: "edge-public",
       userId: "user-other",
       name: "Public",
-      dnsLabel: "public-edge",
       tunnelUrl: "wss://public-edge.edge.pontia.dev/tunnel",
       serviceCredentialHash: "secret-hash",
       accessScope: "public",
@@ -180,7 +177,6 @@ test("the health endpoint checks only edges visible to the signed-in user", asyn
       id: "edge-private",
       userId: "user-other",
       name: "Private",
-      dnsLabel: "private-edge",
       tunnelUrl: "wss://private-edge.edge.pontia.dev/tunnel",
       serviceCredentialHash: "secret-hash",
     },
@@ -243,14 +239,13 @@ test("the health endpoint requires sign-in", async () => {
   expect(response.status).toBe(401);
 });
 
-test("an owner can rename an edge without changing its DNS label", async () => {
+test("an owner can rename an edge without changing its tunnel URL", async () => {
   const event = await authenticatedEvent(ownerId);
   const edgeId = "edge-owned";
   await database.db.insert(edges).values({
     id: edgeId,
     userId: ownerId,
     name: "brave-atlas",
-    dnsLabel: "brave-atlas",
     tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel",
     serviceCredentialHash: "secret-hash",
   });
@@ -278,11 +273,14 @@ test("an owner can rename an edge without changing its DNS label", async () => {
   await renameEdge(event);
   expect(
     await database.db
-      .select({ name: edges.name, dnsLabel: edges.dnsLabel })
+      .select({ name: edges.name, tunnelUrl: edges.tunnelUrl })
       .from(edges)
       .where(eq(edges.id, edgeId))
       .get(),
-  ).toEqual({ name: "Home server", dnsLabel: "brave-atlas" });
+  ).toEqual({
+    name: "Home server",
+    tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel",
+  });
 });
 
 test("an unauthenticated browser cannot issue an edge deployment", async () => {

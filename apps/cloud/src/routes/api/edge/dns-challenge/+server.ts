@@ -5,7 +5,7 @@ import { edges } from "$lib/server/db/schema";
 import {
   CloudflareDnsProvider,
   isLegacyEdgeDnsOwner,
-  managedEdgeHostname,
+  managedEdgeDns,
   previewBase,
   previewDns,
   validDnsChallenge,
@@ -40,7 +40,7 @@ export const POST: RequestHandler = async (event) => {
     if (!principal) return json({ error: "invalid_edge_credentials" }, { status: 401 });
     edgeId = principal.edgeId;
     const edge = await db
-      .select({ userId: edges.userId, dnsLabel: edges.dnsLabel, tunnelUrl: edges.tunnelUrl })
+      .select({ userId: edges.userId, tunnelUrl: edges.tunnelUrl })
       .from(edges)
       .where(eq(edges.id, principal.edgeId))
       .get();
@@ -49,16 +49,17 @@ export const POST: RequestHandler = async (event) => {
     if (!isLegacyEdgeDnsOwner(env, edge.userId)) {
       return json({ error: "forbidden" }, { status: 403 });
     }
-    hostname = managedEdgeHostname(edge);
-    if (!hostname || edge.dnsLabel === null) {
+    const managedDns = managedEdgeDns(edge.tunnelUrl);
+    if (!managedDns) {
       return json({ error: "invalid_edge" }, { status: 409 });
     }
+    hostname = managedDns.hostname;
     if (body.scope === "preview" && !env.PREVIEW_ZONE) {
       return json({ error: "edge_preview_unavailable" }, { status: 409 });
     }
     if (!(await env.EDGE_DNS_RATE_LIMIT.limit({ key: edgeId })).success)
       return json({ error: "rate_limited" }, { status: 429 });
-    if (body.scope === "preview") hostname = previewBase(edge.dnsLabel, env.PREVIEW_ZONE!);
+    if (body.scope === "preview") hostname = previewBase(managedDns.label, env.PREVIEW_ZONE!);
     const dns =
       body.scope === "preview"
         ? previewDns(env)

@@ -5,7 +5,7 @@ import { edges } from "./db/schema";
 import {
   CloudflareDnsProvider,
   isLegacyEdgeDnsOwner,
-  managedEdgeHostname,
+  managedEdgeDns,
   previewBase,
   previewDns,
   probePreview,
@@ -21,7 +21,7 @@ export async function manageEdgePreview(event: RequestEvent, operation: "provisi
   const principal = credential && (await authenticateEdgeCredential(db, credential));
   if (!principal) return json({ error: "invalid_edge_credentials" }, { status: 401 });
   const edge = await db
-    .select({ userId: edges.userId, dnsLabel: edges.dnsLabel, tunnelUrl: edges.tunnelUrl })
+    .select({ userId: edges.userId, tunnelUrl: edges.tunnelUrl })
     .from(edges)
     .where(eq(edges.id, principal.edgeId))
     .get();
@@ -30,11 +30,11 @@ export async function manageEdgePreview(event: RequestEvent, operation: "provisi
     return json({ error: "forbidden" }, { status: 403 });
   }
   if (!env.PREVIEW_ZONE) return json({ error: "edge_preview_unavailable" }, { status: 409 });
-  const control = managedEdgeHostname(edge);
-  if (!control || edge.dnsLabel === null) return json({ error: "invalid_edge" }, { status: 409 });
+  const managedDns = managedEdgeDns(edge.tunnelUrl);
+  if (!managedDns) return json({ error: "invalid_edge" }, { status: 409 });
   if (!(await env.EDGE_DNS_RATE_LIMIT.limit({ key: principal.edgeId })).success)
     return json({ error: "rate_limited" }, { status: 429 });
-  const base = previewBase(edge.dnsLabel, env.PREVIEW_ZONE);
+  const base = previewBase(managedDns.label, env.PREVIEW_ZONE);
   try {
     if (operation === "confirm") {
       if (!(await probePreview(base, edge.tunnelUrl)))
@@ -42,7 +42,7 @@ export async function manageEdgePreview(event: RequestEvent, operation: "provisi
       await db.update(edges).set({ previewEnabled: 1 }).where(eq(edges.id, principal.edgeId));
     } else {
       const dns = new CloudflareDnsProvider(env.CLOUDFLARE_DNS_TOKEN, env.CLOUDFLARE_DNS_ZONE_ID);
-      await previewDns(env).ensureA(`*.${base}`, await dns.ipv4(control));
+      await previewDns(env).ensureA(`*.${base}`, await dns.ipv4(managedDns.hostname));
     }
     return json({ preview_base_hostname: base, manage_certificate: true });
   } catch {

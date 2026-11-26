@@ -10,7 +10,7 @@ edge_state() {
 
 for scope in public private; do
   edge_state "UPDATE edges SET access_scope='$scope', preview_enabled=0
-              WHERE dns_label='docker-e2e' RETURNING preview_enabled" |
+              WHERE tunnel_url='wss://docker-e2e.edge.pontia.dev/tunnel' RETURNING preview_enabled" |
     jq -e '. == [{"preview_enabled": 0}]'
 
   scripts/docker-e2e compose exec -T edge sh -ec '
@@ -20,6 +20,7 @@ for scope in public private; do
         --request POST https://pontia.dev/api/edge/preview/confirm
   ' | jq -e '.preview_base_hostname == "docker-e2e.pontia.run" and .manage_certificate == true'
 
-  edge_state "SELECT preview_enabled FROM edges WHERE dns_label='docker-e2e'" |
+  edge_state "SELECT preview_enabled FROM edges
+              WHERE tunnel_url='wss://docker-e2e.edge.pontia.dev/tunnel'" |
     jq -e '. == [{"preview_enabled": 1}]'
 done

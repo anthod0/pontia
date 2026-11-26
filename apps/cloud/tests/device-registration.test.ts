@@ -46,7 +46,6 @@ async function insertEdge(
     userId,
     accessScope,
     name,
-    dnsLabel: id,
     tunnelUrl: `wss://${id}.example/tunnel`,
     serviceCredentialHash: "hash",
   });

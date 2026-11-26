@@ -303,7 +303,6 @@ export async function confirmEdgeDeployment(
               accessScope: sql<"private">`'private'`.as("access_scope"),
               name: sql<string>`${deployment.hostname}`.as("name"),
               previewEnabled: sql<number>`0`.as("preview_enabled"),
-              dnsLabel: sql<null>`NULL`.as("dns_label"),
               tunnelUrl: sql<string>`${identity.tunnelUrl}`.as("tunnel_url"),
               serviceCredentialHash: sql<string>`${deployment.serviceCredentialHash}`.as(
                 "service_credential_hash",

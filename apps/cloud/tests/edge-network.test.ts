@@ -8,7 +8,7 @@ import {
   isGlobalUnicastIpv4,
   isLegacyEdgeDnsOwner,
   isValidEdgeHost,
-  managedEdgeHostname,
+  managedEdgeDns,
   ownershipMessage,
   probeEdgeHealth,
   resolvesToPublicAddresses,
@@ -123,21 +123,22 @@ test("extracts only canonical tunnel URLs for public hosts", () => {
   expect(edgeApiOrigin("wss://edge.example.com:443/tunnel")).toBeNull();
 });
 
-test("only a labeled edge on its single-label managed hostname has Cloud-managed DNS", () => {
-  expect(
-    managedEdgeHostname({ dnsLabel: "sg", tunnelUrl: "wss://sg.edge.pontia.dev/tunnel" }),
-  ).toBe("sg.edge.pontia.dev");
-  expect(
-    managedEdgeHostname({ dnsLabel: "sg", tunnelUrl: "wss://sg.edge.pontia.dev:8443/tunnel" }),
-  ).toBe("sg.edge.pontia.dev");
-  for (const edge of [
-    { dnsLabel: null, tunnelUrl: "wss://sg.edge.pontia.dev/tunnel" },
-    { dnsLabel: "sg", tunnelUrl: "wss://other.edge.pontia.dev/tunnel" },
-    { dnsLabel: "sg", tunnelUrl: "wss://sg.example.com/tunnel" },
-    { dnsLabel: "a.sg", tunnelUrl: "wss://a.sg.edge.pontia.dev/tunnel" },
-    { dnsLabel: null, tunnelUrl: "wss://edge.example.com/tunnel" },
+test("managed DNS identity requires a single label under the managed edge zone", () => {
+  expect(managedEdgeDns("wss://sg.edge.pontia.dev/tunnel")).toEqual({
+    hostname: "sg.edge.pontia.dev",
+    label: "sg",
+  });
+  expect(managedEdgeDns("wss://sg.edge.pontia.dev:8443/tunnel")).toEqual({
+    hostname: "sg.edge.pontia.dev",
+    label: "sg",
+  });
+  for (const tunnelUrl of [
+    "wss://edge.pontia.dev/tunnel",
+    "wss://a.sg.edge.pontia.dev/tunnel",
+    "wss://sg.example.com/tunnel",
+    "wss://edge.example.com/tunnel",
   ]) {
-    expect(managedEdgeHostname(edge)).toBeNull();
+    expect(managedEdgeDns(tunnelUrl)).toBeNull();
   }
 });
 

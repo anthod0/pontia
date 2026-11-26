@@ -138,7 +138,6 @@ test("a verified ownership proof registers the edge on its own domain", async ()
   expect(await database.db.select().from(edges).get()).toMatchObject({
     id: edgeId,
     name: hostname,
-    dnsLabel: null,
     previewEnabled: 0,
     accessScope: "private",
     tunnelUrl: `wss://${hostname}:8443/tunnel`,

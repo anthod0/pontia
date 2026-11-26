@@ -9,12 +9,12 @@ const ownerId = "0199791c-6600-7000-8000-000000000001";
 const otherUserId = "0199791c-6600-7000-8000-000000000002";
 const edgeId = "0199791c-6600-7000-8000-000000000003";
 
-const managed = { dnsLabel: "brave-atlas", tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel" };
-const selfHosted = { dnsLabel: null, tunnelUrl: "wss://edge.example.com/tunnel" };
+const managed = { tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel" };
+const selfHosted = { tunnelUrl: "wss://edge.example.com/tunnel" };
 
 async function insertEdgeResources(
   accessScope: "private" | "public" = "private",
-  endpoint: { dnsLabel: string | null; tunnelUrl: string } = managed,
+  endpoint: { tunnelUrl: string } = managed,
 ) {
   await database.db.insert(users).values([{ id: ownerId }, { id: otherUserId }]);
   await database.db.insert(edges).values({
@@ -66,8 +66,8 @@ test("deleting a managed edge of a legacy DNS owner cleans DNS and removes its r
       ownerId,
       edgeId,
       {
-        async cleanupHostname(hostname, dnsLabel) {
-          cleaned.push([hostname, dnsLabel]);
+        async cleanupHostname(hostname, label) {
+          cleaned.push([hostname, label]);
         },
       },
       true,
@@ -91,7 +91,7 @@ test("deleting a self-hosted edge on its own domain never touches DNS", async ()
   }
 });
 
-test("a labeled edge outside the legacy DNS allowlist is removed without DNS cleanup", async () => {
+test("a managed edge outside the legacy DNS allowlist is removed without DNS cleanup", async () => {
   await insertEdgeResources();
   expect(await removeOwnedEdge(database.db, ownerId, edgeId, noDns, false)).toEqual({
     status: "deleted",

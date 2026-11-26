@@ -87,9 +87,9 @@ export const actions: Actions = {
         userId,
         edgeId,
         {
-          async cleanupHostname(hostname, dnsLabel) {
+          async cleanupHostname(hostname, label) {
             if (env.PREVIEW_ZONE)
-              await previewDns(env).cleanupHostname(previewBase(dnsLabel, env.PREVIEW_ZONE));
+              await previewDns(env).cleanupHostname(previewBase(label, env.PREVIEW_ZONE));
             await new CloudflareDnsProvider(
               env.CLOUDFLARE_DNS_TOKEN,
               env.CLOUDFLARE_DNS_ZONE_ID,
@@ -99,9 +99,6 @@ export const actions: Actions = {
         isLegacyEdgeDnsOwner(env, userId),
       );
       if (result.status === "not_found") return fail(404, { error: m.edges_error_not_found() });
-      if (result.status === "invalid_edge") {
-        return fail(409, { error: m.edges_error_invalid_network() });
-      }
     } catch (cause) {
       console.error({
         event: "edge_deletion_failed",

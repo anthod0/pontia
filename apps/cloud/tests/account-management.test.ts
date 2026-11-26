@@ -85,7 +85,6 @@ test("account setup is needed until the user has a registered device, regardless
     id: edgeId,
     userId: otherUserId,
     name: "Other edge",
-    dnsLabel: "other-edge",
     tunnelUrl: "wss://other.example/tunnel",
     serviceCredentialHash: "hash",
   });
@@ -116,7 +115,6 @@ test("the settings pages return the current profile, browser sessions, CLI crede
     id: edgeId,
     userId,
     name: "Home edge",
-    dnsLabel: "home-edge",
     tunnelUrl: "wss://home.example/tunnel",
     serviceCredentialHash: "hash",
   });
@@ -161,7 +159,6 @@ test("a device owner can update its name and handle", async () => {
     id: edgeId,
     userId,
     name: "Home edge",
-    dnsLabel: "home-edge",
     tunnelUrl: "wss://home.example/tunnel",
     serviceCredentialHash: "hash",
   });
@@ -197,7 +194,6 @@ test("device handles remain unique within a user", async () => {
     id: edgeId,
     userId,
     name: "Home edge",
-    dnsLabel: "home-edge",
     tunnelUrl: "wss://home.example/tunnel",
     serviceCredentialHash: "hash",
   });
@@ -246,7 +242,6 @@ test("editing a device does not modify another user's device", async () => {
     id: edgeId,
     userId: otherUserId,
     name: "Other edge",
-    dnsLabel: "other-edge",
     tunnelUrl: "wss://other.example/tunnel",
     serviceCredentialHash: "hash",
   });
@@ -437,7 +432,6 @@ test("removing a device prevents its reconnection without revoking other devices
     id: edgeId,
     userId,
     name: "Edge",
-    dnsLabel: "edge",
     tunnelUrl: "wss://edge.example/tunnel",
     serviceCredentialHash: "hash",
     accessScope: "public",

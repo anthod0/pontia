@@ -56,7 +56,6 @@ async function seedHttpTicketFixture() {
     id: edgeId,
     userId: "user-http",
     name: "HTTP Edge",
-    dnsLabel: "edge-http",
     tunnelUrl: "wss://edge-http.example/tunnel",
     serviceCredentialHash: await sha256Base64url(edgeSecret),
   });
@@ -213,7 +212,6 @@ test("automatic binding controls the tunnel and Dashboard audience and respects 
       name,
       accessScope,
       userId: "other",
-      dnsLabel: name,
       tunnelUrl: `wss://${name}.edge.pontia.dev/tunnel`,
       serviceCredentialHash: name,
     });

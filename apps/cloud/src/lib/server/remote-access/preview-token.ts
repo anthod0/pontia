@@ -6,6 +6,7 @@ import { devices, edges } from "../db/schema";
 import { edgeIsAccessibleTo } from "./resources";
 import { isValidDeviceHandle } from "./device-handle";
 import { capabilitySigningKey } from "../edge-auth";
+import { managedEdgeDns } from "../edge-network";
 
 // Fetch Standard bad ports, also enforced at the device's loopback dialer.
 const blockedPorts = new Set([
@@ -39,7 +40,6 @@ export async function issuePreviewToken(
       .select({
         id: devices.id,
         edge: edges.id,
-        label: edges.dnsLabel,
         tunnel: edges.tunnelUrl,
         enabled: edges.previewEnabled,
       })
@@ -50,9 +50,10 @@ export async function issuePreviewToken(
       )
       .get());
   if (!device) return { status: 404, body: { error: "device_not_found" } };
-  if (!device.enabled || !device.label || !env.PREVIEW_ZONE)
+  const managedDns = managedEdgeDns(device.tunnel);
+  if (!device.enabled || !managedDns || !env.PREVIEW_ZONE)
     return { status: 409, body: { error: "edge_preview_unavailable" } };
-  const hostname = `${port}-${device.id.replaceAll("-", "")}.${device.label}.${env.PREVIEW_ZONE}`;
+  const hostname = `${port}-${device.id.replaceAll("-", "")}.${managedDns.label}.${env.PREVIEW_ZONE}`;
   const now = Math.floor(Date.now() / 1000);
   const expires = now + 4 * 3600;
   const token = await new SignJWT({ purpose: "localhost_preview", did: device.id, port })

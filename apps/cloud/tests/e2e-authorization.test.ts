@@ -28,7 +28,6 @@ async function seedDevice(publicKey: string) {
     id: "0195e7b9-91c2-73d4-a560-2f78b90c1234",
     userId: "user-owner",
     name: "Tokyo",
-    dnsLabel: "brave-atlas",
     tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel",
     serviceCredentialHash: "hash",
   });
@@ -143,6 +142,7 @@ test("a self-hosted edge on its own domain receives connections but no previews"
     name: "relay.example.com",
     tunnelUrl: "wss://relay.example.com:8443/tunnel",
     serviceCredentialHash: "hash",
+    previewEnabled: 1,
   });
   await database.db.insert(devices).values({
     id: deviceId,

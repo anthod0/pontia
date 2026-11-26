@@ -65,7 +65,6 @@ async function authenticatedRecords() {
     id: edgeId,
     userId: "user-http",
     name: "HTTP Edge",
-    dnsLabel: "http-edge",
     tunnelUrl: "wss://http-edge.example/tunnel",
     serviceCredentialHash: "hash",
   });
@@ -280,7 +279,6 @@ test("device profile updates hide and preserve another user's device", async () 
     id: otherEdgeId,
     userId: otherUserId,
     name: "Other Edge",
-    dnsLabel: "other-edge",
     tunnelUrl: "wss://other-edge.example/tunnel",
     serviceCredentialHash: "hash",
   });
@@ -339,7 +337,6 @@ test("editing the Edge preserves identity and URL and moves ticket authorization
     userId: "public-owner",
     accessScope: "public",
     name: "New Edge",
-    dnsLabel: "new-edge",
     tunnelUrl: "wss://new-edge.example/tunnel",
     serviceCredentialHash: "hash",
   });
@@ -404,7 +401,6 @@ test("unavailable Edge updates leave all profile fields unchanged", async () => 
     id: privateId,
     userId: "private-owner",
     name: "Private",
-    dnsLabel: "private-edge",
     tunnelUrl: "wss://private-edge.example/tunnel",
     serviceCredentialHash: "hash",
   });
