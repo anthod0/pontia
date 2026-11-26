@@ -192,7 +192,7 @@ impl Peer {
                     _ => return Err(invalid()),
                 };
             }
-            Some("text" | "input" | "tool" | "tool_result") => {
+            Some("text" | "reasoning" | "input" | "tool" | "tool_result") => {
                 if state.closed {
                     return Err(invalid());
                 }

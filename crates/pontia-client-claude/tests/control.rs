@@ -1594,6 +1594,53 @@ async fn same_workspace_sessions_keep_identity_input_and_live_output_separate() 
 }
 
 #[tokio::test]
+async fn reasoning_deltas_share_live_output_with_text_and_tools() {
+    use pontia_agent_control::{LiveOutputItem, LiveToolOutcome, LiveToolPhase};
+
+    let h = Harness::new().await;
+    let session = h.create("reasoning-tool").await;
+    h.gate(&session, 1, "start");
+    let turn = h.wait_states(&session, &["running"]).await[0].0.clone();
+    let snapshot = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let Some(snapshot) = h.app.live_output().snapshot(&session, &turn)
+                && matches!(
+                    snapshot.items.get(2),
+                    Some(LiveOutputItem::ToolCall {
+                        status: Some(status),
+                        result: Some(_),
+                        ..
+                    }) if status.phase == LiveToolPhase::Ended
+                        && status.outcome == Some(LiveToolOutcome::Failed)
+                )
+            {
+                break snapshot;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(matches!(
+        &snapshot.items[0],
+        LiveOutputItem::Reasoning { text, truncated: false, .. } if text == "Consider options"
+    ));
+    assert!(matches!(
+        &snapshot.items[1],
+        LiveOutputItem::AssistantText { text, .. } if text == "reasoning-tool"
+    ));
+    assert!(matches!(
+        &snapshot.items[2],
+        LiveOutputItem::ToolCall { status: Some(status), result: Some(_), .. }
+            if status.phase == LiveToolPhase::Ended
+                && status.outcome == Some(LiveToolOutcome::Failed)
+    ));
+    h.gate(&session, 1, "finish");
+    h.wait_states(&session, &["completed"]).await;
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn failed_tool_does_not_fail_turn_and_explicit_failure_does() {
     for (text, expected) in [("tool", "completed"), ("fail", "failed")] {
         let h = Harness::new().await;

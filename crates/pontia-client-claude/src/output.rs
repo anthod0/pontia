@@ -2,7 +2,7 @@ use crate::peer::{Input, Peer, field};
 use pontia_agent_control::{
     EventIngestService, LiveOutputBatch, LiveOutputIdentity, LiveOutputProducer,
     LiveOutputPublishOutcome, LiveOutputSnapshotReplacement, LiveOutputSource, LiveOutputUpdate,
-    LiveToolOutcome, LiveToolPhase, LiveToolResult, LiveToolStatus,
+    LiveReasoningBound, LiveToolOutcome, LiveToolPhase, LiveToolResult, LiveToolStatus,
 };
 use pontia_core::{Error, Result};
 use serde_json::Value;
@@ -48,6 +48,11 @@ pub(crate) async fn publish(
             item_id: format!("text:{}", field(event, "item_id")?),
             delta: field(event, "delta")?.into(),
         }],
+        Some("reasoning") => vec![LiveOutputUpdate::ReasoningDelta {
+            item_id: format!("reasoning:{}", field(event, "item_id")?),
+            delta: field(event, "delta")?.into(),
+            truncated: false,
+        }],
         Some("input") => vec![LiveOutputUpdate::UserInput {
             item_id: format!("input:{}", field(event, "item_id")?),
             text: field(event, "text")?.into(),
@@ -85,17 +90,35 @@ pub(crate) async fn publish(
         }
         _ => return Err(invalidated()),
     };
-    let updates = updates
-        .into_iter()
-        .map(|update| update.bound_tool_content(&snapshot.items))
-        .collect();
+    let mut bounded = Vec::with_capacity(updates.len());
+    for update in updates {
+        match update.bound_reasoning(&snapshot.items) {
+            LiveReasoningBound::Update(update) => {
+                bounded.push(update.bound_tool_content(&snapshot.items));
+            }
+            LiveReasoningBound::Snapshot(items) => {
+                accept(
+                    input,
+                    output
+                        .replace_snapshot(LiveOutputSnapshotReplacement {
+                            producer,
+                            sequence: input.sequence + 1,
+                            items,
+                        })
+                        .await?,
+                )?;
+                return Ok(());
+            }
+            LiveReasoningBound::Drop => return Ok(()),
+        }
+    }
     accept(
         input,
         output
             .publish_batch(LiveOutputBatch {
                 producer,
                 first_sequence: input.sequence + 1,
-                updates,
+                updates: bounded,
             })
             .await?,
     )

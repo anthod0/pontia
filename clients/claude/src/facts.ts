@@ -21,6 +21,7 @@ export type HostEvent =
     }
   | { kind: "started"; input_id: string }
   | { kind: "text"; input_id: string; item_id: string; delta: string }
+  | { kind: "reasoning"; input_id: string; item_id: string; delta: string }
   | { kind: "input"; input_id: string; item_id: string; text: string }
   | { kind: "tool"; input_id: string; call_id: string; name: string; arguments: unknown }
   | { kind: "tool_result"; input_id: string; call_id: string; failed: boolean; content: unknown }
@@ -148,7 +149,8 @@ export class InputFacts {
   private unconsumed = new Map<string, string>();
   private ownsReplies = false;
   private streamMessage?: string;
-  private streamed = new Set<string>();
+  private streamedText = new Set<string>();
+  private streamedReasoning = new Set<string>();
   private complete = new Set<string>();
   private tools = new Set<string>();
   historyAnchor: string;
@@ -226,12 +228,20 @@ export class InputFacts {
         if (event.type === "message_start") this.streamMessage = event.message.id;
         if (this.streamMessage) {
           if (event.type === "content_block_start" && event.content_block.type === "text") {
-            this.streamed.add(this.streamMessage);
+            this.streamedText.add(this.streamMessage);
             this.text(`${this.streamMessage}:${event.index}`, event.content_block.text);
           }
+          if (event.type === "content_block_start" && event.content_block.type === "thinking") {
+            this.streamedReasoning.add(this.streamMessage);
+            this.reasoning(`${this.streamMessage}:${event.index}`, event.content_block.thinking);
+          }
           if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-            this.streamed.add(this.streamMessage);
+            this.streamedText.add(this.streamMessage);
             this.text(`${this.streamMessage}:${event.index}`, event.delta.text);
+          }
+          if (event.type === "content_block_delta" && event.delta.type === "thinking_delta") {
+            this.streamedReasoning.add(this.streamMessage);
+            this.reasoning(`${this.streamMessage}:${event.index}`, event.delta.thinking);
           }
         }
         if (event.type === "message_stop") this.streamMessage = undefined;
@@ -242,7 +252,9 @@ export class InputFacts {
         if (this.complete.has(message.uuid)) return;
         this.complete.add(message.uuid);
         for (const [index, block] of reply.content.entries()) {
-          if (block.type === "text" && !this.streamed.has(reply.id))
+          if (block.type === "thinking" && !this.streamedReasoning.has(reply.id))
+            this.reasoning(`${message.uuid}:${index}`, block.thinking);
+          if (block.type === "text" && !this.streamedText.has(reply.id))
             this.text(`${message.uuid}:${index}`, block.text);
           if (block.type === "tool_use" && !this.tools.has(block.id)) {
             this.tools.add(block.id);
@@ -275,5 +287,9 @@ export class InputFacts {
 
   private text(item_id: string, delta: string): void {
     if (delta) this.emit({ kind: "text", input_id: this.id, item_id, delta });
+  }
+
+  private reasoning(item_id: string, delta: string): void {
+    if (delta) this.emit({ kind: "reasoning", input_id: this.id, item_id, delta });
   }
 }

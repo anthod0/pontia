@@ -309,6 +309,75 @@ test("streamed text and full assistant messages render once; tool generation is 
   assert.equal(events.filter((e) => e.kind === "finished" && e.outcome === "completed").length, 1);
 });
 
+test("streamed thinking joins its deltas once without hiding text or tools", async (t) => {
+  const { fixture, events, host } = setup();
+  t.after(() => host.close());
+  host.submit(first, "task");
+  fixture.messages.push(init());
+  fixture.messages.push(stream({ type: "message_start", message: { id: "reply" } }, first));
+  fixture.messages.push(
+    stream({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "thinking", thinking: "Consider", signature: "" },
+    }),
+  );
+  fixture.messages.push(
+    stream({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "thinking_delta", thinking: " the options" },
+    }),
+  );
+  fixture.messages.push(
+    stream({
+      type: "content_block_delta",
+      index: 1,
+      delta: { type: "text_delta", text: "answer" },
+    }),
+  );
+  fixture.messages.push(stream({ type: "message_stop" }));
+  fixture.messages.push(
+    assistant(first, [
+      { type: "thinking", thinking: "Consider the options", signature: "signature" },
+      { type: "text", text: "answer" },
+      { type: "tool_use", id: "call", name: "Read", input: { file_path: "file" } },
+    ]),
+  );
+  await settle();
+  assert.deepEqual(
+    events.filter((e) => e.kind === "reasoning").map((e) => e.delta),
+    ["Consider", " the options"],
+  );
+  assert.deepEqual(
+    events.filter((e) => e.kind === "text").map((e) => e.delta),
+    ["answer"],
+  );
+  assert.equal(events.filter((e) => e.kind === "tool").length, 1);
+});
+
+test("complete thinking blocks are forwarded when no stream events arrived", async (t) => {
+  const { fixture, events, host } = setup();
+  t.after(() => host.close());
+  host.submit(first, "task");
+  fixture.messages.push(init());
+  fixture.messages.push(
+    assistant(first, [
+      { type: "thinking", thinking: "historical reasoning", signature: "signature" },
+      { type: "text", text: "answer" },
+    ]),
+  );
+  await settle();
+  assert.deepEqual(
+    events.filter((e) => e.kind === "reasoning").map((e) => e.delta),
+    ["historical reasoning"],
+  );
+  assert.deepEqual(
+    events.filter((e) => e.kind === "text").map((e) => e.delta),
+    ["answer"],
+  );
+});
+
 test("separate assistant block envelopes sharing an API message preserve text and tool results", async (t) => {
   const { fixture, events, host } = setup();
   t.after(() => host.close());

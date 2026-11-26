@@ -286,6 +286,10 @@ if (process.argv[2] === "history-info") {
         },
       });
       event({ kind: "started", input_id: active.id, input:active.input });
+      if (active.text === "reasoning-tool") {
+        event({ kind: "reasoning", input_id: active.id, item_id: "thought", delta: "Consider" });
+        event({ kind: "reasoning", input_id: active.id, item_id: "thought", delta: " options" });
+      }
       event({ kind: "text", input_id: active.id, item_id: "reply", delta: active.text });
       if (active.text.startsWith("approval")) {
         for (let n = 0; n < (active.text === "approval-pair" ? 2 : 1); n++) {
@@ -325,7 +329,7 @@ if (process.argv[2] === "history-info") {
           }
         }
       }
-      if (active.text === "tool") {
+      if (active.text === "tool" || active.text === "reasoning-tool") {
         event({
           kind: "tool",
           input_id: active.id,
