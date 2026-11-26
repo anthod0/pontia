@@ -378,10 +378,15 @@
         {#if installed.length}
           <section class="space-y-1"><h2 class="pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">{$t('onboarding.clients.group.onDevice')}</h2>
             {#each installed as client, index (client.id)}
-              <div class="flex items-center gap-3 border-b py-3 last:border-b-0">
-                <ClientIcon clientType={client.client_type} acpAgentId={client.client_key} class="size-8" />
-                <div class="min-w-0 flex-1 space-y-2"><div class="flex items-center gap-2"><h3 class="font-medium text-heading">{client.name}</h3><span class="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{authState(client)?.methods.length ? $t('onboarding.clients.login.web') : $t('onboarding.clients.login.terminal')}</span></div><ClientStageTrack stages={stages(client)} label={$t('onboarding.clients.progress')} /></div>
-                <Button size="sm" variant={index === 0 ? 'default' : 'outline'} onclick={() => choose(client)}>{rowAction(client)}</Button>
+              <div class="flex items-start gap-3 border-b py-3 last:border-b-0">
+                <ClientIcon clientType={client.client_type} acpAgentId={client.client_key} class="mt-0.5 size-8" />
+                <div class="min-w-0 flex-1 space-y-2">
+                  <div class="flex min-w-0 items-center gap-2">
+                    <div class="flex min-w-0 flex-1 items-center gap-2"><h3 class="truncate font-medium text-heading">{client.name}</h3><span class="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{authState(client)?.methods.length ? $t('onboarding.clients.login.web') : $t('onboarding.clients.login.terminal')}</span></div>
+                    <Button class="shrink-0" size="sm" variant={index === 0 ? 'default' : 'outline'} onclick={() => choose(client)}>{rowAction(client)}</Button>
+                  </div>
+                  <ClientStageTrack stages={stages(client)} label={$t('onboarding.clients.progress')} />
+                </div>
               </div>
             {/each}
           </section>
