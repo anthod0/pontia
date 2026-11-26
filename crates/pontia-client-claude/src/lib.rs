@@ -1,5 +1,6 @@
 mod connection;
 mod history;
+pub mod install;
 mod instructions;
 mod interactions;
 mod models;

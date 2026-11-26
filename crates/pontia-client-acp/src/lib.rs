@@ -6,6 +6,7 @@ mod capabilities;
 mod compaction;
 pub mod configuration;
 mod connection;
+pub mod install;
 pub use agents::{
     AcpAgentDefinition, AcpAgents, AcpLaunch, CompactionProtocol, InterjectionProtocol,
 };

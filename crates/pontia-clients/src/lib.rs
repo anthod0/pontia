@@ -53,6 +53,10 @@ pub fn registration(config: &AppConfig) -> ClientRegistry {
     clients.register(pontia_client_codex::registration());
     clients.register(pontia_client_claude::registration());
     clients.register(pontia_client_acp::registration());
+    clients.register_installer(Arc::new(pontia_client_claude::install::ClaudeInstaller));
+    for installer in pontia_client_acp::install::installers() {
+        clients.register_installer(installer);
+    }
     for integration in integrations() {
         clients.register_integration(integration);
     }
