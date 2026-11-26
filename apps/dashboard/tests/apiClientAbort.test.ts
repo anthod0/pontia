@@ -11,6 +11,7 @@ const {
   listWorkspaceRoots,
   listWorkspaces,
   refreshWorkspaceGitStatus,
+  setSessionReasoningEffort,
   terminateSession,
 } = testDevice.api;
 import { token } from "../src/stores/auth";
@@ -100,6 +101,23 @@ test("requests session exit through the lifecycle command endpoint", async () =>
   expect(fetchMock).toHaveBeenCalledWith(
     "/api/v1/sessions/session%2F1/exit",
     expect.objectContaining({ method: "POST" }),
+  );
+});
+
+test("requests a reasoning effort change without treating acceptance as confirmed state", async () => {
+  const fetchMock = vi.fn(async () => jsonResponse({ accepted: true }));
+  vi.stubGlobal("fetch", fetchMock);
+
+  await expect(setSessionReasoningEffort("session/1", "high")).resolves.toEqual({
+    accepted: true,
+  });
+
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/v1/sessions/session%2F1/reasoning-effort",
+    expect.objectContaining({
+      method: "PATCH",
+      body: JSON.stringify({ reasoning_effort: "high" }),
+    }),
   );
 });
 

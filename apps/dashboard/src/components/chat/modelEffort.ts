@@ -1,4 +1,15 @@
-import type { SessionModel } from "../../api/types";
+import type { SessionCreationOption, SessionModel, SessionView } from "../../api/types";
+
+export function sessionCreationOption(
+  session: SessionView,
+  options: SessionCreationOption[],
+): SessionCreationOption | undefined {
+  return options.find(
+    (option) =>
+      option.client_type === session.client_type &&
+      Object.entries(option.metadata).every(([key, value]) => session.metadata[key] === value),
+  );
+}
 
 /**
  * A model row in the picker. `key` is the bound model value; the client default row uses `''`

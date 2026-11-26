@@ -18,6 +18,7 @@
   import MobileSessionStepsCard from './MobileSessionStepsCard.svelte'
   import MobileSessionMetaStrip from './MobileSessionMetaStrip.svelte'
   import MobileSessionInteractions from './MobileSessionInteractions.svelte'
+  import SessionReasoningEffortControl from '../../../components/chat/SessionReasoningEffortControl.svelte'
   let { chat }: { chat: SessionChatController } = $props()
   const { title: heading, action } = useMobileHeader()
   const session = $derived(chat.selectedSession),
@@ -78,10 +79,22 @@
       onDismiss={chat.dismissFailedInboxMessage}
     />
     {#if chat.selectedCompaction?.phase === 'failed'}<p role="alert">{chat.selectedCompaction.message}</p>{/if}
-    <MobileSessionMetaStrip
-      items={chat.selectedSessionMetadataItems}
-      refresh={chat.refreshCurrentSessionGitStatus}
-    />
+    <div class="flex items-center gap-1">
+      <div class="min-w-0 flex-1">
+        <MobileSessionMetaStrip
+          items={chat.selectedSessionMetadataItems}
+          refresh={chat.refreshCurrentSessionGitStatus}
+        />
+      </div>
+      {#if session.capabilities.reasoning_effort_control === true}
+        <SessionReasoningEffortControl
+          {session}
+          busy={chat.reasoningEffortBusy}
+          error={chat.reasoningEffortError}
+          onChange={(effort) => void chat.changeSelectedReasoningEffort(effort)}
+        />
+      {/if}
+    </div>
     <MobileMessageComposer
       bind:value={$draft}
       draftId={'session:' + session.session_id}

@@ -31,6 +31,7 @@ import type {
   RenameWorkspaceInput,
   SessionView,
   SessionCompactionAccepted,
+  SessionReasoningEffortAccepted,
   SessionCreationOption,
   SessionOverviewSection,
   SessionOverviewView,
@@ -948,6 +949,20 @@ export function createApi(device: DeviceRuntime) {
     ).session;
   }
 
+  async function setSessionReasoningEffort(
+    sessionId: string,
+    reasoningEffort: string,
+  ): Promise<SessionReasoningEffortAccepted> {
+    return request<SessionReasoningEffortAccepted>(
+      `/sessions/${encodeURIComponent(sessionId)}/reasoning-effort`,
+      {
+        method: "PATCH",
+        body: { reasoning_effort: reasoningEffort },
+        mutating: true,
+      },
+    );
+  }
+
   async function pinSession(sessionId: string): Promise<SessionView> {
     return (
       await request<{ session: SessionView }>(`/sessions/${encodeURIComponent(sessionId)}/pin`, {
@@ -1219,6 +1234,7 @@ export function createApi(device: DeviceRuntime) {
     cancelAgentClientLogin,
     submitAgentClientLoginInput,
     listSessionCreationOptions,
+    setSessionReasoningEffort,
     listPendingInteractions,
     getInteraction,
     respondInteraction,

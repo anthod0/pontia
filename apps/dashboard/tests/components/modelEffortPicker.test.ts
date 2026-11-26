@@ -7,7 +7,9 @@ import {
   effortChoices,
   meterBars,
   pickerRows,
+  sessionCreationOption,
 } from "../../src/components/chat/modelEffort";
+import type { SessionView } from "../../src/api/types";
 import Harness from "./ModelEffortPickerHarness.svelte";
 
 const effort = (id: string, description = "") => ({ id, name: id, description });
@@ -43,6 +45,33 @@ test("lists the client default row only without a search and filters by name and
   expect(rows("")).toEqual(["", "max", "mini", "plain"]);
   expect(rows("", false)).toEqual(["max", "mini", "plain"]);
   expect(rows(" PLA ")).toEqual(["plain"]);
+});
+
+test("matches a session to the creation option that owns its model catalog", () => {
+  const active = {
+    client_type: "acp",
+    metadata: { acp_agent_id: "grok" },
+  } as SessionView;
+  const options = [
+    {
+      id: "kiro",
+      name: "Kiro",
+      client_type: "acp",
+      model_catalog_key: "kiro",
+      metadata: { acp_agent_id: "kiro" },
+      version: null,
+    },
+    {
+      id: "grok",
+      name: "Grok",
+      client_type: "acp",
+      model_catalog_key: "grok",
+      metadata: { acp_agent_id: "grok" },
+      version: null,
+    },
+  ];
+
+  expect(sessionCreationOption(active, options)?.model_catalog_key).toBe("grok");
 });
 
 test("offers the default effort before model options and nothing for effortless models", () => {

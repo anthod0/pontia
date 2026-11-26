@@ -47,7 +47,7 @@ export function createSessionChat(routeSessionId: () => string | null) {
   const deviceScope = dashboardScope();
   const { pending: pendingHistoryForks } = device.historyForks;
   const { retryInboxMessage } = device.sessions;
-  const { compactSession } = device.api;
+  const { compactSession, setSessionReasoningEffort } = device.api;
   const { chatMessagesWithOptimistic, createOptimisticChatQuery, reconcileOptimisticMessages } =
     device.optimisticChat;
   const { createOptimisticInboxQuery, inboxSubmissionMessages, reconcileInboxSubmissions } =
@@ -97,6 +97,9 @@ export function createSessionChat(routeSessionId: () => string | null) {
   let actionBusy = $state.raw(false);
   let inboxActionMessageId = $state.raw<string | null>(null);
   let actionError = $state.raw<string | null>(null);
+  let reasoningEffortBusy = $state.raw(false);
+  let reasoningEffortError = $state.raw<string | null>(null);
+  let reasoningEffortSessionId = "";
   let compactionEvents = $state.raw<EventView[]>([]);
   let requestedCompaction = $state.raw<string | null>(null);
   let unsubscribeDashboardEvents: (() => void) | null = null;
@@ -813,7 +816,16 @@ export function createSessionChat(routeSessionId: () => string | null) {
         streamEvent.event.type === "session.model_updated" ||
         streamEvent.event.type === "session.reasoning_effort_updated"
       ) {
-        void loadSessionDetail(selectedSessionId, { showLoading: false });
+        const sessionId = selectedSessionId;
+        void loadSessionDetail(sessionId, { showLoading: false }).finally(() => {
+          if (
+            streamEvent.event.type === "session.reasoning_effort_updated" &&
+            reasoningEffortSessionId === sessionId
+          ) {
+            reasoningEffortBusy = false;
+            reasoningEffortSessionId = "";
+          }
+        });
         return;
       }
       if (!sessionSupportsTimeline(currentSelectedSession())) {
@@ -878,6 +890,9 @@ export function createSessionChat(routeSessionId: () => string | null) {
     pendingPromptScrolls = [];
     actionError = null;
     branchActionError = null;
+    reasoningEffortBusy = false;
+    reasoningEffortError = null;
+    reasoningEffortSessionId = "";
     if (selectedSessionId) {
       autofocusComposer = claimChatEntryAutofocus(`${device.id}:/chat/${selectedSessionId}`);
       await loadSelectedSession(selectedSessionId);
@@ -1056,6 +1071,29 @@ export function createSessionChat(routeSessionId: () => string | null) {
         actionError = error instanceof Error ? error.message : String(error);
     } finally {
       actionBusy = false;
+    }
+  }
+
+  async function changeSelectedReasoningEffort(reasoningEffort: string): Promise<void> {
+    if (
+      !selectedSession ||
+      selectedSession.capabilities.reasoning_effort_control !== true ||
+      reasoningEffortBusy ||
+      reasoningEffort === selectedSession.reasoning_effort
+    )
+      return;
+    const sessionId = selectedSessionId;
+    reasoningEffortBusy = true;
+    reasoningEffortError = null;
+    reasoningEffortSessionId = sessionId;
+    try {
+      await setSessionReasoningEffort(sessionId, reasoningEffort);
+    } catch (error) {
+      if (selectedSessionId === sessionId) {
+        reasoningEffortBusy = false;
+        reasoningEffortSessionId = "";
+        reasoningEffortError = error instanceof Error ? error.message : String(error);
+      }
     }
   }
 
@@ -1349,6 +1387,7 @@ export function createSessionChat(routeSessionId: () => string | null) {
       return canSend;
     },
     cancelPendingInboxMessage,
+    changeSelectedReasoningEffort,
     chatDraft,
     compactSelectedSession,
     get compactedHistoryNotice() {
@@ -1401,6 +1440,12 @@ export function createSessionChat(routeSessionId: () => string | null) {
     },
     get rulerTurns() {
       return rulerTurns;
+    },
+    get reasoningEffortBusy() {
+      return reasoningEffortBusy;
+    },
+    get reasoningEffortError() {
+      return reasoningEffortError;
     },
     scrollChatToBottom,
     get selectedCompaction() {

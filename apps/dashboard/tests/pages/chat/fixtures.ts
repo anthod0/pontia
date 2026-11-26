@@ -111,6 +111,7 @@ const mocks = vi.hoisted(() => {
     archiveSession: vi.fn(),
     unarchiveSession: vi.fn(),
     updateSessionTitle: vi.fn(),
+    setSessionReasoningEffort: vi.fn(),
     createSession: vi.fn(),
     loadSessionTimeline: vi.fn(async (_sessionId: string) => null),
     refreshSessionTimeline: vi.fn(async () => true),
@@ -160,6 +161,7 @@ vi.mock("../../../src/api/client", async (importOriginal) => {
       );
     }),
     registerWorkspace: (input: unknown) => mocks.registerWorkspace(input),
+    setSessionReasoningEffort: mocks.setSessionReasoningEffort,
   };
   return {
     ...original,
@@ -491,6 +493,7 @@ beforeEach(() => {
     warnings: [],
   });
   mocks.registerWorkspace.mockReset().mockResolvedValue(workspace());
+  mocks.setSessionReasoningEffort.mockReset().mockResolvedValue({ accepted: true });
   mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
     const detail = mocks.sessionDetail.get();
     const turns = detail?.turns ?? [];

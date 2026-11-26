@@ -10,6 +10,7 @@
   import type { ChatCommand } from '$lib/chatCommands'
   import { isExecutingSessionState } from '$lib/sessionState'
   import { type compactionStatus } from '$lib/session-chat/compaction'
+  import SessionReasoningEffortControl from './SessionReasoningEffortControl.svelte'
 
   interface Props {
     commands: ChatCommand[]
@@ -26,6 +27,8 @@
     compaction?: ReturnType<typeof compactionStatus>
     canSend?: boolean
     autofocus?: boolean
+    reasoningEffortBusy?: boolean
+    reasoningEffortError?: string | null
     onCancelInboxMessage: (message: InboxMessageView) => void
     onRetryInboxMessage: (message: InboxMessageView) => void
     onDismissInboxMessage: (message: InboxMessageView) => void
@@ -33,6 +36,7 @@
     onInterrupt: () => void
     onFocus: () => void
     onRefreshGitStatus: () => void
+    onReasoningEffortChange: (effort: string) => void
   }
 
   let {
@@ -50,6 +54,8 @@
     compaction = null,
     canSend = false,
     autofocus = false,
+    reasoningEffortBusy = false,
+    reasoningEffortError = null,
     onCancelInboxMessage,
     onRetryInboxMessage,
     onDismissInboxMessage,
@@ -57,6 +63,7 @@
     onInterrupt,
     onFocus,
     onRefreshGitStatus,
+    onReasoningEffortChange,
   }: Props = $props()
 
   let composerDisabled = $derived(submitting || actionBusy)
@@ -81,6 +88,9 @@
     <MessageComposer draftId={`session:${session.session_id}`} bind:value={input} {commands} workspaceId={session.workspace_id} busy={submitting} disabled={composerDisabled} submitDisabled={!canSend} fullscreen {autofocus} {interruptMode} interruptBusy={actionBusy} onSubmit={onSend} {onInterrupt} {onFocus}>
       {#snippet header()}
         <SessionMetadata {session} {gitStatus} {metadataItems} {metadataSummary} {onRefreshGitStatus} />
+        {#if session.capabilities.reasoning_effort_control === true}
+          <SessionReasoningEffortControl {session} busy={reasoningEffortBusy} error={reasoningEffortError} onChange={onReasoningEffortChange} />
+        {/if}
       {/snippet}
     </MessageComposer>
     {#if canSendSessionMessage(session, 'x') === false}

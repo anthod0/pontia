@@ -399,6 +399,10 @@ export interface SessionCompactionAccepted {
   operation_id: string;
 }
 
+export interface SessionReasoningEffortAccepted {
+  accepted: boolean;
+}
+
 export interface SessionCapabilities {
   steer?: boolean;
   accept_task?: boolean;
@@ -412,6 +416,7 @@ export interface SessionCapabilities {
   manual_compaction: boolean;
   compaction_events: boolean;
   compaction_history: boolean;
+  reasoning_effort_control?: boolean;
   context_usage?: ContextUsageCapability;
   [key: string]: unknown;
 }

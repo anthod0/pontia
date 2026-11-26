@@ -78,6 +78,140 @@ function observedHistorySentinels(): Element[] {
     );
 }
 
+function prepareReasoningEffortSession(): SessionView {
+  const selected = session({
+    model: "model-a",
+    reasoning_effort: "medium",
+    capabilities: {
+      accept_task: true,
+      timeline: true,
+      reasoning_effort_control: true,
+    },
+  });
+  window.history.pushState({}, "", "/dashboard/chat/session-1");
+  mocks.pathParams = { sessionId: "session-1" };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+  vi.spyOn(api, "listAgentClientModels").mockResolvedValue({
+    version: null,
+    fetched_at: Date.now(),
+    default_model: "model-a",
+    models: [
+      {
+        id: "model-a",
+        name: "Model A",
+        description: "",
+        default_reasoning_effort: "medium",
+        reasoning_efforts: [
+          { id: "low", name: "Low", description: "Fast" },
+          { id: "medium", name: "Medium", description: "Balanced" },
+          { id: "high", name: "High", description: "Deep" },
+        ],
+      },
+    ],
+  });
+  return selected;
+}
+
+test("keeps the confirmed reasoning effort visible until the session event reports the actual value", async () => {
+  const selected = prepareReasoningEffortSession();
+  render(SessionChatPage);
+
+  const trigger = await screen.findByRole("button", { name: "Reasoning effort: Medium" });
+  await fireEvent.click(trigger);
+  await fireEvent.click(await screen.findByRole("option", { name: /High/ }));
+
+  await waitFor(() =>
+    expect(mocks.setSessionReasoningEffort).toHaveBeenCalledWith("session-1", "high"),
+  );
+  expect(screen.getByRole("button", { name: "Reasoning effort: Medium" })).toHaveAttribute(
+    "aria-busy",
+    "true",
+  );
+
+  mocks.loadSessionDetail.mockReset().mockImplementationOnce(async () => {
+    const detail = {
+      session: { ...selected, reasoning_effort: "low" },
+      turns: [],
+      inboxMessages: [],
+      events: [],
+    };
+    mocks.sessionDetail.set(detail);
+    return detail;
+  });
+  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBeGreaterThan(0));
+  for (const listener of mocks.dashboardEventListeners) {
+    listener({
+      kind: "session_event",
+      event: {
+        session_id: "session-1",
+        turn_id: null,
+        type: "session.reasoning_effort_updated",
+        payload: { reasoning_effort: "low" },
+      },
+    });
+  }
+
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Reasoning effort: Low" })).toHaveAttribute(
+      "aria-busy",
+      "false",
+    ),
+  );
+});
+
+test("reports a rejected reasoning effort change and keeps the confirmed value selectable", async () => {
+  prepareReasoningEffortSession();
+  mocks.setSessionReasoningEffort.mockRejectedValueOnce(new Error("control unavailable"));
+  render(SessionChatPage);
+
+  await fireEvent.click(await screen.findByRole("button", { name: "Reasoning effort: Medium" }));
+  await fireEvent.click(await screen.findByRole("option", { name: /High/ }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("control unavailable");
+  expect(screen.getByRole("button", { name: "Reasoning effort: Medium" })).toBeEnabled();
+});
+
+test("hides reasoning effort control when the session does not expose the capability", async () => {
+  const selected = session({ model: "model-a", reasoning_effort: "medium" });
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+  mocks.pathParams = { sessionId: "session-1" };
+  window.history.pushState({}, "", "/dashboard/chat/session-1");
+
+  render(SessionChatPage);
+
+  await screen.findByPlaceholderText("Follow up…");
+  expect(screen.queryByRole("button", { name: /Reasoning effort:/ })).not.toBeInTheDocument();
+});
+
+test("exposes reasoning effort control in the mobile session footer", async () => {
+  const originalMatchMedia = window.matchMedia;
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: query.includes("max-width"),
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+  prepareReasoningEffortSession();
+
+  try {
+    render(SessionChatPage);
+    await fireEvent.click(await screen.findByRole("button", { name: "Reasoning effort: Medium" }));
+    await fireEvent.click(await screen.findByRole("option", { name: /High/ }));
+
+    await waitFor(() =>
+      expect(mocks.setSessionReasoningEffort).toHaveBeenCalledWith("session-1", "high"),
+    );
+  } finally {
+    window.matchMedia = originalMatchMedia;
+  }
+});
+
 test("refreshes git on every entry and manual focus, while autofocusing only on first entry", async () => {
   const selected = session({ session_id: "session-2", workspace_id: "workspace-1" });
   window.history.pushState({}, "", "/dashboard/chat/session-2");
