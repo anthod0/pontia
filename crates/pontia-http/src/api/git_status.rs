@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 
 use pontia_application::{AppState, WorkspaceGitStatusService};
 
+use super::git::with_git_deadline;
 use super::response::{ApiError, ApiResponse, ok};
 
 pub async fn get_workspace_git_status(
@@ -26,6 +27,6 @@ pub async fn refresh_workspace_git_status(
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let service =
         WorkspaceGitStatusService::new(state.db(), state.git_refresh(), state.workspace_browser());
-    let git_status = service.refresh_workspace_git_status(&workspace_id).await?;
+    let git_status = with_git_deadline(service.refresh_workspace_git_status(&workspace_id)).await?;
     Ok(ok(json!({ "git_status": git_status })))
 }

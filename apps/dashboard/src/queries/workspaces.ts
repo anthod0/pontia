@@ -21,9 +21,6 @@ export type GitDiffTarget = { path: string; orig_path?: string; group: GitChange
 /** A file changed by a commit. */
 export type GitCommitFileTarget = { path: string; orig_path?: string };
 
-/** How often the open Git tab re-reads the change list. */
-const GIT_CHANGES_POLL_MS = 5_000;
-
 export function createWorkspaceQueries(device: DeviceRuntime) {
   const workspaceKeys = {
     all: [device.id, "workspaces"] as const,
@@ -143,8 +140,6 @@ export function createWorkspaceQueries(device: DeviceRuntime) {
         queryKey: workspaceKeys.gitChanges(workspaceId()),
         queryFn: ({ signal }) => device.api.getWorkspaceGitChanges(workspaceId(), { signal }),
         enabled: enabled() && workspaceId().length > 0,
-        refetchInterval: GIT_CHANGES_POLL_MS,
-        refetchIntervalInBackground: false,
       }),
       () => device.queryClient,
     );
@@ -325,13 +320,19 @@ export function createWorkspaceQueries(device: DeviceRuntime) {
     return createMutation(refreshWorkspaceGitStatusMutationOptions, () => device.queryClient);
   }
 
-  async function refreshWorkspaceGitStatus(workspaceId: string): Promise<WorkspaceGitStatusView> {
-    const observer = new MutationObserver(
-      device.queryClient,
-      refreshWorkspaceGitStatusMutationOptions(),
-    );
+  async function refreshWorkspaceGitStatus(
+    workspaceId: string,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<WorkspaceGitStatusView> {
+    const observer = new MutationObserver(device.queryClient, {
+      ...refreshWorkspaceGitStatusMutationOptions(),
+      mutationFn: () =>
+        options.signal
+          ? device.api.refreshWorkspaceGitStatus(workspaceId, options)
+          : device.api.refreshWorkspaceGitStatus(workspaceId),
+    });
     try {
-      return await observer.mutate(workspaceId);
+      return await observer.mutate();
     } finally {
       observer.reset();
     }

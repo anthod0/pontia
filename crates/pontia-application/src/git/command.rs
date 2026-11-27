@@ -1,7 +1,12 @@
 //! Read-only git invocation with a timeout and an output cap.
 
 use pontia_core::error::{Error, Result};
-use std::{collections::BTreeSet, path::Path, process::Stdio, time::Duration};
+use std::{
+    collections::BTreeSet,
+    path::{Path, PathBuf},
+    process::Stdio,
+    time::Duration,
+};
 use tokio::{io::AsyncReadExt, process::Command};
 
 const GIT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -13,38 +18,64 @@ pub(crate) struct GitOutput {
     pub truncated: bool,
 }
 
-/// Runs git in `dir` without a shell. Arguments are passed as separate argv entries and
-/// pathspecs are literal. Repository settings that run external programs or take locks are
-/// disabled. Exit code 1 is accepted when `allow_exit_one` is set (`git diff --no-index`).
-pub(crate) async fn run_git(
-    dir: &Path,
-    args: &[&str],
-    limit: usize,
-    allow_exit_one: bool,
-) -> Result<GitOutput> {
-    // Read names only. Included files inherit the scope of the including config.
-    let config = invoke(
-        dir,
-        &[],
-        &[
-            "config",
-            "--null",
-            "--show-scope",
-            "--name-only",
-            "--get-regexp",
-            r"^filter\..*\.(clean|smudge|process)$",
-        ],
-        1024 * 1024,
-        true,
-    )
-    .await?;
-    if config.truncated {
-        return Err(Error::Domain(
-            "git filter configuration exceeds limit".into(),
-        ));
+pub(crate) struct GitCommand {
+    dir: PathBuf,
+    overrides: Vec<String>,
+}
+
+impl GitCommand {
+    pub(crate) async fn new(dir: &Path) -> Result<Self> {
+        // Read names only. Included files inherit the scope of the including config.
+        let config = invoke(
+            dir,
+            &[],
+            &[
+                "config",
+                "--null",
+                "--show-scope",
+                "--name-only",
+                "--get-regexp",
+                r"^filter\..*\.(clean|smudge|process)$",
+            ],
+            1024 * 1024,
+            true,
+        )
+        .await?;
+        if config.truncated {
+            return Err(Error::Domain(
+                "git filter configuration exceeds limit".into(),
+            ));
+        }
+        Ok(Self {
+            dir: dir.to_path_buf(),
+            overrides: filter_overrides(&config.stdout)?,
+        })
     }
-    let overrides = filter_overrides(&config.stdout)?;
-    invoke(dir, &overrides, args, limit, allow_exit_one).await
+
+    pub(crate) async fn run(
+        &self,
+        args: &[&str],
+        limit: usize,
+        allow_exit_one: bool,
+    ) -> Result<GitOutput> {
+        invoke(&self.dir, &self.overrides, args, limit, allow_exit_one).await
+    }
+
+    pub(crate) async fn run_text(&self, args: &[&str]) -> Result<String> {
+        const LIMIT: usize = 8 * 1024 * 1024;
+        let output = self.run(args, LIMIT, false).await?;
+        if output.truncated {
+            return Err(Error::Domain(format!(
+                "git {} output exceeds {LIMIT} bytes",
+                args.join(" ")
+            )));
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    }
+
+    pub(crate) fn dir(&self) -> &Path {
+        &self.dir
+    }
 }
 
 fn filter_overrides(config: &[u8]) -> Result<Vec<String>> {
@@ -178,27 +209,14 @@ async fn invoke(
     })
 }
 
-/// Runs a git query whose whole output is needed.
-pub(crate) async fn run_git_text(dir: &Path, args: &[&str]) -> Result<String> {
-    const LIMIT: usize = 8 * 1024 * 1024;
-    let output = run_git(dir, args, LIMIT, false).await?;
-    if output.truncated {
-        return Err(Error::Domain(format!(
-            "git {} output exceeds {LIMIT} bytes",
-            args.join(" ")
-        )));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
-}
-
 /// Git queries are scoped to the Workspace's own .git directory or gitfile.
-pub(crate) async fn repo_root(dir: &Path) -> Result<Option<String>> {
-    match tokio::fs::symlink_metadata(dir.join(".git")).await {
+pub(crate) async fn repo_root(command: &GitCommand) -> Result<Option<String>> {
+    match tokio::fs::symlink_metadata(command.dir.join(".git")).await {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error.into()),
         Ok(_) => {}
     }
-    let root = run_git_text(dir, &["rev-parse", "--show-toplevel"]).await?;
+    let root = command.run_text(&["rev-parse", "--show-toplevel"]).await?;
     Ok(Some(root.trim_end_matches('\n').to_string()))
 }
 
@@ -223,18 +241,19 @@ mod tests {
     #[tokio::test]
     async fn stops_git_when_output_reaches_the_limit() {
         let repo = tempfile::tempdir().unwrap();
-        run_git_text(repo.path(), &["init", "-q"]).await.unwrap();
+        let command = GitCommand::new(repo.path()).await.unwrap();
+        command.run_text(&["init", "-q"]).await.unwrap();
         std::fs::write(repo.path().join("big.txt"), "line\n".repeat(400_000)).unwrap();
 
         let started = std::time::Instant::now();
-        let output = run_git(
-            repo.path(),
-            &["diff", "--no-index", "--", "/dev/null", "big.txt"],
-            64 * 1024,
-            true,
-        )
-        .await
-        .unwrap();
+        let output = command
+            .run(
+                &["diff", "--no-index", "--", "/dev/null", "big.txt"],
+                64 * 1024,
+                true,
+            )
+            .await
+            .unwrap();
 
         assert!(output.truncated);
         assert_eq!(output.stdout.len(), 64 * 1024);

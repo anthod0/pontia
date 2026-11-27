@@ -1,11 +1,6 @@
+use super::{changes::ChangeGroup, command::GitCommand};
 use pontia_core::error::{Error, Result};
 use serde::Serialize;
-use std::path::Path;
-
-use super::{
-    changes::ChangeGroup,
-    command::{run_git, run_git_text},
-};
 
 /// Largest diff output read for one file.
 pub(crate) const MAX_DIFF_BYTES: usize = 512 * 1024;
@@ -57,7 +52,7 @@ pub(crate) fn validate_repo_path(path: &str) -> Result<()> {
 }
 
 pub(crate) async fn file_diff(
-    repo_root: &Path,
+    command: &GitCommand,
     path: &str,
     orig_path: Option<&str>,
     group: ChangeGroup,
@@ -81,11 +76,11 @@ pub(crate) async fn file_diff(
     ];
     let output = match group {
         ChangeGroup::Untracked => {
-            ensure_untracked(repo_root, path).await?;
+            ensure_untracked(command, path).await?;
             let mut args = vec!["diff", "--no-index"];
             args.extend(common);
             args.extend(["--", "/dev/null", path]);
-            run_git(repo_root, &args, MAX_DIFF_BYTES, true).await?
+            command.run(&args, MAX_DIFF_BYTES, true).await?
         }
         ChangeGroup::Staged | ChangeGroup::Unstaged | ChangeGroup::Conflicted => {
             let mut args = vec!["diff", "-M"];
@@ -99,7 +94,7 @@ pub(crate) async fn file_diff(
             args.push("--");
             args.extend(orig_path);
             args.push(path);
-            run_git(repo_root, &args, MAX_DIFF_BYTES, false).await?
+            command.run(&args, MAX_DIFF_BYTES, false).await?
         }
     };
     let mut diff = parse_unified_diff(&String::from_utf8_lossy(&output.stdout));
@@ -115,19 +110,17 @@ pub(crate) async fn file_diff(
 
 /// Only a path git reports as an untracked file is read, so `--no-index` never follows a
 /// symbolic link to content outside the repository.
-async fn ensure_untracked(repo_root: &Path, path: &str) -> Result<()> {
-    let status = run_git_text(
-        repo_root,
-        &[
+async fn ensure_untracked(command: &GitCommand, path: &str) -> Result<()> {
+    let status = command
+        .run_text(&[
             "status",
             "--porcelain=v2",
             "-z",
             "--untracked-files=all",
             "--",
             path,
-        ],
-    )
-    .await?;
+        ])
+        .await?;
     let expected = format!("? {path}");
     if status.split('\0').any(|record| record == expected) {
         Ok(())

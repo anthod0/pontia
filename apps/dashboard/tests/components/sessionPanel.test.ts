@@ -8,6 +8,7 @@ import type {
   GitCommitSummary,
   GitCommitView,
   GitDiffView,
+  WorkspaceGitStatusView,
   WorkspaceView,
 } from "../../src/api/types";
 import type { SessionPanel } from "../../src/components/chat/sessionPanel/sessionPanelContext.svelte";
@@ -473,6 +474,44 @@ test("opens history when the changes request fails", async () => {
   const panel = await openTab("Git");
   await within(panel).findByRole("alert");
   await within(panel).findByRole("button", { name: /add history view/ });
+});
+
+test("the Git refresh button tracks only requests launched by the click", async () => {
+  let finishStatus!: (status: WorkspaceGitStatusView) => void;
+  vi.spyOn(testDevice.api, "refreshWorkspaceGitStatus").mockImplementation(
+    () => new Promise((resolve) => (finishStatus = resolve)),
+  );
+  render(SessionPanelHarness);
+  const panel = await openTab("Git");
+  await within(panel).findByRole("button", { name: /add history view/ });
+  const refresh = within(panel).getByRole("button", { name: "Refresh" });
+
+  const background = testDevice.queryClient.refetchQueries({
+    queryKey: testDevice.workspaceQueries.workspaceKeys.gitChanges("workspace-1"),
+  });
+  expect(refresh).toBeEnabled();
+  await background;
+
+  await fireEvent.click(refresh);
+  expect(refresh).toBeDisabled();
+  finishStatus({
+    workspace_id: "workspace-1",
+    repo_root: "/repo",
+    branch: "main",
+    upstream: null,
+    ahead: 0,
+    behind: 0,
+    staged_count: 0,
+    unstaged_count: 0,
+    untracked_count: 0,
+    conflicted_count: 0,
+    clean: true,
+    state: "observed",
+    failure: null,
+    observed_at: "2026-11-20T00:00:00Z",
+    updated_at: "2026-11-20T00:00:00Z",
+  });
+  await waitFor(() => expect(refresh).toBeEnabled());
 });
 
 test("reads a chosen branch's history and a commit's file diffs without checking out", async () => {

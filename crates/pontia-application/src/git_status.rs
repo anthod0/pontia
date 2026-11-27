@@ -14,7 +14,7 @@ use std::{
 
 use crate::{
     ExternalQueryService, WorkspaceGitStatusView,
-    git::command::{repo_root, run_git_text},
+    git::command::{GitCommand, repo_root},
 };
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -75,6 +75,16 @@ impl GitRefreshCoordinator {
         let view = refresh().await?;
         entry.store(view.clone()).await;
         Ok(view)
+    }
+
+    pub(crate) async fn scan<T, F, Fut>(&self, workspace_id: &str, scan: F) -> Result<T>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<T>>,
+    {
+        let entry = self.entry(workspace_id).await;
+        let _singleflight = entry.singleflight.lock().await;
+        scan().await
     }
 
     async fn entry(&self, workspace_id: &str) -> Arc<GitRefreshEntry> {
@@ -201,10 +211,13 @@ async fn refresh_workspace_git_status_now(
 }
 
 async fn observe_git_status(workspace_path: &Path) -> Result<ParsedGitStatus> {
-    let Some(repo_root) = repo_root(workspace_path).await? else {
+    let command = GitCommand::new(workspace_path).await?;
+    let Some(repo_root) = repo_root(&command).await? else {
         return Ok(ParsedGitStatus::default());
     };
-    let status = run_git_text(workspace_path, &["status", "--porcelain=v2", "--branch"]).await?;
+    let status = command
+        .run_text(&["status", "--porcelain=v2", "--branch"])
+        .await?;
     let mut parsed = parse_porcelain_v2_status(&status)?;
     parsed.repo_root = Some(repo_root);
     Ok(parsed)
@@ -384,6 +397,49 @@ mod tests {
         assert_eq!(first.branch.as_deref(), Some("main"));
         assert_eq!(second.branch.as_deref(), Some("main"));
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn git_refresh_waits_for_an_active_change_scan() {
+        let coordinator = GitRefreshCoordinator::new(Duration::from_secs(60));
+        let scan_started = std::sync::Arc::new(tokio::sync::Notify::new());
+        let finish_scan = std::sync::Arc::new(tokio::sync::Notify::new());
+        let refresh_calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+
+        let scan = tokio::spawn({
+            let coordinator = coordinator.clone();
+            let scan_started = scan_started.clone();
+            let finish_scan = finish_scan.clone();
+            async move {
+                coordinator
+                    .scan("workspace-1", || async move {
+                        scan_started.notify_one();
+                        finish_scan.notified().await;
+                        Ok(())
+                    })
+                    .await
+            }
+        });
+        scan_started.notified().await;
+        let refresh = tokio::spawn({
+            let coordinator = coordinator.clone();
+            let refresh_calls = refresh_calls.clone();
+            async move {
+                coordinator
+                    .refresh("workspace-1", || async move {
+                        refresh_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        Ok(status_view("workspace-1", "main"))
+                    })
+                    .await
+            }
+        });
+
+        tokio::task::yield_now().await;
+        assert_eq!(refresh_calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+        finish_scan.notify_one();
+        scan.await.expect("scan task").expect("scan");
+        refresh.await.expect("refresh task").expect("refresh");
+        assert_eq!(refresh_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 
     #[test]

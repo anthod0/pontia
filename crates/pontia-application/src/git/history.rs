@@ -1,15 +1,13 @@
 //! Branches, commit history and commit contents. Everything here reads committed objects
 //! only; nothing checks out a branch or touches the work tree.
 
-use pontia_core::error::{Error, Result};
-use serde::Serialize;
-use std::path::Path;
-
 use super::{
     changes::{MAX_CHANGED_FILES, Numstat, parse_numstat},
-    command::{run_git, run_git_text},
+    command::GitCommand,
     diff::{DiffHunkView, MAX_DIFF_BYTES, parse_unified_diff, validate_repo_path},
 };
+use pontia_core::error::{Error, Result};
+use serde::Serialize;
 
 /// Commits returned per page of history.
 const COMMIT_PAGE_SIZE: usize = 50;
@@ -92,19 +90,17 @@ pub struct GitCommitDiffView {
     pub truncated: bool,
 }
 
-pub(crate) async fn branches(repo_root: &Path) -> Result<(Option<String>, Vec<GitBranchView>)> {
-    let head = head_ref(repo_root).await?;
-    let output = run_git_text(
-        repo_root,
-        &[
+pub(crate) async fn branches(command: &GitCommand) -> Result<(Option<String>, Vec<GitBranchView>)> {
+    let head = head_ref(command).await?;
+    let output = command
+        .run_text(&[
             "for-each-ref",
             "--sort=-committerdate",
             "--format=%(refname)%1f%(symref)",
             "refs/heads",
             "refs/remotes",
-        ],
-    )
-    .await?;
+        ])
+        .await?;
     let branches = output
         .lines()
         .filter_map(|line| {
@@ -130,18 +126,20 @@ pub(crate) async fn branches(repo_root: &Path) -> Result<(Option<String>, Vec<Gi
 }
 
 /// The checked-out branch, `HEAD` when detached, or `None` while HEAD has no commit.
-async fn head_ref(repo_root: &Path) -> Result<Option<String>> {
-    let commit = run_git(
-        repo_root,
-        &["rev-parse", "--verify", "--quiet", "HEAD^{commit}"],
-        4096,
-        true,
-    )
-    .await?;
+async fn head_ref(command: &GitCommand) -> Result<Option<String>> {
+    let commit = command
+        .run(
+            &["rev-parse", "--verify", "--quiet", "HEAD^{commit}"],
+            4096,
+            true,
+        )
+        .await?;
     if commit.stdout.is_empty() {
         return Ok(None);
     }
-    let symbolic = run_git(repo_root, &["symbolic-ref", "--quiet", "HEAD"], 4096, true).await?;
+    let symbolic = command
+        .run(&["symbolic-ref", "--quiet", "HEAD"], 4096, true)
+        .await?;
     let name = String::from_utf8_lossy(&symbolic.stdout).trim().to_string();
     Ok(Some(if name.is_empty() {
         DETACHED_HEAD.to_string()
@@ -151,7 +149,7 @@ async fn head_ref(repo_root: &Path) -> Result<Option<String>> {
 }
 
 pub(crate) async fn commits(
-    repo_root: &Path,
+    command: &GitCommand,
     ref_name: &str,
     skip: usize,
     branch: Option<&str>,
@@ -162,9 +160,8 @@ pub(crate) async fn commits(
     }
     let count = format!("--max-count={}", COMMIT_PAGE_SIZE + 1);
     let skip = format!("--skip={skip}");
-    let output = run_git_text(
-        repo_root,
-        &[
+    let output = command
+        .run_text(&[
             "log",
             "-z",
             &count,
@@ -173,17 +170,16 @@ pub(crate) async fn commits(
             "--end-of-options",
             ref_name,
             "--",
-        ],
-    )
-    .await
-    .map_err(|error| match error {
-        Error::Domain(message)
-            if message.contains("bad revision") || message.contains("bad object") =>
-        {
-            Error::NotFound(format!("ref {ref_name} not found"))
-        }
-        error => error,
-    })?;
+        ])
+        .await
+        .map_err(|error| match error {
+            Error::Domain(message)
+                if message.contains("bad revision") || message.contains("bad object") =>
+            {
+                Error::NotFound(format!("ref {ref_name} not found"))
+            }
+            error => error,
+        })?;
     let mut commits = output
         .split('\0')
         .filter(|record| !record.is_empty())
@@ -206,12 +202,12 @@ pub(crate) async fn commits(
         .collect::<Result<Vec<_>>>()?;
     let has_more = commits.len() > COMMIT_PAGE_SIZE;
     commits.truncate(COMMIT_PAGE_SIZE);
-    mark_pushed(repo_root, branch.unwrap_or(ref_name), &mut commits).await?;
+    mark_pushed(command, branch.unwrap_or(ref_name), &mut commits).await?;
     Ok(GitCommitsView { commits, has_more })
 }
 
 async fn mark_pushed(
-    repo_root: &Path,
+    command: &GitCommand,
     branch: &str,
     commits: &mut [GitCommitSummaryView],
 ) -> Result<()> {
@@ -227,19 +223,19 @@ async fn mark_pushed(
     } else {
         return Ok(());
     };
-    let upstream = run_git(
-        repo_root,
-        &[
-            "rev-parse",
-            "--verify",
-            "--quiet",
-            "--end-of-options",
-            &upstream,
-        ],
-        128,
-        true,
-    )
-    .await?;
+    let upstream = command
+        .run(
+            &[
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                "--end-of-options",
+                &upstream,
+            ],
+            128,
+            true,
+        )
+        .await?;
     if upstream.stdout.is_empty() {
         return Ok(());
     }
@@ -247,7 +243,7 @@ async fn mark_pushed(
     let mut args = vec!["rev-list", "--end-of-options", &exclude];
     args.extend(commits.iter().map(|commit| commit.sha.as_str()));
     args.push("--");
-    let output = run_git_text(repo_root, &args).await?;
+    let output = command.run_text(&args).await?;
     let unpushed: std::collections::HashSet<_> = output.lines().collect();
     for commit in commits {
         commit.pushed = Some(!unpushed.contains(commit.sha.as_str()));
@@ -255,21 +251,19 @@ async fn mark_pushed(
     Ok(())
 }
 
-pub(crate) async fn commit(repo_root: &Path, sha: &str) -> Result<GitCommitView> {
+pub(crate) async fn commit(command: &GitCommand, sha: &str) -> Result<GitCommitView> {
     validate_sha(sha)?;
     let object = format!("{sha}^{{commit}}");
-    let header = run_git_text(
-        repo_root,
-        &[
+    let header = command
+        .run_text(&[
             "show",
             "--no-patch",
             "--format=%H%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%cn%x1f%cI%x1f%s%x1f%b",
             "--end-of-options",
             &object,
-        ],
-    )
-    .await
-    .map_err(|error| commit_not_found(error, sha))?;
+        ])
+        .await
+        .map_err(|error| commit_not_found(error, sha))?;
     let fields = header.splitn(9, FIELD).collect::<Vec<_>>();
     let [
         sha,
@@ -304,8 +298,8 @@ pub(crate) async fn commit(repo_root: &Path, sha: &str) -> Result<GitCommitView>
             sha,
         ]
     };
-    let names = run_git_text(repo_root, &tree_args("--name-status")).await?;
-    let numstat = run_git_text(repo_root, &tree_args("--numstat")).await?;
+    let names = command.run_text(&tree_args("--name-status")).await?;
+    let numstat = command.run_text(&tree_args("--numstat")).await?;
     let mut files = parse_name_status(&names)?;
     let total = files.len();
     files.truncate(MAX_CHANGED_FILES);
@@ -337,7 +331,7 @@ pub(crate) async fn commit(repo_root: &Path, sha: &str) -> Result<GitCommitView>
 }
 
 pub(crate) async fn commit_diff(
-    repo_root: &Path,
+    command: &GitCommand,
     sha: &str,
     path: &str,
     orig_path: Option<&str>,
@@ -366,7 +360,8 @@ pub(crate) async fn commit_diff(
     ];
     args.extend(orig_path);
     args.push(path);
-    let output = run_git(repo_root, &args, MAX_DIFF_BYTES, false)
+    let output = command
+        .run(&args, MAX_DIFF_BYTES, false)
         .await
         .map_err(|error| commit_not_found(error, sha))?;
     let mut diff = parse_unified_diff(&String::from_utf8_lossy(&output.stdout));

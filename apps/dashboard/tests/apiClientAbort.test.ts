@@ -5,6 +5,12 @@ const {
   getTurnTimeline,
   getTurnTreeHistory,
   getTurnTreeUpdates,
+  getWorkspaceGitBranches,
+  getWorkspaceGitChanges,
+  getWorkspaceGitCommit,
+  getWorkspaceGitCommitDiff,
+  getWorkspaceGitCommits,
+  getWorkspaceGitDiff,
   listAgentProfiles,
   listTurns,
   listWorkspaceRootEntries,
@@ -68,6 +74,48 @@ test("passes AbortSignal through settings-related read requests", async () => {
   expect(signals.every((signal) => signal && !signal.aborted)).toBe(true);
   controller.abort();
   expect(signals.every((signal) => signal?.aborted)).toBe(true);
+});
+
+test("bounds every Git request and preserves caller cancellation", async () => {
+  const timeoutControllers: AbortController[] = [];
+  vi.spyOn(AbortSignal, "timeout").mockImplementation(() => {
+    const controller = new AbortController();
+    timeoutControllers.push(controller);
+    return controller.signal;
+  });
+  const requestSignals: AbortSignal[] = [];
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    requestSignals.push(init!.signal as AbortSignal);
+    const url = String(input);
+    if (url.endsWith("/git-status/refresh")) return jsonResponse({ git_status: {} });
+    if (url.endsWith("/git/changes")) return jsonResponse({ changes: {} });
+    if (url.includes("/git/diff?")) return jsonResponse({ diff: {} });
+    if (url.endsWith("/git/branches")) return jsonResponse({ branches: {} });
+    if (url.includes("/git/commits?")) return jsonResponse({ commits: {} });
+    if (url.includes("/diff?")) return jsonResponse({ diff: {} });
+    if (url.includes("/git/commits/")) return jsonResponse({ commit: {} });
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const caller = new AbortController();
+
+  await Promise.all([
+    refreshWorkspaceGitStatus("workspace-1", { signal: caller.signal }),
+    getWorkspaceGitChanges("workspace-1"),
+    getWorkspaceGitDiff("workspace-1", { path: "file", group: "staged" }),
+    getWorkspaceGitBranches("workspace-1"),
+    getWorkspaceGitCommits("workspace-1", "HEAD", 0),
+    getWorkspaceGitCommit("workspace-1", "a".repeat(40)),
+    getWorkspaceGitCommitDiff("workspace-1", "a".repeat(40), { path: "file" }),
+  ]);
+
+  expect(AbortSignal.timeout).toHaveBeenCalledTimes(7);
+  expect(AbortSignal.timeout).toHaveBeenCalledWith(15_000);
+  caller.abort();
+  expect(requestSignals[0]?.aborted).toBe(true);
+  expect(requestSignals.slice(1).every((signal) => !signal.aborted)).toBe(true);
+  timeoutControllers.forEach((controller) => controller.abort());
+  expect(requestSignals.every((signal) => signal.aborted)).toBe(true);
 });
 
 test("requests session overview groups and cursor pages from the direct response endpoint", async () => {
