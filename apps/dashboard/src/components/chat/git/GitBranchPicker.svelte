@@ -1,7 +1,6 @@
 <script lang="ts">
   import ResponsiveSelect from '$lib/components/ui/overlay/ResponsiveSelect.svelte'
   import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon'
-  import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { t } from '$lib/i18n'
   import type { GitBranch } from '../../../api/types'
@@ -24,7 +23,6 @@
   {#snippet trigger()}
     <GitBranchIcon class="size-3 shrink-0" />
     <span class="min-w-0 flex-1 truncate text-left font-mono text-11 font-medium">{branchLabel}</span>
-    <CaretDownIcon class="size-2.5 shrink-0" />
   {/snippet}
   {#snippet option(branch)}
     <span class="min-w-0 flex-1 truncate font-mono text-13">{branch.name}</span>
