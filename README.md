@@ -84,3 +84,5 @@ When Helpers will write to the same repository, ask each one to create a short-l
 ## License
 
 [Apache License 2.0](LICENSE)
+
+[![As seen on Open Source Alternatives](https://www.opensourcealternatives.to/badge-osa.svg)](https://www.opensourcealternatives.to)
