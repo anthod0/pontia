@@ -11,7 +11,7 @@ Pontia 让你从电脑或手机浏览器给 Lead Bot 派任务，由它协调开
 
 ## 复用现有订阅（BYOS）
 
-Pontia 直接在你的设备上运行受支持的官方 CLI 进程；Claude Code 则通过官方 Agent SDK 运行。它沿用这些客户端已有的登录状态与提供商设置，因此 Claude、ChatGPT/Codex、Grok、Kiro、Antigravity 等订阅，以及 Pi 提供商凭据、API Key 和自定义模型端点，都留在对应的原生客户端中。Pontia 不提取或转发 OAuth Token。
+Pontia 直接在本机运行受支持的官方 CLI 和 Claude Agent SDK，复用你已有的订阅、API Key 或自定义端点，不提取或转发 OAuth Token。
 
 ## 主要功能
 
@@ -26,23 +26,6 @@ Pontia 直接在你的设备上运行受支持的官方 CLI 进程；Claude Code
 
 - **初始化时接入**：Claude Code、Codex、Pi（需安装 `tmux`）。
 - **初始化后启用**：Google Antigravity、Kiro、Grok Build，入口在「设置 → Agent 客户端」。[客户端配置指南](https://pontia.dev/zh/docs/agent-clients)
-
-## Agent 能力矩阵
-
-| Client | 接入方式 | Session 控制 | 审批模式 | 模型与推理强度 | 工作目录 |
-| --- | --- | --- | --- | --- | --- |
-| Pi | 原生 TUI 插件 | 恢复、引导、中断、时间线分支 | 默认、受限、YOLO | 客户端模型目录及其公布的推理强度 | 每个 Session 使用一个 Workspace；并行写任务使用独立 Git worktree |
-| Codex | 原生 app-server | 恢复、引导、中断、将较早提示词编辑为新 Session | 默认、受限、YOLO | 客户端模型目录及其公布的推理强度 | 每个 Session 使用一个 Workspace；并行写任务使用独立 Git worktree |
-| Claude Code | Claude Agent SDK | 恢复、引导、中断、将较早提示词编辑为新 Session | 默认、受限、YOLO | 客户端模型目录及其公布的推理强度 | 每个 Session 使用一个 Workspace；并行写任务使用独立 Git worktree |
-| Grok Build | ACP server | 恢复、插入指令、中断、在客户端声明支持时压缩上下文 | 默认、受限、YOLO | ACP 模型目录及其公布的推理强度 | 每个 Session 使用一个 Workspace；并行写任务使用独立 Git worktree |
-| Google Antigravity | ACP server | 恢复、引导、中断 | 默认、受限、YOLO | ACP 模型目录及其公布的推理强度 | 每个 Session 使用一个 Workspace；并行写任务使用独立 Git worktree |
-| Kiro | ACP server | 恢复、在客户端声明支持时引导和压缩上下文、中断 | 默认、受限、YOLO | ACP 模型目录及其公布的推理强度 | 每个 Session 使用一个 Workspace；并行写任务使用独立 Git worktree |
-
-## 使用 Git worktree 并行推进任务
-
-把多个独立任务交给 Lead Bot，它可以并行启动专注于单项工作的 Helper。[Agent 配置](https://pontia.dev/zh/docs/agent-profiles)可为每个角色指定客户端、模型、推理强度、权限和任务指令。
-
-当多个 Helper 会写入同一仓库时，让每个 Helper 从原有活跃 Workspace 建立短期分支和独立 Git worktree。这样可以把并行修改隔离到不同 checkout，同时共享项目上下文。你可以打开任一 Helper 的原生 Session，查看工作内容和它报告的 Diff；也可以用 Dashboard 的 Files 与 Git 面板检查活跃 Workspace。各分支准备好后，再由 Lead Bot 协调验证与合入。
 
 ## 快速开始
 

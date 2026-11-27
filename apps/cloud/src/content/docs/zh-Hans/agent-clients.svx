@@ -9,24 +9,7 @@ Agent Client 将 Pontia 连接到编程 Agent 的原生会话、控制通道和�
 
 ## 复用现有订阅（BYOS）
 
-Pontia 直接在你的设备上运行受支持的官方 CLI 进程；Claude Code 则通过官方 Agent SDK 运行。它沿用各客户端已有的登录状态和提供商配置，不提取或转发 OAuth Token。你可以继续使用 Claude、ChatGPT/Codex、Grok、Kiro、Antigravity 等订阅，以及原生客户端中配置的 Pi 提供商凭据、API Key 与自定义模型端点。
-
-## Agent 能力矩阵
-
-| Client | 接入方式 | Session 控制 | 审批模式 | 模型与推理强度 | 目录隔离 |
-| --- | --- | --- | --- | --- | --- |
-| [Pi](/docs/agent-clients/pi) | 原生 TUI 插件 | 恢复、引导、中断、时间线分支 | 默认、受限、YOLO | 客户端模型目录及其公布的推理强度 | 每个 Session 使用一个 Workspace；并行写任务使用独立 Git worktree |
-| [Codex](/docs/agent-clients/codex) | 原生 app-server | 恢复、引导、中断、将较早提示词编辑为新 Session | 默认、受限、YOLO | 客户端模型目录及其公布的推理强度 | 每个 Session 使用一个 Workspace；并行写任务使用独立 Git worktree |
-| [Claude Code](/docs/agent-clients/claude) | Claude Agent SDK | 恢复、引导、中断、将较早提示词编辑为新 Session | 默认、受限、YOLO | 客户端模型目录及其公布的推理强度 | 每个 Session 使用一个 Workspace；并行写任务使用独立 Git worktree |
-| [Grok Build](/docs/agent-clients/grok) | ACP server | 恢复、插入指令、中断、在客户端声明支持时压缩上下文 | 默认、受限、YOLO | ACP 模型目录及其公布的推理强度 | 每个 Session 使用一个 Workspace；并行写任务使用独立 Git worktree |
-| [Google Antigravity](/docs/agent-clients/antigravity) | ACP server | 恢复、引导、中断 | 默认、受限、YOLO | ACP 模型目录及其公布的推理强度 | 每个 Session 使用一个 Workspace；并行写任务使用独立 Git worktree |
-| [Kiro](/docs/agent-clients/kiro) | ACP server | 恢复、在客户端声明支持时引导和压缩上下文、中断 | 默认、受限、YOLO | ACP 模型目录及其公布的推理强度 | 每个 Session 使用一个 Workspace；并行写任务使用独立 Git worktree |
-
-## 使用 Git worktree 并行推进任务
-
-Lead Bot 可以把独立任务分派给并行 Helper。[Agent 配置](/docs/agent-profiles)可为每个角色指定客户端、模型、推理强度、权限和任务指令。
-
-并行修改同一仓库时，从原有活跃 Workspace 启动 Helper，并让每个 Helper 建立短期分支和独立 Git worktree。Worktree 仍关联原 Workspace，因此每个 Helper 都能共享项目上下文，同时在不同 checkout 中修改。你可以打开 Helper 的原生 Session，查看工作内容和它报告的 Diff；也可以用 Dashboard 的 Files 与 Git 面板检查活跃 Workspace。各分支准备好后，再由 Lead Bot 协调验证与合入。
+Pontia 直接在本机运行受支持的官方 CLI 和 Claude Agent SDK，复用你已有的订阅、API Key 或自定义端点，不提取或转发 OAuth Token。
 
 | Client | 一键安装 | 认证方式 |
 | --- | --- | --- |
