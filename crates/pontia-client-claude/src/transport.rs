@@ -166,7 +166,6 @@ impl ClientControlChannel for Connection {
     fn start_turn<'a>(
         &'a self,
         _: &'a pontia_agent_control::InputPayload,
-        _: Option<&'a str>,
     ) -> pontia_agent_control::DeliveryOperation<'a> {
         Box::pin(async {
             Err(pontia_agent_control::DeliveryError::Unsupported(

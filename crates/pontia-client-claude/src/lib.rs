@@ -311,7 +311,6 @@ impl ClientSession for Adapter {
         target: &'a ControlTarget,
         payload: &'a InputPayload,
         turn: Option<&'a str>,
-        message: Option<&'a str>,
     ) -> DeliveryOperation<'a, InputReceipt> {
         Box::pin(async move {
             let text = payload.text.as_str();
@@ -342,7 +341,7 @@ impl ClientSession for Adapter {
             let result = peer
                 .connection()
                 .map_err(DeliveryError::from)?
-                .deliver(json!({"method":"input","input_id":id,"text":text,"input":{"summary":text.chars().take(pontia_core::domain::MAX_TURN_INPUT_SUMMARY_CHARS).collect::<String>(),"inbox_message_id":message}}))
+                .deliver(json!({"method":"input","input_id":id,"text":text,"input":{"summary":text.chars().take(pontia_core::domain::MAX_TURN_INPUT_SUMMARY_CHARS).collect::<String>()}}))
                 .await;
             if let Err(error) = result {
                 let mut state = peer.state.lock().await;
@@ -370,7 +369,6 @@ impl ClientSession for Adapter {
         events: EventIngestService,
         target: &'a ControlTarget,
         payload: &'a InputPayload,
-        _message: Option<&'a str>,
     ) -> DeliveryOperation<'a, InputReceipt> {
         Box::pin(async move {
             let peer = self

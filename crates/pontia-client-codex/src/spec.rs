@@ -33,7 +33,6 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
             ..pontia_agent_control::client_contract::SessionLifecycleBehavior::DEFAULT
         },
         native_turn_identity: true,
-        native_turn_metadata_key: Some("codex_turn_id"),
         runtime: RuntimeBehavior::External,
         control_runtime_role: None,
         dispatch: DispatchBehavior::Connected,

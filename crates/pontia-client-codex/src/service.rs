@@ -139,25 +139,22 @@ impl CodexService {
         &self,
         target: &pontia_agent_control::runtime::ControlTarget,
         payload: &InputPayload,
-        message_id: Option<&str>,
     ) -> Result<pontia_agent_control::control::InputReceipt> {
-        self.submit(target, payload, message_id, false).await
+        self.submit(target, payload, false).await
     }
 
     pub(crate) async fn steer(
         &self,
         target: &pontia_agent_control::runtime::ControlTarget,
         payload: &InputPayload,
-        message_id: Option<&str>,
     ) -> Result<pontia_agent_control::control::InputReceipt> {
-        self.submit(target, payload, message_id, true).await
+        self.submit(target, payload, true).await
     }
 
     async fn submit(
         &self,
         target: &pontia_agent_control::runtime::ControlTarget,
         payload: &InputPayload,
-        message_id: Option<&str>,
         steer: bool,
     ) -> Result<pontia_agent_control::control::InputReceipt> {
         let session_id = &target.session_id;
@@ -257,9 +254,6 @@ impl CodexService {
         let active = turns.iter().find(|turn| turn["status"] == "inProgress");
         let mut params =
             json!({"threadId":thread_id,"input":[{"type":"text","text":payload.text}]});
-        if let Some(message_id) = message_id {
-            params["clientUserMessageId"] = json!(message_id);
-        }
         let method = match (steer, active) {
             (false, None) => "turn/start",
             (true, Some(active)) => {

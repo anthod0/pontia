@@ -149,7 +149,7 @@ async fn normalized_summaries_are_bounded_before_size_validation_and_broadcast_a
         None,
         json!({
             "runtime_id":"runtime", "input_summary":"中😀".repeat(30_000),
-            "inbox_message_id":"message", "topology_context":{"kind":"root"},
+            "topology_context":{"kind":"root"},
             "ignored_client_field":"x".repeat(70_000),
         }),
     );
@@ -179,7 +179,6 @@ async fn normalized_summaries_are_bounded_before_size_validation_and_broadcast_a
     assert_eq!(event.source, EventSource::AgentAdapter);
     assert_eq!(event.client_type, "pi");
     assert_eq!(event.payload["input"]["summary"], "中😀".repeat(100));
-    assert_eq!(event.payload["metadata"]["inbox_message_id"], "message");
     assert_eq!(event.topology, Some(TurnTopology::Unknown));
     assert_eq!(event.payload["topology_context"], json!({"kind":"root"}));
     fixture

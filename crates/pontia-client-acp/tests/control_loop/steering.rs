@@ -55,7 +55,6 @@ async fn finish_queued(h: &Harness, session: &str, turn: &str, message: &Value) 
     assert_eq!(delivered["state"], "dispatched");
     assert_ne!(delivered["turn_id"], turn);
     assert_eq!(h.requests("session/cancel"), 0);
-    assert_eq!(h.events(session, "inbox.message_failed").await, 0);
     assert!(!h.wire().iter().any(|item| item["overlap"] == true));
 }
 
@@ -515,7 +514,6 @@ async fn native_interjections_keep_distinct_inputs_in_wire_and_replay_order() {
         let mut h = Harness::new(&[("ACP_INTERJECT", mode)]).await;
         let session = h.create("first").await.unwrap();
         let turn = start(&h, &session).await;
-        let mut rows = vec![];
         for _ in 0..2 {
             let msg = h
                 .app
@@ -534,7 +532,6 @@ async fn native_interjections_keep_distinct_inputs_in_wire_and_replay_order() {
                 .clone();
             assert_eq!(msg["state"], "dispatched", "{mode} {msg}");
             assert!(msg["turn_id"].is_null());
-            rows.push(msg["message_id"].as_str().unwrap().to_owned());
         }
         tokio::time::timeout(Duration::from_secs(5), async {
             loop {
@@ -580,19 +577,6 @@ async fn native_interjections_keep_distinct_inputs_in_wire_and_replay_order() {
             assert!(extra.iter().all(|i| i.turn_id.as_deref() != Some(&turn)));
         } else {
             assert!(extra.iter().all(|i| i.turn_id.as_deref() == Some(&turn)));
-            for row in rows {
-                assert_eq!(
-                    h.app
-                        .inbox_commands()
-                        .get_message(&session, &row)
-                        .await
-                        .unwrap()
-                        .unwrap()
-                        .turn_id
-                        .as_deref(),
-                    Some(turn.as_str())
-                );
-            }
         }
         assert_eq!(h.requests("session/prompt"), 1);
         assert_eq!(h.requests("session/cancel"), 0);

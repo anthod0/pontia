@@ -320,9 +320,7 @@ impl EventIngestService {
                     {
                         tracing::warn!(%error,"timeline compaction marker write failed");
                     }
-                    self.effects
-                        .apply(&self.pool, self.clients.clone(), &event)
-                        .await?;
+                    self.effects.apply(&event).await?;
                 }
                 Ok(Some(result))
             }

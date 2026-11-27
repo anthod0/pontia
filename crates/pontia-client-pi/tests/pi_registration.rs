@@ -939,7 +939,7 @@ async fn restarting_a_stable_runtime_rejects_old_connection_facts_and_receipts()
         let (session, runtime) = (session.clone(), runtime.clone());
         tokio::spawn(async move {
             let payload = pontia_agent_control::InputPayload::from("one input");
-            control.start_turn(&session, &runtime, &payload, None).await
+            control.start_turn(&session, &runtime, &payload).await
         })
     };
     let receipt = requests.recv().await.unwrap();

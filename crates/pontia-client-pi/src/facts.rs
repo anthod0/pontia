@@ -35,12 +35,6 @@ pub fn normalize_payload(event_type: EventType, data: Value) -> Result<Value> {
                 "input": { "summary": input_summary },
                 "timeline_anchor": { "previous_leaf_id": previous_leaf_id },
             });
-            if let Some(inbox_message_id) = object
-                .get("inbox_message_id")
-                .or_else(|| data.pointer("/metadata/inbox_message_id"))
-            {
-                payload["metadata"] = json!({ "inbox_message_id": inbox_message_id });
-            }
             if let Some(topology_context) = object.get("topology_context") {
                 payload["topology_context"] = topology_context.clone();
             }

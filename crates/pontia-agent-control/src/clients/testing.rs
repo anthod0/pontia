@@ -70,12 +70,8 @@ impl ClientControlChannel for Channel {
             Ok(())
         })
     }
-    fn steer<'a>(
-        &'a self,
-        payload: &'a InputPayload,
-        message: Option<&'a str>,
-    ) -> DeliveryOperation<'a> {
-        self.start_turn(payload, message)
+    fn steer<'a>(&'a self, payload: &'a InputPayload) -> DeliveryOperation<'a> {
+        self.start_turn(payload)
     }
     fn available(&self) -> bool {
         !self.closed.load(Ordering::SeqCst)
@@ -83,11 +79,7 @@ impl ClientControlChannel for Channel {
     fn invalidate(&self) {
         self.closed.store(true, Ordering::SeqCst);
     }
-    fn start_turn<'a>(
-        &'a self,
-        payload: &'a InputPayload,
-        _: Option<&'a str>,
-    ) -> DeliveryOperation<'a> {
+    fn start_turn<'a>(&'a self, payload: &'a InputPayload) -> DeliveryOperation<'a> {
         Box::pin(async move {
             if let Some(error) = self.next_error.lock().unwrap().take() {
                 if matches!(error, pontia_core::Error::ControlUnknown(_)) {

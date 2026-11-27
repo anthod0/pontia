@@ -382,7 +382,6 @@ impl ClientSession for AcpAdapter {
         target: &'a ControlTarget,
         payload: &'a InputPayload,
         _turn: Option<&'a str>,
-        _message: Option<&'a str>,
     ) -> DeliveryOperation<'a, InputReceipt> {
         Box::pin(async move {
             let result: Result<InputReceipt> = async {
@@ -538,7 +537,6 @@ impl ClientSession for AcpAdapter {
         events: EventIngestService,
         target: &'a ControlTarget,
         payload: &'a InputPayload,
-        message: Option<&'a str>,
     ) -> DeliveryOperation<'a, InputReceipt> {
         Box::pin(async move {
             let result: Result<InputReceipt> = async {
@@ -553,7 +551,7 @@ impl ClientSession for AcpAdapter {
                     .ok_or_else(|| {
                         Error::StateConflict("ACP active prompt changed before steer".into())
                     })?;
-                crate::steering::send(&peer, &events, target, &turn, &payload.text, message).await
+                crate::steering::send(&peer, &events, target, &turn, &payload.text).await
             }
             .await;
             result.map_err(delivery_error)

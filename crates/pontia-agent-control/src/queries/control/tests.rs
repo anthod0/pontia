@@ -38,7 +38,6 @@ impl ClientSession for Client {
         _: &'a ControlTarget,
         _: &'a InputPayload,
         _: Option<&'a str>,
-        _: Option<&'a str>,
     ) -> DeliveryOperation<'a, InputReceipt> {
         self.inputs.fetch_add(1, Ordering::SeqCst);
         Box::pin(async { Ok(InputReceipt::default()) })

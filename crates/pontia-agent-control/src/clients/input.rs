@@ -1,7 +1,6 @@
 use crate::client_contract::{DeliveryError, DispatchMode, InputPayload};
 use pontia_core::{Error, Result, ids::new_dispatch_id};
 use pontia_runtime::AgentInput;
-use serde_json::Value;
 
 use super::ClientAdapter;
 use crate::{
@@ -31,13 +30,12 @@ impl ClientAdapter {
         &self,
         target: &ControlTarget,
         payload: InputPayload,
-        metadata: &Value,
         turn: Option<&str>,
     ) -> ControlResult<InputReceipt> {
         if self.spec.adapter.dispatch == DispatchMode::None {
             return ControlResult::Unsupported("client has no input channel".into());
         }
-        let result = self.start_turn_inner(target, payload, metadata, turn).await;
+        let result = self.start_turn_inner(target, payload, turn).await;
         ControlResult::from_delivery(result)
     }
 
@@ -45,7 +43,6 @@ impl ClientAdapter {
         &self,
         target: &ControlTarget,
         payload: InputPayload,
-        metadata: &Value,
         turn: Option<&str>,
     ) -> std::result::Result<InputReceipt, DeliveryError> {
         target
@@ -59,13 +56,7 @@ impl ClientAdapter {
                 .transpose()
                 .map_err(DeliveryError::from)?;
             return client
-                .start_turn(
-                    self.events.clone(),
-                    target,
-                    &payload,
-                    turn,
-                    metadata["inbox_message_id"].as_str(),
-                )
+                .start_turn(self.events.clone(), target, &payload, turn)
                 .await;
         }
         let input = AgentInput {
@@ -74,10 +65,7 @@ impl ClientAdapter {
             input: payload.text.clone(),
         };
         match self.spec.adapter.dispatch {
-            DispatchMode::Connected => {
-                self.channel_start_turn(target, &payload, metadata["inbox_message_id"].as_str())
-                    .await?
-            }
+            DispatchMode::Connected => self.channel_start_turn(target, &payload).await?,
             DispatchMode::InProcessRecorded => {
                 self.registry
                     .get(self.spec.client_type)
@@ -108,7 +96,6 @@ impl ClientAdapter {
         &self,
         target: &ControlTarget,
         payload: InputPayload,
-        metadata: &Value,
     ) -> ControlResult<InputReceipt> {
         if self.spec.adapter.dispatch == DispatchMode::None {
             return ControlResult::Unsupported("client has no input channel".into());
@@ -144,19 +131,11 @@ impl ClientAdapter {
                 .await
                 .map_err(DeliveryError::from)?;
             if let Some(client) = self.session_client() {
-                return client
-                    .steer(
-                        self.events.clone(),
-                        target,
-                        &payload,
-                        metadata["inbox_message_id"].as_str(),
-                    )
-                    .await;
+                return client.steer(self.events.clone(), target, &payload).await;
             }
             match self.spec.adapter.dispatch {
                 DispatchMode::Connected => {
-                    self.channel_steer(target, &payload, metadata["inbox_message_id"].as_str())
-                        .await?;
+                    self.channel_steer(target, &payload).await?;
                 }
                 DispatchMode::InProcessRecorded | DispatchMode::None => {
                     return Err(DeliveryError::Unsupported(

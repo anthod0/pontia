@@ -10,7 +10,6 @@ impl ClientAdapter {
         &self,
         target: &ControlTarget,
         payload: &InputPayload,
-        message: Option<&str>,
     ) -> Result<(), DeliveryError> {
         RuntimeReadinessService::new(self.pool.clone(), self.spec.adapter.control_runtime_role)
             .wait_until_ready(
@@ -29,7 +28,6 @@ impl ClientAdapter {
                 &target.session_id,
                 target.instance().map_err(DeliveryError::from)?,
                 payload,
-                message,
             )
             .await
     }
@@ -38,7 +36,6 @@ impl ClientAdapter {
         &self,
         target: &ControlTarget,
         payload: &InputPayload,
-        message: Option<&str>,
     ) -> Result<(), DeliveryError> {
         RuntimeReadinessService::new(self.pool.clone(), self.spec.adapter.control_runtime_role)
             .wait_until_ready(
@@ -57,7 +54,6 @@ impl ClientAdapter {
                 &target.session_id,
                 target.instance().map_err(DeliveryError::from)?,
                 payload,
-                message,
             )
             .await
     }

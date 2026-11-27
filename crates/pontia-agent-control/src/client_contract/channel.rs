@@ -57,16 +57,8 @@ pub trait ClientControlChannel: Send + Sync {
     }
     fn ping(&self) -> ClientControlOperation<'_>;
     fn replay<'a>(&'a self, replay_id: &'a str) -> ClientControlOperation<'a>;
-    fn start_turn<'a>(
-        &'a self,
-        payload: &'a InputPayload,
-        inbox_message_id: Option<&'a str>,
-    ) -> DeliveryOperation<'a>;
-    fn steer<'a>(
-        &'a self,
-        _payload: &'a InputPayload,
-        _inbox_message_id: Option<&'a str>,
-    ) -> DeliveryOperation<'a> {
+    fn start_turn<'a>(&'a self, payload: &'a InputPayload) -> DeliveryOperation<'a>;
+    fn steer<'a>(&'a self, _payload: &'a InputPayload) -> DeliveryOperation<'a> {
         Box::pin(async {
             Err(DeliveryError::Unsupported(
                 "This client does not support steer".into(),

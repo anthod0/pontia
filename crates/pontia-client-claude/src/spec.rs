@@ -24,7 +24,6 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     adapter: AgentClientAdapter {
         lifecycle: SessionLifecycleBehavior::DEFAULT,
         native_turn_identity: false,
-        native_turn_metadata_key: None,
         runtime: RuntimeBehavior::External,
         control_runtime_role: Some("claude_sdk_host"),
         dispatch: DispatchBehavior::Connected,

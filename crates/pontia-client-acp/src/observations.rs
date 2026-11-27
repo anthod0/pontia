@@ -52,7 +52,7 @@ impl Peer {
             }
             Observation::PromotionStarted {
                 native,
-                digest,
+                digest: _,
                 summary,
                 index,
             } => {
@@ -71,20 +71,6 @@ impl Peer {
                     .turn_id
                     .ok_or_else(|| Error::Domain("Missing observed Turn identity".into()))?;
                 let mut state = self.state.lock().await;
-                let mut candidates = state
-                    .interjections
-                    .values()
-                    .filter(|entry| entry.digest == digest);
-                if let Some(entry) = candidates.next()
-                    && candidates.next().is_none()
-                    && let Some(message) = &entry.message
-                {
-                    pontia_storage_sqlite::repositories::inbox::SqliteInboxRepository::new(
-                        events.db(),
-                    )
-                    .link_started_turn(session, message, &turn)
-                    .await?;
-                }
                 state.active = Some(crate::peer::Prompt {
                     turn,
                     prompt_index: Some(index),

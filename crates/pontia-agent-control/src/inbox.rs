@@ -1,9 +1,5 @@
 mod live;
 pub use live::{SendMode, SendOutcome};
-mod retry;
-pub use retry::RetryInboxMessageRequest;
-mod association;
-pub(crate) use association::InboxAssociations;
 mod scheduling;
 pub(crate) use scheduling::{InboxScheduler, SessionActor, SessionPhase};
 
@@ -18,10 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
 
-use crate::{
-    ControlQueryService, InboxMessageView, PontiaEvent, PontiaEventSource, PontiaEventType,
-    TurnCommandService, views::inbox::row_to_view,
-};
+use crate::{ControlQueryService, InboxMessageView, TurnCommandService, views::inbox::row_to_view};
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct SubmitInboxMessageRequest {
@@ -45,15 +38,13 @@ pub struct InboxCommandOutcome {
 #[derive(Clone)]
 pub struct InboxCommandService {
     pool: SqlitePool,
-    event_ingest: crate::EventIngestService,
     queries: ControlQueryService,
     clients: crate::clients::ClientExecutionService,
     turns: TurnCommandService,
     pub(crate) scheduler: InboxScheduler,
 }
 
-struct EnqueueOptions<'a> {
-    retry_of: Option<&'a str>,
+struct EnqueueOptions {
     resuming: bool,
     interrupt_before_delivery: bool,
     drain_now: bool,
@@ -62,7 +53,6 @@ struct EnqueueOptions<'a> {
 impl InboxCommandService {
     pub(crate) fn new(
         pool: SqlitePool,
-        event_ingest: crate::EventIngestService,
         queries: ControlQueryService,
         clients: crate::clients::ClientExecutionService,
         turns: TurnCommandService,
@@ -70,7 +60,6 @@ impl InboxCommandService {
     ) -> Self {
         Self {
             pool,
-            event_ingest,
             queries,
             clients,
             turns,
@@ -113,7 +102,6 @@ impl InboxCommandService {
             session_id,
             request,
             EnqueueOptions {
-                retry_of: None,
                 resuming: false,
                 interrupt_before_delivery: true,
                 drain_now: true,
@@ -128,7 +116,7 @@ impl InboxCommandService {
         message_id: &str,
         session_id: &str,
         request: SubmitInboxMessageRequest,
-        options: EnqueueOptions<'_>,
+        options: EnqueueOptions,
         actor: &scheduling::SessionActor,
     ) -> Result<InboxCommandOutcome> {
         if message_id.is_empty() || message_id.len() > 512 {
@@ -136,11 +124,6 @@ impl InboxCommandService {
         }
         let inbox_repository = SqliteInboxRepository::new(self.pool.clone());
         if let Some(existing) = inbox_repository.get_message(session_id, message_id).await? {
-            if existing.retry_of_message_id.as_deref() != options.retry_of {
-                return Err(Error::StateConflict(
-                    "Submission identity was already used for a different Retry association".into(),
-                ));
-            }
             return Ok(InboxCommandOutcome {
                 data: json!({"inbox_message":row_to_view(existing)?}),
                 duplicate: true,
@@ -190,7 +173,6 @@ impl InboxCommandService {
                     input: &request.input,
                     metadata: &metadata,
                     steer_target,
-                    retry_of: options.retry_of,
                     resuming: options.resuming,
                 },
             )
@@ -200,14 +182,6 @@ impl InboxCommandService {
                 "Submission identity belongs to another Session".into(),
             ));
         }
-
-        self.audit(
-            session_id,
-            &session.client_type,
-            PontiaEventType::InboxMessageQueued,
-            json!({ "message_id": message_id, "delivery_policy": delivery_policy }),
-        )
-        .await?;
 
         let active_turn = SqliteTurnRepository::new(self.pool.clone())
             .active_turn(session_id)
@@ -278,7 +252,7 @@ impl InboxCommandService {
         message_id: &str,
     ) -> Result<InboxCommandOutcome> {
         let query = &self.queries;
-        let session = query
+        query
             .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
@@ -297,13 +271,7 @@ impl InboxCommandService {
             )));
         }
         if rows_affected > 0 {
-            self.audit(
-                session_id,
-                &session.client_type,
-                PontiaEventType::InboxMessageCancelled,
-                json!({ "message_id": message_id }),
-            )
-            .await?;
+            self.notify_available(session_id);
         }
         let message = self.get_message(session_id, message_id).await?.unwrap();
         Ok(InboxCommandOutcome {
@@ -318,7 +286,7 @@ impl InboxCommandService {
         message_id: &str,
     ) -> Result<InboxCommandOutcome> {
         let query = &self.queries;
-        let session = query
+        query
             .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
@@ -337,13 +305,7 @@ impl InboxCommandService {
             )));
         }
         if rows_affected > 0 {
-            self.audit(
-                session_id,
-                &session.client_type,
-                PontiaEventType::InboxMessageDismissed,
-                json!({ "message_id": message_id }),
-            )
-            .await?;
+            self.notify_available(session_id);
         }
         let message = self.get_message(session_id, message_id).await?.unwrap();
         Ok(InboxCommandOutcome {
@@ -367,10 +329,6 @@ impl InboxCommandService {
         let Some(session) = query.get_session_control(session_id).await? else {
             return Ok(());
         };
-        actor.set_phase(match session.state.as_str() {
-            "busy" | "waiting_for_interaction" => scheduling::SessionPhase::Busy,
-            _ => scheduling::SessionPhase::Idle,
-        });
         let adapter = self.clients.for_client(&session.client_type)?;
         let active = SqliteTurnRepository::new(self.pool.clone())
             .active_turn(session_id)
@@ -417,6 +375,9 @@ impl InboxCommandService {
             }
             None
         };
+        if steer_turn_id.is_none() && actor.phase() != scheduling::SessionPhase::Idle {
+            return Ok(());
+        }
         if steer_turn_id.is_none()
             && !matches!(session.state.as_str(), "idle" | "interrupted")
             && !(matches!(session.state.as_str(), "created" | "starting")
@@ -432,12 +393,6 @@ impl InboxCommandService {
         if !metadata.is_object() {
             metadata = json!({});
         }
-        if let Value::Object(ref mut object) = metadata {
-            object.insert(
-                "inbox_message_id".to_string(),
-                Value::String(message_id.clone()),
-            );
-        }
         let rows_affected = inbox_repository.mark_dispatching(&message_id).await?;
         if rows_affected == 0 {
             return Ok(());
@@ -450,7 +405,6 @@ impl InboxCommandService {
                     .submit_steer(
                         session_id,
                         input.into(),
-                        metadata,
                         &turn_id,
                         row.required_runtime_id.as_deref(),
                     )
@@ -483,25 +437,11 @@ impl InboxCommandService {
             Err(error) => Err(crate::DeliveryError::from(error)),
         };
         match delivery {
-            Ok((turn_id, receipt)) => {
+            Ok((turn_id, _receipt)) => {
                 actor.finish_start();
-                InboxAssociations::new(self.pool.clone(), self.clients.registry().clone())
-                    .record_receipt(session_id, &message_id, &receipt)
-                    .await?;
                 inbox_repository
                     .mark_dispatched(&message_id, turn_id.as_deref())
                     .await?;
-                let mut payload = json!({ "message_id": message_id });
-                if let Some(turn_id) = turn_id {
-                    payload["turn_id"] = json!(turn_id);
-                }
-                self.audit(
-                    session_id,
-                    &session.client_type,
-                    PontiaEventType::InboxMessageDispatched,
-                    payload,
-                )
-                .await?;
                 self.notify_available(session_id);
             }
             Err(crate::DeliveryError::Offline(_)) => {
@@ -526,6 +466,7 @@ impl InboxCommandService {
                 self.mark_unknown(&message_id, &reason).await?;
             }
             Err(error) => {
+                actor.cancel_start();
                 self.mark_failed(&message_id, error.to_string()).await?;
                 self.notify_available(session_id);
             }
@@ -534,62 +475,23 @@ impl InboxCommandService {
     }
 
     async fn mark_failed(&self, message_id: &str, failure_message: String) -> Result<()> {
-        if SqliteInboxRepository::new(self.pool.clone())
+        let changed = SqliteInboxRepository::new(self.pool.clone())
             .mark_failed(message_id, &failure_message)
-            .await?
-            == 0
-        {
-            return Ok(());
+            .await?;
+        if changed > 0 {
+            let session_id: String =
+                sqlx::query_scalar("SELECT session_id FROM inbox_messages WHERE message_id=?")
+                    .bind(message_id)
+                    .fetch_one(&self.pool)
+                    .await?;
+            self.notify_available(&session_id);
         }
-        self.audit_delivery(message_id, PontiaEventType::InboxMessageFailed)
-            .await
+        Ok(())
     }
 
     async fn mark_unknown(&self, message_id: &str, reason: &str) -> Result<()> {
-        if SqliteInboxRepository::new(self.pool.clone())
+        SqliteInboxRepository::new(self.pool.clone())
             .mark_unknown(message_id, reason)
-            .await?
-            == 0
-        {
-            return Ok(());
-        }
-        self.audit_delivery(message_id, PontiaEventType::InboxMessageDeliveryUnknown)
-            .await
-    }
-
-    async fn audit_delivery(&self, message_id: &str, event_type: PontiaEventType) -> Result<()> {
-        let (session_id, client_type, state): (String, String, String) = sqlx::query_as("SELECT m.session_id,s.client_type,m.state FROM inbox_messages m JOIN sessions s ON s.session_id=m.session_id WHERE m.message_id=?")
-            .bind(message_id).fetch_one(&self.pool).await?;
-        let event_type = if state == "dispatched" {
-            PontiaEventType::InboxMessageDispatched
-        } else {
-            event_type
-        };
-        self.audit(
-            &session_id,
-            &client_type,
-            event_type,
-            json!({"message_id":message_id,"state":state}),
-        )
-        .await
-    }
-
-    async fn audit(
-        &self,
-        session_id: &str,
-        client_type: &str,
-        event_type: PontiaEventType,
-        payload: Value,
-    ) -> Result<()> {
-        self.event_ingest
-            .ingest_pontia_event(PontiaEvent::new(
-                session_id,
-                None,
-                PontiaEventSource::ExternalApi,
-                client_type,
-                event_type,
-                payload,
-            ))
             .await?;
         Ok(())
     }

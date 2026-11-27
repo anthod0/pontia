@@ -103,11 +103,7 @@ impl ClientControlChannel for Channel {
     fn replay<'a>(&'a self, _: &'a str) -> ClientControlOperation<'a> {
         Box::pin(async { Ok(()) })
     }
-    fn start_turn<'a>(
-        &'a self,
-        payload: &'a InputPayload,
-        _: Option<&'a str>,
-    ) -> DeliveryOperation<'a> {
+    fn start_turn<'a>(&'a self, payload: &'a InputPayload) -> DeliveryOperation<'a> {
         Box::pin(async move {
             self.operations.lock().unwrap().push(payload.text.clone());
             Ok(())

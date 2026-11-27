@@ -35,13 +35,6 @@ pub enum PontiaEventType {
     TurnQueued,
     TurnDispatchFailed,
     TurnInterruptRequested,
-    InboxMessageQueued,
-    InboxMessageDispatched,
-    InboxMessageCancelled,
-    InboxMessageSuperseded,
-    InboxMessageFailed,
-    InboxMessageDeliveryUnknown,
-    InboxMessageDismissed,
 }
 
 impl PontiaEventType {
@@ -60,13 +53,6 @@ impl PontiaEventType {
         Self::TurnQueued,
         Self::TurnDispatchFailed,
         Self::TurnInterruptRequested,
-        Self::InboxMessageQueued,
-        Self::InboxMessageDispatched,
-        Self::InboxMessageCancelled,
-        Self::InboxMessageSuperseded,
-        Self::InboxMessageFailed,
-        Self::InboxMessageDeliveryUnknown,
-        Self::InboxMessageDismissed,
     ];
 }
 
@@ -87,13 +73,6 @@ impl From<PontiaEventType> for EventType {
             PontiaEventType::TurnQueued => Self::TurnQueued,
             PontiaEventType::TurnDispatchFailed => Self::TurnDispatchFailed,
             PontiaEventType::TurnInterruptRequested => Self::TurnInterruptRequested,
-            PontiaEventType::InboxMessageQueued => Self::InboxMessageQueued,
-            PontiaEventType::InboxMessageDispatched => Self::InboxMessageDispatched,
-            PontiaEventType::InboxMessageCancelled => Self::InboxMessageCancelled,
-            PontiaEventType::InboxMessageSuperseded => Self::InboxMessageSuperseded,
-            PontiaEventType::InboxMessageFailed => Self::InboxMessageFailed,
-            PontiaEventType::InboxMessageDeliveryUnknown => Self::InboxMessageDeliveryUnknown,
-            PontiaEventType::InboxMessageDismissed => Self::InboxMessageDismissed,
         }
     }
 }

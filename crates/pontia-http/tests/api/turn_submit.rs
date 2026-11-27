@@ -141,9 +141,9 @@ async fn inbox_submission_still_creates_turns_and_turn_events_are_queryable() {
         "continue work"
     );
     assert!(
-        turn_body["data"]["turn"]["metadata"]["inbox_message_id"]
-            .as_str()
-            .is_some()
+        turn_body["data"]["turn"]["metadata"]
+            .get("inbox_message_id")
+            .is_none()
     );
 
     let (events_status, events_body) = request(

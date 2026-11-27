@@ -476,17 +476,20 @@ async fn retrieval_waits_for_its_native_turn_before_exiting() {
         .unwrap()
         .unwrap();
     assert_eq!(snapshot.state, "idle");
-    assert!(snapshot.has_unsettled_input);
+    assert!(!snapshot.has_unsettled_input);
     assert!(GenericRuntimeManager.is_alive(&snapshot.runtimes[0].runtime_id));
     let runtime = &snapshot.runtimes[0].runtime_id;
     let ingest = control.event_ingest_service();
-    let started = ingest.report_fact(ReportedFact {
-        session_id: reader.clone(),
-        turn_id: None,
-        report_key: None,
-        fact_type: EventType::TurnStarted,
-        data: json!({"runtime_id":runtime,"metadata":{"inbox_message_id":snapshot.inbox[0].message_id}}),
-    }).await.unwrap();
+    let started = ingest
+        .report_fact(ReportedFact {
+            session_id: reader.clone(),
+            turn_id: None,
+            report_key: None,
+            fact_type: EventType::TurnStarted,
+            data: json!({"runtime_id":runtime}),
+        })
+        .await
+        .unwrap();
     let response = helpers
         .execute(HelperRequest {
             session_id: reader.clone(),

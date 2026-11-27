@@ -29,7 +29,6 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
             ..SessionLifecycleBehavior::DEFAULT
         },
         native_turn_identity: false,
-        native_turn_metadata_key: None,
         runtime: RuntimeBehavior::External,
         control_runtime_role: Some("acp"),
         dispatch: DispatchBehavior::Connected,

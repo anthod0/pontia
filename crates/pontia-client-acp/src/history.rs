@@ -26,7 +26,6 @@ pub(crate) struct Message {
     pub text: String,
     pub display: Option<String>,
     pub prompt: Option<usize>,
-    pub interjection: bool,
     pub(crate) raw_result: bool,
     pub(crate) tool: Option<(String, Option<String>)>,
     pub(crate) managed_tool_use: Option<ManagedToolUse>,
@@ -151,7 +150,6 @@ pub(crate) fn collect(
                 role,
                 text: text.into(),
                 prompt,
-                interjection,
                 display: interjection
                     .then(|| {
                         update

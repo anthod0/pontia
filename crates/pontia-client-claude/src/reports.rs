@@ -114,10 +114,7 @@ impl Peer {
             EventType::TurnStarted => {
                 let id = field(event, "input_id")?;
                 let input = &event["input"];
-                if !input["summary"].is_string()
-                    || !(input["inbox_message_id"].is_null()
-                        || input["inbox_message_id"].is_string())
-                {
+                if !input["summary"].is_string() {
                     return Err(invalid());
                 }
                 if !replay

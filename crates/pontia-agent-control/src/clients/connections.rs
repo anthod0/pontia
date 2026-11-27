@@ -351,10 +351,9 @@ impl ClientControlService {
         session_id: &str,
         runtime_id: &str,
         payload: &crate::InputPayload,
-        inbox_message_id: Option<&str>,
     ) -> std::result::Result<(), crate::DeliveryError> {
         self.request(session_id, runtime_id, false, |channel| async move {
-            channel.start_turn(payload, inbox_message_id).await
+            channel.start_turn(payload).await
         })
         .await
     }
@@ -371,10 +370,9 @@ impl ClientControlService {
         session_id: &str,
         runtime_id: &str,
         payload: &crate::InputPayload,
-        inbox_message_id: Option<&str>,
     ) -> std::result::Result<(), crate::DeliveryError> {
         self.request(session_id, runtime_id, false, |channel| async move {
-            channel.steer(payload, inbox_message_id).await
+            channel.steer(payload).await
         })
         .await
     }

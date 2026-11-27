@@ -106,13 +106,7 @@ impl InboxCommandService {
             }
             let delivery = self
                 .turns
-                .submit_steer(
-                    session_id,
-                    input.clone(),
-                    input.metadata.clone(),
-                    &turn.turn_id,
-                    None,
-                )
+                .submit_steer(session_id, input.clone(), &turn.turn_id, None)
                 .await
                 .map_err(ImmediateSendError::Control)?;
             let delivery = immediate_result(delivery.1);
@@ -281,7 +275,6 @@ impl InboxCommandService {
                 metadata: input.metadata,
             },
             EnqueueOptions {
-                retry_of: None,
                 resuming: false,
                 interrupt_before_delivery,
                 drain_now: false,

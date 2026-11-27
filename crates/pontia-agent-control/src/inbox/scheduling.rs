@@ -63,8 +63,7 @@ impl SessionActor {
         );
     }
 
-    #[cfg(test)]
-    fn phase(&self) -> SessionPhase {
+    pub(crate) fn phase(&self) -> SessionPhase {
         match self.phase.load(Ordering::Acquire) {
             value if value == SessionPhase::Idle as u8 => SessionPhase::Idle,
             value if value == SessionPhase::StartingTurn as u8 => SessionPhase::StartingTurn,

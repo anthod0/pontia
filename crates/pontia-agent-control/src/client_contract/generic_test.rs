@@ -44,7 +44,6 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
             ..super::SessionLifecycleBehavior::DEFAULT
         },
         native_turn_identity: false,
-        native_turn_metadata_key: Some("native_turn_receipt"),
         runtime: RuntimeBehavior::InProcess,
         control_runtime_role: Some("generic_control"),
         dispatch: DispatchBehavior::InProcessRecorded,

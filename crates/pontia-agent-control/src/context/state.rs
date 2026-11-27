@@ -103,7 +103,6 @@ impl AgentControl {
         );
         let inbox = Arc::new(crate::InboxCommandService::new(
             builder.db.clone(),
-            ingest.clone(),
             queries.clone(),
             execution.clone(),
             turns.clone(),

@@ -8,8 +8,6 @@ pub struct InboxMessageRow {
     pub metadata: String,
     pub branch_target_turn_id: Option<String>,
     pub steer_target_turn_id: Option<String>,
-    pub retry_of_message_id: Option<String>,
-    pub retried_by_message_id: Option<String>,
     pub turn_id: Option<String>,
     pub superseded_by_message_id: Option<String>,
     pub failure_message: Option<String>,

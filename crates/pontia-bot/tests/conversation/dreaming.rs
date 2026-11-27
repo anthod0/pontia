@@ -311,13 +311,16 @@ async fn accepted_first_input_keeps_an_idle_round_alive_until_its_native_turn_ar
     );
     let runtime = &snapshot.runtimes[0].runtime_id;
     let ingest = control.event_ingest_service();
-    let started = ingest.report_fact(ReportedFact {
-        session_id: round.clone(),
-        turn_id: None,
-        report_key: Some("delayed-start".into()),
-        fact_type: EventType::TurnStarted,
-        data: json!({"runtime_id":runtime,"metadata":{"inbox_message_id":snapshot.inbox[0].message_id}}),
-    }).await.unwrap();
+    let started = ingest
+        .report_fact(ReportedFact {
+            session_id: round.clone(),
+            turn_id: None,
+            report_key: Some("delayed-start".into()),
+            fact_type: EventType::TurnStarted,
+            data: json!({"runtime_id":runtime}),
+        })
+        .await
+        .unwrap();
     let turn = started.turn_id.unwrap();
     report(&ingest, &round, runtime, &turn, EventType::TurnCompleted).await;
     let _exits = report_exits(&control);

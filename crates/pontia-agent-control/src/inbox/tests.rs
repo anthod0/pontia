@@ -12,13 +12,12 @@ fn queued_message<'a>(
         input: "input",
         metadata: "{}",
         steer_target: None,
-        retry_of: None,
         resuming: false,
     }
 }
 
 #[tokio::test]
-async fn recovery_preserves_uncertainty_and_only_unsent_messages_can_be_claimed() {
+async fn recovery_preserves_uncertainty_and_blocks_later_messages() {
     let root = tempfile::tempdir().unwrap();
     let pool = connect_sqlite(&format!(
         "sqlite://{}",
@@ -85,48 +84,6 @@ async fn recovery_preserves_uncertainty_and_only_unsent_messages_can_be_claimed(
                 .unwrap(),
             0,
             "unresolved delivery must not be overtaken"
-        );
-        sqlx::query("INSERT INTO turns(turn_id,session_id,state) VALUES (?,?,'completed')")
-            .bind(format!("{client}-turn"))
-            .bind(client)
-            .execute(&pool)
-            .await
-            .unwrap();
-        repository
-            .link_started_turn(client, &format!("{client}-one"), &format!("{client}-turn"))
-            .await
-            .unwrap();
-        assert_eq!(
-            service
-                .get_message(client, &format!("{client}-one"))
-                .await
-                .unwrap()
-                .unwrap()
-                .state,
-            "dispatched"
-        );
-        assert_eq!(
-            repository
-                .mark_dispatching(&format!("{client}-two"))
-                .await
-                .unwrap(),
-            1
-        );
-        repository
-            .mark_dispatched(&format!("{client}-two"), None)
-            .await
-            .unwrap();
-        repository
-            .enqueue(queued_message(&format!("{client}-three"), client))
-            .await
-            .unwrap();
-        assert_eq!(
-            repository
-                .mark_dispatching(&format!("{client}-three"))
-                .await
-                .unwrap(),
-            0,
-            "wait for a fact associating accepted input with its Turn"
         );
     }
 }
@@ -537,16 +494,13 @@ async fn busy_rejection_preserves_fifo_and_cancelled_input_never_enters_client()
             channel.input.lock().unwrap().last(),
             Some(&index.to_string())
         );
-        let turn = format!("turn-{index}");
-        sqlx::query("INSERT INTO turns(turn_id,session_id,state) VALUES (?,'session','completed')")
-            .bind(&turn)
-            .execute(&state.db())
-            .await
-            .unwrap();
-        SqliteInboxRepository::new(state.db())
-            .link_started_turn("session", &format!("msg-{:02}", 13 - index), &turn)
-            .await
-            .unwrap();
+        let delivered = channel.input.lock().unwrap().len();
+        inbox.drain_inbox("session").await.unwrap();
+        assert_eq!(channel.input.lock().unwrap().len(), delivered);
+        inbox
+            .scheduler
+            .session("session")
+            .set_phase(SessionPhase::Idle);
     }
     assert_eq!(
         *channel.input.lock().unwrap(),
@@ -554,81 +508,6 @@ async fn busy_rejection_preserves_fifo_and_cancelled_input_never_enters_client()
             .filter(|index| *index != 6)
             .map(|index| index.to_string())
             .collect::<Vec<_>>()
-    );
-}
-
-#[tokio::test]
-async fn unknown_delivery_requires_explicit_new_execution_and_retains_retry_lineage() {
-    let (_root, state, channel) = connected_inbox().await;
-    let inbox = state.inbox_commands();
-    *channel.next_error.lock().unwrap() = Some(Error::ControlUnknown("response lost".into()));
-    let first = inbox
-        .submit_message_once("first", "session", request("same text"))
-        .await
-        .unwrap();
-    assert_eq!(first.data["inbox_message"]["state"], "unknown");
-    inbox
-        .submit_message_once("first", "session", request("same text"))
-        .await
-        .unwrap();
-    inbox.drain_inbox("session").await.unwrap();
-    assert_eq!(channel.input.lock().unwrap().len(), 1);
-    assert!(
-        inbox
-            .retry_message(
-                &state.session_commands(),
-                "session",
-                "first",
-                RetryInboxMessageRequest {
-                    message_id: "retry".into(),
-                    allow_unknown: false
-                }
-            )
-            .await
-            .is_err()
-    );
-    inbox
-        .retry_message(
-            &state.session_commands(),
-            "session",
-            "first",
-            RetryInboxMessageRequest {
-                message_id: "retry".into(),
-                allow_unknown: true,
-            },
-        )
-        .await
-        .unwrap();
-    let repeated = inbox
-        .retry_message(
-            &state.session_commands(),
-            "session",
-            "first",
-            RetryInboxMessageRequest {
-                message_id: "double-click".into(),
-                allow_unknown: true,
-            },
-        )
-        .await
-        .unwrap();
-    assert!(repeated.duplicate);
-    assert_eq!(channel.input.lock().unwrap().len(), 2);
-    let original = inbox
-        .get_message("session", "first")
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(original.state, "unknown");
-    assert_eq!(original.retried_by_message_id.as_deref(), Some("retry"));
-    assert_eq!(
-        inbox
-            .get_message("session", "retry")
-            .await
-            .unwrap()
-            .unwrap()
-            .retry_of_message_id
-            .as_deref(),
-        Some("first")
     );
 }
 
@@ -744,71 +623,7 @@ async fn steer_targets_the_active_turn_while_after_idle_waits() {
 }
 
 #[tokio::test]
-async fn failed_session_restore_is_diagnostic_and_repeated_retry_does_not_restart() {
-    let (root, state, channel) = connected_inbox().await;
-    let (workspace, _) = crate::workspaces::upsert_canonical_workspace(
-        &state.db(),
-        root.path().to_str().unwrap(),
-        None,
-    )
-    .await
-    .unwrap();
-    sqlx::query("UPDATE sessions SET workspace_id=?,workspace_ref=? WHERE session_id='session'")
-        .bind(workspace.workspace_id)
-        .bind(workspace.canonical_path)
-        .execute(&state.db())
-        .await
-        .unwrap();
-    sqlx::query("UPDATE sessions SET state='exited' WHERE session_id='session'")
-        .execute(&state.db())
-        .await
-        .unwrap();
-    sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary) VALUES ('failure','session','failed','after_idle','recover')").execute(&state.db()).await.unwrap();
-    let inbox = state.inbox_commands();
-    let first = inbox
-        .retry_message(
-            &state.session_commands(),
-            "session",
-            "failure",
-            RetryInboxMessageRequest {
-                message_id: "restore".into(),
-                allow_unknown: false,
-            },
-        )
-        .await
-        .unwrap();
-    assert_eq!(first.data["inbox_message"]["state"], "failed");
-    assert!(
-        first.data["inbox_message"]["failure_message"]
-            .as_str()
-            .unwrap()
-            .contains("Session recovery failed")
-    );
-    let repeat = inbox
-        .retry_message(
-            &state.session_commands(),
-            "session",
-            "failure",
-            RetryInboxMessageRequest {
-                message_id: "another".into(),
-                allow_unknown: false,
-            },
-        )
-        .await
-        .unwrap();
-    assert!(repeat.duplicate);
-    assert_eq!(repeat.data, first.data);
-    assert!(channel.input.lock().unwrap().is_empty());
-    let starts: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE event_type='session.resuming'")
-            .fetch_one(&state.db())
-            .await
-            .unwrap();
-    assert_eq!(starts, 1);
-}
-
-#[tokio::test]
-async fn duplicate_submission_preserves_native_receipt_and_original_contents() {
+async fn duplicate_submission_preserves_original_contents() {
     let (_root, state, channel) = connected_inbox().await;
     let inbox = state.inbox_commands();
     let mut original = request("first input");
@@ -817,27 +632,12 @@ async fn duplicate_submission_preserves_native_receipt_and_original_contents() {
         .submit_message_once("message", "session", original.clone())
         .await
         .unwrap();
-    InboxAssociations::new(state.db(), state.clients().clone())
-        .record_receipt(
-            "session",
-            "message",
-            &crate::control::InputReceipt {
-                turn_pending: false,
-                native_turn_id: Some("native-turn".into()),
-                runtime_id: Some("runtime".into()),
-            },
-        )
-        .await
-        .unwrap();
     let current = inbox
         .get_message("session", "message")
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(
-        current.metadata,
-        json!({"native_turn_receipt":"native-turn"})
-    );
+    assert_eq!(current.metadata, json!(["caller metadata"]));
     for repeated in [
         original,
         SubmitInboxMessageRequest {
@@ -858,7 +658,7 @@ async fn duplicate_submission_preserves_native_receipt_and_original_contents() {
 }
 
 #[tokio::test]
-async fn submission_identity_still_enforces_session_and_retry_associations() {
+async fn submission_identity_is_scoped_to_one_session() {
     let (_root, state, channel) = connected_inbox().await;
     let inbox = state.inbox_commands();
     inbox
@@ -876,26 +676,5 @@ async fn submission_identity_still_enforces_session_and_retry_associations() {
         .await
         .unwrap_err();
     assert!(matches!(cross_session, Error::StateConflict(_)));
-    sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary) VALUES ('failed','session','failed','after_idle','input')")
-        .execute(&state.db()).await.unwrap();
-    let unrelated_retry = inbox
-        .retry_message(
-            &state.session_commands(),
-            "session",
-            "failed",
-            RetryInboxMessageRequest {
-                message_id: "message".into(),
-                allow_unknown: false,
-            },
-        )
-        .await
-        .unwrap_err();
-    assert!(matches!(unrelated_retry, Error::StateConflict(_)));
-    let failed = inbox
-        .get_message("session", "failed")
-        .await
-        .unwrap()
-        .unwrap();
-    assert!(failed.retried_by_message_id.is_none());
     assert_eq!(*channel.input.lock().unwrap(), ["input"]);
 }

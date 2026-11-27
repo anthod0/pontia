@@ -1469,14 +1469,14 @@ async fn approvals_cannot_be_resolved_from_another_session_in_the_same_workspace
 }
 
 #[tokio::test]
-async fn initial_input_binds_identity_once_and_inbox_waits_for_authoritative_end() {
+async fn initial_input_binds_identity_once_and_queue_waits_for_authoritative_end() {
     let h = Harness::new().await;
     let session = h.create("first").await;
     h.wait_inputs(&session, 1).await;
     assert!(h.turns(&session).await.is_empty(), "receipt is not start");
     h.submit(&session, "second").await;
     h.gate(&session, 1, "start");
-    let first = h.wait_states(&session, &["running"]).await;
+    h.wait_states(&session, &["running"]).await;
     let binding = pontia_agent_control::AgentBindingService::new(h.app.db())
         .binding_for_session(&session)
         .await
@@ -1491,7 +1491,7 @@ async fn initial_input_binds_identity_once_and_inbox_waits_for_authoritative_end
     .fetch_all(&h.app.db())
     .await
     .unwrap();
-    assert_eq!(inbox[0].1.as_deref(), Some(first[0].0.as_str()));
+    assert_eq!(inbox[0], ("dispatched".into(), None));
     assert_eq!(inbox[1], ("pending".into(), None));
     assert_eq!(
         h.wire(&session)

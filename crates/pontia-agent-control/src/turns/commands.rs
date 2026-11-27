@@ -145,7 +145,7 @@ impl TurnCommandService {
                 .map(|turn| turn.turn_id),
         };
         let receipt = adapter
-            .start_turn(&target, payload, &metadata, turn_id.as_deref())
+            .start_turn(&target, payload, turn_id.as_deref())
             .await;
         if let Some(turn_id) = &turn_id
             && let ControlResult::Rejected(error) = &receipt
@@ -168,7 +168,6 @@ impl TurnCommandService {
         &self,
         session_id: &str,
         payload: InputPayload,
-        metadata: Value,
         expected_turn_id: &str,
         required_runtime_id: Option<&str>,
     ) -> Result<(Option<String>, ControlResult<InputReceipt>)> {
@@ -210,7 +209,7 @@ impl TurnCommandService {
         let receipt = self
             .clients
             .for_client(&session.client_type)?
-            .steer(&target, payload, &metadata)
+            .steer(&target, payload)
             .await;
         let pending = matches!(&receipt, ControlResult::Accepted(r) | ControlResult::Sent(r) if r.turn_pending);
         Ok(((!pending).then(|| expected_turn_id.to_owned()), receipt))

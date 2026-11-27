@@ -72,7 +72,6 @@ async fn pi_input_waits_for_ready_uses_socket_and_leaves_lifecycle_to_client() {
         let request: Value = serde_json::from_str(&line).unwrap();
         assert_eq!(request["method"], "submit");
         assert_eq!(request["params"]["input"], "hello after ready");
-        assert_eq!(request["params"]["inbox_message_id"], "msg_one");
         let reply = json!({"jsonrpc":"2.0","id":request["id"],"result":{"accepted":true}});
         stream
             .get_mut()
@@ -83,11 +82,7 @@ async fn pi_input_waits_for_ready_uses_socket_and_leaves_lifecycle_to_client() {
     let service = state.turn_commands();
     let dispatch = tokio::spawn(async move {
         service
-            .start_turn(
-                "sess_pi",
-                "hello after ready".into(),
-                json!({"inbox_message_id":"msg_one"}),
-            )
+            .start_turn("sess_pi", "hello after ready".into(), json!({}))
             .await
     });
     tokio::time::sleep(Duration::from_millis(100)).await;

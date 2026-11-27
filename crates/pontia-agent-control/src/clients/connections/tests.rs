@@ -35,11 +35,7 @@ impl crate::ClientControlChannel for StartOnlyChannel {
         Box::pin(async { Ok(()) })
     }
 
-    fn start_turn<'a>(
-        &'a self,
-        _: &'a crate::InputPayload,
-        _: Option<&'a str>,
-    ) -> crate::DeliveryOperation<'a> {
+    fn start_turn<'a>(&'a self, _: &'a crate::InputPayload) -> crate::DeliveryOperation<'a> {
         Box::pin(async { Ok(()) })
     }
 }
@@ -60,7 +56,7 @@ async fn default_delivery_primitives_preserve_unsupported_classification() {
 
     let payload = crate::InputPayload::from("steer");
     assert!(matches!(
-        control.steer("session", "original", &payload, None).await,
+        control.steer("session", "original", &payload).await,
         Err(crate::DeliveryError::Unsupported(_))
     ));
     assert!(matches!(
@@ -98,7 +94,7 @@ async fn identity_conflicts_cannot_replace_a_current_channel() {
     }
     let payload = crate::InputPayload::from("one input");
     control
-        .start_turn("session", "original", &payload, None)
+        .start_turn("session", "original", &payload)
         .await
         .unwrap();
     assert_eq!(*current.input.lock().unwrap(), ["one input"]);
@@ -152,9 +148,7 @@ async fn replacement_during_submission_returns_unknown_without_replaying_input()
         let control = control.clone();
         async move {
             let payload = crate::InputPayload::from("one input");
-            control
-                .start_turn("session", "original", &payload, None)
-                .await
+            control.start_turn("session", "original", &payload).await
         }
     });
     tokio::time::timeout(std::time::Duration::from_secs(2), old.started.notified())

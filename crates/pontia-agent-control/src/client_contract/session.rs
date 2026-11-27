@@ -63,14 +63,12 @@ pub trait ClientSession: Send + Sync {
         target: &'a ControlTarget,
         payload: &'a InputPayload,
         turn: Option<&'a str>,
-        message: Option<&'a str>,
     ) -> DeliveryOperation<'a, InputReceipt>;
     fn steer<'a>(
         &'a self,
         _events: EventIngestService,
         _target: &'a ControlTarget,
         _payload: &'a InputPayload,
-        _message: Option<&'a str>,
     ) -> DeliveryOperation<'a, InputReceipt> {
         Box::pin(async {
             Err(DeliveryError::Unsupported(

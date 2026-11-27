@@ -64,7 +64,7 @@ impl ClientControlChannel for Channel {
     fn replay<'a>(&'a self, _: &'a str) -> ClientControlOperation<'a> {
         Box::pin(async { Ok(()) })
     }
-    fn start_turn<'a>(&'a self, _: &'a InputPayload, _: Option<&'a str>) -> DeliveryOperation<'a> {
+    fn start_turn<'a>(&'a self, _: &'a InputPayload) -> DeliveryOperation<'a> {
         Box::pin(async { Ok(()) })
     }
 }

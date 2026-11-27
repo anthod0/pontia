@@ -78,32 +78,6 @@ fn parse_submission(value: Value) -> Result<SubmitInboxMessageRequest, ApiError>
     serde_json::from_value(value).map_err(|error| ApiError::invalid_request(error.to_string()))
 }
 
-pub async fn retry_inbox_message(
-    State(state): State<AppState>,
-    Path((session_id, message_id)): Path<(String, String)>,
-    Json(request): Json<pontia_agent_control::RetryInboxMessageRequest>,
-) -> Result<Response, ApiError> {
-    let outcome = state
-        .control()
-        .inbox_commands()
-        .retry_message(
-            &state.control().session_commands(),
-            &session_id,
-            &message_id,
-            request,
-        )
-        .await?;
-    Ok((
-        if outcome.duplicate {
-            StatusCode::OK
-        } else {
-            StatusCode::CREATED
-        },
-        ok(outcome.data),
-    )
-        .into_response())
-}
-
 pub async fn list_inbox_messages(
     State(state): State<AppState>,
     Path(session_id): Path<String>,

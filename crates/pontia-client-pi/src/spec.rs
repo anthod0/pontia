@@ -46,7 +46,6 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
             ..pontia_agent_control::client_contract::SessionLifecycleBehavior::DEFAULT
         },
         native_turn_identity: false,
-        native_turn_metadata_key: None,
         control_runtime_role: Some(CONTROL_RUNTIME_ROLE),
         runtime: RuntimeBehavior::Tmux(TmuxRuntimeBehavior {
             hook_log: Some(HookLogBehavior {

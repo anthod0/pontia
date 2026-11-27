@@ -432,10 +432,6 @@ fn external_api_router(state: HttpState) -> Router {
             get(api::get_inbox_message).put(api::put_inbox_message),
         )
         .route(
-            "/api/v1/sessions/{session_id}/inbox/messages/{message_id}/retry",
-            post(api::retry_inbox_message),
-        )
-        .route(
             "/api/v1/sessions/{session_id}/inbox/messages/{message_id}/cancel",
             post(api::cancel_inbox_message),
         )

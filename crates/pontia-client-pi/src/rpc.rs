@@ -120,14 +120,10 @@ impl pontia_agent_control::ClientControlChannel for PiRpcPeer {
     fn start_turn<'a>(
         &'a self,
         payload: &'a pontia_agent_control::InputPayload,
-        inbox_message_id: Option<&'a str>,
     ) -> pontia_agent_control::DeliveryOperation<'a> {
         Box::pin(async move {
             let result = self
-                .deliver(
-                    "submit",
-                    json!({"input":payload.text,"inbox_message_id":inbox_message_id}),
-                )
+                .deliver("submit", json!({"input":payload.text}))
                 .await?;
             if result != json!({"accepted":true}) {
                 return Err(pontia_agent_control::DeliveryError::Uncertain(
@@ -140,15 +136,9 @@ impl pontia_agent_control::ClientControlChannel for PiRpcPeer {
     fn steer<'a>(
         &'a self,
         payload: &'a pontia_agent_control::InputPayload,
-        inbox_message_id: Option<&'a str>,
     ) -> pontia_agent_control::DeliveryOperation<'a> {
         Box::pin(async move {
-            if self
-                .deliver(
-                    "steer",
-                    json!({"input":payload.text,"inbox_message_id":inbox_message_id}),
-                )
-                .await?
+            if self.deliver("steer", json!({"input":payload.text})).await?
                 != json!({"accepted":true})
             {
                 return Err(pontia_agent_control::DeliveryError::Uncertain(

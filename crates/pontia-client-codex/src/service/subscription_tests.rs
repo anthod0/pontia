@@ -829,16 +829,12 @@ async fn first_inbox_message_is_delivered_before_thread_history_exists() {
     assert_eq!(inputs.len(), 1);
     assert_eq!(inputs[0]["threadId"], "thread-one");
     assert_eq!(inputs[0]["input"][0]["text"], "hi");
-    assert_eq!(
-        inputs[0]["clientUserMessageId"],
-        outcome.data["inbox_message"]["message_id"]
-    );
     drop(inputs);
     fixture.shutdown().await;
 }
 
 #[tokio::test]
-async fn native_user_message_recovers_a_lost_first_input_receipt() {
+async fn native_user_message_does_not_resolve_an_unknown_delivery() {
     let fixture = Fixture::new().await;
     let outcome = fixture
         .app
@@ -862,7 +858,7 @@ async fn native_user_message_recovers_a_lost_first_input_receipt() {
     .unwrap();
     let service = super::CodexService::new(fixture.app.event_ingest_service());
     let native = json!({"id":"native-turn","status":"completed","items":[{
-        "id":"user-item","clientId":message,"type":"userMessage","content":[{"type":"text","text":"hi"}]
+        "id":"user-item","type":"userMessage","content":[{"type":"text","text":"hi"}]
     }]});
     service
         .turn_fact(&fixture.session, &native, "snapshot")
@@ -875,11 +871,8 @@ async fn native_user_message_recovers_a_lost_first_input_receipt() {
         .await
         .unwrap()
         .unwrap();
-    assert!(!snapshot.has_unsettled_input);
-    assert_eq!(
-        snapshot.inbox[0].turn_id.as_deref(),
-        Some(snapshot.turns[0].turn_id.as_str())
-    );
+    assert!(snapshot.has_unsettled_input);
+    assert!(snapshot.inbox[0].turn_id.is_none());
     assert_eq!(snapshot.turns[0].state, "completed");
     assert_eq!(fixture.inputs.lock().await.len(), 1);
     fixture.shutdown().await;
@@ -919,131 +912,6 @@ async fn rejected_thread_start_allows_the_unbound_session_to_exit() {
             .state,
         "exited"
     );
-    fixture.shutdown().await;
-}
-
-#[tokio::test]
-async fn failed_first_input_can_be_retried_on_the_same_unmaterialized_thread_after_resume() {
-    let fixture = Fixture::new().await;
-    fixture.rpc_errors.lock().await.insert(
-        "turn/start".into(),
-        json!({"code":-32600,"message":"input rejected"}),
-    );
-    let inbox = fixture.app.inbox_commands();
-    let outcome = inbox
-        .submit_message(
-            &fixture.session,
-            serde_json::from_value(json!({"input":"hi"})).unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(outcome.data["inbox_message"]["state"], "failed");
-    let original = outcome.data["inbox_message"]["message_id"]
-        .as_str()
-        .unwrap();
-    fixture
-        .app
-        .session_commands()
-        .terminate_session(&fixture.session)
-        .await
-        .unwrap();
-    fixture.rpc_errors.lock().await.clear();
-
-    let retried = inbox
-        .retry_message(
-            &fixture.app.session_commands(),
-            &fixture.session,
-            original,
-            serde_json::from_value(json!({"message_id":"retry-first-input"})).unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(retried.data["inbox_message"]["state"], "dispatched");
-    let inputs = fixture.inputs.lock().await;
-    assert_eq!(inputs.len(), 1);
-    assert_eq!(inputs[0]["threadId"], "thread-one");
-    assert_eq!(inputs[0]["input"][0]["text"], "hi");
-    assert_eq!(inputs[0]["clientUserMessageId"], "retry-first-input");
-    drop(inputs);
-    assert_eq!(
-        fixture
-            .methods
-            .lock()
-            .await
-            .iter()
-            .filter(|method| method.as_str() == "thread/start")
-            .count(),
-        1
-    );
-    fixture.shutdown().await;
-}
-
-#[tokio::test]
-async fn observer_recovers_a_created_session_with_a_bound_unmaterialized_thread_for_retry() {
-    let fixture = Fixture::new().await;
-    fixture.rpc_errors.lock().await.insert(
-        "turn/start".into(),
-        json!({"code":-32600,"message":"input rejected"}),
-    );
-    let inbox = fixture.app.inbox_commands();
-    let outcome = inbox
-        .submit_message(
-            &fixture.session,
-            serde_json::from_value(json!({"input":"hi"})).unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(outcome.data["inbox_message"]["state"], "failed");
-    let original = outcome.data["inbox_message"]["message_id"]
-        .as_str()
-        .unwrap();
-    // Reproduce the persisted Session/binding left by the original history-query failure.
-    sqlx::query("UPDATE sessions SET state='created' WHERE session_id=?")
-        .bind(&fixture.session)
-        .execute(&fixture.app.db())
-        .await
-        .unwrap();
-    let runtime = CodexRuntime::existing(fixture.root.path()).await.unwrap();
-    runtime.clear_subscriptions().await;
-    fixture.rpc_errors.lock().await.clear();
-    let (shutdown, receiver) = tokio::sync::watch::channel(false);
-    let observer = tokio::spawn(
-        super::CodexObserver::new(&fixture.app, fixture.root.path().into()).run(receiver),
-    );
-
-    inbox
-        .retry_message(
-            &fixture.app.session_commands(),
-            &fixture.session,
-            original,
-            serde_json::from_value(json!({"message_id":"retry-created-input"})).unwrap(),
-        )
-        .await
-        .unwrap();
-    let delivered = tokio::time::timeout(std::time::Duration::from_secs(3), async {
-        loop {
-            let message = inbox
-                .get_message(&fixture.session, "retry-created-input")
-                .await
-                .unwrap()
-                .unwrap();
-            if !matches!(message.state.as_str(), "pending" | "dispatching") {
-                break message;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .unwrap();
-    assert_eq!(delivered.state, "dispatched");
-    let inputs = fixture.inputs.lock().await;
-    assert_eq!(inputs.len(), 1);
-    assert_eq!(inputs[0]["threadId"], "thread-one");
-    assert_eq!(inputs[0]["input"][0]["text"], "hi");
-    drop(inputs);
-    shutdown.send(true).unwrap();
-    observer.await.unwrap();
     fixture.shutdown().await;
 }
 
@@ -1147,7 +1015,6 @@ async fn native_turn_state_changes_report_state_changed() {
             &target,
             &pontia_agent_control::InputPayload::from("hello"),
             None,
-            None,
         )
         .await;
     let steer = client
@@ -1155,7 +1022,6 @@ async fn native_turn_state_changes_report_state_changed() {
             fixture.app.event_ingest_service(),
             &target,
             &pontia_agent_control::InputPayload::from("follow up"),
-            None,
         )
         .await;
 
@@ -1181,7 +1047,6 @@ async fn missing_native_active_turn_reports_state_changed() {
             fixture.app.event_ingest_service(),
             &target,
             &pontia_agent_control::InputPayload::from("follow up"),
-            None,
         )
         .await;
     let interrupt = client
@@ -1215,7 +1080,6 @@ async fn native_active_turn_drives_steer_and_interrupt() {
             fixture.app.event_ingest_service(),
             &target,
             &pontia_agent_control::InputPayload::from("follow up"),
-            None,
         )
         .await
         .unwrap();

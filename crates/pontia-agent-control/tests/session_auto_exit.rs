@@ -56,11 +56,7 @@ impl ClientControlChannel for Channel {
     fn replay<'a>(&'a self, _: &'a str) -> ClientControlOperation<'a> {
         panic!("unexpected replay")
     }
-    fn start_turn<'a>(
-        &'a self,
-        payload: &'a InputPayload,
-        _: Option<&'a str>,
-    ) -> DeliveryOperation<'a> {
+    fn start_turn<'a>(&'a self, payload: &'a InputPayload) -> DeliveryOperation<'a> {
         Box::pin(async move {
             self.inputs.lock().unwrap().push(payload.text.clone());
             Ok(())
@@ -238,7 +234,7 @@ async fn after_idle_input_is_delivered_and_consumed_before_exit() {
     assert_eq!(*channel.inputs.lock().unwrap(), ["follow up"]);
     assert_eq!(channel.exits.load(Ordering::SeqCst), 0);
     assert!(
-        state
+        !state
             .queries()
             .session_snapshot("session")
             .await
@@ -246,13 +242,7 @@ async fn after_idle_input_is_delivered_and_consumed_before_exit() {
             .unwrap()
             .has_unsettled_input
     );
-    fact(
-        &state,
-        EventType::TurnStarted,
-        Some("second"),
-        json!({"input":{"inbox_message_id":id}}),
-    )
-    .await;
+    fact(&state, EventType::TurnStarted, Some("second"), json!({})).await;
     fact(&state, EventType::TurnCompleted, Some("second"), json!({})).await;
     wait_for(&state, "exited").await;
     state.inbox_commands().stop_scheduling().await;
@@ -340,13 +330,13 @@ async fn non_idle_states_and_active_turns_do_not_exit() {
 }
 
 #[tokio::test]
-async fn unsettled_input_blocks_exit_even_after_recovery() {
-    for input_state in [
-        "pending",
-        "resuming",
-        "dispatching",
-        "unknown",
-        "dispatched",
+async fn recovery_exits_after_settled_input_and_blocks_uncertain_delivery() {
+    for (input_state, expected_exit) in [
+        ("pending", false),
+        ("resuming", true),
+        ("dispatching", false),
+        ("unknown", false),
+        ("dispatched", true),
     ] {
         let (root, state, channel) = fixture().await;
         state.inbox_commands().stop_scheduling().await;
@@ -369,14 +359,13 @@ async fn unsettled_input_blocks_exit_even_after_recovery() {
             .await
             .unwrap();
         restarted.inbox_commands().resume_pending().await.unwrap();
-        if input_state == "resuming" {
-            // Recovery explicitly fails preparation interrupted by the daemon restart.
+        if expected_exit {
             wait_for(&restarted, "exited").await;
         }
         restarted.inbox_commands().stop_scheduling().await;
         assert_eq!(
             channel.exits.load(Ordering::SeqCst),
-            usize::from(input_state == "resuming"),
+            usize::from(expected_exit),
             "{input_state}"
         );
     }

@@ -99,9 +99,7 @@ async fn replacement_and_exit_fence_connections_without_synthesizing_facts() {
         let control = state.control().client_control();
         tokio::spawn(async move {
             let payload = pontia_agent_control::InputPayload::from("uncertain");
-            control
-                .start_turn("sess_pi", "rt_old", &payload, None)
-                .await
+            control.start_turn("sess_pi", "rt_old", &payload).await
         })
     };
     requests.recv().await.unwrap();
@@ -286,7 +284,7 @@ async fn real_pi_client_reconnects_after_daemon_restart_and_delivers_external_in
             .unwrap();
     assert_eq!(
         delivered,
-        json!({"input":"first\n你好","inboxMessageId":body["data"]["inbox_message"]["message_id"]})
+        json!({"input":"first\n你好","mode":"start_turn"})
     );
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns")
         .fetch_one(&state.db())

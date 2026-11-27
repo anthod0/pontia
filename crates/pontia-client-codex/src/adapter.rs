@@ -237,11 +237,10 @@ impl ClientSession for CodexClient {
         target: &'a ControlTarget,
         payload: &'a InputPayload,
         _turn: Option<&'a str>,
-        message: Option<&'a str>,
     ) -> DeliveryOperation<'a, InputReceipt> {
         Box::pin(async move {
             CodexService::new(events)
-                .start_turn(target, payload, message)
+                .start_turn(target, payload)
                 .await
                 .map_err(DeliveryError::from)
         })
@@ -251,11 +250,10 @@ impl ClientSession for CodexClient {
         events: EventIngestService,
         target: &'a ControlTarget,
         payload: &'a InputPayload,
-        message: Option<&'a str>,
     ) -> DeliveryOperation<'a, InputReceipt> {
         Box::pin(async move {
             CodexService::new(events)
-                .steer(target, payload, message)
+                .steer(target, payload)
                 .await
                 .map_err(DeliveryError::from)
         })

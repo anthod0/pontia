@@ -80,6 +80,9 @@ impl SessionCommandService {
     pub(crate) async fn auto_exit_if_done(&self, session_id: &str) -> Result<()> {
         let actor = self.inbox.scheduler.session(session_id);
         let _guard = actor.lock().await;
+        if actor.phase() != crate::inbox::SessionPhase::Idle {
+            return Ok(());
+        }
         let armed: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM sessions WHERE session_id=? AND exit_when_done=1 AND state='idle')",
         )

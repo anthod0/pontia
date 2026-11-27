@@ -277,8 +277,8 @@ async fn delivery_operations_map_pi_rejections_without_external_turn_identity() 
             });
             let payload = InputPayload::from("once");
             let operation = match method {
-                "submit" => peer.start_turn(&payload, Some("message")),
-                "steer" => peer.steer(&payload, Some("message")),
+                "submit" => peer.start_turn(&payload),
+                "steer" => peer.steer(&payload),
                 "interrupt" => peer.interrupt(),
                 _ => unreachable!(),
             };

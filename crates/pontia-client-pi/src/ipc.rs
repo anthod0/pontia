@@ -384,19 +384,13 @@ impl pontia_agent_control::ClientControlChannel for PiChannel {
     fn start_turn<'a>(
         &'a self,
         payload: &'a pontia_agent_control::InputPayload,
-        inbox_message_id: Option<&'a str>,
     ) -> pontia_agent_control::DeliveryOperation<'a> {
-        self.peer.start_turn(payload, inbox_message_id)
+        self.peer.start_turn(payload)
     }
     fn steer<'a>(
         &'a self,
         payload: &'a pontia_agent_control::InputPayload,
-        inbox_message_id: Option<&'a str>,
     ) -> pontia_agent_control::DeliveryOperation<'a> {
-        pontia_agent_control::ClientControlChannel::steer(
-            self.peer.as_ref(),
-            payload,
-            inbox_message_id,
-        )
+        pontia_agent_control::ClientControlChannel::steer(self.peer.as_ref(), payload)
     }
 }

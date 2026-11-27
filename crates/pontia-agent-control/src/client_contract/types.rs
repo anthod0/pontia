@@ -70,7 +70,6 @@ impl RuntimeBindingBehavior {
 pub struct AgentClientAdapter {
     pub lifecycle: super::SessionLifecycleBehavior,
     pub native_turn_identity: bool,
-    pub native_turn_metadata_key: Option<&'static str>,
     pub runtime: RuntimeBehavior,
     /// The only runtime role eligible to control this client's Session.
     /// Shared-backend clients have no Session control runtime.

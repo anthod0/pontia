@@ -19,7 +19,6 @@ pub(crate) struct Interjection {
     pub turn: String,
     pub prompt: usize,
     pub digest: String,
-    pub message: Option<String>,
     pub shown: bool,
 }
 
@@ -55,7 +54,6 @@ pub(crate) async fn send(
     target: &ControlTarget,
     turn: &str,
     input: &str,
-    message: Option<&str>,
 ) -> Result<InputReceipt> {
     let mut state = peer.state.lock().await;
     target.validate(&events.db()).await?;
@@ -145,7 +143,6 @@ pub(crate) async fn send(
                 request_id: serde_json::to_value(request.id())?,
                 turn: turn.into(),
                 digest: text_digest(input),
-                message: message.map(str::to_owned),
                 prompt,
                 shown: false,
             },
@@ -304,37 +301,6 @@ impl Peer {
         &self,
         state: &mut crate::peer::SessionState,
     ) -> Result<()> {
-        let inbox = pontia_storage_sqlite::repositories::inbox::SqliteInboxRepository::new(
-            self.events.db(),
-        );
-        for entry in state.interjections.values() {
-            let Some(message) = &entry.message else {
-                continue;
-            };
-            let mut prompt = None;
-            let consumed = state
-                .history
-                .iter()
-                .filter(|m| {
-                    if m.prompt.is_some() {
-                        prompt = m.prompt;
-                    }
-                    prompt == Some(entry.prompt)
-                        && m.interjection
-                        && text_digest(m.display.as_deref().unwrap_or(&m.text)) == entry.digest
-                })
-                .count();
-            let sent = state
-                .interjections
-                .values()
-                .filter(|other| other.prompt == entry.prompt && other.digest == entry.digest)
-                .count();
-            if consumed == sent {
-                inbox
-                    .link_started_turn(&self.session, message, &entry.turn)
-                    .await?;
-            }
-        }
         state.interjections.clear();
         self.remember(state, None).await
     }

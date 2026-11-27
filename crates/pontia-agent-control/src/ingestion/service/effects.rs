@@ -1,6 +1,6 @@
 use crate::{
     AgentEventBroker, ClientControlService, LiveOutputService,
-    inbox::{InboxAssociations, InboxScheduler},
+    inbox::{InboxScheduler, SessionPhase},
 };
 use pontia_core::{
     Result,
@@ -30,12 +30,7 @@ impl PostCommitEffects {
         }
     }
 
-    pub(super) async fn apply(
-        &self,
-        pool: &sqlx::SqlitePool,
-        clients: crate::clients::ClientRegistry,
-        event: &DomainEvent,
-    ) -> Result<()> {
+    pub(super) async fn apply(&self, event: &DomainEvent) -> Result<()> {
         if matches!(
             event.event_type,
             EventType::SessionExited | EventType::SessionError
@@ -64,9 +59,44 @@ impl PostCommitEffects {
             }
         }
 
-        InboxAssociations::new(pool.clone(), clients)
-            .observe_committed(&self.scheduler, event)
-            .await?;
+        match event.event_type {
+            EventType::TurnStarted => self
+                .scheduler
+                .observe_phase(&event.session_id, SessionPhase::Busy),
+            EventType::TurnInterruptRequested => self
+                .scheduler
+                .observe_phase(&event.session_id, SessionPhase::Interrupting),
+            EventType::SessionReady
+            | EventType::InteractionUnblocked
+            | EventType::SessionExited
+            | EventType::SessionError
+            | EventType::TurnCompleted
+            | EventType::TurnFailed
+            | EventType::TurnDispatchFailed
+            | EventType::TurnInterrupted => self
+                .scheduler
+                .observe_phase(&event.session_id, SessionPhase::Idle),
+            _ => {}
+        }
+        let manual_compaction_finished = event.payload["trigger"] == "manual"
+            && matches!(
+                event.event_type,
+                EventType::SessionCompactionCompleted | EventType::SessionCompactionFailed
+            );
+        if manual_compaction_finished
+            || matches!(
+                event.event_type,
+                EventType::SessionReady
+                    | EventType::InteractionUnblocked
+                    | EventType::TurnStarted
+                    | EventType::TurnCompleted
+                    | EventType::TurnFailed
+                    | EventType::TurnDispatchFailed
+                    | EventType::TurnInterrupted
+            )
+        {
+            self.scheduler.wake(event.session_id.clone());
+        }
         Ok(())
     }
 }

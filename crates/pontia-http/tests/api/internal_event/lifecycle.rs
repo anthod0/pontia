@@ -22,8 +22,7 @@ async fn reporting_service_normalizes_started_fact_into_a_domain_event() {
             "data": {
                 "runtime_id": "rtinst_normalized",
                 "input_summary": "hello",
-                "previous_leaf_id": null,
-                "inbox_message_id": "msg_1"
+                "previous_leaf_id": null
             }
         }),
     )
@@ -57,7 +56,7 @@ async fn reporting_service_normalizes_started_fact_into_a_domain_event() {
     assert_eq!(started.source, EventSource::AgentAdapter);
     assert_eq!(started.client_type, "pi");
     assert_eq!(started.payload["input"]["summary"], "hello");
-    assert_eq!(started.payload["metadata"]["inbox_message_id"], "msg_1");
+    assert!(started.payload.get("metadata").is_none());
 }
 
 #[tokio::test]
