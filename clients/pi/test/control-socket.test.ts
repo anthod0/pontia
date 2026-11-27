@@ -168,7 +168,7 @@ test("reasoning effort control accepts native Pi levels and rejects malformed re
   ).toEqual([-32602, -32602]);
 });
 
-test("branch replay can resolve over the same socket and rejects malformed message identifiers", async () => {
+test("branch replay can resolve over the same socket and rejects malformed replay identifiers", async () => {
   const replies: any[] = [];
   const root = await server((socket, message) => {
     if (!message.method) {
@@ -176,12 +176,12 @@ test("branch replay can resolve over the same socket and rejects malformed messa
       return;
     }
     if (message.method === "begin") {
-      for (const [id, inbox_message_id] of [
-        ["valid", "msg_replay"],
-        ["invalid", "msg_one extra"],
+      for (const [id, replay_id] of [
+        ["valid", "replay_valid"],
+        ["invalid", "replay_one extra"],
       ]) {
         socket.write(
-          `${JSON.stringify({ jsonrpc: "2.0", id, method: "branch.replay", params: { inbox_message_id } })}\n`,
+          `${JSON.stringify({ jsonrpc: "2.0", id, method: "branch.replay", params: { replay_id } })}\n`,
         );
       }
     }
@@ -192,8 +192,8 @@ test("branch replay can resolve over the same socket and rejects malformed messa
     );
   });
   let resolved: Promise<unknown> | undefined;
-  const replay = vi.fn((inboxMessageId: string) => {
-    resolved = client.request("branch.resolve", { inbox_message_id: inboxMessageId });
+  const replay = vi.fn((replayId: string) => {
+    resolved = client.request("branch.resolve", { replay_id: replayId });
   });
   const client = await connectPi(
     root,
@@ -206,7 +206,7 @@ test("branch replay can resolve over the same socket and rejects malformed messa
   await client.request("begin", {});
   await vi.waitFor(() => expect(replies).toHaveLength(2));
   await expect(resolved).resolves.toEqual({ target_entry_id: "native-user" });
-  expect(replay).toHaveBeenCalledExactlyOnceWith("msg_replay");
+  expect(replay).toHaveBeenCalledExactlyOnceWith("replay_valid");
   expect(replies).toContainEqual({ jsonrpc: "2.0", id: "valid", result: { accepted: true } });
   expect(replies.find((response) => response.id === "invalid").error.code).toBe(-32602);
 });

@@ -355,14 +355,9 @@ impl ClientControlService {
         .await
     }
 
-    pub async fn replay(
-        &self,
-        session_id: &str,
-        runtime_id: &str,
-        inbox_message_id: &str,
-    ) -> Result<()> {
+    pub async fn replay(&self, session_id: &str, runtime_id: &str, replay_id: &str) -> Result<()> {
         self.request(session_id, runtime_id, false, |channel| async move {
-            channel.replay(inbox_message_id).await
+            channel.replay(replay_id).await
         })
         .await
     }

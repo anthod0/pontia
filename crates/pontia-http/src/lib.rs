@@ -424,6 +424,10 @@ fn external_api_router(state: HttpState) -> Router {
             get(api::list_inbox_messages).post(api::submit_inbox_message),
         )
         .route(
+            "/api/v1/sessions/{session_id}/branch-replay",
+            post(api::submit_branch_replay),
+        )
+        .route(
             "/api/v1/sessions/{session_id}/inbox/messages/{message_id}",
             get(api::get_inbox_message).put(api::put_inbox_message),
         )

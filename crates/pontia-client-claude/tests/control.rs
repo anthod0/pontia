@@ -515,7 +515,6 @@ impl Harness {
                     input: text.into(),
                     metadata: json!({}),
                     delivery_policy: "after_idle".into(),
-                    branch_target_turn_id: None,
                 },
             )
             .await
@@ -725,7 +724,6 @@ impl Harness {
                 SubmitInboxMessageRequest {
                     input: text.into(),
                     delivery_policy: "after_idle".into(),
-                    branch_target_turn_id: None,
                     metadata: json!({}),
                 },
             )
@@ -2118,7 +2116,6 @@ async fn steering_uses_the_active_turn_while_after_idle_waits() {
                 input: "correction".into(),
                 metadata: json!({}),
                 delivery_policy: "steer".into(),
-                branch_target_turn_id: None,
             },
         )
         .await

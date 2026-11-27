@@ -93,7 +93,6 @@ impl WorkflowRecoveryService {
                     SubmitInboxMessageRequest {
                         input: self.recovery_prompt(&row).await?,
                         delivery_policy: "after_idle".into(),
-                        branch_target_turn_id: None,
                         metadata: json!({"source":"workflow_recovery","workflow_id":row.workflow_id,"recovery_id":row.recovery_id}),
                     },
                 )

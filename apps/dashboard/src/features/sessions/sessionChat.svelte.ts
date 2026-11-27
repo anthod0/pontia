@@ -632,11 +632,9 @@ export function createSessionChat(routeSessionId: () => string | null) {
         await interruptSession(sessionId);
         await waitForBranchSubmissionReady(sessionId);
       }
-      await submitInboxMessage(sessionId, {
+      await device.api.submitBranchReplay(sessionId, {
+        target_turn_id: projectedTurn.turn_id,
         input,
-        delivery_policy: "after_idle",
-        metadata: { source: "dashboard_chat_branch_edit" },
-        branch_target_turn_id: projectedTurn.turn_id,
       });
       return true;
     } catch (error) {

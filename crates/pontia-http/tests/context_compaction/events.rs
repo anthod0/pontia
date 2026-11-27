@@ -46,7 +46,6 @@ async fn manual_compaction_holds_inbox_until_completion_failure_or_cancellation(
                 pontia_agent_control::SubmitInboxMessageRequest {
                     input: "hi".into(),
                     delivery_policy: "after_idle".into(),
-                    branch_target_turn_id: None,
                     metadata: json!({}),
                 },
             )

@@ -175,7 +175,7 @@ export function createInboxQueries(device: DeviceRuntime) {
       input: submission.input.input.trim(),
       deliveryPolicy: submission.input.delivery_policy,
       metadata: submission.input.metadata,
-      branchTargetTurnId: submission.input.branch_target_turn_id ?? null,
+      branchTargetTurnId: null,
       showInChat,
       submittedAt: new Date().toISOString(),
       acceptedMessage: null,
@@ -415,8 +415,7 @@ export function createInboxQueries(device: DeviceRuntime) {
       const session = device.queryClient.getQueryData<SessionView>(
         device.sessionQueries.sessionKeys.detail(submission.sessionId),
       );
-      const visible =
-        !submission.input.branch_target_turn_id && !isExecutingSessionState(session?.state);
+      const visible = !isExecutingSessionState(session?.state);
       if (visible) rememberChatShownInboxMessage(submission.messageId);
       return { localId: beginInboxSubmission(submission, visible) };
     },

@@ -9,7 +9,6 @@ pub struct NewInboxMessage<'a> {
     pub delivery_policy: &'a str,
     pub input: &'a str,
     pub metadata: &'a str,
-    pub branch_target: Option<&'a str>,
     pub steer_target: Option<&'a str>,
     pub retry_of: Option<&'a str>,
     pub resuming: bool,
@@ -28,12 +27,12 @@ impl SqliteInboxRepository {
     pub async fn enqueue(&self, message: NewInboxMessage<'_>) -> Result<bool> {
         let mut tx = self.pool.begin().await?;
         let inserted = sqlx::query(
-            "INSERT INTO inbox_messages (message_id,session_id,state,delivery_policy,input_summary,metadata,branch_target_turn_id,steer_target_turn_id,retry_of_message_id) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(message_id) DO NOTHING"
+            "INSERT INTO inbox_messages (message_id,session_id,state,delivery_policy,input_summary,metadata,steer_target_turn_id,retry_of_message_id) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(message_id) DO NOTHING"
         )
         .bind(message.message_id).bind(message.session_id)
         .bind(if message.resuming { "resuming" } else { "pending" })
         .bind(message.delivery_policy).bind(message.input).bind(message.metadata)
-        .bind(message.branch_target).bind(message.steer_target)
+        .bind(message.steer_target)
         .bind(message.retry_of)
         .execute(&mut *tx).await?.rows_affected() == 1;
         if inserted && message.delivery_policy == "interrupt_now" {
@@ -215,19 +214,13 @@ mod tests {
     use super::*;
     use crate::{connect_sqlite, run_migrations};
 
-    fn message<'a>(
-        id: &'a str,
-        policy: &'a str,
-        input: &'a str,
-        target: Option<&'a str>,
-    ) -> NewInboxMessage<'a> {
+    fn message<'a>(id: &'a str, policy: &'a str, input: &'a str) -> NewInboxMessage<'a> {
         NewInboxMessage {
             message_id: id,
             session_id: "sess_1",
             delivery_policy: policy,
             input,
             metadata: "{}",
-            branch_target: target,
             steer_target: None,
             retry_of: None,
             resuming: false,
@@ -254,10 +247,10 @@ mod tests {
         .unwrap();
         let repo = SqliteInboxRepository::new(pool);
 
-        repo.enqueue(message("msg_1", "interrupt_now", "one", None))
+        repo.enqueue(message("msg_1", "interrupt_now", "one"))
             .await
             .unwrap();
-        repo.enqueue(message("msg_2", "interrupt_now", "two", None))
+        repo.enqueue(message("msg_2", "interrupt_now", "two"))
             .await
             .unwrap();
 
@@ -283,17 +276,15 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
-        let repo = SqliteInboxRepository::new(pool);
+        let repo = SqliteInboxRepository::new(pool.clone());
 
-        repo.enqueue(message(
-            "msg_branch",
-            "after_idle",
-            "replacement",
-            Some("turn_target"),
-        ))
+        sqlx::query(
+            "INSERT INTO inbox_messages (message_id, session_id, state, delivery_policy, input_summary, metadata, branch_target_turn_id) VALUES ('msg_branch', 'sess_1', 'pending', 'after_idle', 'replacement', '{}', 'turn_target')",
+        )
+        .execute(&pool)
         .await
         .unwrap();
-        repo.enqueue(message("msg_plain", "after_idle", "ordinary", None))
+        repo.enqueue(message("msg_plain", "after_idle", "ordinary"))
             .await
             .unwrap();
 

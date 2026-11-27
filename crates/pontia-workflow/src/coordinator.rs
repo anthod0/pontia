@@ -190,7 +190,7 @@ where
             input.push_str(&format!("\nInspect: pontia workflow show {id}"));
             self.inbox.submit_message_once(&format!("workflow-report:{}",event.event_id), &workflow.initiator_session_id,
                 pontia_agent_control::SubmitInboxMessageRequest {
-                    input, delivery_policy:"after_idle".into(), branch_target_turn_id:None,
+                    input, delivery_policy:"after_idle".into(),
                     metadata: serde_json::json!({"source":"workflow_report","workflow_id":id,"event_type":event.event_type,"event_id":event.event_id}),
                 }).await?;
             self.repository

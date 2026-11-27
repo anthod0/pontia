@@ -312,58 +312,31 @@ async fn inbox_submission_rejects_whitespace_only_input() {
 }
 
 #[tokio::test]
-async fn branch_submission_rejects_interrupt_delivery() {
+async fn inbox_submission_rejects_the_removed_branch_target_field() {
     let _scope = GenericClientTestScope::new().await;
     let (state, _workspace, _pontia_home) = test_state().await;
     let session_id = create_session(state.clone()).await;
 
-    let (status, body) = post_json(
-        state,
-        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
-        None,
-        json!({
-            "input":"replacement",
-            "delivery_policy":"interrupt_now",
-            "branch_target_turn_id":"turn_missing"
-        }),
-    )
-    .await;
+    let response = http::router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/inbox/messages"))
+                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "input":"replacement",
+                        "branch_target_turn_id":"turn_missing"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
 
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body["error"]["code"], "invalid_request");
-    assert!(
-        body["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("after_idle")
-    );
-}
-
-#[tokio::test]
-async fn branch_submission_rejects_an_unsupported_session_before_persisting() {
-    let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace, _pontia_home) = test_state().await;
-    let session_id = create_session(state.clone()).await;
-
-    let (status, body) = post_json(
-        state.clone(),
-        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
-        None,
-        json!({
-            "input":"replacement",
-            "branch_target_turn_id":"turn_missing"
-        }),
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(body["error"]["code"], "capability_unavailable");
-    assert!(
-        body["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("branch control")
-    );
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let (_, list) = get_json(
         state,
         &format!("/api/v1/sessions/{session_id}/inbox/messages"),
@@ -713,7 +686,6 @@ async fn persistent_submission_survives_response_loss_and_database_reopen() {
                     json!({
                         "input":"changed again",
                         "delivery_policy":"interrupt_now",
-                        "branch_target_turn_id":"different-target",
                         "metadata":["different metadata"]
                     })
                     .to_string(),

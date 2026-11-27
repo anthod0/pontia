@@ -23,6 +23,7 @@ pub use client_auth::{
 };
 mod auth;
 mod authentication;
+mod branch_replay;
 mod dashboard_events;
 mod events;
 mod git;
@@ -48,6 +49,7 @@ pub use agent_profiles::{
 };
 pub use auth::validate_auth;
 pub(crate) use authentication::authenticate;
+pub use branch_replay::submit_branch_replay;
 pub use dashboard_events::stream_dashboard_events;
 pub use events::{stream_session_events, stream_turn_events};
 pub use git::{

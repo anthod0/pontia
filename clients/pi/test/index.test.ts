@@ -393,14 +393,14 @@ describe("pontia pi extension lifecycle", () => {
       }
       calls.push("resolve");
       expect(params).toEqual({
-        inbox_message_id: "msg_replay",
+        replay_id: "replay_test",
         session_id: "sess_replay",
         runtime_id: "rtinst_replay",
         client_type: "pi",
       });
       return {
         branch_replay: {
-          inbox_message_id: "msg_replay",
+          replay_id: "replay_test",
           session_id: "sess_replay",
           runtime_id: "rtinst_replay",
           client_type: "pi",
@@ -458,15 +458,17 @@ describe("pontia pi extension lifecycle", () => {
       ui: { setEditorText: vi.fn(() => calls.push("clear")) },
     };
 
-    replay!("msg_replay");
+    replay!("replay_test");
     await command;
 
     await started;
     expect(reported.find((event) => event.type === "turn.started")?.data).toMatchObject({
       input_summary: "replacement prompt",
-      inbox_message_id: "msg_replay",
     });
-    expect(sendUserMessage).toHaveBeenCalledWith("/pontia-edit msg_replay", {
+    expect(reported.find((event) => event.type === "turn.started")?.data).not.toHaveProperty(
+      "inbox_message_id",
+    );
+    expect(sendUserMessage).toHaveBeenCalledWith("/pontia-edit replay_test", {
       expandPromptTemplates: true,
     });
     expect(commandContext.waitForIdle).toHaveBeenCalledOnce();
@@ -476,7 +478,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(sendUserMessage).toHaveBeenCalledWith("replacement prompt");
     expect(calls).toEqual(["resolve", "idle", "navigate", "clear", "send"]);
     await handlers.session_shutdown({ reason: "quit" }, ctx);
-    expect(() => replay!("msg_stale")).toThrow("no longer current");
+    expect(() => replay!("replay_stale")).toThrow("no longer current");
   });
 
   test.each([
@@ -498,7 +500,7 @@ describe("pontia pi extension lifecycle", () => {
         },
         request: vi.fn(async () => ({
           branch_replay: {
-            inbox_message_id: "msg_replay",
+            replay_id: "replay_test",
             session_id: "sess_replay",
             runtime_id: "rtinst_replay",
             client_type: "pi",
@@ -515,7 +517,7 @@ describe("pontia pi extension lifecycle", () => {
         : vi.fn(async () => navigationResult);
 
       await commands["pontia-edit"].handler(
-        "msg_replay",
+        "replay_test",
         persistentTuiContext({
           waitForIdle: vi.fn(async () => undefined),
           navigateTree,
@@ -543,7 +545,7 @@ describe("pontia pi extension lifecycle", () => {
     });
     const resolveNavigation = vi.fn();
     await failedResolve.commands["pontia-edit"].handler(
-      "msg_replay",
+      "replay_test",
       persistentTuiContext({
         waitForIdle: vi.fn(),
         navigateTree: resolveNavigation,
@@ -567,7 +569,7 @@ describe("pontia pi extension lifecycle", () => {
       },
       request: vi.fn(async () => ({
         branch_replay: {
-          inbox_message_id: "msg_replay",
+          replay_id: "replay_test",
           session_id: "sess_replay",
           runtime_id: "rtinst_replay",
           client_type: "pi",
@@ -582,7 +584,7 @@ describe("pontia pi extension lifecycle", () => {
     });
     const submitNavigation = vi.fn(async () => ({ cancelled: false }));
     await failedSubmit.commands["pontia-edit"].handler(
-      "msg_replay",
+      "replay_test",
       persistentTuiContext({
         waitForIdle: vi.fn(async () => undefined),
         navigateTree: submitNavigation,

@@ -49,7 +49,7 @@ pub trait ClientControlChannel: Send + Sync {
         })
     }
     fn ping(&self) -> ClientControlOperation<'_>;
-    fn replay<'a>(&'a self, inbox_message_id: &'a str) -> ClientControlOperation<'a>;
+    fn replay<'a>(&'a self, replay_id: &'a str) -> ClientControlOperation<'a>;
     fn submit<'a>(
         &'a self,
         input: &'a str,

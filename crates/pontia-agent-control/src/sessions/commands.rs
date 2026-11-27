@@ -244,7 +244,6 @@ impl SessionCommandService {
                             input: task.input,
                             metadata: task.metadata,
                             delivery_policy: "after_idle".into(),
-                            branch_target_turn_id: None,
                         },
                     )
                     .await?;

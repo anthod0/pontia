@@ -146,14 +146,11 @@ impl pontia_agent_control::ClientControlChannel for PiRpcPeer {
     }
     fn replay<'a>(
         &'a self,
-        inbox_message_id: &'a str,
+        replay_id: &'a str,
     ) -> pontia_agent_control::ClientControlOperation<'a> {
         Box::pin(async move {
             if self
-                .call(
-                    "branch.replay",
-                    json!({"inbox_message_id": inbox_message_id}),
-                )
+                .call("branch.replay", json!({"replay_id": replay_id}))
                 .await?
                 != json!({"accepted": true})
             {

@@ -165,7 +165,6 @@ fn request() -> SubmitInboxMessageRequest {
         input: "follow up".into(),
         metadata: json!({}),
         delivery_policy: "after_idle".into(),
-        branch_target_turn_id: None,
     }
 }
 

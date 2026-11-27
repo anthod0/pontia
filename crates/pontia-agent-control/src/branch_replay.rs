@@ -1,16 +1,32 @@
-use pontia_core::{domain::TurnState, error::Error};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
+
+use pontia_core::{domain::TurnState, error::Error, ids::new_branch_replay_id};
 use pontia_storage_sqlite::repositories::{
-    agent_bindings::SqliteAgentBindingRepository, inbox::SqliteInboxRepository,
-    session_runtimes::SqliteSessionRuntimeRepository, turns::SqliteTurnRepository,
+    agent_bindings::SqliteAgentBindingRepository, turns::SqliteTurnRepository,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 
-use crate::ControlQueryService;
+use crate::{ControlQueryService, runtime::ControlTarget};
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SubmitBranchReplayRequest {
+    pub target_turn_id: String,
+    pub input: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct BranchReplayOutcome {
+    pub replay_id: String,
+}
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct ResolveBranchReplayRequest {
-    pub inbox_message_id: String,
+    pub replay_id: String,
     pub session_id: String,
     pub runtime_id: String,
     pub client_type: String,
@@ -18,7 +34,7 @@ pub struct ResolveBranchReplayRequest {
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ResolvedBranchReplay {
-    pub inbox_message_id: String,
+    pub replay_id: String,
     pub session_id: String,
     pub runtime_id: String,
     pub client_type: String,
@@ -29,143 +45,104 @@ pub struct ResolvedBranchReplay {
 #[derive(Clone)]
 pub struct BranchReplayService {
     clients: crate::clients::ClientRegistry,
+    execution: crate::clients::ClientExecutionService,
+    history_control: crate::clients::ClientControlService,
+    pending: Arc<Mutex<HashMap<String, ResolvedBranchReplay>>>,
     pool: SqlitePool,
-    history_control: Option<crate::clients::ClientControlService>,
+    scheduler: crate::inbox::InboxScheduler,
 }
 
 impl BranchReplayService {
-    pub fn with_clients(mut self, clients: crate::clients::ClientRegistry) -> Self {
-        self.clients = clients;
-        self
-    }
-
-    pub fn with_history_control(mut self, control: crate::clients::ClientControlService) -> Self {
-        self.history_control = Some(control);
-        self
-    }
-    pub fn new(pool: SqlitePool) -> Self {
+    pub(crate) fn new(
+        pool: SqlitePool,
+        clients: crate::clients::ClientRegistry,
+        execution: crate::clients::ClientExecutionService,
+        history_control: crate::clients::ClientControlService,
+        scheduler: crate::inbox::InboxScheduler,
+    ) -> Self {
         Self {
             pool,
-            clients: Default::default(),
-            history_control: None,
+            clients,
+            execution,
+            history_control,
+            pending: Default::default(),
+            scheduler,
         }
     }
 
-    pub(crate) async fn dispatch(
-        &self,
-        clients: &crate::clients::ClientExecutionService,
-        session: &str,
-        message: &str,
-    ) -> pontia_core::Result<crate::control::ControlResult<crate::control::InputReceipt>> {
-        let view = ControlQueryService::new(self.pool.clone())
-            .with_clients(self.clients.clone())
-            .get_session_control(session)
-            .await?
-            .ok_or_else(|| Error::NotFound(format!("session {session} not found")))?;
-        let target =
-            crate::runtime::ControlTarget::resolve(&self.pool, &self.clients, session, None)
-                .await?;
-        self.resolve_command(ResolveBranchReplayRequest {
-            inbox_message_id: message.into(),
-            session_id: session.into(),
-            runtime_id: target.instance()?.into(),
-            client_type: view.client_type.clone(),
-        })
-        .await?;
-        let result = clients
-            .for_client(&view.client_type)?
-            .replay(&target, message)
-            .await;
-        Ok(match result {
-            crate::control::ControlResult::Sent(()) => {
-                crate::control::ControlResult::Sent(crate::control::InputReceipt::default())
-            }
-            other => crate::control::ControlResult::from_result(
-                other
-                    .into_result()
-                    .map(|_| crate::control::InputReceipt::default()),
-            ),
-        })
-    }
-
-    pub async fn validate_submission(
+    pub async fn submit(
         &self,
         session_id: &str,
         target_turn_id: &str,
-    ) -> pontia_core::Result<()> {
-        self.resolve_target(session_id, target_turn_id).await?;
-        Ok(())
+        input: &str,
+    ) -> pontia_core::Result<BranchReplayOutcome> {
+        let lock = self.scheduler.session_lock(session_id);
+        let _guard = lock.lock().await;
+        if input.trim().is_empty() {
+            return Err(Error::Domain(
+                "branch replay input must not be blank".into(),
+            ));
+        }
+
+        let session = ControlQueryService::new(self.pool.clone())
+            .with_clients(self.clients.clone())
+            .get_session_control(session_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
+        if session.state != "idle" {
+            return Err(Error::StateConflict(format!(
+                "session {session_id} in state {} cannot replay a branch",
+                session.state
+            )));
+        }
+        let target_entry_id = self.resolve_target(session_id, target_turn_id).await?;
+        let target = ControlTarget::resolve(&self.pool, &self.clients, session_id, None).await?;
+        let runtime_id = target.instance()?.to_string();
+        let channel = self.execution.for_client(&session.client_type)?;
+        let replay_id = new_branch_replay_id().to_string();
+        let replay = ResolvedBranchReplay {
+            replay_id: replay_id.clone(),
+            session_id: session_id.to_string(),
+            runtime_id,
+            client_type: session.client_type.clone(),
+            replacement_input: input.to_string(),
+            target_entry_id,
+        };
+        self.pending
+            .lock()
+            .expect("branch replay lock")
+            .insert(replay_id.clone(), replay);
+
+        let delivery = channel.replay(&target, &replay_id).await;
+        if let Err(error) = delivery.into_result() {
+            self.pending
+                .lock()
+                .expect("branch replay lock")
+                .remove(&replay_id);
+            return Err(error);
+        }
+        Ok(BranchReplayOutcome { replay_id })
     }
 
     pub async fn resolve_command(
         &self,
         request: ResolveBranchReplayRequest,
     ) -> pontia_core::Result<ResolvedBranchReplay> {
-        let runtime_id = SqliteSessionRuntimeRepository::new(self.pool.clone())
-            .runtime_id(
-                &request.session_id,
-                self.clients.control_runtime_role(&request.client_type),
-            )
-            .await?
-            .ok_or_else(|| {
-                Error::StateConflict(format!(
-                    "Session {} has no bound Runtime instance",
-                    request.session_id
-                ))
-            })?;
-        if runtime_id != request.runtime_id {
-            return Err(Error::StateConflict(format!(
-                "Runtime instance does not own Session {}",
-                request.session_id
-            )));
-        }
-        let binding = SqliteAgentBindingRepository::new(self.pool.clone())
-            .binding_for_session(&request.session_id)
-            .await?
-            .ok_or_else(|| {
-                Error::StateConflict(format!(
-                    "Session {} has no Agent binding",
-                    request.session_id
-                ))
-            })?;
-        if binding.client_type != request.client_type {
+        let mut pending = self.pending.lock().expect("branch replay lock");
+        let replay = pending.get(&request.replay_id).ok_or_else(|| {
+            Error::NotFound(format!("branch replay {} not found", request.replay_id))
+        })?;
+        if replay.session_id != request.session_id
+            || replay.runtime_id != request.runtime_id
+            || replay.client_type != request.client_type
+        {
             return Err(Error::StateConflict(
-                "Agent binding client type does not match branch replay request".to_string(),
+                "branch replay does not match its connection identity".into(),
             ));
         }
-        let message = SqliteInboxRepository::new(self.pool.clone())
-            .get_message(&request.session_id, &request.inbox_message_id)
-            .await?
-            .ok_or_else(|| {
-                Error::NotFound(format!(
-                    "inbox message {} not found",
-                    request.inbox_message_id
-                ))
-            })?;
-        if !matches!(message.state.as_str(), "dispatching" | "dispatched") {
-            return Err(Error::StateConflict(format!(
-                "inbox message {} is not being delivered",
-                request.inbox_message_id
-            )));
-        }
-        let target_turn_id = message.branch_target_turn_id.as_deref().ok_or_else(|| {
-            Error::Domain(format!(
-                "inbox message {} is not a branch submission",
-                request.inbox_message_id
-            ))
-        })?;
-        let target_entry_id = self
-            .resolve_target(&request.session_id, target_turn_id)
-            .await?;
-
-        Ok(ResolvedBranchReplay {
-            inbox_message_id: request.inbox_message_id,
-            session_id: request.session_id,
-            runtime_id: request.runtime_id,
-            client_type: request.client_type,
-            replacement_input: message.input_summary,
-            target_entry_id,
-        })
+        Ok(pending
+            .remove(&request.replay_id)
+            .expect("branch replay was checked above"))
     }
 
     async fn resolve_target(
@@ -181,12 +158,6 @@ impl BranchReplayService {
         if !session.capabilities.branch_control {
             return Err(Error::CapabilityUnavailable(format!(
                 "session {session_id} does not support branch control"
-            )));
-        }
-        if !matches!(session.state.as_str(), "idle" | "interrupted" | "exited") {
-            return Err(Error::StateConflict(format!(
-                "session {session_id} in state {} cannot navigate branches",
-                session.state
             )));
         }
 
@@ -242,7 +213,7 @@ impl BranchReplayService {
                     client_session_key: binding.client_session_key.clone(),
                     client_session_file: binding.client_session_file.clone().map(Into::into),
                 },
-                self.history_control.clone(),
+                Some(self.history_control.clone()),
             )
         }) {
             return history

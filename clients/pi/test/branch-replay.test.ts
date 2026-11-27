@@ -66,7 +66,7 @@ test("RPC replay enters Pi's native command context and navigates the running se
                   };
                 expect(method).toBe("branch.resolve");
                 expect(params).toEqual({
-                  inbox_message_id: "msg_native",
+                  replay_id: "replay_native",
                   session_id: "sess_native",
                   runtime_id: "rt_native",
                   client_type: "pi",
@@ -125,7 +125,7 @@ test("RPC replay enters Pi's native command context and navigates the running se
     },
   });
   expect(replay).toBeTypeOf("function");
-  replay!("msg_native");
+  replay!("replay_native");
   await vi.waitFor(() => expect(replacement).toHaveBeenCalledExactlyOnceWith("replacement"));
   expect(navigated).toHaveBeenCalledOnce();
   expect(sessionManager.getLeafId()).toBeNull();

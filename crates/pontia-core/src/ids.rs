@@ -51,6 +51,10 @@ pub fn new_message_id() -> ExternalId {
     prefixed_id("msg")
 }
 
+pub fn new_branch_replay_id() -> ExternalId {
+    prefixed_id("replay")
+}
+
 pub fn new_agent_binding_id() -> ExternalId {
     prefixed_id("bind")
 }

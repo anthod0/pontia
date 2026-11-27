@@ -15,8 +15,9 @@ pub async fn submit_inbox_message(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(session_id): Path<String>,
-    Json(request): Json<SubmitInboxMessageRequest>,
+    Json(request): Json<Value>,
 ) -> Result<Response, ApiError> {
+    let request = parse_submission(request)?;
     let service = state.control().inbox_commands();
     let outcome = match headers.get("Idempotency-Key") {
         Some(key) => {
@@ -46,8 +47,9 @@ pub async fn submit_inbox_message(
 pub async fn put_inbox_message(
     State(state): State<AppState>,
     Path((session_id, message_id)): Path<(String, String)>,
-    Json(request): Json<SubmitInboxMessageRequest>,
+    Json(request): Json<Value>,
 ) -> Result<Response, ApiError> {
+    let request = parse_submission(request)?;
     let outcome = state
         .control()
         .inbox_commands()
@@ -62,6 +64,18 @@ pub async fn put_inbox_message(
         ok(outcome.data),
     )
         .into_response())
+}
+
+fn parse_submission(value: Value) -> Result<SubmitInboxMessageRequest, ApiError> {
+    if value
+        .as_object()
+        .is_some_and(|object| object.contains_key("branch_target_turn_id"))
+    {
+        return Err(ApiError::invalid_request(
+            "branch_target_turn_id is not accepted by the Inbox API",
+        ));
+    }
+    serde_json::from_value(value).map_err(|error| ApiError::invalid_request(error.to_string()))
 }
 
 pub async fn retry_inbox_message(

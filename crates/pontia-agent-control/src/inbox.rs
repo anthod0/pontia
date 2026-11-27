@@ -19,8 +19,8 @@ use serde_json::{Value, json};
 use sqlx::SqlitePool;
 
 use crate::{
-    BranchReplayService, ControlQueryService, InboxMessageView, PontiaEvent, PontiaEventSource,
-    PontiaEventType, TurnCommandService, views::inbox::row_to_view,
+    ControlQueryService, InboxMessageView, PontiaEvent, PontiaEventSource, PontiaEventType,
+    TurnCommandService, views::inbox::row_to_view,
 };
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -28,8 +28,6 @@ pub struct SubmitInboxMessageRequest {
     pub input: String,
     #[serde(default = "default_delivery_policy")]
     pub delivery_policy: String,
-    #[serde(default)]
-    pub branch_target_turn_id: Option<String>,
     #[serde(default)]
     pub metadata: Value,
 }
@@ -51,7 +49,6 @@ pub struct InboxCommandService {
     queries: ControlQueryService,
     clients: crate::clients::ClientExecutionService,
     turns: TurnCommandService,
-    branches: BranchReplayService,
     pub(crate) scheduler: InboxScheduler,
 }
 
@@ -62,7 +59,6 @@ impl InboxCommandService {
         queries: ControlQueryService,
         clients: crate::clients::ClientExecutionService,
         turns: TurnCommandService,
-        branches: BranchReplayService,
         scheduler: InboxScheduler,
     ) -> Self {
         Self {
@@ -71,7 +67,6 @@ impl InboxCommandService {
             queries,
             clients,
             turns,
-            branches,
             scheduler,
         }
     }
@@ -153,27 +148,6 @@ impl InboxCommandService {
             .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-        if request.branch_target_turn_id.is_some() {
-            if request.delivery_policy != "after_idle" {
-                return Err(Error::Domain(
-                    "branch submissions require after_idle delivery".to_string(),
-                ));
-            }
-            if !session.capabilities.branch_control {
-                return Err(Error::CapabilityUnavailable(format!(
-                    "session {session_id} does not support branch control"
-                )));
-            }
-            self.branches
-                .validate_submission(
-                    session_id,
-                    request
-                        .branch_target_turn_id
-                        .as_deref()
-                        .expect("branch target was checked above"),
-                )
-                .await?;
-        }
         let metadata = serde_json::to_string(&request.metadata)?;
 
         let active_turn = SqliteTurnRepository::new(self.pool.clone())
@@ -197,7 +171,6 @@ impl InboxCommandService {
                     delivery_policy,
                     input: &request.input,
                     metadata: &metadata,
-                    branch_target: request.branch_target_turn_id.as_deref(),
                     steer_target,
                     retry_of,
                     resuming,
@@ -383,7 +356,7 @@ impl InboxCommandService {
             self.mark_failed(&row.message_id, error.to_string()).await?;
             return Ok(());
         }
-        if row.branch_target_turn_id.is_none() && !adapter.input_available(session_id).await? {
+        if !adapter.input_available(session_id).await? {
             return Ok(());
         }
         if matches!(session.state.as_str(), "exited" | "error") {
@@ -419,7 +392,6 @@ impl InboxCommandService {
         let delivery_policy = row.delivery_policy;
         let message_id = row.message_id;
         let input = row.input_summary;
-        let branch_target_turn_id = row.branch_target_turn_id;
         let metadata = row.metadata;
         let mut metadata: Value = serde_json::from_str(&metadata)?;
         if !metadata.is_object() {
@@ -437,22 +409,15 @@ impl InboxCommandService {
         }
 
         let turns = &self.turns;
-        let delivery = if branch_target_turn_id.is_some() {
-            self.branches
-                .dispatch(&self.clients, session_id, &message_id)
-                .await
-                .map(|result| (None, result))
-        } else {
-            turns
-                .submit_input(
-                    session_id,
-                    input,
-                    metadata,
-                    intent,
-                    row.required_runtime_id.as_deref(),
-                )
-                .await
-        };
+        let delivery = turns
+            .submit_input(
+                session_id,
+                input,
+                metadata,
+                intent,
+                row.required_runtime_id.as_deref(),
+            )
+            .await;
         let delivery = match delivery {
             Ok((turn_id, result)) => result.into_result().map(|receipt| (turn_id, receipt)),
             Err(error) => Err(error),

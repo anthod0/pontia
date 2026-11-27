@@ -380,7 +380,6 @@ impl HelperService {
                             input: message,
                             delivery_policy: "after_idle".into(),
                             metadata: json!({}),
-                            branch_target_turn_id: None,
                         },
                     )
                     .await?;

@@ -141,15 +141,12 @@ export async function connectPi(
       return;
     }
     if (method === "branch.replay" && onReplay) {
-      if (
-        typeof params.inbox_message_id !== "string" ||
-        !/^msg_[^\s]+$/.test(params.inbox_message_id)
-      ) {
-        error(-32602, "branch.replay requires an Inbox Message identifier");
+      if (typeof params.replay_id !== "string" || !/^replay_[^\s]+$/.test(params.replay_id)) {
+        error(-32602, "branch.replay requires a replay identifier");
         return;
       }
       try {
-        onReplay(params.inbox_message_id);
+        onReplay(params.replay_id);
         respond({ result: { accepted: true } });
       } catch (failure) {
         error(

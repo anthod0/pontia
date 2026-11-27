@@ -40,22 +40,17 @@ async fn attach(pi: &PiRpcPeer, session: &str, runtime: &str, native: &str) {
     .unwrap();
 }
 
-async fn post_external_json(
-    state: AppState,
-    uri: &str,
-    idempotency_key: Option<&str>,
-    body: Value,
-) -> (StatusCode, Value) {
-    let mut builder = Request::builder()
-        .method("POST")
-        .uri(uri)
-        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
-        .header(header::CONTENT_TYPE, "application/json");
-    if let Some(key) = idempotency_key {
-        builder = builder.header("Idempotency-Key", key);
-    }
+async fn post_external_json(state: AppState, uri: &str, body: Value) -> (StatusCode, Value) {
     let response = http::router(state)
-        .oneshot(builder.body(Body::from(body.to_string())).expect("request"))
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body.to_string()))
+                .expect("request"),
+        )
         .await
         .expect("response");
     let status = response.status();
@@ -65,472 +60,35 @@ async fn post_external_json(
         .await
         .expect("body")
         .to_bytes();
-    (status, serde_json::from_slice(&body).expect("json body"))
+    let body = serde_json::from_slice(&body).unwrap_or(Value::Null);
+    (status, body)
 }
 
-#[tokio::test]
-async fn branch_replay_resolves_root_middle_latest_and_interrupted_targets_without_mutation() {
-    let temp = tempdir().unwrap();
-    let (state, _pontia_home) = test_state().await;
-    let session_id = "sess_branch_resolve";
-    let runtime_id = "runtime_sess_branch_resolve";
-    let cwd = temp.path().join("workspace");
-    fs::create_dir_all(&cwd).unwrap();
-    let cwd = cwd.canonicalize().unwrap();
-    seed_session(&state, session_id).await;
+async fn seed_replay_target(
+    state: &AppState,
+    root: &std::path::Path,
+    session_id: &str,
+    target_turn_id: &str,
+    runtime_id: &str,
+    session_key: &str,
+) {
+    seed_session(state, session_id).await;
     sqlx::query("UPDATE sessions SET state = 'idle' WHERE session_id = ?")
         .bind(session_id)
         .execute(&state.db())
         .await
         .unwrap();
-
-    let session_key = "branch-resolve";
-    let segments = [
-        concat!(
-            "{\"type\":\"message\",\"id\":\"root-user\",\"parentId\":null,\"message\":{\"role\":\"user\",\"content\":\"root\"}}\n",
-            "{\"type\":\"message\",\"id\":\"root-answer\",\"parentId\":\"root-user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"root answer\"}]}}\n"
-        ),
-        concat!(
-            "{\"type\":\"message\",\"id\":\"middle-user\",\"parentId\":\"root-answer\",\"message\":{\"role\":\"user\",\"content\":\"middle\"}}\n",
-            "{\"type\":\"message\",\"id\":\"middle-answer\",\"parentId\":\"middle-user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"middle answer\"}]}}\n"
-        ),
-        concat!(
-            "{\"type\":\"message\",\"id\":\"interrupted-user\",\"parentId\":\"middle-answer\",\"message\":{\"role\":\"user\",\"content\":\"interrupted\"}}\n",
-            "{\"type\":\"message\",\"id\":\"interrupted-answer\",\"parentId\":\"interrupted-user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"interrupted answer\"}]}}\n"
-        ),
-        concat!(
-            "{\"type\":\"message\",\"id\":\"latest-user\",\"parentId\":\"interrupted-answer\",\"message\":{\"role\":\"user\",\"content\":\"latest\"}}\n",
-            "{\"type\":\"message\",\"id\":\"latest-answer\",\"parentId\":\"latest-user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"latest answer\"}]}}\n"
-        ),
-    ];
-    let transcript = segments.concat();
-    let transcript_path = temp.path().join(format!("bound-{session_key}.jsonl"));
-    fs::write(&transcript_path, &transcript).unwrap();
-    let binding = AgentBindingService::new(state.db())
-        .upsert_binding(UpsertAgentBindingRequest {
-            session_id: session_id.to_string(),
-            client_type: "pi".to_string(),
-            launch_cwd: cwd.display().to_string(),
-            client_session_key: session_key.to_string(),
-            client_session_file: Some(transcript_path.display().to_string()),
-            metadata: json!({}),
-        })
-        .await
-        .unwrap();
-    let cursor = |offset, anchor: Option<&str>| {
-        PiJsonlV2Cursor {
-            binding_id: binding.id.clone(),
-            byte_offset: offset,
-            native_entry_anchor: anchor.map(ToString::to_string),
-            relation: TimelineBoundaryRelation::After,
-        }
-        .encode()
-    };
-    let targets = [
-        (
-            "turn_01900000-0000-7000-8000-000000000001",
-            "msg_branch_root",
-            "root-user",
-            "root-answer",
-            "root",
-            None,
-            "completed",
-            "root replacement",
-        ),
-        (
-            "turn_01900000-0000-7000-8000-000000000002",
-            "msg_branch_middle",
-            "middle-user",
-            "middle-answer",
-            "linked",
-            Some("turn_01900000-0000-7000-8000-000000000001"),
-            "completed",
-            "middle replacement",
-        ),
-        (
-            "turn_01900000-0000-7000-8000-000000000003",
-            "msg_branch_interrupted",
-            "interrupted-user",
-            "interrupted-answer",
-            "linked",
-            Some("turn_01900000-0000-7000-8000-000000000002"),
-            "interrupted",
-            "interrupted replacement",
-        ),
-        (
-            "turn_01900000-0000-7000-8000-000000000004",
-            "msg_branch_latest",
-            "latest-user",
-            "latest-answer",
-            "linked",
-            Some("turn_01900000-0000-7000-8000-000000000003"),
-            "completed",
-            "latest replacement",
-        ),
-    ];
-    let head_anchors = [
-        None,
-        Some("root-answer"),
-        Some("middle-answer"),
-        Some("interrupted-answer"),
-    ];
-    let mut offset = 0;
-    for (index, (turn_id, _, _, tail_anchor, topology, parent_turn_id, state_name, _)) in
-        targets.iter().enumerate()
-    {
-        let tail = offset + segments[index].len();
-        sqlx::query(
-            r#"INSERT INTO turns
-               (turn_id, session_id, head_cursor, tail_cursor, topology_status, parent_turn_id, state, input_summary)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
-        )
-        .bind(turn_id)
-        .bind(session_id)
-        .bind(cursor(offset, head_anchors[index]))
-        .bind(cursor(tail, Some(tail_anchor)))
-        .bind(topology)
-        .bind(parent_turn_id)
-        .bind(state_name)
-        .bind(format!("{topology} input"))
-        .execute(&state.db())
-        .await
-        .unwrap();
-        offset = tail;
-    }
-    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES (?, ?, '/unused/branch-resolve.sock', '%1', 'pi_tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) ON CONFLICT(runtime_id) DO UPDATE SET state=excluded.state, tmux_socket_path=excluded.tmux_socket_path, tmux_pane_id=excluded.tmux_pane_id"#)
-.bind(session_id)
-.bind(runtime_id)
-    .execute(&state.db())
-    .await
-    .unwrap();
-    for (turn_id, message_id, _, _, _, _, _, replacement) in targets {
-        sqlx::query(
-            r#"INSERT INTO inbox_messages
-               (message_id, session_id, state, delivery_policy, input_summary, branch_target_turn_id)
-               VALUES (?, ?, 'dispatching', 'after_idle', ?, ?)"#,
-        )
-        .bind(message_id)
-        .bind(session_id)
-        .bind(replacement)
-        .bind(turn_id)
-        .execute(&state.db())
-        .await
-        .unwrap();
-    }
-
-    let (pi, _requests) = rpc_client(&state).await;
-    attach(&pi, session_id, runtime_id, session_key).await;
-    let before: (i64, i64, i64) = sqlx::query_as(
-        "SELECT (SELECT COUNT(*) FROM turns), (SELECT COUNT(*) FROM events), (SELECT COUNT(*) FROM inbox_messages WHERE state = 'dispatching')",
-    )
-    .fetch_one(&state.db())
-    .await
-    .unwrap();
-    for (_, message_id, target_entry_id, _, _, _, _, replacement_input) in targets {
-        let body = pi
-            .call(
-                "branch.resolve",
-                json!({
-                    "inbox_message_id": message_id,
-                    "session_id": session_id,
-                    "runtime_id": runtime_id,
-                    "client_type": "pi"
-                }),
-            )
-            .await
-            .unwrap();
-        assert_eq!(
-            body["branch_replay"],
-            json!({
-                "inbox_message_id": message_id,
-                "session_id": session_id,
-                "runtime_id": runtime_id,
-                "client_type": "pi",
-                "replacement_input": replacement_input,
-                "target_entry_id": target_entry_id
-            })
-        );
-    }
-    let after: (i64, i64, i64) = sqlx::query_as(
-        "SELECT (SELECT COUNT(*) FROM turns), (SELECT COUNT(*) FROM events), (SELECT COUNT(*) FROM inbox_messages WHERE state = 'dispatching')",
-    )
-    .fetch_one(&state.db())
-    .await
-    .unwrap();
-    assert_eq!(after, before);
-
-    let inbox_uri = format!("/api/v1/sessions/{session_id}/inbox/messages");
-    let (unknown_status, _) = post_external_json(
-        state.clone(),
-        &inbox_uri,
-        None,
-        json!({
-            "input": "replacement",
-            "branch_target_turn_id": "turn_unknown"
-        }),
-    )
-    .await;
-    assert_eq!(unknown_status, StatusCode::NOT_FOUND);
-
-    let other_session_id = "sess_branch_other";
-    seed_session(&state, other_session_id).await;
-    sqlx::query(
-        r#"INSERT INTO turns (turn_id, session_id, state, input_summary)
-           VALUES ('turn_branch_other', ?, 'completed', 'other')"#,
-    )
-    .bind(other_session_id)
-    .execute(&state.db())
-    .await
-    .unwrap();
-    let (cross_session_status, _) = post_external_json(
-        state.clone(),
-        &inbox_uri,
-        None,
-        json!({
-            "input": "replacement",
-            "branch_target_turn_id": "turn_branch_other"
-        }),
-    )
-    .await;
-    assert_eq!(cross_session_status, StatusCode::CONFLICT);
-
-    sqlx::query("UPDATE sessions SET state = 'busy' WHERE session_id = ?")
-        .bind(session_id)
-        .execute(&state.db())
-        .await
-        .unwrap();
-    let (busy_status, _) = post_external_json(
-        state.clone(),
-        &inbox_uri,
-        None,
-        json!({
-            "input": "replacement",
-            "branch_target_turn_id": "turn_01900000-0000-7000-8000-000000000001"
-        }),
-    )
-    .await;
-    assert_eq!(busy_status, StatusCode::CONFLICT);
-    sqlx::query("UPDATE sessions SET state = 'idle' WHERE session_id = ?")
-        .bind(session_id)
-        .execute(&state.db())
-        .await
-        .unwrap();
-
-    sqlx::query(
-        r#"INSERT INTO turns (turn_id, session_id, state, input_summary)
-           VALUES ('turn_branch_missing_boundary', ?, 'completed', 'missing boundary')"#,
-    )
-    .bind(session_id)
-    .execute(&state.db())
-    .await
-    .unwrap();
-    let (missing_boundary_status, _) = post_external_json(
-        state.clone(),
-        &inbox_uri,
-        None,
-        json!({
-            "input": "replacement",
-            "branch_target_turn_id": "turn_branch_missing_boundary"
-        }),
-    )
-    .await;
-    assert_eq!(missing_boundary_status, StatusCode::CONFLICT);
-
-    assert!(
-        pi.call(
-            "branch.resolve",
-            json!({
-                "inbox_message_id": "msg_branch_root", "session_id": session_id,
-                "runtime_id": "rtinst_stale", "client_type": "pi",
-            })
-        )
-        .await
-        .unwrap_err()
-        .to_string()
-        .contains("connection identity")
-    );
-
-    for (session, runtime, client_type) in [
-        (other_session_id, runtime_id, "pi"),
-        (session_id, runtime_id, "codex"),
-    ] {
-        assert!(
-            pi.call(
-                "branch.resolve",
-                json!({
-                    "inbox_message_id": "msg_branch_root", "session_id": session,
-                    "runtime_id": runtime, "client_type": client_type,
-                })
-            )
-            .await
-            .unwrap_err()
-            .to_string()
-            .contains("connection identity")
-        );
-    }
-    sqlx::query("UPDATE session_runtimes SET runtime_id = 'rtinst_replaced' WHERE session_id = ?")
-        .bind(session_id)
-        .execute(&state.db())
-        .await
-        .unwrap();
-    assert!(
-        pi.call(
-            "branch.resolve",
-            json!({
-                "inbox_message_id": "msg_branch_root", "session_id": session_id,
-                "runtime_id": runtime_id, "client_type": "pi",
-            })
-        )
-        .await
-        .unwrap_err()
-        .to_string()
-        .contains("no longer current")
-    );
-    sqlx::query("UPDATE session_runtimes SET runtime_id = ? WHERE session_id = ?")
-        .bind(runtime_id)
-        .bind(session_id)
-        .execute(&state.db())
-        .await
-        .unwrap();
-
-    let unbound_candidate = temp.path().join("unbound-candidate.jsonl");
-    fs::write(&unbound_candidate, &transcript).unwrap();
-    let stale_bound_path = temp.path().join("stale-bound-source.jsonl");
-    sqlx::query("UPDATE agent_bindings SET client_session_file = ? WHERE id = ?")
-        .bind(stale_bound_path.display().to_string())
-        .bind(&binding.id)
-        .execute(&state.db())
-        .await
-        .unwrap();
-    let stale_source = pi
-        .call(
-            "branch.resolve",
-            json!({
-                "inbox_message_id": "msg_branch_root",
-                "session_id": session_id,
-                "runtime_id": runtime_id,
-                "client_type": "pi"
-            }),
-        )
-        .await;
-    assert!(stale_source.is_err());
-    pi.close();
-    tokio::time::timeout(std::time::Duration::from_secs(1), async {
-        while state
-            .control()
-            .client_control()
-            .available(session_id)
-            .await
-            .unwrap()
-        {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .unwrap();
-    sqlx::query("UPDATE agent_bindings SET client_session_file = ? WHERE id = ?")
-        .bind(transcript_path.display().to_string())
-        .bind(&binding.id)
-        .execute(&state.db())
-        .await
-        .unwrap();
-    state
-        .control()
-        .inbox_commands()
-        .recover_deliveries()
-        .await
-        .unwrap();
-    sqlx::query(
-        "INSERT INTO events (event_id, session_id, source, client_type, event_type, occurred_at, payload) VALUES ('evt_branch_resolve_ready', ?, 'agent_client', 'pi', 'session.ready', '2026-07-24T00:00:00Z', ?)",
-    )
-    .bind(session_id)
-    .bind(json!({"runtime_id": runtime_id}).to_string())
-    .execute(&state.db())
-    .await
-    .unwrap();
-    let (blocked_delivery_status, blocked_delivery_body) = post_external_json(
-        state.clone(),
-        &inbox_uri,
-        None,
-        json!({
-            "input": "replacement with unavailable connection",
-            "branch_target_turn_id": "turn_01900000-0000-7000-8000-000000000001"
-        }),
-    )
-    .await;
-    assert_eq!(blocked_delivery_status, StatusCode::CREATED);
-    assert_eq!(
-        blocked_delivery_body["data"]["inbox_message"]["state"],
-        "pending"
-    );
-    let unknown = state
-        .control()
-        .inbox_commands()
-        .get_message(session_id, "msg_branch_root")
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(
-        unknown.state, "unknown",
-        "unconfirmed branch delivery cannot be overtaken or automatically replayed"
-    );
-    assert_eq!(
-        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM turns WHERE session_id = ?")
-            .bind(session_id)
-            .fetch_one(&state.db())
-            .await
-            .unwrap(),
-        5
-    );
-}
-
-#[tokio::test]
-async fn branch_resolution_requires_registered_connection_identity() {
-    let (state, _pontia_home) = test_state().await;
-    let (pi, _requests) = rpc_client(&state).await;
-    let error = pi
-        .call(
-            "branch.resolve",
-            json!({
-                "inbox_message_id": "msg_unknown", "session_id": "sess_unknown",
-                "runtime_id": "rtinst_unknown", "client_type": "pi",
-            }),
-        )
-        .await
-        .unwrap_err();
-    assert!(error.to_string().contains("requires registration"));
-    pi.close();
-}
-
-#[tokio::test]
-async fn branch_inbox_delivery_is_opaque_idempotent_and_does_not_fabricate_a_turn() {
-    let temp = tempdir().unwrap();
-    let (state, _pontia_home) = test_state().await;
-    let session_id = "sess_branch_dispatch";
-    let target_turn_id = "turn_branch_dispatch_target";
-    let runtime_id = "runtime_sess_branch_dispatch";
-    let cwd = temp.path().join("workspace");
-    fs::create_dir_all(&cwd).unwrap();
-    let cwd = cwd.canonicalize().unwrap();
-    seed_session(&state, session_id).await;
-    sqlx::query("UPDATE sessions SET state = 'idle' WHERE session_id = ?")
-        .bind(session_id)
-        .execute(&state.db())
-        .await
-        .unwrap();
-
-    let session_key = "branch-dispatch";
     let transcript = concat!(
-        "{\"type\":\"message\",\"id\":\"dispatch-user\",\"parentId\":null,\"message\":{\"role\":\"user\",\"content\":\"original\"}}\n",
-        "{\"type\":\"message\",\"id\":\"dispatch-answer\",\"parentId\":\"dispatch-user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"answer\"}]}}\n"
+        "{\"type\":\"message\",\"id\":\"target-user\",\"parentId\":null,\"message\":{\"role\":\"user\",\"content\":\"original\"}}\n",
+        "{\"type\":\"message\",\"id\":\"target-answer\",\"parentId\":\"target-user\",\"message\":{\"role\":\"assistant\",\"content\":[]}}\n"
     );
-    let transcript_path = temp.path().join(format!("bound-{session_key}.jsonl"));
+    let transcript_path = root.join("session.jsonl");
     fs::write(&transcript_path, transcript).unwrap();
     let binding = AgentBindingService::new(state.db())
         .upsert_binding(UpsertAgentBindingRequest {
             session_id: session_id.to_string(),
             client_type: "pi".to_string(),
-            launch_cwd: cwd.display().to_string(),
+            launch_cwd: root.display().to_string(),
             client_session_key: session_key.to_string(),
             client_session_file: Some(transcript_path.display().to_string()),
             metadata: json!({}),
@@ -554,187 +112,170 @@ async fn branch_inbox_delivery_is_opaque_idempotent_and_does_not_fabricate_a_tur
     .bind(target_turn_id)
     .bind(session_id)
     .bind(cursor(0, None))
-    .bind(cursor(transcript.len(), Some("dispatch-answer")))
+    .bind(cursor(transcript.len(), Some("target-answer")))
     .execute(&state.db())
     .await
     .unwrap();
-
-    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES (?, ?, '/unused/branch-dispatch.sock', '%1', 'pi_tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) ON CONFLICT(runtime_id) DO UPDATE SET state=excluded.state, tmux_socket_path=excluded.tmux_socket_path, tmux_pane_id=excluded.tmux_pane_id"#)
-.bind(session_id)
-.bind(runtime_id)
+    sqlx::query(
+        "UPDATE session_runtimes SET runtime_id=?,tmux_socket_path='/unused/branch.sock',tmux_pane_id='%1' WHERE session_id=?",
+    )
+    .bind(runtime_id)
+    .bind(session_id)
     .execute(&state.db())
     .await
     .unwrap();
     sqlx::query(
         r#"INSERT INTO events
            (event_id, session_id, source, client_type, event_type, occurred_at, payload)
-           VALUES ('evt_branch_dispatch_ready', ?, 'agent_client', 'pi', 'session.ready',
-                   '2026-07-24T00:00:00Z', ?)"#,
+           VALUES (?, ?, 'agent_client', 'pi', 'session.ready',
+                   '2026-11-27T00:00:00Z', ?)"#,
     )
+    .bind(format!("evt_{session_id}_ready"))
     .bind(session_id)
     .bind(json!({"runtime_id": runtime_id}).to_string())
     .execute(&state.db())
     .await
     .unwrap();
+}
+
+#[tokio::test]
+async fn branch_replay_uses_one_time_memory_without_creating_an_inbox_message() {
+    let temp = tempdir().unwrap();
+    let (state, _pontia_home) = test_state().await;
+    let session_id = "sess_branch_replay";
+    let target_turn_id = "turn_branch_target";
+    let runtime_id = "runtime_branch_replay";
+    let session_key = "branch-native";
+    seed_replay_target(
+        &state,
+        temp.path(),
+        session_id,
+        target_turn_id,
+        runtime_id,
+        session_key,
+    )
+    .await;
 
     let (pi, mut requests) = rpc_client(&state).await;
     attach(&pi, session_id, runtime_id, session_key).await;
     let client = pi.clone();
-    let delivery = tokio::spawn(async move {
+    let replay = tokio::spawn(async move {
         let request = requests.recv().await.unwrap();
         assert_eq!(request.method, "branch.replay");
-        // Resolve in the reverse direction before acknowledging the command.
-        let resolved = client
-            .call(
-                "branch.resolve",
-                json!({
-                    "inbox_message_id": request.params["inbox_message_id"],
-                    "session_id": session_id, "runtime_id": runtime_id,
-                    "client_type": "pi",
-                }),
-            )
-            .await
-            .unwrap();
-        assert_eq!(
-            resolved["branch_replay"]["replacement_input"],
-            "secret replacement content"
-        );
+        let replay_id = request.params["replay_id"].as_str().unwrap().to_string();
+        assert!(replay_id.starts_with("replay_"));
         client
             .reply(request.id, json!({"accepted": true}))
             .await
             .unwrap();
-        (request.params, requests)
+        let params = json!({
+            "replay_id": replay_id,
+            "session_id": session_id,
+            "runtime_id": runtime_id,
+            "client_type": "pi",
+        });
+        let resolved = client.call("branch.resolve", params.clone()).await.unwrap();
+        assert_eq!(
+            resolved["branch_replay"]["replacement_input"],
+            "replacement"
+        );
+        assert_eq!(resolved["branch_replay"]["target_entry_id"], "target-user");
+        assert!(client.call("branch.resolve", params).await.is_err());
+        replay_id
     });
 
-    let uri = format!("/api/v1/sessions/{session_id}/inbox/messages");
-    let request = json!({
-        "input": "secret replacement content",
-        "branch_target_turn_id": target_turn_id
-    });
-    let first = post_external_json(
+    let (status, body) = post_external_json(
         state.clone(),
-        &uri,
-        Some("branch-dispatch-once"),
-        request.clone(),
+        &format!("/api/v1/sessions/{session_id}/branch-replay"),
+        json!({"target_turn_id": target_turn_id, "input": "replacement"}),
     )
     .await;
-    let second =
-        post_external_json(state.clone(), &uri, Some("branch-dispatch-once"), request).await;
-    assert_eq!(first.0, StatusCode::CREATED, "{:?}", first.1);
-    assert_eq!(second.0, StatusCode::OK);
-    assert_eq!(first.1["data"], second.1["data"]);
-    let message = &first.1["data"]["inbox_message"];
-    let message_id = message["message_id"].as_str().unwrap();
-    assert_eq!(message["state"], "dispatched");
-    assert_eq!(message["branch_target_turn_id"], target_turn_id);
-    assert_eq!(message["turn_id"], Value::Null);
-
-    let (delivered, mut requests) = delivery.await.unwrap();
-    assert_eq!(delivered, json!({"inbox_message_id": message_id}));
-    assert!(requests.try_recv().is_err());
-    let turn_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns WHERE session_id = ?")
-        .bind(session_id)
-        .fetch_one(&state.db())
-        .await
-        .unwrap();
-    assert_eq!(turn_count, 1);
-    let current_turn_id: Option<String> =
-        sqlx::query_scalar("SELECT current_turn_id FROM sessions WHERE session_id = ?")
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(
+        body["data"]["branch_replay"]["replay_id"],
+        replay.await.unwrap()
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM inbox_messages WHERE session_id = ?")
             .bind(session_id)
             .fetch_one(&state.db())
             .await
-            .unwrap();
-    assert_eq!(current_turn_id, None);
-    pi.close();
-}
-
-#[tokio::test]
-async fn branch_resolve_requests_paginated_history_on_its_own_connection_without_a_file() {
-    let root = tempdir().unwrap();
-    let (state, _pontia_home) = test_state().await;
-    let session = "sess_branch_rpc";
-    let runtime = "runtime_sess_branch_rpc";
-    let native = "branch-native";
-    seed_session(&state, session).await;
-    sqlx::query("UPDATE sessions SET state='idle' WHERE session_id=?")
-        .bind(session)
-        .execute(&state.db())
-        .await
-        .unwrap();
-    let missing = root.path().join("missing.jsonl");
-    let binding = AgentBindingService::new(state.db())
-        .upsert_binding(UpsertAgentBindingRequest {
-            session_id: session.into(),
-            client_type: "pi".into(),
-            launch_cwd: root.path().display().to_string(),
-            client_session_key: native.into(),
-            client_session_file: Some(missing.display().to_string()),
-            metadata: json!({}),
-        })
-        .await
-        .unwrap();
-    let cursor = |anchor: Option<&str>| {
-        pontia_client_pi::history::PiEntryCursor {
-            binding_id: binding.id.clone(),
-            session_id: native.into(),
-            anchor: anchor.map(Into::into),
-            relation: "after".into(),
-        }
-        .encode()
-    };
-    sqlx::query("INSERT INTO turns(turn_id,session_id,head_cursor,tail_cursor,topology_status,state,input_summary) VALUES ('turn_target',?,?,?,'root','completed','question')").bind(session).bind(cursor(None)).bind(cursor(Some("a"))).execute(&state.db()).await.unwrap();
-    sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary,branch_target_turn_id) VALUES ('msg_reverse',?,'dispatching','after_idle','replacement','turn_target')").bind(session).execute(&state.db()).await.unwrap();
-    sqlx::query("UPDATE session_runtimes SET tmux_socket_path='/unused/branch.sock',tmux_pane_id='%1' WHERE session_id=?").bind(session).execute(&state.db()).await.unwrap();
-    let (pi, mut requests) = rpc_client(&state).await;
-    attach(&pi, session, runtime, native).await;
-    let mut pending = tokio::spawn({
-        let pi = pi.clone();
-        async move {
-            pi.call("branch.resolve",json!({"inbox_message_id":"msg_reverse","session_id":session,"runtime_id":runtime,"client_type":"pi"})).await
-        }
-    });
-    for index in 0..2 {
-        let request = tokio::time::timeout(std::time::Duration::from_secs(2), async {
-            tokio::select! { request = requests.recv() => request.unwrap(), result = &mut pending => panic!("branch returned before history: {result:?}") }
-        }).await.unwrap();
-        assert_eq!(request.method, "history.read");
-        if index == 0 {
-            // The server must process another peer request while branch resolution
-            // is waiting for a reverse history response on this connection.
-            let result = tokio::time::timeout(
-                std::time::Duration::from_secs(2),
-                pi.call("session.context", json!({"client_session_key":native})),
-            )
-            .await
-            .unwrap()
-            .unwrap();
-            assert_eq!(result["session_context"]["session_id"], session);
-        }
-        if index == 1 {
-            assert_eq!(request.params["snapshot"], "fixed");
-            assert_eq!(request.params["continuation"], "after-u");
-        }
-        let entry = if index == 0 {
-            json!({"id":"u","parentId":null,"type":"message","timestamp":"2026-10-11T00:00:00Z","message":{"role":"user","content":"question"}})
-        } else {
-            json!({"id":"a","parentId":"u","type":"message","timestamp":"2026-10-11T00:00:00Z","message":{"role":"assistant","content":[]}})
-        };
-        pi.reply(request.id,json!({"session_id":native,"snapshot":"fixed","entry_count":2,"upper_entry_id":"a","leaf_id":"a","entries":[entry],"continuation":if index==0{Some("after-u")}else{None}})).await.unwrap();
-    }
-    let response = pending.await.unwrap().unwrap();
-    assert_eq!(response["branch_replay"]["target_entry_id"], "u");
-    assert_eq!(
-        response["branch_replay"]["replacement_input"],
-        "replacement"
+            .unwrap(),
+        0
     );
-    assert!(!missing.exists());
     assert_eq!(
-        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM turns WHERE session_id=?")
-            .bind(session)
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM turns WHERE session_id = ?")
+            .bind(session_id)
             .fetch_one(&state.db())
             .await
             .unwrap(),
         1
     );
+    pi.close();
+}
+
+#[tokio::test]
+async fn branch_replay_validates_idle_and_target_before_delivery() {
+    let temp = tempdir().unwrap();
+    let (state, _pontia_home) = test_state().await;
+    let session_id = "sess_branch_validation";
+    let target_turn_id = "turn_branch_validation";
+    let runtime_id = "runtime_branch_validation";
+    seed_replay_target(
+        &state,
+        temp.path(),
+        session_id,
+        target_turn_id,
+        runtime_id,
+        "validation-native",
+    )
+    .await;
+    let uri = format!("/api/v1/sessions/{session_id}/branch-replay");
+
+    let (status, _) = post_external_json(
+        state.clone(),
+        &uri,
+        json!({"target_turn_id": "turn_missing", "input": "replacement"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    sqlx::query("UPDATE sessions SET state = 'busy' WHERE session_id = ?")
+        .bind(session_id)
+        .execute(&state.db())
+        .await
+        .unwrap();
+    let (status, _) = post_external_json(
+        state.clone(),
+        &uri,
+        json!({"target_turn_id": target_turn_id, "input": "replacement"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+
+    let (status, _) = post_external_json(
+        state.clone(),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
+        json!({"input": "replacement", "branch_target_turn_id": target_turn_id}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn branch_resolution_requires_registered_connection_identity() {
+    let (state, _pontia_home) = test_state().await;
+    let (pi, _requests) = rpc_client(&state).await;
+    let error = pi
+        .call(
+            "branch.resolve",
+            json!({
+                "replay_id": "replay_unknown", "session_id": "sess_unknown",
+                "runtime_id": "runtime_unknown", "client_type": "pi",
+            }),
+        )
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("requires registration"));
     pi.close();
 }

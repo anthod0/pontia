@@ -49,6 +49,7 @@ struct IntegrationState {
 }
 
 struct CommandServices {
+    branches: crate::BranchReplayService,
     sessions: Arc<crate::SessionCommandService>,
     turns: crate::TurnCommandService,
     inbox: Arc<crate::InboxCommandService>,
@@ -93,16 +94,19 @@ impl AgentControl {
             execution.clone(),
             scheduler.clone(),
         );
-        let branches = crate::BranchReplayService::new(builder.db.clone())
-            .with_clients(builder.clients.clone())
-            .with_history_control(builder.client_control.clone());
+        let branches = crate::BranchReplayService::new(
+            builder.db.clone(),
+            builder.clients.clone(),
+            execution.clone(),
+            builder.client_control.clone(),
+            scheduler.clone(),
+        );
         let inbox = Arc::new(crate::InboxCommandService::new(
             builder.db.clone(),
             ingest.clone(),
             queries.clone(),
             execution.clone(),
             turns.clone(),
-            branches,
             scheduler.clone(),
         ));
         let sessions = Arc::new(crate::SessionCommandService::new(
@@ -124,6 +128,7 @@ impl AgentControl {
         Self {
             inner: Arc::new(AgentControlInner {
                 commands: CommandServices {
+                    branches,
                     sessions,
                     turns,
                     inbox,
@@ -224,6 +229,9 @@ impl AgentControl {
     }
     pub fn inbox_commands(&self) -> Arc<crate::InboxCommandService> {
         self.inner.commands.inbox.clone()
+    }
+    pub fn branch_replays(&self) -> crate::BranchReplayService {
+        self.inner.commands.branches.clone()
     }
     pub fn queries(&self) -> crate::ControlQueryService {
         crate::ControlQueryService::new(self.db())

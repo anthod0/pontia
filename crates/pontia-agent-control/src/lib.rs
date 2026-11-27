@@ -26,7 +26,10 @@ pub use agent_profiles::{
     AgentProfileService, AgentProfileView, LaunchableAgentProfile, ProfileLaunchConfig,
     UpsertAgentProfileRequest,
 };
-pub use branch_replay::{BranchReplayService, ResolveBranchReplayRequest, ResolvedBranchReplay};
+pub use branch_replay::{
+    BranchReplayOutcome, BranchReplayService, ResolveBranchReplayRequest, ResolvedBranchReplay,
+    SubmitBranchReplayRequest,
+};
 pub use client_contract::{ClientControlChannel, ClientControlOperation};
 pub use clients::ClientControlService;
 pub use context::AgentControl;

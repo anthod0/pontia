@@ -890,7 +890,11 @@ export interface SubmitInboxMessageInput {
   input: string;
   delivery_policy?: InboxDeliveryPolicy;
   metadata?: JsonObject;
-  branch_target_turn_id?: string | null;
+}
+
+export interface SubmitBranchReplayInput {
+  target_turn_id: string;
+  input: string;
 }
 
 export interface ApiEnvelope<T> {

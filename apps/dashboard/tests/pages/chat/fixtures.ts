@@ -101,6 +101,7 @@ const mocks = vi.hoisted(() => {
     retryInboxMessage: vi.fn(async () => undefined),
     recoverInboxSubmission: vi.fn(async () => undefined),
     submitInboxMessage: vi.fn(),
+    submitBranchReplay: vi.fn(async () => ({ replay_id: "replay_test" })),
     cancelInboxMessage: vi.fn(),
     dismissInboxMessage: vi.fn(),
     resumeSession: vi.fn(),
@@ -162,6 +163,7 @@ vi.mock("../../../src/api/client", async (importOriginal) => {
     }),
     registerWorkspace: (input: unknown) => mocks.registerWorkspace(input),
     setSessionReasoningEffort: mocks.setSessionReasoningEffort,
+    submitBranchReplay: mocks.submitBranchReplay,
   };
   return {
     ...original,
@@ -192,10 +194,8 @@ vi.mock("../../../src/stores/sessions", async (importOriginal) => {
         input: input.input.trim(),
         deliveryPolicy: input.delivery_policy,
         metadata: input.metadata,
-        branchTargetTurnId: input.branch_target_turn_id ?? null,
-        showInChat:
-          !input.branch_target_turn_id &&
-          !["busy", "waiting_for_interaction"].includes(currentSession?.state ?? ""),
+        branchTargetTurnId: null,
+        showInChat: !["busy", "waiting_for_interaction"].includes(currentSession?.state ?? ""),
         submittedAt: new Date().toISOString(),
         acceptedMessage: null,
         dispatchedTurnId: null,
@@ -494,6 +494,7 @@ beforeEach(() => {
   });
   mocks.registerWorkspace.mockReset().mockResolvedValue(workspace());
   mocks.setSessionReasoningEffort.mockReset().mockResolvedValue({ accepted: true });
+  mocks.submitBranchReplay.mockReset().mockResolvedValue({ replay_id: "replay_test" });
   mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
     const detail = mocks.sessionDetail.get();
     const turns = detail?.turns ?? [];

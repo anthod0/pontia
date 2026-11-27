@@ -507,7 +507,6 @@ async fn dashboard_fork_excludes_the_target_and_preserves_running_source() {
             pontia_agent_control::SubmitInboxMessageRequest {
                 input: "edited prompt".into(),
                 delivery_policy: "after_idle".into(),
-                branch_target_turn_id: None,
                 metadata: json!({}),
             },
         )

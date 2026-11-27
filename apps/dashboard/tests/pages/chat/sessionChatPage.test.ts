@@ -546,7 +546,7 @@ test("copies eligible user messages and opens and cancels historical edits", asy
 
   const editor = screen.getByRole("textbox", { name: "Edit historical message" });
   expect(editor).toHaveValue("Inspect the original implementation.");
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+  expect(mocks.submitBranchReplay).not.toHaveBeenCalled();
 
   await fireEvent.keyDown(screen.getByRole("textbox", { name: "Edit historical message" }), {
     key: "Escape",
@@ -554,7 +554,7 @@ test("copies eligible user messages and opens and cancels historical edits", asy
   expect(
     screen.queryByRole("textbox", { name: "Edit historical message" }),
   ).not.toBeInTheDocument();
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+  expect(mocks.submitBranchReplay).not.toHaveBeenCalled();
 
   await user.click(
     screen.getByRole("button", { name: "Edit message: Inspect the original implementation." }),
@@ -565,7 +565,7 @@ test("copies eligible user messages and opens and cancels historical edits", asy
     screen.queryByRole("textbox", { name: "Edit historical message" }),
   ).not.toBeInTheDocument();
   expect(screen.getByText("Inspect the original implementation.")).toBeInTheDocument();
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+  expect(mocks.submitBranchReplay).not.toHaveBeenCalled();
 });
 
 test("offers branch actions only on the primary user message represented by a projected Turn", async () => {
@@ -744,7 +744,7 @@ test("edits completed history while busy and interrupts only when the edit is sa
 
   await user.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() => expect(mocks.interruptSession).toHaveBeenCalledWith("session-branch"));
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+  expect(mocks.submitBranchReplay).not.toHaveBeenCalled();
 
   const interruptedSession = { ...busySession, state: "interrupted", current_turn_id: null };
   mocks.sessions.set([interruptedSession]);
@@ -764,15 +764,13 @@ test("edits completed history while busy and interrupts only when the edit is sa
   });
 
   await waitFor(() =>
-    expect(mocks.submitInboxMessage).toHaveBeenCalledWith("session-branch", {
+    expect(mocks.submitBranchReplay).toHaveBeenCalledWith("session-branch", {
+      target_turn_id: "turn-completed",
       input: "Completed historical input",
-      delivery_policy: "after_idle",
-      metadata: { source: "dashboard_chat_branch_edit" },
-      branch_target_turn_id: "turn-completed",
     }),
   );
   expect(mocks.interruptSession.mock.invocationCallOrder[0]).toBeLessThan(
-    mocks.submitInboxMessage.mock.invocationCallOrder[0],
+    mocks.submitBranchReplay.mock.invocationCallOrder[0],
   );
 });
 
@@ -813,7 +811,7 @@ test("keeps a busy edit open when interrupting the active Turn fails", async () 
   await user.click(screen.getByRole("button", { name: "Save" }));
 
   expect(await screen.findByRole("alert")).toHaveTextContent("Interrupt failed");
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+  expect(mocks.submitBranchReplay).not.toHaveBeenCalled();
   expect(screen.getByRole("textbox", { name: "Edit historical message" })).toHaveValue(
     "Completed historical input",
   );
@@ -881,14 +879,7 @@ test("submits Edit with Enter and keeps Shift+Enter for newlines", async () => {
     completed_at: "2026-05-14T00:01:02Z",
   });
   prepareBranchChat([originalTurn, suffixTurn]);
-  mocks.submitInboxMessage.mockResolvedValue(
-    inboxMessage({
-      message_id: "message-edit",
-      session_id: "session-branch",
-      input: { summary: "Corrected question" },
-      branch_target_turn_id: "turn-original",
-    }),
-  );
+  mocks.submitBranchReplay.mockResolvedValue({ replay_id: "replay_edit" });
 
   render(SessionChatPage);
 
@@ -898,7 +889,7 @@ test("submits Edit with Enter and keeps Shift+Enter for newlines", async () => {
   await user.type(editor, "Corrected question");
 
   const shiftEnterResult = await fireEvent.keyDown(editor, { key: "Enter", shiftKey: true });
-  const submittedAfterShiftEnter = mocks.submitInboxMessage.mock.calls.length;
+  const submittedAfterShiftEnter = mocks.submitBranchReplay.mock.calls.length;
   const plainEnterResult = await fireEvent.keyDown(editor, { key: "Enter" });
 
   expect(shiftEnterResult).toBe(true);
@@ -906,11 +897,9 @@ test("submits Edit with Enter and keeps Shift+Enter for newlines", async () => {
   expect(plainEnterResult).toBe(false);
 
   await waitFor(() =>
-    expect(mocks.submitInboxMessage).toHaveBeenCalledWith("session-branch", {
+    expect(mocks.submitBranchReplay).toHaveBeenCalledWith("session-branch", {
+      target_turn_id: "turn-original",
       input: "Corrected question",
-      delivery_policy: "after_idle",
-      metadata: { source: "dashboard_chat_branch_edit" },
-      branch_target_turn_id: "turn-original",
     }),
   );
   expect(
@@ -932,17 +921,10 @@ test("rejects a blank edit locally and disables competing branch actions while s
   });
   prepareBranchChat([originalTurn, otherTurn]);
   let resolveSubmission: (() => void) | null = null;
-  mocks.submitInboxMessage.mockImplementation(
+  mocks.submitBranchReplay.mockImplementation(
     () =>
       new Promise((resolve) => {
-        resolveSubmission = () =>
-          resolve(
-            inboxMessage({
-              session_id: "session-branch",
-              input: { summary: "Original question" },
-              branch_target_turn_id: "turn-original",
-            }),
-          );
+        resolveSubmission = () => resolve({ replay_id: "replay_edit" });
       }),
   );
 
@@ -954,13 +936,13 @@ test("rejects a blank edit locally and disables competing branch actions while s
   await user.type(editor, "   ");
   expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   await fireEvent.keyDown(editor, { key: "Enter" });
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+  expect(mocks.submitBranchReplay).not.toHaveBeenCalled();
 
   await user.clear(editor);
   await user.type(editor, "Corrected question");
   await user.click(screen.getByRole("button", { name: "Save" }));
 
-  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(mocks.submitBranchReplay).toHaveBeenCalledTimes(1));
   expect(editor).toBeDisabled();
   expect(screen.getByRole("button", { name: "Edit message: Other question" })).toBeDisabled();
   resolveSubmission?.();
@@ -972,7 +954,7 @@ test("rejects a blank edit locally and disables competing branch actions while s
 test("presents branch submission errors and keeps editing available for correction", async () => {
   const user = userEvent.setup();
   prepareBranchChat([turn({ turn_id: "turn-original", input: { summary: "Original question" } })]);
-  mocks.submitInboxMessage.mockRejectedValue(new Error("Target Turn can no longer be resolved"));
+  mocks.submitBranchReplay.mockRejectedValue(new Error("Target Turn can no longer be resolved"));
 
   render(SessionChatPage);
 
@@ -1010,13 +992,7 @@ test("keeps the divergent suffix until a projected tree update replaces it", asy
     created_at: "2026-05-14T00:02:00Z",
   });
   prepareBranchChat([rootTurn, originalTurn, oldSuffix]);
-  mocks.submitInboxMessage.mockResolvedValue(
-    inboxMessage({
-      session_id: "session-branch",
-      input: { summary: "Replacement middle question" },
-      branch_target_turn_id: "turn-original",
-    }),
-  );
+  mocks.submitBranchReplay.mockResolvedValue({ replay_id: "replay_edit" });
 
   render(SessionChatPage);
 
@@ -1024,7 +1000,7 @@ test("keeps the divergent suffix until a projected tree update replaces it", asy
     await screen.findByRole("button", { name: "Edit message: Original middle question" }),
   );
   await user.click(screen.getByRole("button", { name: "Save" }));
-  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalled());
+  await waitFor(() => expect(mocks.submitBranchReplay).toHaveBeenCalled());
   expect(screen.getByText("Abandoned suffix question")).toBeInTheDocument();
 
   const replacementTurn = turn({
@@ -2115,49 +2091,6 @@ test("supports cancelling pending inbox messages and retrying or removing failed
     }),
   );
   expect(mocks.dismissInboxMessage).toHaveBeenCalledWith("session-2", "message-failed");
-});
-
-test("retries a failed branch delivery with its original target", async () => {
-  const selected = session({ session_id: "session-2", state: "idle" });
-  window.history.pushState({}, "", "/dashboard/chat/session-2");
-  mocks.pathParams = { sessionId: "session-2" };
-  mocks.loadedSessions = [selected];
-  mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({
-    session: selected,
-    turns: [],
-    inboxMessages: [
-      inboxMessage({
-        message_id: "message-branch-failed",
-        session_id: "session-2",
-        state: "failed",
-        input: { summary: "Corrected historical input" },
-        metadata: { source: "dashboard_chat_branch_edit" },
-        branch_target_turn_id: "turn-original",
-        failure_message: "Pi navigation failed",
-      }),
-    ],
-    events: [],
-  });
-
-  render(SessionChatPage);
-
-  await screen.findByText("Corrected historical input");
-  const resend = screen.getByRole("button", {
-    name: /retry inbox message corrected historical input/i,
-  });
-  resend.focus();
-  expect(await screen.findByRole("tooltip")).toHaveTextContent("Pi navigation failed");
-  await userEvent.click(resend);
-
-  expect(mocks.retryInboxMessage).toHaveBeenCalledWith(
-    "session-2",
-    expect.objectContaining({
-      message_id: "message-branch-failed",
-      branch_target_turn_id: "turn-original",
-    }),
-    false,
-  );
 });
 
 test("renders an existing session title in the top bar and metadata above the prompt input", async () => {

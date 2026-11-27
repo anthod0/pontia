@@ -386,12 +386,12 @@ export function createPontiaPiExtension(
         if (generation !== controlGeneration) return;
         await reportModelAndEffort(true);
       },
-      (inboxMessageId) => {
+      (replayId) => {
         if (generation !== controlGeneration || reportingDisabled || !boundSessionContext) {
           throw new Error("Pi control session is no longer current");
         }
         // Command dispatch supplies the native context required by navigateTree.
-        pi.sendUserMessage(`/pontia-edit ${inboxMessageId}`, { expandPromptTemplates: true });
+        pi.sendUserMessage(`/pontia-edit ${replayId}`, { expandPromptTemplates: true });
       },
       {
         interrupt() {
@@ -467,16 +467,16 @@ export function createPontiaPiExtension(
   });
 
   pi.registerCommand("pontia-edit", {
-    description: "Replay a Pontia Inbox message from a historical Pi entry",
+    description: "Replay a historical Pi entry",
     handler: async (args, ctx) => {
       if (!isPersistentSessionContext(ctx)) return;
-      const inboxMessageId = args.trim();
+      const replayId = args.trim();
       const logFile = currentHookLogFile();
-      if (!/^msg_[^\s]+$/.test(inboxMessageId)) {
+      if (!/^replay_[^\s]+$/.test(replayId)) {
         await logDiagnostic(logFile, {
           level: "error",
           code: "branch_replay_invalid_command",
-          message: "pontia-edit requires exactly one Inbox Message identifier",
+          message: "pontia-edit requires exactly one replay identifier",
         });
         return;
       }
@@ -497,7 +497,7 @@ export function createPontiaPiExtension(
       try {
         const connection = await registrationConnection();
         const body = await connection.request("branch.resolve", {
-          inbox_message_id: inboxMessageId,
+          replay_id: replayId,
           session_id: commandContext.sessionId,
           runtime_id: commandContext.runtimeId,
           client_type: "pi",
@@ -506,7 +506,7 @@ export function createPontiaPiExtension(
         replacementInput = optionalString(replay?.replacement_input) ?? "";
         targetEntryId = optionalString(replay?.target_entry_id) ?? "";
         if (
-          optionalString(replay?.inbox_message_id) !== inboxMessageId ||
+          optionalString(replay?.replay_id) !== replayId ||
           optionalString(replay?.session_id) !== commandContext.sessionId ||
           optionalString(replay?.runtime_id) !== commandContext.runtimeId ||
           optionalString(replay?.client_type) !== "pi" ||
@@ -533,7 +533,7 @@ export function createPontiaPiExtension(
             level: "warn",
             code: "branch_replay_navigation_cancelled",
             message: "pontia-edit tree navigation was cancelled",
-            details: { inbox_message_id: inboxMessageId },
+            details: { replay_id: replayId },
           });
           return;
         }
@@ -558,7 +558,7 @@ export function createPontiaPiExtension(
         }
         await directInput.run(
           {
-            submission: { input: replacementInput, inboxMessageId },
+            submission: { input: replacementInput },
             sessionContext: current,
             consumed: false,
           },

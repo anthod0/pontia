@@ -8,7 +8,6 @@ async fn submit(h: &Harness, session: &str, policy: &str) -> Value {
             SubmitInboxMessageRequest {
                 input: "end_turn".into(),
                 delivery_policy: policy.into(),
-                branch_target_turn_id: None,
                 metadata: json!({}),
             },
         )
@@ -480,7 +479,6 @@ async fn native_interjections_keep_distinct_inputs_in_wire_and_replay_order() {
                         input: "再看一下🦓".into(),
                         metadata: json!({}),
                         delivery_policy: "steer".into(),
-                        branch_target_turn_id: None,
                     },
                 )
                 .await

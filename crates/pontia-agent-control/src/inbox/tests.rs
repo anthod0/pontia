@@ -11,7 +11,6 @@ fn queued_message<'a>(
         delivery_policy: "after_idle",
         input: "input",
         metadata: "{}",
-        branch_target: None,
         steer_target: None,
         retry_of: None,
         resuming: false,
@@ -235,7 +234,6 @@ async fn cloned_control_preserves_initial_input_gate_and_event_wakeup() {
             SubmitInboxMessageRequest {
                 input: "queued".into(),
                 delivery_policy: "after_idle".into(),
-                branch_target_turn_id: None,
                 metadata: json!({}),
             },
         )
@@ -327,7 +325,6 @@ fn request(input: &str) -> SubmitInboxMessageRequest {
     SubmitInboxMessageRequest {
         input: input.into(),
         delivery_policy: "after_idle".into(),
-        branch_target_turn_id: None,
         metadata: json!({}),
     }
 }
@@ -673,7 +670,6 @@ async fn duplicate_submission_preserves_native_receipt_and_original_contents() {
         SubmitInboxMessageRequest {
             input: "changed input".into(),
             delivery_policy: "interrupt_now".into(),
-            branch_target_turn_id: Some("different-target".into()),
             metadata: json!({"changed":true}),
         },
     ] {

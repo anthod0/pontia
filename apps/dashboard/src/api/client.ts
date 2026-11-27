@@ -35,6 +35,7 @@ import type {
   SessionCreationOption,
   SessionOverviewSection,
   SessionOverviewView,
+  SubmitBranchReplayInput,
   SubmitInboxMessageInput,
   TurnTimelineDirection,
   TurnTimelinePage,
@@ -1072,6 +1073,18 @@ export function createApi(device: DeviceRuntime) {
     ).inbox_message;
   }
 
+  async function submitBranchReplay(
+    sessionId: string,
+    input: SubmitBranchReplayInput,
+  ): Promise<{ replay_id: string }> {
+    return (
+      await request<{ branch_replay: { replay_id: string } }>(
+        `/sessions/${encodeURIComponent(sessionId)}/branch-replay`,
+        { method: "POST", body: input, idempotency: false, retryNetworkErrors: false },
+      )
+    ).branch_replay;
+  }
+
   async function getInboxMessage(
     sessionId: string,
     messageId: string,
@@ -1279,6 +1292,7 @@ export function createApi(device: DeviceRuntime) {
     listTurns,
     listInboxMessages,
     submitInboxMessage,
+    submitBranchReplay,
     forkSession,
     getInboxMessage,
     retryInboxMessage,

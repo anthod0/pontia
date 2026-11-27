@@ -1122,7 +1122,6 @@ async fn cancel_keeps_prompt_active_and_inbox_queued_until_final_response() {
             SubmitInboxMessageRequest {
                 input: "end_turn".into(),
                 delivery_policy: "after_idle".into(),
-                branch_target_turn_id: None,
                 metadata: json!({}),
             },
         )
@@ -2018,7 +2017,6 @@ async fn backpressured_prompt_writes_do_not_report_a_live_history_source_as_unav
                         input: "x".repeat(2 * 1024 * 1024),
                         metadata: json!({}),
                         delivery_policy: "after_idle".into(),
-                        branch_target_turn_id: None,
                     },
                 )
                 .await

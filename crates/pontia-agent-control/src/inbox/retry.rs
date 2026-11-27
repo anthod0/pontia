@@ -57,7 +57,6 @@ impl InboxCommandService {
                 SubmitInboxMessageRequest {
                     input: original.input.summary,
                     delivery_policy: original.delivery_policy,
-                    branch_target_turn_id: original.branch_target_turn_id,
                     metadata,
                 },
                 Some(original_id),

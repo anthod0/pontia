@@ -574,11 +574,11 @@ async fn branch_replay_lost_acknowledgement_is_unknown_and_not_replayed_after_at
     let (pi, mut requests) = client(&state);
     let (session, runtime) = register(&pi, root.path()).await;
     let control = state.client_control();
-    let replay = control.replay(&session, &runtime, "msg_replay");
+    let replay = control.replay(&session, &runtime, "replay_test");
     let disconnect = async {
         let request = requests.recv().await.unwrap();
         assert_eq!(request.method, "branch.replay");
-        assert_eq!(request.params, json!({"inbox_message_id": "msg_replay"}));
+        assert_eq!(request.params, json!({"replay_id": "replay_test"}));
         pi.close();
     };
     let (result, ()) = tokio::join!(replay, disconnect);

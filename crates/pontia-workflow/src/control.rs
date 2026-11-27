@@ -75,7 +75,6 @@ impl WorkflowControlService {
                         SubmitInboxMessageRequest {
                             input: "continue".to_string(),
                             delivery_policy: "after_idle".to_string(),
-                            branch_target_turn_id: None,
                             metadata: json!({
                                 "source": "workflow_resume",
                                 "workflow_id": workflow_id,

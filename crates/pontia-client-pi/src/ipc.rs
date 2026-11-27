@@ -210,11 +210,7 @@ async fn dispatch(
         }
         // Reverse history calls must not hold the fact/connection identity gate.
         drop(_identity_guard);
-        let replay = pontia_agent_control::BranchReplayService::new(state.db())
-            .with_clients(state.clients())
-            .with_history_control(state.client_control().clone())
-            .resolve_command(query)
-            .await?;
+        let replay = state.branch_replays().resolve_command(query).await?;
         let _guard = state.client_control().lock_identity().await;
         let current: Arc<dyn pontia_agent_control::ClientControlChannel> = channel.clone();
         state
@@ -381,9 +377,9 @@ impl pontia_agent_control::ClientControlChannel for PiChannel {
     }
     fn replay<'a>(
         &'a self,
-        inbox_message_id: &'a str,
+        replay_id: &'a str,
     ) -> pontia_agent_control::ClientControlOperation<'a> {
-        self.peer.replay(inbox_message_id)
+        self.peer.replay(replay_id)
     }
     fn submit<'a>(
         &'a self,
