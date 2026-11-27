@@ -127,11 +127,21 @@ pub(super) async fn wait_for_report(
 ) -> String {
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            let report = sqlx::query_scalar("SELECT input_summary FROM inbox_messages WHERE session_id='origin'
-                AND json_extract(metadata,'$.workflow_id')=? AND json_extract(metadata,'$.event_type')=?")
-                .bind(workflow_id).bind(event_type).fetch_optional(pool).await.unwrap();
-            if let Some(input)=report { return input; }
+            let report = sqlx::query_scalar(
+                "SELECT input_summary FROM inbox_messages WHERE session_id='origin'
+                 AND input_summary LIKE ? AND input_summary LIKE ?",
+            )
+            .bind(format!("%({workflow_id})%"))
+            .bind(format!("%{event_type}%"))
+            .fetch_optional(pool)
+            .await
+            .unwrap();
+            if let Some(input) = report {
+                return input;
+            }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
-    }).await.expect("initiating Session receives Workflow report")
+    })
+    .await
+    .expect("initiating Session receives Workflow report")
 }

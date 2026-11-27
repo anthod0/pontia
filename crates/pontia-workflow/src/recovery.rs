@@ -1,9 +1,8 @@
 use crate::{Result, validation::validate_handoff_file_name};
 use crate::{models::WorkflowRecoveryRow, repository::SqliteWorkflowRepository};
 use pontia_agent_control::{
-    AgentControl, InboxCommandService, SessionCommandService, SubmitInboxMessageRequest,
+    AgentControl, InboxCommandService, InputPayload, SendMode, SessionCommandService,
 };
-use serde_json::json;
 use std::path::{Path, PathBuf};
 
 #[derive(Clone)]
@@ -86,44 +85,27 @@ impl WorkflowRecoveryService {
                 .await?;
             return Ok(true);
         } else {
-            self.inbox
-                .submit_message_once(
-                    &row.message_id,
+            if let Err(error) = self
+                .inbox
+                .send(
                     &row.session_id,
-                    SubmitInboxMessageRequest {
-                        input: self.recovery_prompt(&row).await?,
-                        delivery_policy: "after_idle".into(),
-                        metadata: json!({"source":"workflow_recovery","workflow_id":row.workflow_id,"recovery_id":row.recovery_id}),
-                    },
+                    InputPayload::from(self.recovery_prompt(&row).await?),
+                    SendMode::Immediate,
                 )
-                .await?;
-        }
-        let message = self
-            .inbox
-            .get_message(&row.session_id, &row.message_id)
-            .await?
-            .ok_or_else(|| pontia_core::Error::Domain("Recovery input is missing".into()))?;
-        match message.state.as_str() {
-            "dispatched" => {
+                .await
+            {
                 self.repository
-                    .finish_recovery(&row.recovery_id, None)
-                    .await?
-            }
-            "failed" | "unknown" | "cancelled" | "dismissed" | "superseded" => {
-                let reason = format!(
-                    "Recovery input {}: {}",
-                    message.state,
-                    message
-                        .failure_message
-                        .as_deref()
-                        .unwrap_or("input did not complete delivery")
-                );
-                self.repository
-                    .finish_recovery(&row.recovery_id, Some(&reason))
+                    .finish_recovery(
+                        &row.recovery_id,
+                        Some(&format!("Recovery input delivery failed: {error}")),
+                    )
                     .await?;
+                return Ok(true);
             }
-            _ => {}
         }
+        self.repository
+            .finish_recovery(&row.recovery_id, None)
+            .await?;
         Ok(true)
     }
 

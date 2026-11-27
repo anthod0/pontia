@@ -1,9 +1,8 @@
 use crate::repository::SqliteWorkflowRepository;
 use pontia_agent_control::{
-    ControlQueryService, InboxCommandService, SubmitInboxMessageRequest, TurnCommandService,
+    ControlQueryService, InboxCommandService, InputPayload, SendMode, TurnCommandService,
 };
 use serde::Serialize;
-use serde_json::json;
 use uuid::Uuid;
 
 use crate::{Error, Result};
@@ -68,29 +67,10 @@ impl WorkflowControlService {
                 .as_ref()
                 .is_some_and(|session| session.state == "interrupted")
             {
-                let outcome = self
-                    .inbox
-                    .submit_message(
-                        &session_id,
-                        SubmitInboxMessageRequest {
-                            input: "continue".to_string(),
-                            delivery_policy: "after_idle".to_string(),
-                            metadata: json!({
-                                "source": "workflow_resume",
-                                "workflow_id": workflow_id,
-                            }),
-                        },
-                    )
-                    .await?;
-                if outcome.data["inbox_message"]["state"] == "failed" {
-                    let message = outcome.data["inbox_message"]["failure_message"]
-                        .as_str()
-                        .unwrap_or("continue dispatch failed");
-                    return Err(pontia_core::Error::Domain(format!(
-                        "workflow {workflow_id} could not send continue while resuming: {message}"
-                    ))
-                    .into());
-                }
+                self.inbox
+                    .send(&session_id, InputPayload::from("continue"), SendMode::Queue)
+                    .await
+                    .map_err(pontia_core::Error::from)?;
                 continue_sent = true;
             }
         }

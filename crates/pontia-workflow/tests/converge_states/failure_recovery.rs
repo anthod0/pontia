@@ -330,32 +330,32 @@ async fn unknown_input_and_unrelated_failure_are_not_retryable() {
 }
 
 #[tokio::test]
-async fn restart_after_direct_delivery_preserves_unknown_input() {
+async fn failed_immediate_delivery_finishes_without_automatic_replay() {
     let (_root, app, repo) = fixture().await;
     let row = repo
         .request_recovery("wf_retry", "failure", "attempt")
         .await
         .unwrap();
     ready(&app, &repo, &row).await;
-    sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary) VALUES (?,'failed','dispatching','after_idle','recover')")
-        .bind(&row.message_id)
-        .execute(&app.db())
-        .await
-        .unwrap();
-    app.inbox_commands().recover_deliveries().await.unwrap();
-    coordinator(&app).reconcile("wf_retry").await.unwrap();
-    coordinator(&app).reconcile("wf_retry").await.unwrap();
+    let coordinator = coordinator(&app);
+
+    coordinator.reconcile("wf_retry").await.unwrap();
+    coordinator.reconcile("wf_retry").await.unwrap();
+
+    let attempts = repo.list_recoveries("wf_retry").await.unwrap();
+    assert_eq!(attempts.len(), 1);
+    assert_eq!(attempts[0].state, "failed");
     assert_eq!(
         repo.get_workflow("wf_retry").await.unwrap().unwrap().state,
         "failed"
     );
-    let input = app
-        .inbox_commands()
-        .get_message("failed", &row.message_id)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(input.state, "unknown");
-    assert_eq!(repo.list_recoveries("wf_retry").await.unwrap().len(), 1);
-    assert!(repo.recovery_candidate("wf_retry").await.unwrap().is_none());
+    assert_eq!(
+        repo.list_events("wf_retry")
+            .await
+            .unwrap()
+            .iter()
+            .filter(|event| event.event_type == "workflow.failed")
+            .count(),
+        2
+    );
 }

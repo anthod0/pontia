@@ -3,7 +3,9 @@ mod node_execution;
 use std::{path::PathBuf, time::Duration};
 
 use crate::repository::SqliteWorkflowRepository;
-use pontia_agent_control::{AgentEventBroker, InboxCommandService, SessionCommandService};
+use pontia_agent_control::{
+    AgentEventBroker, InboxCommandService, InputPayload, SendMode, SessionCommandService,
+};
 use pontia_core::domain::EventType;
 use tokio::sync::watch;
 
@@ -188,11 +190,14 @@ where
                 ));
             }
             input.push_str(&format!("\nInspect: pontia workflow show {id}"));
-            self.inbox.submit_message_once(&format!("workflow-report:{}",event.event_id), &workflow.initiator_session_id,
-                pontia_agent_control::SubmitInboxMessageRequest {
-                    input, delivery_policy:"after_idle".into(),
-                    metadata: serde_json::json!({"source":"workflow_report","workflow_id":id,"event_type":event.event_type,"event_id":event.event_id}),
-                }).await?;
+            self.inbox
+                .send(
+                    &workflow.initiator_session_id,
+                    InputPayload::from(input),
+                    SendMode::Queue,
+                )
+                .await
+                .map_err(pontia_core::Error::from)?;
             self.repository
                 .mark_report_queued(id, event.sequence)
                 .await?;
