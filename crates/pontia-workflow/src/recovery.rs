@@ -1,6 +1,8 @@
 use crate::{Result, validation::validate_handoff_file_name};
 use crate::{models::WorkflowRecoveryRow, repository::SqliteWorkflowRepository};
-use pontia_agent_control::{AgentControl, InboxCommandService, SessionCommandService};
+use pontia_agent_control::{
+    AgentControl, InboxCommandService, SessionCommandService, SubmitInboxMessageRequest,
+};
 use serde_json::json;
 use std::path::{Path, PathBuf};
 
@@ -44,7 +46,7 @@ impl WorkflowRecoveryService {
     }
 
     pub(crate) async fn reconcile(&self, workflow_id: &str) -> Result<bool> {
-        let Some(mut row) = self
+        let Some(row) = self
             .repository
             .list_recoveries(workflow_id)
             .await?
@@ -65,9 +67,6 @@ impl WorkflowRecoveryService {
                 return Ok(true);
             }
             if let Err(error) = self.prepare(&row).await {
-                self.inbox
-                    .fail_prepared_message(&row.session_id, &row.message_id, &error.to_string())
-                    .await?;
                 self.repository
                     .finish_recovery(&row.recovery_id, Some(&error.to_string()))
                     .await?;
@@ -79,24 +78,24 @@ impl WorkflowRecoveryService {
             .recovery_runtime_available(&row.recovery_id)
             .await?
         {
-            self.inbox
-                .fail_prepared_message(
-                    &row.session_id,
-                    &row.message_id,
-                    "Recovered Session exited or changed runtime before input delivery",
+            self.repository
+                .finish_recovery(
+                    &row.recovery_id,
+                    Some("Recovered Session exited or changed runtime before input delivery"),
                 )
                 .await?;
+            return Ok(true);
         } else {
-            if row.runtime_id.is_none() {
-                row.runtime_id = self.repository.recovered_node_runtime(&row.node_id).await?;
-            }
             self.inbox
-                .release_prepared_message(
-                    &row.session_id,
+                .submit_message_once(
                     &row.message_id,
-                    row.runtime_id.as_deref().ok_or_else(|| {
-                        pontia_core::Error::Domain("Recovery runtime is missing".into())
-                    })?,
+                    &row.session_id,
+                    SubmitInboxMessageRequest {
+                        input: self.recovery_prompt(&row).await?,
+                        delivery_policy: "after_idle".into(),
+                        branch_target_turn_id: None,
+                        metadata: json!({"source":"workflow_recovery","workflow_id":row.workflow_id,"recovery_id":row.recovery_id}),
+                    },
                 )
                 .await?;
         }
@@ -164,36 +163,29 @@ impl WorkflowRecoveryService {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(error.into()),
         }
-        let input = format!(
+        self.sessions.resume_for_input(&row.session_id).await?;
+        self.repository
+            .start_recovery_delivery(&row.recovery_id)
+            .await?;
+        Ok(())
+    }
+
+    async fn recovery_prompt(&self, row: &WorkflowRecoveryRow) -> Result<String> {
+        let node = self
+            .repository
+            .get_node(&row.node_id)
+            .await?
+            .ok_or_else(|| pontia_core::Error::NotFound("Recovery node missing".into()))?;
+        let directory = self.home.join("workflows").join(&row.workflow_id);
+        let archive = directory.join("recoveries").join(&row.recovery_id);
+        let output = directory.join("handoff").join(&node.output);
+        Ok(format!(
             "Recover your interrupted Workflow Agent Node {} in the same conversation. Earlier submitted nodes remain complete. Inspect your existing work and any external side effects before continuing; do not blindly repeat completed operations. Your previous unsubmitted output, if present, was archived under `{}` and is not an accepted Submission. Recheck your assigned instructions and upstream inputs, then write the full output to `{}` and run `pontia workflow submit`. Stop after successful submission.\n\nNode instructions:\n{}",
             node.title,
             archive.display(),
             output.display(),
             node.instructions
-        );
-        let outcome = self
-            .inbox
-            .prepare_message_once(
-                &self.sessions,
-                &row.message_id,
-                &row.session_id,
-                input,
-                json!({"source":"workflow_recovery","workflow_id":row.workflow_id,"recovery_id":row.recovery_id}),
-            )
-            .await?;
-        if outcome.data["inbox_message"]["state"] != "resuming" {
-            return Err(pontia_core::Error::Domain(
-                outcome.data["inbox_message"]["failure_message"]
-                    .as_str()
-                    .unwrap_or("Recovery input could not be prepared")
-                    .into(),
-            )
-            .into());
-        }
-        self.repository
-            .start_recovery_delivery(&row.recovery_id)
-            .await?;
-        Ok(())
+        ))
     }
 }
 

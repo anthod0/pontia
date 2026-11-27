@@ -64,6 +64,14 @@ async fn migrations_preserve_removed_schema_contracts() {
     .await
     .expect("inspect ingest_warnings table");
     assert_eq!(ingest_warnings_table_count, 0);
+
+    let workflow_inbox_snapshots: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'workflow_inbox_snapshots'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("inspect workflow_inbox_snapshots table");
+    assert_eq!(workflow_inbox_snapshots, 0);
 }
 
 #[tokio::test]

@@ -253,7 +253,7 @@ impl SessionCommandService {
         Ok(true)
     }
 
-    pub(crate) async fn resume_for_input(&self, session_id: &str) -> Result<()> {
+    pub async fn resume_for_input(&self, session_id: &str) -> Result<()> {
         self.resume_session(session_id, &self.pontia_home).await?;
         let session = self
             .queries

@@ -36,8 +36,7 @@ WHERE s.has_agent_binding=1 AND w.workflow_id=? AND s.client_type IN (SELECT val
     AND NOT EXISTS (SELECT 1 FROM workflow_nodes child WHERE child.workflow_id=w.workflow_id
         AND child.parent_node_id=n.node_id AND child.session_id IS NOT NULL)
     AND NOT EXISTS (SELECT 1 FROM workflow_recoveries WHERE workflow_id=w.workflow_id AND state IN ('requested','preparing','dispatching'))
-    AND NOT EXISTS (SELECT 1 FROM workflow_inbox_snapshots i WHERE i.session_id=s.session_id AND
-        (i.state IN ('pending','resuming','dispatching','unknown') OR (i.state='dispatched' AND i.turn_id IS NULL)))
+    AND NOT s.has_unsettled_input
 "#;
 
 impl SqliteWorkflowRepository {
@@ -131,7 +130,7 @@ impl SqliteWorkflowRepository {
         self.refresh_session(&session_id).await?;
         self.synchronize().await?;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        let result=sqlx::query("UPDATE workflow_recoveries SET state='dispatching',runtime_id=(SELECT runtime_id FROM workflow_runtime_snapshots WHERE session_id=workflow_recoveries.session_id AND state = 'running' AND is_control),updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE recovery_id=? AND state='preparing' AND EXISTS (SELECT 1 FROM workflow_session_snapshots s JOIN workflow_runtime_snapshots r ON r.session_id=s.session_id WHERE s.session_id=workflow_recoveries.session_id AND s.state='idle' AND r.state IN ('starting','running') AND r.is_control AND r.runtime_id IS NOT NULL) AND EXISTS (SELECT 1 FROM workflow_inbox_snapshots WHERE message_id=workflow_recoveries.message_id AND state='resuming')")
+        let result=sqlx::query("UPDATE workflow_recoveries SET state='dispatching',runtime_id=(SELECT runtime_id FROM workflow_runtime_snapshots WHERE session_id=workflow_recoveries.session_id AND state = 'running' AND is_control),updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE recovery_id=? AND state='preparing' AND EXISTS (SELECT 1 FROM workflow_session_snapshots s JOIN workflow_runtime_snapshots r ON r.session_id=s.session_id WHERE s.session_id=workflow_recoveries.session_id AND s.state='idle' AND r.state IN ('starting','running') AND r.is_control AND r.runtime_id IS NOT NULL)")
             .bind(id).execute(&mut *tx).await?;
         if result.rows_affected() != 1 {
             return Err(Error::StateConflict(

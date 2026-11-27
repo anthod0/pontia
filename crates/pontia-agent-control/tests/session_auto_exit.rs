@@ -294,36 +294,6 @@ async fn unmarked_session_stays_idle_after_completion_and_recovery() {
 }
 
 #[tokio::test]
-async fn failing_prepared_input_allows_exit() {
-    let (_root, state, channel) = fixture().await;
-    let message = state
-        .inbox_commands()
-        .prepare_message_once(
-            &state.session_commands(),
-            "held",
-            "session",
-            "task".into(),
-            json!({}),
-        )
-        .await
-        .unwrap();
-    assert_eq!(message.data["inbox_message"]["state"], "resuming");
-    state
-        .session_commands()
-        .exit_when_done("session")
-        .await
-        .unwrap();
-    state
-        .inbox_commands()
-        .fail_prepared_message("session", "held", "cancelled by caller")
-        .await
-        .unwrap();
-    wait_for(&state, "exited").await;
-    state.inbox_commands().stop_scheduling().await;
-    assert_eq!(channel.exits.load(Ordering::SeqCst), 1);
-}
-
-#[tokio::test]
 async fn non_idle_states_and_active_turns_do_not_exit() {
     for session_state in [
         "created",

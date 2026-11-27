@@ -84,8 +84,8 @@ impl SqliteWorkflowRepository {
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
         snapshot: &pontia_agent_control::SessionSnapshot,
     ) -> Result<()> {
-        let changed = sqlx::query("INSERT INTO workflow_session_snapshots(session_id,client_type,state,current_turn_id,position,has_agent_binding,revision) VALUES (?,?,?,?,?,?,?) ON CONFLICT(session_id) DO UPDATE SET client_type=excluded.client_type,state=excluded.state,current_turn_id=excluded.current_turn_id,position=MAX(workflow_session_snapshots.position,excluded.position),has_agent_binding=excluded.has_agent_binding,revision=excluded.revision WHERE excluded.revision>=workflow_session_snapshots.revision")
-            .bind(&snapshot.session_id).bind(&snapshot.client_type).bind(&snapshot.state).bind(&snapshot.current_turn_id).bind(snapshot.event_position).bind(snapshot.has_agent_binding).bind(snapshot.revision).execute(&mut **tx).await?;
+        let changed = sqlx::query("INSERT INTO workflow_session_snapshots(session_id,client_type,state,current_turn_id,position,has_agent_binding,has_unsettled_input,revision) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(session_id) DO UPDATE SET client_type=excluded.client_type,state=excluded.state,current_turn_id=excluded.current_turn_id,position=MAX(workflow_session_snapshots.position,excluded.position),has_agent_binding=excluded.has_agent_binding,has_unsettled_input=excluded.has_unsettled_input,revision=excluded.revision WHERE excluded.revision>=workflow_session_snapshots.revision")
+            .bind(&snapshot.session_id).bind(&snapshot.client_type).bind(&snapshot.state).bind(&snapshot.current_turn_id).bind(snapshot.event_position).bind(snapshot.has_agent_binding).bind(snapshot.has_unsettled_input).bind(snapshot.revision).execute(&mut **tx).await?;
         if changed.rows_affected() == 0 {
             return Ok(());
         }
@@ -110,14 +110,6 @@ impl SqliteWorkflowRepository {
         for runtime in &snapshot.runtimes {
             sqlx::query("INSERT INTO workflow_runtime_snapshots(runtime_id,session_id,role,state,is_control) VALUES (?,?,?,?,?)")
                 .bind(&runtime.runtime_id).bind(&snapshot.session_id).bind(&runtime.role).bind(&runtime.state).bind(runtime.is_control).execute(&mut **tx).await?;
-        }
-        sqlx::query("DELETE FROM workflow_inbox_snapshots WHERE session_id=?")
-            .bind(&snapshot.session_id)
-            .execute(&mut **tx)
-            .await?;
-        for message in &snapshot.inbox {
-            sqlx::query("INSERT INTO workflow_inbox_snapshots(message_id,session_id,state,turn_id) VALUES (?,?,?,?)")
-                .bind(&message.message_id).bind(&snapshot.session_id).bind(&message.state).bind(&message.turn_id).execute(&mut **tx).await?;
         }
         Ok(())
     }

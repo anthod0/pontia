@@ -591,8 +591,10 @@ CREATE TABLE workflow_session_snapshots (
     state TEXT NOT NULL,
     current_turn_id TEXT,
     position INTEGER NOT NULL,
-    has_agent_binding INTEGER NOT NULL
-, revision INTEGER NOT NULL DEFAULT 0);
+    has_agent_binding INTEGER NOT NULL,
+    has_unsettled_input INTEGER NOT NULL DEFAULT 0,
+    revision INTEGER NOT NULL DEFAULT 0
+);
 
 CREATE TABLE workflow_turn_snapshots (
     turn_id TEXT PRIMARY KEY NOT NULL,
@@ -612,14 +614,6 @@ CREATE TABLE workflow_runtime_snapshots (
 
 CREATE INDEX idx_workflow_runtime_snapshots_session ON workflow_runtime_snapshots(session_id);
 
-CREATE TABLE workflow_inbox_snapshots (
-    message_id TEXT PRIMARY KEY NOT NULL,
-    session_id TEXT NOT NULL,
-    state TEXT NOT NULL,
-    turn_id TEXT
-);
-
-CREATE INDEX idx_workflow_inbox_snapshots_session ON workflow_inbox_snapshots(session_id);
 CREATE TABLE control_state_revision (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     revision INTEGER NOT NULL
