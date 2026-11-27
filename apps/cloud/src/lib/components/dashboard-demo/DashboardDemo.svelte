@@ -1,6 +1,5 @@
 <script lang="ts">
 	import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon';
-	import * as Tabs from '$lib/components/ui/tabs';
 	import ArrowsLeftRightIcon from 'phosphor-svelte/lib/ArrowsLeftRightIcon';
 	import CaretLeftIcon from 'phosphor-svelte/lib/CaretLeftIcon';
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
@@ -15,7 +14,6 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import { cn } from '$lib/utils';
 	import BotAvatarMark from '$lib/components/bot-story/BotAvatarMark.svelte';
-	import DemoNewChat from './DemoNewChat.svelte';
 	import DemoActionSheet from './DemoActionSheet.svelte';
 	import DemoBrowserTab from './DemoBrowserTab.svelte';
 	import DemoBotChat from './DemoBotChat.svelte';
@@ -54,7 +52,6 @@
 	let workspaceFilter = $state('');
 	// Like the Dashboard, the Session list shows only active sessions until the filter asks for all.
 	let sessionScope = $state<'active' | 'all'>('active');
-	let setup = $state<'new' | 'sessions' | null>(null);
 	let sessionsOpen = $state(true);
 	let mobileSidebarOpen = $state(false);
 	let botId = $state<string | null>(null);
@@ -77,14 +74,8 @@
 	const dropdownContent = 'rounded-lg p-1 shadow-none';
 	const dropdownItem = 'gap-1.5 rounded-sm py-1 pl-1.5 text-sm';
 
-	function openView(view: 'new' | 'sessions') {
-		setup = view;
-		mobileSidebarOpen = false;
-	}
-
 	function selectDevice(handle: string): void {
 		if (handle === deviceHandle) return;
-		setup = null;
 		previousDeviceHandle = deviceHandle;
 		deviceHandle = handle;
 		workspaceFilter = '';
@@ -97,7 +88,6 @@
 	}
 
 	function selectSession(next: DemoSession): void {
-		setup = null;
 		if (next.workspaceId !== session.workspaceId) diff = null;
 		if (next.id !== sessionId) file = null;
 		sessionId = next.id;
@@ -106,7 +96,6 @@
 	}
 
 	function selectBot(id: string): void {
-		setup = null;
 		botId = id;
 		mobileSidebarOpen = false;
 	}
@@ -148,18 +137,13 @@
 			return;
 		}
 		if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
-			if (event.code === 'KeyN') {
-				event.preventDefault();
-				openView('new');
-				return;
-			}
 			if (event.code === 'KeyM' && previousDevice) {
 				event.preventDefault();
 				selectDevice(previousDevice.handle);
 				return;
 			}
 		}
-		if (setup || bot || !event.altKey || event.ctrlKey || event.shiftKey || event.metaKey || event.code !== 'KeyG') return;
+		if (bot || !event.altKey || event.ctrlKey || event.shiftKey || event.metaKey || event.code !== 'KeyG') return;
 		event.preventDefault();
 		if (panelOpen && panelTab === 'git') closePanel();
 		else {
@@ -170,7 +154,7 @@
 </script>
 
 {#snippet sessionItem(item: DemoSession)}
-	{@const active = !setup && !bot && item.id === session.id}
+	{@const active = !bot && item.id === session.id}
 	<li class="relative text-sm">
 		<button
 			type="button"
@@ -249,7 +233,7 @@
 					<div class="flex h-8 items-center px-2 text-xs font-semibold text-heading">Bots</div>
 					<ul class="flex flex-col gap-1">
 						{#each device.bots as item (item.id)}
-							{@const active = !setup && item.id === bot?.id}
+							{@const active = item.id === bot?.id}
 							{@const todos = item.entries.filter(entry => entry.kind === 'bot' && entry.todo === 'open').length}
 							<li>
 								<button
@@ -278,8 +262,8 @@
 						<button type="button" class="flex items-center gap-1 text-xs font-medium" aria-expanded={sessionsOpen} onclick={() => sessionsOpen = !sessionsOpen}>Sessions<CaretRightIcon class={cn('size-3', sessionsOpen && 'rotate-90')} /></button>
 						<span class="flex-1"></span>
 						<span class="flex items-center gap-2">
-							<button type="button" class="grid size-8 place-items-center rounded hover:bg-muted" aria-label="New Chat" onclick={() => openView('new')}><NotePencilIcon class="size-4" /></button>
-							<button type="button" class="grid size-8 place-items-center rounded hover:bg-muted" aria-label="Open all sessions" onclick={() => openView('sessions')}><ArrowUpRightIcon class="size-4" /></button>
+							<span class="grid size-8 place-items-center" aria-hidden="true"><NotePencilIcon class="size-4" /></span>
+							<span class="grid size-8 place-items-center" aria-hidden="true"><ArrowUpRightIcon class="size-4" /></span>
 							<DropdownMenu.Root>
 								<DropdownMenu.Trigger
 									class={cn('rounded-sm hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-hidden', filterApplied && 'text-primary')}
@@ -340,35 +324,7 @@
 		</div>
 	</aside>
 
-	{#if setup === 'sessions'}
-		<section class="demo-scroll min-w-0 flex-1 overflow-auto p-4">
-			<button type="button" class="mb-3 flex items-center gap-1 rounded-md p-1 text-sm hover:bg-muted" onclick={() => setup = null}><CaretLeftIcon />Back to chat</button>
-			<p class="mb-4 text-xl font-semibold">Sessions</p>
-			<Tabs.Root value="all">
-				<Tabs.List variant="line" aria-label="Session views">
-					<Tabs.Trigger value="all">All</Tabs.Trigger>
-					<Tabs.Trigger value="pinned">Pinned</Tabs.Trigger>
-				</Tabs.List>
-				{#each ['all', 'pinned'] as view}
-					<Tabs.Content value={view}>
-						<ul class="divide-y divide-border">
-							{#each (view === 'all' ? device.sessions : pinnedSessions) as item (item.id)}
-								{@render sessionItem(item)}
-							{/each}
-						</ul>
-					</Tabs.Content>
-				{/each}
-			</Tabs.Root>
-		</section>
-	{:else if setup === 'new'}
-		<DemoNewChat {device} onback={() => setup = null} onstart={(next) => {
-			device.sessions.unshift(next);
-			workspaceFilter = '';
-			sessionsOpen = true;
-			panelOpen = false;
-			selectSession(next);
-		}} />
-	{:else if bot}
+	{#if bot}
 		{#key bot.id}
 			<DemoBotChat
 				{bot}

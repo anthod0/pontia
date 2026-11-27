@@ -9,15 +9,14 @@ export type DemoStep =
   | { kind: "thinking"; text: string };
 
 export const demoClients = {
-  codex: { name: "Codex", logo: "codex", models: ["gpt-6.2-astra", "gpt-6.2-sol"] },
-  claude: { name: "Claude Code", logo: "claude-code", models: ["opus"] },
-  pi: { name: "Pi", logo: "pi", models: ["gpt-6.2-astra"] },
-  kiro: { name: "Kiro", logo: "kiro", models: [] },
-  grok: { name: "Grok Build", logo: "grok-build", models: ["grok-4.7"] },
+  codex: { name: "Codex", logo: "codex" },
+  claude: { name: "Claude Code", logo: "claude-code" },
+  pi: { name: "Pi", logo: "pi" },
+  kiro: { name: "Kiro", logo: "kiro" },
+  grok: { name: "Grok Build", logo: "grok-build" },
   antigravity: {
     name: "Google Antigravity",
     logo: "google-antigravity",
-    models: ["gemini-4-neon"],
   },
 } as const;
 
@@ -124,7 +123,6 @@ export interface DemoBot {
 export interface DemoDevice {
   handle: string;
   name: string;
-  clients: DemoClient[];
   bots: DemoBot[];
   workspaces: DemoWorkspace[];
   sessions: DemoSession[];
@@ -134,7 +132,6 @@ export const demoDevices: DemoDevice[] = [
   {
     handle: "studio",
     name: "Studio MacBook",
-    clients: ["codex", "claude", "pi", "grok", "antigravity", "kiro"],
     bots: [
       {
         id: "atlas",
@@ -685,7 +682,6 @@ export const demoDevices: DemoDevice[] = [
   {
     handle: "build-server",
     name: "Build Server",
-    clients: ["claude", "codex", "pi", "grok"],
     bots: [
       {
         id: "ops",
