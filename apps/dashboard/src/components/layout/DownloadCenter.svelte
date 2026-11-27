@@ -22,7 +22,7 @@
     {#snippet child({ props })}
       <Button {...props} variant="ghost" size="sm" class="pointer-events-auto relative inline-flex h-8 gap-1.5 bg-popover ring-1 ring-foreground/10 px-2 [&_svg:not([class*=size-])]:size-3.5" aria-label={$t('downloads.title')} title={$t('downloads.title')}>
         <DownloadSimpleIcon class={activeCount ? 'text-primary' : ''} />
-        <Badge data-testid="downloads-count" class="absolute -top-1.5 -right-1.5 h-4 min-w-4 rounded-chip px-1 text-10 tabular-nums">{$number($downloads.length)}</Badge>
+        <Badge data-testid="downloads-count" class="absolute -top-1.5 -right-1.5 h-4 min-w-4 rounded-chip px-1 text-10 text-white tabular-nums">{$number($downloads.length)}</Badge>
         <span class="sr-only" role="status">{activeCount ? $t('downloads.activeCount', { count: activeCount }) : ''}</span>
       </Button>
     {/snippet}

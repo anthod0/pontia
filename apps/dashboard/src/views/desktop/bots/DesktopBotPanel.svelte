@@ -13,9 +13,9 @@
   import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon'
   import QuotesIcon from 'phosphor-svelte/lib/QuotesIcon'
   import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon'
+  import CaretLeftIcon from 'phosphor-svelte/lib/CaretLeftIcon'
   import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
   import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon'
-  import SidebarSimpleIcon from 'phosphor-svelte/lib/SidebarSimpleIcon'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import * as Tabs from '$lib/components/ui/tabs/index.js'
@@ -176,13 +176,13 @@
 </script>
 
 {#snippet badge(corner = false)}
-  {#if count > 0}<Badge class={['h-4 min-w-4 rounded-chip px-1 text-10 tabular-nums', corner && 'pointer-events-none absolute -top-1 -right-1']}>{count > 99 ? '99+' : count}</Badge>{/if}
+  {#if count > 0}<Badge class={['h-4 min-w-4 rounded-chip px-1 text-10 text-white tabular-nums', corner && 'pointer-events-none absolute -top-1 -right-1']}>{count > 99 ? '99+' : count}</Badge>{/if}
 {/snippet}
 
 {#snippet sidebarButton()}
   <Button variant="ghost" size="icon-circle" class={['pointer-events-auto mr-3 relative size-8 p-0 ring-1 ring-foreground/10', panel.open ? 'bg-muted text-heading' : 'bg-popover']}
     aria-label={count > 0 ? $t('bots.sidebarWithTodos', { count }) : $t('nav.sidebar')} title={$t('nav.sidebar')} aria-pressed={panel.open} onclick={() => { void (panel.open ? panel.close() : panel.show()) }}>
-    <SidebarSimpleIcon class="size-4 -scale-x-100" />{@render badge(true)}
+    {#if panel.open}<CaretRightIcon class="size-4" />{:else}<CaretLeftIcon class="size-4" />{/if}{@render badge(true)}
   </Button>
 {/snippet}
 
