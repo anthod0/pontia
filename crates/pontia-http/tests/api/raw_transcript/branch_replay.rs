@@ -255,7 +255,7 @@ async fn branch_replay_validates_idle_and_target_before_delivery() {
 
     let (status, _) = post_external_json(
         state.clone(),
-        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
+        &format!("/api/v1/sessions/{session_id}/messages"),
         json!({"input": "replacement", "branch_target_turn_id": target_turn_id}),
     )
     .await;

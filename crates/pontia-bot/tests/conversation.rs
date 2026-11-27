@@ -673,7 +673,6 @@ async fn busy_bot_without_steering_queues_follow_up_input() {
         .await
         .unwrap();
     assert_eq!(messages.len(), 1);
-    assert_eq!(messages[0].state, "pending");
     assert_eq!(
         service.chat(&bot.bot_id).await.unwrap().status,
         WorkStatus::Processing

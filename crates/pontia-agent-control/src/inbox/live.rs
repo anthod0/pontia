@@ -4,14 +4,17 @@ use crate::{
     inbox::{SessionActor, SessionPhase},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum SendMode {
+    #[default]
     Immediate,
     Queue,
     Interrupt,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[serde(tag = "status", rename_all = "snake_case")]
 pub enum SendOutcome {
     Delivered,
     Queued { message_id: String },
@@ -63,14 +66,35 @@ impl InboxCommandService {
         let actor = self.scheduler.session(session_id);
         let _guard = actor.lock().await;
         match mode {
-            SendMode::Immediate => self
-                .deliver_immediate_locked(session_id, input, &actor)
-                .await
-                .map_err(ImmediateSendError::into_delivery),
-            SendMode::Queue => {
-                self.queue_input_locked(session_id, input, "after_idle", true, &actor)
+            SendMode::Immediate => {
+                let session = self
+                    .queries
+                    .get_session_control(session_id)
                     .await
+                    .map_err(crate::DeliveryError::from)?
+                    .ok_or_else(|| {
+                        crate::DeliveryError::StateChanged(format!(
+                            "session {session_id} not found"
+                        ))
+                    })?;
+                let busy = matches!(session.state.as_str(), "busy" | "waiting_for_interaction");
+                if busy && !session.capabilities.steer {
+                    self.queue_input_locked(session_id, input, &actor).await
+                } else {
+                    match self
+                        .deliver_immediate_locked(session_id, input.clone(), &actor)
+                        .await
+                    {
+                        Err(ImmediateSendError::Delivery(crate::DeliveryError::Unsupported(_)))
+                            if busy =>
+                        {
+                            self.queue_input_locked(session_id, input, &actor).await
+                        }
+                        result => result.map_err(ImmediateSendError::into_delivery),
+                    }
+                }
             }
+            SendMode::Queue => self.queue_input_locked(session_id, input, &actor).await,
             SendMode::Interrupt => self.interrupt_input_locked(session_id, input, &actor).await,
         }
     }
@@ -185,8 +209,6 @@ impl InboxCommandService {
         &self,
         session_id: &str,
         mut input: InputPayload,
-        delivery_policy: &str,
-        interrupt_before_delivery: bool,
         actor: &SessionActor,
     ) -> std::result::Result<SendOutcome, crate::DeliveryError> {
         let repository = SqliteInboxRepository::new(self.pool.clone());
@@ -265,22 +287,9 @@ impl InboxCommandService {
             }
         }
         let message_id = new_message_id().to_string();
-        self.enqueue_message_locked(
-            &message_id,
-            session_id,
-            SubmitInboxMessageRequest {
-                input: input.text,
-                delivery_policy: delivery_policy.into(),
-                metadata: input.metadata,
-            },
-            EnqueueOptions {
-                interrupt_before_delivery,
-                drain_now: false,
-            },
-            actor,
-        )
-        .await
-        .map_err(crate::DeliveryError::from)?;
+        self.enqueue_message_locked(&message_id, session_id, input)
+            .await
+            .map_err(crate::DeliveryError::from)?;
         if force_queue {
             self.drain_inbox_locked(session_id, actor)
                 .await
@@ -330,10 +339,7 @@ impl InboxCommandService {
             .interrupt_current_turn_locked(session_id, actor)
             .await
         {
-            Ok(_) => {
-                self.queue_input_locked(session_id, input, "interrupt_now", false, actor)
-                    .await
-            }
+            Ok(_) => self.queue_input_locked(session_id, input, actor).await,
             Err(error) => match crate::DeliveryError::from(error) {
                 crate::DeliveryError::StateChanged(_) => {
                     let active = SqliteTurnRepository::new(self.pool.clone())

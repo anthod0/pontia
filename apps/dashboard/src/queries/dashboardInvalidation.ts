@@ -22,7 +22,7 @@ export function createInvalidation(device: DeviceRuntime) {
 
   function isMutableDashboardQuery(queryKey: readonly unknown[]): boolean {
     if (queryKey[1] === device.sessionQueries.sessionKeys.all[1]) {
-      if (queryKey[2] === "optimistic-inbox" || queryKey[2] === "optimistic-chat") return false;
+      if (queryKey[2] === "optimistic-chat") return false;
       if (queryKey[2] === "timeline") return queryKey[3] === "snapshot";
       return queryKey[2] === "overview" || queryKey[2] === "detail";
     }

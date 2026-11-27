@@ -501,14 +501,10 @@ async fn dashboard_fork_excludes_the_target_and_preserves_running_source() {
     assert_eq!(lineage, (source.clone(), target, "before".into()));
     f.app
         .inbox_commands()
-        .submit_message_once(
-            "replacement",
+        .send(
             &child,
-            pontia_agent_control::SubmitInboxMessageRequest {
-                input: "edited prompt".into(),
-                delivery_policy: "after_idle".into(),
-                metadata: json!({}),
-            },
+            pontia_agent_control::InputPayload::new("edited prompt").force_queue(),
+            pontia_agent_control::SendMode::Queue,
         )
         .await
         .unwrap();

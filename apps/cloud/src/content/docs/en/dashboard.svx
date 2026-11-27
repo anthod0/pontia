@@ -39,12 +39,11 @@ The chat page streams the conversation and work steps exposed by the Agent Clien
 - queue input while a supported Agent Client is busy;
 - interrupt the current Turn when the Client supports interruption;
 - answer tool and permission requests, such as command approvals, when the Client asks for them;
-- retry or dismiss Inbox messages whose delivery failed;
 - type `@` to find files and directories in the active Workspace;
 - attach files with the **+** button in the composer, up to 1 GiB each;
 - edit an eligible earlier user message to branch from that point in the native conversation history.
 
-The Inbox tracks submitted messages waiting for delivery or queued by an Agent Client.
+Queued messages appear above the composer and can be canceled before delivery.
 
 ## Files in replies
 

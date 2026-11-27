@@ -12,14 +12,28 @@ import urllib.request
 import uuid
 
 
+def wait_for(description, check):
+    deadline = time.monotonic() + 90
+    while time.monotonic() < deadline:
+        result = check()
+        if result:
+            return result
+        time.sleep(0.5)
+    raise TimeoutError(description)
+
+
 def main():
     config = tomllib.loads(Path("/home/e2e/.pontia/config.toml").read_text())
     headers = {"Authorization": "Bearer " + config["external_api_token"], "Content-Type": "application/json"}
 
     def request(path, payload=None, method=None):
+        request_headers = headers.copy()
+        if path.startswith("sessions/") and path.endswith("/messages") and payload is not None:
+            request_headers["Idempotency-Key"] = uuid.uuid4().hex
         req = urllib.request.Request(
             "http://127.0.0.1:8080/api/v1/" + path,
-            headers=headers, method=method, data=None if payload is None else json.dumps(payload).encode(),
+            headers=request_headers, method=method,
+            data=None if payload is None else json.dumps(payload).encode(),
         )
         with urllib.request.urlopen(req, timeout=60) as response:
             return json.load(response)["data"]
@@ -41,8 +55,15 @@ def check_session(request):
         assert detail["model"] == "gpt-4o-mini", detail["model"]
 
     def expect_reply(prompt, expected):
-        message = request(session + "/inbox/messages", {"input": prompt, "delivery_policy": "after_idle"})
-        turn = message["inbox_message"]["turn_id"]
+        previous_turn = request(session)["session"]["current_turn_id"]
+        message = request(session + "/messages", {"input": prompt, "mode": "immediate"})
+        assert message["delivery"]["status"] == "delivered", message
+
+        def new_turn():
+            current_turn = request(session)["session"]["current_turn_id"]
+            return current_turn if current_turn != previous_turn else None
+
+        turn = wait_for("Session did not start a new Turn", new_turn)
         deadline = time.monotonic() + 90
         while time.monotonic() < deadline:
             state = request(f"{session}/turns/{turn}")["turn"]["state"]

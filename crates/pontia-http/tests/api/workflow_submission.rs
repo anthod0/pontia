@@ -286,7 +286,6 @@ async fn workflow_termination_reports_once_to_the_origin_and_preserves_running_s
     stop.send(true).unwrap();
     worker.await.unwrap();
     assert_eq!(messages.len(), 1);
-    assert_eq!(messages[0].delivery_policy, "after_idle");
     for text in [
         "wf_http_submit",
         "node_http_submit",
@@ -294,7 +293,7 @@ async fn workflow_termination_reports_once_to_the_origin_and_preserves_running_s
         "The required source file is missing.",
         "pontia workflow show wf_http_submit",
     ] {
-        assert!(messages[0].input.summary.contains(text));
+        assert!(messages[0].input.contains(text));
     }
     let snapshot = pontia_workflow::WorkflowQueryService::new(app.db.clone(), control.queries())
         .get_workflow("wf_http_submit")

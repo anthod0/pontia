@@ -2,8 +2,9 @@ import type {
   AgentProfileView,
   DashboardStreamEvent,
   EventView,
-  InboxMessageView,
   JsonObject,
+  MessageDelivery,
+  QueuedMessageView,
   SessionOverviewView,
   SessionView,
   TurnTimelineGroup,
@@ -32,6 +33,8 @@ export function createMockDevice(data: MockData): MockDevice {
   return { data, streams: new Set(), timers: new Map(), authProbed: false };
 }
 
+const messageDeliveries = new WeakMap<MockSession, Map<string, MessageDelivery>>();
+
 /** A response body sent without the `{ data, meta, error }` envelope. */
 class Unwrapped {
   readonly body: unknown;
@@ -58,6 +61,7 @@ type Handler = (context: {
   params: Params;
   query: URLSearchParams;
   body: JsonObject;
+  headers: Headers;
 }) => unknown;
 
 const TURN_DURATION_MS = 2_500;
@@ -138,7 +142,7 @@ function cancelTimer(device: MockDevice, sessionId: string): void {
   device.timers.delete(sessionId);
 }
 
-function startTurn(device: MockDevice, session: MockSession, input: string, messageId?: string) {
+function startTurn(device: MockDevice, session: MockSession, input: string) {
   const startedAt = now();
   const turn: TurnView = {
     turn_id: device.data.nextId("turn"),
@@ -152,7 +156,7 @@ function startTurn(device: MockDevice, session: MockSession, input: string, mess
     created_at: startedAt,
     started_at: startedAt,
     completed_at: null,
-    metadata: messageId ? { inbox_message_id: messageId } : {},
+    metadata: {},
   };
   session.turns.push(turn);
   session.items.set(turn.turn_id, [
@@ -163,13 +167,7 @@ function startTurn(device: MockDevice, session: MockSession, input: string, mess
   ]);
   session.view.current_turn_id = turn.turn_id;
   touch(session, "busy");
-  emit(
-    device,
-    session,
-    "turn.started",
-    turn.turn_id,
-    messageId ? { metadata: { inbox_message_id: messageId } } : {},
-  );
+  emit(device, session, "turn.started", turn.turn_id, {});
   device.timers.set(
     session.view.session_id,
     setTimeout(() => completeTurn(device, session, turn, mockReply(input)), TURN_DURATION_MS),
@@ -224,23 +222,18 @@ function completeTurn(
   session.view.context_usage = contextUsage((session.view.context_usage?.used_tokens ?? 0) + 4_000);
   touch(session, "idle");
   emit(device, session, "turn.completed", turn.turn_id);
-  dispatchNextInboxMessage(device, session);
+  dispatchNextQueuedMessage(device, session);
 }
 
-function dispatchNextInboxMessage(device: MockDevice, session: MockSession): void {
-  const next = session.inbox.find((message) => message.state === "pending");
+function dispatchNextQueuedMessage(device: MockDevice, session: MockSession): void {
+  const next = session.queue[0];
   if (!next) return;
   dispatch(device, session, next);
 }
 
-function dispatch(device: MockDevice, session: MockSession, message: InboxMessageView): void {
-  const turn = startTurn(device, session, message.input.summary, message.message_id);
-  Object.assign(message, {
-    state: "dispatched",
-    turn_id: turn.turn_id,
-    dispatched_at: now(),
-    updated_at: now(),
-  });
+function dispatch(device: MockDevice, session: MockSession, message: QueuedMessageView): void {
+  session.queue = session.queue.filter((item) => item.message_id !== message.message_id);
+  startTurn(device, session, message.input);
 }
 
 function runningTurn(session: MockSession): TurnView | undefined {
@@ -464,62 +457,67 @@ function mockClientAuth(client: ReturnType<typeof findAgentClient>) {
   };
 }
 
-function findInboxMessage(session: MockSession, messageId: string): InboxMessageView {
+function findQueuedMessage(session: MockSession, messageId: string): QueuedMessageView {
   return (
-    session.inbox.find((message) => message.message_id === messageId) ?? notFound("Inbox message")
+    session.queue.find((message) => message.message_id === messageId) ?? notFound("Queued message")
   );
 }
 
-function createInboxMessage(
+function createQueuedMessage(
   session: MockSession,
   messageId: string,
   input: string,
-  deliveryPolicy: string,
   metadata: JsonObject,
-): InboxMessageView {
+): QueuedMessageView {
   const timestamp = now();
-  const message: InboxMessageView = {
+  const message: QueuedMessageView = {
     message_id: messageId,
     session_id: session.view.session_id,
-    state: "pending",
-    delivery_policy: deliveryPolicy,
-    input: { summary: input },
+    input,
     metadata,
-    branch_target_turn_id: null,
-    turn_id: null,
-    steer_target_turn_id: null,
-    retry_of_message_id: null,
-    retried_by_message_id: null,
-    superseded_by_message_id: null,
-    failure_message: null,
     created_at: timestamp,
-    updated_at: timestamp,
-    dispatched_at: null,
-    cancelled_at: null,
   };
-  session.inbox.push(message);
+  session.queue.push(message);
   return message;
 }
 
-function submitInboxMessage(
+function sendMessage(
   device: MockDevice,
   session: MockSession,
   messageId: string,
   body: JsonObject,
-): InboxMessageView {
-  const existing = session.inbox.find((message) => message.message_id === messageId);
-  if (existing) return existing;
-  const policy = typeof body.delivery_policy === "string" ? body.delivery_policy : "after_idle";
-  const message = createInboxMessage(
+): { status: "delivered" } | { status: "queued"; message_id: string } {
+  const mode = typeof body.mode === "string" ? body.mode : "immediate";
+  const message = createQueuedMessage(
     session,
     messageId,
     String(body.input ?? ""),
-    policy,
     (body.metadata as JsonObject | undefined) ?? {},
   );
-  if (policy === "interrupt_now") interrupt(device, session);
-  if (!runningTurn(session)) dispatch(device, session, message);
-  return message;
+  if (mode === "interrupt") interrupt(device, session);
+  if (!runningTurn(session) || (mode === "immediate" && session.view.capabilities.steer)) {
+    dispatch(device, session, message);
+    return { status: "delivered" };
+  }
+  return { status: "queued", message_id: messageId };
+}
+
+function sendMessageOnce(
+  device: MockDevice,
+  session: MockSession,
+  messageId: string,
+  body: JsonObject,
+): MessageDelivery {
+  let deliveries = messageDeliveries.get(session);
+  if (!deliveries) {
+    deliveries = new Map();
+    messageDeliveries.set(session, deliveries);
+  }
+  const previous = deliveries.get(messageId);
+  if (previous) return previous;
+  const delivery = sendMessage(device, session, messageId, body);
+  deliveries.set(messageId, delivery);
+  return delivery;
 }
 
 function directoryEntries(device: MockDevice, path: string) {
@@ -1065,7 +1063,7 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
         },
         turns: [],
         items: new Map(),
-        inbox: [],
+        queue: [],
         events: [],
         interactions: [],
       };
@@ -1182,53 +1180,31 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
   ],
   [
     "GET",
-    "/sessions/:id/inbox/messages",
-    ({ device, params: [id] }) => ({ inbox_messages: findSession(device, id).inbox }),
-  ],
-  [
-    "PUT",
-    "/sessions/:id/inbox/messages/:message",
-    ({ device, params: [id, messageId], body }) => ({
-      inbox_message: submitInboxMessage(device, findSession(device, id), messageId, body),
-    }),
-  ],
-  [
-    "GET",
-    "/sessions/:id/inbox/messages/:message",
-    ({ device, params: [id, messageId] }) => ({
-      inbox_message: findInboxMessage(findSession(device, id), messageId),
-    }),
+    "/sessions/:id/queue",
+    ({ device, params: [id] }) => ({ messages: findSession(device, id).queue }),
   ],
   [
     "POST",
-    "/sessions/:id/inbox/messages/:message/retry",
-    ({ device, params: [id, originalId], body }) => {
-      const session = findSession(device, id);
-      const original = findInboxMessage(session, originalId);
-      const retry = submitInboxMessage(device, session, String(body.message_id), {
-        input: original.input.summary,
-        delivery_policy: original.delivery_policy,
-        metadata: original.metadata,
-      });
-      Object.assign(original, { retried_by_message_id: retry.message_id, updated_at: now() });
-      retry.retry_of_message_id = original.message_id;
-      return { inbox_message: retry };
-    },
+    "/sessions/:id/messages",
+    ({ device, params: [id], body, headers }) => ({
+      delivery: sendMessageOnce(
+        device,
+        findSession(device, id),
+        headers.get("Idempotency-Key") ?? device.data.nextId("msg"),
+        body,
+      ),
+    }),
   ],
-  ...(["cancel", "dismiss"] as const).map((action): [string, string, Handler] => [
-    "POST",
-    `/sessions/:id/inbox/messages/:message/${action}`,
+  [
+    "DELETE",
+    "/sessions/:id/queue/:message",
     ({ device, params: [id, messageId] }) => {
-      const message = findInboxMessage(findSession(device, id), messageId);
-      const timestamp = now();
-      Object.assign(message, {
-        state: action === "cancel" ? "cancelled" : "dismissed",
-        updated_at: timestamp,
-        ...(action === "cancel" ? { cancelled_at: timestamp } : {}),
-      });
-      return { inbox_message: message };
+      const session = findSession(device, id);
+      const message = findQueuedMessage(session, messageId);
+      session.queue = session.queue.filter((item) => item.message_id !== messageId);
+      return { message };
     },
-  ]),
+  ],
   [
     "GET",
     "/sessions/:id/interactions",
@@ -1369,6 +1345,7 @@ export async function handleDeviceRequest(
         params: match.slice(1).map(decodeURIComponent),
         query: url.searchParams,
         body: text ? (JSON.parse(text) as JsonObject) : {},
+        headers: request.headers,
       });
       if (result instanceof Unwrapped) return json(200, result.body);
       return json(200, { data: result, meta: {}, error: null });

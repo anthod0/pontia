@@ -228,18 +228,25 @@ async fn real_pi_client_reconnects_after_daemon_restart_and_delivers_external_in
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/sessions/sess_input/inbox/messages")
+                .uri("/api/v1/sessions/sess_input/messages")
                 .header("content-type", "application/json")
                 .header("authorization", "Bearer token")
-                .body(Body::from(json!({"input":"first\n你好"}).to_string()))
+                .body(Body::from(
+                    json!({"input":"first\n你好","mode":"queue"}).to_string(),
+                ))
                 .unwrap(),
         )
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::CREATED);
+    let status = response.status();
     let body: Value =
         serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
-    assert_eq!(body["data"]["inbox_message"]["state"], "pending");
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    assert_eq!(body["data"]["delivery"]["status"], "queued");
+    let message_id = body["data"]["delivery"]["message_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let listener = ControlListener::bind(root.path()).await.unwrap();
     let task = tokio::spawn(listener.run(
         restarted.control().clone(),
@@ -247,17 +254,13 @@ async fn real_pi_client_reconnects_after_daemon_restart_and_delivers_external_in
     ));
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            let status: String =
-                sqlx::query_scalar("SELECT state FROM inbox_messages WHERE message_id=?")
-                    .bind(
-                        body["data"]["inbox_message"]["message_id"]
-                            .as_str()
-                            .unwrap(),
-                    )
+            let remaining: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM inbox_messages WHERE message_id=?")
+                    .bind(&message_id)
                     .fetch_one(&state.db())
                     .await
                     .unwrap();
-            if status == "dispatched" {
+            if remaining == 0 {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
@@ -449,7 +452,14 @@ async fn pi_lifecycle_controls_preserve_rejection_and_unknown_delivery() {
             }
             let error = task.await.unwrap().unwrap_err();
             if outcome == "rejected" {
-                assert!(matches!(error, pontia_core::Error::Domain(_)));
+                if method == "interrupt" {
+                    assert!(matches!(
+                        error,
+                        pontia_core::Error::CapabilityUnavailable(_)
+                    ));
+                } else {
+                    assert!(matches!(error, pontia_core::Error::Domain(_)));
+                }
             } else {
                 assert!(matches!(error, pontia_core::Error::ControlUnknown(_)));
             }

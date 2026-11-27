@@ -9,12 +9,11 @@ import { navigate } from "$lib/navigation";
 import { dashboardScope } from "$lib/dashboardRoutes";
 import { claimChatEntryAutofocus } from "$lib/chatEntryAutofocus";
 import type { HistoryFork } from "../../stores/historyForks";
-import { SubmissionUnconfirmedError } from "../../stores/inboxRecovery";
 import type {
   DashboardStreamEvent,
   EventView,
-  InboxDeliveryPolicy,
-  InboxMessageView,
+  MessageMode,
+  QueuedMessageView,
   SessionView,
   TurnView,
 } from "../../api/types";
@@ -37,7 +36,6 @@ import { scrollDocumentToBottom } from "../../lib/session-chat/autoScroll";
 import {
   sessionMetadataItems,
   sessionMetadataSummary,
-  visibleChatInboxMessages,
 } from "../../components/chat/sessionMetadata";
 import { isExecutingSessionState, isTerminalSession } from "$lib/sessionState";
 import { fromStore } from "svelte/store";
@@ -49,12 +47,9 @@ export function createSessionChat(routeSessionId: () => string | null) {
   const device = useDeviceRuntime();
   const deviceScope = dashboardScope();
   const { pending: pendingHistoryForks } = device.historyForks;
-  const { retryInboxMessage } = device.sessions;
   const { compactSession, setSessionReasoningEffort } = device.api;
   const { chatMessagesWithOptimistic, createOptimisticChatQuery, reconcileOptimisticMessages } =
     device.optimisticChat;
-  const { createOptimisticInboxQuery, inboxSubmissionMessages, reconcileInboxSubmissions } =
-    device.inboxQueries;
   const { chatDraft, clearChatDraft } = device.chatDraft;
   const {
     createRefreshWorkspaceGitStatusMutation,
@@ -63,8 +58,7 @@ export function createSessionChat(routeSessionId: () => string | null) {
     invalidateWorkspaceGit,
   } = device.workspaceQueries;
   const {
-    cancelInboxMessage,
-    dismissInboxMessage,
+    cancelQueuedMessage,
     loadSessionDetail,
     interruptSession,
     terminateSession,
@@ -78,7 +72,7 @@ export function createSessionChat(routeSessionId: () => string | null) {
     sessionDetailError,
     sessionDetailErrorKind,
     selectSession,
-    submitInboxMessage,
+    sendMessage: submitMessage,
     updateSessionTitle,
   } = device.sessions;
   const {
@@ -91,14 +85,12 @@ export function createSessionChat(routeSessionId: () => string | null) {
   const { subscribeDashboardEvents } = device.events;
   const { openLiveOutputStream } = device.liveOutput;
 
-  const { queuedInboxMessages } = device.inboxQueries;
-
   let selectedSessionId = $state.raw("");
   let submitting = $state.raw(false);
   let branchActionSubmitting = $state.raw(false);
   let branchActionError = $state.raw<string | null>(null);
   let actionBusy = $state.raw(false);
-  let inboxActionMessageId = $state.raw<string | null>(null);
+  let queueActionMessageId = $state.raw<string | null>(null);
   let actionError = $state.raw<string | null>(null);
   let reasoningEffortBusy = $state.raw(false);
   let reasoningEffortSessionId = "";
@@ -129,7 +121,6 @@ export function createSessionChat(routeSessionId: () => string | null) {
   const workspaceGitStatuses = createWorkspaceGitStatusesStore();
   const refreshWorkspaceGitStatusMutation = createRefreshWorkspaceGitStatusMutation();
   const optimisticChatQuery = createOptimisticChatQuery();
-  const optimisticInboxQuery = createOptimisticInboxQuery();
 
   const AUTO_RESUME_IDLE_TIMEOUT_MS = 30_000;
   const BRANCH_INTERRUPT_TIMEOUT_MS = 30_000;
@@ -137,7 +128,6 @@ export function createSessionChat(routeSessionId: () => string | null) {
 
   const chatDraftValue = fromStore(chatDraft);
   const optimisticChatQueryValue = fromStore(optimisticChatQuery);
-  const optimisticInboxQueryValue = fromStore(optimisticInboxQuery);
   const pendingHistoryForksValue = fromStore(pendingHistoryForks);
   const sessionDetailValue = fromStore(sessionDetail);
   const tValue = fromStore(t);
@@ -349,18 +339,10 @@ export function createSessionChat(routeSessionId: () => string | null) {
       timeline = timelineMessages;
     untrack(() => reconcileOptimisticMessages(id, timeline));
   });
-  $effect(() => {
-    const id = selectedSessionId,
-      timeline = timelineMessages;
-    untrack(() => reconcileInboxSubmissions(id, timeline));
-  });
   const messages = $derived(
-    inboxSubmissionMessages(
-      chatMessagesWithOptimistic(
-        timelineMessages,
-        optimisticChatQueryValue.current.data?.[selectedSessionId] ?? [],
-      ),
-      optimisticInboxQueryValue.current.data?.[selectedSessionId] ?? [],
+    chatMessagesWithOptimistic(
+      timelineMessages,
+      optimisticChatQueryValue.current.data?.[selectedSessionId] ?? [],
     ),
   );
 
@@ -398,22 +380,10 @@ export function createSessionChat(routeSessionId: () => string | null) {
     ),
   );
 
-  const selectedInboxMessages = $derived(
+  const queuedMessages = $derived(
     selectedSessionId && sessionDetailValue.current?.session.session_id === selectedSessionId
-      ? sessionDetailValue.current.inboxMessages
+      ? sessionDetailValue.current.queuedMessages
       : [],
-  );
-
-  const selectedInboxSubmissions = $derived(
-    optimisticInboxQueryValue.current.data?.[selectedSessionId] ?? [],
-  );
-
-  const visibleInboxMessages = $derived(
-    queuedInboxMessages(visibleChatInboxMessages(selectedInboxMessages), selectedInboxSubmissions),
-  );
-
-  const pendingInboxSubmissionId = $derived(
-    selectedInboxSubmissions.find((submission) => !submission.acceptedMessage)?.localId ?? null,
   );
 
   const canSend = $derived(canSendSessionMessage(selectedSession, "x") && !submitting);
@@ -543,49 +513,16 @@ export function createSessionChat(routeSessionId: () => string | null) {
     await refreshSessionGitStatus(currentSelectedSession());
   }
 
-  async function cancelPendingInboxMessage(message: InboxMessageView): Promise<void> {
-    if (!selectedSessionId || message.state !== "pending") return;
-    inboxActionMessageId = message.message_id;
+  async function cancelQueueMessage(message: QueuedMessageView): Promise<void> {
+    if (!selectedSessionId) return;
+    queueActionMessageId = message.message_id;
     actionError = null;
     try {
-      await cancelInboxMessage(selectedSessionId, message.message_id);
+      await cancelQueuedMessage(selectedSessionId, message.message_id);
     } catch (error) {
       actionError = error instanceof Error ? error.message : String(error);
     } finally {
-      inboxActionMessageId = null;
-    }
-  }
-
-  async function retryFailedInboxMessage(message: InboxMessageView): Promise<void> {
-    if (!selectedSessionId || !["failed", "unknown"].includes(message.state)) return;
-    if (message.state === "unknown" && !window.confirm(tValue.current("chat.duplicateConfirm")))
-      return;
-    inboxActionMessageId = message.message_id;
-    actionError = null;
-    try {
-      await retryInboxMessage(selectedSessionId, message, message.state === "unknown");
-    } catch (error) {
-      actionError =
-        error instanceof SubmissionUnconfirmedError
-          ? null
-          : error instanceof Error
-            ? error.message
-            : String(error);
-    } finally {
-      inboxActionMessageId = null;
-    }
-  }
-
-  async function dismissFailedInboxMessage(message: InboxMessageView): Promise<void> {
-    if (!selectedSessionId || message.state !== "failed") return;
-    inboxActionMessageId = message.message_id;
-    actionError = null;
-    try {
-      await dismissInboxMessage(selectedSessionId, message.message_id);
-    } catch (error) {
-      actionError = error instanceof Error ? error.message : String(error);
-    } finally {
-      inboxActionMessageId = null;
+      queueActionMessageId = null;
     }
   }
 
@@ -639,7 +576,7 @@ export function createSessionChat(routeSessionId: () => string | null) {
       return true;
     } catch (error) {
       branchActionError = error instanceof Error ? error.message : String(error);
-      return error instanceof SubmissionUnconfirmedError;
+      return false;
     } finally {
       branchActionSubmitting = false;
     }
@@ -1289,10 +1226,7 @@ export function createSessionChat(routeSessionId: () => string | null) {
     });
   }
 
-  async function sendMessage(
-    message: string,
-    deliveryPolicy: InboxDeliveryPolicy,
-  ): Promise<boolean> {
+  async function sendMessage(message: string, mode: MessageMode): Promise<boolean> {
     if (!canSend || !selectedSessionId || !message.trim()) return false;
     submitting = true;
     actionError = null;
@@ -1314,21 +1248,16 @@ export function createSessionChat(routeSessionId: () => string | null) {
         if (clientResumeWaitsForIdle(selectedSession)) await waitForSessionIdle(selectedSessionId);
         clearChatDraft();
       }
-      await submitInboxMessage(selectedSessionId, {
+      await submitMessage(selectedSessionId, {
         input: message,
-        delivery_policy: deliveryPolicy,
+        mode,
         metadata: { source: "dashboard_chat" },
       });
       return true;
     } catch (error) {
       pendingPromptScrolls = pendingPromptScrolls.filter((request) => request !== scrollRequest);
       if (!get(chatDraft).trim()) chatDraft.set(originalDraft);
-      actionError =
-        error instanceof SubmissionUnconfirmedError
-          ? null
-          : error instanceof Error
-            ? error.message
-            : String(error);
+      actionError = error instanceof Error ? error.message : String(error);
       return false;
     } finally {
       submitting = false;
@@ -1422,7 +1351,7 @@ export function createSessionChat(routeSessionId: () => string | null) {
     get canSend() {
       return canSend;
     },
-    cancelPendingInboxMessage,
+    cancelQueueMessage,
     chatDraft,
     compactSelectedSession,
     get compactedHistoryNotice() {
@@ -1436,14 +1365,13 @@ export function createSessionChat(routeSessionId: () => string | null) {
     },
     device,
     pendingHistoryForks,
-    dismissFailedInboxMessage,
     editHistoricalMessage,
     exitSelectedSession,
     get historyObserverEnabled() {
       return historyObserverEnabled;
     },
-    get inboxActionMessageId() {
-      return inboxActionMessageId;
+    get queueActionMessageId() {
+      return queueActionMessageId;
     },
     get initialChatScrollPending() {
       return initialChatScrollPending;
@@ -1459,14 +1387,10 @@ export function createSessionChat(routeSessionId: () => string | null) {
     },
     navigateFromRuler,
     openNewChat,
-    get pendingInboxSubmissionId() {
-      return pendingInboxSubmissionId;
-    },
     recoverHistoryFork,
     refreshCurrentSessionGitStatus,
     refreshSessionTimeline,
     renameSelectedSession,
-    retryFailedInboxMessage,
     get rulerNavigableTurnIds() {
       return rulerNavigableTurnIds;
     },
@@ -1514,8 +1438,8 @@ export function createSessionChat(routeSessionId: () => string | null) {
     get transcriptResolving() {
       return transcriptResolving;
     },
-    get visibleInboxMessages() {
-      return visibleInboxMessages;
+    get queuedMessages() {
+      return queuedMessages;
     },
     setHideScrollButton(callback?: () => void) {
       hideScrollButton = callback;

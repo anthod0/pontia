@@ -28,9 +28,9 @@ function commands(): ChatCommand[] {
 }
 
 test.each([
-  [{ key: "Enter" }, "steer"],
-  [{ key: "Tab" }, "after_idle"],
-  [{ key: "Enter", altKey: true }, "after_idle"],
+  [{ key: "Enter" }, "immediate"],
+  [{ key: "Tab" }, "queue"],
+  [{ key: "Enter", altKey: true }, "queue"],
 ])("submits using the delivery policy selected by %j", async (shortcut, policy) => {
   const onSubmit = vi.fn();
   render(MessageComposer, { value: "Continue the task", onSubmit });
@@ -52,7 +52,7 @@ test("Alt+Enter queues text ending in a backslash without changing its content",
   const onSubmit = vi.fn();
   render(MessageComposer, { value: "Keep this \\", onSubmit });
   await fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter", altKey: true });
-  expect(onSubmit).toHaveBeenCalledExactlyOnceWith("Keep this \\", "after_idle");
+  expect(onSubmit).toHaveBeenCalledExactlyOnceWith("Keep this \\", "queue");
 });
 
 test("backslash plus Enter inserts a newline instead of submitting", async () => {

@@ -22,7 +22,7 @@ function renderChat(overrides: Partial<SessionView> = {}, events: EventView[] = 
     },
   });
   window.history.pushState({}, "", `/dashboard/chat/${selected.session_id}`);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events });
+  mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events });
   chatDraft.set("/compact");
   render(SessionChatPage);
   return selected;
@@ -63,7 +63,7 @@ test("manual compaction waits for a terminal fact and refreshes native history w
   report(event("started"));
   await fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
   expect(compact).toHaveBeenCalledExactlyOnceWith("session-1");
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+  expect(mocks.sendMessage).not.toHaveBeenCalled();
   report(event("completed"));
   await waitFor(() =>
     expect(screen.getByRole("button", { name: "Compact context" })).toBeEnabled(),
@@ -126,7 +126,7 @@ test.each([{ state: "busy" }, { state: "exited" }, { capabilities: { manual_comp
     expect(await screen.findByRole("button", { name: "Compact context" })).toBeDisabled();
     await fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
     expect(compact).not.toHaveBeenCalled();
-    expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
   },
 );
 
@@ -151,5 +151,5 @@ test("event-only compaction refreshes the readable history after a completion", 
       topology: false,
     }),
   );
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+  expect(mocks.sendMessage).not.toHaveBeenCalled();
 });

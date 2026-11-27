@@ -813,18 +813,19 @@ async fn first_input_restores_launch_data_and_binds_a_thread_without_a_runtime()
 }
 
 #[tokio::test]
-async fn first_inbox_message_is_delivered_before_thread_history_exists() {
+async fn first_message_is_delivered_before_thread_history_exists() {
     let fixture = Fixture::new().await;
     let outcome = fixture
         .app
         .inbox_commands()
-        .submit_message(
+        .send(
             &fixture.session,
-            serde_json::from_value(json!({"input":"hi"})).unwrap(),
+            "hi".into(),
+            pontia_agent_control::SendMode::Immediate,
         )
         .await
         .unwrap();
-    assert_eq!(outcome.data["inbox_message"]["state"], "dispatched");
+    assert_eq!(outcome, pontia_agent_control::SendOutcome::Delivered);
     let inputs = fixture.inputs.lock().await;
     assert_eq!(inputs.len(), 1);
     assert_eq!(inputs[0]["threadId"], "thread-one");
@@ -839,9 +840,10 @@ async fn native_user_message_does_not_recreate_delivered_queue_input() {
     fixture
         .app
         .inbox_commands()
-        .submit_message(
+        .send(
             &fixture.session,
-            serde_json::from_value(json!({"input":"hi"})).unwrap(),
+            "hi".into(),
+            pontia_agent_control::SendMode::Immediate,
         )
         .await
         .unwrap();
@@ -876,13 +878,17 @@ async fn rejected_thread_start_allows_the_unbound_session_to_exit() {
     let outcome = fixture
         .app
         .inbox_commands()
-        .submit_message(
+        .send(
             &fixture.session,
-            serde_json::from_value(json!({"input":"hi"})).unwrap(),
+            "hi".into(),
+            pontia_agent_control::SendMode::Immediate,
         )
         .await
-        .unwrap();
-    assert_eq!(outcome.data["inbox_message"]["state"], "failed");
+        .unwrap_err();
+    assert!(matches!(
+        outcome,
+        pontia_agent_control::DeliveryError::Offline(_)
+    ));
     fixture
         .app
         .session_commands()

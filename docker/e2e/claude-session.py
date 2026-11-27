@@ -186,10 +186,10 @@ def check_workflow(request, marker):
     assert handoff.read_text().strip() == marker
 
     def report():
-        messages = request(f"sessions/{origin}/inbox/messages")["inbox_messages"]
-        return next((m for m in messages if (m["metadata"] or {}).get("workflow_id") == workflow), None)
+        return next((record for record in transcript(request, origin)
+                     if record["type"] == "user" and str(handoff) in json.dumps(record)), None)
 
-    assert str(handoff) in wait_for("initiating Session did not receive output paths", report)["input"]["summary"]
+    wait_for("initiating Session did not receive output paths", report)
     print(f'{workflow} completed, {session_id} submitted {marker} via {runtime["role"]} {runtime["runtime_id"]}',
           flush=True)
 

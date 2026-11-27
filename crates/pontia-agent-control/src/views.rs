@@ -3,7 +3,7 @@ pub mod inbox;
 pub mod sessions;
 pub mod turns;
 pub use events::{EventStreamScope, EventView};
-pub use inbox::{InboxInputView, InboxMessageView};
+pub use inbox::QueuedMessageView;
 pub use sessions::{
     ContextUsageCapability, ContextUsageView, SessionCapabilities, SessionLineageView, SessionView,
 };

@@ -974,9 +974,9 @@ test.each([false, true])(
 test("multiple steers within one native Turn keep distinct tool groups renderable", async () => {
   const nativeItems = [
     { ...item("turn-1", "call-1", "first work"), kind: "tool_call", title: "first tool" },
-    { ...item("turn-1", "steer-1", "follow up one"), kind: "user", role: "user" },
+    { ...item("turn-1", "immediate-1", "follow up one"), kind: "user", role: "user" },
     { ...item("turn-1", "call-2", "second work"), kind: "tool_call", title: "second tool" },
-    { ...item("turn-1", "steer-2", "follow up two"), kind: "user", role: "user" },
+    { ...item("turn-1", "immediate-2", "follow up two"), kind: "user", role: "user" },
     item("turn-1", "answer", "final answer"),
   ];
   render(SessionConversation, { props: { messages: timelineItemsToChatMessages(nativeItems) } });

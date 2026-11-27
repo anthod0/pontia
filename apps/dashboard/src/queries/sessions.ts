@@ -10,7 +10,7 @@ import type {
   CreateSessionInput,
   CreateSessionResult,
   EventView,
-  InboxMessageView,
+  QueuedMessageView,
   SessionView,
   TurnView,
   UpdateSessionInput,
@@ -20,7 +20,7 @@ import type { DeviceRuntime } from "../device/runtime";
 export interface SessionConsoleDetail {
   session: SessionView;
   turns: TurnView[];
-  inboxMessages: InboxMessageView[];
+  queuedMessages: QueuedMessageView[];
   events: EventView[];
 }
 export function createSessionQueries(device: DeviceRuntime) {
@@ -29,11 +29,7 @@ export function createSessionQueries(device: DeviceRuntime) {
     details: () => [...sessionKeys.all, "detail"] as const,
     detail: (sessionId: string) => [...sessionKeys.details(), sessionId] as const,
     turns: (sessionId: string) => [...sessionKeys.detail(sessionId), "turns"] as const,
-    inboxMessages: (sessionId: string) =>
-      [...sessionKeys.detail(sessionId), "inbox-messages"] as const,
-    inboxMessage: (sessionId: string, messageId: string) =>
-      [...sessionKeys.inboxMessages(sessionId), messageId] as const,
-    optimisticInbox: () => [...sessionKeys.all, "optimistic-inbox"] as const,
+    queue: (sessionId: string) => [...sessionKeys.detail(sessionId), "queue"] as const,
     optimisticChat: () => [...sessionKeys.all, "optimistic-chat"] as const,
     events: (sessionId: string) => [...sessionKeys.detail(sessionId), "events"] as const,
   };
@@ -58,12 +54,11 @@ export function createSessionQueries(device: DeviceRuntime) {
     });
   }
 
-  function sessionInboxMessagesOptions(sessionId: string, enabled = true) {
+  function sessionQueueOptions(sessionId: string, enabled = true) {
     return queryOptions({
-      queryKey: sessionKeys.inboxMessages(sessionId),
+      queryKey: sessionKeys.queue(sessionId),
       enabled: enabled && sessionId.length > 0,
-      queryFn: ({ signal }) =>
-        fetchSessionSnapshot(sessionId, signal, device.api.listInboxMessages),
+      queryFn: ({ signal }) => fetchSessionSnapshot(sessionId, signal, device.api.listQueue),
       refetchOnMount: false,
       retryOnMount: false,
     });
@@ -93,12 +88,9 @@ export function createSessionQueries(device: DeviceRuntime) {
     );
   }
 
-  function createSessionInboxMessagesQuery(
-    sessionId: () => string,
-    enabled: () => boolean = () => true,
-  ) {
+  function createSessionQueueQuery(sessionId: () => string, enabled: () => boolean = () => true) {
     return createQuery(
-      () => sessionInboxMessagesOptions(sessionId(), enabled()),
+      () => sessionQueueOptions(sessionId(), enabled()),
       () => device.queryClient,
     );
   }
@@ -132,13 +124,13 @@ export function createSessionQueries(device: DeviceRuntime) {
   }
 
   async function fetchSessionDetail(sessionId: string): Promise<SessionConsoleDetail> {
-    const [session, turns, inboxMessages, events] = await Promise.all([
+    const [session, turns, queuedMessages, events] = await Promise.all([
       device.queryClient.fetchQuery(sessionOptions(sessionId)),
       device.queryClient.fetchQuery(sessionTurnsOptions(sessionId)),
-      device.queryClient.fetchQuery(sessionInboxMessagesOptions(sessionId)),
+      device.queryClient.fetchQuery(sessionQueueOptions(sessionId)),
       device.queryClient.fetchQuery(sessionEventsOptions(sessionId)),
     ]);
-    return { session, turns, inboxMessages, events };
+    return { session, turns, queuedMessages, events };
   }
 
   function invalidateSessionDetail(sessionId: string): Promise<void> {
@@ -154,7 +146,6 @@ export function createSessionQueries(device: DeviceRuntime) {
   function clearSessionQueries(): void {
     void device.queryClient.cancelQueries({ queryKey: sessionKeys.details() });
     device.queryClient.removeQueries({ queryKey: sessionKeys.details() });
-    device.queryClient.removeQueries({ queryKey: sessionKeys.optimisticInbox() });
     device.queryClient.removeQueries({ queryKey: sessionKeys.optimisticChat() });
   }
 
@@ -162,17 +153,16 @@ export function createSessionQueries(device: DeviceRuntime) {
     const sessionId = detail.session.session_id;
     device.queryClient.setQueryData(sessionKeys.detail(sessionId), detail.session);
     device.queryClient.setQueryData(sessionKeys.turns(sessionId), detail.turns);
-    device.queryClient.setQueryData(sessionKeys.inboxMessages(sessionId), detail.inboxMessages);
+    device.queryClient.setQueryData(sessionKeys.queue(sessionId), detail.queuedMessages);
     device.queryClient.setQueryData(sessionKeys.events(sessionId), detail.events);
   }
 
-  function setSessionInboxMessages(
+  function setSessionQueue(
     sessionId: string,
-    update: (messages: InboxMessageView[]) => InboxMessageView[],
+    update: (messages: QueuedMessageView[]) => QueuedMessageView[],
   ): void {
-    device.queryClient.setQueryData<InboxMessageView[]>(
-      sessionKeys.inboxMessages(sessionId),
-      (messages) => update(messages ?? []),
+    device.queryClient.setQueryData<QueuedMessageView[]>(sessionKeys.queue(sessionId), (messages) =>
+      update(messages ?? []),
     );
   }
 
@@ -194,7 +184,7 @@ export function createSessionQueries(device: DeviceRuntime) {
       setSessionDetail({
         session: result.session,
         turns: result.initial_turn ? [result.initial_turn] : [],
-        inboxMessages: [],
+        queuedMessages: [],
         events: [],
       });
       if (input.initial_task?.input) {
@@ -332,17 +322,17 @@ export function createSessionQueries(device: DeviceRuntime) {
     sessionKeys,
     sessionOptions,
     sessionTurnsOptions,
-    sessionInboxMessagesOptions,
+    sessionQueueOptions,
     sessionEventsOptions,
     createSessionQuery,
     createSessionTurnsQuery,
-    createSessionInboxMessagesQuery,
+    createSessionQueueQuery,
     createSessionEventsQuery,
     fetchSessionDetail,
     invalidateSessionDetail,
     clearSessionQueries,
     setSessionDetail,
-    setSessionInboxMessages,
+    setSessionQueue,
     createCreateSessionMutation,
     createUpdateSessionMutation,
     createPinSessionMutation,

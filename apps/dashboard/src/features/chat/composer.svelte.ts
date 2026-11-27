@@ -4,7 +4,7 @@ import { translate } from "$lib/i18n";
 import { uploadMessage } from "$lib/uploads/message";
 import type { UploadDraftState } from "$lib/uploads/draft";
 import { findChatCommand, type ChatCommand } from "$lib/chatCommands";
-import type { InboxDeliveryPolicy } from "../../api/types";
+import type { MessageMode } from "../../api/types";
 import { useDeviceRuntime } from "../../device/context";
 
 export function createComposer(options: {
@@ -15,7 +15,7 @@ export function createComposer(options: {
   busy?: boolean;
   submitDisabled?: boolean;
   commands: ChatCommand[];
-  onSubmit: (message: string, policy: InboxDeliveryPolicy) => void | Promise<boolean | void>;
+  onSubmit: (message: string, mode: MessageMode) => void | Promise<boolean | void>;
   closeExpanded: () => void;
 }) {
   const device = useDeviceRuntime();
@@ -78,14 +78,14 @@ export function createComposer(options: {
   );
 
   /** Returns false when the composer cannot submit right now. */
-  function submit(deliveryPolicy: InboxDeliveryPolicy = "steer"): boolean {
+  function submit(mode: MessageMode = "immediate"): boolean {
     if (cannotSubmit) return false;
     if (command) executeCommand(command);
-    else void submitMessage(deliveryPolicy);
+    else void submitMessage(mode);
     return true;
   }
 
-  async function submitMessage(deliveryPolicy: InboxDeliveryPolicy): Promise<void> {
+  async function submitMessage(mode: MessageMode): Promise<void> {
     const draft = uploads;
     sending = true;
     toast.dismiss(submissionToastId);
@@ -94,7 +94,7 @@ export function createComposer(options: {
         sentAwaitingCleanup =
           (await options.onSubmit(
             uploadMessage(options.value, completedFiles, completedSecrets),
-            deliveryPolicy,
+            mode,
           )) === true;
       if (sentAwaitingCleanup) {
         await draft?.clear();
@@ -110,7 +110,7 @@ export function createComposer(options: {
         action: {
           label: translate("common.retry"),
           onClick: (event) => {
-            if (!submit(deliveryPolicy)) event.preventDefault();
+            if (!submit(mode)) event.preventDefault();
           },
         },
       });

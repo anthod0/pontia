@@ -66,7 +66,7 @@ async fn post_internal_event(state: AppState, body: Value) -> (StatusCode, Value
 async fn create_session(state: AppState) -> String {
     let workspace_id = crate::common::test_app::workspace_id(&state).await;
     let (status, body) = request(
-        state,
+        state.clone(),
         "POST",
         "/api/v1/sessions",
         Some(json!({"client_type":"generic","workspace_id":workspace_id})),
@@ -79,19 +79,16 @@ async fn create_session(state: AppState) -> String {
         .to_string()
 }
 
-async fn submit_inbox_message(state: AppState, session_id: &str, input: &str) -> String {
+async fn send_message(state: AppState, session_id: &str, input: &str) -> String {
     let (status, body) = request(
-        state,
+        state.clone(),
         "POST",
-        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
+        &format!("/api/v1/sessions/{session_id}/messages"),
         Some(json!({"input": input, "metadata": {}})),
     )
     .await;
     assert_eq!(status, StatusCode::CREATED, "{body:?}");
-    body["data"]["inbox_message"]["turn_id"]
-        .as_str()
-        .expect("turn id")
-        .to_string()
+    crate::common::wait_for_turn_id(&state, session_id).await
 }
 
 fn event_body(_event_id: &str, event_type: &str, session_id: &str, turn_id: &str) -> Value {
@@ -121,12 +118,12 @@ async fn post_turn_external_endpoint_is_removed() {
 }
 
 #[tokio::test]
-async fn inbox_submission_still_creates_turns_and_turn_events_are_queryable() {
+async fn message_delivery_creates_turns_and_turn_events_are_queryable() {
     let _scope = GenericClientTestScope::new().await;
     let (state, _workspace, _pontia_home) = test_state().await;
     let session_id = create_session(state.clone()).await;
 
-    let turn_id = submit_inbox_message(state.clone(), &session_id, "continue work").await;
+    let turn_id = send_message(state.clone(), &session_id, "continue work").await;
 
     let (turn_status, turn_body) = request(
         state.clone(),
@@ -168,7 +165,7 @@ async fn internal_events_advance_inbox_submitted_turn_and_session_projection() {
     let _scope = GenericClientTestScope::new().await;
     let (state, _workspace, _pontia_home) = test_state().await;
     let session_id = create_session(state.clone()).await;
-    let turn_id = submit_inbox_message(state.clone(), &session_id, "run").await;
+    let turn_id = send_message(state.clone(), &session_id, "run").await;
 
     let runtime_id: String =
         sqlx::query_scalar("SELECT runtime_id FROM session_runtimes WHERE session_id = ?")

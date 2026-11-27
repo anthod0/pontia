@@ -29,8 +29,8 @@ mod events;
 mod git;
 mod git_status;
 mod idempotency;
-mod inbox;
 mod interactions;
+mod messages;
 pub use interactions::{get_interaction, list_interactions, respond_interaction};
 mod live_output;
 mod response;
@@ -57,11 +57,8 @@ pub use git::{
     get_workspace_git_commit_diff, get_workspace_git_commits, get_workspace_git_diff,
 };
 pub use git_status::{get_workspace_git_status, refresh_workspace_git_status};
-pub use inbox::{
-    cancel_inbox_message, dismiss_inbox_message, get_inbox_message, list_inbox_messages,
-    put_inbox_message, submit_inbox_message,
-};
 pub use live_output::stream_live_output;
+pub use messages::{cancel_queued_message, list_queue, send_message};
 pub use response::{ApiError, ApiResponse};
 pub use sessions::{
     archive_session, compact_session, create_session, exit_session, fork_session, get_session,

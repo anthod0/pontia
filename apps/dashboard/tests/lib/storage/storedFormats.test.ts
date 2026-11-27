@@ -98,18 +98,6 @@ test("history forks are saved as a JSON list per device", async () => {
   expect(localStorage.getItem("pontia:history-forks:v1:local")).toBe("[]");
 });
 
-test("unconfirmed Inbox submissions are saved as a JSON list per device", async () => {
-  const { createInboxRecovery } = await import("../../../src/stores/inboxRecovery");
-  const recovery = createInboxRecovery({ id: "local" } as DeviceRuntime);
-  const submission = { messageId: "m1", sessionId: "s1", input: { input: "hello" } };
-  recovery.rememberSubmission(submission);
-  expect(localStorage.getItem("pontia:inbox-submissions:v2:local")).toBe(
-    JSON.stringify([submission]),
-  );
-  recovery.forgetSubmission("m1");
-  expect(localStorage.getItem("pontia:inbox-submissions:v2:local")).toBe("[]");
-});
-
 test("a removed upload is marked with 1 when IndexedDB cannot delete it", async () => {
   const { removeUploadRecord } = await import("../../../src/lib/uploads/records");
   const record = {
@@ -150,25 +138,10 @@ test("device handles are saved as text", async () => {
   expect(localStorage.getItem("pontia.lastDeviceHandle")).toBe("travel-laptop");
 });
 
-test.each([
-  ["Inbox submissions", "../../../src/stores/inboxRecovery"],
-  ["history forks", "../../../src/stores/historyForks"],
-])("%s fail instead of reading as empty when storage is unavailable", async (_name, path) => {
-  const module = await import(/* @vite-ignore */ path);
-  const create = module.createInboxRecovery ?? module.createHistoryForks;
+test("history forks fail instead of reading as empty when storage is unavailable", async () => {
+  const { createHistoryForks } = await import("../../../src/stores/historyForks");
   vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
     throw new DOMException("denied", "SecurityError");
   });
-  expect(() => create({ id: "local" } as DeviceRuntime)).toThrow(DOMException);
-});
-
-test("an Inbox submission that cannot be saved is not remembered", async () => {
-  const { createInboxRecovery } = await import("../../../src/stores/inboxRecovery");
-  const recovery = createInboxRecovery({ id: "local" } as DeviceRuntime);
-  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
-    throw new DOMException("full", "QuotaExceededError");
-  });
-  expect(() =>
-    recovery.rememberSubmission({ messageId: "m", sessionId: "s", input: { input: "x" } }),
-  ).toThrow(DOMException);
+  expect(() => createHistoryForks({ id: "local" } as DeviceRuntime)).toThrow(DOMException);
 });

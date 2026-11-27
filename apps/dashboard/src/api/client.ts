@@ -26,7 +26,8 @@ import type {
   CreateSessionInput,
   CreateSessionResult,
   EventView,
-  InboxMessageView,
+  MessageDelivery,
+  QueuedMessageView,
   RegisterWorkspaceInput,
   RenameWorkspaceInput,
   SessionView,
@@ -36,7 +37,7 @@ import type {
   SessionOverviewSection,
   SessionOverviewView,
   SubmitBranchReplayInput,
-  SubmitInboxMessageInput,
+  SendMessageInput,
   TurnTimelineDirection,
   TurnTimelinePage,
   TurnTreeHistoryPage,
@@ -1021,8 +1022,6 @@ export function createApi(device: DeviceRuntime) {
     ).session;
   }
 
-  // GET /sessions/:id/turns is read-only turn history. WebUI dispatch must use
-  // submitInboxMessage(); reported Agent facts remain authoritative for turn lifecycle.
   async function listTurns(
     sessionId: string,
     options: ReadRequestOptions = {},
@@ -1035,16 +1034,16 @@ export function createApi(device: DeviceRuntime) {
     ).turns;
   }
 
-  async function listInboxMessages(
+  async function listQueue(
     sessionId: string,
     options: ReadRequestOptions = {},
-  ): Promise<InboxMessageView[]> {
+  ): Promise<QueuedMessageView[]> {
     return (
-      await boundedReadRequest<{ inbox_messages: InboxMessageView[] }>(
-        `/sessions/${encodeURIComponent(sessionId)}/inbox/messages`,
+      await boundedReadRequest<{ messages: QueuedMessageView[] }>(
+        `/sessions/${encodeURIComponent(sessionId)}/queue`,
         options,
       )
-    ).inbox_messages;
+    ).messages;
   }
 
   async function forkSession(
@@ -1060,17 +1059,18 @@ export function createApi(device: DeviceRuntime) {
     });
   }
 
-  async function submitInboxMessage(
+  async function sendMessage(
     sessionId: string,
-    input: SubmitInboxMessageInput,
-    messageId: string,
-  ): Promise<InboxMessageView> {
+    input: SendMessageInput,
+    idempotencyKey?: string,
+  ): Promise<MessageDelivery> {
+    const headers = idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined;
     return (
-      await request<{ inbox_message: InboxMessageView }>(
-        `/sessions/${encodeURIComponent(sessionId)}/inbox/messages/${encodeURIComponent(messageId)}`,
-        { method: "PUT", body: input },
+      await request<{ delivery: MessageDelivery }>(
+        `/sessions/${encodeURIComponent(sessionId)}/messages`,
+        { method: "POST", body: input, headers },
       )
-    ).inbox_message;
+    ).delivery;
   }
 
   async function submitBranchReplay(
@@ -1085,55 +1085,16 @@ export function createApi(device: DeviceRuntime) {
     ).branch_replay;
   }
 
-  async function getInboxMessage(
+  async function cancelQueuedMessage(
     sessionId: string,
     messageId: string,
-    options: ReadRequestOptions = {},
-  ): Promise<InboxMessageView> {
+  ): Promise<QueuedMessageView> {
     return (
-      await boundedReadRequest<{ inbox_message: InboxMessageView }>(
-        `/sessions/${encodeURIComponent(sessionId)}/inbox/messages/${encodeURIComponent(messageId)}`,
-        options,
+      await request<{ message: QueuedMessageView }>(
+        `/sessions/${encodeURIComponent(sessionId)}/queue/${encodeURIComponent(messageId)}`,
+        { method: "DELETE", mutating: true },
       )
-    ).inbox_message;
-  }
-
-  async function retryInboxMessage(
-    sessionId: string,
-    originalId: string,
-    messageId: string,
-    allowUnknown: boolean,
-  ): Promise<InboxMessageView> {
-    return (
-      await request<{ inbox_message: InboxMessageView }>(
-        `/sessions/${encodeURIComponent(sessionId)}/inbox/messages/${encodeURIComponent(originalId)}/retry`,
-        { method: "POST", body: { message_id: messageId, allow_unknown: allowUnknown } },
-      )
-    ).inbox_message;
-  }
-
-  async function cancelInboxMessage(
-    sessionId: string,
-    messageId: string,
-  ): Promise<InboxMessageView> {
-    return (
-      await request<{ inbox_message: InboxMessageView }>(
-        `/sessions/${encodeURIComponent(sessionId)}/inbox/messages/${encodeURIComponent(messageId)}/cancel`,
-        { method: "POST", mutating: true },
-      )
-    ).inbox_message;
-  }
-
-  async function dismissInboxMessage(
-    sessionId: string,
-    messageId: string,
-  ): Promise<InboxMessageView> {
-    return (
-      await request<{ inbox_message: InboxMessageView }>(
-        `/sessions/${encodeURIComponent(sessionId)}/inbox/messages/${encodeURIComponent(messageId)}/dismiss`,
-        { method: "POST", mutating: true },
-      )
-    ).inbox_message;
+    ).message;
   }
 
   async function listEvents(
@@ -1290,14 +1251,11 @@ export function createApi(device: DeviceRuntime) {
     unarchiveSession,
     getSession,
     listTurns,
-    listInboxMessages,
-    submitInboxMessage,
+    listQueue,
+    sendMessage,
     submitBranchReplay,
     forkSession,
-    getInboxMessage,
-    retryInboxMessage,
-    cancelInboxMessage,
-    dismissInboxMessage,
+    cancelQueuedMessage,
     listEvents,
     getTurnTimeline,
     getTurnTreeHistory,

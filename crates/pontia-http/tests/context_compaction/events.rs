@@ -40,17 +40,16 @@ async fn manual_compaction_holds_inbox_until_completion_failure_or_cancellation(
             .state
             .control()
             .inbox_commands()
-            .submit_message_once(
-                "queued",
+            .send(
                 "session",
-                pontia_agent_control::SubmitInboxMessageRequest {
-                    input: "hi".into(),
-                    delivery_policy: "after_idle".into(),
-                    metadata: json!({}),
-                },
+                "hi".into(),
+                pontia_agent_control::SendMode::Queue,
             )
             .await;
-        assert_eq!(submitted.unwrap().data["inbox_message"]["state"], "pending");
+        assert!(matches!(
+            submitted.unwrap(),
+            pontia_agent_control::SendOutcome::Queued { .. }
+        ));
         assert!(fixture.channel.operations.lock().unwrap().is_empty());
 
         for trigger in ["threshold", "overflow", "unknown"] {
@@ -75,15 +74,7 @@ async fn manual_compaction_holds_inbox_until_completion_failure_or_cancellation(
         service.report_fact(fact(kind, data)).await.unwrap();
         tokio::time::timeout(std::time::Duration::from_secs(2), async {
             loop {
-                let message = fixture
-                    .state
-                    .control()
-                    .inbox_commands()
-                    .get_message("session", "queued")
-                    .await
-                    .unwrap()
-                    .unwrap();
-                if message.state == "dispatched" {
+                if fixture.channel.operations.lock().unwrap().as_slice() == ["hi"] {
                     break;
                 }
                 tokio::task::yield_now().await;

@@ -68,7 +68,7 @@ async fn request(
 async fn create_session(state: AppState) -> String {
     let workspace_id = crate::common::test_app::workspace_id(&state).await;
     let (status, body) = request(
-        state,
+        state.clone(),
         "POST",
         "/api/v1/sessions",
         Some(TOKEN),
@@ -100,20 +100,17 @@ async fn report_session_exit(state: &AppState, session_id: &str) {
 }
 
 async fn submit_turn(state: AppState, session_id: &str) -> String {
-    let (status, body) = request(
-        state,
+    let (status, _body) = request(
+        state.clone(),
         "POST",
-        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
+        &format!("/api/v1/sessions/{session_id}/messages"),
         Some(TOKEN),
         None,
         Some(json!({"input":"work"})),
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    body["data"]["inbox_message"]["turn_id"]
-        .as_str()
-        .expect("turn id")
-        .to_string()
+    crate::common::wait_for_turn_id(&state, session_id).await
 }
 
 #[tokio::test]

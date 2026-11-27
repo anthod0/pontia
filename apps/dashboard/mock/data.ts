@@ -3,7 +3,7 @@ import type {
   AgentClientSetupOperation,
   AgentProfileView,
   EventView,
-  InboxMessageView,
+  QueuedMessageView,
   Interaction,
   ManagedToolUseInput,
   SessionCreationOption,
@@ -22,7 +22,7 @@ export interface MockSession {
   view: SessionView;
   turns: TurnView[];
   items: Map<string, TurnTimelineItem[]>;
-  inbox: InboxMessageView[];
+  queue: QueuedMessageView[];
   events: EventView[];
   interactions: Interaction[];
 }
@@ -319,7 +319,7 @@ function buildSession(nextId: (prefix: string) => string, spec: SessionSpec): Mo
       ]
     : [];
 
-  return { view, turns, items, inbox: [], events, interactions };
+  return { view, turns, items, queue: [], events, interactions };
 }
 
 export function sessionEvent(

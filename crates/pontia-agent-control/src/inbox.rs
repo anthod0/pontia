@@ -10,33 +10,13 @@ use pontia_core::{
 use pontia_storage_sqlite::repositories::{
     inbox::SqliteInboxRepository, turns::SqliteTurnRepository,
 };
-use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
 
 use crate::{
-    ControlQueryService, InboxMessageView, TurnCommandService,
-    views::inbox::{cancelled_view, dispatched_view, row_to_view},
+    ControlQueryService, InputPayload, QueuedMessageView, TurnCommandService,
+    views::inbox::row_to_view,
 };
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-pub struct SubmitInboxMessageRequest {
-    pub input: String,
-    #[serde(default = "default_delivery_policy")]
-    pub delivery_policy: String,
-    #[serde(default)]
-    pub metadata: Value,
-}
-
-fn default_delivery_policy() -> String {
-    "after_idle".to_string()
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct InboxCommandOutcome {
-    pub data: Value,
-    pub duplicate: bool,
-}
 
 #[derive(Clone)]
 pub struct InboxCommandService {
@@ -45,11 +25,6 @@ pub struct InboxCommandService {
     clients: crate::clients::ClientExecutionService,
     turns: TurnCommandService,
     pub(crate) scheduler: InboxScheduler,
-}
-
-struct EnqueueOptions {
-    interrupt_before_delivery: bool,
-    drain_now: bool,
 }
 
 impl InboxCommandService {
@@ -69,152 +44,44 @@ impl InboxCommandService {
         }
     }
 
-    pub async fn submit_message(
-        &self,
-        session_id: &str,
-        request: SubmitInboxMessageRequest,
-    ) -> Result<InboxCommandOutcome> {
-        self.submit_message_with_id(&new_message_id().to_string(), session_id, request)
-            .await
-    }
-
-    /// Queues a message under a caller-owned stable identity. Repeating that
-    /// identity for the same Session returns the current record; the repeated
-    /// request does not replace its contents or enqueue a second message.
-    pub async fn submit_message_once(
-        &self,
-        message_id: &str,
-        session_id: &str,
-        request: SubmitInboxMessageRequest,
-    ) -> Result<InboxCommandOutcome> {
-        self.submit_message_with_id(message_id, session_id, request)
-            .await
-    }
-
-    async fn submit_message_with_id(
-        &self,
-        message_id: &str,
-        session_id: &str,
-        request: SubmitInboxMessageRequest,
-    ) -> Result<InboxCommandOutcome> {
-        let actor = self.scheduler.session(session_id);
-        let _guard = actor.lock().await;
-        self.enqueue_message_locked(
-            message_id,
-            session_id,
-            request,
-            EnqueueOptions {
-                interrupt_before_delivery: true,
-                drain_now: true,
-            },
-            &actor,
-        )
-        .await
-    }
-
     async fn enqueue_message_locked(
         &self,
         message_id: &str,
         session_id: &str,
-        request: SubmitInboxMessageRequest,
-        options: EnqueueOptions,
-        actor: &scheduling::SessionActor,
-    ) -> Result<InboxCommandOutcome> {
-        if message_id.is_empty() || message_id.len() > 512 {
-            return Err(Error::Domain("Invalid Inbox submission identity".into()));
-        }
+        input: InputPayload,
+    ) -> Result<()> {
         let inbox_repository = SqliteInboxRepository::new(self.pool.clone());
-        if let Some(existing) = inbox_repository.get_message(session_id, message_id).await? {
-            return Ok(InboxCommandOutcome {
-                data: json!({"inbox_message":row_to_view(existing)?}),
-                duplicate: true,
-            });
-        }
-        if request.input.trim().is_empty() {
-            return Err(Error::Domain(
-                "inbox message input must not be blank".to_string(),
-            ));
-        }
-        if !matches!(
-            request.delivery_policy.as_str(),
-            "after_idle" | "interrupt_now" | "steer"
-        ) {
-            return Err(Error::Domain(format!(
-                "unknown delivery_policy: {}",
-                request.delivery_policy
-            )));
+        if input.text.trim().is_empty() {
+            return Err(Error::Domain("message input must not be blank".to_string()));
         }
 
         let query = &self.queries;
-        let session = query
+        query
             .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-        let metadata = serde_json::to_string(&request.metadata)?;
+        let metadata = serde_json::to_string(&input.metadata)?;
 
         let inserted = inbox_repository
             .enqueue(
                 pontia_storage_sqlite::repositories::inbox::NewInboxMessage {
                     message_id,
                     session_id,
-                    input: &request.input,
+                    input: &input.text,
                     metadata: &metadata,
                 },
             )
             .await?;
         if !inserted {
             return Err(Error::StateConflict(
-                "Submission identity belongs to another Session".into(),
+                "message identity already exists".into(),
             ));
         }
-        let queued_message = self
-            .get_message(session_id, message_id)
-            .await?
-            .ok_or_else(|| Error::Domain("queued inbox message missing".to_string()))?;
 
-        let active_turn = SqliteTurnRepository::new(self.pool.clone())
-            .active_turn(session_id)
-            .await?;
-        if options.interrupt_before_delivery
-            && request.delivery_policy == "interrupt_now"
-            && active_turn.is_some()
-        {
-            if !session.capabilities.interrupt {
-                inbox_repository.remove(session_id, message_id).await?;
-                return Err(Error::CapabilityUnavailable(
-                    "session ".to_string() + session_id + " runtime does not support interrupt",
-                ));
-            } else if let Err(error) = self
-                .turns
-                .interrupt_current_turn_locked(session_id, actor)
-                .await
-            {
-                inbox_repository.remove(session_id, message_id).await?;
-                return Err(error);
-            }
-        }
-
-        if options.drain_now {
-            self.drain_inbox_locked(session_id, actor).await?;
-        }
-
-        let message = match self.get_message(session_id, message_id).await? {
-            Some(message) => serde_json::to_value(message)?,
-            None => {
-                let turn_id = SqliteTurnRepository::new(self.pool.clone())
-                    .active_turn(session_id)
-                    .await?
-                    .map(|turn| turn.turn_id);
-                serde_json::to_value(dispatched_view(queued_message, turn_id))?
-            }
-        };
-        Ok(InboxCommandOutcome {
-            data: json!({ "inbox_message": message }),
-            duplicate: false,
-        })
+        Ok(())
     }
 
-    pub async fn list_messages(&self, session_id: &str) -> Result<Vec<InboxMessageView>> {
+    pub async fn list_messages(&self, session_id: &str) -> Result<Vec<QueuedMessageView>> {
         self.queries
             .get_session_control(session_id)
             .await?
@@ -229,7 +96,7 @@ impl InboxCommandService {
         &self,
         session_id: &str,
         message_id: &str,
-    ) -> Result<Option<InboxMessageView>> {
+    ) -> Result<Option<QueuedMessageView>> {
         let row = SqliteInboxRepository::new(self.pool.clone())
             .get_message(session_id, message_id)
             .await?;
@@ -240,7 +107,7 @@ impl InboxCommandService {
         &self,
         session_id: &str,
         message_id: &str,
-    ) -> Result<InboxCommandOutcome> {
+    ) -> Result<QueuedMessageView> {
         let query = &self.queries;
         query
             .get_session_control(session_id)
@@ -252,31 +119,12 @@ impl InboxCommandService {
         let message = self
             .get_message(session_id, message_id)
             .await?
-            .ok_or_else(|| Error::NotFound(format!("inbox message {message_id} not found")))?;
+            .ok_or_else(|| Error::NotFound(format!("queued message {message_id} not found")))?;
         SqliteInboxRepository::new(self.pool.clone())
             .remove(session_id, message_id)
             .await?;
         self.notify_available(session_id);
-        Ok(InboxCommandOutcome {
-            data: json!({ "inbox_message": cancelled_view(message) }),
-            duplicate: false,
-        })
-    }
-
-    pub async fn dismiss_message(
-        &self,
-        session_id: &str,
-        message_id: &str,
-    ) -> Result<InboxCommandOutcome> {
-        let query = &self.queries;
-        query
-            .get_session_control(session_id)
-            .await?
-            .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-
-        Err(Error::NotFound(format!(
-            "inbox message {message_id} not found"
-        )))
+        Ok(message)
     }
 
     pub async fn drain_inbox(&self, session_id: &str) -> Result<()> {

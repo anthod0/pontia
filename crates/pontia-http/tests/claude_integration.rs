@@ -204,8 +204,8 @@ async fn claude_http_exit_history_and_resume_preserve_the_conversation() {
     let (status, submitted) = call(
         &h.app,
         "POST",
-        &format!("{base}/inbox/messages"),
-        json!({"input":"resumed conversation","delivery_policy":"after_idle","metadata":{}}),
+        &format!("{base}/messages"),
+        json!({"input":"resumed conversation","mode":"queue","metadata":{}}),
     )
     .await;
     assert_eq!(status, StatusCode::CREATED, "{submitted}");
@@ -328,7 +328,13 @@ async fn claude_http_parallel_approvals_deliver_session_allow_and_deny_to_separa
     h.stop().await;
 }
 
-async fn assert_expired(h: &Harness, session: &str, paths: &[String]) {
+async fn assert_expired(
+    h: &Harness,
+    session: &str,
+    turn: &str,
+    paths: &[String],
+    expected_turn_state: &str,
+) {
     wait_interactions(&h.app, session, &["expired", "expired"]).await;
     for path in paths {
         assert_eq!(
@@ -339,24 +345,31 @@ async fn assert_expired(h: &Harness, session: &str, paths: &[String]) {
         );
     }
     assert!(h.choices(session).is_empty());
-    wait_turn(&h.app, session, "running").await;
+    let (_, body) = call(
+        &h.app,
+        "GET",
+        &format!("/api/v1/sessions/{session}/turns/{turn}"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(body["data"]["turn"]["state"], expected_turn_state);
 }
 
 #[tokio::test]
 async fn claude_http_native_cancellation_rejects_late_choices() {
     let h = Harness::new().await;
-    let (session, _, paths) = h.approvals().await;
+    let (session, turn, paths) = h.approvals().await;
     h.gate(&session, "cancel");
-    assert_expired(&h, &session, &paths).await;
+    assert_expired(&h, &session, &turn, &paths, "running").await;
     h.stop().await;
 }
 
 #[tokio::test]
 async fn claude_http_host_loss_expires_callbacks_without_turn_result() {
     let h = Harness::new().await;
-    let (session, _, paths) = h.approvals().await;
+    let (session, turn, paths) = h.approvals().await;
     h.gate(&session, "lost");
-    assert_expired(&h, &session, &paths).await;
+    assert_expired(&h, &session, &turn, &paths, "interrupted").await;
     h.stop().await;
 }
 
@@ -375,7 +388,7 @@ async fn claude_http_interrupt_remains_available_while_approvals_wait() {
         .0,
         StatusCode::OK
     );
-    assert_expired(&h, &session, &paths).await;
+    assert_expired(&h, &session, &turn, &paths, "running").await;
     h.stop().await;
 }
 
@@ -398,11 +411,11 @@ async fn claude_http_creation_inbox_live_output_interrupt_and_exit_share_applica
     let (_, queued) = call(
         &app,
         "POST",
-        &format!("/api/v1/sessions/{session}/inbox/messages"),
-        json!({"input":"second","delivery_policy":"after_idle"}),
+        &format!("/api/v1/sessions/{session}/messages"),
+        json!({"input":"second","mode":"queue"}),
     )
     .await;
-    assert_eq!(queued["data"]["inbox_message"]["state"], "pending");
+    assert_eq!(queued["data"]["delivery"]["status"], "queued");
     let response = pontia_http::router(app.clone())
         .oneshot(
             Request::builder()

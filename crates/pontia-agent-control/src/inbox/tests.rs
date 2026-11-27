@@ -85,16 +85,15 @@ async fn cloned_control_preserves_session_actor_and_event_wakeup() {
         .await
         .unwrap();
     let authenticated = state.clone();
-    let submitted = authenticated
+    let crate::SendOutcome::Queued { message_id } = authenticated
         .inbox_commands()
-        .submit_message("session", request("queued"))
+        .send("session", "queued".into(), crate::SendMode::Queue)
         .await
-        .unwrap();
-    assert_eq!(submitted.data["inbox_message"]["state"], "pending");
+        .unwrap()
+    else {
+        panic!("input must remain queued while the session is starting");
+    };
     assert!(channel.input.lock().unwrap().is_empty());
-    let id = submitted.data["inbox_message"]["message_id"]
-        .as_str()
-        .unwrap();
     sqlx::query("UPDATE sessions SET state='idle' WHERE session_id='session'")
         .execute(&pool)
         .await
@@ -106,7 +105,7 @@ async fn cloned_control_preserves_session_actor_and_event_wakeup() {
         loop {
             if authenticated
                 .inbox_commands()
-                .get_message("session", id)
+                .get_message("session", &message_id)
                 .await
                 .unwrap()
                 .is_none()
@@ -161,14 +160,6 @@ async fn connected_inbox() -> (
         .unwrap();
     state.inbox_commands().stop_scheduling().await;
     (root, state, channel)
-}
-
-fn request(input: &str) -> SubmitInboxMessageRequest {
-    SubmitInboxMessageRequest {
-        input: input.into(),
-        delivery_policy: "after_idle".into(),
-        metadata: json!({}),
-    }
 }
 
 #[tokio::test]
@@ -267,7 +258,7 @@ async fn offline_queued_send_remains_pending() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(message.state, "pending");
+    assert_eq!(message.input, "queued");
 }
 
 #[tokio::test]
@@ -322,17 +313,21 @@ async fn queued_messages_are_fifo_and_cancelled_input_is_not_sent() {
         .execute(&state.db())
         .await
         .unwrap();
+    let mut message_ids = Vec::new();
     for index in 0..3 {
-        inbox
-            .submit_message_once(
-                &format!("message-{index}"),
-                "session",
-                request(&index.to_string()),
-            )
+        let crate::SendOutcome::Queued { message_id } = inbox
+            .send("session", index.to_string().into(), crate::SendMode::Queue)
             .await
-            .unwrap();
+            .unwrap()
+        else {
+            panic!("busy session input must be queued");
+        };
+        message_ids.push(message_id);
     }
-    inbox.cancel_message("session", "message-1").await.unwrap();
+    inbox
+        .cancel_message("session", &message_ids[1])
+        .await
+        .unwrap();
     sqlx::query("UPDATE sessions SET state='idle' WHERE session_id='session'")
         .execute(&state.db())
         .await
@@ -357,62 +352,4 @@ async fn queued_messages_are_fifo_and_cancelled_input_is_not_sent() {
 
     assert_eq!(*channel.input.lock().unwrap(), ["0", "2"]);
     assert!(inbox.list_messages("session").await.unwrap().is_empty());
-}
-
-#[tokio::test]
-async fn duplicate_pending_submission_preserves_original_contents() {
-    let (_root, state, _channel) = connected_inbox().await;
-    let inbox = state.inbox_commands();
-    sqlx::query("UPDATE sessions SET state='busy' WHERE session_id='session'")
-        .execute(&state.db())
-        .await
-        .unwrap();
-    let mut original = request("first input");
-    original.metadata = json!(["caller metadata"]);
-    inbox
-        .submit_message_once("message", "session", original)
-        .await
-        .unwrap();
-
-    let duplicate = inbox
-        .submit_message_once("message", "session", request("changed input"))
-        .await
-        .unwrap();
-
-    assert!(duplicate.duplicate);
-    assert_eq!(
-        duplicate.data["inbox_message"]["input"]["summary"],
-        "first input"
-    );
-    assert_eq!(
-        duplicate.data["inbox_message"]["metadata"],
-        json!(["caller metadata"])
-    );
-}
-
-#[tokio::test]
-async fn submission_identity_is_scoped_to_one_session() {
-    let (_root, state, _channel) = connected_inbox().await;
-    let inbox = state.inbox_commands();
-    sqlx::query("UPDATE sessions SET state='busy' WHERE session_id='session'")
-        .execute(&state.db())
-        .await
-        .unwrap();
-    inbox
-        .submit_message_once("message", "session", request("input"))
-        .await
-        .unwrap();
-    sqlx::query(
-        "INSERT INTO sessions(session_id,client_type,state) VALUES ('other','test-channel','idle')",
-    )
-    .execute(&state.db())
-    .await
-    .unwrap();
-
-    let error = inbox
-        .submit_message_once("message", "other", request("input"))
-        .await
-        .unwrap_err();
-
-    assert!(matches!(error, Error::StateConflict(_)));
 }

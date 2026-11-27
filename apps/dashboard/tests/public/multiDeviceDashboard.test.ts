@@ -134,7 +134,7 @@ beforeEach(async () => {
     if (url.pathname.includes("/turns/timeline"))
       return response({ items: [], groups: [], has_more: false });
     if (url.pathname.endsWith("/turns")) return response({ turns: [] });
-    if (url.pathname.endsWith("/inbox-messages")) return response({ messages: [] });
+    if (url.pathname.endsWith("/queue")) return response({ messages: [] });
     if (url.pathname.endsWith("/events")) return response({ events: [] });
     return baseRequest(handle, path, init);
   });

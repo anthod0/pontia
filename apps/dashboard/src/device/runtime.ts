@@ -7,14 +7,13 @@ import { createConnection } from "../stores/connection";
 import { createChatDraft } from "../stores/chatDraft";
 import { createHistoryForks } from "../stores/historyForks";
 import { createSidebarSessionFilter } from "../stores/sidebarSessionFilter";
-import { createInboxRecovery } from "../stores/inboxRecovery";
 import { createSessions } from "../stores/sessions";
 import { createWorkflows } from "../stores/workflows";
 import { createTimeline } from "../stores/timeline";
 import { createSessionQueries } from "../queries/sessions";
 import { createWorkspaceQueries } from "../queries/workspaces";
 import { createWorkflowQueries } from "../queries/workflows";
-import { createInboxQueries } from "../queries/inbox";
+import { createQueueQueries } from "../queries/queue";
 import { createOptimisticChat } from "../queries/optimisticChat";
 import { createAgentProfileQueries } from "../queries/agentProfiles";
 import { createMemoryQueries } from "../queries/memory";
@@ -78,11 +77,6 @@ export class DeviceRuntime {
     return (this._sidebarSessionFilter ??= createSidebarSessionFilter(this));
   }
 
-  private _inboxRecovery?: ReturnType<typeof createInboxRecovery>;
-  get inboxRecovery(): ReturnType<typeof createInboxRecovery> {
-    return (this._inboxRecovery ??= createInboxRecovery(this));
-  }
-
   private _sessions?: ReturnType<typeof createSessions>;
   get sessions(): ReturnType<typeof createSessions> {
     return (this._sessions ??= createSessions(this));
@@ -113,9 +107,9 @@ export class DeviceRuntime {
     return (this._workflowQueries ??= createWorkflowQueries(this));
   }
 
-  private _inboxQueries?: ReturnType<typeof createInboxQueries>;
-  get inboxQueries(): ReturnType<typeof createInboxQueries> {
-    return (this._inboxQueries ??= createInboxQueries(this));
+  private _queueQueries?: ReturnType<typeof createQueueQueries>;
+  get queueQueries(): ReturnType<typeof createQueueQueries> {
+    return (this._queueQueries ??= createQueueQueries(this));
   }
 
   private _optimisticChat?: ReturnType<typeof createOptimisticChat>;

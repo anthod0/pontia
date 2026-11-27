@@ -5,7 +5,7 @@ import type { SessionConsoleDetail } from "../../../src/stores/sessions";
 import type { TimelineState } from "../../../src/stores/timeline";
 import type {
   CreateSessionResult,
-  InboxMessageView,
+  QueuedMessageView,
   SessionView,
   TimelineItem,
   TurnView,
@@ -16,9 +16,6 @@ import type {
 const { chatDraft } = testDevice.chatDraft;
 const { queryClient } = testDevice;
 const { sessionKeys } = testDevice.sessionQueries;
-import { type OptimisticInboxSubmission } from "../../../src/queries/inbox";
-const { confirmInboxSubmission, reconcileInboxSubmissionForDashboardEvent } =
-  testDevice.inboxQueries;
 import { resetChatEntryAutofocus } from "../../../src/lib/chatEntryAutofocus";
 
 const mocks = vi.hoisted(() => {
@@ -98,12 +95,9 @@ const mocks = vi.hoisted(() => {
     liveOutputListeners,
     loadedSessions: [] as SessionView[],
     loadSessionDetail: vi.fn(async () => null),
-    retryInboxMessage: vi.fn(async () => undefined),
-    recoverInboxSubmission: vi.fn(async () => undefined),
-    submitInboxMessage: vi.fn(),
+    sendMessage: vi.fn(),
     submitBranchReplay: vi.fn(async () => ({ replay_id: "replay_test" })),
-    cancelInboxMessage: vi.fn(),
-    dismissInboxMessage: vi.fn(),
+    cancelQueuedMessage: vi.fn(),
     resumeSession: vi.fn(),
     interruptSession: vi.fn(),
     terminateSession: vi.fn(),
@@ -181,53 +175,32 @@ vi.mock("../../../src/stores/sessions", async (importOriginal) => {
     sessionDetailErrorKind: mocks.sessionDetailErrorKind,
     selectSession: vi.fn(),
     loadSessionDetail: mocks.loadSessionDetail,
-    submitInboxMessage: async (
+    sendMessage: async (
       sessionId: string,
-      input: import("../../../src/api/types").SubmitInboxMessageInput,
+      input: import("../../../src/api/types").SendMessageInput,
     ) => {
-      const detailSession = mocks.sessionDetail.get()?.session;
-      const currentSession = detailSession?.session_id === sessionId ? detailSession : null;
-      const localId = `test_${crypto.randomUUID()}`;
-      const optimistic: OptimisticInboxSubmission = {
-        localId,
-        sessionId,
-        input: input.input.trim(),
-        deliveryPolicy: input.delivery_policy,
-        metadata: input.metadata,
-        branchTargetTurnId: null,
-        showInChat: !["busy", "waiting_for_interaction"].includes(currentSession?.state ?? ""),
-        submittedAt: new Date().toISOString(),
-        acceptedMessage: null,
-        dispatchedTurnId: null,
-      };
-      queryClient.setQueryData<Record<string, OptimisticInboxSubmission[]>>(
-        sessionKeys.optimisticInbox(),
-        (submissions) => ({
-          ...submissions,
-          [sessionId]: [...(submissions?.[sessionId] ?? []), optimistic],
-        }),
-      );
-      try {
-        const message = await mocks.submitInboxMessage(sessionId, input);
-        if (message) confirmInboxSubmission(sessionId, localId, message);
-        return message;
-      } catch (error) {
-        queryClient.setQueryData<Record<string, OptimisticInboxSubmission[]>>(
-          sessionKeys.optimisticInbox(),
-          (submissions) => ({
-            ...submissions,
-            [sessionId]: (submissions?.[sessionId] ?? []).filter(
-              (submission) => submission.localId !== localId,
-            ),
-          }),
-        );
-        throw error;
+      const delivery = await mocks.sendMessage(sessionId, input);
+      if (delivery?.status === "delivered") {
+        queryClient.setQueryData<
+          Record<string, import("../../../src/lib/session-chat/sessionChat").SessionChatMessage[]>
+        >(sessionKeys.optimisticChat(), (current) => ({
+          ...current,
+          [sessionId]: [
+            ...(current?.[sessionId] ?? []),
+            {
+              id: `optimistic:${crypto.randomUUID()}:user`,
+              turnId: `local_${crypto.randomUUID()}`,
+              role: "user",
+              content: input.input,
+              status: "pending",
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        }));
       }
+      return delivery;
     },
-    retryInboxMessage: mocks.retryInboxMessage,
-    recoverInboxSubmission: mocks.recoverInboxSubmission,
-    cancelInboxMessage: mocks.cancelInboxMessage,
-    dismissInboxMessage: mocks.dismissInboxMessage,
+    cancelQueuedMessage: mocks.cancelQueuedMessage,
     resumeSession: mocks.resumeSession,
     interruptSession: mocks.interruptSession,
     terminateSession: mocks.terminateSession,
@@ -291,14 +264,8 @@ vi.mock("../../../src/services/eventStream", async (importOriginal) => {
     subscribeDashboardEvents: (
       listener: (event: import("../../../src/api/types").DashboardStreamEvent) => void,
     ) => {
-      const coordinatedListener = (
-        event: import("../../../src/api/types").DashboardStreamEvent,
-      ) => {
-        reconcileInboxSubmissionForDashboardEvent(event);
-        listener(event);
-      };
-      mocks.dashboardEventListeners.add(coordinatedListener);
-      return () => mocks.dashboardEventListeners.delete(coordinatedListener);
+      mocks.dashboardEventListeners.add(listener);
+      return () => mocks.dashboardEventListeners.delete(listener);
     },
   };
   return {
@@ -371,24 +338,12 @@ export const turn = (overrides: Partial<TurnView> = {}): TurnView => ({
   ...overrides,
 });
 
-export const inboxMessage = (overrides: Partial<InboxMessageView> = {}): InboxMessageView => ({
+export const queuedMessage = (overrides: Partial<QueuedMessageView> = {}): QueuedMessageView => ({
   message_id: "message-1",
   session_id: "session-1",
-  state: "pending",
-  delivery_policy: "after_idle",
-  input: { summary: "queued follow-up" },
+  input: "queued follow-up",
   metadata: {},
-  branch_target_turn_id: null,
-  turn_id: null,
-  steer_target_turn_id: null,
-  retry_of_message_id: null,
-  retried_by_message_id: null,
-  superseded_by_message_id: null,
-  failure_message: null,
   created_at: "2026-05-14T00:00:03Z",
-  updated_at: "2026-05-14T00:00:04Z",
-  dispatched_at: null,
-  cancelled_at: null,
   ...overrides,
 });
 
@@ -495,6 +450,9 @@ beforeEach(() => {
   mocks.registerWorkspace.mockReset().mockResolvedValue(workspace());
   mocks.setSessionReasoningEffort.mockReset().mockResolvedValue({ accepted: true });
   mocks.submitBranchReplay.mockReset().mockResolvedValue({ replay_id: "replay_test" });
+  mocks.sendMessage.mockReset().mockResolvedValue({ status: "delivered" });
+  mocks.cancelQueuedMessage.mockReset();
+  queryClient.setQueryData(sessionKeys.optimisticChat(), {});
   mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
     const detail = mocks.sessionDetail.get();
     const turns = detail?.turns ?? [];

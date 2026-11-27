@@ -98,7 +98,7 @@ beforeEach(() => {
         "/sessions/current/turns": {
           turns: [{ turn_id: "turn-2", state: state === "busy" ? "running" : "completed" }],
         },
-        "/sessions/current/inbox/messages": { inbox_messages: [] },
+        "/sessions/current/queue": { messages: [] },
         "/sessions/current/turns/tree/history": {
           session_id: "current",
           groups: [],

@@ -40,7 +40,7 @@ test.each(["pi", "codex"] as const)(
     });
     mocks.sessionDetailError.set(null);
     mocks.sessionDetailErrorKind.set(null);
-    mocks.sessionDetail.set({ session: recovered, turns: [], inboxMessages: [], events: [] });
+    mocks.sessionDetail.set({ session: recovered, turns: [], queuedMessages: [], events: [] });
     mocks.timelineState.set(
       timelineStateValue({ sessionId: "session-1", status: "empty", mode: "linear" }),
     );
@@ -48,8 +48,7 @@ test.each(["pi", "codex"] as const)(
     expect(await screen.findByPlaceholderText("Follow up…")).toBeInTheDocument();
     await waitFor(() => expect(mocks.liveOutputListeners.has("session-1")).toBe(true));
     expect(screen.queryByText("Unable to connect")).not.toBeInTheDocument();
-    expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
-    expect(mocks.recoverInboxSubmission).not.toHaveBeenCalled();
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
     page.unmount();
     expect(mocks.liveOutputListeners.size).toBe(0);
     expect(mocks.dashboardEventListeners.size).toBe(0);

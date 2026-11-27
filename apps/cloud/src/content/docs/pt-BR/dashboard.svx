@@ -39,12 +39,11 @@ A página do chat transmite a conversa e as etapas de trabalho expostas pelo Age
 - colocar entradas na fila enquanto um Agent Client compatível estiver ocupado;
 - interromper o Turn atual quando o Client suportar interrupção;
 - responder a pedidos de ferramentas e de permissão, como aprovações de comandos, quando o Client solicitar;
-- tentar de novo ou descartar mensagens do Inbox cuja entrega falhou;
 - digitar `@` para encontrar arquivos e diretórios na Workspace ativa;
 - anexar arquivos com o botão **+** no compositor, até 1 GiB cada;
 - editar uma mensagem anterior elegível do usuário para ramificar a partir daquele ponto no histórico da conversa nativa.
 
-O Inbox acompanha as mensagens enviadas que aguardam entrega ou que estão na fila de um Agent Client.
+As mensagens na fila aparecem acima do compositor e podem ser canceladas antes da entrega.
 
 ## Arquivos nas respostas
 

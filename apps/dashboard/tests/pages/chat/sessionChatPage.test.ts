@@ -1,5 +1,5 @@
 import {
-  inboxMessage,
+  queuedMessage,
   mocks,
   session,
   timelineItemsFromTurns,
@@ -93,7 +93,7 @@ function prepareReasoningEffortSession(): SessionView {
   mocks.pathParams = { sessionId: "session-1" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
   vi.spyOn(api, "listAgentClientModels").mockResolvedValue({
     version: null,
     fetched_at: Date.now(),
@@ -135,7 +135,7 @@ test("keeps the confirmed reasoning effort in slash commands until the session e
     const detail = {
       session: { ...selected, reasoning_effort: "low" },
       turns: [],
-      inboxMessages: [],
+      queuedMessages: [],
       events: [],
     };
     mocks.sessionDetail.set(detail);
@@ -177,7 +177,7 @@ test("reports a rejected reasoning effort slash command and preserves it for ret
 
 test("hides reasoning effort slash commands when the session does not expose the capability", async () => {
   const selected = session({ model: "model-a", reasoning_effort: "medium" });
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
   mocks.pathParams = { sessionId: "session-1" };
   window.history.pushState({}, "", "/dashboard/chat/session-1");
 
@@ -224,7 +224,7 @@ test("refreshes git on every entry and manual focus, while autofocusing only on 
   mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
 
   const firstPage = render(SessionChatPage);
 
@@ -264,7 +264,7 @@ function prepareBranchChat(
   mocks.sessionDetail.set({
     session: selected,
     turns: turns.map((item) => ({ ...item, session_id: "session-branch" })),
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
   return selected;
@@ -305,7 +305,7 @@ test("replaces Send with Interrupt in the empty composer for a busy interruptibl
   mocks.sessionDetail.set({
     session: busySession,
     turns: [turn({ state: "running", output: null, completed_at: null })],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
   mocks.pathParams = { sessionId: "session-1" };
@@ -341,7 +341,7 @@ test("waiting for interaction still permits interrupting the active Turn", async
   mocks.sessionDetail.set({
     session: waiting,
     turns: [turn({ state: "running", output: null, completed_at: null })],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
   mocks.pathParams = { sessionId: "session-1" };
@@ -363,7 +363,7 @@ test.each([
     const selected = session(overrides);
     mocks.loadedSessions = [selected];
     mocks.sessions.set([selected]);
-    mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+    mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
     mocks.pathParams = { sessionId: "session-1" };
     window.history.pushState({}, "", "/dashboard/chat/session-1");
 
@@ -376,7 +376,7 @@ test.each([
 );
 
 test.each(["busy", "waiting_for_interaction"])(
-  "queues inbox input while an interruptible session is %s",
+  "queues input while an interruptible session is %s",
   async (state) => {
     const busySession = session({
       state,
@@ -388,20 +388,20 @@ test.each(["busy", "waiting_for_interaction"])(
     mocks.sessionDetail.set({
       session: busySession,
       turns: [turn({ state: "running", output: null, completed_at: null })],
-      inboxMessages: [],
+      queuedMessages: [],
       events: [],
     });
     mocks.pathParams = { sessionId: "session-1" };
     window.history.pushState({}, "", "/dashboard/chat/session-1");
 
-    const queuedMessage = inboxMessage({
+    const queuedRecord = queuedMessage({
       message_id: `message-queued-${state}`,
       session_id: "session-1",
-      input: { summary: "Queue this follow-up" },
+      input: "Queue this follow-up",
     });
-    mocks.submitInboxMessage.mockImplementationOnce(async () => {
-      mocks.sessionDetail.set({ ...mocks.sessionDetail.get()!, inboxMessages: [queuedMessage] });
-      return queuedMessage;
+    mocks.sendMessage.mockImplementationOnce(async () => {
+      mocks.sessionDetail.set({ ...mocks.sessionDetail.get()!, queuedMessages: [queuedRecord] });
+      return { status: "queued", message_id: queuedRecord.message_id };
     });
     render(SessionChatPage);
 
@@ -411,40 +411,18 @@ test.each(["busy", "waiting_for_interaction"])(
     expect(screen.queryByRole("button", { name: /interrupt agent/i })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /^send$/i }));
     await waitFor(() =>
-      expect(mocks.submitInboxMessage).toHaveBeenCalledWith("session-1", {
+      expect(mocks.sendMessage).toHaveBeenCalledWith("session-1", {
         input: "Queue this follow-up",
-        delivery_policy: "steer",
+        mode: "immediate",
         metadata: { source: "dashboard_chat" },
       }),
     );
     expect(mocks.interruptSession).not.toHaveBeenCalled();
-    const queued = await screen.findByRole("region", { name: "Inbox" });
+    const queued = await screen.findByRole("region", { name: "Queued messages" });
     expect(within(queued).getByText("Queue this follow-up")).toBeInTheDocument();
     expect(screen.getByRole("log")).not.toHaveTextContent("Queue this follow-up");
 
-    await waitFor(() => expect(mocks.dashboardEventListeners.size).toBeGreaterThan(0));
-    for (const listener of mocks.dashboardEventListeners) {
-      listener({
-        kind: "session_event",
-        id: "event-queued-turn-started",
-        occurred_at: "2026-05-14T00:01:00Z",
-        event: {
-          event_id: "event-queued-turn-started",
-          session_id: "session-1",
-          turn_id: "turn-2",
-          source: "client",
-          type: "turn.started",
-          time: "2026-05-14T00:01:00Z",
-          payload: { metadata: { inbox_message_id: queuedMessage.message_id } },
-        },
-      });
-    }
-
-    await waitFor(() => {
-      expect(screen.queryByRole("region", { name: "Inbox" })).not.toBeInTheDocument();
-      expect(screen.getByRole("log")).toHaveTextContent("Queue this follow-up");
-    });
-
+    mocks.sessionDetail.set({ ...mocks.sessionDetail.get()!, queuedMessages: [] });
     mocks.timelineState.set(
       timelineStateValue({
         sessionId: "session-1",
@@ -480,7 +458,7 @@ test("selects tree timeline loading when the Session advertises timeline and top
   mocks.sessionDetail.set({
     session: selected,
     turns: [turn({ turn_id: "turn-5", session_id: "session-tree" })],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
 
@@ -673,8 +651,8 @@ test.each(["completed", "interrupted"] as const)(
       .spyOn(api, "forkSession")
       .mockResolvedValue({ stage: "session_created", session_id: "fork-child", error: null });
     const submit = vi
-      .spyOn(api, "submitInboxMessage")
-      .mockResolvedValue(inboxMessage({ session_id: "fork-child" }));
+      .spyOn(api, "sendMessage")
+      .mockResolvedValue({ status: "queued", message_id: "message-fork" });
     render(SessionChatPage);
     await userEvent.click(
       await screen.findByRole("button", { name: "Edit message: Original prompt" }),
@@ -691,7 +669,7 @@ test.each(["completed", "interrupted"] as const)(
         "fork-child",
         {
           input: "Replacement prompt",
-          delivery_policy: "after_idle",
+          mode: "queue",
           metadata: { source: "dashboard_history_fork" },
         },
         expect.any(String),
@@ -699,7 +677,7 @@ test.each(["completed", "interrupted"] as const)(
     );
     expect(fork).toHaveBeenCalledWith("session-branch", "previous", expect.any(String));
     expect(mocks.interruptSession).not.toHaveBeenCalled();
-    expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
     fork.mockRestore();
     submit.mockRestore();
   },
@@ -759,7 +737,7 @@ test("edits completed history while busy and interrupts only when the edit is sa
         completed_at: "2026-05-14T00:01:02Z",
       },
     ],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
 
@@ -1046,7 +1024,7 @@ test("shows the initial prompt immediately after starting a chat while timeline 
     mocks.sessionDetail.set({
       session: created,
       turns: [initialTurn],
-      inboxMessages: [],
+      queuedMessages: [],
       events: [],
     });
     return { session: created, initial_turn: initialTurn } satisfies CreateSessionResult;
@@ -1091,7 +1069,7 @@ test("does not substitute projected Turn summaries while timeline history is sti
   mocks.sessionDetail.set({
     session: selected,
     turns: [activeTurn],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
   mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
@@ -1117,7 +1095,7 @@ test("shows workspace git status in the selected chat composer summary", async (
   mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
   mocks.workspaces.set([
     workspace({
       workspace_id: "workspace-1",
@@ -1177,7 +1155,7 @@ test("does not show the empty conversation state while the selected chat is init
   mocks.sessionDetail.set({
     session: selected,
     turns: [turn({ session_id: "session-2" })],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
   mocks.restoreSessionTimeline.mockImplementation(
@@ -1211,7 +1189,7 @@ test("keeps the selected chat transcript hidden until the initial bottom scroll 
   mocks.sessionDetail.set({
     session: selected,
     turns: [turn({ session_id: "session-2" })],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
   mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
@@ -1259,7 +1237,7 @@ test("scrolls to the document bottom after entering a selected chat", async () =
   mocks.sessionDetail.set({
     session: selected,
     turns: [turn({ session_id: "session-2" })],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
 
@@ -1276,7 +1254,7 @@ test("settles the selected session at the bottom of the mobile scroll container"
   mocks.sessionDetail.set({
     session: selected,
     turns: [turn({ session_id: selected.session_id })],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
   const scroller = document.createElement("main");
@@ -1315,7 +1293,7 @@ test("scrolls to the settled document bottom when switching chats through SPA na
     mocks.sessionDetail.set({
       session: firstSession,
       turns: [turn({ session_id: "session-1" })],
-      inboxMessages: [],
+      queuedMessages: [],
       events: [],
     });
     mocks.loadSessionDetail.mockImplementation(async (sessionId: string) => {
@@ -1323,7 +1301,7 @@ test("scrolls to the settled document bottom when switching chats through SPA na
       mocks.sessionDetail.set({
         session: selected,
         turns: [turn({ session_id: sessionId })],
-        inboxMessages: [],
+        queuedMessages: [],
         events: [],
       });
       return null;
@@ -1362,7 +1340,7 @@ test("does not load earlier chat history before the initial selected chat scroll
   mocks.sessionDetail.set({
     session: selected,
     turns: [turn({ session_id: "session-2" })],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
   mocks.timelineState.set(
@@ -1400,7 +1378,7 @@ test("loads earlier chat history only after pulling beyond the top history senti
   mocks.sessionDetail.set({
     session: selected,
     turns: [turn({ session_id: "session-2" })],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
   mocks.timelineState.set(
@@ -1442,7 +1420,7 @@ test.each([undefined, "native", "file"] as const)(
     mocks.sessionDetail.set({
       session: selected,
       turns: [turn({ turn_id: "turn-latest", session_id: "session-cached" })],
-      inboxMessages: [],
+      queuedMessages: [],
       events: [],
     });
     let resolveRefresh: (() => void) | null = null;
@@ -1518,7 +1496,7 @@ test("scrolls a restored chat to the bottom after its session detail arrives", a
           mocks.sessionDetail.set({
             session: selected,
             turns: [turn({ session_id: "session-cached" })],
-            inboxMessages: [],
+            queuedMessages: [],
             events: [],
           });
           conversationRendered = true;
@@ -1571,7 +1549,7 @@ test("rebuilds a restored chat when session detail topology disagrees with the c
   mocks.sessionDetail.set({
     session: listed,
     turns: [turn({ session_id: "session-cached" })],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
   let resolveDetail: (() => void) | null = null;
@@ -1583,7 +1561,7 @@ test("rebuilds a restored chat when session detail topology disagrees with the c
           mocks.sessionDetail.set({
             session: detailed,
             turns: [turn({ session_id: "session-cached" })],
-            inboxMessages: [],
+            queuedMessages: [],
             events: [],
           });
           resolve(null);
@@ -1636,7 +1614,7 @@ test("does not refresh an already-loaded selected chat when the window regains f
   mocks.sessionDetail.set({
     session: selected,
     turns: [turn({ session_id: "session-2" })],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
   mocks.timelineState.set(
@@ -1712,7 +1690,7 @@ test("does not refresh git status for selected-session idle events", async () =>
   mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
 
   render(SessionChatPage);
 
@@ -1756,7 +1734,7 @@ test("does not toast transient network errors from automatic chat refreshes", as
   mocks.sessionDetail.set({
     session: selected,
     turns: [turn({ session_id: "session-2" })],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
   mocks.timelineState.set(
@@ -1801,8 +1779,8 @@ test("mobile composer resize button opens a fullscreen follow-up composer sharin
   mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
-  mocks.submitInboxMessage.mockResolvedValue(undefined);
+  mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
+  mocks.sendMessage.mockResolvedValue({ status: "delivered" });
   const wrap = stubWrappedComposer();
 
   try {
@@ -1824,9 +1802,9 @@ test("mobile composer resize button opens a fullscreen follow-up composer sharin
     await fireEvent.click(within(fullscreenComposer).getByRole("button", { name: /send/i }));
 
     await waitFor(() =>
-      expect(mocks.submitInboxMessage).toHaveBeenCalledWith("session-2", {
+      expect(mocks.sendMessage).toHaveBeenCalledWith("session-2", {
         input: "mobile draft plus more",
-        delivery_policy: "steer",
+        mode: "immediate",
         metadata: { source: "dashboard_chat" },
       }),
     );
@@ -1894,7 +1872,7 @@ test("shows idle thought summary trigger above the final assistant response", as
       status: "ready",
     }),
   );
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
   const timelineSnapshot = mocks.timelineState.get();
   mocks.loadSessionTimeline.mockImplementationOnce(async () => {
     mocks.timelineState.set(timelineSnapshot);
@@ -1926,7 +1904,7 @@ test("renders assistant output as markdown while leaving user prompts as plain t
         output: { summary: "**bold output**\n\n- first item" },
       }),
     ],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
 
@@ -1953,7 +1931,7 @@ test("highlights fenced code blocks in assistant markdown and copies their text"
         output: { summary: "```ts\nconst answer: number = 42;\n```" },
       }),
     ],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
 
@@ -1973,7 +1951,7 @@ test("highlights fenced code blocks in assistant markdown and copies their text"
   expect(await screen.findByRole("button", { name: /code block copied/i })).toBeInTheDocument();
 });
 
-test("only pending and failed inbox messages expose actions in the chat", async () => {
+test("queued messages expose cancel actions in the chat", async () => {
   const selected = session({ session_id: "session-2", state: "idle" });
   window.history.pushState({}, "", "/dashboard/chat/session-2");
   mocks.pathParams = { sessionId: "session-2" };
@@ -1982,37 +1960,11 @@ test("only pending and failed inbox messages expose actions in the chat", async 
   mocks.sessionDetail.set({
     session: selected,
     turns: [],
-    inboxMessages: [
-      inboxMessage({
-        message_id: "message-dispatched",
+    queuedMessages: [
+      queuedMessage({
+        message_id: "message-queued",
         session_id: "session-2",
-        state: "dispatched",
-        input: { summary: "Already sent" },
-      }),
-      inboxMessage({
-        message_id: "message-pending-old",
-        session_id: "session-2",
-        state: "pending",
-        input: { summary: "Continue implementation" },
-        updated_at: "2026-05-14T00:00:04Z",
-      }),
-      inboxMessage({
-        message_id: "message-failed",
-        session_id: "session-2",
-        state: "failed",
-        input: { summary: "Fix the failing dashboard test" },
-        metadata: { source: "dashboard_chat", attempt: 1 },
-        delivery_policy: "interrupt_now",
-        turn_id: "turn-2",
-        failure_message: "runtime unavailable",
-        updated_at: "2026-05-14T00:00:05Z",
-      }),
-      inboxMessage({
-        message_id: "message-dispatching",
-        session_id: "session-2",
-        state: "dispatching",
-        input: { summary: "Sending now" },
-        updated_at: "2026-05-14T00:00:06Z",
+        input: "Continue implementation",
       }),
     ],
     events: [],
@@ -2022,24 +1974,14 @@ test("only pending and failed inbox messages expose actions in the chat", async 
 
   expect(
     await screen.findByRole("button", {
-      name: "Cancel inbox message Continue implementation",
+      name: "Cancel queued message Continue implementation",
     }),
   ).toBeEnabled();
-  expect(
-    screen.getByRole("button", {
-      name: "Retry inbox message Fix the failing dashboard test",
-    }),
-  ).toBeEnabled();
-  expect(
-    screen.getByRole("button", {
-      name: "Remove inbox message Fix the failing dashboard test",
-    }),
-  ).toBeEnabled();
-  const inbox = screen.getByRole("region", { name: /Inbox/ });
-  expect(within(inbox).getAllByRole("listitem")).toHaveLength(2);
+  const queue = screen.getByRole("region", { name: /Queued messages/ });
+  expect(within(queue).getAllByRole("listitem")).toHaveLength(1);
 });
 
-test("supports cancelling pending inbox messages and retrying or removing failed inbox messages", async () => {
+test("supports cancelling queued messages", async () => {
   const selected = session({ session_id: "session-2", state: "idle" });
   window.history.pushState({}, "", "/dashboard/chat/session-2");
   mocks.pathParams = { sessionId: "session-2" };
@@ -2048,20 +1990,11 @@ test("supports cancelling pending inbox messages and retrying or removing failed
   mocks.sessionDetail.set({
     session: selected,
     turns: [],
-    inboxMessages: [
-      inboxMessage({
-        message_id: "message-pending",
+    queuedMessages: [
+      queuedMessage({
+        message_id: "message-queued",
         session_id: "session-2",
-        state: "pending",
-        input: { summary: "Continue implementation" },
-      }),
-      inboxMessage({
-        message_id: "message-failed",
-        session_id: "session-2",
-        state: "failed",
-        input: { summary: "Fix the failing dashboard test" },
-        metadata: { source: "dashboard_chat", attempt: 1 },
-        delivery_policy: "interrupt_now",
+        input: "Continue implementation",
       }),
     ],
     events: [],
@@ -2070,27 +2003,9 @@ test("supports cancelling pending inbox messages and retrying or removing failed
   render(SessionChatPage);
 
   await userEvent.click(
-    await screen.findByRole("button", { name: /cancel inbox message continue implementation/i }),
+    await screen.findByRole("button", { name: /cancel queued message continue implementation/i }),
   );
-  expect(mocks.cancelInboxMessage).toHaveBeenCalledWith("session-2", "message-pending");
-
-  await userEvent.click(
-    await screen.findByRole("button", {
-      name: /retry inbox message fix the failing dashboard test/i,
-    }),
-  );
-  expect(mocks.retryInboxMessage).toHaveBeenCalledWith(
-    "session-2",
-    expect.objectContaining({ message_id: "message-failed", delivery_policy: "interrupt_now" }),
-    false,
-  );
-
-  await userEvent.click(
-    await screen.findByRole("button", {
-      name: /remove inbox message fix the failing dashboard test/i,
-    }),
-  );
-  expect(mocks.dismissInboxMessage).toHaveBeenCalledWith("session-2", "message-failed");
+  expect(mocks.cancelQueuedMessage).toHaveBeenCalledWith("session-2", "message-queued");
 });
 
 test("renders an existing session title in the top bar and metadata above the prompt input", async () => {
@@ -2111,7 +2026,7 @@ test("renders an existing session title in the top bar and metadata above the pr
   mocks.sessionDetail.set({
     session: selected,
     turns: [turn({ session_id: "session-2" })],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
   mocks.workspaces.set([
@@ -2167,7 +2082,7 @@ test("shows supported context usage in chat session metadata while hiding unsupp
   mocks.pathParams = { sessionId: "session-usage" };
   mocks.loadedSessions = [withUsage];
   mocks.sessions.set([withUsage]);
-  mocks.sessionDetail.set({ session: withUsage, turns: [], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({ session: withUsage, turns: [], queuedMessages: [], events: [] });
 
   render(SessionChatPage);
 
@@ -2188,7 +2103,7 @@ test("shows supported context usage in chat session metadata while hiding unsupp
   mocks.pathParams = { sessionId: "session-unsupported" };
   mocks.loadedSessions = [unsupported];
   mocks.sessions.set([unsupported]);
-  mocks.sessionDetail.set({ session: unsupported, turns: [], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({ session: unsupported, turns: [], queuedMessages: [], events: [] });
 
   render(SessionChatPage);
 
@@ -2197,26 +2112,19 @@ test("shows supported context usage in chat session metadata while hiding unsupp
   expect(screen.queryByText("example-model")).not.toBeInTheDocument();
 });
 
-test("shows delivery loading on the submit button instead of below the optimistic message", async () => {
+test("shows delivery loading on the submit button until the message is delivered", async () => {
   const user = userEvent.setup();
   const selected = session({ session_id: "session-optimistic", state: "idle" });
   window.history.pushState({}, "", "/dashboard/chat/session-optimistic");
   mocks.pathParams = { sessionId: "session-optimistic" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
   let resolveSubmission: (() => void) | null = null;
-  mocks.submitInboxMessage.mockImplementation(
+  mocks.sendMessage.mockImplementation(
     () =>
       new Promise((resolve) => {
-        resolveSubmission = () =>
-          resolve(
-            inboxMessage({
-              message_id: "message-optimistic",
-              session_id: "session-optimistic",
-              input: { summary: "slow network message" },
-            }),
-          );
+        resolveSubmission = () => resolve({ status: "delivered" });
       }),
   );
 
@@ -2226,31 +2134,12 @@ test("shows delivery loading on the submit button instead of below the optimisti
   await user.type(followUpInput, "slow network message");
   await user.click(screen.getByRole("button", { name: /send/i }));
 
-  const optimisticMessage = await screen.findByText("slow network message");
-  expect(optimisticMessage.closest('[data-role="user"]')).toBeInTheDocument();
+  expect(screen.queryByText("slow network message")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Message delivery pending")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Sending message" })).toHaveAttribute(
     "aria-busy",
     "true",
   );
-
-  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBeGreaterThan(0));
-  for (const listener of mocks.dashboardEventListeners) {
-    listener({
-      kind: "session_event",
-      id: "event-turn-started",
-      occurred_at: "2026-05-14T00:00:00Z",
-      event: {
-        event_id: "event-turn-started",
-        session_id: "session-optimistic",
-        turn_id: "turn-optimistic",
-        source: "client",
-        type: "turn.started",
-        time: "2026-05-14T00:00:00Z",
-        payload: { metadata: { inbox_message_id: "message-optimistic" } },
-      },
-    });
-  }
 
   mocks.timelineState.set(
     timelineStateValue({
@@ -2279,16 +2168,16 @@ test("shows delivery loading on the submit button instead of below the optimisti
 });
 
 test.each([
-  ["acp", { key: "Enter" }, "steer"],
-  ["acp", { key: "Tab" }, "after_idle"],
-  ["acp", { key: "Enter", altKey: true }, "after_idle"],
-  ["claude-agent", { key: "Enter" }, "steer"],
-  ["claude-agent", { key: "Tab" }, "after_idle"],
-  ["claude-agent", { key: "Enter", altKey: true }, "after_idle"],
-  ["pi", { key: "Enter" }, "steer"],
-  ["codex", { key: "Enter" }, "steer"],
-  ["pi", { key: "Tab" }, "after_idle"],
-  ["codex", { key: "Enter", altKey: true }, "after_idle"],
+  ["acp", { key: "Enter" }, "immediate"],
+  ["acp", { key: "Tab" }, "queue"],
+  ["acp", { key: "Enter", altKey: true }, "queue"],
+  ["claude-agent", { key: "Enter" }, "immediate"],
+  ["claude-agent", { key: "Tab" }, "queue"],
+  ["claude-agent", { key: "Enter", altKey: true }, "queue"],
+  ["pi", { key: "Enter" }, "immediate"],
+  ["codex", { key: "Enter" }, "immediate"],
+  ["pi", { key: "Tab" }, "queue"],
+  ["codex", { key: "Enter", altKey: true }, "queue"],
 ])(
   "%s follow-up submits %j using %s while preserving newline shortcuts",
   async (clientType, shortcut, policy) => {
@@ -2302,8 +2191,8 @@ test.each([
     mocks.pathParams = { sessionId: "session-2" };
     mocks.loadedSessions = [selected];
     mocks.sessions.set([selected]);
-    mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
-    mocks.submitInboxMessage.mockResolvedValue(undefined);
+    mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
+    mocks.sendMessage.mockResolvedValue({ status: "delivered" });
 
     render(SessionChatPage);
 
@@ -2316,13 +2205,13 @@ test.each([
     expect(await fireEvent.keyDown(followUpInput, { key: "Enter", shiftKey: true })).toBe(false);
     expect(await fireEvent.keyDown(followUpInput, { key: "Enter", ctrlKey: true })).toBe(false);
     expect(followUpInput.querySelectorAll("br:not(.ProseMirror-trailingBreak)")).toHaveLength(2);
-    expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
 
     expect(await fireEvent.keyDown(followUpInput, shortcut)).toBe(false);
     await waitFor(() =>
-      expect(mocks.submitInboxMessage).toHaveBeenCalledWith("session-2", {
+      expect(mocks.sendMessage).toHaveBeenCalledWith("session-2", {
         input: "continue this session",
-        delivery_policy: policy,
+        mode: policy,
         metadata: { source: "dashboard_chat" },
       }),
     );
@@ -2344,7 +2233,7 @@ test("enables history intersection loading only after initial timeline load and 
   mocks.sessionDetail.set({
     session: selected,
     turns: [turn({ session_id: "session-2" })],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
   let resolveTimeline: () => void = () => {};
@@ -2399,7 +2288,7 @@ test("shows a floating scroll-down button away from the bottom and scrolls down 
   mocks.sessionDetail.set({
     session: selected,
     turns: [turn({ session_id: "session-2" })],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
 
@@ -2433,7 +2322,7 @@ test("shows the floating scroll-down button after switching sessions when the do
   mocks.sessionDetail.set({
     session: selected,
     turns: [turn({ session_id: "session-2" })],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
 
@@ -2448,7 +2337,7 @@ test("shows the floating scroll-down button after switching sessions when the do
   mocks.sessionDetail.set({
     session: other,
     turns: [turn({ session_id: "session-3" })],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
   window.dispatchEvent(new PopStateEvent("popstate"));
@@ -2477,7 +2366,7 @@ test("hides the floating scroll-down button at the bottom", async () => {
   mocks.sessionDetail.set({
     session: selected,
     turns: [turn({ session_id: "session-2" })],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
 
@@ -2502,9 +2391,9 @@ test.each(["idle", "busy"])(
     mocks.pathParams = { sessionId: "session-2" };
     mocks.loadedSessions = [selected];
     mocks.sessions.set([selected]);
-    mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
-    let accept!: (message: ReturnType<typeof inboxMessage>) => void;
-    mocks.submitInboxMessage.mockImplementationOnce(
+    mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
+    let accept!: (delivery: { status: "delivered" }) => void;
+    mocks.sendMessage.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           accept = resolve;
@@ -2527,23 +2416,9 @@ test.each(["idle", "busy"])(
     });
     await user.click(screen.getByRole("button", { name: /send/i }));
 
-    if (state === "busy") {
-      const queued = await screen.findByRole("region", { name: "Inbox" });
-      expect(within(queued).getByText("continue this session")).toBeInTheDocument();
-      expect(within(queued).getByRole("button", { name: /cancel inbox message/i })).toBeDisabled();
-      expect(document.querySelector('[data-chat-role="user"]')).not.toBeInTheDocument();
-      expect(scrollTo).not.toHaveBeenCalled();
-    } else {
-      await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
-    }
-    accept(
-      inboxMessage({
-        session_id: "session-2",
-        state: "dispatched",
-        turn_id: "turn-2",
-        input: { summary: "continue this session" },
-      }),
-    );
+    expect(document.querySelector('[data-chat-role="user"]')).not.toBeInTheDocument();
+    expect(scrollTo).not.toHaveBeenCalled();
+    accept({ status: "delivered" });
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /^send$/i })).not.toHaveAttribute(
         "aria-busy",
@@ -2552,8 +2427,6 @@ test.each(["idle", "busy"])(
     );
     await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
     expect(scrollTo).toHaveBeenCalledWith({ top: 4096 });
-    expect(screen.queryByRole("region", { name: "Inbox" })).not.toBeInTheDocument();
-
     const submittedTurn = turn({
       session_id: "session-2",
       turn_id: "turn-2",
@@ -2606,28 +2479,10 @@ test("scrolls once for each dispatched submission, not on unrelated assistant up
   mocks.sessionDetail.set({
     session: selected,
     turns: [existingTurn],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
-  mocks.submitInboxMessage
-    .mockResolvedValueOnce(
-      inboxMessage({
-        session_id: "session-2",
-        message_id: "queued-1",
-        state: "dispatched",
-        turn_id: "turn-2",
-        input: { summary: "continue this session" },
-      }),
-    )
-    .mockResolvedValueOnce(
-      inboxMessage({
-        session_id: "session-2",
-        message_id: "queued-2",
-        state: "dispatched",
-        turn_id: "turn-3",
-        input: { summary: "another queued question" },
-      }),
-    );
+  mocks.sendMessage.mockResolvedValue({ status: "delivered" });
 
   render(SessionChatPage);
   await waitFor(() =>
@@ -2636,15 +2491,15 @@ test("scrolls once for each dispatched submission, not on unrelated assistant up
     ).toBeInTheDocument(),
   );
   const followUpInput = screen.getByPlaceholderText("Follow up…");
-  await user.type(followUpInput, "continue this session");
+  await user.type(followUpInput, "first queued question");
   scrollTo.mockClear();
   await user.click(screen.getByRole("button", { name: /send/i }));
-  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalled());
-  expect(screen.getAllByText("continue this session")).toHaveLength(2);
+  await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled());
+  expect(screen.getByText("first queued question")).toBeInTheDocument();
   await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
   await user.type(followUpInput, "another queued question");
   await user.click(screen.getByRole("button", { name: /send/i }));
-  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledTimes(2));
   await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(2));
   mocks.timelineState.set(
     timelineStateValue({
@@ -2711,8 +2566,8 @@ test("waits for the native user message if the optimistic message disappears bef
   mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
-  mocks.submitInboxMessage.mockResolvedValue(undefined);
+  mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
+  mocks.sendMessage.mockResolvedValue({ status: "delivered" });
   render(SessionChatPage);
   await waitFor(() =>
     expect(
@@ -2733,7 +2588,7 @@ test("waits for the native user message if the optimistic message disappears bef
     await user.click(screen.getByRole("button", { name: /^send$/i }));
     await screen.findByText("A new prompt");
     await waitFor(() => expect(frames.length).toBeGreaterThan(0));
-    queryClient.setQueryData(sessionKeys.optimisticInbox(), {});
+    queryClient.setQueryData(sessionKeys.optimisticChat(), {});
     await waitFor(() => expect(screen.queryByText("A new prompt")).not.toBeInTheDocument());
     animationFrame.mockRestore();
     for (const frame of frames) frame(performance.now());
@@ -2766,14 +2621,8 @@ test("keeps the sent user message in the chat between turn start and its native 
   mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
-  mocks.submitInboxMessage.mockResolvedValue(
-    inboxMessage({
-      message_id: "message-sent",
-      session_id: "session-2",
-      input: { summary: "keep me visible" },
-    }),
-  );
+  mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
+  mocks.sendMessage.mockResolvedValue({ status: "delivered" });
   render(SessionChatPage);
   await waitFor(() =>
     expect(
@@ -2785,37 +2634,6 @@ test("keeps the sent user message in the chat between turn start and its native 
   await user.click(screen.getByRole("button", { name: /^send$/i }));
   await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
 
-  testDevice.inboxQueries.syncInboxSubmissions("session-2", [
-    inboxMessage({
-      message_id: "message-sent",
-      session_id: "session-2",
-      state: "dispatched",
-      turn_id: null,
-      input: { summary: "keep me visible" },
-    }),
-  ]);
-  await tick();
-  expect(
-    screen.getByText("keep me visible").closest('[data-chat-role="user"]'),
-  ).toBeInTheDocument();
-
-  for (const listener of mocks.dashboardEventListeners) {
-    listener({
-      kind: "session_event",
-      id: "event-sent-turn-started",
-      occurred_at: "2026-05-14T00:01:00Z",
-      event: {
-        event_id: "event-sent-turn-started",
-        session_id: "session-2",
-        turn_id: "turn-sent",
-        source: "client",
-        type: "turn.started",
-        time: "2026-05-14T00:01:00Z",
-        payload: { metadata: { inbox_message_id: "message-sent" } },
-      },
-    });
-  }
-  await new Promise(requestAnimationFrame);
   expect(
     screen.getByText("keep me visible").closest('[data-chat-role="user"]'),
   ).toBeInTheDocument();
@@ -2848,8 +2666,8 @@ test("does not consume a submit scroll until the unavailable conversation mounts
   mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
-  mocks.submitInboxMessage.mockResolvedValue(undefined);
+  mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
+  mocks.sendMessage.mockResolvedValue({ status: "delivered" });
   render(SessionChatPage);
   await waitFor(() =>
     expect(
@@ -2863,7 +2681,7 @@ test("does not consume a submit scroll until the unavailable conversation mounts
   await user.type(screen.getByPlaceholderText("Follow up…"), "Prompt during an outage");
   scrollTo.mockClear();
   await user.click(screen.getByRole("button", { name: /^send$/i }));
-  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalled());
+  await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled());
   await new Promise(requestAnimationFrame);
   expect(screen.queryByText("Prompt during an outage")).not.toBeInTheDocument();
   expect(scrollTo).not.toHaveBeenCalled();
@@ -2874,62 +2692,13 @@ test("does not consume a submit scroll until the unavailable conversation mounts
   scrollTo.mockRestore();
 });
 
-test("does not scroll to the document bottom after retrying an inbox message", async () => {
-  const user = userEvent.setup();
-  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-  const selected = session({ session_id: "session-2", state: "idle" });
-  Object.defineProperty(document.documentElement, "scrollHeight", {
-    configurable: true,
-    value: 4096,
-  });
-  window.history.pushState({}, "", "/dashboard/chat/session-2");
-  mocks.pathParams = { sessionId: "session-2" };
-  mocks.loadedSessions = [selected];
-  mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({
-    session: selected,
-    turns: [],
-    inboxMessages: [
-      inboxMessage({
-        message_id: "message-failed",
-        session_id: "session-2",
-        state: "failed",
-        input: { summary: "fix the failing dashboard test" },
-      }),
-    ],
-    events: [],
-  });
-  mocks.submitInboxMessage.mockResolvedValue(undefined);
-
-  render(SessionChatPage);
-
-  await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 4096 }));
-  await screen.findByRole("button", { name: /retry inbox message/i });
-  scrollTo.mockClear();
-  await user.click(
-    await screen.findByRole("button", {
-      name: /retry inbox message fix the failing dashboard test/i,
-    }),
-  );
-
-  await waitFor(() =>
-    expect(mocks.retryInboxMessage).toHaveBeenCalledWith(
-      "session-2",
-      expect.objectContaining({ state: "failed" }),
-      false,
-    ),
-  );
-  expect(scrollTo).not.toHaveBeenCalled();
-  scrollTo.mockRestore();
-});
-
 test("does not toast passive chat errors", async () => {
   const selected = session({ session_id: "session-2", state: "idle" });
   window.history.pushState({}, "", "/dashboard/chat/session-2");
   mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
   mocks.sessionDetailError.set("Could not load session detail");
 
   render(SessionChatPage);
@@ -2951,7 +2720,7 @@ test("renders an explicit degraded state instead of projected or partial history
   mocks.sessionDetail.set({
     session: selected,
     turns: [turn({ session_id: "session-2" })],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
   mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
@@ -3007,7 +2776,7 @@ test("uses selected session detail state for bottom interrupted status when the 
         completed_at: "2026-05-14T00:00:03Z",
       }),
     ],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
 
@@ -3026,12 +2795,12 @@ test("hides exit on exited sessions and waits for idle after automatic resume be
   mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
   mocks.resumeSession.mockImplementation(async () => {
     mocks.sessions.set([starting]);
-    mocks.sessionDetail.set({ session: starting, turns: [], inboxMessages: [], events: [] });
+    mocks.sessionDetail.set({ session: starting, turns: [], queuedMessages: [], events: [] });
   });
-  mocks.submitInboxMessage.mockResolvedValue(undefined);
+  mocks.sendMessage.mockResolvedValue({ status: "delivered" });
 
   render(SessionChatPage);
 
@@ -3047,20 +2816,20 @@ test("hides exit on exited sessions and waits for idle after automatic resume be
   expect(followUpInput).toHaveAttribute("contenteditable", "false");
   expect(screen.getByRole("button", { name: /send/i })).toBeDisabled();
   await Promise.resolve();
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+  expect(mocks.sendMessage).not.toHaveBeenCalled();
 
   mocks.sessions.set([idle]);
-  mocks.sessionDetail.set({ session: idle, turns: [], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({ session: idle, turns: [], queuedMessages: [], events: [] });
 
   await waitFor(() =>
-    expect(mocks.submitInboxMessage).toHaveBeenCalledWith("session-2", {
+    expect(mocks.sendMessage).toHaveBeenCalledWith("session-2", {
       input: "continue this session",
-      delivery_policy: "steer",
+      mode: "immediate",
       metadata: { source: "dashboard_chat" },
     }),
   );
   expect(mocks.resumeSession.mock.invocationCallOrder[0]).toBeLessThan(
-    mocks.submitInboxMessage.mock.invocationCallOrder[0],
+    mocks.sendMessage.mock.invocationCallOrder[0],
   );
 });
 
@@ -3076,24 +2845,24 @@ test("resumes an exited Claude conversation by submitting the real input before 
   mocks.pathParams = { sessionId: "claude-resume" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
   mocks.resumeSession.mockImplementation(async () => {
     mocks.sessions.set([starting]);
-    mocks.sessionDetail.set({ session: starting, turns: [], inboxMessages: [], events: [] });
+    mocks.sessionDetail.set({ session: starting, turns: [], queuedMessages: [], events: [] });
   });
-  mocks.submitInboxMessage.mockResolvedValue(undefined);
+  mocks.sendMessage.mockResolvedValue({ status: "delivered" });
   render(SessionChatPage);
   await user.type(await screen.findByPlaceholderText("Follow up…"), "continue bound conversation");
   await user.click(screen.getByRole("button", { name: /send/i }));
   await waitFor(() =>
-    expect(mocks.submitInboxMessage).toHaveBeenCalledWith("claude-resume", {
+    expect(mocks.sendMessage).toHaveBeenCalledWith("claude-resume", {
       input: "continue bound conversation",
-      delivery_policy: "steer",
+      mode: "immediate",
       metadata: { source: "dashboard_chat" },
     }),
   );
   expect(mocks.resumeSession).toHaveBeenCalledTimes(1);
-  expect(mocks.submitInboxMessage).toHaveBeenCalledTimes(1);
+  expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
 });
 
 test("scrolls to a message selected from the conversation ruler", async () => {
@@ -3112,7 +2881,7 @@ test("scrolls to a message selected from the conversation ruler", async () => {
   mocks.sessionDetail.set({
     session: selected,
     turns: [turn({ session_id: "session-2", input: { summary: "Jump target" } })],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
 
@@ -3143,7 +2912,7 @@ test("renders ordered live output over the active Turn transcript while preservi
   mocks.sessionDetail.set({
     session: selected,
     turns: [runningTurn],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
 
@@ -3225,7 +2994,7 @@ test("retains terminal live output after a failed timeline refresh and removes i
   mocks.sessionDetail.set({
     session: selected,
     turns: [runningTurn],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
 
@@ -3259,7 +3028,7 @@ test("retains terminal live output after a failed timeline refresh and removes i
   mocks.sessionDetail.set({
     session: { ...selected, state: "idle", current_turn_id: "turn-live" },
     turns: [{ ...runningTurn, state: "completed", completed_at: "2026-05-14T00:00:03Z" }],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
   mocks.refreshSessionTimeline.mockImplementationOnce(async () => {
@@ -3312,7 +3081,7 @@ test("shows received live output without native history and keeps it after a con
   window.history.pushState({}, "", "/dashboard/chat/session-live-only");
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [running], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [running], queuedMessages: [], events: [] });
   render(SessionChatPage);
   await waitFor(() => expect(mocks.liveOutputListeners.has(selected.session_id)).toBe(true));
   const live = mocks.liveOutputListeners.get(selected.session_id)!;
@@ -3332,7 +3101,7 @@ test("shows received live output without native history and keeps it after a con
   mocks.sessionDetail.set({
     session: { ...selected, state: "idle", current_turn_id: null },
     turns: [{ ...running, state: "completed" }],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
   await tick();
@@ -3341,7 +3110,7 @@ test("shows received live output without native history and keeps it after a con
   mocks.sessionDetail.set({
     session: { ...selected, state: "exited", current_turn_id: null, capabilities: {} },
     turns: [{ ...running, state: "completed" }],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   });
   await tick();
@@ -3362,7 +3131,12 @@ test("refreshes independent control health and disables input without ending an 
     window.history.pushState({}, "", "/dashboard/chat/session-health");
     mocks.loadedSessions = [selected];
     mocks.sessions.set([selected]);
-    mocks.sessionDetail.set({ session: selected, turns: [running], inboxMessages: [], events: [] });
+    mocks.sessionDetail.set({
+      session: selected,
+      turns: [running],
+      queuedMessages: [],
+      events: [],
+    });
     const view = render(SessionChatPage);
     await screen.findByRole("button", { name: "Interrupt agent" });
     mocks.loadSessionDetail.mockImplementation(async () => {
@@ -3373,7 +3147,7 @@ test("refreshes independent control health and disables input without ending an 
           "claude-agent": { unavailable_reason: "unsupported_result" },
         },
         turns: [running],
-        inboxMessages: [],
+        queuedMessages: [],
         events: [],
       });
       return null;
@@ -3404,7 +3178,7 @@ test("shows ACP reconnection diagnostics in the session feed", async () => {
   window.history.pushState({}, "", `/dashboard/chat/${selected.session_id}`);
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
 
   render(SessionChatPage);
 
@@ -3426,7 +3200,7 @@ test("shows ACP startup failure diagnostics as an alert", async () => {
   window.history.pushState({}, "", `/dashboard/chat/${selected.session_id}`);
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
 
   render(SessionChatPage);
 
@@ -3446,10 +3220,10 @@ test("closes the old live output stream when navigating to another Session", asy
   window.history.pushState({}, "", "/dashboard/chat/session-1");
   mocks.loadedSessions = [first, second];
   mocks.sessions.set([first, second]);
-  mocks.sessionDetail.set({ session: first, turns: [], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({ session: first, turns: [], queuedMessages: [], events: [] });
   mocks.loadSessionDetail.mockImplementation(async (sessionId: string) => {
     const selected = sessionId === "session-1" ? first : second;
-    mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+    mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
     return null;
   });
 

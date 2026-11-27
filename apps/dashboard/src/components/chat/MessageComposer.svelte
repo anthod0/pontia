@@ -29,7 +29,7 @@
   import { cn } from '$lib/utils.js'
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import { promptValueAfterEnter } from '$lib/promptEnterBehavior'
-  import type { FilePickerFileView, InboxDeliveryPolicy } from '../../api/types'
+  import type { FilePickerFileView, MessageMode } from '../../api/types'
 
 
   interface Props {
@@ -52,7 +52,7 @@
     onRemovePrefix?: () => void
     draftId?: string
     retainDraft?: boolean
-    onSubmit: (message: string, deliveryPolicy: InboxDeliveryPolicy) => void | Promise<boolean | void>
+    onSubmit: (message: string, mode: MessageMode) => void | Promise<boolean | void>
     onInterrupt?: () => void
     onFocus?: () => void
   }
@@ -162,7 +162,7 @@
     fullscreenEditor?.focusEnd()
   }
 
-  export function submit(policy:InboxDeliveryPolicy='steer') {return controller.submit(policy)}
+  export function submit(mode:MessageMode='immediate') {return controller.submit(mode)}
   function chooseMenuCommand(selected: ChatCommand): void {
     if (disabled || busy || selected.disabledReason) return
     if (selected.name === '/rename') {
@@ -226,7 +226,7 @@
     if (queueInput) {
       if (controller.cannotSubmit || command || (event.key === 'Tab' && value.trim() && commands.some(item => item.name.startsWith(value.trim())))) return
       event.preventDefault()
-      submit('after_idle')
+      submit('queue')
       return
     }
     const isPlainEnter = event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey

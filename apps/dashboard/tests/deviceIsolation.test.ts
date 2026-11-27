@@ -69,8 +69,8 @@ test("a delayed mutation and its follow-up reads stay with the initiating device
               ? { turns: [] }
               : url.endsWith("/events")
                 ? { events: [] }
-                : url.endsWith("/inbox/messages")
-                  ? { inbox_messages: [] }
+                : url.endsWith("/queue")
+                  ? { messages: [] }
                   : { session: { session_id: "same", title: "A", state: "idle" } },
           ),
         ),
@@ -142,19 +142,9 @@ test("events update only their device cursor and cache, and stopping one stream 
   expect(get(b.connection.sseStatus)).toBe("open");
 });
 
-test("Inbox recovery and persisted timelines do not cross devices after reload", async () => {
-  const a = device("a", vi.fn());
-  const b = device("b", vi.fn());
-  const first = { sessionId: "same", messageId: "same", input: { input: "A" } };
-  const second = { ...first, input: { input: "B" } };
-  a.inboxRecovery.rememberSubmission(first);
-  b.inboxRecovery.rememberSubmission(second);
+test("persisted timelines do not cross devices after reload", async () => {
   const reloadedA = device("a", vi.fn());
   const reloadedB = device("b", vi.fn());
-  expect(get(reloadedA.inboxRecovery.unconfirmedSubmissions)).toEqual([first]);
-  expect(get(reloadedB.inboxRecovery.unconfirmedSubmissions)).toEqual([second]);
-  reloadedA.inboxRecovery.forgetSubmission("same");
-  expect(get(reloadedB.inboxRecovery.unconfirmedSubmissions)).toEqual([second]);
   await writeCachedTimeline({
     deviceId: "a",
     sessionId: "same",

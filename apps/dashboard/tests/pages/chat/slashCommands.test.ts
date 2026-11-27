@@ -23,7 +23,7 @@ function renderChat(value: string, overrides: Partial<SessionView> = {}) {
   window.history.pushState({}, "", `/dashboard/chat/${selected.session_id}`);
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
   chatDraft.set(value);
   render(SessionChatPage);
   return selected;
@@ -38,7 +38,7 @@ test.each(["idle", "error", "exited"])(
     expect(get(chatDraft)).toBe("");
     expect(mocks.createSession).not.toHaveBeenCalled();
     expect(mocks.terminateSession).not.toHaveBeenCalled();
-    expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
   },
 );
 
@@ -60,7 +60,7 @@ test("/exit terminates a busy session once, keeps the page, and waits for report
   await waitFor(() => expect(get(chatDraft)).toBe(""));
   expect(mocks.sessionDetail.get()?.session.state).toBe("busy");
   expect(mocks.navigate).not.toHaveBeenCalled();
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+  expect(mocks.sendMessage).not.toHaveBeenCalled();
 });
 
 test.each(["idle", "busy", "exited"])(
@@ -88,7 +88,7 @@ test.each(["idle", "busy", "exited"])(
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     finish();
     await waitFor(() => expect(get(chatDraft)).toBe(""));
-    expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
     expect(mocks.resumeSession).not.toHaveBeenCalled();
   },
 );
@@ -102,7 +102,7 @@ test("failed /rename preserves the full command for retry", async () => {
   await fireEvent.click(screen.getByRole("button", { name: "Rename" }));
   await waitFor(() => expect(get(chatDraft)).toBe(""));
   expect(mocks.updateSessionTitle).toHaveBeenLastCalledWith(selected.session_id, "New title");
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+  expect(mocks.sendMessage).not.toHaveBeenCalled();
 });
 
 test.each(["/rename", "/rename   "])("/rename requires a nonempty name: %j", async (value) => {
@@ -110,7 +110,7 @@ test.each(["/rename", "/rename   "])("/rename requires a nonempty name: %j", asy
   expect(await screen.findByRole("button", { name: "Rename" })).toBeDisabled();
   await fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
   expect(mocks.updateSessionTitle).not.toHaveBeenCalled();
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+  expect(mocks.sendMessage).not.toHaveBeenCalled();
 });
 
 test("failed /exit preserves the command for retry and shows the error", async () => {
@@ -123,7 +123,7 @@ test("failed /exit preserves the command for retry and shows the error", async (
   await fireEvent.click(screen.getByRole("button", { name: "Exit" }));
   await waitFor(() => expect(get(chatDraft)).toBe(""));
   expect(mocks.terminateSession).toHaveBeenLastCalledWith(selected.session_id);
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+  expect(mocks.sendMessage).not.toHaveBeenCalled();
 });
 
 test.each(["exited", "error"])(
@@ -134,7 +134,7 @@ test.each(["exited", "error"])(
     await fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
     expect(mocks.terminateSession).not.toHaveBeenCalled();
     expect(mocks.resumeSession).not.toHaveBeenCalled();
-    expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
   },
 );
 
@@ -169,7 +169,7 @@ test.each([
       if (other !== called) expect(mocks[other]).not.toHaveBeenCalled();
     }
     expect(mocks.navigate).not.toHaveBeenCalled();
-    expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
   },
 );
 
@@ -178,7 +178,7 @@ test("/pin is unavailable for an archived session", async () => {
   expect(await screen.findByRole("button", { name: "Pin" })).toBeDisabled();
   await fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
   expect(mocks.pinSession).not.toHaveBeenCalled();
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+  expect(mocks.sendMessage).not.toHaveBeenCalled();
 });
 
 test("failed /archive preserves the command for retry and shows the error", async () => {
@@ -203,7 +203,7 @@ test("chat actions pin and archive the current session without submitting a mess
   await waitFor(() =>
     expect(mocks.archiveSession).toHaveBeenCalledExactlyOnceWith(selected.session_id),
   );
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+  expect(mocks.sendMessage).not.toHaveBeenCalled();
 });
 
 test.each([
@@ -239,10 +239,10 @@ test("file mentions keep their keyboard selection before ordinary message submis
   await screen.findByRole("listbox", { name: "File suggestions" });
   await screen.findByRole("option", { name: "@src/main.rs" });
   await fireEvent.keyDown(editor, { key: "Enter" });
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+  expect(mocks.sendMessage).not.toHaveBeenCalled();
   await fireEvent.keyDown(editor, { key: "Enter" });
   await waitFor(() =>
-    expect(mocks.submitInboxMessage).toHaveBeenCalledWith(
+    expect(mocks.sendMessage).toHaveBeenCalledWith(
       "session-1",
       expect.objectContaining({
         input: "@src/main.rs",
@@ -274,7 +274,7 @@ test("chat actions exits the current session without submitting a message", asyn
   await waitFor(() =>
     expect(mocks.terminateSession).toHaveBeenCalledExactlyOnceWith(selected.session_id),
   );
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+  expect(mocks.sendMessage).not.toHaveBeenCalled();
 });
 
 test("chat actions prepares rename and focuses the input without executing it", async () => {
@@ -294,7 +294,7 @@ test("chat actions prepares rename and focuses the input without executing it", 
       "New title",
     ),
   );
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+  expect(mocks.sendMessage).not.toHaveBeenCalled();
 });
 
 test.each([{ state: "exited" }, { state: "error" }])(
@@ -307,7 +307,7 @@ test.each([{ state: "exited" }, { state: "error" }])(
     await fireEvent.click(menu.getByText("New chat"));
     expect(mocks.navigate).toHaveBeenCalledWith("/", { workspace: "workspace-1" });
     expect(mocks.terminateSession).not.toHaveBeenCalled();
-    expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
   },
 );
 
@@ -362,7 +362,7 @@ test("a model fact refreshes session metadata even when native history is availa
     mocks.sessionDetail.set({
       session: { ...selected, model: "model-b" },
       turns: [],
-      inboxMessages: [],
+      queuedMessages: [],
       events: [],
     });
     return null;

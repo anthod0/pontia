@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, time::Duration};
 
 use pontia_agent_control::{
-    AgentControl, CreateSessionRequest, SubmitInboxMessageRequest,
+    AgentControl, CreateSessionRequest, InputPayload, SendMode, SendOutcome,
     client_contract::ClientServicePhase,
     clients::{ClientRegistry, ClientServiceTasks},
     interactions::InteractionResponse,
@@ -1117,14 +1117,7 @@ async fn cancel_keeps_prompt_active_and_inbox_queued_until_final_response() {
         .unwrap();
     h.app
         .inbox_commands()
-        .submit_message(
-            &session,
-            SubmitInboxMessageRequest {
-                input: "end_turn".into(),
-                delivery_policy: "after_idle".into(),
-                metadata: json!({}),
-            },
-        )
+        .send(&session, "end_turn".into(), SendMode::Queue)
         .await
         .unwrap();
     assert_eq!(h.events(&session, "turn.interrupted").await, 0);
@@ -2048,13 +2041,10 @@ async fn backpressured_prompt_writes_do_not_report_a_live_history_source_as_unav
         let session = session.clone();
         async move {
             app.inbox_commands()
-                .submit_message(
+                .send(
                     &session,
-                    SubmitInboxMessageRequest {
-                        input: "x".repeat(2 * 1024 * 1024),
-                        metadata: json!({}),
-                        delivery_policy: "after_idle".into(),
-                    },
+                    InputPayload::new("x".repeat(2 * 1024 * 1024)),
+                    SendMode::Queue,
                 )
                 .await
         }

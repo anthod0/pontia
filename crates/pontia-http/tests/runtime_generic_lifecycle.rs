@@ -92,17 +92,14 @@ async fn create_session_with_body(state: AppState, mut body: Value) -> String {
 
 async fn submit_turn(state: AppState, session_id: &str) -> String {
     let (status, body) = request(
-        state,
+        state.clone(),
         "POST",
-        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
+        &format!("/api/v1/sessions/{session_id}/messages"),
         Some(json!({"input":"work through generic"})),
     )
     .await;
     assert_eq!(status, StatusCode::CREATED, "{body:?}");
-    body["data"]["inbox_message"]["turn_id"]
-        .as_str()
-        .expect("turn id")
-        .to_string()
+    common::wait_for_turn_id(&state, session_id).await
 }
 
 #[tokio::test]

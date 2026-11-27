@@ -1,6 +1,6 @@
 use pontia_agent_control::{
     AgentControl, ClientControlChannel, ClientControlOperation, DeliveryOperation,
-    EventIngestService, InputPayload, SubmitInboxMessageRequest,
+    EventIngestService, InputPayload, SendMode, SendOutcome,
     client_contract::{
         DispatchBehavior, RuntimeBehavior, RuntimeBindingBehavior, TerminateBehavior,
         TmuxRuntimeBehavior, TurnLifecycleBehavior, test_registration,
@@ -160,14 +160,6 @@ async fn wait_for(state: &AgentControl, expected: &str) {
     .await
     .unwrap();
 }
-fn request() -> SubmitInboxMessageRequest {
-    SubmitInboxMessageRequest {
-        input: "follow up".into(),
-        metadata: json!({}),
-        delivery_policy: "after_idle".into(),
-    }
-}
-
 #[tokio::test]
 async fn exits_after_finishing_a_turn() {
     let (_root, state, channel) = fixture().await;
@@ -198,15 +190,14 @@ async fn exits_after_finishing_a_turn() {
 async fn after_idle_input_is_delivered_and_consumed_before_exit() {
     let (_root, state, channel) = fixture().await;
     fact(&state, EventType::TurnStarted, Some("first"), json!({})).await;
-    let message = state
+    let SendOutcome::Queued { message_id } = state
         .inbox_commands()
-        .submit_message("session", request())
+        .send("session", "follow up".into(), SendMode::Queue)
         .await
-        .unwrap();
-    let id = message.data["inbox_message"]["message_id"]
-        .as_str()
-        .unwrap();
-    assert_eq!(message.data["inbox_message"]["state"], "pending");
+        .unwrap()
+    else {
+        panic!("busy session input must be queued");
+    };
     state
         .session_commands()
         .exit_when_done("session")
@@ -217,7 +208,7 @@ async fn after_idle_input_is_delivered_and_consumed_before_exit() {
         loop {
             if state
                 .inbox_commands()
-                .get_message("session", id)
+                .get_message("session", &message_id)
                 .await
                 .unwrap()
                 .is_none()

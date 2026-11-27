@@ -103,18 +103,15 @@ async fn create_session_with_body(state: AppState, mut body: Value) -> Value {
 }
 
 async fn submit_turn(state: AppState, session_id: &str, input: &str) -> (String, Value) {
-    let (status, body) = post_json(
+    let (status, _body) = post_json(
         state.clone(),
-        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
+        &format!("/api/v1/sessions/{session_id}/messages"),
         Some(TOKEN),
-        json!({"input":input,"turn_id":"turn_client_must_be_ignored"}),
+        json!({"input":input}),
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    let turn_id = body["data"]["inbox_message"]["turn_id"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let turn_id = common::wait_for_turn_id(&state, session_id).await;
     let (turn_status, turn_body) = get_json(
         state,
         &format!("/api/v1/sessions/{session_id}/turns/{turn_id}"),

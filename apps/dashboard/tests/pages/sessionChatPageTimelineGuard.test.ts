@@ -39,19 +39,17 @@ const mocks = vi.hoisted(() => {
       const selected =
         mocks.loadedSessions.find((session) => session.session_id === sessionId) ?? null;
       if (selected)
-        mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+        mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
       return null;
     }),
-    submitInboxMessage: vi.fn(),
-    cancelInboxMessage: vi.fn(),
-    dismissInboxMessage: vi.fn(),
+    sendMessage: vi.fn(),
+    cancelQueuedMessage: vi.fn(),
     interruptSession: vi.fn(),
     resumeSession: vi.fn(),
     terminateSession: vi.fn(),
     updateSessionTitle: vi.fn(),
     chatDraft: writableStore(""),
     optimisticChatQuery: writableStore({ data: {} }),
-    optimisticInboxQuery: writableStore({ data: {} }),
     workspaces: writableStore([]),
     workspacesError: writableStore<string | null>(null),
     workspaceGitStatuses: writableStore({}),
@@ -94,9 +92,8 @@ vi.mock("../../src/stores/sessions", async (importOriginal) => {
     sessionDetailErrorKind: mocks.sessionDetailErrorKind,
     selectSession: vi.fn(),
     loadSessionDetail: mocks.loadSessionDetail,
-    submitInboxMessage: mocks.submitInboxMessage,
-    cancelInboxMessage: mocks.cancelInboxMessage,
-    dismissInboxMessage: mocks.dismissInboxMessage,
+    sendMessage: mocks.sendMessage,
+    cancelQueuedMessage: mocks.cancelQueuedMessage,
     interruptSession: mocks.interruptSession,
     resumeSession: mocks.resumeSession,
     terminateSession: mocks.terminateSession,
@@ -131,21 +128,6 @@ vi.mock("../../src/queries/optimisticChat", async (importOriginal) => {
     ...original,
     ...mocked,
     createOptimisticChat: (device) => ({ ...original.createOptimisticChat(device), ...mocked }),
-  };
-});
-vi.mock("../../src/queries/inbox", async (importOriginal) => {
-  const original = await importOriginal();
-  const mocked = {
-    createOptimisticInboxQuery: () => mocks.optimisticInboxQuery,
-    consumeInboxSubmission: vi.fn(),
-    inboxSubmissionMessages: (loadedMessages: unknown[]) => loadedMessages,
-    queuedInboxMessages: (messages: unknown[]) => messages,
-    reconcileInboxSubmissions: vi.fn(),
-  };
-  return {
-    ...original,
-    ...mocked,
-    createInboxQueries: (device) => ({ ...original.createInboxQueries(device), ...mocked }),
   };
 });
 vi.mock("../../src/stores/workspaces", () => ({

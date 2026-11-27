@@ -1,5 +1,6 @@
 #[path = "support/acp_relay.rs"]
 mod acp_relay;
+mod common;
 use axum::{
     body::Body,
     http::{Request, StatusCode},
@@ -257,16 +258,15 @@ async fn acp_tools_use_existing_http_snapshot_updates_reconnect_and_closed_event
     .await;
     assert_eq!(status, StatusCode::CREATED);
     let session = created["data"]["session"]["session_id"].as_str().unwrap();
-    let (_, submitted) = call(
+    let (status, submitted) = call(
         &app,
         "POST",
-        &format!("/api/v1/sessions/{session}/inbox/messages"),
-        json!({"input":"end_turn","delivery_policy":"after_idle"}),
+        &format!("/api/v1/sessions/{session}/messages"),
+        json!({"input":"end_turn","mode":"queue"}),
     )
     .await;
-    let turn = submitted["data"]["inbox_message"]["turn_id"]
-        .as_str()
-        .unwrap();
+    assert_eq!(status, StatusCode::CREATED, "{submitted}");
+    let turn = common::wait_for_turn_id(&app, session).await;
     let mut stream = live_stream(&app, session).await;
     for marker in ["update-1", "live-1-0"] {
         std::fs::write(root.path().join(marker), "").unwrap();
@@ -305,10 +305,10 @@ async fn acp_tools_use_existing_http_snapshot_updates_reconnect_and_closed_event
         json!({"type":"tool_status_updated","call_id":"native-call","status":{"phase":"ended","outcome":"failed"}}),
         json!({"type":"tool_result","call_id":"native-call","result":{"error":{"exitCode":1},"truncated":false}}),
     ]).await;
-    wait_turn(&app, session, turn, "running").await;
+    wait_turn(&app, session, &turn, "running").await;
     std::fs::write(root.path().join("release-1"), "").unwrap();
     assert_eq!(live_event(&mut stream).await["type"], "closed");
-    wait_turn(&app, session, turn, "completed").await;
+    wait_turn(&app, session, &turn, "completed").await;
     app.control().shutdown().notify();
     tokio::time::timeout(Duration::from_secs(5), tasks.join())
         .await
@@ -448,14 +448,14 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
     let (status, result) = call(
         &app,
         "POST",
-        &format!("{path}/inbox/messages"),
-        json!({"input":"end_turn","delivery_policy":"after_idle"}),
+        &format!("{path}/messages"),
+        json!({"input":"end_turn","mode":"queue"}),
     )
     .await;
     assert!(status.is_success(), "{result}");
-    let turn = result["data"]["inbox_message"]["turn_id"].as_str().unwrap();
+    let turn = common::wait_for_turn_id(&app, session).await;
     std::fs::write(root.path().join("update-1"), "").unwrap();
-    wait_turn(&app, session, turn, "running").await;
+    wait_turn(&app, session, &turn, "running").await;
     let interactions = get(&app, &format!("{path}/interactions")).await;
     let interactions = interactions["interactions"].as_array().unwrap();
     assert_eq!(interactions.len(), 3);
@@ -473,7 +473,7 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
     let turn_before_response = get(&app, &format!("{path}/turns/{turn}")).await;
     assert_eq!(turn_before_response["turn"]["state"], "running");
     std::fs::write(root.path().join("release-1"), "").unwrap();
-    wait_turn(&app, session, turn, "interrupted").await;
+    wait_turn(&app, session, &turn, "interrupted").await;
     let history = get(&app, &format!("{path}/turns/timeline?direction=backward")).await;
     assert!(history.to_string().contains("streamed answer"), "{history}");
     let (status, body) = call(&app, "POST", &format!("{path}/exit"), json!({})).await;

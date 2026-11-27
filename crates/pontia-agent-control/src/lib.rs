@@ -36,9 +36,7 @@ pub use client_contract::{
 pub use clients::ClientControlService;
 pub use context::AgentControl;
 pub use control::ControlCommandOutcome;
-pub use inbox::{
-    InboxCommandOutcome, InboxCommandService, SendMode, SendOutcome, SubmitInboxMessageRequest,
-};
+pub use inbox::{InboxCommandService, SendMode, SendOutcome};
 pub use ingestion::{
     EventIngestResult, EventIngestService, EventReportError, EventReportNormalizer,
     InternalEventValidationService, PontiaEvent, PontiaEventSource, PontiaEventType, ReportedFact,
@@ -67,9 +65,8 @@ pub use sessions::{
 };
 pub use turns::TurnCommandService;
 pub use views::{
-    ContextUsageCapability, ContextUsageView, EventStreamScope, EventView, InboxInputView,
-    InboxMessageView, SessionCapabilities, SessionLineageView, SessionView, TurnInputView,
-    TurnOutputView, TurnView,
+    ContextUsageCapability, ContextUsageView, EventStreamScope, EventView, QueuedMessageView,
+    SessionCapabilities, SessionLineageView, SessionView, TurnInputView, TurnOutputView, TurnView,
 };
 
 pub use workspaces::{WorkspaceRecord, get_workspace_record};

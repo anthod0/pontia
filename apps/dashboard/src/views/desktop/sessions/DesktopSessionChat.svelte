@@ -31,16 +31,14 @@
         gitStatus={chat.selectedSessionGitStatus}
         metadataItems={chat.selectedSessionMetadataItems}
         metadataSummary={chat.selectedSessionMetadataSummary}
-        queuedMessages={chat.visibleInboxMessages}
-        inboxBusyMessageId={chat.inboxActionMessageId ?? chat.pendingInboxSubmissionId}
+        queuedMessages={chat.queuedMessages}
+        queueBusyMessageId={chat.queueActionMessageId}
         submitting={chat.submitting}
         actionBusy={chat.actionBusy}
         compaction={chat.selectedCompaction}
         canSend={chat.canSend}
         autofocus={chat.autofocusComposer}
-        onCancelInboxMessage={(message) => void chat.cancelPendingInboxMessage(message)}
-        onRetryInboxMessage={(message) => void chat.retryFailedInboxMessage(message)}
-        onDismissInboxMessage={(message) => void chat.dismissFailedInboxMessage(message)}
+        onCancelQueuedMessage={(message) => void chat.cancelQueueMessage(message)}
         onSend={chat.sendMessage}
         onInterrupt={() => void chat.interruptSelectedSession()}
         onFocus={() => void chat.refreshCurrentSessionGitStatus()}

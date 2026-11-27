@@ -1,10 +1,9 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
-  import type { InboxDeliveryPolicy, InboxMessageView, SessionView, WorkspaceGitStatusView } from '../../api/types'
+  import type { MessageMode, QueuedMessageView, SessionView, WorkspaceGitStatusView } from '../../api/types'
   import { canSendSessionMessage } from '$lib/session-chat/sessionChat'
   import MessageComposer from './MessageComposer.svelte'
   import QueuedMessages from './QueuedMessages.svelte'
-  import InboxSubmissionRecovery from './InboxSubmissionRecovery.svelte'
   import SessionMetadata from './SessionMetadata.svelte'
   import { type SessionMetadataItem } from './sessionMetadata'
   import type { ChatCommand } from '$lib/chatCommands'
@@ -17,8 +16,8 @@
     gitStatus?: WorkspaceGitStatusView
     metadataItems: SessionMetadataItem[]
     metadataSummary: string
-    queuedMessages: InboxMessageView[]
-    inboxBusyMessageId: string | null
+    queuedMessages: QueuedMessageView[]
+    queueBusyMessageId: string | null
     input: string
     height?: number
     submitting?: boolean
@@ -26,10 +25,8 @@
     compaction?: ReturnType<typeof compactionStatus>
     canSend?: boolean
     autofocus?: boolean
-    onCancelInboxMessage: (message: InboxMessageView) => void
-    onRetryInboxMessage: (message: InboxMessageView) => void
-    onDismissInboxMessage: (message: InboxMessageView) => void
-    onSend: (message: string, deliveryPolicy: InboxDeliveryPolicy) => Promise<boolean>
+    onCancelQueuedMessage: (message: QueuedMessageView) => void
+    onSend: (message: string, mode: MessageMode) => Promise<boolean>
     onInterrupt: () => void
     onFocus: () => void
     onRefreshGitStatus: () => void
@@ -42,7 +39,7 @@
     metadataItems,
     metadataSummary,
     queuedMessages,
-    inboxBusyMessageId,
+    queueBusyMessageId,
     input = $bindable(''),
     height = $bindable(0),
     submitting = false,
@@ -50,9 +47,7 @@
     compaction = null,
     canSend = false,
     autofocus = false,
-    onCancelInboxMessage,
-    onRetryInboxMessage,
-    onDismissInboxMessage,
+    onCancelQueuedMessage,
     onSend,
     onInterrupt,
     onFocus,
@@ -69,14 +64,11 @@
     {#if compaction?.phase === 'failed'}
       <p role="alert" class="mb-2 text-xs text-destructive">{compaction.message}</p>
     {/if}
-    <InboxSubmissionRecovery sessionId={session.session_id} />
     <QueuedMessages
       sessionId={session.session_id}
       messages={queuedMessages}
-      busyMessageId={inboxBusyMessageId}
-      onCancel={onCancelInboxMessage}
-      onRetry={onRetryInboxMessage}
-      onDismiss={onDismissInboxMessage}
+      busyMessageId={queueBusyMessageId}
+      onCancel={onCancelQueuedMessage}
     />
     <MessageComposer draftId={`session:${session.session_id}`} bind:value={input} {commands} workspaceId={session.workspace_id} busy={submitting} disabled={composerDisabled} submitDisabled={!canSend} fullscreen {autofocus} {interruptMode} interruptBusy={actionBusy} onSubmit={onSend} {onInterrupt} {onFocus}>
       {#snippet header()}

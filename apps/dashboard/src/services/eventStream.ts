@@ -232,7 +232,6 @@ export function createEvents(device: DeviceRuntime) {
 
   function handleDashboardEvent(streamEvent: DashboardStreamEvent, cursor: string | null): void {
     if (cursor) device.connection.dashboardStreamCursor.set(cursor);
-    device.inboxQueries.reconcileInboxSubmissionForDashboardEvent(streamEvent);
     void device.invalidation.invalidateQueriesForDashboardEvent(streamEvent);
     refreshScheduler.handleEvent(streamEvent);
     for (const listener of dashboardEventListeners) listener(streamEvent);

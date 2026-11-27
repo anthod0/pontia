@@ -29,7 +29,7 @@ function detail(topology: boolean): SessionConsoleDetail {
       metadata: {},
     },
     turns: [],
-    inboxMessages: [],
+    queuedMessages: [],
     events: [],
   };
 }

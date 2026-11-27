@@ -300,17 +300,7 @@ export type SessionState =
   | "error";
 export type TurnState = "queued" | "running" | "completed" | "failed" | "interrupted";
 export type TurnTopologyStatus = "unknown" | "root" | "linked";
-export type InboxDeliveryPolicy = "after_idle" | "interrupt_now" | "steer";
-export type InboxMessageState =
-  | "resuming"
-  | "unknown"
-  | "pending"
-  | "dispatching"
-  | "dispatched"
-  | "cancelled"
-  | "superseded"
-  | "failed"
-  | "dismissed";
+export type MessageMode = "immediate" | "queue" | "interrupt";
 export type WorkflowState =
   | "pending"
   | "running"
@@ -719,25 +709,15 @@ export interface TurnView {
   metadata: JsonObject;
 }
 
-export interface InboxMessageView {
+export interface QueuedMessageView {
   message_id: string;
   session_id: string;
-  state: InboxMessageState | string;
-  delivery_policy: InboxDeliveryPolicy | string;
-  input: { summary: string; [key: string]: unknown };
+  input: string;
   metadata: JsonObject;
-  branch_target_turn_id: string | null;
-  turn_id: string | null;
-  steer_target_turn_id: string | null;
-  retry_of_message_id: string | null;
-  retried_by_message_id: string | null;
-  superseded_by_message_id: string | null;
-  failure_message: string | null;
   created_at: string;
-  updated_at: string;
-  dispatched_at: string | null;
-  cancelled_at: string | null;
 }
+
+export type MessageDelivery = { status: "delivered" } | { status: "queued"; message_id: string };
 
 /** A file of a message's attachments block. */
 export interface AttachedFile {
@@ -886,9 +866,9 @@ export interface SubmitTurnInput {
   metadata?: JsonObject;
 }
 
-export interface SubmitInboxMessageInput {
+export interface SendMessageInput {
   input: string;
-  delivery_policy?: InboxDeliveryPolicy;
+  mode?: MessageMode;
   metadata?: JsonObject;
 }
 

@@ -1,5 +1,5 @@
 use pontia_agent_control::{
-    AgentControl, CreateSessionRequest, SubmitInboxMessageRequest,
+    AgentControl, CreateSessionRequest, SendMode, SendOutcome,
     client_contract::ClientServicePhase,
     clients::{ClientRegistry, ClientServiceTasks},
 };
@@ -509,14 +509,7 @@ impl Harness {
     async fn submit(&self, session: &str, text: &str) {
         self.app
             .inbox_commands()
-            .submit_message(
-                session,
-                SubmitInboxMessageRequest {
-                    input: text.into(),
-                    metadata: json!({}),
-                    delivery_policy: "after_idle".into(),
-                },
-            )
+            .send(session, text.into(), SendMode::Queue)
             .await
             .unwrap();
     }
@@ -709,8 +702,7 @@ impl Harness {
             .tree_history(session.into(), None, 50)
             .await
     }
-    async fn resume_input(&self, session: &str, text: &str) -> Value {
-        let message = uuid::Uuid::new_v4().to_string();
+    async fn resume_input(&self, session: &str, text: &str) -> SendOutcome {
         self.app
             .session_commands()
             .resume_for_input(session)
@@ -718,18 +710,9 @@ impl Harness {
             .unwrap();
         self.app
             .inbox_commands()
-            .submit_message_once(
-                &message,
-                session,
-                SubmitInboxMessageRequest {
-                    input: text.into(),
-                    delivery_policy: "after_idle".into(),
-                    metadata: json!({}),
-                },
-            )
+            .send(session, text.into(), SendMode::Queue)
             .await
             .unwrap()
-            .data
     }
 }
 
@@ -868,7 +851,7 @@ async fn exited_sessions_read_and_resume_their_own_history_in_a_shared_workspace
                 .timeline
         );
         let result = h.resume_input(session, &format!("{text} continued")).await;
-        assert_eq!(result["inbox_message"]["state"], "dispatched", "{result}");
+        assert_eq!(result, SendOutcome::Delivered);
         h.wait_inputs(session, 2).await;
         h.gate(session, 2, "start");
         h.gate(session, 2, "finish");
@@ -967,7 +950,7 @@ async fn relative_config_directory_is_bound_to_the_execution_workspace() {
     let result = h
         .resume_input(&session, "same relative configuration")
         .await;
-    assert_eq!(result["inbox_message"]["state"], "dispatched", "{result}");
+    assert_eq!(result, SendOutcome::Delivered);
     h.wait_inputs(&session, 2).await;
     h.stop().await;
 }
@@ -1009,7 +992,7 @@ async fn closed_history_and_resume_survive_a_control_service_restart() {
         "durable conversation"
     );
     let result = h.resume_input(&session, "after service restart").await;
-    assert_eq!(result["inbox_message"]["state"], "dispatched", "{result}");
+    assert_eq!(result, SendOutcome::Delivered);
     h.wait_inputs(&session, 2).await;
     h.gate(&session, 2, "start");
     h.gate(&session, 2, "finish");
@@ -1102,7 +1085,7 @@ async fn host_loss_allows_manual_and_input_driven_resume_after_process_exit() {
         );
         if input_driven {
             let result = h.resume_input(&session, "automatic recovery").await;
-            assert_eq!(result["inbox_message"]["state"], "dispatched");
+            assert_eq!(result, SendOutcome::Delivered);
         } else {
             h.app
                 .session_commands()
@@ -1169,7 +1152,7 @@ async fn host_exit_after_the_control_socket_closes_still_allows_resume() {
     h.wait_session(&session, "exited").await;
     h.wait_states(&session, &["interrupted"]).await;
     let result = h.resume_input(&session, "after delayed exit").await;
-    assert_eq!(result["inbox_message"]["state"], "dispatched");
+    assert_eq!(result, SendOutcome::Delivered);
     h.wait_inputs(&session, 2).await;
     h.stop().await;
 }
@@ -2110,19 +2093,10 @@ async fn steering_uses_the_active_turn_while_after_idle_waits() {
     let steered = h
         .app
         .inbox_commands()
-        .submit_message(
-            &session,
-            SubmitInboxMessageRequest {
-                input: "correction".into(),
-                metadata: json!({}),
-                delivery_policy: "steer".into(),
-            },
-        )
+        .send(&session, "correction".into(), SendMode::Immediate)
         .await
         .unwrap();
-    let steered = steered.data;
-    assert_eq!(steered["inbox_message"]["state"], "dispatched");
-    assert_eq!(steered["inbox_message"]["turn_id"], turns[0].0);
+    assert_eq!(steered, pontia_agent_control::SendOutcome::Delivered);
     let wire = h.wire(&session);
     let steering = wire.iter().find(|v| v["method"] == "steer").unwrap();
     assert!(steering.get("target_input_id").is_none());
@@ -2424,7 +2398,7 @@ async fn compacted_sdk_history_keeps_readable_turns_and_resumes_without_private_
         .await
         .unwrap();
     let receipt = h.resume_input(&session, "after compact resume").await;
-    assert_eq!(receipt["inbox_message"]["state"], "dispatched");
+    assert_eq!(receipt, SendOutcome::Delivered);
     h.wait_inputs(&session, 3).await;
     h.gate(&session, 3, "start");
     h.gate(&session, 3, "finish");

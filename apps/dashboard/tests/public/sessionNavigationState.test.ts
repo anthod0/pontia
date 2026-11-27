@@ -8,7 +8,7 @@ test("leaving a device's real chat page preserves its timeline and selection thr
   window.history.replaceState({}, "", "/office-mac/chat/same");
   const selected = session({ session_id: "same" });
   mocks.loadedSessions = [selected];
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], queuedMessages: [], events: [] });
   const view = render(SessionChatPage);
   await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith("same"));
   await waitFor(() => expect(mocks.timelineState.get().status).toBe("empty"));

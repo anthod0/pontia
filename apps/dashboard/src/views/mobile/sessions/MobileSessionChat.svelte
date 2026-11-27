@@ -12,7 +12,6 @@
   import SessionFeed from '../../shared/sessions/SessionFeed.svelte'
   import MobileMessageComposer from '../chat/MobileMessageComposer.svelte'
   import QueuedMessages from '../../../components/chat/QueuedMessages.svelte'
-  import InboxSubmissionRecovery from '../../../components/chat/InboxSubmissionRecovery.svelte'
   import RenameSessionDialog from '../../../components/chat/RenameSessionDialog.svelte'
   import MobileSessionActionSheet from './MobileSessionActionSheet.svelte'
   import MobileSessionStepsCard from './MobileSessionStepsCard.svelte'
@@ -68,14 +67,11 @@
     use:chromeMetrics={'--mobile-footer-h'}
   >
     <MobileSessionInteractions sessionId={session.session_id} />
-    <InboxSubmissionRecovery sessionId={session.session_id} />
     <QueuedMessages
       sessionId={session.session_id}
-      messages={chat.visibleInboxMessages}
-      busyMessageId={chat.inboxActionMessageId ?? chat.pendingInboxSubmissionId}
-      onCancel={chat.cancelPendingInboxMessage}
-      onRetry={chat.retryFailedInboxMessage}
-      onDismiss={chat.dismissFailedInboxMessage}
+      messages={chat.queuedMessages}
+      busyMessageId={chat.queueActionMessageId}
+      onCancel={chat.cancelQueueMessage}
     />
     {#if chat.selectedCompaction?.phase === 'failed'}<p role="alert">{chat.selectedCompaction.message}</p>{/if}
     <MobileSessionMetaStrip
@@ -90,7 +86,7 @@
       autofocus={chat.autofocusComposer}
       busy={chat.submitting || chat.actionBusy}
       submitDisabled={!chat.canSend}
-      onSubmit={(text) => chat.sendMessage(text, 'steer')}
+      onSubmit={(text) => chat.sendMessage(text, 'immediate')}
       onInterrupt={isExecutingSessionState(session.state) && session.capabilities.interrupt
         ? chat.interruptSelectedSession
         : undefined}

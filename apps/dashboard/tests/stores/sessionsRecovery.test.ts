@@ -39,7 +39,7 @@ function sessionEvent(type: string, sessionId = "a"): DashboardStreamEvent {
 beforeEach(() => {
   vi.spyOn(api, "getSession").mockImplementation(async (id) => session(id));
   vi.spyOn(api, "listTurns").mockResolvedValue([]);
-  vi.spyOn(api, "listInboxMessages").mockResolvedValue([]);
+  vi.spyOn(api, "listQueue").mockResolvedValue([]);
   vi.spyOn(api, "listEvents").mockResolvedValue([]);
   selectSession("a");
 });

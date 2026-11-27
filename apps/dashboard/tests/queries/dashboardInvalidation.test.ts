@@ -81,7 +81,7 @@ test("a session event invalidates its session snapshots and every overview varia
 test("connection recovery invalidates mutable snapshots without expiring immutable or optimistic data", async () => {
   const sessionKey = sessionKeys.detail("session-1");
   const workflowDetailKey = workflowKeys.detail("workflow-1");
-  const optimisticKey = sessionKeys.optimisticInbox();
+  const optimisticKey = sessionKeys.optimisticChat();
   for (const key of [sessionKey, workflowDetailKey, optimisticKey]) {
     queryClient.setQueryData(key, {});
   }

@@ -21,7 +21,7 @@ mod raw_transcript;
 mod runtime_binding;
 mod runtime_lifecycle;
 mod session_create;
-mod session_inbox;
+mod session_messages;
 mod session_overview;
 mod session_reasoning_effort;
 mod session_workspace_linking;

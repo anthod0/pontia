@@ -1,31 +1,63 @@
 use super::*;
 
-async fn submit(h: &Harness, session: &str, policy: &str) -> Value {
-    h.app
+#[derive(Debug)]
+enum Submission {
+    Delivered { turn_id: Option<String> },
+    Queued { message_id: String },
+    Error(pontia_agent_control::DeliveryError),
+}
+
+impl Submission {
+    fn delivered_turn(&self) -> &str {
+        match self {
+            Self::Delivered {
+                turn_id: Some(turn_id),
+            } => turn_id,
+            outcome => panic!("expected delivered turn, got {outcome:?}"),
+        }
+    }
+
+    fn queued_message_id(&self) -> &str {
+        match self {
+            Self::Queued { message_id } => message_id,
+            outcome => panic!("expected queued message, got {outcome:?}"),
+        }
+    }
+}
+
+async fn submit(h: &Harness, session: &str, mode: SendMode) -> Submission {
+    match h
+        .app
         .inbox_commands()
-        .submit_message(
-            session,
-            SubmitInboxMessageRequest {
-                input: "end_turn".into(),
-                delivery_policy: policy.into(),
-                metadata: json!({}),
-            },
-        )
+        .send(session, "end_turn".into(), mode)
         .await
-        .unwrap()
-        .data["inbox_message"]
-        .clone()
+    {
+        Ok(SendOutcome::Delivered) => {
+            let turn_id = sqlx::query_scalar::<_, String>(
+                "SELECT turn_id FROM turns WHERE session_id=? ORDER BY created_at DESC LIMIT 1",
+            )
+            .bind(session)
+            .fetch_optional(&h.app.db())
+            .await
+            .unwrap();
+            Submission::Delivered { turn_id }
+        }
+        Ok(SendOutcome::Queued { message_id }) => Submission::Queued { message_id },
+        Err(error) => Submission::Error(error),
+    }
 }
 
 async fn start(h: &Harness, session: &str) -> String {
-    let message = submit(h, session, "steer").await;
-    let turn = message["turn_id"].as_str().unwrap().to_owned();
+    let turn = submit(h, session, SendMode::Immediate)
+        .await
+        .delivered_turn()
+        .to_owned();
     h.release("update-1");
     h.wait_turn(session, &turn, "running").await;
     turn
 }
 
-async fn finish_queued(h: &Harness, session: &str, turn: &str, message: &Value) {
+async fn finish_queued(h: &Harness, session: &str, turn: &str, message_id: &str) {
     h.release("release-1");
     h.wait_turn(session, turn, "completed").await;
     tokio::time::timeout(Duration::from_secs(5), async {
@@ -44,16 +76,16 @@ async fn finish_queued(h: &Harness, session: &str, turn: &str, message: &Value) 
     })
     .await
     .unwrap();
-    let delivered = h
-        .app
-        .inbox_commands()
-        .get_message(session, message["message_id"].as_str().unwrap())
-        .await
-        .unwrap()
-        .unwrap();
-    let delivered = serde_json::to_value(delivered).unwrap();
-    assert_eq!(delivered["state"], "dispatched");
-    assert_ne!(delivered["turn_id"], turn);
+    assert!(
+        h.app
+            .inbox_commands()
+            .get_message(session, message_id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let turns = h.app.queries().list_turns(session).await.unwrap();
+    assert_ne!(turns.last().unwrap().turn_id, turn);
     assert_eq!(h.requests("session/cancel"), 0);
     assert!(!h.wire().iter().any(|item| item["overlap"] == true));
 }
@@ -90,14 +122,11 @@ async fn unsupported_steer_silently_waits_in_inbox_until_idle() {
             .steer
     );
     let turn = start(&h, &session).await;
-    let message = submit(&h, &session, "steer").await;
-    assert_eq!(message["state"], "pending");
-    assert_eq!(message["delivery_policy"], "after_idle");
-    assert!(message["failure_message"].is_null());
-    assert!(message["turn_id"].is_null());
+    let message = submit(&h, &session, SendMode::Immediate).await;
+    let message_id = message.queued_message_id().to_owned();
     assert_eq!(h.requests("_session/steering"), 0);
     assert_eq!(h.requests("session/prompt"), 1);
-    finish_queued(&h, &session, &turn, &message).await;
+    finish_queued(&h, &session, &turn, &message_id).await;
     h.stop().await;
 }
 
@@ -116,11 +145,10 @@ async fn advertised_steering_joins_current_turn_and_after_idle_waits() {
             .steer
     );
     let turn = start(&h, &session).await;
-    let queued = submit(&h, &session, "after_idle").await;
+    let queued = submit(&h, &session, SendMode::Queue).await;
     for _ in 0..2 {
-        let message = submit(&h, &session, "steer").await;
-        assert_eq!(message["state"], "dispatched");
-        assert_eq!(message["turn_id"], turn);
+        let message = submit(&h, &session, SendMode::Immediate).await;
+        assert_eq!(message.delivered_turn(), turn);
     }
     assert_eq!(h.requests("_session/steering"), 2);
     assert_eq!(h.requests("session/prompt"), 1);
@@ -151,7 +179,7 @@ async fn advertised_steering_joins_current_turn_and_after_idle_waits() {
             "promptRequired"
         );
     }
-    finish_queued(&h, &session, &turn, &queued).await;
+    finish_queued(&h, &session, &turn, queued.queued_message_id()).await;
     for restart in [false, true] {
         if restart {
             h.restart().await;
@@ -195,9 +223,8 @@ async fn antigravity_finishes_the_running_turn_with_the_latest_prompt() {
         .turn_id;
     h.release("update-1");
     h.wait_turn(&session, &turn, "running").await;
-    let message = submit(&h, &session, "steer").await;
-    assert_eq!(message["turn_id"], turn);
-    assert_eq!(message["state"], "dispatched");
+    let message = submit(&h, &session, SendMode::Immediate).await;
+    assert_eq!(message.delivered_turn(), turn);
     expect_pending_history(&h, &session).await;
     h.release("release-1");
     h.release("update-2");
@@ -226,7 +253,12 @@ async fn antigravity_replays_an_interrupted_prompt_before_the_next_input() {
     let h = Harness::new(&[("ACP_ANTIGRAVITY", "1")]).await;
     let session = h.create("antigravity").await.unwrap();
     let turn = start(&h, &session).await;
-    assert_eq!(submit(&h, &session, "steer").await["turn_id"], turn);
+    assert_eq!(
+        submit(&h, &session, SendMode::Immediate)
+            .await
+            .delivered_turn(),
+        turn
+    );
     h.release("release-1");
     h.release("update-2");
     h.release("release-2");
@@ -282,13 +314,18 @@ async fn antigravity_replays_an_interrupted_prompt_before_the_next_input() {
 
 /// Runs one steered Antigravity Turn whose prompts are numbered from `first`.
 async fn steered_turn(h: &Harness, session: &str, first: usize) {
-    let turn = submit(h, session, "steer").await["turn_id"]
-        .as_str()
-        .unwrap()
+    let turn = submit(h, session, SendMode::Immediate)
+        .await
+        .delivered_turn()
         .to_owned();
     h.release(&format!("update-{first}"));
     h.wait_turn(session, &turn, "running").await;
-    assert_eq!(submit(h, session, "steer").await["turn_id"], turn);
+    assert_eq!(
+        submit(h, session, SendMode::Immediate)
+            .await
+            .delivered_turn(),
+        turn
+    );
     h.release(&format!("release-{first}"));
     h.release(&format!("update-{}", first + 1));
     h.release(&format!("release-{}", first + 1));
@@ -317,10 +354,10 @@ async fn antigravity_accepts_a_running_step_replayed_before_its_history() {
     let stopped = server("failed");
     lines.insert(1, &stopped);
     std::fs::write(&path, lines.join("\n")).unwrap();
-    let next = submit(&h, &session, "steer").await;
+    let next = submit(&h, &session, SendMode::Immediate).await;
     h.release("update-5");
     h.release("release-5");
-    h.wait_turn(&session, next["turn_id"].as_str().unwrap(), "completed")
+    h.wait_turn(&session, next.delivered_turn(), "completed")
         .await;
     assert_eq!(h.events(&session, "turn.dispatch_failed").await, 0);
     assert_eq!(h.requests("session/prompt"), 5);
@@ -336,13 +373,11 @@ async fn prompt_required_keeps_unconsumed_steer_queued() {
     .await;
     let session = h.create("first").await.unwrap();
     let turn = start(&h, &session).await;
-    let message = submit(&h, &session, "steer").await;
-    assert_eq!(message["state"], "pending");
-    assert_eq!(message["delivery_policy"], "after_idle");
-    assert!(message["failure_message"].is_null());
+    let message = submit(&h, &session, SendMode::Immediate).await;
+    let message_id = message.queued_message_id().to_owned();
     assert_eq!(h.requests("_session/steering"), 1);
     assert_eq!(h.requests("session/prompt"), 1);
-    finish_queued(&h, &session, &turn, &message).await;
+    finish_queued(&h, &session, &turn, &message_id).await;
     assert_eq!(h.requests("_session/steering"), 1);
     h.stop().await;
 }
@@ -356,9 +391,8 @@ async fn unavailable_steering_method_waits_until_idle_and_disables_steer() {
     .await;
     let session = h.create("first").await.unwrap();
     let turn = start(&h, &session).await;
-    let message = submit(&h, &session, "steer").await;
-    assert_eq!(message["state"], "pending");
-    assert_eq!(message["delivery_policy"], "after_idle");
+    let message = submit(&h, &session, SendMode::Immediate).await;
+    let message_id = message.queued_message_id().to_owned();
     assert!(
         !h.app
             .queries()
@@ -369,7 +403,7 @@ async fn unavailable_steering_method_waits_until_idle_and_disables_steer() {
             .capabilities
             .steer
     );
-    finish_queued(&h, &session, &turn, &message).await;
+    finish_queued(&h, &session, &turn, &message_id).await;
     assert_eq!(h.requests("_session/steering"), 1);
     h.stop().await;
 }
@@ -383,8 +417,11 @@ async fn lost_steering_receipt_is_unknown_and_not_replayed() {
     .await;
     let session = h.create("first").await.unwrap();
     let turn = start(&h, &session).await;
-    let message = submit(&h, &session, "steer").await;
-    assert_eq!(message["state"], "unknown");
+    let message = submit(&h, &session, SendMode::Immediate).await;
+    assert!(matches!(
+        message,
+        Submission::Error(pontia_agent_control::DeliveryError::Uncertain(_))
+    ));
     assert_eq!(h.requests("_session/steering"), 1);
     h.app.inbox_commands().drain_inbox(&session).await.unwrap();
     assert_eq!(h.requests("session/prompt"), 1);
@@ -404,7 +441,7 @@ async fn lost_steering_receipt_is_unknown_and_not_replayed() {
 
 #[tokio::test]
 async fn live_input_queues_only_when_the_busy_peer_lacks_steering() {
-    use pontia_agent_control::{DeliveryError, SendMode, SendOutcome};
+    use pontia_agent_control::{SendMode, SendOutcome};
     for supported in [false, true] {
         let h = Harness::new(&[("ACP_STEERING", if supported { "1" } else { "0" })]).await;
         let session = h.create("first").await.unwrap();
@@ -435,24 +472,10 @@ async fn live_input_queues_only_when_the_busy_peer_lacks_steering() {
             h.release("release-1");
             h.wait_turn(&session, &turn, "completed").await;
         } else {
-            assert!(matches!(receipt, Err(DeliveryError::Unsupported(_))));
-            assert!(matches!(
-                inbox
-                    .send(&session, "end_turn".into(), SendMode::Queue)
-                    .await
-                    .unwrap(),
-                SendOutcome::Queued { .. }
-            ));
+            assert!(matches!(receipt.unwrap(), SendOutcome::Queued { .. }));
             let messages = inbox.list_messages(&session).await.unwrap();
             assert_eq!(messages.len(), 1);
-            assert_eq!(messages[0].state, "pending");
-            finish_queued(
-                &h,
-                &session,
-                &turn,
-                &serde_json::to_value(&messages[0]).unwrap(),
-            )
-            .await;
+            finish_queued(&h, &session, &turn, &messages[0].message_id).await;
         }
         h.stop().await;
     }
@@ -472,16 +495,6 @@ async fn missing_interject_queues_live_input_and_disables_only_this_peer() {
                 "end_turn".into(),
                 pontia_agent_control::SendMode::Immediate,
             )
-            .await,
-        Err(pontia_agent_control::DeliveryError::Unsupported(_))
-    ));
-    assert!(matches!(
-        inbox
-            .send(
-                &session,
-                "end_turn".into(),
-                pontia_agent_control::SendMode::Queue,
-            )
             .await
             .unwrap(),
         pontia_agent_control::SendOutcome::Queued { .. }
@@ -497,13 +510,7 @@ async fn missing_interject_queues_live_input_and_disables_only_this_peer() {
             .capabilities
             .steer
     );
-    finish_queued(
-        &h,
-        &session,
-        &turn,
-        &serde_json::to_value(messages.iter().find(|m| m.state == "pending").unwrap()).unwrap(),
-    )
-    .await;
+    finish_queued(&h, &session, &turn, &messages.first().unwrap().message_id).await;
     assert_eq!(h.requests("_x.ai/interject"), 1);
     h.stop().await;
 }
@@ -518,20 +525,10 @@ async fn native_interjections_keep_distinct_inputs_in_wire_and_replay_order() {
             let msg = h
                 .app
                 .inbox_commands()
-                .submit_message(
-                    &session,
-                    SubmitInboxMessageRequest {
-                        input: "再看一下🦓".into(),
-                        metadata: json!({}),
-                        delivery_policy: "steer".into(),
-                    },
-                )
+                .send(&session, "再看一下🦓".into(), SendMode::Immediate)
                 .await
-                .unwrap()
-                .data["inbox_message"]
-                .clone();
-            assert_eq!(msg["state"], "dispatched", "{mode} {msg}");
-            assert!(msg["turn_id"].is_null());
+                .unwrap();
+            assert_eq!(msg, SendOutcome::Delivered, "{mode}");
         }
         tokio::time::timeout(Duration::from_secs(5), async {
             loop {
@@ -589,7 +586,10 @@ async fn unrecognized_interjection_receipt_keeps_the_prompt_running_without_resu
     let h = Harness::new(&[("ACP_INTERJECT", "unknown")]).await;
     let session = h.create("first").await.unwrap();
     let turn = start(&h, &session).await;
-    assert_eq!(submit(&h, &session, "steer").await["state"], "unknown");
+    assert!(matches!(
+        submit(&h, &session, SendMode::Immediate).await,
+        Submission::Error(pontia_agent_control::DeliveryError::Uncertain(_))
+    ));
     h.release("release-1");
     h.wait_turn(&session, &turn, "completed").await;
     h.app.inbox_commands().drain_inbox(&session).await.unwrap();
@@ -604,10 +604,8 @@ async fn unavailable_interjection_method_returns_dashboard_message_to_inbox() {
     let h = Harness::new(&[("ACP_INTERJECT", "unsupported")]).await;
     let session = h.create("first").await.unwrap();
     let turn = start(&h, &session).await;
-    let message = submit(&h, &session, "steer").await;
-    assert_eq!(message["delivery_policy"], "after_idle");
-    assert_eq!(message["state"], "pending");
-    finish_queued(&h, &session, &turn, &message).await;
+    let message = submit(&h, &session, SendMode::Immediate).await;
+    finish_queued(&h, &session, &turn, message.queued_message_id()).await;
     assert_eq!(h.requests("_x.ai/interject"), 1);
     h.stop().await;
 }
@@ -617,7 +615,10 @@ async fn disconnected_interjection_is_unknown_and_never_resubmitted() {
     let h = Harness::new(&[("ACP_INTERJECT", "disconnect")]).await;
     let session = h.create("first").await.unwrap();
     start(&h, &session).await;
-    assert_eq!(submit(&h, &session, "steer").await["state"], "unknown");
+    assert!(matches!(
+        submit(&h, &session, SendMode::Immediate).await,
+        Submission::Error(pontia_agent_control::DeliveryError::Uncertain(_))
+    ));
     h.app.inbox_commands().drain_inbox(&session).await.unwrap();
     assert_eq!(h.requests("session/prompt"), 1);
     assert_eq!(h.requests("_x.ai/interject"), 1);
@@ -644,15 +645,14 @@ async fn kiro_injects_into_the_running_turn_and_filters_live_and_replayed_notes(
     let h = Harness::new(&[("ACP_KIRO", "1"), ("ACP_KIRO_STEER", "inject")]).await;
     let session = h.create("kiro").await.unwrap();
     let turn = start(&h, &session).await;
-    let mut delivery = Box::pin(submit(&h, &session, "steer"));
+    let mut delivery = Box::pin(submit(&h, &session, SendMode::Immediate));
     tokio::select! {
         _ = &mut delivery => panic!("steering completed before injection"),
         _ = wait_fixture_response(&h, "steer-queued-barrier") => {}
     }
     h.release("inject");
     let message = delivery.await;
-    assert_eq!(message["state"], "dispatched");
-    assert_eq!(message["turn_id"], turn);
+    assert_eq!(message.delivered_turn(), turn);
     let items = tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             let live = h.app.live_output().snapshot(&session, &turn).unwrap();
@@ -696,7 +696,7 @@ async fn kiro_queued_without_matching_injection_is_undelivered() {
         let h = Harness::new(&[("ACP_KIRO", "1"), ("ACP_KIRO_STEER", mode)]).await;
         let session = h.create("kiro").await.unwrap();
         let turn = start(&h, &session).await;
-        let mut delivery = Box::pin(submit(&h, &session, "steer"));
+        let mut delivery = Box::pin(submit(&h, &session, SendMode::Immediate));
         tokio::select! {
             _ = &mut delivery => panic!("unmatched injection completed steering"),
             _ = wait_fixture_response(&h, "steer-queued-barrier") => {}
@@ -709,8 +709,13 @@ async fn kiro_queued_without_matching_injection_is_undelivered() {
             h.release("release-1");
         }
         let receipt = delivery.await;
-        assert_eq!(receipt["state"], if timeout { "unknown" } else { "failed" });
-        assert!(receipt["turn_id"].is_null());
+        assert!(matches!(&receipt, Submission::Error(_)));
+        if timeout {
+            assert!(matches!(
+                &receipt,
+                Submission::Error(pontia_agent_control::DeliveryError::Uncertain(_))
+            ));
+        }
         if timeout {
             h.release("inject");
             wait_fixture_response(&h, "steer-barrier").await;
@@ -738,9 +743,8 @@ async fn unavailable_kiro_steering_method_waits_until_idle_and_disables_steer() 
     let h = Harness::new(&[("ACP_KIRO", "1"), ("ACP_KIRO_STEER", "unsupported")]).await;
     let session = h.create("kiro").await.unwrap();
     let turn = start(&h, &session).await;
-    let message = submit(&h, &session, "steer").await;
-    assert_eq!(message["state"], "pending");
-    assert_eq!(message["delivery_policy"], "after_idle");
+    let message = submit(&h, &session, SendMode::Immediate).await;
+    let message_id = message.queued_message_id().to_owned();
     assert!(
         !h.app
             .queries()
@@ -751,7 +755,7 @@ async fn unavailable_kiro_steering_method_waits_until_idle_and_disables_steer() 
             .capabilities
             .steer
     );
-    finish_queued(&h, &session, &turn, &message).await;
+    finish_queued(&h, &session, &turn, &message_id).await;
     assert_eq!(h.requests("_session/steer"), 2);
     h.stop().await;
 }
@@ -762,7 +766,12 @@ async fn kiro_hides_the_rest_of_a_note_after_controller_reattachment() {
     let session = h.create("kiro").await.unwrap();
     let turn = start(&h, &session).await;
     h.release("inject");
-    assert_eq!(submit(&h, &session, "steer").await["turn_id"], turn);
+    assert_eq!(
+        submit(&h, &session, SendMode::Immediate)
+            .await
+            .delivered_turn(),
+        turn
+    );
     wait_fixture_response(&h, "note-barrier").await;
     h.restart().await;
     tokio::time::timeout(Duration::from_secs(10), async {

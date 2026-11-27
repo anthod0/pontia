@@ -1,12 +1,7 @@
 import { translate as defaultTranslate, type Translator } from "$lib/i18n";
 import { clientSessionLabel } from "../../clients";
 import { contextUsageSummary } from "$lib/contextUsage";
-import type {
-  InboxMessageView,
-  SessionView,
-  WorkspaceGitStatusView,
-  WorkspaceView,
-} from "../../api/types";
+import type { SessionView, WorkspaceGitStatusView, WorkspaceView } from "../../api/types";
 
 export type SessionMetadataItem = {
   key: string;
@@ -218,18 +213,4 @@ export function sessionMetadataSummary(
 ): string {
   if (!items.length) return translate("chat.details");
   return items.map((item) => item.value).join(" · ");
-}
-
-export function visibleChatInboxMessages(messages: InboxMessageView[]): InboxMessageView[] {
-  return messages.filter(
-    (message) => !message.retried_by_message_id && ["pending", "failed"].includes(message.state),
-  );
-}
-
-export function inboxBadgeVariant(
-  message: InboxMessageView,
-): "default" | "secondary" | "destructive" | "outline" {
-  if (message.state === "failed") return "destructive";
-  if (message.state === "dispatching") return "outline";
-  return "secondary";
 }

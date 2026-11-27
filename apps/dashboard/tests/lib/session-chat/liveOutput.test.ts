@@ -151,7 +151,7 @@ test("consumed user input appears at its position and replaces its transcript co
   const steeredTranscript: SessionChatMessage[] = [
     ...transcript,
     {
-      id: "native-steer",
+      id: "native-immediate",
       turnId: "turn-live",
       role: "user",
       content: "Change direction",

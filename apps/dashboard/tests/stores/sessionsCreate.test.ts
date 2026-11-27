@@ -32,12 +32,11 @@ const api = vi.hoisted(() => ({
   getSessionOverview: vi.fn(),
   getSession: vi.fn(),
   listTurns: vi.fn(),
-  listInboxMessages: vi.fn(),
+  listQueue: vi.fn(),
   listEvents: vi.fn(),
   updateSession: vi.fn(),
-  submitInboxMessage: vi.fn(),
-  cancelInboxMessage: vi.fn(),
-  dismissInboxMessage: vi.fn(),
+  sendMessage: vi.fn(),
+  cancelQueuedMessage: vi.fn(),
   interruptSession: vi.fn(),
   resumeSession: vi.fn(),
   terminateSession: vi.fn(),
@@ -80,6 +79,6 @@ describe("sessions store createSession", () => {
       detailValue = value;
     });
     unsubscribeDetail();
-    expect(detailValue).toEqual({ session, turns: [], inboxMessages: [], events: [] });
+    expect(detailValue).toEqual({ session, turns: [], queuedMessages: [], events: [] });
   });
 });

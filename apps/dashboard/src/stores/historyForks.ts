@@ -57,11 +57,11 @@ export function createHistoryForks(device: DeviceRuntime) {
       }
       operation.stage = "input_unconfirmed";
       save(operation);
-      await device.api.submitInboxMessage(
+      await device.api.sendMessage(
         operation.sessionId!,
         {
           input: operation.input,
-          delivery_policy: "after_idle",
+          mode: "queue",
           metadata: { source: "dashboard_history_fork" },
         },
         `fork-${operation.operationId}`,

@@ -20,7 +20,7 @@ impl InputPayload {
         }
     }
 
-    pub(crate) fn with_metadata(mut self, metadata: serde_json::Value) -> Self {
+    pub fn with_metadata(mut self, metadata: serde_json::Value) -> Self {
         self.metadata = metadata;
         self
     }
