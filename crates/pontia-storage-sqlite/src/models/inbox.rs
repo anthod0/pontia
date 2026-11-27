@@ -28,4 +28,5 @@ pub struct PendingInboxMessageRow {
     pub input_summary: String,
     pub metadata: String,
     pub branch_target_turn_id: Option<String>,
+    pub turn_id: Option<String>,
 }

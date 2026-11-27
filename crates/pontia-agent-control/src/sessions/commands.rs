@@ -154,11 +154,6 @@ impl SessionCommandService {
 
         let session_id = new_session_id().to_string();
         let runtime_id = pontia_core::ids::new_runtime_id().to_string();
-        let initial_slot = if request.initial_task.is_some() {
-            Some(self.inbox.reserve_initial_input(&session_id).await)
-        } else {
-            None
-        };
         let _launch = pontia_runtime::launch_lock::launch(&self.pontia_home)?;
         let ingest = self.event_ingest.clone();
 
@@ -235,18 +230,22 @@ impl SessionCommandService {
             }
         };
         let Some(runtime) = runtime else {
-            drop(initial_slot);
             if let Some(task) = request.initial_task {
-                self.inbox
-                    .submit_message(
-                        &session_id,
-                        crate::SubmitInboxMessageRequest {
-                            input: task.input,
-                            metadata: task.metadata,
-                            delivery_policy: "after_idle".into(),
-                        },
-                    )
+                let initial_turn = self
+                    .turns
+                    .prepare_initial(&session_id, &task.input, &task.metadata)
                     .await?;
+                self.inbox
+                    .send(
+                        &session_id,
+                        crate::InputPayload::new(task.input)
+                            .with_metadata(task.metadata)
+                            .with_prepared_turn(initial_turn.map(|turn| turn.turn_id))
+                            .force_queue(),
+                        crate::SendMode::Queue,
+                    )
+                    .await
+                    .map_err(Error::from)?;
             }
             return Ok(CreateSessionOutcome {
                 data: json!({"session":self.queries.get_session(&session_id).await?}),
@@ -275,45 +274,31 @@ impl SessionCommandService {
             .await?;
 
         drop(launch_guard);
-        let turns = self.turns.clone();
-        let initial_turn = if let Some(task) = &request.initial_task {
-            turns
+        let (initial_turn, initial_delivery) = if let Some(task) = request.initial_task {
+            let initial_turn = self
+                .turns
                 .prepare_initial(&session_id, &task.input, &task.metadata)
-                .await?
+                .await?;
+            let input = crate::InputPayload::new(task.input)
+                .with_metadata(task.metadata)
+                .with_prepared_turn(initial_turn.as_ref().map(|turn| turn.turn_id.clone()))
+                .force_queue();
+            (initial_turn, Some(input))
         } else {
-            None
+            (None, None)
         };
+        if let Some(input) = initial_delivery {
+            self.inbox
+                .send(&session_id, input, crate::SendMode::Queue)
+                .await
+                .map_err(Error::from)?;
+        }
         let query = &self.queries;
         let session = query
             .get_session(&session_id)
             .await?
             .ok_or_else(|| Error::Domain("created session missing".into()))?;
-        let initial_turn_id = initial_turn.as_ref().map(|turn| turn.turn_id.clone());
         let data = json!({ "session": session, "initial_turn": initial_turn });
-        if let Some(task) = request.initial_task {
-            let target = crate::runtime::ControlTarget {
-                session_id: session_id.clone(),
-                runtime_id: runtime.runtime_id().map(str::to_string),
-                control_runtime_role: self
-                    .clients
-                    .registry()
-                    .control_runtime_role(&request.client_type),
-            };
-            tokio::spawn(async move {
-                let _initial_slot = initial_slot;
-                if let Err(error) = turns
-                    .dispatch_initial(
-                        &target,
-                        &task.input,
-                        &task.metadata,
-                        initial_turn_id.as_deref(),
-                    )
-                    .await
-                {
-                    tracing::warn!(%session_id, %error, "initial input dispatch failed");
-                }
-            });
-        }
 
         Ok(CreateSessionOutcome {
             data,

@@ -76,8 +76,8 @@ impl BranchReplayService {
         target_turn_id: &str,
         input: &str,
     ) -> pontia_core::Result<BranchReplayOutcome> {
-        let lock = self.scheduler.session_lock(session_id);
-        let _guard = lock.lock().await;
+        let actor = self.scheduler.session(session_id);
+        let _guard = actor.lock().await;
         if input.trim().is_empty() {
             return Err(Error::Domain(
                 "branch replay input must not be blank".into(),

@@ -5,11 +5,34 @@ use std::{future::Future, pin::Pin};
 #[non_exhaustive]
 pub struct InputPayload {
     pub text: String,
+    pub(crate) metadata: serde_json::Value,
+    pub(crate) prepared_turn_id: Option<String>,
+    pub(crate) force_queue: bool,
 }
 
 impl InputPayload {
     pub fn new(text: impl Into<String>) -> Self {
-        Self { text: text.into() }
+        Self {
+            text: text.into(),
+            metadata: serde_json::Value::Object(Default::default()),
+            prepared_turn_id: None,
+            force_queue: false,
+        }
+    }
+
+    pub(crate) fn with_metadata(mut self, metadata: serde_json::Value) -> Self {
+        self.metadata = metadata;
+        self
+    }
+
+    pub(crate) fn with_prepared_turn(mut self, turn_id: Option<String>) -> Self {
+        self.prepared_turn_id = turn_id;
+        self
+    }
+
+    pub(crate) fn force_queue(mut self) -> Self {
+        self.force_queue = true;
+        self
     }
 }
 

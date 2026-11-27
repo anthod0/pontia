@@ -38,7 +38,7 @@ pub use context::AgentControl;
 pub use control::ControlCommandOutcome;
 pub use inbox::{
     InboxCommandOutcome, InboxCommandService, LiveInputDelivery, RetryInboxMessageRequest,
-    SubmitInboxMessageRequest,
+    SendMode, SendOutcome, SubmitInboxMessageRequest,
 };
 pub use ingestion::{
     EventIngestResult, EventIngestService, EventReportError, EventReportNormalizer,

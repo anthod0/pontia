@@ -1,11 +1,12 @@
 mod live;
 pub use live::LiveInputDelivery;
+pub use live::{SendMode, SendOutcome};
 mod retry;
 pub use retry::RetryInboxMessageRequest;
 mod association;
 pub(crate) use association::InboxAssociations;
 mod scheduling;
-pub(crate) use scheduling::InboxScheduler;
+pub(crate) use scheduling::{InboxScheduler, SessionActor, SessionPhase};
 
 use pontia_core::{
     error::{Error, Result},
@@ -50,6 +51,13 @@ pub struct InboxCommandService {
     clients: crate::clients::ClientExecutionService,
     turns: TurnCommandService,
     pub(crate) scheduler: InboxScheduler,
+}
+
+struct EnqueueOptions<'a> {
+    retry_of: Option<&'a str>,
+    resuming: bool,
+    interrupt_before_delivery: bool,
+    drain_now: bool,
 }
 
 impl InboxCommandService {
@@ -99,26 +107,37 @@ impl InboxCommandService {
         session_id: &str,
         request: SubmitInboxMessageRequest,
     ) -> Result<InboxCommandOutcome> {
-        let lock = self.scheduler.command_lock(session_id);
-        let _guard = lock.lock().await;
-        self.enqueue_message(message_id, session_id, request, None, false)
-            .await
+        let actor = self.scheduler.session(session_id);
+        let _guard = actor.lock().await;
+        self.enqueue_message_locked(
+            message_id,
+            session_id,
+            request,
+            EnqueueOptions {
+                retry_of: None,
+                resuming: false,
+                interrupt_before_delivery: true,
+                drain_now: true,
+            },
+            &actor,
+        )
+        .await
     }
 
-    async fn enqueue_message(
+    async fn enqueue_message_locked(
         &self,
         message_id: &str,
         session_id: &str,
         request: SubmitInboxMessageRequest,
-        retry_of: Option<&str>,
-        resuming: bool,
+        options: EnqueueOptions<'_>,
+        actor: &scheduling::SessionActor,
     ) -> Result<InboxCommandOutcome> {
         if message_id.is_empty() || message_id.len() > 512 {
             return Err(Error::Domain("Invalid Inbox submission identity".into()));
         }
         let inbox_repository = SqliteInboxRepository::new(self.pool.clone());
         if let Some(existing) = inbox_repository.get_message(session_id, message_id).await? {
-            if existing.retry_of_message_id.as_deref() != retry_of {
+            if existing.retry_of_message_id.as_deref() != options.retry_of {
                 return Err(Error::StateConflict(
                     "Submission identity was already used for a different Retry association".into(),
                 ));
@@ -172,8 +191,8 @@ impl InboxCommandService {
                     input: &request.input,
                     metadata: &metadata,
                     steer_target,
-                    retry_of,
-                    resuming,
+                    retry_of: options.retry_of,
+                    resuming: options.resuming,
                 },
             )
             .await?;
@@ -194,14 +213,22 @@ impl InboxCommandService {
         let active_turn = SqliteTurnRepository::new(self.pool.clone())
             .active_turn(session_id)
             .await?;
-        if !resuming && request.delivery_policy == "interrupt_now" && active_turn.is_some() {
+        if options.interrupt_before_delivery
+            && !options.resuming
+            && request.delivery_policy == "interrupt_now"
+            && active_turn.is_some()
+        {
             if !session.capabilities.interrupt {
                 self.mark_failed(
                     message_id,
                     "session ".to_string() + session_id + " runtime does not support interrupt",
                 )
                 .await?;
-            } else if let Err(error) = self.turns.interrupt_current_turn(session_id).await {
+            } else if let Err(error) = self
+                .turns
+                .interrupt_current_turn_locked(session_id, actor)
+                .await
+            {
                 if matches!(error, Error::ControlUnknown(_)) {
                     self.mark_unknown(message_id, &error.to_string()).await?;
                 } else {
@@ -210,8 +237,8 @@ impl InboxCommandService {
             }
         }
 
-        if !resuming {
-            self.drain_inbox(session_id).await?;
+        if !options.resuming && options.drain_now {
+            self.drain_inbox_locked(session_id, actor).await?;
         }
 
         let message = self
@@ -327,15 +354,24 @@ impl InboxCommandService {
     }
 
     pub async fn drain_inbox(&self, session_id: &str) -> Result<()> {
-        let lock = self.scheduler.session_lock(session_id);
-        let _guard = lock.lock().await;
-        if self.scheduler.awaiting_initial(session_id) {
-            return Ok(());
-        }
+        let actor = self.scheduler.session(session_id);
+        let _guard = actor.lock().await;
+        self.drain_inbox_locked(session_id, &actor).await
+    }
+
+    async fn drain_inbox_locked(
+        &self,
+        session_id: &str,
+        actor: &scheduling::SessionActor,
+    ) -> Result<()> {
         let query = &self.queries;
         let Some(session) = query.get_session_control(session_id).await? else {
             return Ok(());
         };
+        actor.set_phase(match session.state.as_str() {
+            "busy" | "waiting_for_interaction" => scheduling::SessionPhase::Busy,
+            _ => scheduling::SessionPhase::Idle,
+        });
         let adapter = self.clients.for_client(&session.client_type)?;
         let active = SqliteTurnRepository::new(self.pool.clone())
             .active_turn(session_id)
@@ -362,6 +398,7 @@ impl InboxCommandService {
         if matches!(session.state.as_str(), "exited" | "error") {
             return Ok(());
         }
+        let prepared_turn_id = row.turn_id.clone();
         let steer_turn_id = if row.delivery_policy == "steer" {
             if active.as_ref().map(|turn| &turn.turn_id) != row.steer_target_turn_id.as_ref() {
                 self.mark_failed(
@@ -374,7 +411,9 @@ impl InboxCommandService {
             }
             row.steer_target_turn_id
         } else {
-            if active.is_some() {
+            if active.as_ref().map(|turn| &turn.turn_id) != prepared_turn_id.as_ref()
+                && active.is_some()
+            {
                 return Ok(());
             }
             None
@@ -419,12 +458,14 @@ impl InboxCommandService {
                     .await
             }
             None => {
+                actor.set_phase(scheduling::SessionPhase::StartingTurn);
                 turns
                     .submit_start_turn(
                         session_id,
                         input.into(),
                         metadata,
                         row.required_runtime_id.as_deref(),
+                        prepared_turn_id.as_deref(),
                     )
                     .await
             }
@@ -437,11 +478,14 @@ impl InboxCommandService {
                 self.notify_available(session_id);
                 return Ok(());
             }
-            Ok((turn_id, result)) => result.into_result().map(|receipt| (turn_id, receipt)),
-            Err(error) => Err(error),
+            Ok((turn_id, result)) => result
+                .into_delivery_result()
+                .map(|receipt| (turn_id, receipt)),
+            Err(error) => Err(crate::DeliveryError::from(error)),
         };
         match delivery {
             Ok((turn_id, receipt)) => {
+                actor.finish_start();
                 InboxAssociations::new(self.pool.clone(), self.clients.registry().clone())
                     .record_receipt(session_id, &message_id, &receipt)
                     .await?;
@@ -461,15 +505,25 @@ impl InboxCommandService {
                 .await?;
                 self.notify_available(session_id);
             }
-            Err(Error::Conflict {
-                code: "input_busy", ..
-            })
-            | Err(Error::StateConflict(_))
-                if delivery_policy != "steer" =>
-            {
+            Err(crate::DeliveryError::Offline(_)) => {
+                actor.cancel_start();
+                if let Some(turn_id) = prepared_turn_id.as_deref() {
+                    inbox_repository
+                        .detach_prepared_turn(&message_id, turn_id)
+                        .await?;
+                }
                 inbox_repository.return_pending(&message_id).await?;
             }
-            Err(Error::ControlUnknown(reason)) => {
+            Err(crate::DeliveryError::StateChanged(_)) if delivery_policy != "steer" => {
+                actor.cancel_start();
+                if let Some(turn_id) = prepared_turn_id.as_deref() {
+                    inbox_repository
+                        .detach_prepared_turn(&message_id, turn_id)
+                        .await?;
+                }
+                inbox_repository.return_pending(&message_id).await?;
+            }
+            Err(crate::DeliveryError::Uncertain(reason)) => {
                 self.mark_unknown(&message_id, &reason).await?;
             }
             Err(error) => {

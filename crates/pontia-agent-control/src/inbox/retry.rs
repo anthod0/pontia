@@ -16,8 +16,8 @@ impl InboxCommandService {
         original_id: &str,
         request: RetryInboxMessageRequest,
     ) -> Result<InboxCommandOutcome> {
-        let lock = self.scheduler.command_lock(session_id);
-        let _guard = lock.lock().await;
+        let actor = self.scheduler.session(session_id);
+        let _guard = actor.lock().await;
         let original = self
             .get_message(session_id, original_id)
             .await?
@@ -51,7 +51,7 @@ impl InboxCommandService {
             }
         }
         let outcome = self
-            .enqueue_message(
+            .enqueue_message_locked(
                 &request.message_id,
                 session_id,
                 SubmitInboxMessageRequest {
@@ -59,8 +59,13 @@ impl InboxCommandService {
                     delivery_policy: original.delivery_policy,
                     metadata,
                 },
-                Some(original_id),
-                resuming,
+                EnqueueOptions {
+                    retry_of: Some(original_id),
+                    resuming,
+                    interrupt_before_delivery: true,
+                    drain_now: true,
+                },
+                &actor,
             )
             .await?;
         if resuming && !outcome.duplicate {
@@ -69,7 +74,7 @@ impl InboxCommandService {
                     SqliteInboxRepository::new(self.pool.clone())
                         .return_pending(&request.message_id)
                         .await?;
-                    self.drain_inbox(session_id).await?;
+                    self.drain_inbox_locked(session_id, &actor).await?;
                 }
                 Err(error) => {
                     self.mark_failed(

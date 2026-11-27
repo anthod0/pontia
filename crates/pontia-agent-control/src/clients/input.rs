@@ -110,6 +110,31 @@ impl ClientAdapter {
         if self.spec.adapter.dispatch == DispatchMode::None {
             return ControlResult::Unsupported("client has no input channel".into());
         }
+        if self.spec.adapter.dispatch == DispatchMode::InProcessRecorded {
+            let result = async {
+                target.validate(&self.pool.clone()).await?;
+                self.registry
+                    .get(self.spec.client_type)
+                    .and_then(|entry| entry.in_process.as_ref())
+                    .ok_or_else(|| {
+                        pontia_core::Error::CapabilityUnavailable(
+                            "in-process client is unavailable".into(),
+                        )
+                    })?
+                    .submit(AgentInput {
+                        session_id: target.session_id.clone(),
+                        dispatch_id: new_dispatch_id().to_string(),
+                        input: payload.text.clone(),
+                    })?;
+                Ok(InputReceipt {
+                    turn_pending: false,
+                    native_turn_id: None,
+                    runtime_id: target.runtime_id.clone(),
+                })
+            }
+            .await;
+            return ControlResult::from_result(result);
+        }
         let result = async {
             target
                 .validate(&self.pool.clone())

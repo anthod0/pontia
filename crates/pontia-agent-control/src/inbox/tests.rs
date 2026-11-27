@@ -169,21 +169,6 @@ async fn runtime_scoped_exit_and_interrupt_reject_replaced_instances_before_nati
     ] {
         assert!(matches!(error, Error::StateConflict(_)));
     }
-    let error = state
-        .turn_commands()
-        .dispatch_initial(
-            &crate::runtime::ControlTarget {
-                session_id: "session".into(),
-                runtime_id: Some("old".into()),
-                control_runtime_role: Some("generic_control"),
-            },
-            "initial input",
-            &json!({}),
-            None,
-        )
-        .await
-        .unwrap_err();
-    assert!(matches!(error, Error::StateConflict(_)));
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
         .fetch_one(&pool)
         .await
@@ -192,7 +177,7 @@ async fn runtime_scoped_exit_and_interrupt_reject_replaced_instances_before_nati
 }
 
 #[tokio::test]
-async fn cloned_control_preserves_initial_input_gate_and_event_wakeup() {
+async fn cloned_control_preserves_session_actor_and_event_wakeup() {
     let root = tempfile::tempdir().unwrap();
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
@@ -225,7 +210,10 @@ async fn cloned_control_preserves_initial_input_gate_and_event_wakeup() {
         })
         .await
         .unwrap();
-    state.inbox_commands().scheduler.begin_initial("session");
+    sqlx::query("UPDATE sessions SET state='starting' WHERE session_id='session'")
+        .execute(&pool)
+        .await
+        .unwrap();
     let authenticated = state.clone();
     let submitted = authenticated
         .inbox_commands()
@@ -244,7 +232,10 @@ async fn cloned_control_preserves_initial_input_gate_and_event_wakeup() {
     let id = submitted.data["inbox_message"]["message_id"]
         .as_str()
         .unwrap();
-    state.inbox_commands().scheduler.finish_initial("session");
+    sqlx::query("UPDATE sessions SET state='idle' WHERE session_id='session'")
+        .execute(&pool)
+        .await
+        .unwrap();
     authenticated
         .event_ingest_service()
         .control_available("session");
@@ -330,10 +321,185 @@ fn request(input: &str) -> SubmitInboxMessageRequest {
 }
 
 #[tokio::test]
+async fn immediate_send_delivers_without_creating_an_inbox_message() {
+    let (_root, state, channel) = connected_inbox().await;
+    let outcome = state
+        .inbox_commands()
+        .send("session", "now".into(), crate::SendMode::Immediate)
+        .await
+        .unwrap();
+
+    assert_eq!(outcome, crate::SendOutcome::Delivered);
+    assert_eq!(*channel.input.lock().unwrap(), ["now"]);
+    assert!(
+        state
+            .inbox_commands()
+            .list_messages("session")
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn uncertain_immediate_send_is_not_retried_or_queued() {
+    let (_root, state, channel) = connected_inbox().await;
+    *channel.next_error.lock().unwrap() = Some(Error::ControlUnknown("lost receipt".into()));
+
+    let error = state
+        .inbox_commands()
+        .send("session", "once".into(), crate::SendMode::Immediate)
+        .await
+        .unwrap_err();
+
+    assert!(matches!(error, crate::DeliveryError::Uncertain(_)));
+    assert_eq!(*channel.input.lock().unwrap(), ["once"]);
+    assert!(
+        state
+            .inbox_commands()
+            .list_messages("session")
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn offline_prepared_turn_returns_to_queue_without_reusing_failed_turn() {
+    let (_root, state, channel) = connected_inbox().await;
+    sqlx::query(
+        "INSERT INTO turns(turn_id,session_id,state) VALUES ('prepared','session','queued')",
+    )
+    .execute(&state.db())
+    .await
+    .unwrap();
+    *channel.next_error.lock().unwrap() =
+        Some(Error::CapabilityUnavailable("channel offline".into()));
+
+    let crate::SendOutcome::Queued { message_id } = state
+        .inbox_commands()
+        .send(
+            "session",
+            crate::InputPayload::from("initial")
+                .with_prepared_turn(Some("prepared".into()))
+                .force_queue(),
+            crate::SendMode::Queue,
+        )
+        .await
+        .unwrap()
+    else {
+        panic!("offline input must remain queued");
+    };
+
+    let message = state
+        .inbox_commands()
+        .get_message("session", &message_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(message.state, "pending");
+    assert_eq!(message.turn_id, None);
+}
+
+#[tokio::test]
+async fn queued_send_does_not_overtake_an_unknown_delivery() {
+    let (_root, state, channel) = connected_inbox().await;
+    let repository = SqliteInboxRepository::new(state.db());
+    repository
+        .enqueue(queued_message("unknown", "session"))
+        .await
+        .unwrap();
+    repository.mark_dispatching("unknown").await.unwrap();
+    repository
+        .mark_unknown("unknown", "receipt lost")
+        .await
+        .unwrap();
+
+    let crate::SendOutcome::Queued { message_id } = state
+        .inbox_commands()
+        .send("session", "later".into(), crate::SendMode::Queue)
+        .await
+        .unwrap()
+    else {
+        panic!("unresolved delivery must keep later input queued");
+    };
+
+    assert_eq!(
+        state
+            .inbox_commands()
+            .get_message("session", &message_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "pending"
+    );
+    assert!(channel.input.lock().unwrap().is_empty());
+    state.inbox_commands().stop_scheduling().await;
+}
+
+#[tokio::test]
+async fn consecutive_interrupt_sends_replace_the_pending_interrupt_head() {
+    let (_root, state, channel) = connected_inbox().await;
+    sqlx::query("UPDATE sessions SET state='busy' WHERE session_id='session'")
+        .execute(&state.db())
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO turns(turn_id,session_id,state) VALUES ('active','session','running')",
+    )
+    .execute(&state.db())
+    .await
+    .unwrap();
+
+    let crate::SendOutcome::Queued { message_id: first } = state
+        .inbox_commands()
+        .send("session", "first".into(), crate::SendMode::Interrupt)
+        .await
+        .unwrap()
+    else {
+        panic!("interrupt input must wait for the active turn to finish");
+    };
+    let crate::SendOutcome::Queued { message_id: second } = state
+        .inbox_commands()
+        .send("session", "second".into(), crate::SendMode::Interrupt)
+        .await
+        .unwrap()
+    else {
+        panic!("replacement interrupt input must remain queued");
+    };
+
+    assert_eq!(
+        state
+            .inbox_commands()
+            .get_message("session", &first)
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "superseded"
+    );
+    assert_eq!(
+        state
+            .inbox_commands()
+            .get_message("session", &second)
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "pending"
+    );
+    assert!(channel.input.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn busy_rejection_preserves_fifo_and_cancelled_input_never_enters_client() {
     let (_root, state, channel) = connected_inbox().await;
     let inbox = state.inbox_commands();
-    inbox.scheduler.begin_initial("session");
+    sqlx::query("UPDATE sessions SET state='busy' WHERE session_id='session'")
+        .execute(&state.db())
+        .await
+        .unwrap();
     for index in 0..13 {
         // Reverse identifiers deliberately: arrival order must break timestamp ties.
         inbox
@@ -346,7 +512,10 @@ async fn busy_rejection_preserves_fifo_and_cancelled_input_never_enters_client()
             .unwrap();
     }
     inbox.cancel_message("session", "msg-07").await.unwrap();
-    inbox.scheduler.finish_initial("session");
+    sqlx::query("UPDATE sessions SET state='idle' WHERE session_id='session'")
+        .execute(&state.db())
+        .await
+        .unwrap();
     *channel.next_error.lock().unwrap() = Some(Error::Conflict {
         code: "input_busy",
         message: "became busy".into(),
@@ -473,7 +642,9 @@ async fn queued_steer_never_retargets_a_different_turn() {
     .execute(&state.db())
     .await
     .unwrap();
-    inbox.scheduler.begin_initial("session");
+    channel
+        .closed
+        .store(true, std::sync::atomic::Ordering::SeqCst);
     let mut input = request("steer original");
     input.delivery_policy = "steer".into();
     inbox
@@ -490,7 +661,9 @@ async fn queued_steer_never_retargets_a_different_turn() {
     .execute(&state.db())
     .await
     .unwrap();
-    inbox.scheduler.finish_initial("session");
+    channel
+        .closed
+        .store(false, std::sync::atomic::Ordering::SeqCst);
     inbox.drain_inbox("session").await.unwrap();
     let message = inbox
         .get_message("session", "steer")

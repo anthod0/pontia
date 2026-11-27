@@ -1,7 +1,10 @@
 use super::InboxCommandService;
 use std::{
-    collections::{HashMap, HashSet},
-    sync::{Arc, Mutex, Weak},
+    collections::HashMap,
+    sync::{
+        Arc, Mutex, Weak,
+        atomic::{AtomicU8, Ordering},
+    },
 };
 use tokio::sync::Mutex as AsyncMutex;
 
@@ -9,14 +12,67 @@ use tokio::sync::Mutex as AsyncMutex;
 pub(crate) struct InboxScheduler(Arc<Mutex<State>>);
 #[derive(Default)]
 struct State {
-    sessions: HashMap<String, Arc<AsyncMutex<()>>>,
-    commands: HashMap<String, Arc<AsyncMutex<()>>>,
+    sessions: HashMap<String, Arc<SessionActor>>,
     running: HashMap<String, bool>,
     stopped: bool,
-    initial_inputs: HashSet<String>,
     // AgentControl owns delivery; a weak link prevents the event/scheduler/delivery cycle from leaking.
     delivery: Weak<InboxCommandService>,
     lifecycle: Weak<crate::SessionCommandService>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[repr(u8)]
+pub(crate) enum SessionPhase {
+    #[default]
+    Idle,
+    StartingTurn,
+    Busy,
+    Interrupting,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct SessionActor {
+    serial: AsyncMutex<()>,
+    phase: AtomicU8,
+}
+
+impl SessionActor {
+    pub(crate) async fn lock(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.serial.lock().await
+    }
+
+    pub(crate) fn set_phase(&self, phase: SessionPhase) {
+        self.phase.store(phase as u8, Ordering::Release);
+    }
+
+    pub(crate) fn finish_start(&self) {
+        let _ = self.phase.compare_exchange(
+            SessionPhase::StartingTurn as u8,
+            SessionPhase::Busy as u8,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        );
+    }
+
+    pub(crate) fn cancel_start(&self) {
+        let _ = self.phase.compare_exchange(
+            SessionPhase::StartingTurn as u8,
+            SessionPhase::Idle as u8,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        );
+    }
+
+    #[cfg(test)]
+    fn phase(&self) -> SessionPhase {
+        match self.phase.load(Ordering::Acquire) {
+            value if value == SessionPhase::Idle as u8 => SessionPhase::Idle,
+            value if value == SessionPhase::StartingTurn as u8 => SessionPhase::StartingTurn,
+            value if value == SessionPhase::Busy as u8 => SessionPhase::Busy,
+            value if value == SessionPhase::Interrupting as u8 => SessionPhase::Interrupting,
+            _ => unreachable!("SessionPhase stores only declared discriminants"),
+        }
+    }
 }
 
 impl InboxScheduler {
@@ -30,39 +86,7 @@ impl InboxScheduler {
         state.lifecycle = Arc::downgrade(lifecycle);
     }
 
-    pub fn begin_initial(&self, session: &str) {
-        self.0
-            .lock()
-            .expect("inbox scheduler lock")
-            .initial_inputs
-            .insert(session.into());
-    }
-    pub fn finish_initial(&self, session: &str) {
-        self.0
-            .lock()
-            .expect("inbox scheduler lock")
-            .initial_inputs
-            .remove(session);
-    }
-    pub fn awaiting_initial(&self, session: &str) -> bool {
-        self.0
-            .lock()
-            .expect("inbox scheduler lock")
-            .initial_inputs
-            .contains(session)
-    }
-
-    pub fn command_lock(&self, session: &str) -> Arc<AsyncMutex<()>> {
-        self.0
-            .lock()
-            .expect("inbox scheduler lock")
-            .commands
-            .entry(session.into())
-            .or_default()
-            .clone()
-    }
-
-    pub fn session_lock(&self, session: &str) -> Arc<AsyncMutex<()>> {
+    pub(crate) fn session(&self, session: &str) -> Arc<SessionActor> {
         self.0
             .lock()
             .expect("inbox scheduler lock")
@@ -70,6 +94,11 @@ impl InboxScheduler {
             .entry(session.into())
             .or_default()
             .clone()
+    }
+
+    pub(crate) fn observe_phase(&self, session: &str, phase: SessionPhase) {
+        let actor = self.session(session);
+        actor.set_phase(phase);
     }
 
     pub fn wake(&self, session: String) {
@@ -126,13 +155,6 @@ impl InboxScheduler {
 }
 
 impl InboxCommandService {
-    pub(crate) async fn reserve_initial_input(
-        &self,
-        session: &str,
-    ) -> tokio::sync::OwnedMutexGuard<()> {
-        self.scheduler.session_lock(session).lock_owned().await
-    }
-
     pub fn notify_available(&self, session: &str) {
         self.scheduler.wake(session.into());
     }
@@ -159,5 +181,22 @@ impl InboxCommandService {
 
     pub async fn stop_scheduling(&self) {
         self.scheduler.stop().await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn committed_phase_updates_are_not_dropped_while_the_actor_is_locked() {
+        let scheduler = InboxScheduler::default();
+        let actor = scheduler.session("session");
+        let _guard = actor.lock().await;
+        actor.set_phase(SessionPhase::StartingTurn);
+
+        scheduler.observe_phase("session", SessionPhase::Idle);
+
+        assert_eq!(actor.phase(), SessionPhase::Idle);
     }
 }

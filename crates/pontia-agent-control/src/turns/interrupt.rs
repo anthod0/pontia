@@ -5,6 +5,16 @@ use pontia_storage_sqlite::repositories::turns::SqliteTurnRepository;
 use serde_json::json;
 impl TurnCommandService {
     pub async fn interrupt_current_turn(&self, session_id: &str) -> Result<ControlCommandOutcome> {
+        let actor = self.scheduler.session(session_id);
+        let _guard = actor.lock().await;
+        self.interrupt_current_turn_locked(session_id, &actor).await
+    }
+
+    pub(crate) async fn interrupt_current_turn_locked(
+        &self,
+        session_id: &str,
+        actor: &crate::inbox::SessionActor,
+    ) -> Result<ControlCommandOutcome> {
         let query = &self.queries;
         let session = query
             .get_session_control(session_id)
@@ -14,7 +24,9 @@ impl TurnCommandService {
             .active_turn(session_id)
             .await?
         {
-            return self.interrupt_turn(session_id, &active_turn.turn_id).await;
+            return self
+                .interrupt_turn_scoped_locked(session_id, &active_turn.turn_id, None, actor)
+                .await;
         }
         if session.state != "waiting_for_interaction" {
             return Err(Error::StateConflict(format!(
@@ -33,6 +45,7 @@ impl TurnCommandService {
             None,
         )
         .await?;
+        actor.set_phase(crate::inbox::SessionPhase::Interrupting);
         self.clients
             .for_client(&session.client_type)?
             .interrupt(&target)
@@ -51,7 +64,9 @@ impl TurnCommandService {
         turn_id: &str,
         runtime_id: &str,
     ) -> Result<ControlCommandOutcome> {
-        self.interrupt_turn_scoped(session_id, turn_id, Some(runtime_id))
+        let actor = self.scheduler.session(session_id);
+        let _guard = actor.lock().await;
+        self.interrupt_turn_scoped_locked(session_id, turn_id, Some(runtime_id), &actor)
             .await
     }
 
@@ -60,14 +75,18 @@ impl TurnCommandService {
         session_id: &str,
         turn_id: &str,
     ) -> Result<ControlCommandOutcome> {
-        self.interrupt_turn_scoped(session_id, turn_id, None).await
+        let actor = self.scheduler.session(session_id);
+        let _guard = actor.lock().await;
+        self.interrupt_turn_scoped_locked(session_id, turn_id, None, &actor)
+            .await
     }
 
-    async fn interrupt_turn_scoped(
+    async fn interrupt_turn_scoped_locked(
         &self,
         session_id: &str,
         turn_id: &str,
         expected: Option<&str>,
+        actor: &crate::inbox::SessionActor,
     ) -> Result<ControlCommandOutcome> {
         let target = crate::runtime::ControlTarget::resolve(
             &self.pool,
@@ -107,6 +126,7 @@ impl TurnCommandService {
                 "session {session_id} runtime does not support interrupt"
             )));
         }
+        actor.set_phase(crate::inbox::SessionPhase::Interrupting);
         self.interrupt_validated(&session, &turn, target).await
     }
 

@@ -36,7 +36,8 @@ impl SessionCommandService {
 
     /// Serialize with input delivery and reject an exit if execution has resumed.
     pub async fn exit_if_idle(&self, session_id: &str) -> Result<bool> {
-        let _input = self.inbox.reserve_initial_input(session_id).await;
+        let actor = self.inbox.scheduler.session(session_id);
+        let _guard = actor.lock().await;
         if !self.request_idle_exit(session_id).await? {
             return Ok(false);
         }
@@ -77,18 +78,15 @@ impl SessionCommandService {
     }
 
     pub(crate) async fn auto_exit_if_done(&self, session_id: &str) -> Result<()> {
-        // Input commands acquire this lock before the delivery reservation too.
-        // Hold both across the check and client request so new input cannot slip in.
-        let command = self.inbox.scheduler.command_lock(session_id);
-        let _command = command.lock().await;
-        let _input = self.inbox.reserve_initial_input(session_id).await;
+        let actor = self.inbox.scheduler.session(session_id);
+        let _guard = actor.lock().await;
         let armed: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM sessions WHERE session_id=? AND exit_when_done=1 AND state='idle')",
         )
         .bind(session_id)
         .fetch_one(&self.pool)
         .await?;
-        if armed && !self.inbox.scheduler.awaiting_initial(session_id) {
+        if armed {
             self.request_idle_exit(session_id).await?;
         }
         Ok(())

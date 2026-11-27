@@ -43,6 +43,15 @@ impl<T> ControlResult<T> {
             Self::Unsupported(message) => Err(Error::CapabilityUnavailable(message)),
         }
     }
+
+    pub(crate) fn into_delivery_result(self) -> std::result::Result<T, crate::DeliveryError> {
+        match self {
+            Self::Accepted(value) | Self::Sent(value) => Ok(value),
+            Self::Rejected(error) => Err(crate::DeliveryError::from(error)),
+            Self::Unknown(message) => Err(crate::DeliveryError::Uncertain(message)),
+            Self::Unsupported(message) => Err(crate::DeliveryError::Unsupported(message)),
+        }
+    }
 }
 
 #[derive(Debug, Default)]

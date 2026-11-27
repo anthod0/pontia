@@ -1,4 +1,5 @@
 use super::InboxScheduler;
+use super::scheduling::SessionPhase;
 use crate::control::InputReceipt;
 use pontia_core::{
     Result,
@@ -89,11 +90,24 @@ impl InboxAssociations {
         scheduler: &InboxScheduler,
         event: &DomainEvent,
     ) -> Result<()> {
-        if matches!(
-            event.event_type,
-            EventType::TurnStarted | EventType::SessionExited | EventType::SessionError
-        ) {
-            scheduler.finish_initial(&event.session_id);
+        match event.event_type {
+            EventType::TurnStarted => {
+                scheduler.observe_phase(&event.session_id, SessionPhase::Busy)
+            }
+            EventType::TurnInterruptRequested => {
+                scheduler.observe_phase(&event.session_id, SessionPhase::Interrupting)
+            }
+            EventType::SessionReady
+            | EventType::InteractionUnblocked
+            | EventType::SessionExited
+            | EventType::SessionError
+            | EventType::TurnCompleted
+            | EventType::TurnFailed
+            | EventType::TurnDispatchFailed
+            | EventType::TurnInterrupted => {
+                scheduler.observe_phase(&event.session_id, SessionPhase::Idle)
+            }
+            _ => {}
         }
         if event.event_type == EventType::TurnStarted
             && let Some(turn) = &event.turn_id

@@ -50,6 +50,32 @@ impl SqliteInboxRepository {
         Ok(())
     }
 
+    pub async fn attach_prepared_turn(&self, message_id: &str, turn_id: &str) -> Result<()> {
+        sqlx::query("UPDATE inbox_messages SET turn_id=? WHERE message_id=? AND state='pending'")
+            .bind(turn_id)
+            .bind(message_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn detach_prepared_turn(&self, message_id: &str, turn_id: &str) -> Result<()> {
+        sqlx::query("UPDATE inbox_messages SET turn_id=NULL WHERE message_id=? AND turn_id=? AND state='dispatching'")
+            .bind(message_id)
+            .bind(turn_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn supersede_pending_interrupts(&self, session_id: &str) -> Result<()> {
+        sqlx::query("UPDATE inbox_messages SET state='superseded',updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE session_id=? AND delivery_policy='interrupt_now' AND state='pending'")
+            .bind(session_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     pub async fn wait_after_idle(&self, message_id: &str) -> Result<()> {
         sqlx::query("UPDATE inbox_messages SET state='pending',delivery_policy='after_idle',steer_target_turn_id=NULL,failure_message=NULL,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE message_id=? AND state='dispatching'")
             .bind(message_id).execute(&self.pool).await?;
@@ -116,7 +142,7 @@ impl SqliteInboxRepository {
         session_id: &str,
     ) -> Result<Option<PendingInboxMessageRow>> {
         Ok(sqlx::query_as::<_, PendingInboxMessageRow>(
-            r#"SELECT message_id, input_summary, metadata, branch_target_turn_id, delivery_policy, steer_target_turn_id, required_runtime_id
+            r#"SELECT message_id, input_summary, metadata, branch_target_turn_id, delivery_policy, steer_target_turn_id, required_runtime_id, turn_id
                FROM inbox_messages
                WHERE session_id = ? AND state = 'pending'
                ORDER BY CASE delivery_policy WHEN 'interrupt_now' THEN 0 WHEN 'steer' THEN 1 ELSE 2 END,
@@ -128,6 +154,13 @@ impl SqliteInboxRepository {
         .bind(session_id)
         .fetch_optional(&self.pool)
         .await?)
+    }
+
+    pub async fn has_unsettled_input(&self, session_id: &str) -> Result<bool> {
+        Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM inbox_messages WHERE session_id=? AND (state IN ('pending','resuming','dispatching','unknown') OR (state='dispatched' AND turn_id IS NULL AND steer_target_turn_id IS NULL)))")
+            .bind(session_id)
+            .fetch_one(&self.pool)
+            .await?)
     }
 
     pub async fn mark_dispatching(&self, message_id: &str) -> Result<u64> {

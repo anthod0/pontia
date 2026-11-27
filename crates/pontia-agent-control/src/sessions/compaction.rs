@@ -11,7 +11,8 @@ pub struct CompactionAccepted {
 
 impl SessionCommandService {
     pub async fn compact_session(&self, session_id: &str) -> Result<CompactionAccepted> {
-        let _input_guard = self.inbox.reserve_initial_input(session_id).await;
+        let actor = self.inbox.scheduler.session(session_id);
+        let _guard = actor.lock().await;
         let session = self
             .queries
             .get_session(session_id)

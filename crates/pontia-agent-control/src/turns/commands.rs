@@ -42,12 +42,24 @@ impl TurnCommandService {
         payload: InputPayload,
         metadata: Value,
     ) -> Result<Option<TurnView>> {
-        let lock = self.scheduler.session_lock(session_id);
-        let _guard = lock.lock().await;
-        let (turn_id, result) = self
-            .submit_start_turn(session_id, payload, metadata, None)
-            .await?;
-        result.into_result()?;
+        let actor = self.scheduler.session(session_id);
+        let _guard = actor.lock().await;
+        actor.set_phase(crate::inbox::SessionPhase::StartingTurn);
+        let (turn_id, result) = match self
+            .submit_start_turn(session_id, payload, metadata, None, None)
+            .await
+        {
+            Ok(delivery) => delivery,
+            Err(error) => {
+                actor.cancel_start();
+                return Err(error);
+            }
+        };
+        if let Err(error) = result.into_result() {
+            actor.cancel_start();
+            return Err(error);
+        }
+        actor.finish_start();
         let Some(turn_id) = turn_id else {
             return Ok(None);
         };
@@ -66,6 +78,7 @@ impl TurnCommandService {
         payload: InputPayload,
         metadata: Value,
         required_runtime_id: Option<&str>,
+        prepared_turn_id: Option<&str>,
     ) -> Result<(Option<String>, ControlResult<InputReceipt>)> {
         if payload.text.trim().is_empty() {
             return Err(Error::Domain("input must not be blank".into()));
@@ -97,7 +110,13 @@ impl TurnCommandService {
                 },
             );
         }
-        if let Some(active) = active {
+        if let Some(prepared_turn_id) = prepared_turn_id {
+            if active.as_ref().map(|turn| turn.turn_id.as_str()) != Some(prepared_turn_id) {
+                return Err(Error::StateConflict(format!(
+                    "prepared Turn {prepared_turn_id} is not active for session {session_id}"
+                )));
+            }
+        } else if let Some(active) = active {
             return Err(Error::Conflict {
                 code: "input_busy",
                 message: format!(
@@ -118,10 +137,13 @@ impl TurnCommandService {
             required_runtime_id,
         )
         .await?;
-        let turn_id = self
-            .prepare_initial(session_id, &payload.text, &metadata)
-            .await?
-            .map(|turn| turn.turn_id);
+        let turn_id = match prepared_turn_id {
+            Some(turn_id) => Some(turn_id.to_owned()),
+            None => self
+                .prepare_initial(session_id, &payload.text, &metadata)
+                .await?
+                .map(|turn| turn.turn_id),
+        };
         let receipt = adapter
             .start_turn(&target, payload, &metadata, turn_id.as_deref())
             .await;
@@ -232,68 +254,5 @@ impl TurnCommandService {
                 .await?;
         }
         query.get_turn(session_id, &turn_id).await
-    }
-
-    pub(crate) async fn dispatch_initial(
-        &self,
-        target: &ControlTarget,
-        input: &str,
-        metadata: &Value,
-        turn_id: Option<&str>,
-    ) -> Result<()> {
-        let session = target.session_id.as_str();
-        let query = &self.queries;
-        let session_view = query
-            .get_session_control(session)
-            .await?
-            .ok_or_else(|| Error::NotFound(format!("session {session} not found")))?;
-        let adapter = self.clients.for_client(&session_view.client_type)?;
-        adapter.await_initial_ready(target).await?;
-        let session_view = query
-            .get_session_control(session)
-            .await?
-            .ok_or_else(|| Error::NotFound(format!("session {session} not found")))?;
-        if !matches!(session_view.state.as_str(), "idle" | "interrupted") {
-            return Err(Error::StateConflict(
-                "Session is no longer ready for its first input".into(),
-            ));
-        }
-        if !session_view.capabilities.accept_task {
-            return Err(Error::CapabilityUnavailable(
-                "Session cannot accept input".into(),
-            ));
-        }
-        let active = SqliteTurnRepository::new(self.pool.clone())
-            .active_turn(session)
-            .await?;
-        if active.as_ref().map(|turn| turn.turn_id.as_str()) != turn_id {
-            return Err(Error::StateConflict(
-                "Session has another active Turn".into(),
-            ));
-        }
-        self.scheduler.begin_initial(session);
-        let result = adapter
-            .start_turn(target, input.into(), metadata, turn_id)
-            .await;
-        if matches!(
-            result,
-            ControlResult::Rejected(_) | ControlResult::Unsupported(_)
-        ) {
-            self.scheduler.finish_initial(session);
-            self.scheduler.wake(session.into());
-        }
-        if let (Some(turn), ControlResult::Rejected(error)) = (turn_id, &result) {
-            self.event_ingest
-                .ingest_pontia_event(PontiaEvent::new(
-                    session,
-                    Some(turn.into()),
-                    PontiaEventSource::RuntimeManager,
-                    &session_view.client_type,
-                    PontiaEventType::TurnDispatchFailed,
-                    json!({"failure":{"message":error.to_string()}}),
-                ))
-                .await?;
-        }
-        result.into_result().map(|_| ())
     }
 }
