@@ -8,6 +8,7 @@
   import BotSettingsForm from '../../../components/bots/BotSettingsForm.svelte'
   import BotDeleteDialog from '../../../components/bots/BotDeleteDialog.svelte'
   import BotAvatar from '../../../components/bots/BotAvatar.svelte'
+  import BotActionItems from '../../../components/bots/BotActionItems.svelte'
   import MobileBotSheet from './MobileBotSheet.svelte'
   let {
     bot,
@@ -51,14 +52,17 @@
       <button class="mobile-row" onclick={() => stack.back(() => onselect?.(key))}>{$t(label)}</button>
     {/each}
   {/if}
-  <button
-    class="mobile-row"
-    onclick={() => stack.back(() => stack.open({ content: edit, title: $t('bots.edit'), modal: true }))}
-    >{$t('bots.edit')}</button
+  <BotActionItems
+    edit={() => stack.back(() => stack.open({ content: edit, title: $t('bots.edit'), modal: true }))}
+    reload={() => stack.back(reload)}
+    remove={() => stack.back(() => (deleting = true))}
   >
-  <button class="mobile-row" onclick={() => stack.back(reload)}>{$t('bots.reload')}</button>
-  <button class="mobile-row text-destructive" onclick={() => stack.back(() => (deleting = true))}
-    >{$t('bots.delete')}</button
-  >
+    {#snippet item(action, children)}
+      <button class:!text-destructive={action.destructive} class="mobile-row" disabled={action.disabled} onclick={action.select}>
+        {@render children()}
+      </button>
+    {/snippet}
+    {#snippet separator()}<div class="h-px bg-border"></div>{/snippet}
+  </BotActionItems>
 </MobileBotSheet>
 {#if deleting}<BotDeleteDialog {bot} onclose={() => (deleting = false)} ondone={() => (deleting = false)} />{/if}

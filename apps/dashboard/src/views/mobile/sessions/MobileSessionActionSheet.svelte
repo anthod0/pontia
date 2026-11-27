@@ -11,9 +11,7 @@
   import { navigate } from '$lib/navigation'
   import { useMobileStack } from '$lib/mobile/overlayStack.svelte'
   import { sessionRecentFiles, withSessionRecentFile } from '$lib/sessionRecentFiles'
-  import { compactionDisabledReason } from '$lib/session-chat/compaction'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
-  import { isTerminalSession } from '$lib/sessionState'
   import * as Sheet from '$lib/components/ui/sheet'
   import BottomSheet from '$lib/components/ui/overlay/BottomSheet.svelte'
   import { useDeviceRuntime } from '../../../device/context'
@@ -22,6 +20,7 @@
   import MobileSessionFilesScreen from './MobileSessionFilesScreen.svelte'
   import MobileSessionGitScreen from './MobileSessionGitScreen.svelte'
   import MobileFilePreviewScreen from './MobileFilePreviewScreen.svelte'
+  import MobileSessionActionItems from './MobileSessionActionItems.svelte'
   let {
     session,
     open = $bindable(false),
@@ -113,38 +112,26 @@
       <span class="truncate">{clientSessionLabel(session)} · {session.workspace}</span>
     </p>
     <div class="overflow-auto">
-      <button class="mobile-row" onclick={() => stack.back(() => openWorkspace('files'))}
-        >{$t('files.title')}<span class="ml-auto"
-          >{sessionRecentFiles(recent.current, session.session_id).length}</span
-        ></button
+      <MobileSessionActionItems
+        {session}
+        fileCount={sessionRecentFiles(recent.current, session.session_id).length}
+        gitSummary={`${status?.branch ?? ''} ${status?.state === 'observed' && !status.clean ? $t('git.dirty') : ''}`.trim()}
+        openFiles={() => openWorkspace('files')}
+        openGit={() => openWorkspace('git')}
+        newSession={() => void navigate('/new', { workspace: session.workspace_id })}
+        {rename}
+        {pin}
+        {archive}
+        {compact}
+        {exit}
+        {compacting}
       >
-      <button class="mobile-row" onclick={() => stack.back(() => openWorkspace('git'))}
-        >{$t('git.title')}<span class="ml-auto"
-          >{status?.branch ?? ''} {status?.state === 'observed' && !status.clean ? $t('git.dirty') : ''}</span
-        ></button
-      >
-      <button
-        class="mobile-row"
-        onclick={() => stack.back(() => navigate('/new', { workspace: session.workspace_id }))}
-        >{$t('chat.newInWorkspace')}</button
-      >
-      <button class="mobile-row" onclick={() => stack.back(rename)}>{$t('common.rename')}</button>
-      {#if !session.archived_at}<button class="mobile-row" onclick={() => stack.back(pin)}
-          >{$t(session.pinned_at ? 'sessions.unpin' : 'sessions.pin')}</button
-        >{/if}
-      <button class="mobile-row" onclick={() => stack.back(archive)}
-        >{$t(session.archived_at ? 'common.unarchive' : 'common.archive')}</button
-      >
-      <button
-        class="mobile-row disabled:opacity-50"
-        disabled={!!compactionDisabledReason(session, compacting, $t)}
-        onclick={() => stack.back(compact)}>{$t('compaction.action')}</button
-      >
-      <button
-        class="mobile-row text-destructive disabled:opacity-50"
-        disabled={isTerminalSession(session)}
-        onclick={() => stack.back(exit)}>{$t('chat.endCurrent')}</button
-      >
+        {#snippet item(action, children)}
+          <button class="mobile-row disabled:opacity-50" class:text-destructive={action.destructive} disabled={action.disabled} onclick={() => stack.back(action.select)}>
+            {@render children()}
+          </button>
+        {/snippet}
+      </MobileSessionActionItems>
     </div></BottomSheet
   ></Sheet.Root
 >

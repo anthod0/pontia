@@ -2,8 +2,10 @@
   import { toast } from 'svelte-sonner'
   import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
   import * as Tabs from '$lib/components/ui/tabs'
+  import * as ContextMenu from '$lib/components/ui/context-menu'
   import { t } from '$lib/i18n'
   import { navigate } from '$lib/navigation'
+  import { sessionRecentFiles } from '$lib/sessionRecentFiles'
   import { useDeviceRuntime } from '../../../device/context'
   import type { SessionView } from '../../../api/types'
   import { createSessionList, type SessionScope } from '../../../features/sessions/sessionList.svelte'
@@ -12,6 +14,8 @@
   import MobileWorkspaceSheet from '../chat/MobileWorkspaceSheet.svelte'
   import MobileSessionFilterBar from './MobileSessionFilterBar.svelte'
   import MobileSessionRow from './MobileSessionRow.svelte'
+  import MobileSessionActionItems from './MobileSessionActionItems.svelte'
+  import { useSessionPanel, type SessionPanelTab } from '../../../components/chat/sessionPanel/sessionPanelContext.svelte'
   import { workspaceTitle } from '../../../components/chat/sessionMetadata'
   const device = useDeviceRuntime()
   const { selectedWorkspaceId, sessionScope } = device.sidebarSessionFilter
@@ -26,6 +30,9 @@
     renameOpen = $state(false),
     renameError = $state('')
   const workspaces = device.workspaceQueries.createWorkspacesQuery()
+  const panel = useSessionPanel()!
+  const recent = panel.recentFiles(device)
+  const statuses = device.workspaceQueries.createWorkspaceGitStatusesStore()
   const current = $derived(workspaces.data?.find((w) => w.workspace_id === workspace))
   const sessions = createSessionList(
     device,
@@ -57,6 +64,10 @@
       renameError = e instanceof Error ? e.message : String(e)
     }
   }
+  function openWorkspace(session: SessionView, tab: SessionPanelTab) {
+    panel.mobileEntry = { sessionId: session.session_id, tab }
+    void navigate('/chat/' + encodeURIComponent(session.session_id))
+  }
 </script>
 
 <Tabs.Root value={scope} onValueChange={(value) => filter(value as SessionScope)} class="gap-1">
@@ -67,6 +78,7 @@
   <Tabs.Content value={scope} class="pb-16 text-base">
     {#if sessions.query.error}<p role="alert">{sessions.query.error.message}</p>{/if}
     {#each sessions.list as session, i (session.session_id)}
+      {@const status = session.workspace_id ? $statuses[session.workspace_id] : undefined}
       {#if scope !== 'pinned' && session.pinned_at && i === 0}<h2 class="py-2 text-sm text-muted-foreground">
           {$t('common.pinned')}
         </h2>
@@ -87,7 +99,30 @@
         busy={sessions.busyId === session.session_id}
         pin={() => run(() => sessions.pin(session))}
         archive={() => run(() => sessions.archive(session))}
-      />
+      >
+        {#snippet contextMenu()}
+          <MobileSessionActionItems
+            {session}
+            fileCount={sessionRecentFiles(recent.current, session.session_id).length}
+            gitSummary={`${status?.branch ?? ''} ${status?.state === 'observed' && !status.clean ? $t('git.dirty') : ''}`.trim()}
+            openFiles={() => openWorkspace(session, 'files')}
+            openGit={() => openWorkspace(session, 'git')}
+            newSession={() => void navigate('/new', { workspace: session.workspace_id })}
+            rename={() => { rename = session; renameError = ''; renameOpen = true }}
+            pin={() => void run(() => sessions.pin(session))}
+            archive={() => void run(() => sessions.archive(session))}
+            compact={() => void run(() => device.api.compactSession(session.session_id))}
+            exit={() => void run(() => sessions.exit(session))}
+            busy={sessions.busyId === session.session_id}
+          >
+            {#snippet item(action, children)}
+              <ContextMenu.Item disabled={action.disabled} variant={action.destructive ? 'destructive' : 'default'} onSelect={action.select}>
+                {@render children()}
+              </ContextMenu.Item>
+            {/snippet}
+          </MobileSessionActionItems>
+        {/snippet}
+      </MobileSessionRow>
     {:else}{#if !sessions.query.error}
         <p role="status" class="py-8 text-center text-muted-foreground">
           {$t(

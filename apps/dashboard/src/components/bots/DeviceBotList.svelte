@@ -8,10 +8,7 @@
   import { dashboardPath, navigate } from '$lib/navigation'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
-  import { openContextMenu, type MenuAnchor } from '$lib/contextMenu'
-  import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
-  import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
-  import TrashIcon from 'phosphor-svelte/lib/TrashIcon'
+  import * as ContextMenu from '$lib/components/ui/context-menu/index.js'
   import DotsThreeVerticalIcon from 'phosphor-svelte/lib/DotsThreeVerticalIcon'
   import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -19,6 +16,7 @@
   import { useDeviceRuntime } from '../../device/context'
   import BotSettingsDialog from './BotSettingsDialog.svelte'
   import BotDeleteDialog from './BotDeleteDialog.svelte'
+  import BotActionItems from './BotActionItems.svelte'
   import { ApiError } from '../../api/errors'
   import type { Bot } from '../../api/types'
 
@@ -29,17 +27,10 @@
   let creating = $state(false)
   let editing = $state<Bot | null>(null)
   let deleting = $state<Bot | null>(null)
-  let menu = $state<{ bot: Bot; anchor: MenuAnchor; row: HTMLElement } | null>(null)
+  let menu = $state<{ bot: Bot; row: HTMLElement } | null>(null)
   let menuOpen = $state(false)
 
   const rail = $derived(sidebar.state === 'collapsed')
-
-  function showMenu(event: MouseEvent, bot: Bot) {
-    const anchor = openContextMenu(event)
-    if (!anchor) return
-    menu = { bot, anchor, row: event.currentTarget as HTMLElement }
-    menuOpen = true
-  }
 
   // Like the /reload command in the Bot chat: the next message starts a new Bot Session generation.
   async function reload(bot: Bot) {
@@ -58,6 +49,22 @@
     }
   }
 </script>
+
+{#snippet botMenuItems(Item: typeof DropdownMenu.Item, Separator: typeof DropdownMenu.Separator, bot: Bot)}
+  <BotActionItems
+    edit={() => { editing = bot }}
+    reload={() => void reload(bot)}
+    remove={() => { deleting = bot }}
+    reloading={directory.reloading === bot.bot_id}
+  >
+    {#snippet item(action, children)}
+      <Item disabled={action.disabled} variant={action.destructive ? 'destructive' : 'default'} onSelect={action.select}>
+        {@render children()}
+      </Item>
+    {/snippet}
+    {#snippet separator()}<Separator />{/snippet}
+  </BotActionItems>
+{/snippet}
 
 <Sidebar.Group>
   <Sidebar.GroupLabel class="sticky top-0 z-10 flex h-7 items-center gap-1 bg-sidebar p-0 pr-0.5 pl-2 max-md:h-9 group-data-[collapsible=icon]:hidden">
@@ -100,33 +107,41 @@
         {@const path = `/bots/${encodeURIComponent(bot.bot_id)}`}
         {@const active = page.params.botId === bot.bot_id && (handle === undefined || handle === page.params.handle)}
         <Sidebar.MenuItem>
-          <Sidebar.MenuButton isActive={active} tooltipContent={bot.name}
-            class="group-has-data-[sidebar=menu-action]/menu-item:pr-3.5 touch-target:pr-12! h-auto min-h-12 gap-2.5 px-2 py-1.5 max-md:min-h-15 max-md:gap-3 max-md:px-2.5 max-md:py-2 [&_svg]:size-7 max-md:[&_svg]:size-9 group-data-[collapsible=icon]:min-h-0 group-data-[collapsible=icon]:p-1! group-data-[collapsible=icon]:[&_svg]:size-6">
-            {#snippet child({ props })}
-              <a {...props} href={scope ? scope + path : dashboardPath(path)} aria-current={active ? 'page' : undefined}
-                onclick={(event) => { event.preventDefault(); void navigate(path, undefined, { scope }) }}
-                oncontextmenu={(event) => showMenu(event, bot)}>
-                <span class="relative shrink-0">
-                  <BotAvatar shape={bot.avatar_shape} color={bot.avatar_color} {working} />
-                  {#if todos > 0}
-                    <span role="img" aria-label={$t('bots.openTodos', { count: todos })}
-                      class="pointer-events-none absolute -top-[3px] -right-[3px] size-2 rounded-full bg-primary ring-2 ring-sidebar transition-[box-shadow] duration-[80ms] group-hover/menu-button:ring-sidebar-accent group-data-active/menu-button:ring-sidebar-accent max-md:size-2.5"></span>
-                  {/if}
-                </span>
-                <span class="flex min-w-0 flex-1 flex-col gap-px group-data-[collapsible=icon]:sr-only">
-                  <span class="truncate font-medium text-heading group-data-[active=true]/menu-button:font-semibold max-md:text-base">{bot.name}</span>
-                  {#if working}
-                    <span class="truncate text-xs text-primary max-md:text-13">{botWorkStatusLabel(status, $t)}</span>
-                  {/if}
-                </span>
-              </a>
-            {/snippet}
-          </Sidebar.MenuButton>
+          <ContextMenu.Root>
+            <ContextMenu.Trigger>
+              {#snippet child({ props: contextProps })}
+                <Sidebar.MenuButton {...contextProps} isActive={active} tooltipContent={bot.name}
+                  class="group-has-data-[sidebar=menu-action]/menu-item:pr-3.5 touch-target:pr-12! h-auto min-h-12 gap-2.5 px-2 py-1.5 max-md:min-h-15 max-md:gap-3 max-md:px-2.5 max-md:py-2 [&_svg]:size-7 max-md:[&_svg]:size-9 group-data-[collapsible=icon]:min-h-0 group-data-[collapsible=icon]:p-1! group-data-[collapsible=icon]:[&_svg]:size-6">
+                  {#snippet child({ props })}
+                    <a {...props} href={scope ? scope + path : dashboardPath(path)} aria-current={active ? 'page' : undefined}
+                      onclick={(event) => { event.preventDefault(); void navigate(path, undefined, { scope }) }}>
+                      <span class="relative shrink-0">
+                        <BotAvatar shape={bot.avatar_shape} color={bot.avatar_color} {working} />
+                        {#if todos > 0}
+                          <span role="img" aria-label={$t('bots.openTodos', { count: todos })}
+                            class="pointer-events-none absolute -top-[3px] -right-[3px] size-2 rounded-full bg-primary ring-2 ring-sidebar transition-[box-shadow] duration-[80ms] group-hover/menu-button:ring-sidebar-accent group-data-active/menu-button:ring-sidebar-accent max-md:size-2.5"></span>
+                        {/if}
+                      </span>
+                      <span class="flex min-w-0 flex-1 flex-col gap-px group-data-[collapsible=icon]:sr-only">
+                        <span class="truncate font-medium text-heading group-data-[active=true]/menu-button:font-semibold max-md:text-base">{bot.name}</span>
+                        {#if working}
+                          <span class="truncate text-xs text-primary max-md:text-13">{botWorkStatusLabel(status, $t)}</span>
+                        {/if}
+                      </span>
+                    </a>
+                  {/snippet}
+                </Sidebar.MenuButton>
+              {/snippet}
+            </ContextMenu.Trigger>
+            <ContextMenu.Content aria-label={$t('bots.actions')} class="w-auto min-w-44">
+              {@render botMenuItems(ContextMenu.Item, ContextMenu.Separator, bot)}
+            </ContextMenu.Content>
+          </ContextMenu.Root>
           <Sidebar.MenuAction class="hidden touch-target:flex touch-target:size-11 touch-target:right-0 touch-target:after:hidden"
             aria-label={`${bot.name} · ${$t('bots.actions')}`} aria-haspopup="menu" aria-expanded={menuOpen && menu?.bot.bot_id === bot.bot_id}
             onclick={event => {
               const row = event.currentTarget as HTMLElement
-              menu = { bot, row, anchor: row }
+              menu = { bot, row }
               menuOpen = true
             }}>
             <DotsThreeVerticalIcon />
@@ -137,14 +152,11 @@
   </Sidebar.GroupContent>
 </Sidebar.Group>
 
-<ResponsiveMenu bind:open={menuOpen} label={menu?.bot.name ?? $t('bots.actions')} aria-label={$t('bots.actions')} customAnchor={menu?.anchor} side="bottom" align="start" sideOffset={2} class="w-auto min-w-44"
+<ResponsiveMenu bind:open={menuOpen} label={menu?.bot.name ?? $t('bots.actions')} aria-label={$t('bots.actions')} side="bottom" align="start" sideOffset={2} class="w-auto min-w-44"
     onCloseAutoFocus={(event) => { event.preventDefault(); if (!editing && !deleting && menu?.row.isConnected) menu.row.focus() }}>
   {#if menu}
     {@const bot = menu.bot}
-    <DropdownMenu.Item onSelect={() => { editing = bot }}><PencilSimpleIcon />{$t('bots.edit')}</DropdownMenu.Item>
-    <DropdownMenu.Item disabled={directory.reloading === bot.bot_id} onSelect={() => void reload(bot)}><ArrowClockwiseIcon />{$t('bots.reload')}</DropdownMenu.Item>
-    <DropdownMenu.Separator />
-    <DropdownMenu.Item variant="destructive" onSelect={() => { deleting = bot }}><TrashIcon />{$t('bots.delete')}</DropdownMenu.Item>
+    {@render botMenuItems(DropdownMenu.Item, DropdownMenu.Separator, bot)}
   {/if}
 </ResponsiveMenu>
 

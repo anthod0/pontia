@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte'
+  import { onDestroy, type Snippet } from 'svelte'
+  import * as ContextMenu from '$lib/components/ui/context-menu'
   import { t, currentLocale } from '$lib/i18n'
   import SessionStateDot from './SessionStateDot.svelte'
   import { navigate } from '$lib/navigation'
@@ -17,6 +18,7 @@
     pin,
     archive,
     busy,
+    contextMenu,
   }: {
     session: SessionView
     open: boolean
@@ -25,6 +27,7 @@
     pin: () => void
     archive: () => void
     busy: boolean
+    contextMenu: Snippet
   } = $props()
   let start: PointerEvent | null = null,
     timer: ReturnType<typeof setTimeout>,
@@ -79,43 +82,47 @@
       >{$t(session.archived_at ? 'common.unarchive' : 'common.archive')}</button
     >
   </div>
-  <button
-    class="mobile-row relative touch-pan-y select-none bg-background transition-transform"
-    style:transition-duration={drag !== null ? '0ms' : undefined}
-    style:transform={'translateX(' + (drag ?? (open ? -width : 0)) + 'px)'}
-    onpointerdown={down}
-    onpointermove={move}
-    onpointerleave={() => {
-      if (drag === null) cancel()
-    }}
-    onpointerup={end}
-    onpointercancel={cancel}
-    oncontextmenu={(e) => {
-      e.preventDefault()
-      cancel()
-      suppress = true
-      menu()
-    }}
-    onclick={() => {
-      if (suppress) {
-        suppress = false
-        return
-      }
-      if (open) reveal(false)
-      else void navigate('/chat/' + encodeURIComponent(session.session_id))
-    }}
-  >
-    <ClientIcon clientType={session.client_type} {acpAgentId} class="size-8 shrink-0" />
-    <span class="min-w-0 flex-1">
-      <span class="flex items-center gap-1.5"
-        >{#if session.pinned_at}<PushPinIcon class="size-4" />{/if}<strong class="flex-1 truncate"
-          >{sessionChatTitle(session, $t)}</strong
+  <ContextMenu.Root>
+    <ContextMenu.Trigger>
+      {#snippet child({ props })}
+        <button
+          {...props}
+          class="mobile-row relative touch-pan-y select-none bg-background transition-transform"
+          style:transition-duration={drag !== null ? '0ms' : undefined}
+          style:transform={'translateX(' + (drag ?? (open ? -width : 0)) + 'px)'}
+          onpointerdown={down}
+          onpointermove={move}
+          onpointerleave={() => {
+            if (drag === null) cancel()
+          }}
+          onpointerup={end}
+          onpointercancel={cancel}
+          onclick={() => {
+            if (suppress) {
+              suppress = false
+              return
+            }
+            if (open) reveal(false)
+            else void navigate('/chat/' + encodeURIComponent(session.session_id))
+          }}
         >
-        <SessionStateDot state={session.state} />
-      </span>
-      <small class="flex justify-between text-muted-foreground"
-        >{clientSessionLabel(session)}<time datetime={session.updated_at}>{formatRelativeTime(session.updated_at,$currentLocale)}</time></small
-      >
-    </span>
-  </button>
+          <ClientIcon clientType={session.client_type} {acpAgentId} class="size-8 shrink-0" />
+          <span class="min-w-0 flex-1">
+            <span class="flex items-center gap-1.5"
+              >{#if session.pinned_at}<PushPinIcon class="size-4" />{/if}<strong class="flex-1 truncate"
+                >{sessionChatTitle(session, $t)}</strong
+              >
+              <SessionStateDot state={session.state} />
+            </span>
+            <small class="flex justify-between text-muted-foreground"
+              >{clientSessionLabel(session)}<time datetime={session.updated_at}>{formatRelativeTime(session.updated_at,$currentLocale)}</time></small
+            >
+          </span>
+        </button>
+      {/snippet}
+    </ContextMenu.Trigger>
+    <ContextMenu.Content aria-label={sessionChatTitle(session, $t)} class="min-w-44">
+      {@render contextMenu()}
+    </ContextMenu.Content>
+  </ContextMenu.Root>
 </div>

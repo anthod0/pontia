@@ -747,13 +747,13 @@ test("right-clicking a sidebar session opens its actions menu without opening th
   expect(mocks.navigate).not.toHaveBeenCalled();
 });
 
-test("shift right-click on a sidebar session keeps the browser menu", async () => {
+test("shift right-click on a sidebar session opens its actions menu", async () => {
   mocks.sessions.set([{ ...chatSession("session-active", "idle", "2026-05-14T01:00:00Z") }]);
   render(AppSidebarHost);
 
   const row = screen.getByText("session-active").closest("button")!;
-  expect(await fireEvent.contextMenu(row, { shiftKey: true })).toBe(true);
-  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  expect(await fireEvent.contextMenu(row, { shiftKey: true })).toBe(false);
+  expect(screen.getByRole("menu")).toBeInTheDocument();
 });
 
 function mockSidebarBot() {

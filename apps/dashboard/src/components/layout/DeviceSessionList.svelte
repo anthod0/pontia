@@ -18,10 +18,10 @@
   import { navigate } from '$lib/navigation'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
+  import * as ContextMenu from '$lib/components/ui/context-menu/index.js'
   import * as Tooltip from '$lib/components/ui/tooltip/index.js'
   import ShortcutKeys from '$lib/components/shortcuts/ShortcutKeys.svelte'
   import { cn } from '$lib/utils.js'
-  import { openContextMenu, type MenuAnchor } from '$lib/contextMenu'
   import { createSessionList } from '../../features/sessions/sessionList.svelte'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import { sessionStateDotClass } from '$lib/sessionState'
@@ -41,8 +41,6 @@
   let renameError = $state<string | null>(null)
   let filterTrigger = $state<HTMLButtonElement | null>(null)
   let sessionActionMenuOpenKey = $state<string | null>(null)
-  // Set while a row's actions menu was opened by right-clicking the row rather than by its menu button.
-  let sessionContextMenu = $state<{ actionKey: string; anchor: MenuAnchor } | null>(null)
   let sessionsOpen = $state(true)
   const { selectedWorkspaceId, sessionScope } = device.sidebarSessionFilter
   const workspacesQuery = createWorkspacesQuery()
@@ -90,15 +88,7 @@
   }
 
   function setSessionActionMenuOpen(actionKey: string, open: boolean): void {
-    if (open) sessionContextMenu = null
     sessionActionMenuOpenKey = open ? actionKey : null
-  }
-
-  function openSessionContextMenu(event: MouseEvent, actionKey: string): void {
-    const anchor = openContextMenu(event)
-    if (!anchor) return
-    sessionContextMenu = { actionKey, anchor }
-    sessionActionMenuOpenKey = actionKey
   }
 
   function startRenamingSession(session: SessionView) {
@@ -161,17 +151,47 @@
 
 <svelte:window onpopstate={() => (currentPath = window.location.pathname)} />
 
+{#snippet sessionMenuItems(Item: typeof DropdownMenu.Item, Separator: typeof DropdownMenu.Separator, session: SessionView)}
+  <Item onclick={() => startRenamingSession(session)}>
+    <PencilSimpleIcon class="size-4" /> {$t('common.rename')}
+  </Item>
+  <Item disabled={sessions.busyId === session.session_id} onclick={() => void togglePinSessionFromMenu(session)}>
+    {#if session.pinned_at}
+      <PushPinSlashIcon class="size-4" /> {$t('sessions.unpin')}
+    {:else}
+      <PushPinIcon class="size-4" /> {$t('sessions.pin')}
+    {/if}
+  </Item>
+  <Item disabled={sessions.busyId === session.session_id} onclick={() => void archiveSessionFromMenu(session)}>
+    <ArchiveIcon class="size-4" /> {$t('common.archive')}
+  </Item>
+  {#if !isTerminalSessionState(session.state)}
+    <Separator />
+    <Item variant="destructive" disabled={sessions.busyId === session.session_id} onclick={() => void exitSessionFromMenu(session)}>
+      <SignOutIcon class="size-4" /> {$t('common.exit')}
+    </Item>
+  {/if}
+{/snippet}
+
 {#snippet sessionMenuItem(session: SessionView, actionKey: string)}
-  {@const contextMenu = sessionContextMenu?.actionKey === actionKey ? sessionContextMenu : null}
   {@const acpAgentId = (session.acp as { agent_id?: string } | undefined)?.agent_id}
   <Sidebar.MenuItem>
-    <Sidebar.MenuButton class="touch-target:group-has-data-[sidebar=menu-action]/menu-item:pr-16 touch-target:h-11" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session, $t)} · ${statusLabel(session.state, $t)}`} onclick={() => openSession(session.session_id)} oncontextmenu={(event) => openSessionContextMenu(event, actionKey)}>
-      <ClientIcon clientType={session.client_type} {acpAgentId} />
-      {#if session.pinned_at}
-        <PushPinIcon class="size-3.5 shrink-0" aria-label={$t('sessions.pinnedSession')} />
-      {/if}
-      <span class="line-clamp-1">{sessionChatTitle(session, $t)}</span>
-    </Sidebar.MenuButton>
+    <ContextMenu.Root>
+      <ContextMenu.Trigger>
+        {#snippet child({ props })}
+          <Sidebar.MenuButton {...props} class="touch-target:group-has-data-[sidebar=menu-action]/menu-item:pr-16 touch-target:h-11" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session, $t)} · ${statusLabel(session.state, $t)}`} onclick={() => openSession(session.session_id)}>
+            <ClientIcon clientType={session.client_type} {acpAgentId} />
+            {#if session.pinned_at}
+              <PushPinIcon class="size-3.5 shrink-0" aria-label={$t('sessions.pinnedSession')} />
+            {/if}
+            <span class="line-clamp-1">{sessionChatTitle(session, $t)}</span>
+          </Sidebar.MenuButton>
+        {/snippet}
+      </ContextMenu.Trigger>
+      <ContextMenu.Content aria-label={sessionChatTitle(session, $t)} class="w-44">
+        {@render sessionMenuItems(ContextMenu.Item, ContextMenu.Separator, session)}
+      </ContextMenu.Content>
+    </ContextMenu.Root>
     {#if isSessionVisibleState(session.state)}
       <span
         class={cn('pointer-events-none absolute top-1.5 right-1 touch-target:top-3 touch-target:right-11 flex aspect-square w-5 items-center justify-center transition-opacity group-has-[:focus-visible]/menu-item:opacity-0 group-hover/menu-item:opacity-0 group-data-[collapsible=icon]:hidden', sessionActionMenuOpenKey === actionKey ? 'opacity-0' : 'opacity-100')}
@@ -180,7 +200,7 @@
         <span class={`size-2 rounded-full ${sessionStateDotClass(session.state)}`}></span>
       </span>
     {/if}
-    <ResponsiveMenu bind:open={() => sessionActionMenuOpenKey === actionKey, (open) => setSessionActionMenuOpen(actionKey, open)} label={sessionChatTitle(session, $t)} customAnchor={contextMenu?.anchor} side={contextMenu ? 'bottom' : 'right'} align="start" sideOffset={contextMenu ? 2 : 4} class="w-44">
+    <ResponsiveMenu bind:open={() => sessionActionMenuOpenKey === actionKey, (open) => setSessionActionMenuOpen(actionKey, open)} label={sessionChatTitle(session, $t)} side="right" align="start" sideOffset={4} class="w-44">
       {#snippet trigger()}
         <Sidebar.MenuAction
           showOnHover
@@ -197,25 +217,7 @@
           {/snippet}
         </Sidebar.MenuAction>
       {/snippet}
-      <DropdownMenu.Item onclick={() => startRenamingSession(session)}>
-        <PencilSimpleIcon class="size-4" /> {$t('common.rename')}
-      </DropdownMenu.Item>
-      <DropdownMenu.Item disabled={sessions.busyId === session.session_id} onclick={() => void togglePinSessionFromMenu(session)}>
-        {#if session.pinned_at}
-          <PushPinSlashIcon class="size-4" /> {$t('sessions.unpin')}
-        {:else}
-          <PushPinIcon class="size-4" /> {$t('sessions.pin')}
-        {/if}
-      </DropdownMenu.Item>
-      <DropdownMenu.Item disabled={sessions.busyId === session.session_id} onclick={() => void archiveSessionFromMenu(session)}>
-        <ArchiveIcon class="size-4" /> {$t('common.archive')}
-      </DropdownMenu.Item>
-      {#if !isTerminalSessionState(session.state)}
-        <DropdownMenu.Separator />
-        <DropdownMenu.Item variant="destructive" disabled={sessions.busyId === session.session_id} onclick={() => void exitSessionFromMenu(session)}>
-          <SignOutIcon class="size-4" /> {$t('common.exit')}
-        </DropdownMenu.Item>
-      {/if}
+      {@render sessionMenuItems(DropdownMenu.Item, DropdownMenu.Separator, session)}
     </ResponsiveMenu>
   </Sidebar.MenuItem>
 {/snippet}
