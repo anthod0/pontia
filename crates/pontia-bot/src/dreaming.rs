@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use pontia_agent_control::{
-    AgentControl, SessionOwnership, SubmitInboxMessageRequest,
+    AgentControl, InputPayload, SendMode, SessionOwnership,
     interactions::{InteractionIntent, InteractionState},
 };
 use pontia_core::{Error, Result};
@@ -11,6 +11,7 @@ use tokio::sync::{Mutex, watch};
 
 use crate::{
     conversation::ConversationService,
+    delivery::send_input,
     identity::{BotIdentity, BotRole},
 };
 
@@ -116,30 +117,25 @@ impl DreamingService {
             "Organize all unfinished memories. Start with `pontia bot memory pending`, following every page. {pending} memories are currently pending. Available Bots for an essential clarification (choose one by context): {}",
             serde_json::to_string(&recipients)?
         );
-        // The Inbox receipt keeps this round in flight until the native Turn is observed.
-        let delivery = self
-            .control
-            .inbox_commands()
-            .submit_message(
-                session_id,
-                SubmitInboxMessageRequest {
-                    input,
-                    delivery_policy: "after_idle".into(),
-                    metadata: json!({}),
-                },
+        let delivery = send_input(
+            &self.control,
+            session_id,
+            InputPayload::new(input).force_queue(),
+            SendMode::Queue,
+        )
+        .await;
+        if delivery.is_ok()
+            || matches!(
+                &delivery,
+                Err(pontia_agent_control::DeliveryError::Uncertain(_))
             )
-            .await?;
-        self.control
-            .session_commands()
-            .exit_when_done(session_id)
-            .await?;
-        let message = &delivery.data["inbox_message"];
-        if let Some(reason) = message["failure_message"].as_str() {
-            if message["state"] == "unknown" {
-                return Err(Error::ControlUnknown(reason.into()));
-            }
-            return Err(Error::Domain(reason.into()));
+        {
+            self.control
+                .session_commands()
+                .exit_when_done(session_id)
+                .await?;
         }
+        delivery.map_err(Error::from)?;
         tracing::info!(%session_id, pending, "Dreaming started");
         Ok(Some(session_id.into()))
     }

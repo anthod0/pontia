@@ -5,13 +5,15 @@ use std::{
 };
 
 use pontia_agent_control::{
-    AgentControl, CreateSessionRequest, LaunchableAgentProfile, LiveInputDelivery, SessionOwnership,
+    AgentControl, CreateSessionRequest, DeliveryError, InputPayload, LaunchableAgentProfile,
+    SendMode, SessionOwnership,
 };
 use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex as AsyncMutex, broadcast};
 
 use crate::{
+    delivery::{BotInputDelivery, send_input},
     handoff::HandoffService,
     identity::{BotAccess, BotIdentity, BotRole, IdentityError, TOOL_TOKEN_ENV},
     messages::{BotMessage, MessageKind, MessageService, TodoAction, TodoList},
@@ -44,7 +46,7 @@ pub struct SentBotMessage {
     #[serde(flatten)]
     pub message: BotMessage,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub delivery: Option<LiveInputDelivery>,
+    pub delivery: Option<BotInputDelivery>,
 }
 
 #[derive(Clone, Serialize)]
@@ -596,7 +598,7 @@ impl ConversationService {
     }
 
     /// Routes input by stable Bot identity, resolving the current Session at delivery time.
-    pub async fn deliver_input(&self, bot_id: &str, input: &str) -> Result<LiveInputDelivery> {
+    pub async fn deliver_input(&self, bot_id: &str, input: &str) -> Result<BotInputDelivery> {
         self.deliver_notification(bot_id, input, DeliveryMode::StartIfNeeded)
             .await
             .map(|delivery| delivery.expect("StartIfNeeded resolves a Bot Session"))
@@ -613,7 +615,7 @@ impl ConversationService {
         bot_id: &str,
         input: &str,
         mode: DeliveryMode,
-    ) -> Result<Option<LiveInputDelivery>> {
+    ) -> Result<Option<BotInputDelivery>> {
         let activity = self.activity(bot_id);
         let revision = activity.switch_failure.lock().unwrap().0;
         let _guard = activity.delivery.lock().await;
@@ -644,7 +646,7 @@ impl ConversationService {
         activity: &Activity,
         revision: u64,
         mode: DeliveryMode,
-    ) -> Result<Option<LiveInputDelivery>> {
+    ) -> Result<Option<BotInputDelivery>> {
         {
             let failure = activity.switch_failure.lock().unwrap();
             if failure.0 != revision {
@@ -714,7 +716,7 @@ impl ConversationService {
         bot_id: &str,
         session_id: &str,
         input: &str,
-    ) -> Result<LiveInputDelivery> {
+    ) -> Result<BotInputDelivery> {
         let position = self
             .control
             .queries()
@@ -729,18 +731,20 @@ impl ConversationService {
         .bind(bot_id)
         .execute(&self.control.db())
         .await?;
-        let result = self
-            .control
-            .inbox_commands()
-            .submit_live_input(session_id, input.into())
-            .await;
-        if result.is_err() && !matches!(&result, Err(Error::ControlUnknown(_))) {
+        let result = send_input(
+            &self.control,
+            session_id,
+            InputPayload::from(input),
+            SendMode::Immediate,
+        )
+        .await;
+        if result.is_err() && !matches!(&result, Err(DeliveryError::Uncertain(_))) {
             sqlx::query("UPDATE bots SET awaiting_reply = 0 WHERE bot_id = ?")
                 .bind(bot_id)
                 .execute(&self.control.db())
                 .await?;
         }
-        result
+        result.map(BotInputDelivery::from).map_err(Error::from)
     }
 
     async fn current_session(&self, bot: Bot, activity: &Activity) -> Result<String> {

@@ -1,5 +1,4 @@
 mod live;
-pub use live::LiveInputDelivery;
 pub use live::{SendMode, SendOutcome};
 mod retry;
 pub use retry::RetryInboxMessageRequest;

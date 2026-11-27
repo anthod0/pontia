@@ -405,17 +405,17 @@ async fn lost_steering_receipt_is_unknown_and_not_replayed() {
 
 #[tokio::test]
 async fn live_input_queues_only_when_the_busy_peer_lacks_steering() {
-    use pontia_agent_control::LiveInputDelivery;
+    use pontia_agent_control::{DeliveryError, SendMode, SendOutcome};
     for supported in [false, true] {
         let h = Harness::new(&[("ACP_STEERING", if supported { "1" } else { "0" })]).await;
         let session = h.create("first").await.unwrap();
         let inbox = h.app.inbox_commands();
         assert_eq!(
             inbox
-                .submit_live_input(&session, "end_turn".into())
+                .send(&session, "end_turn".into(), SendMode::Immediate)
                 .await
                 .unwrap(),
-            LiveInputDelivery::Accepted
+            SendOutcome::Delivered
         );
         h.release("update-1");
         h.wait_requests("session/prompt", 1).await;
@@ -426,19 +426,25 @@ async fn live_input_queues_only_when_the_busy_peer_lacks_steering() {
             .unwrap();
         h.wait_turn(&session, &turn, "running").await;
         let receipt = inbox
-            .submit_live_input(&session, "end_turn".into())
-            .await
-            .unwrap();
+            .send(&session, "end_turn".into(), SendMode::Immediate)
+            .await;
         assert_eq!(h.requests("session/prompt"), 1);
-        let messages = inbox.list_messages(&session).await.unwrap();
         if supported {
-            assert_eq!(receipt, LiveInputDelivery::Accepted);
+            assert_eq!(receipt.unwrap(), SendOutcome::Delivered);
             assert_eq!(h.requests("_session/steering"), 1);
-            assert!(messages.is_empty());
+            assert!(inbox.list_messages(&session).await.unwrap().is_empty());
             h.release("release-1");
             h.wait_turn(&session, &turn, "completed").await;
         } else {
-            assert_eq!(receipt, LiveInputDelivery::Queued);
+            assert!(matches!(receipt, Err(DeliveryError::Unsupported(_))));
+            assert!(matches!(
+                inbox
+                    .send(&session, "end_turn".into(), SendMode::Queue)
+                    .await
+                    .unwrap(),
+                SendOutcome::Queued { .. }
+            ));
+            let messages = inbox.list_messages(&session).await.unwrap();
             assert_eq!(messages.len(), 1);
             assert_eq!(messages[0].state, "pending");
             finish_queued(
@@ -460,13 +466,27 @@ async fn missing_interject_queues_live_input_and_disables_only_this_peer() {
     let turn = start(&h, &session).await;
     assert_eq!(h.requests("_x.ai/interject"), 0);
     let inbox = h.app.inbox_commands();
-    assert_eq!(
+    assert!(matches!(
         inbox
-            .submit_live_input(&session, "end_turn".into())
+            .send(
+                &session,
+                "end_turn".into(),
+                pontia_agent_control::SendMode::Immediate,
+            )
+            .await,
+        Err(pontia_agent_control::DeliveryError::Unsupported(_))
+    ));
+    assert!(matches!(
+        inbox
+            .send(
+                &session,
+                "end_turn".into(),
+                pontia_agent_control::SendMode::Queue,
+            )
             .await
             .unwrap(),
-        pontia_agent_control::LiveInputDelivery::Queued
-    );
+        pontia_agent_control::SendOutcome::Queued { .. }
+    ));
     let messages = inbox.list_messages(&session).await.unwrap();
     assert!(
         !h.app

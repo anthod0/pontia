@@ -1,8 +1,8 @@
 mod notifications;
 
 use pontia_agent_control::{
-    AgentControl, SessionMessagesQuery, SessionOwnership, SessionView, SubmitInboxMessageRequest,
-    TurnTimelineService, workspaces::require_active_workspace_id,
+    AgentControl, DeliveryError, InputPayload, SendMode, SendOutcome, SessionMessagesQuery,
+    SessionOwnership, SessionView, TurnTimelineService, workspaces::require_active_workspace_id,
 };
 use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -12,7 +12,11 @@ use std::{path::Path, sync::Arc};
 use tokio::sync::Mutex;
 
 use crate::{
-    conversation::ConversationService, handoff::HelperContext, identity::BotRole, records::Bot,
+    conversation::ConversationService,
+    delivery::{BotInputDelivery, send_input},
+    handoff::HelperContext,
+    identity::BotRole,
+    records::Bot,
 };
 
 const HELPER_INSTRUCTIONS: &str = include_str!("helpers/instructions.md");
@@ -90,10 +94,21 @@ pub enum Delivery {
 }
 
 impl Delivery {
-    fn from_result(result: Result<pontia_agent_control::LiveInputDelivery>) -> Self {
+    fn from_result(result: std::result::Result<SendOutcome, DeliveryError>) -> Self {
         match result {
-            Ok(pontia_agent_control::LiveInputDelivery::Accepted) => Self::Accepted,
-            Ok(pontia_agent_control::LiveInputDelivery::Queued) => Self::Queued,
+            Ok(SendOutcome::Delivered) => Self::Accepted,
+            Ok(SendOutcome::Queued { .. }) => Self::Queued,
+            Err(DeliveryError::Uncertain(reason)) => Self::Unknown { reason },
+            Err(error) => Self::Failed {
+                reason: error.to_string(),
+            },
+        }
+    }
+
+    fn from_bot_result(result: Result<BotInputDelivery>) -> Self {
+        match result {
+            Ok(BotInputDelivery::Accepted) => Self::Accepted,
+            Ok(BotInputDelivery::Queued) => Self::Queued,
             Err(Error::ControlUnknown(reason)) => Self::Unknown { reason },
             Err(error) => Self::Failed {
                 reason: error.to_string(),
@@ -168,11 +183,13 @@ impl HelperService {
             } => {
                 self.require_helper(&bot.bot_id, &session_id).await?;
                 nonempty(&message)?;
-                let result = self
-                    .control
-                    .inbox_commands()
-                    .submit_live_input(&session_id, format!("Source: Bot\n\n{message}"))
-                    .await;
+                let result = send_input(
+                    &self.control,
+                    &session_id,
+                    InputPayload::new(format!("Source: Bot\n\n{message}")),
+                    SendMode::Immediate,
+                )
+                .await;
                 Ok(json!({"delivery": Delivery::from_result(result)}))
             }
             HelperCommand::Check(input) => {
@@ -369,33 +386,28 @@ impl HelperService {
             .session_id()
             .ok_or_else(|| Error::Domain("Helper creation returned no Session ID".into()))?;
         let message = format!("Source: Bot\n\n{message}");
-        let delivery = if retrieval {
-            async {
-                let outcome = self
-                    .control
-                    .inbox_commands()
-                    .submit_message(
-                        session_id,
-                        SubmitInboxMessageRequest {
-                            input: message,
-                            delivery_policy: "after_idle".into(),
-                            metadata: json!({}),
-                        },
-                    )
-                    .await?;
-                self.control
-                    .session_commands()
-                    .exit_when_done(session_id)
-                    .await?;
-                outcome.live_delivery()
-            }
-            .await
-        } else {
+        let delivery = send_input(
+            &self.control,
+            session_id,
+            if retrieval {
+                InputPayload::new(message).force_queue()
+            } else {
+                InputPayload::new(message)
+            },
+            if retrieval {
+                SendMode::Queue
+            } else {
+                SendMode::Immediate
+            },
+        )
+        .await;
+        if retrieval && (delivery.is_ok() || matches!(&delivery, Err(DeliveryError::Uncertain(_))))
+        {
             self.control
-                .inbox_commands()
-                .submit_live_input(session_id, message)
-                .await
-        };
+                .session_commands()
+                .exit_when_done(session_id)
+                .await?;
+        }
         Ok(json!({"session_id": session_id, "delivery": Delivery::from_result(delivery)}))
     }
 
@@ -415,7 +427,7 @@ impl HelperService {
                 &format!("Source: Helper\nSession: {source}\n\n{message}"),
             )
             .await;
-        let delivery = Delivery::from_result(result);
+        let delivery = Delivery::from_bot_result(result);
         if matches!(delivery, Delivery::Unknown { .. } | Delivery::Failed { .. }) {
             self.enqueue(&format!("reply:{}", uuid::Uuid::now_v7()), &bot_id, Some(source),
                 &format!("Helper reply delivery result: {}. This describes delivery, not helper execution. The original reply will not be resent.", serde_json::to_string(&delivery)?)).await?;

@@ -1,4 +1,6 @@
 pub mod conversation;
+mod delivery;
+pub use delivery::BotInputDelivery;
 pub mod dreaming;
 pub mod handoff;
 pub mod helpers;

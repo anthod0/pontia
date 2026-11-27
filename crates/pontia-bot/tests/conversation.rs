@@ -37,6 +37,7 @@ const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
 #[derive(Default)]
 struct Client {
     inputs: Mutex<Vec<AgentInput>>,
+    steer: Mutex<Option<bool>>,
     blocked: Mutex<Option<String>>,
     unavailable: Mutex<std::collections::HashSet<String>>,
     all_unavailable: Mutex<bool>,
@@ -207,7 +208,10 @@ impl ClientInteractions for Client {
 
 impl InProcessClient for Client {
     fn capabilities(&self) -> AgentClientCapabilities {
-        CAPABILITIES
+        AgentClientCapabilities {
+            steer: self.steer.lock().unwrap().unwrap_or(CAPABILITIES.steer),
+            ..CAPABILITIES
+        }
     }
     fn ready(&self, session: &str, instance: &str) -> ReportedEvent {
         GenericTestClient::ready_event(session, instance)
@@ -638,6 +642,43 @@ async fn processing_shows_until_the_bot_answers_or_its_turn_ends() {
     assert!(service.chat(&id).await.unwrap().status == WorkStatus::Processing);
     finish(&control, &session, EventType::TurnCompleted).await;
     assert!(service.chat(&id).await.unwrap().status != WorkStatus::Processing);
+}
+
+#[tokio::test]
+async fn busy_bot_without_steering_queues_follow_up_input() {
+    let (_root, _pool, client, control, service) = fixture().await;
+    let bot = service
+        .records()
+        .create(bot_configuration("Bot", MODEL), Default::default())
+        .await
+        .unwrap();
+    service.send(&bot.bot_id, "first").await.unwrap();
+    *client.steer.lock().unwrap() = Some(false);
+
+    let delivery = service
+        .deliver_input(&bot.bot_id, "follow up")
+        .await
+        .unwrap();
+    assert_eq!(serde_json::to_value(delivery).unwrap(), "queued");
+    assert_eq!(client.inputs.lock().unwrap().len(), 1);
+    let session = service
+        .records()
+        .get(&bot.bot_id)
+        .await
+        .unwrap()
+        .current_session_id
+        .unwrap();
+    let messages = control
+        .inbox_commands()
+        .list_messages(&session)
+        .await
+        .unwrap();
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0].state, "pending");
+    assert_eq!(
+        service.chat(&bot.bot_id).await.unwrap().status,
+        WorkStatus::Processing
+    );
 }
 
 async fn instructions(control: &AgentControl, session: &str) -> String {

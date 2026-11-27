@@ -1,5 +1,5 @@
 use crate::client_contract::{DeliveryError, DispatchMode, InputPayload};
-use pontia_core::{Result, ids::new_dispatch_id};
+use pontia_core::{Error, Result, ids::new_dispatch_id};
 use pontia_runtime::AgentInput;
 use serde_json::Value;
 
@@ -86,7 +86,10 @@ impl ClientAdapter {
                         DeliveryError::Offline("in-process client is unavailable".into())
                     })?
                     .submit(input)
-                    .map_err(DeliveryError::from)?;
+                    .map_err(|error| match error {
+                        Error::Domain(message) => DeliveryError::StateChanged(message),
+                        error => DeliveryError::from(error),
+                    })?;
             }
             DispatchMode::None => {
                 return Err(DeliveryError::Unsupported(

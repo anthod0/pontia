@@ -618,7 +618,11 @@ async fn resumed_execution_rejects_the_switch_and_recovery_cleans_the_unused_rep
     waiting.await.unwrap();
     control
         .inbox_commands()
-        .submit_live_input(&old, "already in native queue".into())
+        .send(
+            &old,
+            "already in native queue".into(),
+            pontia_agent_control::SendMode::Immediate,
+        )
         .await
         .unwrap();
     release.send(()).unwrap();

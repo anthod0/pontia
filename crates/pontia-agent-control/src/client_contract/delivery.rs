@@ -30,7 +30,7 @@ impl InputPayload {
         self
     }
 
-    pub(crate) fn force_queue(mut self) -> Self {
+    pub fn force_queue(mut self) -> Self {
         self.force_queue = true;
         self
     }

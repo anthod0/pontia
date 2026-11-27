@@ -25,15 +25,9 @@ enum ImmediateSendError {
 impl ImmediateSendError {
     fn into_delivery(self) -> crate::DeliveryError {
         match self {
+            Self::Control(Error::Domain(message)) => crate::DeliveryError::StateChanged(message),
             Self::Control(error) => error.into(),
             Self::Delivery(error) => error,
-        }
-    }
-
-    fn into_legacy(self) -> Error {
-        match self {
-            Self::Control(error) => error,
-            Self::Delivery(error) => error.into(),
         }
     }
 }
@@ -51,31 +45,6 @@ fn immediate_result<T>(
         crate::control::ControlResult::Unsupported(message) => Err(ImmediateSendError::Delivery(
             crate::DeliveryError::Unsupported(message),
         )),
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum LiveInputDelivery {
-    Accepted,
-    Queued,
-}
-
-impl InboxCommandOutcome {
-    pub fn live_delivery(&self) -> Result<LiveInputDelivery> {
-        let message = &self.data["inbox_message"];
-        let failure = || {
-            message["failure_message"]
-                .as_str()
-                .unwrap_or("Inbox delivery failed")
-                .to_owned()
-        };
-        match message["state"].as_str() {
-            Some("pending" | "dispatching") => Ok(LiveInputDelivery::Queued),
-            Some("dispatched") => Ok(LiveInputDelivery::Accepted),
-            Some("unknown") => Err(Error::ControlUnknown(failure())),
-            _ => Err(Error::StateConflict(failure())),
-        }
     }
 }
 
@@ -423,27 +392,6 @@ impl InboxCommandService {
                 }
                 error => Err(error),
             },
-        }
-    }
-
-    /// Delivers directly unless the active Session needs to wait for its next Turn.
-    pub async fn submit_live_input(
-        &self,
-        session_id: &str,
-        input: String,
-    ) -> Result<LiveInputDelivery> {
-        if input.trim().is_empty() {
-            return Err(Error::Domain("input must not be blank".into()));
-        }
-        let actor = self.scheduler.session(session_id);
-        let _guard = actor.lock().await;
-        match self
-            .deliver_immediate_locked(session_id, input.into(), &actor)
-            .await
-        {
-            Ok(SendOutcome::Delivered) => Ok(LiveInputDelivery::Accepted),
-            Ok(SendOutcome::Queued { .. }) => Ok(LiveInputDelivery::Queued),
-            Err(error) => Err(error.into_legacy()),
         }
     }
 }
