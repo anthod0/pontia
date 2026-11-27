@@ -24,8 +24,14 @@ Pontia runs supported official CLIs and the Claude Agent SDK directly on your ma
 
 ## Supported clients
 
-- **During setup** — Claude Code, Codex and Pi (requires `tmux`).
-- **After setup** — Enable Google Antigravity, Kiro or Grok Build under **Settings → Agent Clients**. [Client setup guide](https://pontia.dev/docs/agent-clients)
+- **Claude Code**
+- **Codex**
+- **Grok Build**
+- **Kiro**
+- **Google Antigravity**
+- **Pi**
+
+See the [Client setup guide](https://pontia.dev/docs/agent-clients) for setup details.
 
 ## Quick start
 

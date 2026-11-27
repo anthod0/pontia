@@ -24,8 +24,14 @@ Pontia 直接在本机运行受支持的官方 CLI 和 Claude Agent SDK，复用
 
 ## 支持的客户端
 
-- **初始化时接入**：Claude Code、Codex、Pi（需安装 `tmux`）。
-- **初始化后启用**：Google Antigravity、Kiro、Grok Build，入口在「设置 → Agent 客户端」。[客户端配置指南](https://pontia.dev/zh/docs/agent-clients)
+- **Claude Code**
+- **Codex**
+- **Grok Build**
+- **Kiro**
+- **Google Antigravity**
+- **Pi**
+
+配置方法见[客户端配置指南](https://pontia.dev/zh/docs/agent-clients)。
 
 ## 快速开始
 
