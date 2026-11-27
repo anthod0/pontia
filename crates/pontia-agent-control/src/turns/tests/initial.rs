@@ -94,7 +94,7 @@ async fn initial_input_uses_the_injected_channel_after_ready() {
                 .get_message("sess_pi", &message_id)
                 .await
                 .unwrap()
-                .is_some_and(|message| message.state == "dispatched");
+                .is_none();
             if delivered {
                 break;
             }
@@ -109,15 +109,13 @@ async fn initial_input_uses_the_injected_channel_after_ready() {
         .await
         .unwrap();
     assert_eq!(count, 0);
-    assert_eq!(
+    assert!(
         state
             .inbox_commands()
             .get_message("sess_pi", &message_id)
             .await
             .unwrap()
-            .unwrap()
-            .state,
-        "dispatched"
+            .is_none()
     );
     state.inbox_commands().stop_scheduling().await;
 }

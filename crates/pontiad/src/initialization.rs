@@ -32,10 +32,5 @@ pub async fn initialize(config: &AppConfig) -> Result<AppState> {
     .file_picker(config.file_picker.clone())
     .build();
     state.control().interactions().recover_pending().await?;
-    state
-        .control()
-        .inbox_commands()
-        .recover_deliveries()
-        .await?;
     Ok(state)
 }

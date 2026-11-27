@@ -354,14 +354,13 @@ async fn bot_inputs_and_replies_use_the_owned_session_and_visible_chat() {
         1
     );
     assert!(
-        control
+        !control
             .queries()
             .session_snapshot(&a_session)
             .await
             .unwrap()
             .unwrap()
-            .inbox
-            .is_empty()
+            .has_unsettled_input
     );
 
     report(&ingest, &a_session, runtime, turn, EventType::TurnFailed).await;

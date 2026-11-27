@@ -235,7 +235,7 @@ async fn busy_inbox_waits_until_idle(policy: &str) {
                 &format!("/api/v1/sessions/{session_id}/inbox/messages/{message_id}"),
             )
             .await;
-            if result.1["data"]["inbox_message"]["state"] == "dispatched" {
+            if result.0 == StatusCode::NOT_FOUND {
                 break result;
             }
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
@@ -243,13 +243,7 @@ async fn busy_inbox_waits_until_idle(policy: &str) {
     })
     .await
     .expect("committed terminal event wakes Inbox scheduling");
-    assert_eq!(get_status, StatusCode::OK);
-    assert_eq!(get_body["data"]["inbox_message"]["state"], "dispatched");
-    assert!(
-        get_body["data"]["inbox_message"]["turn_id"]
-            .as_str()
-            .is_some()
-    );
+    assert_eq!(get_status, StatusCode::NOT_FOUND, "{get_body}");
 
     let (turns_status, turns_body) =
         get_json(state, &format!("/api/v1/sessions/{session_id}/turns")).await;
@@ -262,6 +256,18 @@ async fn idempotent_inbox_retry_returns_current_message_state_without_duplicate_
     let _scope = GenericClientTestScope::new().await;
     let (state, _workspace, _pontia_home) = test_state().await;
     let session_id = create_session(state.clone()).await;
+    let active_turn_id = submit_inbox_turn(state.clone(), &session_id, "first").await;
+    post_internal_event(
+        state.clone(),
+        started_event_body(
+            &state,
+            "evt_idempotent_started",
+            &session_id,
+            &active_turn_id,
+        )
+        .await,
+    )
+    .await;
     let uri = format!("/api/v1/sessions/{session_id}/inbox/messages");
 
     let first = post_json(
@@ -397,7 +403,7 @@ async fn cancel_pending_message_prevents_later_dispatch() {
 }
 
 #[tokio::test]
-async fn newest_pending_interrupt_supersedes_older_pending_interrupt() {
+async fn pending_interrupt_messages_remain_in_fifo_order() {
     let _scope = GenericClientTestScope::new().await;
     let (state, _workspace, _pontia_home) = test_state().await;
     let session_id = create_session(state.clone()).await;
@@ -441,11 +447,7 @@ async fn newest_pending_interrupt_supersedes_older_pending_interrupt() {
         &format!("/api/v1/sessions/{session_id}/inbox/messages/{older_id}"),
     )
     .await;
-    assert_eq!(old_body["data"]["inbox_message"]["state"], "superseded");
-    assert_eq!(
-        old_body["data"]["inbox_message"]["superseded_by_message_id"],
-        newer_id
-    );
+    assert_eq!(old_body["data"]["inbox_message"]["state"], "pending");
 
     let (_, new_body) = get_json(
         state.clone(),
@@ -461,7 +463,7 @@ async fn newest_pending_interrupt_supersedes_older_pending_interrupt() {
 }
 
 #[tokio::test]
-async fn interrupt_now_without_interrupt_capability_marks_message_failed() {
+async fn interrupt_now_without_interrupt_capability_returns_an_error_without_persisting() {
     let _scope = GenericClientTestScope::new().await;
     let (state, _workspace, _pontia_home) = test_state().await;
     let session_id = create_session(state.clone()).await;
@@ -486,76 +488,11 @@ async fn interrupt_now_without_interrupt_capability_marks_message_failed() {
     )
     .await;
 
-    assert_eq!(status, StatusCode::CREATED);
-    let message = &body["data"]["inbox_message"];
-    assert_eq!(message["state"], "failed");
-    assert!(
-        message["failure_message"]
-            .as_str()
-            .unwrap()
-            .contains("does not support interrupt")
-    );
-    assert_eq!(message["turn_id"], Value::Null);
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
 }
 
 #[tokio::test]
-async fn failed_inbox_message_can_be_dismissed_idempotently() {
-    let _scope = GenericClientTestScope::new().await;
-    let (state, _workspace, _pontia_home) = test_state().await;
-    let session_id = create_session(state.clone()).await;
-    let active_turn_id = submit_inbox_turn(state.clone(), &session_id, "first").await;
-    post_internal_event(
-        state.clone(),
-        started_event_body(
-            &state,
-            "evt_dismiss_fail_started",
-            &session_id,
-            &active_turn_id,
-        )
-        .await,
-    )
-    .await;
-    let (_, failed_body) = post_json(
-        state.clone(),
-        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
-        None,
-        json!({"input":"cannot interrupt","delivery_policy":"interrupt_now"}),
-    )
-    .await;
-    let message_id = failed_body["data"]["inbox_message"]["message_id"]
-        .as_str()
-        .expect("message id");
-
-    let (dismiss_status, dismiss_body) = post_json(
-        state.clone(),
-        &format!("/api/v1/sessions/{session_id}/inbox/messages/{message_id}/dismiss"),
-        None,
-        json!({}),
-    )
-    .await;
-
-    assert_eq!(dismiss_status, StatusCode::OK, "{dismiss_body:?}");
-    assert_eq!(dismiss_body["data"]["inbox_message"]["state"], "dismissed");
-    assert_eq!(
-        dismiss_body["data"]["inbox_message"]["failure_message"],
-        failed_body["data"]["inbox_message"]["failure_message"]
-    );
-
-    let (again_status, again_body) = post_json(
-        state.clone(),
-        &format!("/api/v1/sessions/{session_id}/inbox/messages/{message_id}/dismiss"),
-        None,
-        json!({}),
-    )
-    .await;
-    assert_eq!(again_status, StatusCode::OK, "{again_body:?}");
-    assert_eq!(again_body["data"]["inbox_message"]["state"], "dismissed");
-
-    state.control().inbox_commands().stop_scheduling().await;
-}
-
-#[tokio::test]
-async fn pending_inbox_message_cannot_be_dismissed() {
+async fn pending_inbox_message_has_no_failed_record_to_dismiss() {
     let _scope = GenericClientTestScope::new().await;
     let (state, _workspace, _pontia_home) = test_state().await;
     let session_id = create_session(state.clone()).await;
@@ -590,8 +527,8 @@ async fn pending_inbox_message_cannot_be_dismissed() {
     )
     .await;
 
-    assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
-    assert_eq!(body["error"]["code"], "state_conflict");
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body:?}");
+    assert_eq!(body["error"]["code"], "not_found");
 }
 
 #[tokio::test]
@@ -618,6 +555,12 @@ async fn persistent_submission_survives_response_loss_and_database_reopen() {
     .build();
     let _workspace = crate::common::test_app::registered_workspace(&state).await;
     let session = create_session(state.clone()).await;
+    let active_turn_id = submit_inbox_turn(state.clone(), &session, "first").await;
+    post_internal_event(
+        state.clone(),
+        started_event_body(&state, "evt_persistent_started", &session, &active_turn_id).await,
+    )
+    .await;
     let uri = format!("/api/v1/sessions/{session}/inbox/messages");
     let first = post_json(
         state.clone(),

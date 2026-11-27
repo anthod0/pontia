@@ -193,7 +193,7 @@ impl InboxCommandService {
         let force_queue = input.force_queue;
         if !input.force_queue
             && !repository
-                .has_unsettled_input(session_id)
+                .has_pending_input(session_id)
                 .await
                 .map_err(crate::DeliveryError::from)?
         {
@@ -265,7 +265,6 @@ impl InboxCommandService {
             }
         }
         let message_id = new_message_id().to_string();
-        let prepared_turn_id = input.prepared_turn_id.clone();
         self.enqueue_message_locked(
             &message_id,
             session_id,
@@ -275,7 +274,6 @@ impl InboxCommandService {
                 metadata: input.metadata,
             },
             EnqueueOptions {
-                resuming: false,
                 interrupt_before_delivery,
                 drain_now: false,
             },
@@ -283,38 +281,21 @@ impl InboxCommandService {
         )
         .await
         .map_err(crate::DeliveryError::from)?;
-        if let Some(turn_id) = prepared_turn_id {
-            SqliteInboxRepository::new(self.pool.clone())
-                .attach_prepared_turn(&message_id, &turn_id)
-                .await
-                .map_err(crate::DeliveryError::from)?;
-        }
         if force_queue {
             self.drain_inbox_locked(session_id, actor)
                 .await
                 .map_err(crate::DeliveryError::from)?;
         }
         self.notify_available(session_id);
-        let message = self
+        if repository
             .get_message(session_id, &message_id)
             .await
             .map_err(crate::DeliveryError::from)?
-            .ok_or_else(|| {
-                crate::DeliveryError::StateChanged("queued message is missing".into())
-            })?;
-        match message.state.as_str() {
-            "dispatched" => Ok(SendOutcome::Delivered),
-            "pending" | "dispatching" => Ok(SendOutcome::Queued { message_id }),
-            "unknown" => Err(crate::DeliveryError::Uncertain(
-                message
-                    .failure_message
-                    .unwrap_or_else(|| "delivery was not confirmed".into()),
-            )),
-            _ => Err(crate::DeliveryError::Offline(
-                message
-                    .failure_message
-                    .unwrap_or_else(|| "queued delivery failed".into()),
-            )),
+            .is_some()
+        {
+            Ok(SendOutcome::Queued { message_id })
+        } else {
+            Ok(SendOutcome::Delivered)
         }
     }
 
@@ -375,10 +356,6 @@ impl InboxCommandService {
                             "session is not idle after interrupt state changed".into(),
                         ));
                     }
-                    SqliteInboxRepository::new(self.pool.clone())
-                        .supersede_pending_interrupts(session_id)
-                        .await
-                        .map_err(crate::DeliveryError::from)?;
                     self.deliver_immediate_locked(session_id, input, actor)
                         .await
                         .map_err(ImmediateSendError::into_delivery)

@@ -69,7 +69,7 @@ async fn fixture() -> Fixture {
         )
         .await;
     }
-    sqlx::query("INSERT INTO inbox_messages (message_id,session_id,delivery_policy,input_summary,state) VALUES ('pending','sess_messages','after_idle','follow up','pending')")
+    sqlx::query("INSERT INTO inbox_messages (message_id,session_id,input_summary) VALUES ('pending','sess_messages','follow up')")
         .execute(&state.db()).await.unwrap();
     Fixture {
         root,
@@ -136,16 +136,13 @@ async fn recent_pages_continue_through_filtered_turns_and_preserve_execution_sta
     let (status, after) = get_json(f.state.clone(), "/api/v1/sessions/sess_messages").await;
     assert_eq!(status, StatusCode::OK, "{after}");
     assert_eq!(before, after);
-    let inbox: Vec<(String, String, String)> = sqlx::query_as(
-        "SELECT message_id,input_summary,state FROM inbox_messages WHERE session_id='sess_messages'",
+    let inbox: Vec<(String, String)> = sqlx::query_as(
+        "SELECT message_id,input_summary FROM inbox_messages WHERE session_id='sess_messages'",
     )
     .fetch_all(&f.state.db())
     .await
     .unwrap();
-    assert_eq!(
-        inbox,
-        vec![("pending".into(), "follow up".into(), "pending".into())]
-    );
+    assert_eq!(inbox, vec![("pending".into(), "follow up".into())]);
 }
 
 #[tokio::test]
@@ -314,12 +311,12 @@ async fn reading_active_runtime_history_leaves_turn_and_pending_input_unchanged(
     assert_eq!(before.state, after.state);
     assert_eq!(before.state_version, after.state_version);
     assert!(after.tail_cursor.is_none());
-    let pending: (String, Option<String>) =
-        sqlx::query_as("SELECT state,turn_id FROM inbox_messages WHERE message_id='pending'")
+    let pending: String =
+        sqlx::query_scalar("SELECT input_summary FROM inbox_messages WHERE message_id='pending'")
             .fetch_one(&f.state.db())
             .await
             .unwrap();
-    assert_eq!(pending, ("pending".into(), None));
+    assert_eq!(pending, "follow up");
     peer.close();
 }
 
@@ -399,7 +396,7 @@ async fn helper_check_reads_paginated_native_history_without_changing_execution(
         .unwrap();
     assert_eq!(before.event_position, after.event_position);
     assert_eq!(before.current_turn_id, after.current_turn_id);
-    assert_eq!(before.inbox.len(), after.inbox.len());
+    assert_eq!(before.has_unsettled_input, after.has_unsettled_input);
 }
 
 #[tokio::test]

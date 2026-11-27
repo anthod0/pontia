@@ -85,7 +85,7 @@ async fn snapshots_include_unsettled_input_without_client_probes() {
     sqlx::raw_sql("INSERT INTO sessions(session_id,client_type,state,current_turn_id) VALUES ('s','generic','busy','t');
         INSERT INTO turns(turn_id,session_id,state) VALUES ('t','s','running');
         INSERT INTO session_runtimes(runtime_id,session_id,role,state,created_at) VALUES ('r','s','generic_control','running','2026-01-01');
-        INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary) VALUES ('i','s','unknown','after_idle','task');")
+        INSERT INTO inbox_messages(message_id,session_id,input_summary) VALUES ('i','s','task');")
         .execute(&pool).await.unwrap();
     let query = ControlQueryService::new(pool.clone());
     let snapshot = query.session_snapshot("s").await.unwrap().unwrap();

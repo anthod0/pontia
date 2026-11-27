@@ -245,7 +245,7 @@ async fn second_exit_is_a_new_failure_and_old_retry_cannot_start_another_attempt
         .unwrap();
     ready(&app, &repo, &row).await;
     repo.finish_recovery(&row.recovery_id, None).await.unwrap();
-    sqlx::query("UPDATE inbox_messages SET state='failed' WHERE message_id=?")
+    sqlx::query("DELETE FROM inbox_messages WHERE message_id=?")
         .bind(&row.message_id)
         .execute(&app.db())
         .await
@@ -312,19 +312,8 @@ async fn restart_during_preparation_fails_diagnostically_without_replaying() {
 }
 
 #[tokio::test]
-async fn unknown_input_and_unrelated_failure_are_not_retryable() {
+async fn unrelated_failure_is_not_retryable() {
     let (_root, app, repo) = fixture().await;
-    sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary) VALUES ('uncertain','failed','unknown','after_idle','input')").execute(&app.db()).await.unwrap();
-    assert!(repo.recovery_candidate("wf_retry").await.unwrap().is_none());
-    assert!(
-        repo.request_recovery("wf_retry", "failure", "attempt")
-            .await
-            .is_err()
-    );
-    sqlx::query("UPDATE inbox_messages SET state='failed' WHERE message_id='uncertain'")
-        .execute(&app.db())
-        .await
-        .unwrap();
     sqlx::query("UPDATE workflow_events SET payload='{\"failure_message\":\"graceful exit request failed\"}' WHERE event_id='failure'").execute(&app.db()).await.unwrap();
     assert!(repo.recovery_candidate("wf_retry").await.unwrap().is_none());
 }

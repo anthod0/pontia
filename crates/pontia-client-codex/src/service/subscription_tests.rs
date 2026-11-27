@@ -834,9 +834,9 @@ async fn first_inbox_message_is_delivered_before_thread_history_exists() {
 }
 
 #[tokio::test]
-async fn native_user_message_does_not_resolve_an_unknown_delivery() {
+async fn native_user_message_does_not_recreate_delivered_queue_input() {
     let fixture = Fixture::new().await;
-    let outcome = fixture
+    fixture
         .app
         .inbox_commands()
         .submit_message(
@@ -845,17 +845,6 @@ async fn native_user_message_does_not_resolve_an_unknown_delivery() {
         )
         .await
         .unwrap();
-    let message = outcome.data["inbox_message"]["message_id"]
-        .as_str()
-        .unwrap();
-    // Persist exactly the uncertainty left when the native acknowledgement is lost.
-    sqlx::query(
-        "UPDATE inbox_messages SET state='unknown',turn_id=NULL,metadata='{}' WHERE message_id=?",
-    )
-    .bind(message)
-    .execute(&fixture.app.db())
-    .await
-    .unwrap();
     let service = super::CodexService::new(fixture.app.event_ingest_service());
     let native = json!({"id":"native-turn","status":"completed","items":[{
         "id":"user-item","type":"userMessage","content":[{"type":"text","text":"hi"}]
@@ -871,8 +860,7 @@ async fn native_user_message_does_not_resolve_an_unknown_delivery() {
         .await
         .unwrap()
         .unwrap();
-    assert!(snapshot.has_unsettled_input);
-    assert!(snapshot.inbox[0].turn_id.is_none());
+    assert!(!snapshot.has_unsettled_input);
     assert_eq!(snapshot.turns[0].state, "completed");
     assert_eq!(fixture.inputs.lock().await.len(), 1);
     fixture.shutdown().await;

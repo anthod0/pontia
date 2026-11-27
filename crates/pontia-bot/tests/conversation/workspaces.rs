@@ -182,16 +182,16 @@ async fn project_helpers_follow_workspace_filters_and_accept_steering_on_their_r
     )
     .await;
     let steer = "User follow-up to running helper";
-    let input =
-        serde_json::from_value(json!({"input": steer, "delivery_policy": "steer"})).unwrap();
     let sent = control
         .inbox_commands()
-        .submit_message(id, input)
+        .send(
+            id,
+            pontia_agent_control::InputPayload::from(steer),
+            pontia_agent_control::SendMode::Immediate,
+        )
         .await
         .unwrap();
-    assert_eq!(sent.data["inbox_message"]["delivery_policy"], "steer");
-    assert_eq!(sent.data["inbox_message"]["turn_id"], turn);
-    assert_eq!(sent.data["inbox_message"]["state"], "dispatched");
+    assert_eq!(sent, pontia_agent_control::SendOutcome::Delivered);
     assert!(
         client
             .inputs

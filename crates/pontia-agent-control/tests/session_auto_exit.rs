@@ -220,9 +220,7 @@ async fn after_idle_input_is_delivered_and_consumed_before_exit() {
                 .get_message("session", id)
                 .await
                 .unwrap()
-                .unwrap()
-                .state
-                == "dispatched"
+                .is_none()
             {
                 break;
             }
@@ -264,11 +262,6 @@ async fn restart_recovers_an_armed_idle_session_without_a_new_fact() {
     drop(state);
     let restarted = open(root.path()).await;
     let channel = connect(&restarted).await;
-    restarted
-        .inbox_commands()
-        .recover_deliveries()
-        .await
-        .unwrap();
     restarted.inbox_commands().resume_pending().await.unwrap();
     wait_for(&restarted, "exited").await;
     restarted.inbox_commands().stop_scheduling().await;
@@ -330,45 +323,33 @@ async fn non_idle_states_and_active_turns_do_not_exit() {
 }
 
 #[tokio::test]
-async fn recovery_exits_after_settled_input_and_blocks_uncertain_delivery() {
-    for (input_state, expected_exit) in [
-        ("pending", false),
-        ("resuming", true),
-        ("dispatching", false),
-        ("unknown", false),
-        ("dispatched", true),
-    ] {
-        let (root, state, channel) = fixture().await;
-        state.inbox_commands().stop_scheduling().await;
-        sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary) VALUES ('message','session',?,'after_idle','task')")
-            .bind(input_state).execute(&state.db()).await.unwrap();
+async fn pending_input_blocks_exit_until_removed() {
+    let (_root, state, channel) = fixture().await;
+    sqlx::query("INSERT INTO inbox_messages(message_id,session_id,input_summary) VALUES ('message','session','task')")
+        .execute(&state.db()).await.unwrap();
+    assert!(
+        !state
+            .session_commands()
+            .exit_if_idle("session")
+            .await
+            .unwrap()
+    );
+    assert_eq!(channel.exits.load(Ordering::SeqCst), 0);
+
+    sqlx::query("DELETE FROM inbox_messages WHERE message_id='message'")
+        .execute(&state.db())
+        .await
+        .unwrap();
+    assert!(
         state
             .session_commands()
-            .exit_when_done("session")
+            .exit_if_idle("session")
             .await
-            .unwrap();
-        state.client_control().close().await;
-        drop(channel);
-        state.db().close().await;
-        drop(state);
-        let restarted = open(root.path()).await;
-        let channel = connect(&restarted).await;
-        restarted
-            .inbox_commands()
-            .recover_deliveries()
-            .await
-            .unwrap();
-        restarted.inbox_commands().resume_pending().await.unwrap();
-        if expected_exit {
-            wait_for(&restarted, "exited").await;
-        }
-        restarted.inbox_commands().stop_scheduling().await;
-        assert_eq!(
-            channel.exits.load(Ordering::SeqCst),
-            usize::from(expected_exit),
-            "{input_state}"
-        );
-    }
+            .unwrap()
+    );
+    wait_for(&state, "exited").await;
+    state.inbox_commands().stop_scheduling().await;
+    assert_eq!(channel.exits.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test]
@@ -401,7 +382,7 @@ async fn cancelling_the_last_pending_message_triggers_exit() {
     let (_root, state, channel) = fixture().await;
     // A persisted, armed Session awaiting delivery after its control channel reconnects.
     sqlx::raw_sql("UPDATE sessions SET exit_when_done=1;
-        INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary) VALUES ('pending','session','pending','after_idle','task');")
+        INSERT INTO inbox_messages(message_id,session_id,input_summary) VALUES ('pending','session','task');")
         .execute(&state.db()).await.unwrap();
     state
         .inbox_commands()

@@ -143,7 +143,10 @@ async fn conditional_exit_refuses_unsettled_control_state_before_contacting_the_
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary) VALUES ('next','sess_pi','pending','after_idle','next')").execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO inbox_messages(message_id,session_id,input_summary) VALUES ('next','sess_pi','next')")
+        .execute(&pool)
+        .await
+        .unwrap();
     assert!(!commands.exit_if_idle("sess_pi").await.unwrap());
 }
 

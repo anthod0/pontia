@@ -158,17 +158,9 @@ impl InboxCommandService {
         self.scheduler.wake(session.into());
     }
 
-    pub async fn recover_deliveries(&self) -> pontia_core::Result<()> {
-        sqlx::query("UPDATE inbox_messages SET state='failed',failure_message='Session recovery was interrupted before input delivery; retry explicitly',updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE state='resuming'")
-            .execute(&self.pool).await?;
-        sqlx::query("UPDATE inbox_messages SET state=CASE WHEN turn_id IS NULL THEN 'unknown' ELSE 'dispatched' END,failure_message=CASE WHEN turn_id IS NULL THEN 'Delivery is uncertain after Pontia restarted; input was not retried' ELSE NULL END,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE state='dispatching'")
-            .execute(&self.pool).await?;
-        Ok(())
-    }
-
     pub async fn resume_pending(&self) -> pontia_core::Result<()> {
         let sessions: Vec<String> = sqlx::query_scalar(
-            "SELECT session_id FROM inbox_messages WHERE state='pending' UNION SELECT session_id FROM sessions WHERE exit_when_done=1 AND state='idle'",
+            "SELECT session_id FROM inbox_messages UNION SELECT session_id FROM sessions WHERE exit_when_done=1 AND state='idle'",
         )
         .fetch_all(&self.pool)
         .await?;

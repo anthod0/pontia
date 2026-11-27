@@ -1,4 +1,4 @@
-use pontia_storage_sqlite::{connect_sqlite, run_migrations};
+use pontia_storage_sqlite::connect_sqlite;
 use sqlx::{Column, Row};
 
 #[tokio::test]
@@ -43,11 +43,18 @@ async fn removing_submission_snapshots_preserves_messages_and_queue_order() {
         .fetch_all(&pool)
         .await
         .unwrap();
-    run_migrations(&pool).await.unwrap();
+    let mut through_target = sqlx::migrate!("./migrations");
+    through_target.migrations = through_target
+        .iter()
+        .filter(|migration| migration.version < 28)
+        .cloned()
+        .collect::<Vec<_>>()
+        .into();
+    through_target.run(&pool).await.unwrap();
     pool.close().await;
 
     let reopened = connect_sqlite(&database_url).await.unwrap();
-    run_migrations(&reopened).await.unwrap();
+    through_target.run(&reopened).await.unwrap();
     let after = sqlx::query("SELECT rowid AS queue_order, * FROM inbox_messages ORDER BY rowid")
         .fetch_all(&reopened)
         .await

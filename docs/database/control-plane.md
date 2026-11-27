@@ -253,24 +253,10 @@ CREATE TABLE task_events (
 
 CREATE TABLE inbox_messages (
   message_id TEXT PRIMARY KEY NOT NULL,
-  session_id TEXT NOT NULL,
-  state TEXT NOT NULL,
-  delivery_policy TEXT NOT NULL,
+  session_id TEXT NOT NULL REFERENCES sessions (session_id),
   input_summary TEXT NOT NULL,
   metadata TEXT NOT NULL DEFAULT '{}',
-  turn_id TEXT,
-  superseded_by_message_id TEXT,
-  failure_message TEXT,
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  dispatched_at TEXT,
-  cancelled_at TEXT,
-  branch_target_turn_id TEXT REFERENCES turns (turn_id),
-  steer_target_turn_id TEXT REFERENCES turns (turn_id),
-  retry_of_message_id TEXT REFERENCES inbox_messages (message_id),
-  required_runtime_id TEXT,
-  FOREIGN KEY (session_id) REFERENCES sessions (session_id),
-  FOREIGN KEY (turn_id) REFERENCES turns (turn_id)
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 CREATE TABLE agent_profiles (
@@ -473,17 +459,11 @@ CREATE INDEX idx_tasks_session ON tasks (session_id, created_at, task_id);
 
 CREATE INDEX idx_task_events_task ON task_events (task_id, created_at, event_id);
 
-CREATE INDEX idx_inbox_messages_session_state ON inbox_messages (
+CREATE INDEX idx_inbox_messages_session_created ON inbox_messages (
   session_id,
-  state,
-  delivery_policy,
   created_at,
   message_id
 );
-
-CREATE INDEX idx_inbox_messages_turn ON inbox_messages (turn_id)
-WHERE
-  turn_id IS NOT NULL;
 
 CREATE UNIQUE INDEX idx_sessions_workspace_handle ON sessions (workspace_id, handle)
 WHERE
@@ -502,8 +482,6 @@ CREATE UNIQUE INDEX idx_agent_bindings_one_per_session ON agent_bindings (sessio
 
 CREATE UNIQUE INDEX idx_agent_bindings_unique_client_identity ON agent_bindings (client_type, client_session_key);
 
-CREATE INDEX idx_inbox_messages_branch_target ON inbox_messages (branch_target_turn_id);
-
 CREATE INDEX idx_workflow_nodes_workflow_parent ON workflow_nodes (workflow_id, parent_node_id, created_at, node_id);
 
 CREATE INDEX idx_workflow_nodes_session ON workflow_nodes (session_id)
@@ -511,10 +489,6 @@ WHERE
   session_id IS NOT NULL;
 
 CREATE INDEX idx_workflow_events_workflow_sequence ON workflow_events (workflow_id, sequence);
-
-CREATE UNIQUE INDEX idx_inbox_messages_retry_of ON inbox_messages (retry_of_message_id)
-WHERE
-  retry_of_message_id IS NOT NULL;
 
 CREATE UNIQUE INDEX idx_workflow_recovery_active ON workflow_recoveries (workflow_id)
 WHERE
@@ -671,9 +645,6 @@ CREATE TRIGGER inbox_messages_revision_insert AFTER INSERT ON inbox_messages BEG
     UPDATE control_state_revision SET revision = revision + 1 WHERE id = 1;
 END;
 
-CREATE TRIGGER inbox_messages_revision_update AFTER UPDATE ON inbox_messages BEGIN
-    UPDATE control_state_revision SET revision = revision + 1 WHERE id = 1;
-END;
 
 CREATE TRIGGER inbox_messages_revision_delete AFTER DELETE ON inbox_messages BEGIN
     UPDATE control_state_revision SET revision = revision + 1 WHERE id = 1;

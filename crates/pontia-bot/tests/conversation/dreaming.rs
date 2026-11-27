@@ -295,7 +295,7 @@ async fn accepted_first_input_keeps_an_idle_round_alive_until_its_native_turn_ar
         .unwrap();
     assert_eq!(snapshot.state, "idle");
     assert!(snapshot.turns.is_empty());
-    assert_eq!(snapshot.inbox[0].state, "dispatched");
+    assert!(!snapshot.has_unsettled_input);
     let restarted = DreamingService::new(control.clone(), conversation);
     assert!(restarted.start().await.unwrap().is_none());
     assert!(GenericRuntimeManager.is_alive(&snapshot.runtimes[0].runtime_id));

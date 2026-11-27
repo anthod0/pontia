@@ -32,20 +32,35 @@ pub(crate) fn row_to_view(row: InboxMessageRow) -> Result<InboxMessageView> {
     Ok(InboxMessageView {
         message_id: row.message_id,
         session_id: row.session_id,
-        state: row.state,
-        delivery_policy: row.delivery_policy,
+        state: "pending".into(),
+        delivery_policy: "after_idle".into(),
         input: InboxInputView {
             summary: row.input_summary,
         },
         metadata: serde_json::from_str(&row.metadata)?,
-        branch_target_turn_id: row.branch_target_turn_id,
-        steer_target_turn_id: row.steer_target_turn_id,
-        turn_id: row.turn_id,
-        superseded_by_message_id: row.superseded_by_message_id,
-        failure_message: row.failure_message,
+        branch_target_turn_id: None,
+        steer_target_turn_id: None,
+        turn_id: None,
+        superseded_by_message_id: None,
+        failure_message: None,
+        updated_at: row.created_at.clone(),
         created_at: row.created_at,
-        updated_at: row.updated_at,
-        dispatched_at: row.dispatched_at,
-        cancelled_at: row.cancelled_at,
+        dispatched_at: None,
+        cancelled_at: None,
     })
+}
+
+pub(crate) fn dispatched_view(
+    mut view: InboxMessageView,
+    turn_id: Option<String>,
+) -> InboxMessageView {
+    view.state = "dispatched".into();
+    view.dispatched_at = Some(view.created_at.clone());
+    view.turn_id = turn_id;
+    view
+}
+
+pub(crate) fn cancelled_view(mut view: InboxMessageView) -> InboxMessageView {
+    view.state = "cancelled".into();
+    view
 }

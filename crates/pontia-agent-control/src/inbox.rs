@@ -14,7 +14,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
 
-use crate::{ControlQueryService, InboxMessageView, TurnCommandService, views::inbox::row_to_view};
+use crate::{
+    ControlQueryService, InboxMessageView, TurnCommandService,
+    views::inbox::{cancelled_view, dispatched_view, row_to_view},
+};
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct SubmitInboxMessageRequest {
@@ -45,7 +48,6 @@ pub struct InboxCommandService {
 }
 
 struct EnqueueOptions {
-    resuming: bool,
     interrupt_before_delivery: bool,
     drain_now: bool,
 }
@@ -102,7 +104,6 @@ impl InboxCommandService {
             session_id,
             request,
             EnqueueOptions {
-                resuming: false,
                 interrupt_before_delivery: true,
                 drain_now: true,
             },
@@ -151,29 +152,13 @@ impl InboxCommandService {
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
         let metadata = serde_json::to_string(&request.metadata)?;
 
-        let active_turn = SqliteTurnRepository::new(self.pool.clone())
-            .active_turn(session_id)
-            .await?;
-        let delivery_policy = if request.delivery_policy == "steer" && !session.capabilities.steer {
-            "after_idle"
-        } else {
-            request.delivery_policy.as_str()
-        };
-        let steer_target = if delivery_policy == "steer" {
-            active_turn.as_ref().map(|turn| turn.turn_id.as_str())
-        } else {
-            None
-        };
         let inserted = inbox_repository
             .enqueue(
                 pontia_storage_sqlite::repositories::inbox::NewInboxMessage {
                     message_id,
                     session_id,
-                    delivery_policy,
                     input: &request.input,
                     metadata: &metadata,
-                    steer_target,
-                    resuming: options.resuming,
                 },
             )
             .await?;
@@ -182,42 +167,47 @@ impl InboxCommandService {
                 "Submission identity belongs to another Session".into(),
             ));
         }
+        let queued_message = self
+            .get_message(session_id, message_id)
+            .await?
+            .ok_or_else(|| Error::Domain("queued inbox message missing".to_string()))?;
 
         let active_turn = SqliteTurnRepository::new(self.pool.clone())
             .active_turn(session_id)
             .await?;
         if options.interrupt_before_delivery
-            && !options.resuming
             && request.delivery_policy == "interrupt_now"
             && active_turn.is_some()
         {
             if !session.capabilities.interrupt {
-                self.mark_failed(
-                    message_id,
+                inbox_repository.remove(session_id, message_id).await?;
+                return Err(Error::CapabilityUnavailable(
                     "session ".to_string() + session_id + " runtime does not support interrupt",
-                )
-                .await?;
+                ));
             } else if let Err(error) = self
                 .turns
                 .interrupt_current_turn_locked(session_id, actor)
                 .await
             {
-                if matches!(error, Error::ControlUnknown(_)) {
-                    self.mark_unknown(message_id, &error.to_string()).await?;
-                } else {
-                    self.mark_failed(message_id, error.to_string()).await?;
-                }
+                inbox_repository.remove(session_id, message_id).await?;
+                return Err(error);
             }
         }
 
-        if !options.resuming && options.drain_now {
+        if options.drain_now {
             self.drain_inbox_locked(session_id, actor).await?;
         }
 
-        let message = self
-            .get_message(session_id, message_id)
-            .await?
-            .ok_or_else(|| Error::Domain("submitted inbox message missing".to_string()))?;
+        let message = match self.get_message(session_id, message_id).await? {
+            Some(message) => serde_json::to_value(message)?,
+            None => {
+                let turn_id = SqliteTurnRepository::new(self.pool.clone())
+                    .active_turn(session_id)
+                    .await?
+                    .map(|turn| turn.turn_id);
+                serde_json::to_value(dispatched_view(queued_message, turn_id))?
+            }
+        };
         Ok(InboxCommandOutcome {
             data: json!({ "inbox_message": message }),
             duplicate: false,
@@ -257,25 +247,18 @@ impl InboxCommandService {
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
 
-        let rows_affected = SqliteInboxRepository::new(self.pool.clone())
-            .cancel_pending_message(session_id, message_id)
-            .await?;
-
+        let actor = self.scheduler.session(session_id);
+        let _guard = actor.lock().await;
         let message = self
             .get_message(session_id, message_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("inbox message {message_id} not found")))?;
-        if rows_affected == 0 && message.state != "cancelled" {
-            return Err(Error::StateConflict(format!(
-                "inbox message {message_id} is not pending"
-            )));
-        }
-        if rows_affected > 0 {
-            self.notify_available(session_id);
-        }
-        let message = self.get_message(session_id, message_id).await?.unwrap();
+        SqliteInboxRepository::new(self.pool.clone())
+            .remove(session_id, message_id)
+            .await?;
+        self.notify_available(session_id);
         Ok(InboxCommandOutcome {
-            data: json!({ "inbox_message": message }),
+            data: json!({ "inbox_message": cancelled_view(message) }),
             duplicate: false,
         })
     }
@@ -291,27 +274,9 @@ impl InboxCommandService {
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
 
-        let rows_affected = SqliteInboxRepository::new(self.pool.clone())
-            .dismiss_failed_message(session_id, message_id)
-            .await?;
-
-        let message = self
-            .get_message(session_id, message_id)
-            .await?
-            .ok_or_else(|| Error::NotFound(format!("inbox message {message_id} not found")))?;
-        if rows_affected == 0 && message.state != "dismissed" {
-            return Err(Error::StateConflict(format!(
-                "inbox message {message_id} is not failed"
-            )));
-        }
-        if rows_affected > 0 {
-            self.notify_available(session_id);
-        }
-        let message = self.get_message(session_id, message_id).await?.unwrap();
-        Ok(InboxCommandOutcome {
-            data: json!({ "inbox_message": message }),
-            duplicate: false,
-        })
+        Err(Error::NotFound(format!(
+            "inbox message {message_id} not found"
+        )))
     }
 
     pub async fn drain_inbox(&self, session_id: &str) -> Result<()> {
@@ -334,58 +299,31 @@ impl InboxCommandService {
             .active_turn(session_id)
             .await?;
         let inbox_repository = SqliteInboxRepository::new(self.pool.clone());
-        let Some(row) = inbox_repository.next_pending_message(session_id).await? else {
+        let Some(row) = inbox_repository.next_message(session_id).await? else {
             return Ok(());
         };
-        if let Some(expected) = row.required_runtime_id.as_deref()
-            && let Err(error) = crate::runtime::ControlTarget::resolve(
-                &self.pool,
-                self.clients.registry(),
-                session_id,
-                Some(expected),
-            )
-            .await
-        {
-            self.mark_failed(&row.message_id, error.to_string()).await?;
-            return Ok(());
-        }
         if !adapter.input_available(session_id).await? {
             return Ok(());
         }
         if matches!(session.state.as_str(), "exited" | "error") {
             return Ok(());
         }
-        let prepared_turn_id = row.turn_id.clone();
-        let steer_turn_id = if row.delivery_policy == "steer" {
-            if active.as_ref().map(|turn| &turn.turn_id) != row.steer_target_turn_id.as_ref() {
-                self.mark_failed(
-                    &row.message_id,
-                    "Steer target Turn changed; input was not submitted".into(),
-                )
-                .await?;
-                self.notify_available(session_id);
-                return Ok(());
-            }
-            row.steer_target_turn_id
-        } else {
-            if active.as_ref().map(|turn| &turn.turn_id) != prepared_turn_id.as_ref()
-                && active.is_some()
-            {
-                return Ok(());
-            }
-            None
-        };
-        if steer_turn_id.is_none() && actor.phase() != scheduling::SessionPhase::Idle {
+        let prepared_turn_id = active
+            .as_ref()
+            .filter(|turn| turn.state == "queued")
+            .map(|turn| turn.turn_id.as_str());
+        if active.is_some() && prepared_turn_id.is_none() {
             return Ok(());
         }
-        if steer_turn_id.is_none()
-            && !matches!(session.state.as_str(), "idle" | "interrupted")
+        if actor.phase() != scheduling::SessionPhase::Idle {
+            return Ok(());
+        }
+        if !matches!(session.state.as_str(), "idle" | "interrupted")
             && !(matches!(session.state.as_str(), "created" | "starting")
                 && adapter.prepares_on_input())
         {
             return Ok(());
         }
-        let delivery_policy = row.delivery_policy;
         let message_id = row.message_id;
         let input = row.input_summary;
         let metadata = row.metadata;
@@ -393,106 +331,36 @@ impl InboxCommandService {
         if !metadata.is_object() {
             metadata = json!({});
         }
-        let rows_affected = inbox_repository.mark_dispatching(&message_id).await?;
-        if rows_affected == 0 {
-            return Ok(());
-        }
-
-        let turns = &self.turns;
-        let delivery = match steer_turn_id {
-            Some(turn_id) => {
-                turns
-                    .submit_steer(
-                        session_id,
-                        input.into(),
-                        &turn_id,
-                        row.required_runtime_id.as_deref(),
-                    )
-                    .await
-            }
-            None => {
-                actor.set_phase(scheduling::SessionPhase::StartingTurn);
-                turns
-                    .submit_start_turn(
-                        session_id,
-                        input.into(),
-                        metadata,
-                        row.required_runtime_id.as_deref(),
-                        prepared_turn_id.as_deref(),
-                    )
-                    .await
-            }
-        };
-        let delivery = match delivery {
-            Ok((_, crate::control::ControlResult::Unsupported(_)))
-                if delivery_policy == "steer" =>
-            {
-                inbox_repository.wait_after_idle(&message_id).await?;
-                self.notify_available(session_id);
-                return Ok(());
-            }
+        actor.set_phase(scheduling::SessionPhase::StartingTurn);
+        let delivery = match self
+            .turns
+            .submit_start_turn(session_id, input.into(), metadata, None, prepared_turn_id)
+            .await
+        {
             Ok((turn_id, result)) => result
                 .into_delivery_result()
                 .map(|receipt| (turn_id, receipt)),
             Err(error) => Err(crate::DeliveryError::from(error)),
         };
         match delivery {
-            Ok((turn_id, _receipt)) => {
+            Ok((_turn_id, _receipt)) => {
                 actor.finish_start();
-                inbox_repository
-                    .mark_dispatched(&message_id, turn_id.as_deref())
-                    .await?;
+                inbox_repository.remove(session_id, &message_id).await?;
                 self.notify_available(session_id);
             }
             Err(crate::DeliveryError::Offline(_)) => {
                 actor.cancel_start();
-                if let Some(turn_id) = prepared_turn_id.as_deref() {
-                    inbox_repository
-                        .detach_prepared_turn(&message_id, turn_id)
-                        .await?;
-                }
-                inbox_repository.return_pending(&message_id).await?;
             }
-            Err(crate::DeliveryError::StateChanged(_)) if delivery_policy != "steer" => {
+            Err(crate::DeliveryError::StateChanged(_)) => {
                 actor.cancel_start();
-                if let Some(turn_id) = prepared_turn_id.as_deref() {
-                    inbox_repository
-                        .detach_prepared_turn(&message_id, turn_id)
-                        .await?;
-                }
-                inbox_repository.return_pending(&message_id).await?;
-            }
-            Err(crate::DeliveryError::Uncertain(reason)) => {
-                self.mark_unknown(&message_id, &reason).await?;
             }
             Err(error) => {
                 actor.cancel_start();
-                self.mark_failed(&message_id, error.to_string()).await?;
+                inbox_repository.remove(session_id, &message_id).await?;
                 self.notify_available(session_id);
+                return Err(error.into());
             }
         }
-        Ok(())
-    }
-
-    async fn mark_failed(&self, message_id: &str, failure_message: String) -> Result<()> {
-        let changed = SqliteInboxRepository::new(self.pool.clone())
-            .mark_failed(message_id, &failure_message)
-            .await?;
-        if changed > 0 {
-            let session_id: String =
-                sqlx::query_scalar("SELECT session_id FROM inbox_messages WHERE message_id=?")
-                    .bind(message_id)
-                    .fetch_one(&self.pool)
-                    .await?;
-            self.notify_available(&session_id);
-        }
-        Ok(())
-    }
-
-    async fn mark_unknown(&self, message_id: &str, reason: &str) -> Result<()> {
-        SqliteInboxRepository::new(self.pool.clone())
-            .mark_unknown(message_id, reason)
-            .await?;
         Ok(())
     }
 }

@@ -38,13 +38,6 @@ pub struct RuntimeSnapshot {
     pub state: String,
 }
 
-#[derive(Debug, Clone, FromRow)]
-pub struct InboxSnapshot {
-    pub message_id: String,
-    pub state: String,
-    pub turn_id: Option<String>,
-}
-
 #[derive(Debug, Clone)]
 pub struct SessionSnapshot {
     pub session_id: String,
@@ -57,7 +50,6 @@ pub struct SessionSnapshot {
     pub runtimes: Vec<RuntimeSnapshot>,
     pub has_agent_binding: bool,
     pub has_unsettled_input: bool,
-    pub inbox: Vec<InboxSnapshot>,
 }
 
 impl ControlQueryService {
@@ -144,13 +136,11 @@ impl ControlQueryService {
                 .bind(session_id)
                 .fetch_one(&mut *tx)
                 .await?;
-        let has_unsettled_input = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM inbox_messages WHERE session_id=? AND state IN ('pending','resuming','dispatching','unknown'))").bind(session_id).fetch_one(&mut *tx).await?;
-        let inbox = sqlx::query_as(
-            "SELECT message_id,state,turn_id FROM inbox_messages WHERE session_id=?",
-        )
-        .bind(session_id)
-        .fetch_all(&mut *tx)
-        .await?;
+        let has_unsettled_input =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM inbox_messages WHERE session_id=?)")
+                .bind(session_id)
+                .fetch_one(&mut *tx)
+                .await?;
         tx.commit().await?;
         Ok(Some(SessionSnapshot {
             session_id: session_id.into(),
@@ -163,7 +153,6 @@ impl ControlQueryService {
             runtimes,
             has_agent_binding,
             has_unsettled_input,
-            inbox,
         }))
     }
 
