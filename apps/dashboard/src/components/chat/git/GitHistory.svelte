@@ -52,8 +52,7 @@
     if (selectFirst && !selected && commits[0]) oncommit(commits[0].sha)
   })
 
-  export function fetching(): boolean { return commitsQuery.isFetching }
-  export function refresh() { if (ref) void commitsQuery.refetch() }
+  export function refresh() { if (ref) return commitsQuery.refetch() }
 </script>
 
 {#if !ref}

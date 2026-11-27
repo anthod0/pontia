@@ -630,7 +630,7 @@ export function createApi(device: DeviceRuntime) {
 
   // Snapshot consumers coalesce refreshes. Bound reads so a stalled connection
   // cannot hold their in-flight slot forever, including while reading the body.
-  function boundedReadRequest<T>(path: string, options: ReadRequestOptions): Promise<T> {
+  function boundedReadRequest<T>(path: string, options: RequestOptions): Promise<T> {
     const timeout = AbortSignal.timeout(15_000);
     const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
     return request<T>(path, { ...options, signal });
@@ -808,11 +808,14 @@ export function createApi(device: DeviceRuntime) {
     ).workspace;
   }
 
-  async function refreshWorkspaceGitStatus(workspaceId: string): Promise<WorkspaceGitStatusView> {
+  async function refreshWorkspaceGitStatus(
+    workspaceId: string,
+    options: ReadRequestOptions = {},
+  ): Promise<WorkspaceGitStatusView> {
     return (
-      await request<{ git_status: WorkspaceGitStatusView }>(
+      await boundedReadRequest<{ git_status: WorkspaceGitStatusView }>(
         `/workspaces/${encodeURIComponent(workspaceId)}/git-status/refresh`,
-        { method: "POST", mutating: true },
+        { ...options, method: "POST", mutating: true },
       )
     ).git_status;
   }
@@ -822,7 +825,7 @@ export function createApi(device: DeviceRuntime) {
     options: ReadRequestOptions = {},
   ): Promise<GitChangesView> {
     return (
-      await request<{ changes: GitChangesView }>(
+      await boundedReadRequest<{ changes: GitChangesView }>(
         `/workspaces/${encodeURIComponent(workspaceId)}/git/changes`,
         options,
       )
@@ -837,7 +840,7 @@ export function createApi(device: DeviceRuntime) {
     const params = new URLSearchParams({ path: file.path, group: file.group });
     if (file.orig_path) params.set("orig_path", file.orig_path);
     return (
-      await request<{ diff: GitDiffView }>(
+      await boundedReadRequest<{ diff: GitDiffView }>(
         `/workspaces/${encodeURIComponent(workspaceId)}/git/diff?${params}`,
         options,
       )
@@ -849,7 +852,7 @@ export function createApi(device: DeviceRuntime) {
     options: ReadRequestOptions = {},
   ): Promise<GitBranchesView> {
     return (
-      await request<{ branches: GitBranchesView }>(
+      await boundedReadRequest<{ branches: GitBranchesView }>(
         `/workspaces/${encodeURIComponent(workspaceId)}/git/branches`,
         options,
       )
@@ -865,7 +868,7 @@ export function createApi(device: DeviceRuntime) {
     const params = new URLSearchParams({ ref, skip: String(skip) });
     if (branch) params.set("branch", branch);
     return (
-      await request<{ commits: GitCommitsPage }>(
+      await boundedReadRequest<{ commits: GitCommitsPage }>(
         `/workspaces/${encodeURIComponent(workspaceId)}/git/commits?${params}`,
         { signal },
       )
@@ -878,7 +881,7 @@ export function createApi(device: DeviceRuntime) {
     options: ReadRequestOptions = {},
   ): Promise<GitCommitView> {
     return (
-      await request<{ commit: GitCommitView }>(
+      await boundedReadRequest<{ commit: GitCommitView }>(
         `/workspaces/${encodeURIComponent(workspaceId)}/git/commits/${encodeURIComponent(sha)}`,
         options,
       )
@@ -894,7 +897,7 @@ export function createApi(device: DeviceRuntime) {
     const params = new URLSearchParams({ path: file.path });
     if (file.orig_path) params.set("orig_path", file.orig_path);
     return (
-      await request<{ diff: GitCommitDiffView }>(
+      await boundedReadRequest<{ diff: GitCommitDiffView }>(
         `/workspaces/${encodeURIComponent(workspaceId)}/git/commits/${encodeURIComponent(sha)}/diff?${params}`,
         options,
       )

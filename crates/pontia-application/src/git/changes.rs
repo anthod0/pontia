@@ -2,7 +2,7 @@ use pontia_core::error::{Error, Result};
 use serde::Serialize;
 use std::{collections::HashMap, io::Read, path::Path};
 
-use super::command::run_git_text;
+use super::command::GitCommand;
 
 /// Most files returned in one change list; `total` still counts every change.
 pub const MAX_CHANGED_FILES: usize = 1000;
@@ -43,21 +43,18 @@ pub struct GitChangesView {
     pub truncated: bool,
 }
 
-pub(crate) async fn list_changes(repo_root: &Path) -> Result<(Vec<ChangedFileView>, usize)> {
-    let status = run_git_text(
-        repo_root,
-        &["status", "--porcelain=v2", "-z", "--untracked-files=normal"],
-    )
-    .await?;
+pub(crate) async fn list_changes(command: &GitCommand) -> Result<(Vec<ChangedFileView>, usize)> {
+    let status = command
+        .run_text(&["status", "--porcelain=v2", "-z", "--untracked-files=normal"])
+        .await?;
     let mut files = parse_status(&status)?;
     // Order matches the panel: conflicted, staged, unstaged, untracked.
     files.sort_by_key(|file| file.group as u8);
     let total = files.len();
     files.truncate(MAX_CHANGED_FILES);
 
-    let staged = run_git_text(
-        repo_root,
-        &[
+    let staged = command
+        .run_text(&[
             "diff",
             "--cached",
             "--numstat",
@@ -65,25 +62,22 @@ pub(crate) async fn list_changes(repo_root: &Path) -> Result<(Vec<ChangedFileVie
             "-M",
             "--no-ext-diff",
             "--no-textconv",
-        ],
-    )
-    .await?;
-    let unstaged = run_git_text(
-        repo_root,
-        &[
+        ])
+        .await?;
+    let unstaged = command
+        .run_text(&[
             "diff",
             "--numstat",
             "-z",
             "-M",
             "--no-ext-diff",
             "--no-textconv",
-        ],
-    )
-    .await?;
+        ])
+        .await?;
     let staged = parse_numstat(&staged);
     let unstaged = parse_numstat(&unstaged);
 
-    let root = repo_root.to_path_buf();
+    let root = command.dir().to_path_buf();
     let files = tokio::task::spawn_blocking(move || {
         let mut budget = UNTRACKED_COUNT_BUDGET;
         for file in &mut files {

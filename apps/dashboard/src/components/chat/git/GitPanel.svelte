@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick, type Snippet } from 'svelte'
+  import { onDestroy, onMount, tick, type Snippet } from 'svelte'
   import { t } from '$lib/i18n'
   import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
@@ -52,11 +52,12 @@
   let panelWidth = $state(0)
   let now = $state(Date.now())
   let sectionsLoaded = $state(false)
+  let refreshing = $state(false)
   let selectedCommitFiles = $state.raw<GitCommitFile[]>([])
+  let refreshController: AbortController | undefined
   let previousScroll = 0
   const wide = $derived(panelWidth >= 720)
   const minutes = $derived(Math.max(0, Math.floor((now - changesQuery.dataUpdatedAt) / 60_000)))
-  const fetching = $derived(changesQuery.isFetching || (git.historyOpen && (branchesQuery.isFetching || !!history?.fetching())))
   const branchName = $derived(status?.branch ?? $t('git.detachedHead'))
   const branchTooltip = $derived([
     status?.upstream ? `${branchName} → ${status.upstream}` : branchName,
@@ -82,6 +83,8 @@
     return () => clearInterval(timer)
   })
 
+  onDestroy(() => refreshController?.abort())
+
   $effect(() => {
     if (sectionsLoaded) localStorage.setItem(`pontia.git.sections.${workspaceId}`, JSON.stringify({ changes: git.changesOpen, history: git.historyOpen }))
   })
@@ -90,12 +93,27 @@
     if (wide && changes?.files.length && !git.diff && !git.commit) selectChange(orderedFiles[0]!)
   })
 
-  function refresh() {
-    void changesQuery.refetch()
-    void queries.refreshWorkspaceGitStatus(workspaceId).catch(error => onstatuserror?.(error))
+  async function refresh() {
+    if (refreshing) return
+    refreshing = true
+    const controller = new AbortController()
+    refreshController = controller
+    const requests: Promise<unknown>[] = [
+      changesQuery.refetch(),
+      queries.refreshWorkspaceGitStatus(workspaceId, { signal: controller.signal }).catch(error => {
+        if (!controller.signal.aborted) onstatuserror?.(error)
+        throw error
+      }),
+    ]
     if (canReadRepository && git.historyOpen) {
-      void branchesQuery.refetch()
-      history?.refresh()
+      requests.push(branchesQuery.refetch())
+      const historyRefresh = history?.refresh()
+      if (historyRefresh) requests.push(historyRefresh)
+    }
+    await Promise.allSettled(requests)
+    if (refreshController === controller) {
+      refreshController = undefined
+      refreshing = false
     }
   }
 
@@ -185,7 +203,7 @@
     {/if}
     <span class="min-w-0 flex-1"></span>
     {#if changesQuery.dataUpdatedAt && minutes > 5}<time class="shrink-0 text-11 text-muted-foreground tabular-nums" datetime={new Date(changesQuery.dataUpdatedAt).toISOString()}>{$t('git.minutesAgo', { count: minutes })}</time>{/if}
-    <Button variant="ghost" size="icon-circle-sm" class="-mr-1.5 size-7 p-0 max-lg:size-10" disabled={fetching} onclick={refresh} aria-label={$t('common.refresh')} title={`${$t('common.refresh')} · ${$t('git.updatedMinutesAgo', { count: minutes })}`}><ArrowClockwiseIcon class={['size-4', fetching && 'animate-spin']} /></Button>
+    <Button variant="ghost" size="icon-circle-sm" class="-mr-1.5 size-7 p-0 max-lg:size-10" disabled={refreshing} onclick={refresh} aria-label={$t('common.refresh')} title={`${$t('common.refresh')} · ${$t('git.updatedMinutesAgo', { count: minutes })}`}><ArrowClockwiseIcon class={['size-4', refreshing && 'animate-spin']} /></Button>
   </header>
 {/snippet}
 
