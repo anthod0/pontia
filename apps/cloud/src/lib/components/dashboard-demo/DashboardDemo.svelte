@@ -191,7 +191,7 @@
 				<img src="/logo.svg" alt="" class="size-8 shrink-0 object-contain" />
 				<span class="truncate">Pontia</span>
 			</div>
-			<span class="flex size-7 items-center justify-center"><SidebarSimpleIcon class="size-4" /></span>
+			<span class="flex size-7 items-center justify-center"><CaretLeftIcon class="size-4" /></span>
 		</div>
 		<div class="mx-4 h-px shrink-0 bg-border"></div>
 
