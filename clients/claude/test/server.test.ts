@@ -242,7 +242,7 @@ test(
     h.fixture.messages.push(assistant());
     await h.wait(() => h.facts.some((f) => f.event.kind === "started"));
     await h.reconnect();
-    assert.equal((await h.command({ method: "interrupt", input_id: first })).status, "accepted");
+    assert.equal((await h.command({ method: "interrupt" })).status, "accepted");
     assert.equal(h.fixture.interrupts, 1);
     assert.equal(
       h.facts.some((f) => f.event.kind === "finished"),
@@ -323,7 +323,7 @@ test("an outstanding interrupt does not prevent closing the SDK", { timeout: 500
         release = resolve;
       }),
   );
-  void h.command({ method: "interrupt", input_id: first });
+  void h.command({ method: "interrupt" });
   await h.wait(() => h.fixture.interrupts === 1);
   try {
     assert.equal((await h.command({ method: "close" })).status, "accepted");

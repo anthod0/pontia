@@ -93,7 +93,7 @@ test("pending approval leaves output and interrupt live without fabricating a Tu
   const a = request();
   fixture.messages.push(assistant(first, [{ type: "text", text: "still streaming" }], "later"));
   fixture.onInterrupt(async () => a.abort.abort());
-  await host.interrupt(first);
+  await host.interrupt();
   await settle();
   assert.equal((await a.response)?.behavior, "deny");
   assert.ok(events.some((e) => e.kind === "text" && e.delta === "still streaming"));

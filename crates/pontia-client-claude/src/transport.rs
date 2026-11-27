@@ -1,6 +1,6 @@
 use crate::peer::Peer;
 use pontia_agent_control::{
-    ClientControlChannel, ClientControlOperation, EventIngestService,
+    ClientControlChannel, ClientControlOperation, DeliveryError, EventIngestService,
     ipc::rpc::{MAX_FRAME_BYTES, RpcPeer},
 };
 use pontia_core::{Error, Result};
@@ -139,6 +139,15 @@ impl Connection {
         }
     }
 
+    pub async fn deliver(&self, request: Value) -> std::result::Result<Value, DeliveryError> {
+        let response = self
+            .rpc
+            .request("host.command", request, 1024 * 1024, false)
+            .await
+            .map_err(DeliveryError::from)?;
+        delivery_response(&response["result"])
+    }
+
     pub async fn wait_exit(&self) -> Result<()> {
         tokio::time::timeout(CONTROL_TIMEOUT, async {
             while self.process.observe() != ProcessObservation::Exited {
@@ -179,14 +188,9 @@ impl ClientControlChannel for Connection {
     }
     fn interrupt(&self) -> pontia_agent_control::DeliveryOperation<'_> {
         Box::pin(async {
-            let result = async {
-                let status = Self::status(&self.rpc).await?;
-                self.request(json!({"method":"interrupt", "input_id":status["input_id"]}))
-                    .await
-                    .map(|_| ())
-            }
-            .await;
-            result.map_err(pontia_agent_control::DeliveryError::from)
+            self.deliver(json!({"method":"interrupt"}))
+                .await
+                .map(|_| ())
         })
     }
     fn set_reasoning_effort<'a>(&'a self, reasoning_effort: &'a str) -> ClientControlOperation<'a> {
@@ -203,5 +207,67 @@ impl ClientControlChannel for Connection {
     }
     fn replay<'a>(&'a self, _: &'a str) -> ClientControlOperation<'a> {
         Box::pin(async { Err(crate::unsupported()) })
+    }
+}
+
+fn delivery_response(response: &Value) -> std::result::Result<Value, DeliveryError> {
+    let reason = || {
+        response["reason"]
+            .as_str()
+            .unwrap_or("operation_unconfirmed")
+            .to_owned()
+    };
+    match response["status"].as_str() {
+        Some("accepted") => Ok(response.clone()),
+        Some("unsupported") => Err(DeliveryError::Unsupported(reason())),
+        Some("rejected") if response["reason"] == "execution_unavailable" => {
+            Err(DeliveryError::Offline(reason()))
+        }
+        Some("rejected") => Err(DeliveryError::StateChanged(reason())),
+        _ => Err(DeliveryError::Uncertain(reason())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn deliver(response: Value) -> std::result::Result<Value, DeliveryError> {
+        let (client, server) = tokio::net::UnixStream::pair().unwrap();
+        let (rpc, _) = RpcPeer::new(client);
+        let (server, mut requests) = RpcPeer::new(server);
+        let replying = tokio::spawn(async move {
+            let request = requests.recv().await.unwrap();
+            server.reply(request.id, response).await.unwrap();
+        });
+        let connection = Connection {
+            rpc,
+            host_id: "test-host".into(),
+            process: ProcessFingerprint::capture(std::process::id()).unwrap(),
+        };
+        let result = connection.deliver(json!({"method":"interrupt"})).await;
+        replying.await.unwrap();
+        result
+    }
+
+    #[tokio::test]
+    async fn delivery_boundary_preserves_the_four_delivery_outcomes() {
+        assert!(deliver(json!({"status":"accepted"})).await.is_ok());
+        assert!(matches!(
+            deliver(json!({"status":"unsupported","reason":"unsupported_method"})).await,
+            Err(DeliveryError::Unsupported(reason)) if reason == "unsupported_method"
+        ));
+        assert!(matches!(
+            deliver(json!({"status":"rejected","reason":"execution_unavailable"})).await,
+            Err(DeliveryError::Offline(reason)) if reason == "execution_unavailable"
+        ));
+        assert!(matches!(
+            deliver(json!({"status":"rejected","reason":"no_matching_execution"})).await,
+            Err(DeliveryError::StateChanged(reason)) if reason == "no_matching_execution"
+        ));
+        assert!(matches!(
+            deliver(json!({"status":"unknown","reason":"operation_unconfirmed"})).await,
+            Err(DeliveryError::Uncertain(reason)) if reason == "operation_unconfirmed"
+        ));
     }
 }

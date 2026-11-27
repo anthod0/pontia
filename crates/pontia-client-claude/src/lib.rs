@@ -175,6 +175,30 @@ fn unsupported() -> Error {
 fn unavailable() -> Error {
     Error::CapabilityUnavailable("Claude Code host is unavailable".into())
 }
+fn delivery_available(state: &peer::State) -> std::result::Result<(), DeliveryError> {
+    if let Some(reason) = &state.unavailable {
+        return Err(if reason == "input_delivery_unknown" {
+            DeliveryError::Uncertain(reason.clone())
+        } else {
+            DeliveryError::Offline(reason.clone())
+        });
+    }
+    if state.closing || state.closed {
+        return Err(DeliveryError::Offline(
+            "Claude Code host is unavailable".into(),
+        ));
+    }
+    Ok(())
+}
+fn active_delivery(state: &peer::State) -> std::result::Result<(), DeliveryError> {
+    delivery_available(state)?;
+    if state.input.is_none() {
+        return Err(DeliveryError::StateChanged(
+            "Claude Code has no active execution".into(),
+        ));
+    }
+    Ok(())
+}
 impl Adapter {
     fn script(&self, root: &Path) -> Result<PathBuf> {
         let script =
@@ -290,23 +314,24 @@ impl ClientSession for Adapter {
         message: Option<&'a str>,
     ) -> DeliveryOperation<'a, InputReceipt> {
         Box::pin(async move {
-            let result: Result<InputReceipt> = async {
             let text = payload.text.as_str();
-            let peer = self.target(&events, target).await?;
+            let peer = self
+                .target(&events, target)
+                .await
+                .map_err(DeliveryError::from)?;
             if turn.is_some() {
-                return Err(unsupported());
+                return Err(DeliveryError::Unsupported(
+                    "Claude Code input replay is unavailable".into(),
+                ));
             }
             let id = uuid::Uuid::new_v4().to_string();
             {
                 let mut state = peer::lock_after_cache_write(&peer.state).await;
-                if state.unavailable.is_some() || state.closing || state.closed {
-                    return Err(unavailable());
-                }
+                delivery_available(&state)?;
                 if state.input.is_some() {
-                    return Err(Error::Conflict {
-                        code: "input_busy",
-                        message: "Claude Code input is still active".into(),
-                    });
+                    return Err(DeliveryError::StateChanged(
+                        "Claude Code input is still active".into(),
+                    ));
                 }
                 state.input = Some(Input {
                     id: id.clone(),
@@ -315,12 +340,13 @@ impl ClientSession for Adapter {
                 });
             }
             let result = peer
-                .connection()?
-                .request(json!({"method":"input","input_id":id,"text":text,"input":{"summary":text.chars().take(pontia_core::domain::MAX_TURN_INPUT_SUMMARY_CHARS).collect::<String>(),"inbox_message_id":message}}))
+                .connection()
+                .map_err(DeliveryError::from)?
+                .deliver(json!({"method":"input","input_id":id,"text":text,"input":{"summary":text.chars().take(pontia_core::domain::MAX_TURN_INPUT_SUMMARY_CHARS).collect::<String>(),"inbox_message_id":message}}))
                 .await;
             if let Err(error) = result {
                 let mut state = peer.state.lock().await;
-                if matches!(error, Error::ControlUnknown(_)) {
+                if matches!(error, DeliveryError::Uncertain(_)) {
                     state.unavailable = Some("input_delivery_unknown".into());
                 } else if state
                     .input
@@ -336,9 +362,6 @@ impl ClientSession for Adapter {
                 native_turn_id: None,
                 runtime_id: Some(peer.runtime.clone()),
             })
-            }
-            .await;
-            result.map_err(DeliveryError::from)
         })
     }
 
@@ -350,36 +373,31 @@ impl ClientSession for Adapter {
         _message: Option<&'a str>,
     ) -> DeliveryOperation<'a, InputReceipt> {
         Box::pin(async move {
-            let result: Result<InputReceipt> = async {
-                let peer = self.target(&events, target).await?;
-                let target_input = {
-                    let state = peer.state.lock().await;
-                    if state.unavailable.is_some() || state.closing || state.closed {
-                        return Err(unavailable());
-                    }
-                    state.input.as_ref().ok_or_else(unavailable)?.id.clone()
-                };
-                let result = peer
-                    .connection()?
-                    .request(json!({
-                        "method": "steer", "target_input_id": target_input,
-                        "input_id": uuid::Uuid::new_v4().to_string(), "text": payload.text,
-                    }))
-                    .await;
-                if let Err(error) = result {
-                    if matches!(error, Error::ControlUnknown(_)) {
-                        peer.state.lock().await.unavailable = Some("input_delivery_unknown".into());
-                    }
-                    return Err(error);
+            let peer = self
+                .target(&events, target)
+                .await
+                .map_err(DeliveryError::from)?;
+            let mut state = peer.state.lock().await;
+            active_delivery(&state)?;
+            let result = peer
+                .connection()
+                .map_err(DeliveryError::from)?
+                .deliver(json!({
+                    "method": "steer",
+                    "input_id": uuid::Uuid::new_v4().to_string(), "text": payload.text,
+                }))
+                .await;
+            if let Err(error) = result {
+                if matches!(error, DeliveryError::Uncertain(_)) {
+                    state.unavailable = Some("input_delivery_unknown".into());
                 }
-                Ok(InputReceipt {
-                    turn_pending: false,
-                    native_turn_id: None,
-                    runtime_id: Some(peer.runtime.clone()),
-                })
+                return Err(error);
             }
-            .await;
-            result.map_err(DeliveryError::from)
+            Ok(InputReceipt {
+                turn_pending: false,
+                native_turn_id: None,
+                runtime_id: Some(peer.runtime.clone()),
+            })
         })
     }
     fn compact<'a>(
@@ -449,23 +467,17 @@ impl ClientSession for Adapter {
         target: &'a ControlTarget,
     ) -> DeliveryOperation<'a> {
         Box::pin(async move {
-            let result: Result<()> = async {
-                let peer = self.target(&events, target).await?;
-                let id = {
-                    let state = peer.state.lock().await;
-                    let input = state.input.as_ref().ok_or_else(unavailable)?;
-                    if state.closing || state.closed {
-                        return Err(unavailable());
-                    }
-                    input.id.clone()
-                };
-                peer.connection()?
-                    .request(json!({"method":"interrupt","input_id":id}))
-                    .await
-                    .map(|_| ())
-            }
-            .await;
-            result.map_err(DeliveryError::from)
+            let peer = self
+                .target(&events, target)
+                .await
+                .map_err(DeliveryError::from)?;
+            let state = peer.state.lock().await;
+            active_delivery(&state)?;
+            peer.connection()
+                .map_err(DeliveryError::from)?
+                .deliver(json!({"method":"interrupt"}))
+                .await
+                .map(|_| ())
         })
     }
     fn exit<'a>(

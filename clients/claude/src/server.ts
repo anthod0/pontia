@@ -134,11 +134,7 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
           break;
         }
         case "steer":
-          host.steer(
-            string(request.target_input_id),
-            string(request.input_id),
-            string(request.text),
-          );
+          host.steer(string(request.input_id), string(request.text));
           break;
         case "compact":
           host.compact(string(request.operation_id));
@@ -155,7 +151,7 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
             )),
           };
         case "interrupt":
-          await host.interrupt(string(request.input_id));
+          await host.interrupt();
           break;
         case "interaction":
           host.resolveInteraction(string(request.interaction_key), string(request.option));

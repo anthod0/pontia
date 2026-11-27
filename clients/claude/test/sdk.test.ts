@@ -638,7 +638,7 @@ for (const phase of ["streaming", "approval"] as const) {
         await waitFor(() =>
           events.some((e) => e.kind === (phase === "approval" ? "interaction_requested" : "text")),
         );
-        host.steer(first, second, "native steering correction marker");
+        host.steer(second, "native steering correction marker");
         await waitFor(() => host.status().finished);
         assert.deepEqual(
           events.filter((e) => e.kind === "started").map((e) => e.input_id),

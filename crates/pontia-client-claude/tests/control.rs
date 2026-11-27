@@ -2124,10 +2124,8 @@ async fn steering_uses_the_active_turn_while_after_idle_waits() {
     assert_eq!(steered["inbox_message"]["state"], "dispatched");
     assert_eq!(steered["inbox_message"]["turn_id"], turns[0].0);
     let wire = h.wire(&session);
-    let original = wire.iter().find(|v| v["method"] == "input").unwrap();
     let steering = wire.iter().find(|v| v["method"] == "steer").unwrap();
-    assert_eq!(steering["target_input_id"], original["input_id"]);
-    assert_ne!(steering["input_id"], original["input_id"]);
+    assert!(steering.get("target_input_id").is_none());
     assert_eq!(steering["text"], "correction");
     assert_eq!(wire.iter().filter(|v| v["method"] == "input").count(), 1);
     let mut items = Vec::new();

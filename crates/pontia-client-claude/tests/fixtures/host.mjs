@@ -241,7 +241,7 @@ if (process.argv[2] === "history-info") {
           ),
         });
       } else if (request.method === "steer") {
-        if (!active?.started || request.target_input_id !== active.id) {
+        if (!active?.started) {
           send({ type: "response", id: request.id, status: "rejected" });
           return;
         }

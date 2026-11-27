@@ -232,10 +232,10 @@ export class Host {
     }
   }
 
-  steer(target: string, id: string, text: string): void {
+  steer(id: string, text: string): void {
     if (!this.acceptsControl()) throw new ControlError("rejected", "execution_unavailable");
     this.validateInput(id, text);
-    if (!this.current?.started || this.current.finished || this.current.id !== target)
+    if (!this.current?.started || this.current.finished)
       throw new ControlError("rejected", "no_matching_execution");
     this.input.push({
       type: "user",
@@ -259,14 +259,13 @@ export class Host {
     if (this.usedInputs.has(id)) throw new ControlError("rejected", "input_already_submitted");
   }
 
-  async interrupt(id: string): Promise<void> {
+  async interrupt(): Promise<void> {
     if (
       this.closed ||
       this.closing ||
       !this.execution ||
       !this.current?.started ||
-      this.current.finished ||
-      this.current.id !== id
+      this.current.finished
     )
       throw new ControlError("rejected", "no_matching_execution");
     try {

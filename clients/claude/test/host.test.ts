@@ -690,8 +690,7 @@ for (const [terminal, expected] of [
     fixture.messages.push(init());
     fixture.messages.push(assistant());
     await settle();
-    await assert.rejects(host.interrupt(second), rejects("no_matching_execution"));
-    await host.interrupt(first);
+    await host.interrupt();
     assert.equal(fixture.interrupts, 1);
     assert.equal(events.filter((e) => e.kind === "finished").length, 0);
     assert.throws(() => host.submit(second, "next"), rejects("input_busy"));
@@ -775,7 +774,7 @@ test("control loss does not close SDK or release an uncertain execution for anot
   host.controlLost();
   assert.equal(host.status().closed, false);
   assert.equal(events.filter((e) => e.kind === "finished").length, 0);
-  await host.interrupt(first);
+  await host.interrupt();
   fixture.messages.push(result());
   await settle();
   assert.throws(() => host.submit(second, "next"), rejects("execution_unavailable"));
@@ -822,7 +821,7 @@ for (const mode of ["combined", "after text", "after tool use"] as const) {
     fixture.messages.push(init());
     fixture.messages.push(assistant());
     await settle();
-    host.steer(first, second, "change direction");
+    host.steer(second, "change direction");
     const steering = (await fixture.next()).value;
     assert.equal(steering.uuid, second);
     assert.equal(steering.priority, "now");
@@ -874,22 +873,21 @@ for (const mode of ["combined", "after text", "after tool use"] as const) {
   });
 }
 
-test("steering rejects stale, finished and disconnected targets without consuming the message ID", async (t) => {
+test("steering rejects inactive and disconnected executions without consuming the message ID", async (t) => {
   const { fixture, host } = setup();
   t.after(() => host.close());
   host.submit(first, "task");
   await fixture.next();
-  assert.throws(() => host.steer(first, second, "too early"), rejects("no_matching_execution"));
+  assert.throws(() => host.steer(second, "too early"), rejects("no_matching_execution"));
   fixture.messages.push(init());
   fixture.messages.push(assistant());
   await settle();
-  assert.throws(() => host.steer(second, second, "wrong target"), rejects("no_matching_execution"));
   host.controlLost();
-  assert.throws(() => host.steer(first, second, "disconnected"), rejects("execution_unavailable"));
+  assert.throws(() => host.steer(second, "disconnected"), rejects("execution_unavailable"));
   host.controlRestored();
   fixture.messages.push(result());
   await settle();
-  assert.throws(() => host.steer(first, second, "too late"), rejects("no_matching_execution"));
+  assert.throws(() => host.steer(second, "too late"), rejects("no_matching_execution"));
   host.submit(second, "next task");
   assert.equal((await fixture.next()).value.uuid, second);
 });
@@ -902,9 +900,9 @@ test("multiple steering messages are delivered in order and all must resolve bef
   fixture.messages.push(init());
   fixture.messages.push(assistant());
   await settle();
-  host.steer(first, second, "first correction");
-  host.steer(first, native, "second correction");
-  assert.throws(() => host.steer(first, second, "duplicate"), rejects("input_already_submitted"));
+  host.steer(second, "first correction");
+  host.steer(native, "second correction");
+  assert.throws(() => host.steer(second, "duplicate"), rejects("input_already_submitted"));
   assert.equal((await fixture.next()).value.uuid, second);
   assert.equal((await fixture.next()).value.uuid, native);
   fixture.messages.push(result(first));
