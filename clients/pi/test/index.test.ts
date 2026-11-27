@@ -186,26 +186,30 @@ async function installBound(overrides: Parameters<typeof install>[0] = {}) {
 }
 
 describe("pontia pi extension lifecycle", () => {
-  test("steer joins the active run and rejects a stale Turn without starting another run", async () => {
+  test("steer joins a busy run and rejects delivery after Pi becomes idle", async () => {
     let submit!: (input: ControlInput) => void;
+    let idle = false;
     const { handlers, sendUserMessage, reported } = await installBound({
       connectPi: async (_home, _error, onSubmit) => {
         submit = onSubmit;
         return { request: async () => null, registered() {}, close: async () => {} };
       },
     });
-    await handlers.model_select({}, { isIdle: () => false });
+    await handlers.model_select({}, { isIdle: () => idle });
     await handlers.agent_start({}, {});
     submit({
       input: "Adjust the task",
       inboxMessageId: "msg_steer",
-      steerTargetTurnId: "turn_server_1",
+      mode: "steer",
     });
     expect(sendUserMessage).toHaveBeenCalledExactlyOnceWith("Adjust the task", {
       deliverAs: "steer",
     });
     expect(reported.filter((event) => event.type === "turn.started")).toHaveLength(1);
-    expect(() => submit({ input: "Stale task", steerTargetTurnId: "turn_old" })).toThrow();
+    idle = true;
+    expect(() => submit({ input: "Stale task", mode: "steer" })).toThrow(
+      expect.objectContaining({ code: -32011 }),
+    );
     expect(sendUserMessage).toHaveBeenCalledOnce();
   });
 
@@ -234,7 +238,7 @@ describe("pontia pi extension lifecycle", () => {
   });
 
   test("Dashboard input is rejected while the initial user run is preparing", async () => {
-    let submit!: (input: { input: string; inboxMessageId?: string }) => void;
+    let submit!: (input: ControlInput) => void;
     const workspace = await realpath(defaultPontiaHome);
     const { handlers, reported, sendUserMessage } = install({
       env: { PONTIA_SESSION_ID: "sess_1", PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1" },
@@ -259,9 +263,9 @@ describe("pontia pi extension lifecycle", () => {
       { messageType: "user", prompt: "typed in tui" },
       ctx,
     );
-    expect(() => submit({ input: "from dashboard", inboxMessageId: "msg_busy" })).toThrow(
-      expect.objectContaining({ code: -32010 }),
-    );
+    expect(() =>
+      submit({ input: "from dashboard", inboxMessageId: "msg_busy", mode: "start_turn" }),
+    ).toThrow(expect.objectContaining({ code: -32010 }));
     expect(sendUserMessage).not.toHaveBeenCalled();
     await preparing;
     await handlers.agent_start({}, ctx);
@@ -274,7 +278,7 @@ describe("pontia pi extension lifecycle", () => {
   test.each(["before", "during"])(
     "socket input arriving %s agent_settled retains its Inbox identity and never labels manual input",
     async (arrival) => {
-      let submit: ((input: { input: string; inboxMessageId?: string }) => void) | undefined;
+      let submit: ((input: ControlInput) => void) | undefined;
       let idle = true;
       const workspace = await realpath(await tempDir());
       const { handlers, reported, commands, sendUserMessage } = install({
@@ -331,7 +335,7 @@ describe("pontia pi extension lifecycle", () => {
           }
         },
       );
-      submit!({ input: "from dashboard", inboxMessageId: "msg_direct" });
+      submit!({ input: "from dashboard", inboxMessageId: "msg_direct", mode: "start_turn" });
       expect(reported.filter((event) => event.type === "turn.started")).toHaveLength(0);
       await started;
       const first = reported.find((event) => event.type === "turn.started")!;
@@ -347,7 +351,7 @@ describe("pontia pi extension lifecycle", () => {
       expect(continuation.data).not.toHaveProperty("inbox_message_id");
 
       idle = false;
-      expect(() => submit!({ input: "too early" })).toThrow(
+      expect(() => submit!({ input: "too early", mode: "start_turn" })).toThrow(
         expect.objectContaining({ code: -32010 }),
       );
       await handlers.agent_end({ messages: [] }, ctx);
@@ -355,8 +359,8 @@ describe("pontia pi extension lifecycle", () => {
         idle = true;
         settling = true;
       }
-      submit!({ input: "next from inbox", inboxMessageId: "msg_next" });
-      expect(() => submit!({ input: "duplicate while pending" })).toThrow(
+      submit!({ input: "next from inbox", inboxMessageId: "msg_next", mode: "start_turn" });
+      expect(() => submit!({ input: "duplicate while pending", mode: "start_turn" })).toThrow(
         expect.objectContaining({ code: -32010 }),
       );
       expect(reported.filter((event) => event.type === "turn.started")).toHaveLength(2);
@@ -381,7 +385,7 @@ describe("pontia pi extension lifecycle", () => {
       expect(manual.data).toMatchObject({ input_summary: "typed manually" });
       expect(manual.data).not.toHaveProperty("inbox_message_id");
       await handlers.session_shutdown({ reason: "quit" }, ctx);
-      expect(() => submit!({ input: "stale" })).toThrow("no longer current");
+      expect(() => submit!({ input: "stale", mode: "start_turn" })).toThrow("no longer current");
     },
   );
 

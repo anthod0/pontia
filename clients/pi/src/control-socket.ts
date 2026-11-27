@@ -9,7 +9,7 @@ import { MAX_CONTROL_FRAME_BYTES } from "../shared/control-socket.js";
 export interface ControlInput {
   input: string;
   inboxMessageId?: string;
-  steerTargetTurnId?: string;
+  mode: "start_turn" | "steer";
 }
 export interface LifecycleControl {
   interrupt(): void;
@@ -167,7 +167,6 @@ export async function connectPi(
     if (
       typeof params.input !== "string" ||
       !params.input.trim() ||
-      (method === "steer" && (typeof params.turn_id !== "string" || !params.turn_id)) ||
       (params.inbox_message_id != null &&
         (typeof params.inbox_message_id !== "string" || !params.inbox_message_id))
     ) {
@@ -178,7 +177,7 @@ export async function connectPi(
       await onSubmit({
         input: params.input,
         inboxMessageId: params.inbox_message_id ?? undefined,
-        ...(method === "steer" ? { steerTargetTurnId: params.turn_id } : {}),
+        mode: method === "steer" ? "steer" : "start_turn",
       });
       respond({ result: { accepted: true } });
     };

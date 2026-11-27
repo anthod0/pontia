@@ -17,6 +17,7 @@ test.each(["tui", "rpc"])(
     const controls: LifecycleControl[] = [];
     const calls: string[] = [];
     const closes: Array<ReturnType<typeof vi.fn>> = [];
+    let idle = false;
     createPontiaPiExtension(
       {
         on(name: string, handler: any) {
@@ -73,7 +74,7 @@ test.each(["tui", "rpc"])(
       abort: () => calls.push(`${id}:abort`),
       shutdown: () => calls.push(`${id}:shutdown`),
       mode,
-      isIdle: () => false,
+      isIdle: () => idle,
       hasPendingMessages: () => false,
       sessionManager: {
         getSessionId: () => id,
@@ -84,6 +85,9 @@ test.each(["tui", "rpc"])(
     await handlers.session_start({ reason: "startup" }, context("one"));
     expect(controls[0].shutdownIfIdle()).toBe(false);
     controls[0].interrupt();
+    idle = true;
+    expect(() => controls[0].interrupt()).toThrow(expect.objectContaining({ code: -32011 }));
+    idle = false;
     controls[0].shutdown();
     expect(calls).toEqual(["one:abort", "one:abort", "one:shutdown"]);
     expect(events.map((event) => event.type)).toEqual(["session.ready"]);

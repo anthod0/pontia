@@ -61,35 +61,34 @@ function reply(socket: Socket, id: unknown, result: unknown) {
   socket.write(`${JSON.stringify({ jsonrpc: "2.0", id, result })}\n`);
 }
 
-test("steer forwards its target Turn and rejects a missing target", async () => {
+test("steer forwards input without an external Turn identity", async () => {
   const responses: any[] = [];
   const root = await server((socket, message) => {
     if (!message.method) {
       responses.push(message);
       return;
     }
-    for (const [id, params] of [
-      [
-        "valid",
-        { input: "Adjust the task", inbox_message_id: "msg_steer", turn_id: "turn_active" },
-      ],
-      ["missing", { input: "Adjust the task" }],
-    ]) {
-      socket.write(`${JSON.stringify({ jsonrpc: "2.0", id, method: "steer", params })}\n`);
-    }
+    socket.write(
+      `${JSON.stringify({
+        jsonrpc: "2.0",
+        id: "steer",
+        method: "steer",
+        params: { input: "Adjust the task", inbox_message_id: "msg_steer" },
+      })}\n`,
+    );
     reply(socket, message.id, {});
   });
   const submit = vi.fn();
   const client = await connectPi(root, () => {}, submit);
   onTestFinished(() => client.close());
   await client.request("begin", {});
-  await vi.waitFor(() => expect(responses).toHaveLength(2));
+  await vi.waitFor(() => expect(responses).toHaveLength(1));
   expect(submit).toHaveBeenCalledExactlyOnceWith({
     input: "Adjust the task",
     inboxMessageId: "msg_steer",
-    steerTargetTurnId: "turn_active",
+    mode: "steer",
   });
-  expect(responses.find((response) => response.id === "missing").error.code).toBe(-32602);
+  expect(responses[0].result).toEqual({ accepted: true });
 });
 
 test("compaction control acknowledges native initiation and rejects malformed operations", async () => {
@@ -232,7 +231,11 @@ test("dispatches daemon requests while a registration request is awaiting its re
     session_id: "s",
     runtime_id: "r",
   });
-  expect(submit).toHaveBeenCalledWith({ input: "你好", inboxMessageId: "msg_1" });
+  expect(submit).toHaveBeenCalledWith({
+    input: "你好",
+    inboxMessageId: "msg_1",
+    mode: "start_turn",
+  });
 });
 
 test("reconnect attaches the confirmed identity without repeating registration", async () => {
@@ -355,7 +358,11 @@ test("lost turn.started acknowledgements retry the same report over a fresh conn
     "event.report",
     "event.report",
   ]);
-  expect(submit).toHaveBeenCalledWith({ input: "next", inboxMessageId: undefined });
+  expect(submit).toHaveBeenCalledWith({
+    input: "next",
+    inboxMessageId: undefined,
+    mode: "start_turn",
+  });
 });
 
 test("reports large facts without treating normal socket buffering as failure", async () => {

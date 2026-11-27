@@ -1,4 +1,6 @@
-use pontia_agent_control::ipc::rpc::MAX_FRAME_BYTES;
+use pontia_agent_control::{
+    ClientControlChannel, DeliveryError, InputPayload, ipc::rpc::MAX_FRAME_BYTES,
+};
 use pontia_client_pi::rpc::{MAX_CONTROL_FRAME_BYTES, PiRpcPeer};
 use pontia_core::Error;
 use serde_json::{Value, json};
@@ -232,6 +234,59 @@ async fn busy_rejection_is_distinct_from_uncertain_delivery() {
         }
         server.await.unwrap();
         peer.close();
+    }
+}
+
+#[tokio::test]
+async fn delivery_operations_map_pi_rejections_without_external_turn_identity() {
+    for method in ["submit", "steer", "interrupt"] {
+        for (code, expected) in [
+            (
+                -32601,
+                DeliveryError::Unsupported("delivery diagnostic".into()),
+            ),
+            (-32006, DeliveryError::Offline("delivery diagnostic".into())),
+            (
+                if method == "submit" { -32010 } else { -32011 },
+                DeliveryError::StateChanged("delivery diagnostic".into()),
+            ),
+            (
+                -32007,
+                DeliveryError::Uncertain("delivery diagnostic".into()),
+            ),
+        ] {
+            let (left, right) = UnixStream::pair().unwrap();
+            let (peer, _) = PiRpcPeer::new(left);
+            let server = tokio::spawn(async move {
+                let mut pi = BufReader::new(right);
+                let mut line = String::new();
+                pi.read_line(&mut line).await.unwrap();
+                let request: Value = serde_json::from_str(&line).unwrap();
+                assert_eq!(request["method"], method);
+                assert_eq!(request["params"].get("turn_id"), None);
+                pi.get_mut()
+                    .write_all(
+                        format!(
+                            "{}\n",
+                            json!({"jsonrpc":"2.0","id":request["id"],"error":{"code":code,"message":"delivery diagnostic"}})
+                        )
+                        .as_bytes(),
+                    )
+                    .await
+                    .unwrap();
+            });
+            let payload = InputPayload::from("once");
+            let operation = match method {
+                "submit" => peer.start_turn(&payload, Some("message")),
+                "steer" => peer.steer(&payload, Some("message")),
+                "interrupt" => peer.interrupt(),
+                _ => unreachable!(),
+            };
+            let error = operation.await.unwrap_err();
+            assert_eq!(error, expected, "{method} mapped {code} incorrectly");
+            server.await.unwrap();
+            peer.close();
+        }
     }
 }
 

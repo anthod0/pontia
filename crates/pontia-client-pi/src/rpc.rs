@@ -33,15 +33,7 @@ impl PiRpcPeer {
         self.rpc.reply_error(id, code, message).await
     }
     pub async fn call(&self, method: &str, params: Value) -> Result<Value> {
-        let limit = if method == "submit" {
-            MAX_CONTROL_FRAME_BYTES
-        } else {
-            MAX_FRAME_BYTES
-        };
-        let response = self
-            .rpc
-            .request(method, params, limit, method == "history.read")
-            .await?;
+        let response = self.request(method, params).await?;
         if let Some(error) = response.get("error") {
             if method == "history.read" && error["code"] == -32601 {
                 return Err(Error::CapabilityUnavailable(
@@ -69,6 +61,36 @@ impl PiRpcPeer {
                 "Pi RPC {}: {}",
                 error["code"], error["message"]
             )));
+        }
+        Ok(response["result"].clone())
+    }
+    async fn request(&self, method: &str, params: Value) -> Result<Value> {
+        let limit = if method == "submit" {
+            MAX_CONTROL_FRAME_BYTES
+        } else {
+            MAX_FRAME_BYTES
+        };
+        self.rpc
+            .request(method, params, limit, method == "history.read")
+            .await
+    }
+    async fn deliver(
+        &self,
+        method: &str,
+        params: Value,
+    ) -> std::result::Result<Value, pontia_agent_control::DeliveryError> {
+        let response = self
+            .request(method, params)
+            .await
+            .map_err(pontia_agent_control::DeliveryError::from)?;
+        if let Some(error) = response.get("error") {
+            let message = error["message"].as_str().unwrap().to_owned();
+            return Err(match error["code"].as_i64() {
+                Some(-32601) => pontia_agent_control::DeliveryError::Unsupported(message),
+                Some(-32010 | -32011) => pontia_agent_control::DeliveryError::StateChanged(message),
+                Some(-32007) => pontia_agent_control::DeliveryError::Uncertain(message),
+                _ => pontia_agent_control::DeliveryError::Offline(message),
+            });
         }
         Ok(response["result"].clone())
     }
@@ -102,15 +124,35 @@ impl pontia_agent_control::ClientControlChannel for PiRpcPeer {
     ) -> pontia_agent_control::DeliveryOperation<'a> {
         Box::pin(async move {
             let result = self
-                .call(
+                .deliver(
                     "submit",
                     json!({"input":payload.text,"inbox_message_id":inbox_message_id}),
                 )
-                .await
-                .map_err(pontia_agent_control::DeliveryError::from)?;
+                .await?;
             if result != json!({"accepted":true}) {
                 return Err(pontia_agent_control::DeliveryError::Uncertain(
                     "Invalid Pi submit response".into(),
+                ));
+            }
+            Ok(())
+        })
+    }
+    fn steer<'a>(
+        &'a self,
+        payload: &'a pontia_agent_control::InputPayload,
+        inbox_message_id: Option<&'a str>,
+    ) -> pontia_agent_control::DeliveryOperation<'a> {
+        Box::pin(async move {
+            if self
+                .deliver(
+                    "steer",
+                    json!({"input":payload.text,"inbox_message_id":inbox_message_id}),
+                )
+                .await?
+                != json!({"accepted":true})
+            {
+                return Err(pontia_agent_control::DeliveryError::Uncertain(
+                    "Invalid Pi steer response".into(),
                 ));
             }
             Ok(())
@@ -164,12 +206,7 @@ impl pontia_agent_control::ClientControlChannel for PiRpcPeer {
     }
     fn interrupt(&self) -> pontia_agent_control::DeliveryOperation<'_> {
         Box::pin(async {
-            if self
-                .call("interrupt", json!({}))
-                .await
-                .map_err(pontia_agent_control::DeliveryError::from)?
-                != json!({"accepted":true})
-            {
+            if self.deliver("interrupt", json!({})).await? != json!({"accepted":true}) {
                 return Err(pontia_agent_control::DeliveryError::Uncertain(
                     "Invalid Pi interrupt acknowledgement".into(),
                 ));
@@ -208,32 +245,5 @@ impl pontia_agent_control::ClientControlChannel for PiRpcPeer {
             }
             Ok(())
         })
-    }
-}
-
-impl PiRpcPeer {
-    pub(crate) async fn steer(
-        &self,
-        payload: &pontia_agent_control::InputPayload,
-        inbox_message_id: Option<&str>,
-        turn_id: &str,
-    ) -> std::result::Result<(), pontia_agent_control::DeliveryError> {
-        Box::pin(async move {
-            if self
-                .call(
-                    "steer",
-                    json!({"input":payload.text,"inbox_message_id":inbox_message_id,"turn_id":turn_id}),
-                )
-                .await
-                .map_err(pontia_agent_control::DeliveryError::from)?
-                != json!({"accepted":true})
-            {
-                return Err(pontia_agent_control::DeliveryError::Uncertain(
-                    "Invalid Pi steer response".into(),
-                ));
-            }
-            Ok(())
-        })
-        .await
     }
 }

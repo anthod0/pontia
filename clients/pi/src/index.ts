@@ -351,18 +351,9 @@ export function createPontiaPiExtension(
         if (generation !== controlGeneration || reportingDisabled || !boundSessionContext) {
           throw new Error("Pi control session is no longer current");
         }
-        if (submission.steerTargetTurnId) {
-          if (
-            !activeTurn ||
-            activeTurn.ended ||
-            activeTurn.context.turnId !== submission.steerTargetTurnId ||
-            piContext?.isIdle()
-          ) {
-            throw new RpcError(
-              -32011,
-              "Pi steer target is no longer active; input was not submitted",
-            );
-          }
+        if (submission.mode === "steer") {
+          if (piContext!.isIdle())
+            throw new RpcError(-32011, "Pi is idle; steer input was not submitted");
           try {
             pi.sendUserMessage(submission.input, { deliverAs: "steer" });
           } catch (error) {
@@ -375,7 +366,7 @@ export function createPontiaPiExtension(
         }
         if (queuedControlInput)
           throw new RpcError(-32010, "Pi already has pending input; input was not submitted");
-        const idle = piContext?.isIdle();
+        const idle = piContext!.isIdle();
         if (!idle && !activeTurn?.ended)
           throw new RpcError(-32010, "Pi is busy; input was not submitted");
         const id = randomUUID();
@@ -395,7 +386,16 @@ export function createPontiaPiExtension(
       },
       {
         interrupt() {
-          lifecycleContext().abort();
+          const ctx = lifecycleContext();
+          if (ctx.isIdle()) throw new RpcError(-32011, "Pi is idle; nothing to interrupt");
+          try {
+            ctx.abort();
+          } catch (error) {
+            throw new RpcError(
+              -32007,
+              `Pi interrupt result is uncertain: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
         },
         shutdownIfIdle() {
           const ctx = lifecycleContext();
@@ -558,7 +558,7 @@ export function createPontiaPiExtension(
         }
         await directInput.run(
           {
-            submission: { input: replacementInput },
+            submission: { input: replacementInput, mode: "start_turn" },
             sessionContext: current,
             consumed: false,
           },

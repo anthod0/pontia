@@ -44,8 +44,6 @@ pub(crate) async fn serve_peer(
         handling: AtomicUsize::new(0),
         invalidated: AtomicBool::new(false),
         reasoning_effort_controllable: AtomicBool::new(false),
-        pool: state.db(),
-        session_id: std::sync::RwLock::new(None),
     });
     let mut registered = None;
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
@@ -273,7 +271,6 @@ async fn dispatch(
         request,
     )
     .await?;
-    *channel.session_id.write().unwrap() = Some(identity.session_id.clone());
     state
         .client_control()
         .attach_locked(
@@ -312,8 +309,6 @@ struct PiChannel {
     handling: AtomicUsize,
     invalidated: AtomicBool,
     reasoning_effort_controllable: AtomicBool,
-    pool: sqlx::SqlitePool,
-    session_id: std::sync::RwLock<Option<String>>,
 }
 
 impl PiChannel {
@@ -398,26 +393,10 @@ impl pontia_agent_control::ClientControlChannel for PiChannel {
         payload: &'a pontia_agent_control::InputPayload,
         inbox_message_id: Option<&'a str>,
     ) -> pontia_agent_control::DeliveryOperation<'a> {
-        Box::pin(async move {
-            let session_id = self.session_id.read().unwrap().clone().ok_or_else(|| {
-                pontia_agent_control::DeliveryError::Offline(
-                    "Pi control session is not registered".into(),
-                )
-            })?;
-            let turn_id = sqlx::query_scalar::<_, Option<String>>(
-                "SELECT current_turn_id FROM sessions WHERE session_id=?",
-            )
-            .bind(&session_id)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|error| pontia_agent_control::DeliveryError::Offline(error.to_string()))?
-            .flatten()
-            .ok_or_else(|| {
-                pontia_agent_control::DeliveryError::StateChanged(
-                    "Pi active turn changed before steer".into(),
-                )
-            })?;
-            self.peer.steer(payload, inbox_message_id, &turn_id).await
-        })
+        pontia_agent_control::ClientControlChannel::steer(
+            self.peer.as_ref(),
+            payload,
+            inbox_message_id,
+        )
     }
 }
