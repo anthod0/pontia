@@ -261,16 +261,16 @@
 					<div class="flex h-8 items-center gap-1 px-2 text-foreground/70">
 						<button type="button" class="flex items-center gap-1 text-xs font-medium" aria-expanded={sessionsOpen} onclick={() => sessionsOpen = !sessionsOpen}>Sessions<CaretRightIcon class={cn('size-3', sessionsOpen && 'rotate-90')} /></button>
 						<span class="flex-1"></span>
-						<span class="flex items-center gap-2">
-							<span class="grid size-8 place-items-center" aria-hidden="true"><NotePencilIcon class="size-4" /></span>
-							<span class="grid size-8 place-items-center" aria-hidden="true"><ArrowUpRightIcon class="size-4" /></span>
+						<span class="flex items-center gap-0.5">
+							<span class="grid size-6 shrink-0 place-items-center" aria-hidden="true"><NotePencilIcon class="size-[15px]" /></span>
+							<span class="grid size-6 shrink-0 place-items-center" aria-hidden="true"><ArrowUpRightIcon class="size-[15px]" /></span>
 							<DropdownMenu.Root>
 								<DropdownMenu.Trigger
-									class={cn('rounded-sm hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-hidden', filterApplied && 'text-primary')}
+									class={cn('inline-flex size-6 shrink-0 items-center justify-center rounded-full p-0 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-hidden', filterApplied && 'text-primary')}
 									aria-label="Filter sessions"
 									title={`${sessionScope === 'active' ? 'Active sessions' : 'All sessions'} · ${filterWorkspace?.name ?? 'All workspaces'}`}
 								>
-									<FunnelIcon class="size-4" weight={filterApplied ? 'fill' : 'regular'} />
+									<FunnelIcon class="size-[15px]" weight={filterApplied ? 'fill' : 'regular'} />
 								</DropdownMenu.Trigger>
 								<DropdownMenu.Content side="bottom" align="end" class={cn(dropdownContent, 'w-72')}>
 									<DropdownMenu.Label class="px-1.5 py-1 font-medium">Status</DropdownMenu.Label>
