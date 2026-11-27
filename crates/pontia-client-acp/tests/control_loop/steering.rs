@@ -349,6 +349,33 @@ async fn prompt_required_keeps_unconsumed_steer_queued() {
 }
 
 #[tokio::test]
+async fn unavailable_steering_method_waits_until_idle_and_disables_steer() {
+    let h = Harness::new(&[
+        ("ACP_STEERING", "1"),
+        ("ACP_STEERING_OUTCOME", "unsupported"),
+    ])
+    .await;
+    let session = h.create("first").await.unwrap();
+    let turn = start(&h, &session).await;
+    let message = submit(&h, &session, "steer").await;
+    assert_eq!(message["state"], "pending");
+    assert_eq!(message["delivery_policy"], "after_idle");
+    assert!(
+        !h.app
+            .queries()
+            .get_session(&session)
+            .await
+            .unwrap()
+            .unwrap()
+            .capabilities
+            .steer
+    );
+    finish_queued(&h, &session, &turn, &message).await;
+    assert_eq!(h.requests("_session/steering"), 1);
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn lost_steering_receipt_is_unknown_and_not_replayed() {
     let h = Harness::new(&[
         ("ACP_STEERING", "1"),
@@ -700,6 +727,29 @@ async fn kiro_queued_without_matching_injection_is_undelivered() {
         assert_eq!(h.requests("session/cancel"), 0);
         h.stop().await;
     }
+}
+
+#[tokio::test]
+async fn unavailable_kiro_steering_method_waits_until_idle_and_disables_steer() {
+    let h = Harness::new(&[("ACP_KIRO", "1"), ("ACP_KIRO_STEER", "unsupported")]).await;
+    let session = h.create("kiro").await.unwrap();
+    let turn = start(&h, &session).await;
+    let message = submit(&h, &session, "steer").await;
+    assert_eq!(message["state"], "pending");
+    assert_eq!(message["delivery_policy"], "after_idle");
+    assert!(
+        !h.app
+            .queries()
+            .get_session(&session)
+            .await
+            .unwrap()
+            .unwrap()
+            .capabilities
+            .steer
+    );
+    finish_queued(&h, &session, &turn, &message).await;
+    assert_eq!(h.requests("_session/steer"), 2);
+    h.stop().await;
 }
 
 #[tokio::test]

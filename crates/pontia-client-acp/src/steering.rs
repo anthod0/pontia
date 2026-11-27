@@ -34,6 +34,21 @@ pub(crate) fn prompt_required() -> Error {
     }
 }
 
+pub(crate) fn method_unavailable() -> Error {
+    Error::Conflict {
+        code: "steer_method_unavailable",
+        message: "The client does not implement the negotiated steering method".into(),
+    }
+}
+
+pub(crate) fn response_error(error: agent_client_protocol::Error) -> Error {
+    if error.code == agent_client_protocol::ErrorCode::METHOD_NOT_FOUND {
+        method_unavailable()
+    } else {
+        protocol_error(error)
+    }
+}
+
 pub(crate) async fn send(
     peer: &Arc<Peer>,
     events: &EventIngestService,
@@ -75,7 +90,7 @@ pub(crate) async fn send(
                 }
                 Ok(())
             })
-            .map_err(protocol_error)?;
+            .map_err(crate::peer::submission_error)?;
         if let Err(error) = peer.receipts.wait(key).await {
             if matches!(error, Error::ControlUnknown(_)) {
                 peer.invalidate(&mut state, &error);
@@ -116,7 +131,7 @@ pub(crate) async fn send(
                 protocol.method,
                 json!({"sessionId":state.native,"interjectionId":id,"text":input}),
             )
-            .map_err(protocol_error)?,
+            .map_err(crate::peer::submission_error)?,
         );
         let key = serde_json::to_string(request.id())?;
         let prompt = state
@@ -157,13 +172,12 @@ pub(crate) async fn send(
                         state.negotiated.interject = false;
                         state.interjections.remove(&id);
                         state.refresh_capabilities();
-                        let result = result_peer.remember(&state, None).await;
-                        result.and(Err(Error::Conflict {
-                            code: "steer_method_unavailable",
-                            message: "The client does not implement interjection".into(),
-                        }))
+                        result_peer
+                            .remember(&state, None)
+                            .await
+                            .and(Err(method_unavailable()))
                     }
-                    Err(error) => Err(protocol_error(error)),
+                    Err(error) => Err(response_error(error)),
                     Ok(_) => Err(Error::ControlUnknown(
                         "ACP interjection receipt has unknown status".into(),
                     )),
@@ -171,7 +185,7 @@ pub(crate) async fn send(
                 let _ = send.send(outcome);
                 Ok(())
             })
-            .map_err(protocol_error)?;
+            .map_err(crate::peer::submission_error)?;
         peer.receipts.wait(key).await?;
         drop(state);
         tokio::time::timeout(std::time::Duration::from_secs(30), receive)
@@ -193,7 +207,7 @@ pub(crate) async fn send(
                 "_meta": {"steering": {"idleBehavior": "promptRequired"}}
             }),
         )
-        .map_err(protocol_error)?,
+        .map_err(crate::peer::submission_error)?,
     );
     let key = serde_json::to_string(request.id())?;
     let result_peer = peer.clone();
@@ -206,32 +220,45 @@ pub(crate) async fn send(
     request
         .on_receiving_result(async move |result| {
             let mut state = result_peer.state.lock().await;
-            let result = result.map_err(protocol_error).and_then(|response| {
-                match response["outcome"].as_str() {
-                    Some("injected")
-                        if state.current
-                            && state
-                                .active
-                                .as_ref()
-                                .is_some_and(|prompt| prompt.turn == turn) =>
-                    {
-                        if state.history_error.is_none() {
-                            crate::history::append(&mut state.history, "user", &input);
-                        }
-                        state
-                            .active
-                            .as_mut()
-                            .expect("checked active prompt")
-                            .history_end += input.len();
-                        Ok(())
-                    }
-                    Some("promptRequired") => Err(prompt_required()),
-                    Some("failed") => Err(Error::StateConflict("ACP steering was rejected".into())),
-                    _ => Err(Error::ControlUnknown(
-                        "ACP steering outcome could not be associated with the active Turn".into(),
-                    )),
+            let result = match result {
+                Err(error) if error.code == agent_client_protocol::ErrorCode::METHOD_NOT_FOUND => {
+                    state.negotiated.steer = false;
+                    state.refresh_capabilities();
+                    result_peer
+                        .remember(&state, None)
+                        .await
+                        .and(Err(method_unavailable()))
                 }
-            });
+                result => result.map_err(response_error).and_then(|response| {
+                    match response["outcome"].as_str() {
+                        Some("injected")
+                            if state.current
+                                && state
+                                    .active
+                                    .as_ref()
+                                    .is_some_and(|prompt| prompt.turn == turn) =>
+                        {
+                            if state.history_error.is_none() {
+                                crate::history::append(&mut state.history, "user", &input);
+                            }
+                            state
+                                .active
+                                .as_mut()
+                                .expect("checked active prompt")
+                                .history_end += input.len();
+                            Ok(())
+                        }
+                        Some("promptRequired") => Err(prompt_required()),
+                        Some("failed") => {
+                            Err(Error::StateConflict("ACP steering was rejected".into()))
+                        }
+                        _ => Err(Error::ControlUnknown(
+                            "ACP steering outcome could not be associated with the active Turn"
+                                .into(),
+                        )),
+                    }
+                }),
+            };
             if result.is_ok()
                 && let Some(output) = &output
             {
@@ -256,7 +283,7 @@ pub(crate) async fn send(
             let _ = send.send(result);
             Ok(())
         })
-        .map_err(protocol_error)?;
+        .map_err(crate::peer::submission_error)?;
     if let Err(error) = peer.receipts.wait(key).await {
         peer.invalidate(&mut state, &error);
         return Err(error);

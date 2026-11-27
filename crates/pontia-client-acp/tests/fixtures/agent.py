@@ -377,6 +377,9 @@ for line in sys.stdin:
             send({"id": request["id"], "error": {"code": -32603, "message": "Internal error",
                   "data": {"details": "_session/steer: missing or invalid sessionId"}}})
             continue
+        if os.environ["ACP_KIRO_STEER"] == "unsupported":
+            send({"id":request["id"],"error":protocol["method_not_found"]})
+            continue
         message_id = "steer-" + str(request["id"])
         text = request["params"]["message"]
         response(request, {"queued": True, "messageId": message_id})
@@ -407,6 +410,9 @@ for line in sys.stdin:
         outcome = os.environ.get("ACP_STEERING_OUTCOME", "injected")
         if outcome == "disconnect":
             os._exit(0)
+        if outcome == "unsupported":
+            send({"id":request["id"],"error":protocol["method_not_found"]})
+            continue
         if outcome == "injected":
             remember({"sessionUpdate": "user_message_chunk", "content": request["params"]["prompt"][0]})
         response(request, {"outcome": outcome, **({"reason": "noRunningTurn"} if outcome == "promptRequired" else {})})

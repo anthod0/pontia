@@ -231,6 +231,10 @@ pub(crate) fn protocol_error(error: agent_client_protocol::Error) -> Error {
     Error::ControlUnknown(format!("ACP operation could not be confirmed: {error}"))
 }
 
+pub(crate) fn submission_error(error: agent_client_protocol::Error) -> Error {
+    Error::CapabilityUnavailable(format!("ACP operation could not be submitted: {error}"))
+}
+
 pub(crate) async fn runtime_event(
     events: &EventIngestService,
     session: &str,

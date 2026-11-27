@@ -1167,6 +1167,43 @@ async fn cancel_keeps_prompt_active_and_inbox_queued_until_final_response() {
 }
 
 #[tokio::test]
+async fn interrupt_after_prompt_completion_reports_state_changed() {
+    let h = Harness::new(&[]).await;
+    let session = h.create("first").await.unwrap();
+    let turn = h
+        .app
+        .turn_commands()
+        .start_turn(&session, "end_turn".into(), json!({}))
+        .await
+        .unwrap()
+        .unwrap();
+    h.release("update-1");
+    h.release("release-1");
+    h.wait_turn(&session, &turn.turn_id, "completed").await;
+
+    let clients = h.app.clients();
+    let target = pontia_agent_control::runtime::ControlTarget::resolve(
+        &h.app.db(),
+        &clients,
+        &session,
+        None,
+    )
+    .await
+    .unwrap();
+    let client = clients.get("acp").unwrap().session.as_ref().unwrap();
+    let error = client
+        .interrupt(h.app.event_ingest_service(), &target)
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        pontia_agent_control::DeliveryError::StateChanged(_)
+    ));
+    assert_eq!(h.requests("session/cancel"), 0);
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn final_response_without_updates_confirms_started_before_terminal() {
     let h = Harness::new(&[("ACP_NO_UPDATES", "1")]).await;
     let session = h.create("first").await.unwrap();

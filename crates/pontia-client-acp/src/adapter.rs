@@ -28,6 +28,7 @@ use pontia_agent_control::{
 };
 use pontia_core::{Error, Result};
 use pontia_runtime::RuntimeStartRequest;
+use pontia_storage_sqlite::repositories::turns::SqliteTurnRepository;
 use serde_json::json;
 use sqlx::SqlitePool;
 use tokio::sync::Mutex;
@@ -380,15 +381,12 @@ impl ClientSession for AcpAdapter {
         events: EventIngestService,
         target: &'a ControlTarget,
         payload: &'a InputPayload,
-        turn: Option<&'a str>,
+        _turn: Option<&'a str>,
         _message: Option<&'a str>,
     ) -> DeliveryOperation<'a, InputReceipt> {
         Box::pin(async move {
             let result: Result<InputReceipt> = async {
                 let input = payload.text.as_str();
-                let turn = turn.ok_or_else(|| {
-                    Error::Domain("ACP input requires explicit Pontia Turn identity".into())
-                })?;
                 let peer = self.peer(&target.session_id).await?;
                 let reload = {
                     let state = peer.state.lock().await;
@@ -434,6 +432,15 @@ impl ClientSession for AcpAdapter {
                     ));
                 }
                 target.validate(&events.db()).await?;
+                let turn = SqliteTurnRepository::new(events.db())
+                    .active_turn(&target.session_id)
+                    .await?
+                    .ok_or_else(|| {
+                        Error::StateConflict(
+                            "ACP start target changed before prompt submission".into(),
+                        )
+                    })?
+                    .turn_id;
                 if !state.current || state.closing || state.capabilities.is_none() {
                     return Err(unavailable());
                 }
@@ -487,7 +494,7 @@ impl ClientSession for AcpAdapter {
                 ));
                 state.active = Some(Prompt {
                     request_id: serde_json::to_value(sent.id())?,
-                    turn: turn.into(),
+                    turn,
                     started: false,
                     sequence: 0,
                     raw_results: Default::default(),
@@ -508,7 +515,7 @@ impl ClientSession for AcpAdapter {
                     }
                     Ok(())
                 })
-                .map_err(peer::protocol_error)?;
+                .map_err(peer::submission_error)?;
                 if let Err(error) = peer.receipts.wait(key).await {
                     peer.invalidate(&mut state, &error);
                     return Err(error);
@@ -566,14 +573,25 @@ impl ClientSession for AcpAdapter {
                 if !state.current || state.closing {
                     return Err(unavailable());
                 }
+                if state.active.is_none() {
+                    return Err(Error::StateConflict(
+                        "ACP active prompt changed before interrupt".into(),
+                    ));
+                }
                 let native = state.native.clone().ok_or_else(unavailable)?;
                 peer.connection
                     .send_notification(CancelNotification::new(native))
-                    .map_err(peer::protocol_error)?;
-                if let Some(prompt) = state.active.as_mut() {
-                    prompt.cancelled = true;
+                    .map_err(peer::submission_error)?;
+                state
+                    .active
+                    .as_mut()
+                    .expect("checked active prompt")
+                    .cancelled = true;
+                if let Err(error) = peer.remember(&state, None).await {
+                    return Err(Error::ControlUnknown(format!(
+                        "ACP interrupt state could not be persisted after submission: {error}"
+                    )));
                 }
-                peer.remember(&state, None).await?;
                 let permissions = std::mem::take(&mut state.permissions);
                 drop(state);
                 let sent = peer.receipts.wait("session/cancel".into()).await;
@@ -583,7 +601,12 @@ impl ClientSession for AcpAdapter {
                     permissions,
                     Some(&peer.receipts),
                 )
-                .await;
+                .await
+                .map_err(|error| {
+                    Error::ControlUnknown(format!(
+                        "ACP interrupt was delivered but interaction cleanup failed: {error}"
+                    ))
+                });
                 sent.and(expired)
             }
             .await;

@@ -48,12 +48,12 @@ pub(crate) async fn steer(
 ) -> Result<InputReceipt> {
     let request = peer.connection.prepare_request(
         UntypedMessage::new(METHOD, json!({"sessionId":state.native,"message":input}))
-            .map_err(protocol_error)?,
+            .map_err(crate::peer::submission_error)?,
     );
     let key = serde_json::to_string(request.id())?;
     let (send, receive) = oneshot::channel();
     let callback_key = key.clone();
-    let shared = peer.state.clone();
+    let result_peer = peer.clone();
     peer.receipts.steering_request(key.clone(), turn);
     request
         .on_receiving_result(async move |result| {
@@ -63,14 +63,29 @@ pub(crate) async fn steer(
                     Error::StateConflict("Kiro rejected steering".into())
                 }
                 Ok(_) => Error::ControlUnknown("Invalid Kiro steering response".into()),
-                Err(e) => protocol_error(e),
+                Err(error) if error.code == agent_client_protocol::ErrorCode::METHOD_NOT_FOUND => {
+                    let mut state = result_peer.state.lock().await;
+                    state.negotiated.kiro_steer = false;
+                    state.refresh_capabilities();
+                    match result_peer.remember(&state, None).await {
+                        Ok(()) => crate::steering::method_unavailable(),
+                        Err(error) => error,
+                    }
+                }
+                Err(error) => crate::steering::response_error(error),
             };
-            if let Some(waiter) = shared.lock().await.kiro_receipts.remove(&callback_key) {
+            if let Some(waiter) = result_peer
+                .state
+                .lock()
+                .await
+                .kiro_receipts
+                .remove(&callback_key)
+            {
                 let _ = waiter.send(Err(error));
             }
             Ok(())
         })
-        .map_err(protocol_error)?;
+        .map_err(crate::peer::submission_error)?;
     state.kiro_receipts.insert(key.clone(), send);
     // Native replay positions the user message at submission, before the model reads it.
     state.steering_history_pending = true;
