@@ -238,7 +238,7 @@ impl Fixture {
     async fn dispatch_first_input(&self) {
         self.app
             .turn_commands()
-            .create_and_dispatch_turn(&self.session, "hello".into(), json!({}))
+            .start_turn(&self.session, "hello".into(), json!({}))
             .await
             .unwrap();
     }
@@ -516,7 +516,7 @@ async fn restricted_session_fails_before_start_if_mcp_servers_cannot_be_enumerat
         let error = fixture
             .app
             .turn_commands()
-            .create_and_dispatch_turn(&fixture.session, "hello".into(), json!({}))
+            .start_turn(&fixture.session, "hello".into(), json!({}))
             .await
             .unwrap_err();
         assert!(error.to_string().to_lowercase().contains("mcp"), "{error}");
@@ -1028,7 +1028,7 @@ async fn history_rejections_do_not_allow_input_on_an_existing_thread() {
         let error = fixture
             .app
             .turn_commands()
-            .create_and_dispatch_turn(&fixture.session, "another input".into(), json!({}))
+            .start_turn(&fixture.session, "another input".into(), json!({}))
             .await
             .unwrap_err();
         assert!(matches!(error, pontia_core::Error::StateConflict(_)));
@@ -1082,16 +1082,10 @@ async fn active_native_turn_prevents_a_second_start_input() {
     let error = fixture
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&fixture.session, "another input".into(), json!({}))
+        .start_turn(&fixture.session, "another input".into(), json!({}))
         .await
         .unwrap_err();
-    assert!(matches!(
-        error,
-        pontia_core::Error::Conflict {
-            code: "input_busy",
-            ..
-        }
-    ));
+    assert!(matches!(error, pontia_core::Error::StateConflict(_)));
     assert_eq!(fixture.inputs.lock().await.len(), 1);
     fixture.shutdown().await;
 }

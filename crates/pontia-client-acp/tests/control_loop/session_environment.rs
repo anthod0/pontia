@@ -4,7 +4,7 @@ async fn read_environment(h: &Harness, session: &str) {
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(session, "end_turn".into(), json!({}))
+        .start_turn(session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();

@@ -97,14 +97,19 @@ async fn replacement_and_exit_fence_connections_without_synthesizing_facts() {
     ping.await.unwrap().unwrap();
     let blocked = {
         let control = state.control().client_control();
-        tokio::spawn(async move { control.submit("sess_pi", "rt_old", "uncertain", None).await })
+        tokio::spawn(async move {
+            let payload = pontia_agent_control::InputPayload::from("uncertain");
+            control
+                .start_turn("sess_pi", "rt_old", &payload, None)
+                .await
+        })
     };
     requests.recv().await.unwrap();
     old.close();
     let (new, _requests) = attach(&state, "sess_pi", "rt_old").await;
     assert!(matches!(
         blocked.await.unwrap(),
-        Err(pontia_core::Error::ControlUnknown(_))
+        Err(pontia_agent_control::DeliveryError::Uncertain(_))
     ));
     assert!(
         state
@@ -422,7 +427,10 @@ async fn pi_lifecycle_controls_preserve_rejection_and_unknown_delivery() {
                 let control = state.control().client_control();
                 tokio::spawn(async move {
                     if method == "interrupt" {
-                        control.interrupt("sess_control", "rt_control").await
+                        control
+                            .interrupt("sess_control", "rt_control")
+                            .await
+                            .map_err(pontia_core::Error::from)
                     } else {
                         control.shutdown("sess_control", "rt_control").await
                     }

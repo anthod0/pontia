@@ -4,7 +4,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use pontia_agent_control::{
-    ClientControlChannel, ClientControlOperation,
+    ClientControlChannel, ClientControlOperation, DeliveryOperation, InputPayload,
     client_contract::{
         AgentClientCapabilities, AgentClientSpec, DispatchBehavior, RuntimeBindingBehavior,
         TEST_SPEC, test_registration,
@@ -88,7 +88,7 @@ impl ClientControlChannel for Channel {
     fn invalidate(&self) {
         self.closed.store(true, Ordering::SeqCst);
     }
-    fn interrupt(&self) -> ClientControlOperation<'_> {
+    fn interrupt(&self) -> DeliveryOperation<'_> {
         Box::pin(async {
             self.operations.lock().unwrap().push("interrupt".into());
             Ok(())
@@ -103,9 +103,13 @@ impl ClientControlChannel for Channel {
     fn replay<'a>(&'a self, _: &'a str) -> ClientControlOperation<'a> {
         Box::pin(async { Ok(()) })
     }
-    fn submit<'a>(&'a self, input: &'a str, _: Option<&'a str>) -> ClientControlOperation<'a> {
+    fn start_turn<'a>(
+        &'a self,
+        payload: &'a InputPayload,
+        _: Option<&'a str>,
+    ) -> DeliveryOperation<'a> {
         Box::pin(async move {
-            self.operations.lock().unwrap().push(input.into());
+            self.operations.lock().unwrap().push(payload.text.clone());
             Ok(())
         })
     }

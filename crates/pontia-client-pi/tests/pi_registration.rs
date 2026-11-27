@@ -937,7 +937,10 @@ async fn restarting_a_stable_runtime_rejects_old_connection_facts_and_receipts()
     let pending = {
         let control = state.client_control();
         let (session, runtime) = (session.clone(), runtime.clone());
-        tokio::spawn(async move { control.submit(&session, &runtime, "one input", None).await })
+        tokio::spawn(async move {
+            let payload = pontia_agent_control::InputPayload::from("one input");
+            control.start_turn(&session, &runtime, &payload, None).await
+        })
     };
     let receipt = requests.recv().await.unwrap();
     assert_eq!(receipt.method, "submit");
@@ -994,7 +997,7 @@ async fn restarting_a_stable_runtime_rejects_old_connection_facts_and_receipts()
     let _ = old.reply(receipt.id, json!({"accepted":true})).await;
     assert!(matches!(
         pending.await.unwrap(),
-        Err(pontia_core::Error::ControlUnknown(_))
+        Err(pontia_agent_control::DeliveryError::Uncertain(_))
     ));
     assert!(
         requests.try_recv().is_err(),

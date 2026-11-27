@@ -174,7 +174,7 @@ async fn proxy_resume_keeps_the_bound_restricted_session_configuration() {
     let session = created.session_id().unwrap();
     f.app
         .turn_commands()
-        .create_and_dispatch_turn(session, "hello".into(), json!({}))
+        .start_turn(session, "hello".into(), json!({}))
         .await
         .unwrap();
     let native = AgentBindingService::new(f.app.db())

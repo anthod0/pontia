@@ -56,7 +56,7 @@ async fn registration_retries_atomically_and_unblock_retries_without_replaying_d
         let turn = h
             .app
             .turn_commands()
-            .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+            .start_turn(&session, "end_turn".into(), json!({}))
             .await
             .unwrap()
             .unwrap();
@@ -175,7 +175,7 @@ async fn selected_response_failure_never_reports_unblocked_or_replays_response()
     let session = h.create("first").await.unwrap();
     h.app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -235,7 +235,7 @@ async fn terminal_before_flush(cancel_caller: bool) {
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -290,7 +290,7 @@ async fn each_same_tool_permission_unblocks_on_selection_without_waiting_for_pro
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -372,7 +372,7 @@ async fn native_cancel_does_not_prove_unblocked_and_prompt_terminal_clears_remai
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -425,7 +425,7 @@ async fn cancelled_permission_responses_do_not_restore_busy_before_prompt_stops(
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -455,7 +455,7 @@ async fn disconnect_or_close_never_synthesizes_successful_selection() {
         let session = h.create("first").await.unwrap();
         h.app
             .turn_commands()
-            .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+            .start_turn(&session, "end_turn".into(), json!({}))
             .await
             .unwrap()
             .unwrap();
@@ -501,7 +501,7 @@ async fn conflicting_permission_report_does_not_block_later_reports() {
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();

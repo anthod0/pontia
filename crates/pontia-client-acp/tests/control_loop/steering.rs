@@ -189,7 +189,7 @@ async fn antigravity_finishes_the_running_turn_with_the_latest_prompt() {
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "max_tokens".into(), json!({}))
+        .start_turn(&session, "max_tokens".into(), json!({}))
         .await
         .unwrap()
         .unwrap()
@@ -266,7 +266,7 @@ async fn antigravity_replays_an_interrupted_prompt_before_the_next_input() {
     )
     .unwrap();
     let turns = h.app.turn_commands();
-    let dispatch = || turns.create_and_dispatch_turn(&session, "end_turn".into(), json!({}));
+    let dispatch = || turns.start_turn(&session, "end_turn".into(), json!({}));
     assert!(matches!(
         dispatch().await,
         Err(Error::CapabilityUnavailable(_))

@@ -35,7 +35,7 @@ impl TurnCommandService {
         .await?;
         self.clients
             .for_client(&session.client_type)?
-            .interrupt(&target, None)
+            .interrupt(&target)
             .await
             .into_result()?;
         // A Session-level request is not evidence that a Turn exists or has ended.
@@ -121,7 +121,7 @@ impl TurnCommandService {
         let query = &self.queries;
         self.clients
             .for_client(&session.client_type)?
-            .interrupt(&target, Some(turn_id))
+            .interrupt(&target)
             .await
             .into_result()?;
         let ingest = self.event_ingest.clone();

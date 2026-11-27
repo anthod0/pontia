@@ -362,7 +362,7 @@ impl InboxCommandService {
         if matches!(session.state.as_str(), "exited" | "error") {
             return Ok(());
         }
-        let intent = if row.delivery_policy == "steer" {
+        let steer_turn_id = if row.delivery_policy == "steer" {
             if active.as_ref().map(|turn| &turn.turn_id) != row.steer_target_turn_id.as_ref() {
                 self.mark_failed(
                     &row.message_id,
@@ -372,17 +372,14 @@ impl InboxCommandService {
                 self.notify_available(session_id);
                 return Ok(());
             }
-            match row.steer_target_turn_id {
-                Some(turn_id) => crate::turns::InputIntent::Steer { turn_id },
-                None => crate::turns::InputIntent::Start,
-            }
+            row.steer_target_turn_id
         } else {
             if active.is_some() {
                 return Ok(());
             }
-            crate::turns::InputIntent::Start
+            None
         };
-        if matches!(intent, crate::turns::InputIntent::Start)
+        if steer_turn_id.is_none()
             && !matches!(session.state.as_str(), "idle" | "interrupted")
             && !(matches!(session.state.as_str(), "created" | "starting")
                 && adapter.prepares_on_input())
@@ -409,16 +406,37 @@ impl InboxCommandService {
         }
 
         let turns = &self.turns;
-        let delivery = turns
-            .submit_input(
-                session_id,
-                input,
-                metadata,
-                intent,
-                row.required_runtime_id.as_deref(),
-            )
-            .await;
+        let delivery = match steer_turn_id {
+            Some(turn_id) => {
+                turns
+                    .submit_steer(
+                        session_id,
+                        input.into(),
+                        metadata,
+                        &turn_id,
+                        row.required_runtime_id.as_deref(),
+                    )
+                    .await
+            }
+            None => {
+                turns
+                    .submit_start_turn(
+                        session_id,
+                        input.into(),
+                        metadata,
+                        row.required_runtime_id.as_deref(),
+                    )
+                    .await
+            }
+        };
         let delivery = match delivery {
+            Ok((_, crate::control::ControlResult::Unsupported(_)))
+                if delivery_policy == "steer" =>
+            {
+                inbox_repository.wait_after_idle(&message_id).await?;
+                self.notify_available(session_id);
+                return Ok(());
+            }
             Ok((turn_id, result)) => result.into_result().map(|receipt| (turn_id, receipt)),
             Err(error) => Err(error),
         };
@@ -444,15 +462,11 @@ impl InboxCommandService {
                 self.notify_available(session_id);
             }
             Err(Error::Conflict {
-                code: "steer_requires_prompt" | "steer_method_unavailable",
-                ..
-            }) if delivery_policy == "steer" => {
-                inbox_repository.wait_after_idle(&message_id).await?;
-                self.notify_available(session_id);
-            }
-            Err(Error::Conflict {
                 code: "input_busy", ..
-            }) if delivery_policy != "steer" => {
+            })
+            | Err(Error::StateConflict(_))
+                if delivery_policy != "steer" =>
+            {
                 inbox_repository.return_pending(&message_id).await?;
             }
             Err(Error::ControlUnknown(reason)) => {

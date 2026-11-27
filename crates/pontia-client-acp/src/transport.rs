@@ -144,6 +144,17 @@ impl Relay {
     }
 }
 impl ClientControlChannel for Relay {
+    fn start_turn<'a>(
+        &'a self,
+        _: &'a pontia_agent_control::InputPayload,
+        _: Option<&'a str>,
+    ) -> pontia_agent_control::DeliveryOperation<'a> {
+        Box::pin(async {
+            Err(pontia_agent_control::DeliveryError::Unsupported(
+                "ACP input requires a native Session".into(),
+            ))
+        })
+    }
     fn process_id(&self) -> Option<u32> {
         Some(self.process.pid)
     }
@@ -159,24 +170,10 @@ impl ClientControlChannel for Relay {
     fn shutdown(&self) -> ClientControlOperation<'_> {
         Box::pin(self.terminate())
     }
-    fn interrupt(&self) -> ClientControlOperation<'_> {
-        Box::pin(async {
-            Err(Error::CapabilityUnavailable(
-                "ACP interrupt requires its native Session".into(),
-            ))
-        })
-    }
     fn replay<'a>(&'a self, _: &'a str) -> ClientControlOperation<'a> {
         Box::pin(async {
             Err(Error::CapabilityUnavailable(
                 "ACP input replay is unavailable".into(),
-            ))
-        })
-    }
-    fn submit<'a>(&'a self, _: &'a str, _: Option<&'a str>) -> ClientControlOperation<'a> {
-        Box::pin(async {
-            Err(Error::CapabilityUnavailable(
-                "ACP input requires a Turn".into(),
             ))
         })
     }

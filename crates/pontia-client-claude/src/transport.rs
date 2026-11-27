@@ -154,6 +154,17 @@ impl Connection {
 }
 
 impl ClientControlChannel for Connection {
+    fn start_turn<'a>(
+        &'a self,
+        _: &'a pontia_agent_control::InputPayload,
+        _: Option<&'a str>,
+    ) -> pontia_agent_control::DeliveryOperation<'a> {
+        Box::pin(async {
+            Err(pontia_agent_control::DeliveryError::Unsupported(
+                "Claude Code input requires a native Session".into(),
+            ))
+        })
+    }
     fn process_id(&self) -> Option<u32> {
         Some(self.process.pid)
     }
@@ -166,12 +177,16 @@ impl ClientControlChannel for Connection {
     fn ping(&self) -> ClientControlOperation<'_> {
         Box::pin(async { Self::status(&self.rpc).await.map(|_| ()) })
     }
-    fn interrupt(&self) -> ClientControlOperation<'_> {
+    fn interrupt(&self) -> pontia_agent_control::DeliveryOperation<'_> {
         Box::pin(async {
-            let status = Self::status(&self.rpc).await?;
-            self.request(json!({"method":"interrupt", "input_id":status["input_id"]}))
-                .await
-                .map(|_| ())
+            let result = async {
+                let status = Self::status(&self.rpc).await?;
+                self.request(json!({"method":"interrupt", "input_id":status["input_id"]}))
+                    .await
+                    .map(|_| ())
+            }
+            .await;
+            result.map_err(pontia_agent_control::DeliveryError::from)
         })
     }
     fn set_reasoning_effort<'a>(&'a self, reasoning_effort: &'a str) -> ClientControlOperation<'a> {
@@ -187,9 +202,6 @@ impl ClientControlChannel for Connection {
         Box::pin(async { self.request(json!({"method":"close"})).await.map(|_| ()) })
     }
     fn replay<'a>(&'a self, _: &'a str) -> ClientControlOperation<'a> {
-        Box::pin(async { Err(crate::unsupported()) })
-    }
-    fn submit<'a>(&'a self, _: &'a str, _: Option<&'a str>) -> ClientControlOperation<'a> {
         Box::pin(async { Err(crate::unsupported()) })
     }
 }

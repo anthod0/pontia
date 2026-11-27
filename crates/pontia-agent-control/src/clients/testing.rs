@@ -2,7 +2,7 @@ use crate::client_contract::{
     AgentClientSpec, DispatchBehavior, RuntimeBehavior, RuntimeBindingBehavior, TerminateBehavior,
     TmuxRuntimeBehavior, TurnLifecycleBehavior,
 };
-use crate::{ClientControlChannel, ClientControlOperation};
+use crate::{ClientControlChannel, ClientControlOperation, DeliveryOperation, InputPayload};
 use std::sync::{
     Arc, OnceLock,
     atomic::{AtomicBool, Ordering},
@@ -72,11 +72,10 @@ impl ClientControlChannel for Channel {
     }
     fn steer<'a>(
         &'a self,
-        input: &'a str,
+        payload: &'a InputPayload,
         message: Option<&'a str>,
-        _: &'a str,
-    ) -> ClientControlOperation<'a> {
-        self.submit(input, message)
+    ) -> DeliveryOperation<'a> {
+        self.start_turn(payload, message)
     }
     fn available(&self) -> bool {
         !self.closed.load(Ordering::SeqCst)
@@ -84,20 +83,24 @@ impl ClientControlChannel for Channel {
     fn invalidate(&self) {
         self.closed.store(true, Ordering::SeqCst);
     }
-    fn submit<'a>(&'a self, input: &'a str, _: Option<&'a str>) -> ClientControlOperation<'a> {
+    fn start_turn<'a>(
+        &'a self,
+        payload: &'a InputPayload,
+        _: Option<&'a str>,
+    ) -> DeliveryOperation<'a> {
         Box::pin(async move {
             if let Some(error) = self.next_error.lock().unwrap().take() {
                 if matches!(error, pontia_core::Error::ControlUnknown(_)) {
-                    self.input.lock().unwrap().push(input.to_owned());
+                    self.input.lock().unwrap().push(payload.text.clone());
                 }
-                return Err(error);
+                return Err(error.into());
             }
-            self.input.lock().unwrap().push(input.to_owned());
+            self.input.lock().unwrap().push(payload.text.clone());
             self.await_receipt().await;
             Ok(())
         })
     }
-    fn interrupt(&self) -> ClientControlOperation<'_> {
+    fn interrupt(&self) -> DeliveryOperation<'_> {
         Box::pin(async { Ok(()) })
     }
     fn shutdown(&self) -> ClientControlOperation<'_> {

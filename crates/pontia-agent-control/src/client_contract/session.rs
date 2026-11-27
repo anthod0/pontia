@@ -1,6 +1,5 @@
-use crate::{
-    EventIngestService, control::InputReceipt, runtime::ControlTarget, turns::InputIntent,
-};
+use super::{DeliveryError, DeliveryOperation, InputPayload};
+use crate::{EventIngestService, control::InputReceipt, runtime::ControlTarget};
 use pontia_core::Result;
 use pontia_runtime::RuntimeStartRequest;
 use serde_json::Value;
@@ -58,21 +57,38 @@ pub trait ClientSession: Send + Sync {
     ) -> ClientOperation<'a, ()> {
         self.provision(events, root, request)
     }
-    fn input<'a>(
+    fn start_turn<'a>(
         &'a self,
         events: EventIngestService,
         target: &'a ControlTarget,
-        input: &'a str,
+        payload: &'a InputPayload,
         turn: Option<&'a str>,
         message: Option<&'a str>,
-        intent: &'a InputIntent,
-    ) -> ClientOperation<'a, InputReceipt>;
+    ) -> DeliveryOperation<'a, InputReceipt>;
+    fn steer<'a>(
+        &'a self,
+        _events: EventIngestService,
+        _target: &'a ControlTarget,
+        _payload: &'a InputPayload,
+        _message: Option<&'a str>,
+    ) -> DeliveryOperation<'a, InputReceipt> {
+        Box::pin(async {
+            Err(DeliveryError::Unsupported(
+                "This client does not support steer".into(),
+            ))
+        })
+    }
     fn interrupt<'a>(
         &'a self,
-        events: EventIngestService,
-        target: &'a ControlTarget,
-        turn: Option<&'a str>,
-    ) -> ClientOperation<'a, ()>;
+        _events: EventIngestService,
+        _target: &'a ControlTarget,
+    ) -> DeliveryOperation<'a> {
+        Box::pin(async {
+            Err(DeliveryError::Unsupported(
+                "This client does not support interrupt".into(),
+            ))
+        })
+    }
     fn exit<'a>(
         &'a self,
         events: EventIngestService,

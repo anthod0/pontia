@@ -19,7 +19,7 @@ async fn repeated_observations_have_distinct_keys_and_each_report_replays_once()
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -87,7 +87,7 @@ async fn keyed_start_requires_the_same_preallocated_turn_in_its_session() {
         let turn = h
             .app
             .turn_commands()
-            .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+            .start_turn(&session, "end_turn".into(), json!({}))
             .await
             .unwrap()
             .unwrap();

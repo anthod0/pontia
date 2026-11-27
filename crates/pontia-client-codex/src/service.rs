@@ -25,7 +25,7 @@ mod proxy_runtimes;
 #[cfg(test)]
 mod subscription_tests;
 use crate::runtime::{CodexRuntime, CodexServerTarget, SubscriptionState};
-use pontia_agent_control::{AgentBindingService, UpsertAgentBindingRequest};
+use pontia_agent_control::{AgentBindingService, InputPayload, UpsertAgentBindingRequest};
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
@@ -135,12 +135,30 @@ impl CodexService {
         Ok(())
     }
 
-    pub(crate) async fn submit(
+    pub(crate) async fn start_turn(
         &self,
         target: &pontia_agent_control::runtime::ControlTarget,
-        input: &str,
+        payload: &InputPayload,
         message_id: Option<&str>,
-        intent: &pontia_agent_control::turns::InputIntent,
+    ) -> Result<pontia_agent_control::control::InputReceipt> {
+        self.submit(target, payload, message_id, false).await
+    }
+
+    pub(crate) async fn steer(
+        &self,
+        target: &pontia_agent_control::runtime::ControlTarget,
+        payload: &InputPayload,
+        message_id: Option<&str>,
+    ) -> Result<pontia_agent_control::control::InputReceipt> {
+        self.submit(target, payload, message_id, true).await
+    }
+
+    async fn submit(
+        &self,
+        target: &pontia_agent_control::runtime::ControlTarget,
+        payload: &InputPayload,
+        message_id: Option<&str>,
+        steer: bool,
     ) -> Result<pontia_agent_control::control::InputReceipt> {
         let session_id = &target.session_id;
         let runtime = self.runtime(session_id).await?;
@@ -213,7 +231,7 @@ impl CodexService {
                         if !matches!(error, Error::ControlUnknown(_)) {
                             runtime.clear_subscription(session_id).await;
                         }
-                        return Err(error);
+                        return Err(start_rejection(error));
                     }
                 };
                 runtime.current_guard().await?;
@@ -237,23 +255,15 @@ impl CodexService {
         self.reconcile_turns(session_id, &runtime, &turns).await?;
         let thread_id = string(&thread, "id")?;
         let active = turns.iter().find(|turn| turn["status"] == "inProgress");
-        let mut params = json!({"threadId":thread_id,"input":[{"type":"text","text":input}]});
+        let mut params =
+            json!({"threadId":thread_id,"input":[{"type":"text","text":payload.text}]});
         if let Some(message_id) = message_id {
             params["clientUserMessageId"] = json!(message_id);
         }
-        let method = match intent {
-            pontia_agent_control::turns::InputIntent::Start if active.is_none() => "turn/start",
-            pontia_agent_control::turns::InputIntent::Steer { turn_id } => {
-                let native: Option<String> = sqlx::query_scalar("SELECT client_turn_id FROM native_turn_bindings WHERE session_id=? AND turn_id=?")
-                    .bind(session_id).bind(turn_id).fetch_optional(&self.pool).await?;
-                if native.is_none()
-                    || active.and_then(|turn| turn["id"].as_str()) != native.as_deref()
-                {
-                    return Err(Error::StateConflict(
-                        "Codex active turn changed before steer".into(),
-                    ));
-                }
-                params["expectedTurnId"] = json!(native);
+        let method = match (steer, active) {
+            (false, None) => "turn/start",
+            (true, Some(active)) => {
+                params["expectedTurnId"] = active["id"].clone();
                 "turn/steer"
             }
             _ => {
@@ -263,7 +273,10 @@ impl CodexService {
                 });
             }
         };
-        let result = connection.call(method, params).await;
+        let result = connection
+            .call(method, params)
+            .await
+            .map_err(|error| if steer { error } else { start_rejection(error) });
         runtime.current_guard().await?;
         let accepted = result?;
         // turn/start subscribes its connection even when the thread was only loaded in memory.
@@ -288,19 +301,11 @@ impl CodexService {
     pub(crate) async fn interrupt(
         &self,
         target: &pontia_agent_control::runtime::ControlTarget,
-        turn_id: Option<&str>,
     ) -> Result<()> {
         let runtime = self.runtime(&target.session_id).await?;
         let _operation = runtime.lock_session(&target.session_id).await;
         self.confirm_control_connection(target, &runtime).await?;
         let binding = self.binding(&target.session_id).await?;
-        let expected_native: Option<String> = if let Some(turn_id) = turn_id {
-            Some(sqlx::query_scalar(
-                "SELECT client_turn_id FROM native_turn_bindings WHERE session_id=? AND turn_id=?",
-            ).bind(&target.session_id).bind(turn_id).fetch_one(&self.pool).await?)
-        } else {
-            None
-        };
         let connection = runtime.connection().await?;
         let turns = self
             .turns(&connection, &binding.client_session_key)
@@ -308,12 +313,7 @@ impl CodexService {
             .unwrap_or_default();
         let native = turns
             .iter()
-            .find(|turn| {
-                turn["status"] == "inProgress"
-                    && expected_native
-                        .as_ref()
-                        .is_none_or(|expected| turn["id"] == *expected)
-            })
+            .find(|turn| turn["status"] == "inProgress")
             .and_then(|turn| turn["id"].as_str())
             .ok_or_else(|| {
                 Error::StateConflict("Codex active turn changed before interrupt".into())
@@ -546,6 +546,13 @@ impl CodexService {
             .binding_for_session(session)
             .await?
             .ok_or_else(|| Error::StateConflict("Codex thread binding is missing".into()))
+    }
+}
+
+fn start_rejection(error: Error) -> Error {
+    match error {
+        Error::StateConflict(message) => Error::CapabilityUnavailable(message),
+        error => error,
     }
 }
 

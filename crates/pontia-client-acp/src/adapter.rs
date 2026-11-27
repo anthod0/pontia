@@ -19,13 +19,12 @@ use pontia_agent_control::{
     client_contract::{
         AgentClientCapabilities, ClientExitMode, ClientExitOutcome, ClientInteractions,
         ClientOperation, ClientService, ClientServicePhase, ClientSession, ClientSessionDetails,
-        SessionCreationOption,
+        DeliveryError, DeliveryOperation, InputPayload, SessionCreationOption,
     },
     clients::ClientRegistration,
     control::InputReceipt,
     interactions::InteractionResponse,
     runtime::ControlTarget,
-    turns::InputIntent,
 };
 use pontia_core::{Error, Result};
 use pontia_runtime::RuntimeStartRequest;
@@ -95,6 +94,16 @@ pub(crate) struct AcpAdapter {
 
 fn unavailable() -> Error {
     Error::CapabilityUnavailable("ACP control connection is unavailable".into())
+}
+
+fn delivery_error(error: Error) -> DeliveryError {
+    match error {
+        Error::Conflict {
+            code: "steer_requires_prompt" | "steer_method_unavailable",
+            message,
+        } => DeliveryError::Unsupported(message),
+        error => DeliveryError::from(error),
+    }
 }
 
 impl AcpAdapter {
@@ -366,154 +375,181 @@ impl ClientSession for AcpAdapter {
         })
     }
 
-    fn input<'a>(
+    fn start_turn<'a>(
         &'a self,
         events: EventIngestService,
         target: &'a ControlTarget,
-        input: &'a str,
+        payload: &'a InputPayload,
         turn: Option<&'a str>,
-        message: Option<&'a str>,
-        intent: &'a InputIntent,
-    ) -> ClientOperation<'a, InputReceipt> {
+        _message: Option<&'a str>,
+    ) -> DeliveryOperation<'a, InputReceipt> {
         Box::pin(async move {
-            if let InputIntent::Steer { turn_id } = intent {
-                let peer = self.peer(&target.session_id).await?;
-                return crate::steering::send(&peer, &events, target, turn_id, input, message)
-                    .await;
-            }
-            let turn = turn.ok_or_else(|| {
-                Error::Domain("ACP input requires explicit Pontia Turn identity".into())
-            })?;
-            let peer = self.peer(&target.session_id).await?;
-            let reload = {
-                let state = peer.state.lock().await;
-                state.current
-                    && state.active.is_none()
-                    && (state.history_error.is_some()
-                        || state.steering_history_pending
-                        || !state.interjections.is_empty())
-            };
-            if reload {
-                peer.load().await.map_err(|error| match error {
-                    Error::Conflict {
-                        code:
-                            "timeline_history_invalid"
-                            | "timeline_source_identity_mismatch"
-                            | "timeline_source_retryable",
-                        message,
-                    } => Error::CapabilityUnavailable(message),
-                    error => error,
+            let result: Result<InputReceipt> = async {
+                let input = payload.text.as_str();
+                let turn = turn.ok_or_else(|| {
+                    Error::Domain("ACP input requires explicit Pontia Turn identity".into())
                 })?;
-            }
-            let mut state = peer.state.lock().await;
-            if let Some(profile) = peer.policy.profile
-                && state.verified_model.is_none()
-            {
-                let native = state.native.clone().ok_or_else(unavailable)?;
-                drop(state);
-                if let Err(error) = profile.verify(&peer, &native).await {
-                    peer.terminate().await?;
-                    return Err(error);
+                let peer = self.peer(&target.session_id).await?;
+                let reload = {
+                    let state = peer.state.lock().await;
+                    state.current
+                        && state.active.is_none()
+                        && (state.history_error.is_some()
+                            || state.steering_history_pending
+                            || !state.interjections.is_empty())
+                };
+                if reload {
+                    peer.load().await.map_err(|error| match error {
+                        Error::Conflict {
+                            code:
+                                "timeline_history_invalid"
+                                | "timeline_source_identity_mismatch"
+                                | "timeline_source_retryable",
+                            message,
+                        } => Error::CapabilityUnavailable(message),
+                        error => error,
+                    })?;
                 }
-                state = peer.state.lock().await;
-            }
-            if peer.policy.profile.is_some()
-                && (state.verified_model.is_none()
-                    || state.current_model.is_some() && state.current_model != state.verified_model)
-            {
-                drop(state);
-                peer.terminate().await?;
-                return Err(Error::CapabilityUnavailable(
-                    "ACP Session model changed during verification".into(),
-                ));
-            }
-            target.validate(&events.db()).await?;
-            if !state.current || state.closing || state.capabilities.is_none() {
-                return Err(unavailable());
-            }
-            if state.blocked
-                || state.promoted.is_some()
-                || state.compaction.is_some()
-                || state.replay.is_some()
-                || state.active.is_some()
-            {
-                return Err(Error::Conflict {
-                    code: "input_busy",
-                    message: "ACP prompt is still active".into(),
+                let mut state = peer.state.lock().await;
+                if let Some(profile) = peer.policy.profile
+                    && state.verified_model.is_none()
+                {
+                    let native = state.native.clone().ok_or_else(unavailable)?;
+                    drop(state);
+                    if let Err(error) = profile.verify(&peer, &native).await {
+                        peer.terminate().await?;
+                        return Err(error);
+                    }
+                    state = peer.state.lock().await;
+                }
+                if peer.policy.profile.is_some()
+                    && (state.verified_model.is_none()
+                        || state.current_model.is_some()
+                            && state.current_model != state.verified_model)
+                {
+                    drop(state);
+                    peer.terminate().await?;
+                    return Err(Error::CapabilityUnavailable(
+                        "ACP Session model changed during verification".into(),
+                    ));
+                }
+                target.validate(&events.db()).await?;
+                if !state.current || state.closing || state.capabilities.is_none() {
+                    return Err(unavailable());
+                }
+                if state.blocked
+                    || state.promoted.is_some()
+                    || state.compaction.is_some()
+                    || state.replay.is_some()
+                    || state.active.is_some()
+                {
+                    return Err(Error::Conflict {
+                        code: "input_busy",
+                        message: "ACP prompt is still active".into(),
+                    });
+                }
+                let native = state.native.clone().ok_or_else(unavailable)?;
+                let prefix = state.prompt_prefix.as_ref().filter(|_| {
+                    state.system_prompt.is_none()
+                        && !state
+                            .history
+                            .iter()
+                            .rev()
+                            .take_while(|message| message.role != "context_compaction")
+                            .any(|message| message.role == "user")
                 });
-            }
-            let native = state.native.clone().ok_or_else(unavailable)?;
-            let prefix = state.prompt_prefix.as_ref().filter(|_| {
-                state.system_prompt.is_none()
-                    && !state
+                let wire_input = match prefix {
+                    Some(prefix) => format!("{prefix}{input}"),
+                    None => input.to_owned(),
+                };
+                let history_index = crate::history::user_bytes(&state.history);
+                let prompt_index = state.negotiated.interject.then(|| {
+                    state
                         .history
                         .iter()
-                        .rev()
-                        .take_while(|message| message.role != "context_compaction")
-                        .any(|message| message.role == "user")
-            });
-            let wire_input = match prefix {
-                Some(prefix) => format!("{prefix}{input}"),
-                None => input.to_owned(),
-            };
-            let history_index = crate::history::user_bytes(&state.history);
-            let prompt_index = state.negotiated.interject.then(|| {
-                state
-                    .history
-                    .iter()
-                    .filter_map(|m| m.prompt)
-                    .max()
-                    .map_or(0, |i| i + 1)
-            });
-            if let Some(index) = prompt_index {
-                state.history.push(crate::history::Message {
-                    role: "user",
-                    text: input.into(),
-                    prompt: Some(index),
-                    ..Default::default()
+                        .filter_map(|m| m.prompt)
+                        .max()
+                        .map_or(0, |i| i + 1)
                 });
-            } else {
-                crate::history::append(&mut state.history, "user", input);
-            }
-            let sent = peer.connection.prepare_request(PromptRequest::new(
-                native,
-                vec![ContentBlock::Text(TextContent::new(wire_input))],
-            ));
-            state.active = Some(Prompt {
-                request_id: serde_json::to_value(sent.id())?,
-                turn: turn.into(),
-                started: false,
-                sequence: 0,
-                raw_results: Default::default(),
-                thought: None,
-                cancelled: false,
-                prompt_index,
-                history_index,
-                history_end: history_index + input.len(),
-            });
-            peer.remember(&state, None).await?;
-            let key = serde_json::to_string(sent.id())?;
-            let session = target.session_id.clone();
-            let id = serde_json::to_value(sent.id())?;
-            let result_peer = peer.clone();
-            sent.on_receiving_result(async move |result| {
-                if let Err(error) = peer::finish(&result_peer, &id, result).await {
-                    tracing::warn!(%session, %id, %error, "ACP prompt result unavailable");
+                if let Some(index) = prompt_index {
+                    state.history.push(crate::history::Message {
+                        role: "user",
+                        text: input.into(),
+                        prompt: Some(index),
+                        ..Default::default()
+                    });
+                } else {
+                    crate::history::append(&mut state.history, "user", input);
                 }
-                Ok(())
-            })
-            .map_err(peer::protocol_error)?;
-            if let Err(error) = peer.receipts.wait(key).await {
-                peer.invalidate(&mut state, &error);
-                return Err(error);
+                let sent = peer.connection.prepare_request(PromptRequest::new(
+                    native,
+                    vec![ContentBlock::Text(TextContent::new(wire_input))],
+                ));
+                state.active = Some(Prompt {
+                    request_id: serde_json::to_value(sent.id())?,
+                    turn: turn.into(),
+                    started: false,
+                    sequence: 0,
+                    raw_results: Default::default(),
+                    thought: None,
+                    cancelled: false,
+                    prompt_index,
+                    history_index,
+                    history_end: history_index + input.len(),
+                });
+                peer.remember(&state, None).await?;
+                let key = serde_json::to_string(sent.id())?;
+                let session = target.session_id.clone();
+                let id = serde_json::to_value(sent.id())?;
+                let result_peer = peer.clone();
+                sent.on_receiving_result(async move |result| {
+                    if let Err(error) = peer::finish(&result_peer, &id, result).await {
+                        tracing::warn!(%session, %id, %error, "ACP prompt result unavailable");
+                    }
+                    Ok(())
+                })
+                .map_err(peer::protocol_error)?;
+                if let Err(error) = peer.receipts.wait(key).await {
+                    peer.invalidate(&mut state, &error);
+                    return Err(error);
+                }
+                state.refresh_capabilities();
+                drop(state);
+                Ok(InputReceipt {
+                    turn_pending: false,
+                    native_turn_id: None,
+                    runtime_id: target.runtime_id.clone(),
+                })
             }
-            state.refresh_capabilities();
-            drop(state);
-            Ok(InputReceipt {
-                turn_pending: false,
-                native_turn_id: None,
-                runtime_id: target.runtime_id.clone(),
-            })
+            .await;
+            result.map_err(DeliveryError::from)
+        })
+    }
+
+    fn steer<'a>(
+        &'a self,
+        events: EventIngestService,
+        target: &'a ControlTarget,
+        payload: &'a InputPayload,
+        message: Option<&'a str>,
+    ) -> DeliveryOperation<'a, InputReceipt> {
+        Box::pin(async move {
+            let result: Result<InputReceipt> = async {
+                let peer = self.peer(&target.session_id).await?;
+                let turn = peer
+                    .state
+                    .lock()
+                    .await
+                    .active
+                    .as_ref()
+                    .map(|prompt| prompt.turn.clone())
+                    .ok_or_else(|| {
+                        Error::StateConflict("ACP active prompt changed before steer".into())
+                    })?;
+                crate::steering::send(&peer, &events, target, &turn, &payload.text, message).await
+            }
+            .await;
+            result.map_err(delivery_error)
         })
     }
 
@@ -521,39 +557,37 @@ impl ClientSession for AcpAdapter {
         &'a self,
         events: EventIngestService,
         target: &'a ControlTarget,
-        turn: Option<&'a str>,
-    ) -> ClientOperation<'a, ()> {
+    ) -> DeliveryOperation<'a> {
         Box::pin(async move {
-            let peer = self.peer(&target.session_id).await?;
-            let mut state = peer.state.lock().await;
-            target.validate(&events.db()).await?;
-            if !state.current || state.closing {
-                return Err(unavailable());
+            let result: Result<()> = async {
+                let peer = self.peer(&target.session_id).await?;
+                let mut state = peer.state.lock().await;
+                target.validate(&events.db()).await?;
+                if !state.current || state.closing {
+                    return Err(unavailable());
+                }
+                let native = state.native.clone().ok_or_else(unavailable)?;
+                peer.connection
+                    .send_notification(CancelNotification::new(native))
+                    .map_err(peer::protocol_error)?;
+                if let Some(prompt) = state.active.as_mut() {
+                    prompt.cancelled = true;
+                }
+                peer.remember(&state, None).await?;
+                let permissions = std::mem::take(&mut state.permissions);
+                drop(state);
+                let sent = peer.receipts.wait("session/cancel".into()).await;
+                let expired = crate::interactions::expire(
+                    &peer.interactions,
+                    &target.session_id,
+                    permissions,
+                    Some(&peer.receipts),
+                )
+                .await;
+                sent.and(expired)
             }
-            if turn.is_some() && state.active.as_ref().map(|prompt| prompt.turn.as_str()) != turn {
-                return Err(Error::StateConflict(
-                    "ACP active prompt changed before interrupt".into(),
-                ));
-            }
-            let native = state.native.clone().ok_or_else(unavailable)?;
-            peer.connection
-                .send_notification(CancelNotification::new(native))
-                .map_err(peer::protocol_error)?;
-            if let Some(prompt) = state.active.as_mut() {
-                prompt.cancelled = true;
-            }
-            peer.remember(&state, None).await?;
-            let permissions = std::mem::take(&mut state.permissions);
-            drop(state);
-            let sent = peer.receipts.wait("session/cancel".into()).await;
-            let expired = crate::interactions::expire(
-                &peer.interactions,
-                &target.session_id,
-                permissions,
-                Some(&peer.receipts),
-            )
             .await;
-            sent.and(expired)
+            result.map_err(DeliveryError::from)
         })
     }
 

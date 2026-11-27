@@ -14,6 +14,61 @@ async fn fixture() -> (SqlitePool, tempfile::TempDir, ClientControlService) {
     (pool, root, control)
 }
 
+struct StartOnlyChannel;
+
+impl crate::ClientControlChannel for StartOnlyChannel {
+    fn available(&self) -> bool {
+        true
+    }
+
+    fn invalidate(&self) {}
+
+    fn shutdown(&self) -> crate::ClientControlOperation<'_> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn ping(&self) -> crate::ClientControlOperation<'_> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn replay<'a>(&'a self, _: &'a str) -> crate::ClientControlOperation<'a> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn start_turn<'a>(
+        &'a self,
+        _: &'a crate::InputPayload,
+        _: Option<&'a str>,
+    ) -> crate::DeliveryOperation<'a> {
+        Box::pin(async { Ok(()) })
+    }
+}
+
+#[tokio::test]
+async fn default_delivery_primitives_preserve_unsupported_classification() {
+    let (_, _root, control) = fixture().await;
+    control
+        .attach(
+            "test-channel",
+            "session",
+            "original",
+            "native",
+            Arc::new(StartOnlyChannel),
+        )
+        .await
+        .unwrap();
+
+    let payload = crate::InputPayload::from("steer");
+    assert!(matches!(
+        control.steer("session", "original", &payload, None).await,
+        Err(crate::DeliveryError::Unsupported(_))
+    ));
+    assert!(matches!(
+        control.interrupt("session", "original").await,
+        Err(crate::DeliveryError::Unsupported(_))
+    ));
+}
+
 #[tokio::test]
 async fn identity_conflicts_cannot_replace_a_current_channel() {
     let (_, _root, control) = fixture().await;
@@ -41,8 +96,9 @@ async fn identity_conflicts_cannot_replace_a_current_channel() {
                 .is_err()
         );
     }
+    let payload = crate::InputPayload::from("one input");
     control
-        .submit("session", "original", "one input", None)
+        .start_turn("session", "original", &payload, None)
         .await
         .unwrap();
     assert_eq!(*current.input.lock().unwrap(), ["one input"]);
@@ -95,8 +151,9 @@ async fn replacement_during_submission_returns_unknown_without_replaying_input()
     let submission = tokio::spawn({
         let control = control.clone();
         async move {
+            let payload = crate::InputPayload::from("one input");
             control
-                .submit("session", "original", "one input", None)
+                .start_turn("session", "original", &payload, None)
                 .await
         }
     });
@@ -124,7 +181,7 @@ async fn replacement_during_submission_returns_unknown_without_replaying_input()
         .unwrap()
         .unwrap()
         .unwrap_err();
-    assert!(matches!(error, Error::ControlUnknown(_)));
+    assert!(matches!(error, crate::DeliveryError::Uncertain(_)));
     assert!(!old.available());
     assert_eq!(*old.input.lock().unwrap(), ["one input"]);
     assert!(new.input.lock().unwrap().is_empty());

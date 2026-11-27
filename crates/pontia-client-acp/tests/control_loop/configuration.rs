@@ -20,7 +20,7 @@ async fn disabling_and_deleting_a_record_only_affects_new_sessions() {
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&first, "end_turn".into(), json!({}))
+        .start_turn(&first, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();

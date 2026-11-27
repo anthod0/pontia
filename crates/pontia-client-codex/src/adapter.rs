@@ -4,7 +4,8 @@ use crate::{
     runtime::{CodexRuntime, SubscriptionState},
 };
 use pontia_agent_control::client_contract::{
-    TimelineBoundaryBackend, TimelineCachePolicy, TurnTimelineBackend, TurnTopologyBackend,
+    DeliveryError, DeliveryOperation, InputPayload, TimelineBoundaryBackend, TimelineCachePolicy,
+    TurnTimelineBackend, TurnTopologyBackend,
 };
 use pontia_agent_control::{
     EventIngestService,
@@ -15,7 +16,6 @@ use pontia_agent_control::{
     control::InputReceipt,
     interactions::InteractionResponse,
     runtime::ControlTarget,
-    turns::InputIntent,
 };
 use pontia_core::{
     Error, Result,
@@ -44,6 +44,7 @@ pub fn registration() -> ClientRegistration {
 }
 
 struct CodexData;
+
 impl ClientData for CodexData {
     fn timeline_cache_policy(&self) -> Option<TimelineCachePolicy> {
         Some(TimelineCachePolicy {
@@ -230,28 +231,46 @@ impl ClientSession for CodexClient {
                 .await
         })
     }
-    fn input<'a>(
+    fn start_turn<'a>(
         &'a self,
         events: EventIngestService,
         target: &'a ControlTarget,
-        input: &'a str,
+        payload: &'a InputPayload,
         _turn: Option<&'a str>,
         message: Option<&'a str>,
-        intent: &'a InputIntent,
-    ) -> ClientOperation<'a, InputReceipt> {
+    ) -> DeliveryOperation<'a, InputReceipt> {
         Box::pin(async move {
             CodexService::new(events)
-                .submit(target, input, message, intent)
+                .start_turn(target, payload, message)
                 .await
+                .map_err(DeliveryError::from)
+        })
+    }
+    fn steer<'a>(
+        &'a self,
+        events: EventIngestService,
+        target: &'a ControlTarget,
+        payload: &'a InputPayload,
+        message: Option<&'a str>,
+    ) -> DeliveryOperation<'a, InputReceipt> {
+        Box::pin(async move {
+            CodexService::new(events)
+                .steer(target, payload, message)
+                .await
+                .map_err(DeliveryError::from)
         })
     }
     fn interrupt<'a>(
         &'a self,
         events: EventIngestService,
         target: &'a ControlTarget,
-        turn: Option<&'a str>,
-    ) -> ClientOperation<'a, ()> {
-        Box::pin(async move { CodexService::new(events).interrupt(target, turn).await })
+    ) -> DeliveryOperation<'a> {
+        Box::pin(async move {
+            CodexService::new(events)
+                .interrupt(target)
+                .await
+                .map_err(DeliveryError::from)
+        })
     }
     fn set_reasoning_effort<'a>(
         &'a self,

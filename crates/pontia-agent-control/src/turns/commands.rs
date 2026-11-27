@@ -3,10 +3,9 @@ use pontia_storage_sqlite::repositories::turns::SqliteTurnRepository;
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
 
-use super::InputIntent;
 use crate::{
-    ControlQueryService, EventIngestService, PontiaEvent, PontiaEventSource, PontiaEventType,
-    TurnView,
+    ControlQueryService, EventIngestService, InputPayload, PontiaEvent, PontiaEventSource,
+    PontiaEventType, TurnView,
     control::{ControlResult, InputReceipt},
     runtime::ControlTarget,
 };
@@ -37,16 +36,16 @@ impl TurnCommandService {
         }
     }
 
-    pub async fn create_and_dispatch_turn(
+    pub async fn start_turn(
         &self,
         session_id: &str,
-        input: String,
+        payload: InputPayload,
         metadata: Value,
     ) -> Result<Option<TurnView>> {
         let lock = self.scheduler.session_lock(session_id);
         let _guard = lock.lock().await;
         let (turn_id, result) = self
-            .submit_input(session_id, input, metadata, InputIntent::Start, None)
+            .submit_start_turn(session_id, payload, metadata, None)
             .await?;
         result.into_result()?;
         let Some(turn_id) = turn_id else {
@@ -61,15 +60,14 @@ impl TurnCommandService {
         Ok(Some(turn))
     }
 
-    pub(crate) async fn submit_input(
+    pub(crate) async fn submit_start_turn(
         &self,
         session_id: &str,
-        input: String,
+        payload: InputPayload,
         metadata: Value,
-        intent: InputIntent,
         required_runtime_id: Option<&str>,
     ) -> Result<(Option<String>, ControlResult<InputReceipt>)> {
-        if input.trim().is_empty() {
+        if payload.text.trim().is_empty() {
             return Err(Error::Domain("input must not be blank".into()));
         }
         let query = &self.queries;
@@ -81,50 +79,32 @@ impl TurnCommandService {
         let active = SqliteTurnRepository::new(self.pool.clone())
             .active_turn(session_id)
             .await?;
-        match &intent {
-            InputIntent::Start => {
-                if !matches!(session.state.as_str(), "idle" | "interrupted")
-                    && !(session.state == "starting" && adapter.client_owns_turn())
-                    && !(session.state == "created" && adapter.prepares_on_input())
-                {
-                    return Err(
-                        if matches!(session.state.as_str(), "busy" | "waiting_for_interaction") {
-                            Error::Conflict {
-                                code: "input_busy",
-                                message: "Session became busy before input was submitted".into(),
-                            }
-                        } else {
-                            Error::StateConflict(format!(
-                                "session {session_id} in state {} cannot accept a new turn",
-                                session.state
-                            ))
-                        },
-                    );
-                }
-                if let Some(active) = active {
-                    return Err(Error::Conflict {
+        if !matches!(session.state.as_str(), "idle" | "interrupted")
+            && !(session.state == "starting" && adapter.client_owns_turn())
+            && !(session.state == "created" && adapter.prepares_on_input())
+        {
+            return Err(
+                if matches!(session.state.as_str(), "busy" | "waiting_for_interaction") {
+                    Error::Conflict {
                         code: "input_busy",
-                        message: format!(
-                            "session {session_id} already has active turn {}",
-                            active.turn_id
-                        ),
-                    });
-                }
-            }
-            InputIntent::Steer { turn_id } => {
-                if !session.capabilities.steer {
-                    return Ok((
-                        None,
-                        ControlResult::Unsupported("This client does not support steer".into()),
-                    ));
-                }
-                if active.as_ref().map(|turn| &turn.turn_id) != Some(turn_id) {
-                    return Err(Error::Conflict {
-                        code: "steer_target_changed",
-                        message: "steer target is not the current Turn".into(),
-                    });
-                }
-            }
+                        message: "Session became busy before input was submitted".into(),
+                    }
+                } else {
+                    Error::StateConflict(format!(
+                        "session {session_id} in state {} cannot accept a new turn",
+                        session.state
+                    ))
+                },
+            );
+        }
+        if let Some(active) = active {
+            return Err(Error::Conflict {
+                code: "input_busy",
+                message: format!(
+                    "session {session_id} already has active turn {}",
+                    active.turn_id
+                ),
+            });
         }
         if !session.capabilities.accept_task {
             return Err(Error::CapabilityUnavailable(format!(
@@ -138,19 +118,12 @@ impl TurnCommandService {
             required_runtime_id,
         )
         .await?;
-        if let InputIntent::Steer { turn_id } = &intent {
-            let receipt = adapter
-                .input(&target, input, &metadata, &intent, None)
-                .await;
-            let pending = matches!(&receipt, ControlResult::Accepted(r) | ControlResult::Sent(r) if r.turn_pending);
-            return Ok(((!pending).then(|| turn_id.clone()), receipt));
-        }
         let turn_id = self
-            .prepare_initial(session_id, &input, &metadata)
+            .prepare_initial(session_id, &payload.text, &metadata)
             .await?
             .map(|turn| turn.turn_id);
         let receipt = adapter
-            .input(&target, input, &metadata, &intent, turn_id.as_deref())
+            .start_turn(&target, payload, &metadata, turn_id.as_deref())
             .await;
         if let Some(turn_id) = &turn_id
             && let ControlResult::Rejected(error) = &receipt
@@ -167,6 +140,58 @@ impl TurnCommandService {
                 .await?;
         }
         Ok((turn_id, receipt))
+    }
+
+    pub(crate) async fn submit_steer(
+        &self,
+        session_id: &str,
+        payload: InputPayload,
+        metadata: Value,
+        expected_turn_id: &str,
+        required_runtime_id: Option<&str>,
+    ) -> Result<(Option<String>, ControlResult<InputReceipt>)> {
+        if payload.text.trim().is_empty() {
+            return Err(Error::Domain("input must not be blank".into()));
+        }
+        let session = self
+            .queries
+            .get_session_control(session_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
+        if !session.capabilities.steer {
+            return Ok((
+                None,
+                ControlResult::Unsupported("This client does not support steer".into()),
+            ));
+        }
+        let active = SqliteTurnRepository::new(self.pool.clone())
+            .active_turn(session_id)
+            .await?;
+        if active.as_ref().map(|turn| turn.turn_id.as_str()) != Some(expected_turn_id) {
+            return Err(Error::Conflict {
+                code: "steer_target_changed",
+                message: "steer target is not the current Turn".into(),
+            });
+        }
+        if !session.capabilities.accept_task {
+            return Err(Error::CapabilityUnavailable(format!(
+                "session {session_id} runtime cannot accept tasks"
+            )));
+        }
+        let target = ControlTarget::resolve(
+            &self.pool,
+            self.clients.registry(),
+            session_id,
+            required_runtime_id,
+        )
+        .await?;
+        let receipt = self
+            .clients
+            .for_client(&session.client_type)?
+            .steer(&target, payload, &metadata)
+            .await;
+        let pending = matches!(&receipt, ControlResult::Accepted(r) | ControlResult::Sent(r) if r.turn_pending);
+        Ok(((!pending).then(|| expected_turn_id.to_owned()), receipt))
     }
 
     pub(crate) async fn prepare_initial(
@@ -248,7 +273,7 @@ impl TurnCommandService {
         }
         self.scheduler.begin_initial(session);
         let result = adapter
-            .input(target, input.into(), metadata, &InputIntent::Start, turn_id)
+            .start_turn(target, input.into(), metadata, turn_id)
             .await;
         if matches!(
             result,

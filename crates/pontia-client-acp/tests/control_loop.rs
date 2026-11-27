@@ -566,7 +566,7 @@ async fn session_details_keep_protocol_failure_reason_while_reconnecting() {
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -607,7 +607,7 @@ async fn close_fences_late_updates_without_fabricating_an_active_turn_result() {
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -706,7 +706,7 @@ async fn unknown_extension_update_cannot_invent_started_or_break_the_connection(
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -757,7 +757,7 @@ async fn confirmed_final_response_is_not_lost_when_peer_exits_immediately_after_
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -790,7 +790,7 @@ async fn partial_prompt_write_returns_unknown_without_retry_or_dispatch_failed_f
         Duration::from_secs(5),
         h.app
             .turn_commands()
-            .create_and_dispatch_turn(&session, "x".repeat(262144), json!({})),
+            .start_turn(&session, "x".repeat(262144).into(), json!({})),
     )
     .await
     .unwrap();
@@ -1021,7 +1021,7 @@ async fn input_is_async_streams_without_persisting_output_and_uses_standard_stop
             Duration::from_secs(3),
             h.app
                 .turn_commands()
-                .create_and_dispatch_turn(&session, reason.into(), json!({})),
+                .start_turn(&session, reason.into(), json!({})),
         )
         .await
         .unwrap()
@@ -1104,7 +1104,7 @@ async fn cancel_keeps_prompt_active_and_inbox_queued_until_final_response() {
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -1173,7 +1173,7 @@ async fn final_response_without_updates_confirms_started_before_terminal() {
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -1194,7 +1194,7 @@ async fn disconnect_unknown_result_and_shutdown_do_not_invent_terminal_facts() {
         let turn = h
             .app
             .turn_commands()
-            .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+            .start_turn(&session, "end_turn".into(), json!({}))
             .await
             .unwrap()
             .unwrap();
@@ -1255,7 +1255,7 @@ async fn unknown_stop_reason_does_not_guess_a_terminal_state() {
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "extension_completed".into(), json!({}))
+        .start_turn(&session, "extension_completed".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -1287,7 +1287,7 @@ async fn conditional_exit_preserves_an_active_prompt_and_pending_permissions() {
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -1376,7 +1376,7 @@ async fn failed_close_does_not_exit_session_or_terminate_peer() {
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -1444,7 +1444,7 @@ async fn permission_choices_preserve_all_scopes_and_native_ids_without_blocking_
         let turn = h
             .app
             .turn_commands()
-            .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+            .start_turn(&session, "end_turn".into(), json!({}))
             .await
             .unwrap()
             .unwrap();
@@ -1574,7 +1574,7 @@ async fn prompt_cancel_replies_cancelled_to_every_pending_request_without_finish
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -1640,7 +1640,7 @@ async fn native_request_cancellation_expires_only_its_own_interaction() {
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -1706,7 +1706,7 @@ async fn disconnect_and_close_expire_pending_permissions_without_replaying_on_an
         let turn = h
             .app
             .turn_commands()
-            .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+            .start_turn(&session, "end_turn".into(), json!({}))
             .await
             .unwrap()
             .unwrap();
@@ -1760,7 +1760,7 @@ async fn permission_response_flush_does_not_block_incoming_updates_under_pipe_ba
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -1808,7 +1808,7 @@ async fn load_replay_reads_user_and_agent_history_without_creating_execution_fac
         let turn = h
             .app
             .turn_commands()
-            .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+            .start_turn(&session, "end_turn".into(), json!({}))
             .await
             .unwrap()
             .unwrap();
@@ -1873,7 +1873,7 @@ async fn service_restart_loads_the_bound_agent_identity_and_preserves_runtime_an
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -1944,7 +1944,7 @@ async fn lost_prompt_reconnect_expires_permissions_without_replay_or_terminal_fa
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -2048,7 +2048,7 @@ async fn failed_history_load_is_not_empty_success_and_can_be_reprobed() {
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -2110,7 +2110,7 @@ async fn replay_for_another_native_session_is_unavailable_not_empty_history() {
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -2192,7 +2192,7 @@ async fn rechunked_history_preserves_no_output_prompt_boundaries_across_restart(
         let turn = h
             .app
             .turn_commands()
-            .create_and_dispatch_turn(&session, input.into(), json!({}))
+            .start_turn(&session, input.into(), json!({}))
             .await
             .unwrap()
             .unwrap();
@@ -2268,7 +2268,7 @@ async fn cancelling_a_history_reader_does_not_strand_replay_or_misclassify_late_
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -2383,7 +2383,7 @@ async fn invalid_permission_options_or_native_session_do_not_register_or_approve
         let turn = h
             .app
             .turn_commands()
-            .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+            .start_turn(&session, "end_turn".into(), json!({}))
             .await
             .unwrap()
             .unwrap();
@@ -2406,7 +2406,7 @@ async fn active_prompt_survives_daemon_restart_without_replay_and_releases_the_n
     let first = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -2465,7 +2465,7 @@ async fn active_prompt_survives_daemon_restart_without_replay_and_releases_the_n
     let second = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -2506,7 +2506,7 @@ async fn offline_prompt_result_is_delivered_once_without_native_reexecution() {
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -2537,7 +2537,7 @@ async fn reconnected_permission_delivers_the_original_response_once() {
     let session = h.create("first").await.unwrap();
     h.app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -2612,7 +2612,7 @@ async fn terminal_session_rejects_the_relay_and_discards_its_offline_result() {
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -2660,7 +2660,7 @@ async fn check_exited_pages(flags: &[(&str, &str)], agent: &str) {
         let turn = h
             .app
             .turn_commands()
-            .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+            .start_turn(&session, "end_turn".into(), json!({}))
             .await
             .unwrap()
             .unwrap();

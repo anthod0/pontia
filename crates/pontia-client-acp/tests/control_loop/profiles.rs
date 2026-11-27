@@ -491,7 +491,7 @@ async fn kiro_prompts_include_bound_instructions_once_per_context_and_replay_use
         let turn = h
             .app
             .turn_commands()
-            .create_and_dispatch_turn(&session, (*input).into(), json!({}))
+            .start_turn(&session, (*input).into(), json!({}))
             .await
             .unwrap()
             .unwrap();
@@ -538,7 +538,7 @@ async fn kiro_prefers_the_advertised_standard_system_prompt() {
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();

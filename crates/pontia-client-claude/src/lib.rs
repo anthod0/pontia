@@ -19,7 +19,6 @@ use peer::{Input, Peer};
 use pontia_agent_control::{
     AgentControl, EventIngestService, client_contract::*, clients::ClientRegistration,
     control::InputReceipt, interactions::InteractionResponse, runtime::ControlTarget,
-    turns::InputIntent,
 };
 use pontia_core::{Error, Result};
 use pontia_runtime::RuntimeStartRequest;
@@ -282,51 +281,18 @@ impl ClientSession for Adapter {
             Ok(())
         })
     }
-    fn input<'a>(
+    fn start_turn<'a>(
         &'a self,
         events: EventIngestService,
         target: &'a ControlTarget,
-        text: &'a str,
+        payload: &'a InputPayload,
         turn: Option<&'a str>,
         message: Option<&'a str>,
-        intent: &'a InputIntent,
-    ) -> ClientOperation<'a, InputReceipt> {
+    ) -> DeliveryOperation<'a, InputReceipt> {
         Box::pin(async move {
+            let result: Result<InputReceipt> = async {
+            let text = payload.text.as_str();
             let peer = self.target(&events, target).await?;
-            if let InputIntent::Steer { turn_id } = intent {
-                let target_input = {
-                    let state = peer.state.lock().await;
-                    if state.unavailable.is_some() || state.closing || state.closed {
-                        return Err(unavailable());
-                    }
-                    let input = state.input.as_ref().ok_or_else(unavailable)?;
-                    if input.turn.as_deref() != Some(turn_id.as_str()) {
-                        return Err(Error::Conflict {
-                            code: "steer_target_changed",
-                            message: "Claude Code steering target is no longer active".into(),
-                        });
-                    }
-                    input.id.clone()
-                };
-                let result = peer
-                    .connection()?
-                    .request(json!({
-                        "method": "steer", "target_input_id": target_input,
-                        "input_id": uuid::Uuid::new_v4().to_string(), "text": text,
-                    }))
-                    .await;
-                if let Err(error) = result {
-                    if matches!(error, Error::ControlUnknown(_)) {
-                        peer.state.lock().await.unavailable = Some("input_delivery_unknown".into());
-                    }
-                    return Err(error);
-                }
-                return Ok(InputReceipt {
-                    turn_pending: false,
-                    native_turn_id: None,
-                    runtime_id: Some(peer.runtime.clone()),
-                });
-            }
             if turn.is_some() {
                 return Err(unsupported());
             }
@@ -370,6 +336,50 @@ impl ClientSession for Adapter {
                 native_turn_id: None,
                 runtime_id: Some(peer.runtime.clone()),
             })
+            }
+            .await;
+            result.map_err(DeliveryError::from)
+        })
+    }
+
+    fn steer<'a>(
+        &'a self,
+        events: EventIngestService,
+        target: &'a ControlTarget,
+        payload: &'a InputPayload,
+        _message: Option<&'a str>,
+    ) -> DeliveryOperation<'a, InputReceipt> {
+        Box::pin(async move {
+            let result: Result<InputReceipt> = async {
+                let peer = self.target(&events, target).await?;
+                let target_input = {
+                    let state = peer.state.lock().await;
+                    if state.unavailable.is_some() || state.closing || state.closed {
+                        return Err(unavailable());
+                    }
+                    state.input.as_ref().ok_or_else(unavailable)?.id.clone()
+                };
+                let result = peer
+                    .connection()?
+                    .request(json!({
+                        "method": "steer", "target_input_id": target_input,
+                        "input_id": uuid::Uuid::new_v4().to_string(), "text": payload.text,
+                    }))
+                    .await;
+                if let Err(error) = result {
+                    if matches!(error, Error::ControlUnknown(_)) {
+                        peer.state.lock().await.unavailable = Some("input_delivery_unknown".into());
+                    }
+                    return Err(error);
+                }
+                Ok(InputReceipt {
+                    turn_pending: false,
+                    native_turn_id: None,
+                    runtime_id: Some(peer.runtime.clone()),
+                })
+            }
+            .await;
+            result.map_err(DeliveryError::from)
         })
     }
     fn compact<'a>(
@@ -437,26 +447,25 @@ impl ClientSession for Adapter {
         &'a self,
         events: EventIngestService,
         target: &'a ControlTarget,
-        turn: Option<&'a str>,
-    ) -> ClientOperation<'a, ()> {
+    ) -> DeliveryOperation<'a> {
         Box::pin(async move {
-            let peer = self.target(&events, target).await?;
-            let id = {
-                let state = peer.state.lock().await;
-                let input = state.input.as_ref().ok_or_else(unavailable)?;
-                let matches = match turn {
-                    Some(turn) => input.turn.as_deref() == Some(turn),
-                    None => input.turn.is_none(),
+            let result: Result<()> = async {
+                let peer = self.target(&events, target).await?;
+                let id = {
+                    let state = peer.state.lock().await;
+                    let input = state.input.as_ref().ok_or_else(unavailable)?;
+                    if state.closing || state.closed {
+                        return Err(unavailable());
+                    }
+                    input.id.clone()
                 };
-                if !matches || state.closing || state.closed {
-                    return Err(unavailable());
-                }
-                input.id.clone()
-            };
-            peer.connection()?
-                .request(json!({"method":"interrupt","input_id":id}))
-                .await
-                .map(|_| ())
+                peer.connection()?
+                    .request(json!({"method":"interrupt","input_id":id}))
+                    .await
+                    .map(|_| ())
+            }
+            .await;
+            result.map_err(DeliveryError::from)
         })
     }
     fn exit<'a>(

@@ -459,7 +459,7 @@ set = {{ PROBE_NATIVE = "native", PONTIA_SESSION_ID = "wrong-native" }}
             let runtime = CodexRuntime::existing(root.path()).await.unwrap();
             let mut events = runtime.connection().await.unwrap().events.subscribe();
             app.turn_commands()
-                .create_and_dispatch_turn(&session, "Read the environment.".into(), json!({}))
+                .start_turn(&session, "Read the environment.".into(), json!({}))
                 .await
                 .unwrap();
             command_result(&mut events, &session, filtered).await;

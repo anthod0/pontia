@@ -1,5 +1,4 @@
 use super::*;
-use crate::turns::InputIntent;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -46,7 +45,7 @@ impl InboxCommandService {
             let active = SqliteTurnRepository::new(self.pool.clone())
                 .active_turn(session_id)
                 .await?;
-            let intent = match active {
+            let result = match active {
                 Some(turn) => {
                     let session = self
                         .queries
@@ -59,30 +58,39 @@ impl InboxCommandService {
                         drop(guard);
                         return self.queue_live_input(session_id, input).await;
                     }
-                    InputIntent::Steer {
-                        turn_id: turn.turn_id,
-                    }
+                    self.turns
+                        .submit_steer(
+                            session_id,
+                            input.clone().into(),
+                            metadata.clone(),
+                            &turn.turn_id,
+                            None,
+                        )
+                        .await
                 }
-                None => InputIntent::Start,
+                None => {
+                    self.turns
+                        .submit_start_turn(session_id, input.clone().into(), metadata.clone(), None)
+                        .await
+                }
             };
-            let result = self
-                .turns
-                .submit_input(session_id, input.clone(), metadata.clone(), intent, None)
-                .await
-                .and_then(|(_, receipt)| receipt.into_result());
+            let result = match result {
+                Ok((_, crate::control::ControlResult::Unsupported(_))) => {
+                    drop(guard);
+                    return self.queue_live_input(session_id, input).await;
+                }
+                Ok((_, receipt)) => receipt.into_result(),
+                Err(error) => Err(error),
+            };
             match result {
                 Err(Error::Conflict {
                     code: "input_busy" | "steer_target_changed",
                     ..
-                }) if Instant::now() < deadline => {
+                })
+                | Err(Error::StateConflict(_))
+                    if Instant::now() < deadline =>
+                {
                     sleep(Duration::from_millis(25)).await;
-                }
-                Err(Error::Conflict {
-                    code: "steer_method_unavailable",
-                    ..
-                }) => {
-                    drop(guard);
-                    return self.queue_live_input(session_id, input).await;
                 }
                 result => return result.map(|_| LiveInputDelivery::Accepted),
             }

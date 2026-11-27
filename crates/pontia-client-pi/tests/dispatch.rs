@@ -83,7 +83,7 @@ async fn pi_input_waits_for_ready_uses_socket_and_leaves_lifecycle_to_client() {
     let service = state.turn_commands();
     let dispatch = tokio::spawn(async move {
         service
-            .create_and_dispatch_turn(
+            .start_turn(
                 "sess_pi",
                 "hello after ready".into(),
                 json!({"inbox_message_id":"msg_one"}),
@@ -116,7 +116,7 @@ async fn missing_pi_connection_rejects_delivery_without_creating_a_turn() {
     ready(&pool).await;
     let error = state
         .turn_commands()
-        .create_and_dispatch_turn("sess_pi", "not delivered".into(), json!({}))
+        .start_turn("sess_pi", "not delivered".into(), json!({}))
         .await
         .unwrap_err();
     assert!(error.to_string().contains("no current Client connection"));

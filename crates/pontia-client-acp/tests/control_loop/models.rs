@@ -26,7 +26,7 @@ async fn model_updates_preserve_the_active_turn_and_session_identity() {
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -480,7 +480,7 @@ async fn selected_model_is_applied_before_the_first_prompt_and_preserved_on_resu
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();
@@ -521,7 +521,7 @@ async fn resumed_prompt_uses_the_saved_model_when_load_reports_a_different_defau
     let turn = h
         .app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .start_turn(&session, "end_turn".into(), json!({}))
         .await
         .unwrap()
         .unwrap();

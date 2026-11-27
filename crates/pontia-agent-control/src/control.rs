@@ -11,6 +11,20 @@ pub enum ControlResult<T> {
 }
 
 impl<T> ControlResult<T> {
+    pub(crate) fn from_delivery(result: std::result::Result<T, crate::DeliveryError>) -> Self {
+        match result {
+            Ok(value) => Self::Accepted(value),
+            Err(crate::DeliveryError::Unsupported(message)) => Self::Unsupported(message),
+            Err(crate::DeliveryError::Offline(message)) => {
+                Self::Rejected(Error::CapabilityUnavailable(message))
+            }
+            Err(crate::DeliveryError::StateChanged(message)) => {
+                Self::Rejected(Error::StateConflict(message))
+            }
+            Err(crate::DeliveryError::Uncertain(message)) => Self::Unknown(message),
+        }
+    }
+
     pub(crate) fn from_result(result: Result<T>) -> Self {
         match result {
             Ok(value) => Self::Accepted(value),

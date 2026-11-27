@@ -95,22 +95,23 @@ impl pontia_agent_control::ClientControlChannel for PiRpcPeer {
             Ok(())
         })
     }
-    fn steer<'a>(
+    fn start_turn<'a>(
         &'a self,
-        input: &'a str,
+        payload: &'a pontia_agent_control::InputPayload,
         inbox_message_id: Option<&'a str>,
-        turn_id: &'a str,
-    ) -> pontia_agent_control::ClientControlOperation<'a> {
+    ) -> pontia_agent_control::DeliveryOperation<'a> {
         Box::pin(async move {
-            if self
+            let result = self
                 .call(
-                    "steer",
-                    json!({"input":input,"inbox_message_id":inbox_message_id,"turn_id":turn_id}),
+                    "submit",
+                    json!({"input":payload.text,"inbox_message_id":inbox_message_id}),
                 )
-                .await?
-                != json!({"accepted":true})
-            {
-                return Err(Error::ControlUnknown("Invalid Pi steer response".into()));
+                .await
+                .map_err(pontia_agent_control::DeliveryError::from)?;
+            if result != json!({"accepted":true}) {
+                return Err(pontia_agent_control::DeliveryError::Uncertain(
+                    "Invalid Pi submit response".into(),
+                ));
             }
             Ok(())
         })
@@ -161,10 +162,15 @@ impl pontia_agent_control::ClientControlChannel for PiRpcPeer {
             Ok(())
         })
     }
-    fn interrupt(&self) -> pontia_agent_control::ClientControlOperation<'_> {
+    fn interrupt(&self) -> pontia_agent_control::DeliveryOperation<'_> {
         Box::pin(async {
-            if self.call("interrupt", json!({})).await? != json!({"accepted":true}) {
-                return Err(Error::ControlUnknown(
+            if self
+                .call("interrupt", json!({}))
+                .await
+                .map_err(pontia_agent_control::DeliveryError::from)?
+                != json!({"accepted":true})
+            {
+                return Err(pontia_agent_control::DeliveryError::Uncertain(
                     "Invalid Pi interrupt acknowledgement".into(),
                 ));
             }
@@ -203,23 +209,31 @@ impl pontia_agent_control::ClientControlChannel for PiRpcPeer {
             Ok(())
         })
     }
-    fn submit<'a>(
-        &'a self,
-        input: &'a str,
-        inbox_message_id: Option<&'a str>,
-    ) -> pontia_agent_control::ClientControlOperation<'a> {
+}
+
+impl PiRpcPeer {
+    pub(crate) async fn steer(
+        &self,
+        payload: &pontia_agent_control::InputPayload,
+        inbox_message_id: Option<&str>,
+        turn_id: &str,
+    ) -> std::result::Result<(), pontia_agent_control::DeliveryError> {
         Box::pin(async move {
             if self
                 .call(
-                    "submit",
-                    json!({"input":input,"inbox_message_id":inbox_message_id}),
+                    "steer",
+                    json!({"input":payload.text,"inbox_message_id":inbox_message_id,"turn_id":turn_id}),
                 )
-                .await?
+                .await
+                .map_err(pontia_agent_control::DeliveryError::from)?
                 != json!({"accepted":true})
             {
-                return Err(Error::ControlUnknown("Invalid Pi submit response".into()));
+                return Err(pontia_agent_control::DeliveryError::Uncertain(
+                    "Invalid Pi steer response".into(),
+                ));
             }
             Ok(())
         })
+        .await
     }
 }

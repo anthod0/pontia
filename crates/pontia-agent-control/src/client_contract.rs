@@ -15,6 +15,7 @@ pub use lifecycle::{ClientEventInterpreter, ProcessObservationBehavior, SessionL
 mod instructions;
 pub use instructions::{ClientInstructions, InstructionsBindingInput};
 mod data;
+mod delivery;
 pub mod history;
 pub mod native_history;
 mod service;
@@ -26,6 +27,7 @@ pub use data::{
     BranchTargetRequest, ClientData, ClientLaunchRequest, ClientLauncher, NativeEventEvidence,
     ResidentTimeline, TimelineCachePolicy,
 };
+pub use delivery::{DeliveryError, DeliveryOperation, InputPayload};
 pub use service::{ClientService, ClientServicePhase, PreparedServiceShutdown};
 pub use session::{
     ClientExitMode, ClientExitOutcome, ClientOperation, ClientSession, ClientSessionDetails,

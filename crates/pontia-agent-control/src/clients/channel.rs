@@ -1,47 +1,80 @@
 use super::ClientAdapter;
-use crate::{RuntimeReadinessService, runtime::ControlTarget};
-use pontia_core::Result;
+use crate::{
+    RuntimeReadinessService,
+    client_contract::{DeliveryError, InputPayload},
+    runtime::ControlTarget,
+};
 
 impl ClientAdapter {
-    pub(super) async fn channel_input(
+    pub(super) async fn channel_start_turn(
         &self,
         target: &ControlTarget,
-        input: &str,
+        payload: &InputPayload,
         message: Option<&str>,
-        intent: &crate::turns::InputIntent,
-    ) -> Result<()> {
+    ) -> Result<(), DeliveryError> {
         RuntimeReadinessService::new(self.pool.clone(), self.spec.adapter.control_runtime_role)
             .wait_until_ready(
                 &target.session_id,
                 self.spec.client_type,
-                target.instance()?,
+                target.instance().map_err(DeliveryError::from)?,
             )
-            .await?;
-        target.validate(&self.pool.clone()).await?;
-        match intent {
-            crate::turns::InputIntent::Start => {
-                self.control
-                    .submit(&target.session_id, target.instance()?, input, message)
-                    .await
-            }
-            crate::turns::InputIntent::Steer { turn_id } => {
-                self.control
-                    .steer(
-                        &target.session_id,
-                        target.instance()?,
-                        input,
-                        message,
-                        turn_id,
-                    )
-                    .await
-            }
-        }
+            .await
+            .map_err(DeliveryError::from)?;
+        target
+            .validate(&self.pool.clone())
+            .await
+            .map_err(DeliveryError::from)?;
+        self.control
+            .start_turn(
+                &target.session_id,
+                target.instance().map_err(DeliveryError::from)?,
+                payload,
+                message,
+            )
+            .await
     }
 
-    pub(super) async fn channel_interrupt(&self, target: &ControlTarget) -> Result<()> {
-        target.validate(&self.pool.clone()).await?;
+    pub(super) async fn channel_steer(
+        &self,
+        target: &ControlTarget,
+        payload: &InputPayload,
+        message: Option<&str>,
+    ) -> Result<(), DeliveryError> {
+        RuntimeReadinessService::new(self.pool.clone(), self.spec.adapter.control_runtime_role)
+            .wait_until_ready(
+                &target.session_id,
+                self.spec.client_type,
+                target.instance().map_err(DeliveryError::from)?,
+            )
+            .await
+            .map_err(DeliveryError::from)?;
+        target
+            .validate(&self.pool.clone())
+            .await
+            .map_err(DeliveryError::from)?;
         self.control
-            .interrupt(&target.session_id, target.instance()?)
+            .steer(
+                &target.session_id,
+                target.instance().map_err(DeliveryError::from)?,
+                payload,
+                message,
+            )
+            .await
+    }
+
+    pub(super) async fn channel_interrupt(
+        &self,
+        target: &ControlTarget,
+    ) -> Result<(), DeliveryError> {
+        target
+            .validate(&self.pool.clone())
+            .await
+            .map_err(DeliveryError::from)?;
+        self.control
+            .interrupt(
+                &target.session_id,
+                target.instance().map_err(DeliveryError::from)?,
+            )
             .await
     }
 

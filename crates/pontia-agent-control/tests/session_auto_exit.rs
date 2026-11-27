@@ -1,6 +1,6 @@
 use pontia_agent_control::{
-    AgentControl, ClientControlChannel, ClientControlOperation, EventIngestService,
-    SubmitInboxMessageRequest,
+    AgentControl, ClientControlChannel, ClientControlOperation, DeliveryOperation,
+    EventIngestService, InputPayload, SubmitInboxMessageRequest,
     client_contract::{
         DispatchBehavior, RuntimeBehavior, RuntimeBindingBehavior, TerminateBehavior,
         TmuxRuntimeBehavior, TurnLifecycleBehavior, test_registration,
@@ -26,7 +26,7 @@ impl ClientControlChannel for Channel {
         true
     }
     fn invalidate(&self) {}
-    fn interrupt(&self) -> ClientControlOperation<'_> {
+    fn interrupt(&self) -> DeliveryOperation<'_> {
         Box::pin(async { Ok(()) })
     }
     fn shutdown(&self) -> ClientControlOperation<'_> {
@@ -56,9 +56,13 @@ impl ClientControlChannel for Channel {
     fn replay<'a>(&'a self, _: &'a str) -> ClientControlOperation<'a> {
         panic!("unexpected replay")
     }
-    fn submit<'a>(&'a self, input: &'a str, _: Option<&'a str>) -> ClientControlOperation<'a> {
+    fn start_turn<'a>(
+        &'a self,
+        payload: &'a InputPayload,
+        _: Option<&'a str>,
+    ) -> DeliveryOperation<'a> {
         Box::pin(async move {
-            self.inputs.lock().unwrap().push(input.into());
+            self.inputs.lock().unwrap().push(payload.text.clone());
             Ok(())
         })
     }

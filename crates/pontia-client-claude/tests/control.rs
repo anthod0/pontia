@@ -1578,7 +1578,7 @@ async fn conditional_exit_waits_for_host_and_process_closure() {
     // Submit directly so the SDK accepts input before its started fact creates a Turn.
     h.app
         .turn_commands()
-        .create_and_dispatch_turn(&session, "follow up".into(), json!({}))
+        .start_turn(&session, "follow up".into(), json!({}))
         .await
         .unwrap();
     assert_eq!(

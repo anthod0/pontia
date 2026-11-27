@@ -2,10 +2,10 @@ use crate::{
     AgentControl, EventIngestService,
     client_contract::{
         ClientExitMode, ClientExitOutcome, ClientOperation, ClientSession, ClientSessionDetails,
+        DeliveryOperation, InputPayload,
     },
     control::InputReceipt,
     runtime::ControlTarget,
-    turns::InputIntent,
 };
 use pontia_core::{Error, Result};
 use pontia_runtime::RuntimeStartRequest;
@@ -32,15 +32,14 @@ impl ClientSession for Client {
     ) -> ClientOperation<'a, crate::client_contract::AgentClientCapabilities> {
         Box::pin(async move { Ok(self.capabilities.as_ref().unwrap_or(implementation).clone()) })
     }
-    fn input<'a>(
+    fn start_turn<'a>(
         &'a self,
         _: EventIngestService,
         _: &'a ControlTarget,
-        _: &'a str,
+        _: &'a InputPayload,
         _: Option<&'a str>,
         _: Option<&'a str>,
-        _: &'a InputIntent,
-    ) -> ClientOperation<'a, InputReceipt> {
+    ) -> DeliveryOperation<'a, InputReceipt> {
         self.inputs.fetch_add(1, Ordering::SeqCst);
         Box::pin(async { Ok(InputReceipt::default()) })
     }
@@ -78,8 +77,7 @@ impl ClientSession for Client {
         &'a self,
         _: EventIngestService,
         _: &'a ControlTarget,
-        _: Option<&'a str>,
-    ) -> ClientOperation<'a, ()> {
+    ) -> DeliveryOperation<'a> {
         panic!("unexpected interrupt")
     }
     fn exit<'a>(
@@ -174,7 +172,7 @@ async fn input_uses_client_capabilities_without_fetching_display_details() -> Re
     assert!(app.queries().get_session("session").await.is_err());
     assert!(
         app.turn_commands()
-            .create_and_dispatch_turn("session", "input".into(), json!({}))
+            .start_turn("session", "input".into(), json!({}))
             .await?
             .is_none()
     );
@@ -184,7 +182,7 @@ async fn input_uses_client_capabilities_without_fetching_display_details() -> Re
         .await?;
     assert!(matches!(
         app.turn_commands()
-            .create_and_dispatch_turn("session", "blocked".into(), json!({}))
+            .start_turn("session", "blocked".into(), json!({}))
             .await,
         Err(Error::CapabilityUnavailable(_))
     ));

@@ -1,3 +1,4 @@
+use super::{DeliveryError, DeliveryOperation, InputPayload};
 use pontia_core::Result;
 use std::{future::Future, pin::Pin};
 
@@ -39,7 +40,13 @@ pub trait ClientControlChannel: Send + Sync {
         None
     }
     fn invalidate(&self);
-    fn interrupt(&self) -> ClientControlOperation<'_>;
+    fn interrupt(&self) -> DeliveryOperation<'_> {
+        Box::pin(async {
+            Err(DeliveryError::Unsupported(
+                "This client does not support interrupt".into(),
+            ))
+        })
+    }
     fn shutdown(&self) -> ClientControlOperation<'_>;
     fn shutdown_if_idle(&self) -> ClientControlOperation<'_, bool> {
         Box::pin(async {
@@ -50,19 +57,18 @@ pub trait ClientControlChannel: Send + Sync {
     }
     fn ping(&self) -> ClientControlOperation<'_>;
     fn replay<'a>(&'a self, replay_id: &'a str) -> ClientControlOperation<'a>;
-    fn submit<'a>(
+    fn start_turn<'a>(
         &'a self,
-        input: &'a str,
+        payload: &'a InputPayload,
         inbox_message_id: Option<&'a str>,
-    ) -> ClientControlOperation<'a>;
+    ) -> DeliveryOperation<'a>;
     fn steer<'a>(
         &'a self,
-        _input: &'a str,
+        _payload: &'a InputPayload,
         _inbox_message_id: Option<&'a str>,
-        _turn_id: &'a str,
-    ) -> ClientControlOperation<'a> {
+    ) -> DeliveryOperation<'a> {
         Box::pin(async {
-            Err(pontia_core::Error::CapabilityUnavailable(
+            Err(DeliveryError::Unsupported(
                 "This client does not support steer".into(),
             ))
         })

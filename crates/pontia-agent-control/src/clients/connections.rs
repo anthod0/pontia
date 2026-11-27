@@ -314,7 +314,11 @@ impl ClientControlService {
             .is_some_and(|connection| connection.channel.reasoning_effort_control_available()))
     }
 
-    pub async fn interrupt(&self, session_id: &str, runtime_id: &str) -> Result<()> {
+    pub async fn interrupt(
+        &self,
+        session_id: &str,
+        runtime_id: &str,
+    ) -> std::result::Result<(), crate::DeliveryError> {
         self.request(session_id, runtime_id, false, |channel| async move {
             channel.interrupt().await
         })
@@ -342,15 +346,15 @@ impl ClientControlService {
         .await
     }
 
-    pub async fn submit(
+    pub async fn start_turn(
         &self,
         session_id: &str,
         runtime_id: &str,
-        input: &str,
+        payload: &crate::InputPayload,
         inbox_message_id: Option<&str>,
-    ) -> Result<()> {
+    ) -> std::result::Result<(), crate::DeliveryError> {
         self.request(session_id, runtime_id, false, |channel| async move {
-            channel.submit(input, inbox_message_id).await
+            channel.start_turn(payload, inbox_message_id).await
         })
         .await
     }
@@ -366,12 +370,11 @@ impl ClientControlService {
         &self,
         session_id: &str,
         runtime_id: &str,
-        input: &str,
+        payload: &crate::InputPayload,
         inbox_message_id: Option<&str>,
-        turn_id: &str,
-    ) -> Result<()> {
+    ) -> std::result::Result<(), crate::DeliveryError> {
         self.request(session_id, runtime_id, false, |channel| async move {
-            channel.steer(input, inbox_message_id, turn_id).await
+            channel.steer(payload, inbox_message_id).await
         })
         .await
     }
@@ -400,22 +403,31 @@ impl ClientControlService {
         .await
     }
 
-    async fn request<T, F: Future<Output = Result<T>>>(
+    async fn request<T, E, F>(
         &self,
         session_id: &str,
         runtime_id: &str,
         expect_exit: bool,
         operation: impl FnOnce(Arc<dyn ClientControlChannel>) -> F,
-    ) -> Result<T> {
-        let connection = self.connection(session_id).await?.ok_or_else(|| {
-            Error::CapabilityUnavailable(format!(
-                "session {session_id} has no current Client connection"
-            ))
-        })?;
+    ) -> std::result::Result<T, E>
+    where
+        E: From<Error> + std::fmt::Display,
+        F: Future<Output = std::result::Result<T, E>>,
+    {
+        let connection = self
+            .connection(session_id)
+            .await
+            .map_err(E::from)?
+            .ok_or_else(|| {
+                Error::CapabilityUnavailable(format!(
+                    "session {session_id} has no current Client connection"
+                ))
+            })
+            .map_err(E::from)?;
         if connection.runtime_id != runtime_id {
-            return Err(Error::StateConflict(
+            return Err(E::from(Error::StateConflict(
                 "Client control runtime is no longer current".into(),
-            ));
+            )));
         }
         let result = operation(connection.channel.clone()).await;
         if let Err(error) = &result {
@@ -423,14 +435,14 @@ impl ClientControlService {
         }
         let connections = self.connections.lock().await;
         if connections.stopped || connection.retired.load(Ordering::SeqCst) {
-            return Err(Error::ControlUnknown(
+            return Err(E::from(Error::ControlUnknown(
                 "Client connection was retired during request".into(),
-            ));
+            )));
         }
         let current_runtime = self
             .current_runtime(session_id)
             .await
-            .map_err(|error| Error::ControlUnknown(error.to_string()))?;
+            .map_err(|error| E::from(Error::ControlUnknown(error.to_string())))?;
         if current_runtime.as_deref() != Some(runtime_id)
             || !connections
                 .entries
@@ -445,13 +457,13 @@ impl ClientControlService {
                     .is_none_or(|current| Arc::ptr_eq(current, &connection))
                 && sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM sessions s JOIN session_runtimes r ON r.session_id=s.session_id WHERE s.session_id=? AND s.state='exited' AND r.runtime_id=?)")
                     .bind(session_id).bind(runtime_id).fetch_one(&self.pool).await
-                    .map_err(|error| Error::ControlUnknown(error.to_string()))?
+                    .map_err(|error| E::from(Error::ControlUnknown(error.to_string())))?
             {
                 return result;
             }
-            return Err(Error::ControlUnknown(
+            return Err(E::from(Error::ControlUnknown(
                 "Client binding or connection changed during request".into(),
-            ));
+            )));
         }
         result
     }
@@ -462,7 +474,7 @@ impl ClientControlService {
         }
     }
 
-    fn record_error(&self, session_id: &str, error: &Error) {
+    fn record_error(&self, session_id: &str, error: &impl std::fmt::Display) {
         tracing::warn!(session_id, %error, "Client control channel unavailable");
         let path = pontia_runtime::pontia_log_paths(&self.pontia_home).runtime_log;
         let entry = json!({"code":"client_control_unavailable","session_id":session_id,"message":error.to_string()});
