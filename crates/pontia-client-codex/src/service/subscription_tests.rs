@@ -14,6 +14,7 @@ struct Fixture {
     before_thread_response: Arc<Mutex<Vec<Value>>>,
     rpc_errors: Arc<Mutex<HashMap<String, Value>>>,
     inputs: Arc<Mutex<Vec<Value>>>,
+    interrupts: Arc<Mutex<Vec<Value>>>,
     turns: Arc<Mutex<Vec<Value>>>,
     configuration: Arc<Mutex<Value>>,
     thread_requests: Arc<Mutex<Vec<Value>>>,
@@ -53,6 +54,8 @@ impl Fixture {
         let server_errors = rpc_errors.clone();
         let inputs = Arc::new(Mutex::new(Vec::new()));
         let server_inputs = inputs.clone();
+        let interrupts = Arc::new(Mutex::new(Vec::new()));
+        let server_interrupts = interrupts.clone();
         let turns = Arc::new(Mutex::new(Vec::new()));
         let server_turns = turns.clone();
         let codex_home = root.path().canonicalize().unwrap();
@@ -145,10 +148,17 @@ impl Fixture {
                     "thread/turns/list" => {
                         json!({"data":server_turns.lock().await.clone(),"nextCursor":null})
                     }
-                    "turn/start" => {
+                    "turn/start" | "turn/steer" => {
                         materialized = true;
                         server_inputs.lock().await.push(request["params"].clone());
                         json!({"turn":{"id":"turn-one"}})
+                    }
+                    "turn/interrupt" => {
+                        server_interrupts
+                            .lock()
+                            .await
+                            .push(request["params"].clone());
+                        json!({})
                     }
                     "thread/settings/update" => {
                         server_settings_requests.lock().await.push(request.clone());
@@ -225,6 +235,7 @@ impl Fixture {
             before_thread_response,
             rpc_errors,
             inputs,
+            interrupts,
             turns,
             configuration,
             thread_requests,
@@ -241,6 +252,31 @@ impl Fixture {
             .start_turn(&self.session, "hello".into(), json!({}))
             .await
             .unwrap();
+    }
+
+    async fn delivery(
+        &self,
+    ) -> (
+        pontia_agent_control::runtime::ControlTarget,
+        Arc<dyn pontia_agent_control::client_contract::ClientSession>,
+    ) {
+        let target = pontia_agent_control::runtime::ControlTarget::resolve(
+            &self.app.db(),
+            &self.app.clients(),
+            &self.session,
+            None,
+        )
+        .await
+        .unwrap();
+        let client = self
+            .app
+            .clients()
+            .get("codex")
+            .unwrap()
+            .session
+            .clone()
+            .unwrap();
+        (target, client)
     }
 
     async fn start_observer(&self) -> (tokio::sync::watch::Sender<bool>, JoinHandle<()>) {
@@ -1087,6 +1123,115 @@ async fn active_native_turn_prevents_a_second_start_input() {
         .unwrap_err();
     assert!(matches!(error, pontia_core::Error::StateConflict(_)));
     assert_eq!(fixture.inputs.lock().await.len(), 1);
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
+async fn native_turn_state_changes_report_state_changed() {
+    let fixture = Fixture::new().await;
+    fixture.dispatch_first_input().await;
+    fixture
+        .turns
+        .lock()
+        .await
+        .push(json!({"id":"external-turn","status":"inProgress","items":[]}));
+    fixture.rpc_errors.lock().await.insert(
+        "turn/steer".into(),
+        json!({"code":-32000,"message":"Turn is no longer active"}),
+    );
+    let (target, client) = fixture.delivery().await;
+
+    let start = client
+        .start_turn(
+            fixture.app.event_ingest_service(),
+            &target,
+            &pontia_agent_control::InputPayload::from("hello"),
+            None,
+            None,
+        )
+        .await;
+    let steer = client
+        .steer(
+            fixture.app.event_ingest_service(),
+            &target,
+            &pontia_agent_control::InputPayload::from("follow up"),
+            None,
+        )
+        .await;
+
+    assert!(matches!(
+        start,
+        Err(pontia_agent_control::DeliveryError::StateChanged(_))
+    ));
+    assert!(matches!(
+        steer,
+        Err(pontia_agent_control::DeliveryError::StateChanged(_))
+    ));
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
+async fn missing_native_active_turn_reports_state_changed() {
+    let fixture = Fixture::new().await;
+    fixture.dispatch_first_input().await;
+    let (target, client) = fixture.delivery().await;
+
+    let steer = client
+        .steer(
+            fixture.app.event_ingest_service(),
+            &target,
+            &pontia_agent_control::InputPayload::from("follow up"),
+            None,
+        )
+        .await;
+    let interrupt = client
+        .interrupt(fixture.app.event_ingest_service(), &target)
+        .await;
+
+    assert!(matches!(
+        steer,
+        Err(pontia_agent_control::DeliveryError::StateChanged(_))
+    ));
+    assert!(matches!(
+        interrupt,
+        Err(pontia_agent_control::DeliveryError::StateChanged(_))
+    ));
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
+async fn native_active_turn_drives_steer_and_interrupt() {
+    let fixture = Fixture::new().await;
+    fixture.dispatch_first_input().await;
+    fixture
+        .turns
+        .lock()
+        .await
+        .push(json!({"id":"external-turn","status":"inProgress","items":[]}));
+    let (target, client) = fixture.delivery().await;
+
+    client
+        .steer(
+            fixture.app.event_ingest_service(),
+            &target,
+            &pontia_agent_control::InputPayload::from("follow up"),
+            None,
+        )
+        .await
+        .unwrap();
+    client
+        .interrupt(fixture.app.event_ingest_service(), &target)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        fixture.inputs.lock().await[1]["expectedTurnId"],
+        "external-turn"
+    );
+    assert_eq!(
+        fixture.interrupts.lock().await[0]["turnId"],
+        "external-turn"
+    );
     fixture.shutdown().await;
 }
 
