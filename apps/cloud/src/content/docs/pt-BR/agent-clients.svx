@@ -7,6 +7,27 @@
 
 Um Agent Client conecta o Pontia à Session nativa, ao canal de controle e ao histórico de conversas de um agente de programação. O agente roda localmente com suas próprias credenciais, configuração, ferramentas e permissões de sistema de arquivos.
 
+## Use sua assinatura atual (BYOS)
+
+O Pontia executa os processos das CLIs oficiais compatíveis diretamente no seu dispositivo; o Claude Code é executado pela Agent SDK oficial. Ele usa o login e a configuração de provedor já existentes em cada cliente, sem extrair nem encaminhar tokens OAuth. Você pode continuar usando assinaturas como Claude, ChatGPT/Codex, Grok, Kiro e Antigravity, além de credenciais de provedor do Pi, chaves de API e endpoints de modelos personalizados configurados no cliente nativo.
+
+## Matriz de recursos dos Agents
+
+| Client | Conexão | Controles da Session | Modos de aprovação | Modelo e raciocínio | Isolamento de diretório |
+| --- | --- | --- | --- | --- | --- |
+| [Pi](/docs/agent-clients/pi) | Plugin nativo da TUI | Retomar, orientar, interromper e ramificar a timeline | Default, Restricted, YOLO | Catálogo do cliente e níveis de raciocínio anunciados | Uma Workspace por Session; um Git worktree por tarefa paralela com escrita |
+| [Codex](/docs/agent-clients/codex) | App-server nativo | Retomar, orientar, interromper e editar um prompt anterior em uma nova Session | Default, Restricted, YOLO | Catálogo do cliente e níveis de raciocínio anunciados | Uma Workspace por Session; um Git worktree por tarefa paralela com escrita |
+| [Claude Code](/docs/agent-clients/claude) | Claude Agent SDK | Retomar, orientar, interromper e editar um prompt anterior em uma nova Session | Default, Restricted, YOLO | Catálogo do cliente e níveis de raciocínio anunciados | Uma Workspace por Session; um Git worktree por tarefa paralela com escrita |
+| [Grok Build](/docs/agent-clients/grok) | Servidor ACP | Retomar, inserir instruções, interromper e compactar quando anunciado pelo cliente | Default, Restricted, YOLO | Catálogo ACP e níveis de raciocínio anunciados | Uma Workspace por Session; um Git worktree por tarefa paralela com escrita |
+| [Google Antigravity](/docs/agent-clients/antigravity) | Servidor ACP | Retomar, orientar e interromper | Default, Restricted, YOLO | Catálogo ACP e níveis de raciocínio anunciados | Uma Workspace por Session; um Git worktree por tarefa paralela com escrita |
+| [Kiro](/docs/agent-clients/kiro) | Servidor ACP | Retomar, orientar e compactar quando anunciado pelo cliente, e interromper | Default, Restricted, YOLO | Catálogo ACP e níveis de raciocínio anunciados | Uma Workspace por Session; um Git worktree por tarefa paralela com escrita |
+
+## Execute tarefas em paralelo com Git worktrees
+
+Um Lead Bot pode delegar tarefas independentes a Helpers paralelos. Use [Agent Profiles](/docs/agent-profiles) para escolher o cliente, o modelo, o nível de raciocínio, as permissões e as instruções de cada função.
+
+Para alterações simultâneas em um repositório, inicie os Helpers na Workspace ativa original e peça que cada um crie uma branch de curta duração em seu próprio Git worktree. Os worktrees continuam associados à Workspace original, então todos os Helpers mantêm o mesmo contexto de projeto enquanto editam checkouts separados. Abra a Session nativa de um Helper para inspecionar o trabalho e os Diffs relatados, e use os painéis Files e Git do Dashboard para revisar a Workspace ativa. Quando as branches estiverem prontas, o Lead Bot pode coordenar a validação e a integração.
+
 | Client | Instalação em uma etapa | Autenticação |
 | --- | --- | --- |
 | [Pi](/docs/agent-clients/pi) | `pontia client install pi` | Credenciais de provedor do Pi no dispositivo |

@@ -28,7 +28,7 @@
   "continue_with_github": "GitHub で続行",
 
   "home_title": "Pontia — コーディングエージェントをローカルで実行し、どこからでも操作",
-  "home_description": "コーディングエージェント向けのオープンソースのリモートコントロールです。Pi、Codex、Claude Code などを自分のデバイスで実行し、任意のブラウザーから状況を確認して指示できます。",
+  "home_description": "Claude Code、Codex、Grok Build、Kiro、Antigravity、Pi、ACP エージェントを自分のデバイスで動かすオープンソースのリモートコントロールです。",
   "wherever_headline": "{place}、あなたのエージェントを。",
   "wherever_default": "どこにいても",
   "wherever_everywhere": "どの場所でも",

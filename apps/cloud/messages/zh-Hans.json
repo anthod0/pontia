@@ -28,7 +28,7 @@
   "continue_with_github": "使用 GitHub 继续",
 
   "home_title": "Pontia — 在本地运行编程 Agent，随时随地掌控",
-  "home_description": "开源的编程 Agent 远程控制工具。在你自己的设备上运行 Pi、Codex、Claude Code 等，然后在任意浏览器中跟进和引导它们。",
+  "home_description": "开源的编程 Agent 远程控制工具，在你的设备上运行并管理 Claude Code、Codex、Grok Build、Kiro、Antigravity、Pi 与 ACP Agent。",
   "wherever_headline": "{place}，Agent 都在身边。",
   "wherever_default": "无论身在何处",
   "wherever_everywhere": "走遍每一站",

@@ -28,7 +28,7 @@
   "continue_with_github": "Continuar com GitHub",
 
   "home_title": "Pontia — Execute agentes de programação localmente e controle-os de qualquer lugar",
-  "home_description": "Controle remoto de código aberto para agentes de programação. Execute Pi, Codex, Claude Code e outros no seu próprio dispositivo e acompanhe e direcione-os de qualquer navegador.",
+  "home_description": "Controle remoto de código aberto para Claude Code, Codex, Grok Build, Kiro, Antigravity, Pi e agentes ACP executados nos seus dispositivos.",
   "wherever_headline": "Seus agentes, {place}.",
   "wherever_default": "onde quer que você esteja",
   "wherever_everywhere": "em todos os lugares",

@@ -7,6 +7,27 @@
 
 Agent Client は Pontia をコーディングエージェントのネイティブ Session、制御チャネル、会話履歴に接続します。エージェントは独自の認証情報、設定、ツール、ファイルシステム権限でローカルに動作します。
 
+## 既存のサブスクリプションを使う（BYOS）
+
+Pontia は対応する公式 CLI プロセスをデバイス上で直接実行し、Claude Code は公式 Agent SDK 経由で実行します。OAuth トークンを抽出または転送せず、各クライアントの既存のサインインとプロバイダー設定をそのまま利用します。Claude、ChatGPT/Codex、Grok、Kiro、Antigravity などのサブスクリプションに加え、Pi のプロバイダー認証情報、API キー、カスタムモデルエンドポイントもネイティブクライアントで設定できます。
+
+## Agent 機能マトリクス
+
+| Client | 接続方式 | Session 操作 | 承認モード | モデルと推論強度 | ディレクトリ分離 |
+| --- | --- | --- | --- | --- | --- |
+| [Pi](/docs/agent-clients/pi) | ネイティブ TUI プラグイン | 再開、ステアリング、中断、タイムライン分岐 | Default、Restricted、YOLO | クライアントのカタログと公開された推論強度 | Session ごとに 1 つの Workspace。並列書き込みタスクごとに専用 Git worktree |
+| [Codex](/docs/agent-clients/codex) | ネイティブ app-server | 再開、ステアリング、中断、以前のプロンプトを編集して新しい Session を作成 | Default、Restricted、YOLO | クライアントのカタログと公開された推論強度 | Session ごとに 1 つの Workspace。並列書き込みタスクごとに専用 Git worktree |
+| [Claude Code](/docs/agent-clients/claude) | Claude Agent SDK | 再開、ステアリング、中断、以前のプロンプトを編集して新しい Session を作成 | Default、Restricted、YOLO | クライアントのカタログと公開された推論強度 | Session ごとに 1 つの Workspace。並列書き込みタスクごとに専用 Git worktree |
+| [Grok Build](/docs/agent-clients/grok) | ACP server | 再開、指示の挿入、中断、クライアントが対応を通知した場合のコンテキスト圧縮 | Default、Restricted、YOLO | ACP カタログと公開された推論強度 | Session ごとに 1 つの Workspace。並列書き込みタスクごとに専用 Git worktree |
+| [Google Antigravity](/docs/agent-clients/antigravity) | ACP server | 再開、ステアリング、中断 | Default、Restricted、YOLO | ACP カタログと公開された推論強度 | Session ごとに 1 つの Workspace。並列書き込みタスクごとに専用 Git worktree |
+| [Kiro](/docs/agent-clients/kiro) | ACP server | 再開、クライアントが対応を通知した場合のステアリングとコンテキスト圧縮、中断 | Default、Restricted、YOLO | ACP カタログと公開された推論強度 | Session ごとに 1 つの Workspace。並列書き込みタスクごとに専用 Git worktree |
+
+## Git worktree でタスクを並列実行する
+
+Lead Bot は独立したタスクを並列 Helper に委任できます。[Agent Profile](/docs/agent-profiles)では、役割ごとにクライアント、モデル、推論強度、権限、指示を指定できます。
+
+同じリポジトリを並行して変更する場合は、元のアクティブな Workspace で Helper を開始し、それぞれに短期間のブランチと専用 Git worktree を作成させます。Worktree は元の Workspace に関連付けられるため、各 Helper は同じプロジェクトコンテキストを使いながら別々の checkout を編集できます。Helper のネイティブ Session を開いて作業内容や報告された Diff を確認し、Dashboard の Files と Git パネルでアクティブな Workspace をレビューできます。ブランチの準備が整ったら、Lead Bot が検証と統合を調整できます。
+
 | Client | ワンステップインストール | 認証 |
 | --- | --- | --- |
 | [Pi](/docs/agent-clients/pi) | `pontia client install pi` | デバイス上の Pi プロバイダー認証情報 |

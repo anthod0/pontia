@@ -9,6 +9,10 @@ Pontia gives you a Lead Bot that coordinates coding agents on your own machines 
 
 ![Lead Bot chat with two helpers, a delivered report and pending decisions](https://files.pontia.dev/cloud/lead-desk-2640-f11325427ccd.webp)
 
+## Bring your own subscription
+
+Pontia runs supported official CLI processes—and Claude Code through its Agent SDK—directly on your machine. It uses the sign-ins and provider settings already available to those clients, so subscriptions such as Claude, ChatGPT/Codex, Grok, Kiro, and Antigravity, plus Pi provider credentials, API keys, and custom model endpoints, stay with their native client. Pontia does not extract or forward OAuth tokens.
+
 ## Features
 
 - **Hear from the Lead Bot when it needs you.** The Lead Bot brings decisions and approval requests to your Todo.
@@ -22,6 +26,23 @@ Pontia gives you a Lead Bot that coordinates coding agents on your own machines 
 
 - **During setup** — Claude Code, Codex and Pi (requires `tmux`).
 - **After setup** — Enable Google Antigravity, Kiro or Grok Build under **Settings → Agent Clients**. [Client setup guide](https://pontia.dev/docs/agent-clients)
+
+## Agent capability matrix
+
+| Client | Connection | Session controls | Approval modes | Model and reasoning | Working directory |
+| --- | --- | --- | --- | --- | --- |
+| Pi | Native TUI plugin | Resume, steer, interrupt, timeline branches | Default, restricted, YOLO | Client catalog and advertised effort levels | Workspace per Session; Git worktree per parallel write task |
+| Codex | Native app-server | Resume, steer, interrupt, edit an earlier prompt into a new Session | Default, restricted, YOLO | Client catalog and advertised effort levels | Workspace per Session; Git worktree per parallel write task |
+| Claude Code | Claude Agent SDK | Resume, steer, interrupt, edit an earlier prompt into a new Session | Default, restricted, YOLO | Client catalog and advertised effort levels | Workspace per Session; Git worktree per parallel write task |
+| Grok Build | ACP server | Resume, interject, interrupt, compact when advertised | Default, restricted, YOLO | ACP catalog and advertised effort levels | Workspace per Session; Git worktree per parallel write task |
+| Google Antigravity | ACP server | Resume, steer, interrupt | Default, restricted, YOLO | ACP catalog and advertised effort levels | Workspace per Session; Git worktree per parallel write task |
+| Kiro | ACP server | Resume, steer and compact when advertised, interrupt | Default, restricted, YOLO | ACP catalog and advertised effort levels | Workspace per Session; Git worktree per parallel write task |
+
+## Parallel work with Git worktrees
+
+Give the Lead Bot several independent tasks and it can run focused Helpers in parallel. [Agent Profiles](https://pontia.dev/docs/agent-profiles) choose the client, model, reasoning effort, permissions, and instructions for each role.
+
+When Helpers will write to the same repository, ask each one to create a short-lived branch in its own Git worktree from the original active Workspace. This keeps concurrent edits in separate checkouts while preserving the shared project context. Open any Helper's native Session to review its work and reported diffs; use the Dashboard's Files and Git panels to inspect the active Workspace. The Lead Bot can coordinate validation and integration after each branch is ready.
 
 ## Quick start
 
