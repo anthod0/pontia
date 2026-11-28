@@ -32,7 +32,7 @@
 
 <button
   type="button"
-  class="relative mt-1 flex h-[22px] w-full items-center whitespace-nowrap rounded-item pr-3 pl-3.5 text-[11.5px] leading-4 text-muted-foreground after:absolute after:inset-x-0 after:-top-2 after:bottom-0 active:bg-muted"
+  class="relative mb-0.5 flex h-6 w-full items-center whitespace-nowrap rounded-item px-2.5 text-xs leading-4 text-muted-foreground after:absolute after:inset-x-0 after:-top-2 after:-bottom-0.5 active:bg-muted"
   aria-label={$t('chat.detailsSummary', { summary })}
   onclick={() => {
     open = true

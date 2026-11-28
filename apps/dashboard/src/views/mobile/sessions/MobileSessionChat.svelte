@@ -62,7 +62,7 @@
 {#if session}
   <div
     data-mobile-toast-anchor
-    class="absolute inset-x-0 bottom-0 z-10 px-3 pb-[max(.5rem,env(safe-area-inset-bottom))]"
+    class="bot-chat-dock absolute inset-x-0 bottom-0 z-10 px-3 pb-[max(.5rem,env(safe-area-inset-bottom))]"
     bind:clientHeight={height}
     use:chromeMetrics={'--mobile-footer-h'}
   >
@@ -74,6 +74,13 @@
       onCancel={chat.cancelQueueMessage}
     />
     {#if chat.selectedCompaction?.phase === 'failed'}<p role="alert">{chat.selectedCompaction.message}</p>{/if}
+    <MobileSessionMetaStrip
+      {session}
+      gitStatus={chat.selectedSessionGitStatus}
+      items={chat.selectedSessionMetadataItems}
+      summary={chat.selectedSessionMetadataSummary}
+      refresh={chat.refreshCurrentSessionGitStatus}
+    />
     <MobileMessageComposer
       bind:value={$draft}
       draftId={'session:' + session.session_id}
@@ -86,17 +93,7 @@
       onInterrupt={isExecutingSessionState(session.state) && session.capabilities.interrupt
         ? chat.interruptSelectedSession
         : undefined}
-    >
-      {#snippet header()}
-        <MobileSessionMetaStrip
-          {session}
-          gitStatus={chat.selectedSessionGitStatus}
-          items={chat.selectedSessionMetadataItems}
-          summary={chat.selectedSessionMetadataSummary}
-          refresh={chat.refreshCurrentSessionGitStatus}
-        />
-      {/snippet}
-    </MobileMessageComposer>
+    />
   </div>{/if}
 {#if session}<MobileSessionActionSheet
     bind:this={menu}
