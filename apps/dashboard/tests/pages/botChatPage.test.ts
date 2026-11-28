@@ -496,22 +496,21 @@ test("the sidebar button shows the open todo count and reopens the tab last used
 
   await fireEvent.click(button);
   expect(button).toHaveAttribute("aria-pressed", "true");
-  expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute("aria-selected", "true");
-  await fireEvent.click(screen.getByRole("tab", { name: /Todo/ }));
-  await screen.findByText("No todos");
+  expect(screen.getByRole("tab", { name: /Todo/ })).toHaveAttribute("aria-selected", "true");
+  expect(await screen.findByText("No todos")).toBeVisible();
+  await fireEvent.click(screen.getByRole("tab", { name: "Files" }));
   await fireEvent.click(button);
   await waitFor(() => expect(screen.queryByRole("complementary")).not.toBeInTheDocument());
   await fireEvent.click(button);
-  expect(screen.getByRole("tab", { name: /Todo/ })).toHaveAttribute("aria-selected", "true");
-  expect(await screen.findByText("No todos")).toBeVisible();
+  expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute("aria-selected", "true");
   await fireEvent.click(button);
   await waitFor(() => expect(button).toHaveAttribute("aria-pressed", "false"));
 
-  // Another Bot chat page starts on Files.
+  // Another Bot chat page starts on Todo.
   first.unmount();
   render(BotChatPreviewHarness, { botId: bot.bot_id });
   await fireEvent.click(await screen.findByRole("button", { name: "Sidebar, 3 todos" }));
-  expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByRole("tab", { name: /Todo/ })).toHaveAttribute("aria-selected", "true");
 });
 
 test("Bot shortcuts move between Bots in directory order and wrap", async () => {
@@ -558,11 +557,11 @@ test("Bot panel shortcut opens the panel and cycles its tabs in both directions"
 
   await fireEvent.keyDown(window, { code: "KeyP", altKey: true });
   await waitFor(() =>
-    expect(screen.getByRole("tab", { name: "Preview" })).toHaveAttribute("aria-selected", "true"),
+    expect(screen.getByRole("tab", { name: "Search" })).toHaveAttribute("aria-selected", "true"),
   );
   await fireEvent.keyDown(window, { code: "KeyP", altKey: true, shiftKey: true });
   await waitFor(() =>
-    expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute("aria-selected", "true"),
+    expect(screen.getByRole("tab", { name: /Todo/ })).toHaveAttribute("aria-selected", "true"),
   );
 });
 
@@ -590,7 +589,7 @@ test("on wide screens the URL keeps the side panel and its tab without adding hi
   const first = render(BotChatPreviewHarness, { botId: bot.bot_id });
   await fireEvent.click(await screen.findByRole("button", { name: "Sidebar" }));
   expect(screen.getByRole("complementary", { name: "Sidebar" })).toBeVisible();
-  expect(location.search).toBe("?panel=files");
+  expect(location.search).toBe("?panel=todo");
   await fireEvent.click(screen.getByRole("tab", { name: "Search" }));
   expect(location.search).toBe("?panel=search");
   expect(history.length).toBe(entries);
@@ -610,15 +609,12 @@ test("on wide screens the URL keeps the side panel and its tab without adding hi
   expect(screen.queryByRole("complementary", { name: "Sidebar" })).not.toBeInTheDocument();
 });
 
-test("an unknown tab in the URL opens the side panel on Files", async () => {
+test("an unknown tab in the URL opens the side panel on Todo", async () => {
   emptyBotChat();
   history.replaceState({}, "", "?panel=unknown");
   render(BotChatPreviewHarness, { botId: bot.bot_id });
   const panel = await screen.findByRole("complementary", { name: "Sidebar" });
-  expect(within(panel).getByRole("tab", { name: "Files" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  expect(within(panel).getByRole("tab", { name: /Todo/ })).toHaveAttribute("aria-selected", "true");
 });
 
 test("on narrower screens Back closes the side panel and closing it goes back", async () => {
@@ -630,7 +626,7 @@ test("on narrower screens Back closes the side panel and closing it goes back", 
 
   await fireEvent.click(button);
   expect(screen.getByRole("complementary", { name: "Sidebar" })).toBeVisible();
-  expect(location.search).toBe("?panel=files");
+  expect(location.search).toBe("?panel=todo");
   // Switching tabs replaces the entry the panel added, so one Back closes it.
   await fireEvent.click(screen.getByRole("tab", { name: "Search" }));
   expect(location.search).toBe("?panel=search");

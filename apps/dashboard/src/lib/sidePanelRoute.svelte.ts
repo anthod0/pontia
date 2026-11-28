@@ -17,9 +17,9 @@ export class SidePanelRoute<Tab extends string> {
   #closing: Promise<void> | null = null;
   #wide = new MediaQuery("min-width: 1024px");
 
-  constructor(tabs: readonly [Tab, ...Tab[]]) {
+  constructor(tabs: readonly [Tab, ...Tab[]], defaultTab: Tab = tabs[0]) {
     this.#tabs = tabs;
-    this.#last = $state(tabs[0]);
+    this.#last = $state(defaultTab);
   }
 
   /** Whether the panel sits beside the page instead of covering it. */

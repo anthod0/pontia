@@ -63,7 +63,7 @@
   })
   const device = useDeviceRuntime()
   // The Bot chat page's URL says whether the panel is open and on which tab.
-  const panel = new SidePanelRoute<PanelTab>(botPanelTabs)
+  const panel = new SidePanelRoute<PanelTab>(botPanelTabs, 'todo')
   registerShortcut('switchBotPanelTab', event => {
     const next = adjacentValue([...botPanelTabs], panel.tab, event.shiftKey ? -1 : 1) as PanelTab
     void panel.show(next)
