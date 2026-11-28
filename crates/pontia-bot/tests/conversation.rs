@@ -903,6 +903,7 @@ async fn fixture_with_clients(
             .unwrap();
     }
     let control = AgentControl::builder(pool.clone(), root.path().to_owned())
+        .managed_private_root(root.path().join("bot"))
         .clients(registry)
         .build();
     let service = test_conversation(control.clone());
@@ -1330,6 +1331,7 @@ async fn helper_delivery_results_are_not_retried_and_failed_reports_survive_rest
     .await
     .unwrap();
     let recovered_control = AgentControl::builder(reopened, root.path().to_path_buf())
+        .managed_private_root(root.path().join("bot"))
         .clients(control.clients())
         .build();
     let recovered = HelperService::new(

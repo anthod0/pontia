@@ -30,6 +30,7 @@ async fn state() -> (AgentControl, tempfile::TempDir) {
     .unwrap();
     (
         AgentControl::builder(db, root.path().into())
+            .managed_private_root(root.path().join("bot"))
             .clients(support::clients())
             .build(),
         root,

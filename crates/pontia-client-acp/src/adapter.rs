@@ -230,9 +230,7 @@ impl ClientSession for AcpAdapter {
                     _ => &[],
                 };
                 if !files.is_empty() {
-                    pontia_agent_control::workspaces::require_managed_launch_directory(
-                        &root, &cwd,
-                    )?;
+                    store.require_managed_launch_directory(&cwd)?;
                     for file in files {
                         file.install(&cwd)?;
                     }

@@ -144,6 +144,7 @@ impl Harness {
         .await
         .unwrap();
         let app = AgentControl::builder(db, root.path().into())
+            .managed_private_root(root.path().join("bot"))
             .clients(clients.clone())
             .build();
         let management =
@@ -320,6 +321,7 @@ impl Harness {
             env!("CARGO_BIN_EXE_pontia-acp-test-relay").into(),
         ));
         self.app = AgentControl::builder(self.app.db(), self.root.path().into())
+            .managed_private_root(self.root.path().join("bot"))
             .clients(clients.clone())
             .build();
         self.app.interactions().recover_pending().await.unwrap();

@@ -78,7 +78,7 @@ impl EventIngestService {
         fact: ReportedFact,
         write: crate::interactions::InteractionWrite<'_>,
     ) -> pontia_core::Result<()> {
-        let event = EventReportNormalizer::new(self.pool.clone())
+        let event = EventReportNormalizer::new(self.db())
             .with_clients(self.clients.clone())
             .normalize(fact)
             .await?
@@ -88,7 +88,7 @@ impl EventIngestService {
             .validate(&event)?;
         self.ensure_confirmed_event_matches_session_boundary(&event)
             .await?;
-        let outcome = super::commit::EventCommitter::new(self.pool.clone(), self.clients.clone())
+        let outcome = super::commit::EventCommitter::new(self.db(), self.clients.clone())
             .commit(event, None, true, None, Some(write))
             .await?;
         self.apply_outcome(outcome).await?;
@@ -109,7 +109,7 @@ impl EventIngestService {
         {
             return Err(invalid_fact("report_key must not be empty"));
         }
-        let mut reported_event = EventReportNormalizer::new(self.pool.clone())
+        let mut reported_event = EventReportNormalizer::new(self.db())
             .with_clients(self.clients.clone())
             .normalize(fact)
             .await
@@ -200,7 +200,7 @@ impl EventIngestService {
         if let Some(data) = self.clients.data(&event.client_type) {
             data.take_evidence(&mut persisted);
         }
-        let mut connection = self.pool.acquire().await?;
+        let mut connection = self.db().acquire().await?;
         super::commit::duplicate_report(&mut connection, &persisted, persisted.turn_id.as_deref())
             .await
     }

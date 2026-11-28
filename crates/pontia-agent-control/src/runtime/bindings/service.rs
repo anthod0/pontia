@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use pontia_core::error::{Error, Result};
 use pontia_storage_sqlite::repositories::sessions::SqliteSessionRepository;
 use serde_json::Value;
@@ -10,13 +8,11 @@ use super::{
     RuntimeBindingUpsertRequest,
     request::{is_fork_start, non_empty, validate_required},
 };
-use crate::workspaces::resolve_session_directory;
 
 static RUNTIME_BINDING_UPSERT_LOCK: Mutex<()> = Mutex::const_new(());
 
 #[derive(Clone)]
 pub struct RuntimeBindingUpsertService {
-    pontia_home: PathBuf,
     pub(super) session_identity_hint: Option<String>,
     pub(super) clients: crate::clients::ClientRegistry,
     pub(super) pool: SqlitePool,
@@ -31,7 +27,6 @@ impl RuntimeBindingUpsertService {
 
     pub(crate) fn new(
         pool: SqlitePool,
-        pontia_home: PathBuf,
         clients: crate::clients::ClientRegistry,
         events: crate::EventIngestService,
     ) -> Self {
@@ -39,7 +34,6 @@ impl RuntimeBindingUpsertService {
             pool,
             clients,
             events,
-            pontia_home,
             session_identity_hint: None,
         }
     }
@@ -81,8 +75,11 @@ impl RuntimeBindingUpsertService {
                 None => self.unbound_session_id_for_client_session(&request).await?,
             }
         };
-        let (launch_directory, workspace) =
-            resolve_session_directory(&self.pool, &self.pontia_home, launch_cwd).await?;
+        let (launch_directory, workspace) = self
+            .events
+            .store()
+            .resolve_session_directory(launch_cwd)
+            .await?;
         if let Some(session_id) = &existing_session_id
             && let Some(session) = crate::ControlQueryService::new(self.pool.clone())
                 .get_session(session_id)

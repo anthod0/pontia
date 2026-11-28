@@ -154,7 +154,8 @@ impl TestAppBuilder {
                 .expect("enable fixture client");
         }
         let mut builder = AppState::builder(
-            pontia_agent_control::AgentControl::builder(db.clone(), pontia_home)
+            pontia_agent_control::AgentControl::builder(db.clone(), pontia_home.clone())
+                .managed_private_root(pontia_home.join("bot"))
                 .clients(crate::common::clients::clients())
                 .build(),
         )

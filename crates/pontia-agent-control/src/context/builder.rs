@@ -9,6 +9,7 @@ pub struct AgentControlBuilder {
     pub(super) clients: crate::clients::ClientRegistry,
     pub(super) db: SqlitePool,
     pub(super) pontia_home: PathBuf,
+    pub(super) managed_private_roots: Vec<PathBuf>,
     pub(super) shutdown: ShutdownSignal,
     pub(super) agent_events: AgentEventBroker,
     pub(super) live_output: LiveOutputStore,
@@ -20,10 +21,16 @@ impl AgentControlBuilder {
             clients: Default::default(),
             db,
             pontia_home,
+            managed_private_roots: Vec::new(),
             shutdown: ShutdownSignal::default(),
             agent_events: AgentEventBroker::default(),
             live_output: LiveOutputStore::default(),
         }
+    }
+
+    pub fn managed_private_root(mut self, root: PathBuf) -> Self {
+        self.managed_private_roots.push(root);
+        self
     }
 
     pub fn shutdown(mut self, shutdown: ShutdownSignal) -> Self {

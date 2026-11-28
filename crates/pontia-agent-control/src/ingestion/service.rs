@@ -29,7 +29,7 @@ use pontia_core::domain::TurnTopology;
 
 #[derive(Clone)]
 pub struct EventIngestService {
-    pool: SqlitePool,
+    store: crate::ClientControlStore,
     clients: crate::clients::ClientRegistry,
     effects: PostCommitEffects,
     pub(crate) cache: Option<crate::timeline_cache::TimelineCache>,
@@ -60,7 +60,7 @@ impl EventIngestService {
     }
 
     pub fn store(&self) -> crate::ClientControlStore {
-        crate::ClientControlStore::new(self.db())
+        self.store.clone()
     }
 
     pub fn native_sessions(&self) -> crate::sessions::NativeSessionService {
@@ -71,16 +71,16 @@ impl EventIngestService {
     }
 
     pub(crate) fn db(&self) -> SqlitePool {
-        self.pool.clone()
+        self.store.pool.clone()
     }
 
     pub(crate) fn new(
-        pool: SqlitePool,
+        store: crate::ClientControlStore,
         clients: crate::clients::ClientRegistry,
         effects: PostCommitEffects,
     ) -> Self {
         Self {
-            pool,
+            store,
             clients,
             cache: None,
             effects,
@@ -90,7 +90,7 @@ impl EventIngestService {
     #[cfg(any(test, feature = "generic-test-client"))]
     pub fn for_projection_tests(pool: SqlitePool) -> Self {
         Self {
-            pool,
+            store: crate::ClientControlStore::new(pool),
             clients: Default::default(),
             cache: None,
             effects: PostCommitEffects::default(),
@@ -281,7 +281,7 @@ impl EventIngestService {
         enforce_runtime_fence: bool,
         expected_session_state: Option<SessionState>,
     ) -> Result<Option<EventIngestResult>> {
-        let outcome = commit::EventCommitter::new(self.pool.clone(), self.clients.clone())
+        let outcome = commit::EventCommitter::new(self.db(), self.clients.clone())
             .commit(
                 event,
                 initial_agent_binding,
@@ -344,7 +344,7 @@ impl EventIngestService {
             .spec(&event.client_type)
             .is_none_or(|spec| spec.adapter.runtime_binding.requires_session_runtime());
         ensure_confirmed_event_matches_session_boundary(
-            &self.pool,
+            &self.db(),
             event,
             runtime_bound,
             self.clients.control_runtime_role(&event.client_type),
@@ -358,7 +358,7 @@ impl EventIngestService {
     }
 
     pub async fn get_turn(&self, turn_id: &str) -> Result<Option<TurnProjection>> {
-        SqliteTurnRepository::new(self.pool.clone())
+        SqliteTurnRepository::new(self.db())
             .get_projection(turn_id)
             .await?
             .map(turn_from_row)
@@ -366,7 +366,7 @@ impl EventIngestService {
     }
 
     pub async fn list_events(&self, session_id: &str) -> Result<Vec<DomainEvent>> {
-        let rows = SqliteEventRepository::new(self.pool.clone())
+        let rows = SqliteEventRepository::new(self.db())
             .list_domain_event_rows(session_id)
             .await?;
 
@@ -374,7 +374,7 @@ impl EventIngestService {
     }
 
     async fn load_session_projection(&self, session_id: &str) -> Result<Vec<SessionProjection>> {
-        let rows = SqliteSessionRepository::new(self.pool.clone())
+        let rows = SqliteSessionRepository::new(self.db())
             .load_projection_rows(session_id)
             .await?;
 

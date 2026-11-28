@@ -11,8 +11,7 @@ use super::{
     validation::validate_handle,
 };
 use crate::{
-    PontiaEvent, PontiaEventSource, PontiaEventType,
-    workspaces::{require_active_workspace_id, resolve_session_directory},
+    PontiaEvent, PontiaEventSource, PontiaEventType, workspaces::require_active_workspace_id,
 };
 
 enum SessionManagementAction {
@@ -131,7 +130,10 @@ impl SessionCommandService {
                 }
                 (workspace.canonical_path.clone(), Some(workspace))
             } else if let Some(directory) = request.workspace.as_deref() {
-                resolve_session_directory(&self.pool, &self.pontia_home, directory).await?
+                self.event_ingest
+                    .store()
+                    .resolve_session_directory(directory)
+                    .await?
             } else {
                 return Err(Error::Domain(
                     "A Session launch directory is required".into(),

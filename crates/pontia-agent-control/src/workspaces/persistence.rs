@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use sqlx::SqlitePool;
 
@@ -10,20 +10,24 @@ use pontia_storage_sqlite::repositories::workspaces::SqliteWorkspaceRepository;
 
 use super::WorkspaceRecord;
 
-pub fn require_managed_launch_directory(pontia_home: &Path, directory: &Path) -> Result<()> {
-    let root = pontia_home.join("bot");
-    if !root.is_dir() || directory.canonicalize()?.parent() != Some(root.canonicalize()?.as_path())
-    {
-        return Err(Error::Domain(
-            "Restricted agent files require a Pontia-managed launch directory".into(),
-        ));
+fn existing_roots(roots: &[PathBuf]) -> impl Iterator<Item = &PathBuf> {
+    roots.iter().filter(|root| root.is_dir())
+}
+
+pub(crate) fn require_managed_launch_directory(roots: &[PathBuf], directory: &Path) -> Result<()> {
+    for root in existing_roots(roots) {
+        if directory.canonicalize()?.parent() == Some(&root.canonicalize()?) {
+            return Ok(());
+        }
     }
-    Ok(())
+    Err(Error::Domain(
+        "Restricted agent files require a Pontia-managed launch directory".into(),
+    ))
 }
 
 pub(crate) async fn resolve_session_directory(
     pool: &SqlitePool,
-    pontia_home: &Path,
+    roots: &[PathBuf],
     directory: &str,
 ) -> Result<(String, Option<WorkspaceRecord>)> {
     let canonical = std::fs::canonicalize(directory).map_err(|error| {
@@ -38,9 +42,10 @@ pub(crate) async fn resolve_session_directory(
             "Session launch path must be a directory".into(),
         ));
     }
-    let bot_root = pontia_home.join("bot");
-    if bot_root.is_dir() && canonical.starts_with(std::fs::canonicalize(bot_root)?) {
-        return Ok((canonical.to_string_lossy().into_owned(), None));
+    for root in existing_roots(roots) {
+        if canonical.starts_with(root.canonicalize()?) {
+            return Ok((canonical.to_string_lossy().into_owned(), None));
+        }
     }
     let workspace = require_active_workspace(pool, &canonical.to_string_lossy()).await?;
     Ok((workspace.canonical_path.clone(), Some(workspace)))
@@ -154,4 +159,74 @@ pub async fn get_workspace_record(
             })
         })
         .transpose()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn private_sessions_resolve_under_each_registered_root() {
+        let home = tempfile::tempdir().unwrap();
+        let db = pontia_storage_sqlite::connect_sqlite("sqlite::memory:")
+            .await
+            .unwrap();
+        pontia_storage_sqlite::run_migrations(&db).await.unwrap();
+        let app = crate::AgentControl::builder(db, home.path().into())
+            .managed_private_root(home.path().join("workers"))
+            .managed_private_root(home.path().join("reviewers"))
+            .build();
+        let store = app.store();
+        for name in ["workers", "workers/team/session", "reviewers/session"] {
+            let directory = home.path().join(name);
+            std::fs::create_dir_all(&directory).unwrap();
+            let resolved = store
+                .resolve_session_directory(directory.to_str().unwrap())
+                .await
+                .unwrap();
+            assert_eq!(
+                resolved,
+                (
+                    directory.canonicalize().unwrap().display().to_string(),
+                    None
+                )
+            );
+        }
+        let outside = home.path().join("workers-other");
+        std::fs::create_dir(&outside).unwrap();
+        assert!(matches!(
+            store
+                .resolve_session_directory(outside.to_str().unwrap())
+                .await,
+            Err(Error::NotFound(_))
+        ));
+    }
+
+    #[test]
+    fn restricted_files_require_a_direct_child_of_a_registered_root() {
+        let home = tempfile::tempdir().unwrap();
+        let roots = [home.path().join("workers"), home.path().join("reviewers")];
+        for root in &roots {
+            let session = root.join("session");
+            let nested = session.join("nested");
+            std::fs::create_dir_all(&nested).unwrap();
+            require_managed_launch_directory(&roots, &session).unwrap();
+            for denied in [root, &nested] {
+                assert!(matches!(
+                    require_managed_launch_directory(&roots, denied),
+                    Err(Error::Domain(_))
+                ));
+            }
+        }
+        let outside = home.path().join("workers-other/session");
+        std::fs::create_dir_all(&outside).unwrap();
+        assert!(matches!(
+            require_managed_launch_directory(&roots, &outside),
+            Err(Error::Domain(_))
+        ));
+        assert!(matches!(
+            require_managed_launch_directory(&[], &roots[0].join("session")),
+            Err(Error::Domain(_))
+        ));
+    }
 }

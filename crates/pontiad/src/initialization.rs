@@ -15,6 +15,7 @@ pub async fn initialize(config: &AppConfig) -> Result<AppState> {
 
     let state = AppState::builder(
         pontia_agent_control::AgentControl::builder(db.clone(), config.pontia_home.clone())
+            .managed_private_root(config.pontia_home.join("bot"))
             .clients(clients)
             .build(),
     )

@@ -72,7 +72,10 @@ impl AgentControl {
     pub(super) fn from_builder(builder: AgentControlBuilder) -> Self {
         let scheduler = crate::inbox::InboxScheduler::default();
         let mut ingest = crate::EventIngestService::new(
-            builder.db.clone(),
+            crate::ClientControlStore::with_managed_private_roots(
+                builder.db.clone(),
+                builder.managed_private_roots,
+            ),
             builder.clients.clone(),
             crate::ingestion::PostCommitEffects::new(
                 builder.agent_events.clone(),
@@ -212,7 +215,7 @@ impl AgentControl {
 
 impl ClientServiceContext {
     pub fn store(&self) -> crate::ClientControlStore {
-        crate::ClientControlStore::new(self.db())
+        self.inner.events.ingest.store()
     }
 
     pub async fn resolve_target(
@@ -268,7 +271,6 @@ impl ClientServiceContext {
     pub fn session_runtimes(&self) -> crate::RuntimeBindingUpsertService {
         crate::RuntimeBindingUpsertService::new(
             self.db(),
-            self.pontia_home().into(),
             self.clients(),
             self.event_ingest_service(),
         )
