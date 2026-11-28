@@ -21,7 +21,7 @@ tokio = { version = "1", features = ["io-util", "macros", "process", "rt", "sync
 tracing = "0.1"
 uuid = { workspace = true, features = ["v7", "serde"] }
 sha2 = "0.10"
-rustix = { version = "1", features = ["fs"] }
+rustix = { version = "1", features = ["fs", "process"] }
 
 [dev-dependencies]
 pontia-agent-control = { workspace = true, features = ["generic-test-client"] }

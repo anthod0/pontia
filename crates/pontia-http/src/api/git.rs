@@ -19,7 +19,14 @@ pub(super) async fn with_git_deadline<T, F>(request: F) -> Result<T, ApiError>
 where
     F: Future<Output = pontia_core::error::Result<T>>,
 {
-    tokio::time::timeout(GIT_REQUEST_TIMEOUT, request)
+    git_deadline(GIT_REQUEST_TIMEOUT, request).await
+}
+
+pub(super) async fn git_deadline<T>(
+    timeout: Duration,
+    request: impl Future<Output = pontia_core::error::Result<T>>,
+) -> Result<T, ApiError> {
+    tokio::time::timeout(timeout, request)
         .await
         .map_err(|_| {
             ApiError::custom(

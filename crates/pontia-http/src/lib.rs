@@ -288,6 +288,30 @@ fn external_api_router(state: HttpState) -> Router {
             get(api::get_workspace_git_status),
         )
         .route(
+            "/api/v1/workspaces/{workspace_id}/git/stage",
+            post(api::git_write::stage),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/git/unstage",
+            post(api::git_write::unstage),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/git/discard",
+            post(api::git_write::discard),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/git/commit",
+            post(api::git_write::commit),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/git/pull",
+            post(api::git_write::pull),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/git/push",
+            post(api::git_write::push),
+        )
+        .route(
             "/api/v1/workspaces/{workspace_id}/git/changes",
             get(api::get_workspace_git_changes),
         )

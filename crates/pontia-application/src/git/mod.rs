@@ -1,9 +1,11 @@
-//! Read-only views of a Workspace's Git repository.
+//! Workspace Git operations.
 
 mod changes;
 pub(crate) mod command;
 mod diff;
 mod history;
+mod write;
+pub use write::{GitWrite, GitWriteResult, PathSelection};
 
 use pontia_config::WorkspaceBrowserConfig;
 use pontia_core::error::{Error, Result};

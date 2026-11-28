@@ -87,6 +87,17 @@ impl GitRefreshCoordinator {
         scan().await
     }
 
+    pub(crate) async fn mutate<T, F, Fut>(&self, workspace_id: &str, write: F) -> Result<T>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<T>>,
+    {
+        let entry = self.entry(workspace_id).await;
+        let _singleflight = entry.singleflight.lock().await;
+        entry.cache.lock().await.take();
+        write().await
+    }
+
     async fn entry(&self, workspace_id: &str) -> Arc<GitRefreshEntry> {
         let mut entries = self.entries.lock().await;
         entries
@@ -162,7 +173,7 @@ impl WorkspaceGitStatusService {
     }
 }
 
-async fn refresh_workspace_git_status_now(
+pub(crate) async fn refresh_workspace_git_status_now(
     pool: SqlitePool,
     workspace_id: &str,
     path: &Path,

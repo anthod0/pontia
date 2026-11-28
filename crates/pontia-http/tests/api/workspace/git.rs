@@ -673,3 +673,4 @@ async fn local_filter_does_not_prevent_inspection_of_a_modified_file() {
     let (_, body) = post_empty(state, &format!("{base}/git-status/refresh")).await;
     assert_eq!(body["data"]["git_status"]["state"], "observed");
 }
+mod write;

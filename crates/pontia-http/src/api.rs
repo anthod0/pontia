@@ -28,6 +28,7 @@ mod dashboard_events;
 mod events;
 mod git;
 mod git_status;
+pub(crate) mod git_write;
 mod idempotency;
 mod interactions;
 mod messages;
