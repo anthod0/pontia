@@ -514,6 +514,13 @@ WHERE
 CREATE UNIQUE INDEX idx_events_report_key ON events (session_id, event_type, report_key)
 WHERE
   report_key IS NOT NULL;
+CREATE TABLE event_subscriptions (
+    subscriber_id TEXT PRIMARY KEY NOT NULL,
+    cursor_position INTEGER NOT NULL DEFAULT 0 CHECK (cursor_position >= 0),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 CREATE TABLE domain_event_positions (
     position INTEGER PRIMARY KEY AUTOINCREMENT,
     event_id TEXT NOT NULL UNIQUE

@@ -300,7 +300,12 @@ impl EventIngestService {
         match outcome {
             commit::CommitOutcome::Skipped => Ok(None),
             commit::CommitOutcome::Duplicate { result, .. } => Ok(Some(result)),
-            commit::CommitOutcome::Committed { result, events } => {
+            commit::CommitOutcome::Committed {
+                result,
+                events,
+                max_position,
+            } => {
+                self.effects.advance_head(max_position);
                 if let (Some(cache), Some(event)) = (&self.cache, events.last())
                     && self
                         .clients

@@ -1,5 +1,10 @@
 pub mod agent_clients;
 mod agent_events;
+pub mod event_delivery;
+pub use event_delivery::{
+    DurableSubscription, EventDeliveryService, EventScope, EventTail, PositionedEvent,
+    SubscriptionConfig,
+};
 mod control_changes;
 pub use control_changes::{ControlChange, ControlChanges};
 mod agent_profiles;

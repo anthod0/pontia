@@ -41,6 +41,7 @@ struct AppRuntimeState {
 }
 
 struct EventState {
+    delivery: crate::EventDeliveryService,
     changes: crate::ControlChanges,
     ingest: crate::EventIngestService,
     agent_events: AgentEventBroker,
@@ -147,6 +148,10 @@ impl AgentControl {
                     pontia_home: builder.pontia_home,
                 },
                 events: EventState {
+                    delivery: crate::EventDeliveryService::new(
+                        builder.db.clone(),
+                        builder.agent_events.clone(),
+                    ),
                     changes: Default::default(),
                     ingest: ingest.clone(),
                     agent_events: builder.agent_events,
@@ -181,6 +186,10 @@ impl AgentControl {
         if let Some(cache) = self.event_ingest_service().cache {
             cache.run(self.shutdown().subscribe()).await;
         }
+    }
+
+    pub fn events(&self) -> crate::EventDeliveryService {
+        self.inner.events.delivery.clone()
     }
 
     pub fn control_changes(&self) -> crate::ControlChanges {

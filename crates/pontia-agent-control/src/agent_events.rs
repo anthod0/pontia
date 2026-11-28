@@ -4,6 +4,7 @@ const AGENT_EVENT_CHANNEL_CAPACITY: usize = 1024;
 
 #[derive(Clone)]
 pub struct AgentEventBroker {
+    pub(crate) head_position: tokio::sync::watch::Sender<i64>,
     sender: tokio::sync::broadcast::Sender<DomainEvent>,
     history: tokio::sync::broadcast::Sender<String>,
 }
@@ -29,6 +30,10 @@ impl Default for AgentEventBroker {
     fn default() -> Self {
         let (sender, _) = tokio::sync::broadcast::channel(AGENT_EVENT_CHANNEL_CAPACITY);
         let (history, _) = tokio::sync::broadcast::channel(AGENT_EVENT_CHANNEL_CAPACITY);
-        Self { sender, history }
+        Self {
+            sender,
+            history,
+            head_position: tokio::sync::watch::channel(0).0,
+        }
     }
 }

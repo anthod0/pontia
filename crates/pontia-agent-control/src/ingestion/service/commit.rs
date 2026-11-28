@@ -25,6 +25,7 @@ pub(super) enum CommitOutcome {
     Committed {
         result: EventIngestResult,
         events: Vec<DomainEvent>,
+        max_position: i64,
     },
 }
 
@@ -370,6 +371,9 @@ impl EventCommitter {
 
         crate::sessions::register_agent_binding_for_ready_event_in_tx(&mut tx, &event).await?;
 
+        let max_position = sqlx::query_scalar("SELECT MAX(position) FROM domain_event_positions")
+            .fetch_one(&mut *tx)
+            .await?;
         tx.commit().await?;
 
         let mut events = vec![event.clone()];
@@ -377,6 +381,7 @@ impl EventCommitter {
             events.push(runtime_event);
         }
         Ok(CommitOutcome::Committed {
+            max_position,
             events,
             result: EventIngestResult {
                 accepted: true,

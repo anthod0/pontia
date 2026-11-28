@@ -27,6 +27,18 @@ impl PostCommitEffects {
         }
     }
 
+    pub(super) fn advance_head(&self, position: i64) {
+        if let Some(broker) = &self.agent_events {
+            broker.head_position.send_if_modified(|head| {
+                if position <= *head {
+                    return false;
+                }
+                *head = position;
+                true
+            });
+        }
+    }
+
     pub(super) async fn apply(&self, event: &DomainEvent) -> Result<()> {
         if let Some(agent_events) = &self.agent_events {
             agent_events.publish(event.clone());
@@ -87,5 +99,26 @@ impl PostCommitEffects {
             self.scheduler.wake(event.session_id.clone());
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn out_of_order_post_commit_effects_leave_the_larger_watermark_visible() {
+        let broker = AgentEventBroker::default();
+        let mut watch = broker.head_position.subscribe();
+        let effects = PostCommitEffects {
+            agent_events: Some(broker),
+            ..Default::default()
+        };
+        effects.advance_head(5);
+        assert_eq!(*watch.borrow_and_update(), 5);
+        effects.advance_head(3);
+        effects.advance_head(5);
+        assert!(!watch.has_changed().unwrap());
+        assert_eq!(*watch.borrow(), 5);
     }
 }
