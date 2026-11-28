@@ -134,18 +134,6 @@ impl ClientData for Adapter {
             topology: None,
         }
     }
-    fn native_history(
-        &self,
-        binding: AgentBindingResolveRequest,
-        _: Option<pontia_agent_control::clients::ClientControlService>,
-    ) -> Option<Arc<dyn NativeHistory>> {
-        Some(Arc::new(History {
-            adapter: self.clone(),
-            binding,
-            messages: OnceCell::new(),
-            fingerprint: OnceCell::new(),
-        }))
-    }
     fn capture_native_boundary(
         &self,
         binding: &AgentBindingResolveRequest,
@@ -192,6 +180,18 @@ struct History {
     binding: AgentBindingResolveRequest,
     messages: OnceCell<Vec<Value>>,
     fingerprint: OnceCell<Option<String>>,
+}
+
+pub(crate) fn native_history(
+    adapter: crate::Adapter,
+    binding: AgentBindingResolveRequest,
+) -> Arc<dyn NativeHistory> {
+    Arc::new(History {
+        adapter,
+        binding,
+        messages: OnceCell::new(),
+        fingerprint: OnceCell::new(),
+    })
 }
 impl History {
     async fn sdk_output(&self, mode: &str) -> Result<Vec<u8>> {

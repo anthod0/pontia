@@ -63,14 +63,10 @@ impl EventIngestService {
     ) -> Result<EventIngestResult, EventReportError> {
         // Low-level projection callers can construct a database-only service;
         // client reports require the complete set of shared effects.
-        if self.effects.client_control.is_none()
-            || self.effects.agent_events.is_none()
-            || self.effects.live_output.is_none()
-        {
+        if self.effects.agent_events.is_none() || self.effects.live_output.is_none() {
             return Err(Error::InvalidConfig {
                 key: "event_reporting",
-                message: "event reporting requires control and shared notification dependencies"
-                    .into(),
+                message: "event reporting requires shared notification dependencies".into(),
             }
             .into());
         }

@@ -1,5 +1,5 @@
 use super::ClientAdapter;
-use crate::{client_contract::DispatchMode, control::ControlResult, runtime::ControlTarget};
+use crate::{control::ControlResult, runtime::ControlTarget};
 use pontia_core::Error;
 
 impl ClientAdapter {
@@ -16,20 +16,9 @@ impl ClientAdapter {
                         .set_reasoning_effort(self.events.clone(), target, reasoning_effort)
                         .await;
                 }
-                match self.spec.adapter.dispatch {
-                    DispatchMode::Connected => {
-                        self.control
-                            .set_reasoning_effort(
-                                &target.session_id,
-                                target.instance()?,
-                                reasoning_effort,
-                            )
-                            .await
-                    }
-                    _ => Err(Error::CapabilityUnavailable(
-                        "Reasoning effort control is unsupported".into(),
-                    )),
-                }
+                Err(Error::CapabilityUnavailable(
+                    "Reasoning effort control is unsupported".into(),
+                ))
             }
             .await,
         )

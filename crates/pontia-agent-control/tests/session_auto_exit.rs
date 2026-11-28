@@ -1,11 +1,13 @@
 use pontia_agent_control::{
-    AgentControl, ClientControlChannel, ClientControlOperation, DeliveryOperation,
-    EventIngestService, InputPayload, SendMode, SendOutcome,
+    AgentControl, DeliveryOperation, EventIngestService, InputPayload, SendMode, SendOutcome,
     client_contract::{
+        ClientExitMode, ClientExitOutcome, ClientOperation, ClientSession, ClientSessionDetails,
         DispatchBehavior, RuntimeBehavior, RuntimeBindingBehavior, TerminateBehavior,
         TmuxRuntimeBehavior, TurnLifecycleBehavior, test_registration,
     },
     clients::ClientRegistry,
+    control::InputReceipt,
+    runtime::ControlTarget,
 };
 use pontia_core::domain::{EventSource, EventType, ReportedEvent};
 use serde_json::json;
@@ -15,31 +17,44 @@ use std::sync::{
 };
 
 struct Channel {
-    events: EventIngestService,
+    events: OnceLock<EventIngestService>,
     inputs: Mutex<Vec<String>>,
     exits: AtomicUsize,
     exit_attempts: AtomicUsize,
     busy: AtomicBool,
 }
-impl ClientControlChannel for Channel {
-    fn available(&self) -> bool {
-        true
+impl ClientSession for Channel {
+    fn provision<'a>(
+        &'a self,
+        _events: EventIngestService,
+        _root: &'a std::path::Path,
+        _request: pontia_runtime::RuntimeStartRequest,
+    ) -> ClientOperation<'a, Option<pontia_runtime::RuntimeStartResult>> {
+        Box::pin(async { Ok(None) })
     }
-    fn invalidate(&self) {}
-    fn interrupt(&self) -> DeliveryOperation<'_> {
+    fn interrupt<'a>(
+        &'a self,
+        _events: EventIngestService,
+        _target: &'a ControlTarget,
+    ) -> DeliveryOperation<'a> {
         Box::pin(async { Ok(()) })
     }
-    fn shutdown(&self) -> ClientControlOperation<'_> {
-        panic!("exit must be conditional")
-    }
-    fn shutdown_if_idle(&self) -> ClientControlOperation<'_, bool> {
+    fn exit<'a>(
+        &'a self,
+        _events: EventIngestService,
+        _target: &'a ControlTarget,
+        mode: ClientExitMode,
+    ) -> ClientOperation<'a, ClientExitOutcome> {
+        assert_eq!(mode, ClientExitMode::IfIdle, "exit must be conditional");
         Box::pin(async {
             self.exit_attempts.fetch_add(1, Ordering::SeqCst);
             if self.busy.load(Ordering::SeqCst) {
-                return Ok(false);
+                return Ok(ClientExitOutcome::Busy);
             }
             self.exits.fetch_add(1, Ordering::SeqCst);
             self.events
+                .get()
+                .expect("events initialized")
                 .report_client_fact(
                     "session",
                     Some("runtime"),
@@ -47,24 +62,42 @@ impl ClientControlChannel for Channel {
                     json!({"reason":"quit"}),
                 )
                 .await?;
-            Ok(true)
+            Ok(ClientExitOutcome::Requested)
         })
     }
-    fn ping(&self) -> ClientControlOperation<'_> {
-        Box::pin(async { Ok(()) })
-    }
-    fn replay<'a>(&'a self, _: &'a str) -> ClientControlOperation<'a> {
-        panic!("unexpected replay")
-    }
-    fn start_turn<'a>(&'a self, payload: &'a InputPayload) -> DeliveryOperation<'a> {
+    fn start_turn<'a>(
+        &'a self,
+        _events: EventIngestService,
+        target: &'a ControlTarget,
+        payload: &'a InputPayload,
+        _turn: Option<&'a str>,
+    ) -> DeliveryOperation<'a, InputReceipt> {
         Box::pin(async move {
             self.inputs.lock().unwrap().push(payload.text.clone());
-            Ok(())
+            Ok(InputReceipt {
+                turn_pending: false,
+                native_turn_id: None,
+                runtime_id: target.runtime_id.clone(),
+            })
         })
+    }
+    fn available<'a>(
+        &'a self,
+        _pool: sqlx::SqlitePool,
+        _session: &'a str,
+    ) -> ClientOperation<'a, bool> {
+        Box::pin(async { Ok(true) })
+    }
+    fn details<'a>(
+        &'a self,
+        _pool: sqlx::SqlitePool,
+        _session: &'a str,
+    ) -> ClientOperation<'a, ClientSessionDetails> {
+        Box::pin(async { Ok(ClientSessionDetails { data: json!({}) }) })
     }
 }
 
-fn clients() -> ClientRegistry {
+fn clients(channel: Arc<Channel>) -> ClientRegistry {
     static SPEC: OnceLock<pontia_agent_control::client_contract::AgentClientSpec> = OnceLock::new();
     let mut registration = test_registration();
     registration.spec = SPEC.get_or_init(|| {
@@ -78,12 +111,13 @@ fn clients() -> ClientRegistry {
         spec.adapter.turn_lifecycle = TurnLifecycleBehavior::ClientManagedInteractive;
         spec
     });
+    registration.session = Some(channel);
     let mut registry = ClientRegistry::default();
     registry.register(registration);
     registry
 }
 
-async fn open(root: &std::path::Path) -> AgentControl {
+async fn open(root: &std::path::Path, channel: Arc<Channel>) -> AgentControl {
     let pool = pontia_storage_sqlite::connect_sqlite(&format!(
         "sqlite://{}",
         root.join("test.db").display()
@@ -92,32 +126,27 @@ async fn open(root: &std::path::Path) -> AgentControl {
     .unwrap();
     pontia_storage_sqlite::run_migrations(&pool).await.unwrap();
     AgentControl::builder(pool, root.into())
-        .clients(clients())
+        .clients(clients(channel))
         .build()
 }
-async fn connect(state: &AgentControl) -> Arc<Channel> {
-    let channel = Arc::new(Channel {
-        events: state.event_ingest_service(),
+fn test_channel() -> Arc<Channel> {
+    Arc::new(Channel {
+        events: OnceLock::new(),
         inputs: Mutex::default(),
         exits: AtomicUsize::new(0),
         exit_attempts: AtomicUsize::new(0),
         busy: AtomicBool::new(false),
-    });
-    state
-        .client_control()
-        .attach("generic", "session", "runtime", "native", channel.clone())
-        .await
-        .unwrap();
-    channel
+    })
 }
 async fn fixture() -> (tempfile::TempDir, AgentControl, Arc<Channel>) {
     let root = tempfile::tempdir().unwrap();
-    let state = open(root.path()).await;
+    let channel = test_channel();
+    let state = open(root.path(), channel.clone()).await;
+    assert!(channel.events.set(state.event_ingest_service()).is_ok());
     sqlx::raw_sql("INSERT INTO sessions(session_id,client_type,state) VALUES ('session','generic','idle');
         INSERT INTO session_runtimes(session_id,runtime_id,role,state,created_at) VALUES ('session','runtime','generic_control','running','2026-01-01T00:00:00Z');
         INSERT INTO agent_bindings(id,session_id,client_type,launch_cwd,client_session_key) VALUES ('binding','session','generic','/unused','native');")
         .execute(&state.db()).await.unwrap();
-    let channel = connect(&state).await;
     (root, state, channel)
 }
 async fn fact(
@@ -248,11 +277,11 @@ async fn restart_recovers_an_armed_idle_session_without_a_new_fact() {
         .await
         .unwrap();
     drop(channel);
-    state.client_control().close().await;
     state.db().close().await;
     drop(state);
-    let restarted = open(root.path()).await;
-    let channel = connect(&restarted).await;
+    let channel = test_channel();
+    let restarted = open(root.path(), channel.clone()).await;
+    assert!(channel.events.set(restarted.event_ingest_service()).is_ok());
     restarted.inbox_commands().resume_pending().await.unwrap();
     wait_for(&restarted, "exited").await;
     restarted.inbox_commands().stop_scheduling().await;

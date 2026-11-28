@@ -28,7 +28,6 @@ pub struct RuntimeObservationService {
     runtime: GenericRuntimeManager,
     clients: crate::clients::ClientRegistry,
     event_ingest: EventIngestService,
-    control: crate::ClientControlService,
 }
 
 impl RuntimeObservationService {
@@ -36,14 +35,12 @@ impl RuntimeObservationService {
         pool: SqlitePool,
         clients: crate::clients::ClientRegistry,
         event_ingest: EventIngestService,
-        control: crate::ClientControlService,
     ) -> Self {
         Self {
             pool,
             clients,
             runtime: GenericRuntimeManager,
             event_ingest,
-            control,
         }
     }
 
@@ -96,7 +93,6 @@ impl RuntimeObservationService {
         }
 
         for session in sessions {
-            let _identity_guard = self.control.lock_identity().await;
             let timeout_seconds = STARTUP_TIMEOUT.as_secs();
             let mut payload = json!({
                 "reason": "startup_timeout",
@@ -246,7 +242,6 @@ impl RuntimeObservationService {
         binding: ActiveProcessBindingRow,
         observation: crate::client_contract::ProcessObservationBehavior,
     ) -> Result<()> {
-        let _identity_guard = self.control.lock_identity().await;
         let event_type = observation.exit_event;
         self.ingest_service()
             .ingest_runtime_observation_event(PontiaEvent::new(

@@ -39,7 +39,6 @@ async fn main() -> Result<()> {
     let cache_control = app_state.control().clone();
     tokio::spawn(async move { cache_control.run_timeline_cache_cleanup().await });
     let inbox = app_state.control().inbox_commands();
-    let client_control = app_state.control().client_control();
     let runtime_observer = app_state.control().runtime_observer();
     tokio::spawn(runtime_observer.run(app_state.control().shutdown().subscribe()));
     client_tasks.extend(
@@ -165,7 +164,6 @@ async fn main() -> Result<()> {
     cleanup_shutdown.notify();
     let _ = client_probe.await;
     let _ = upload_cleanup.await;
-    client_control.close().await;
     let client_result = client_tasks.join().await;
     inbox.stop_scheduling().await;
     if let Some(task) = remote_task {

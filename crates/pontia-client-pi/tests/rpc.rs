@@ -1,6 +1,4 @@
-use pontia_agent_control::{
-    ClientControlChannel, DeliveryError, InputPayload, ipc::rpc::MAX_FRAME_BYTES,
-};
+use pontia_agent_control::{DeliveryError, InputPayload, ipc::rpc::MAX_FRAME_BYTES};
 use pontia_client_pi::rpc::{MAX_CONTROL_FRAME_BYTES, PiRpcPeer};
 use pontia_core::Error;
 use serde_json::{Value, json};
@@ -113,10 +111,7 @@ async fn reasoning_effort_waits_for_the_pi_acknowledgement() {
     });
     let pending = tokio::spawn({
         let peer = peer.clone();
-        async move {
-            pontia_agent_control::ClientControlChannel::set_reasoning_effort(peer.as_ref(), "max")
-                .await
-        }
+        async move { peer.set_reasoning_effort("max").await }
     });
     wait_until_received.await.unwrap();
     assert!(!pending.is_finished());

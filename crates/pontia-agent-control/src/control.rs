@@ -18,6 +18,7 @@ impl<T> ControlResult<T> {
             Err(crate::DeliveryError::Offline(message)) => {
                 Self::Rejected(Error::CapabilityUnavailable(message))
             }
+            Err(crate::DeliveryError::Rejected(message)) => Self::Rejected(Error::Domain(message)),
             Err(crate::DeliveryError::StateChanged(message)) => {
                 Self::Rejected(Error::StateConflict(message))
             }

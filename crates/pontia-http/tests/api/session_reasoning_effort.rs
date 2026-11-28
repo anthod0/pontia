@@ -5,11 +5,15 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use pontia_agent_control::{
-    ClientControlChannel, ClientControlOperation, DeliveryOperation, InputPayload,
+    DeliveryOperation, EventIngestService, InputPayload,
     client_contract::{
-        AgentClientCapabilities, AgentClientSpec, DispatchBehavior, TEST_SPEC, test_registration,
+        AgentClientCapabilities, AgentClientSpec, ClientExitMode, ClientExitOutcome,
+        ClientOperation, ClientSession, ClientSessionDetails, DispatchBehavior, TEST_SPEC,
+        test_registration,
     },
     clients::ClientRegistry,
+    control::InputReceipt,
+    runtime::ControlTarget,
 };
 use pontia_application::AppState;
 use serde_json::{Value, json};
@@ -39,33 +43,69 @@ struct Channel {
     closed: AtomicBool,
 }
 
-impl ClientControlChannel for Channel {
-    fn set_reasoning_effort<'a>(&'a self, effort: &'a str) -> ClientControlOperation<'a> {
+impl ClientSession for Channel {
+    fn provision<'a>(
+        &'a self,
+        _events: EventIngestService,
+        _root: &'a std::path::Path,
+        _request: pontia_runtime::RuntimeStartRequest,
+    ) -> ClientOperation<'a, Option<pontia_runtime::RuntimeStartResult>> {
+        Box::pin(async { Ok(None) })
+    }
+    fn set_reasoning_effort<'a>(
+        &'a self,
+        _events: EventIngestService,
+        _target: &'a ControlTarget,
+        effort: &'a str,
+    ) -> ClientOperation<'a, ()> {
         Box::pin(async move {
             self.efforts.lock().unwrap().push(effort.into());
             Ok(())
         })
     }
-    fn available(&self) -> bool {
-        !self.closed.load(Ordering::SeqCst)
-    }
-    fn invalidate(&self) {
-        self.closed.store(true, Ordering::SeqCst);
-    }
-    fn interrupt(&self) -> DeliveryOperation<'_> {
+    fn interrupt<'a>(
+        &'a self,
+        _events: EventIngestService,
+        _target: &'a ControlTarget,
+    ) -> DeliveryOperation<'a> {
         Box::pin(async { Ok(()) })
     }
-    fn shutdown(&self) -> ClientControlOperation<'_> {
-        Box::pin(async { Ok(()) })
+    fn exit<'a>(
+        &'a self,
+        _events: EventIngestService,
+        _target: &'a ControlTarget,
+        _mode: ClientExitMode,
+    ) -> ClientOperation<'a, ClientExitOutcome> {
+        Box::pin(async { Ok(ClientExitOutcome::Requested) })
     }
-    fn ping(&self) -> ClientControlOperation<'_> {
-        Box::pin(async { Ok(()) })
+    fn start_turn<'a>(
+        &'a self,
+        _events: EventIngestService,
+        target: &'a ControlTarget,
+        _: &'a InputPayload,
+        _turn: Option<&'a str>,
+    ) -> DeliveryOperation<'a, InputReceipt> {
+        Box::pin(async move {
+            Ok(InputReceipt {
+                turn_pending: false,
+                native_turn_id: None,
+                runtime_id: target.runtime_id.clone(),
+            })
+        })
     }
-    fn replay<'a>(&'a self, _: &'a str) -> ClientControlOperation<'a> {
-        Box::pin(async { Ok(()) })
+    fn available<'a>(
+        &'a self,
+        _pool: sqlx::SqlitePool,
+        _session: &'a str,
+    ) -> ClientOperation<'a, bool> {
+        Box::pin(async move { Ok(!self.closed.load(Ordering::SeqCst)) })
     }
-    fn start_turn<'a>(&'a self, _: &'a InputPayload) -> DeliveryOperation<'a> {
-        Box::pin(async { Ok(()) })
+    fn details<'a>(
+        &'a self,
+        _pool: sqlx::SqlitePool,
+        _session: &'a str,
+    ) -> ClientOperation<'a, ClientSessionDetails> {
+        Box::pin(async { Ok(ClientSessionDetails { data: json!({}) }) })
     }
 }
 
@@ -96,7 +136,8 @@ async fn supported_control_returns_accepted_and_dispatches_without_forging_state
     pontia_storage_sqlite::run_migrations(&db).await.unwrap();
     let mut registration = test_registration();
     registration.spec = &SPEC;
-    registration.in_process = None;
+    let channel = Arc::new(Channel::default());
+    registration.session = Some(channel.clone());
     let mut clients = ClientRegistry::default();
     clients.register(registration);
     let state = AppState::builder(
@@ -116,19 +157,6 @@ async fn supported_control_returns_accepted_and_dispatches_without_forging_state
         .unwrap();
     sqlx::query("INSERT INTO agent_bindings(id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES ('binding','session','reasoning-effort-test','/unused','native','{}')")
         .execute(&db)
-        .await
-        .unwrap();
-    let channel = Arc::new(Channel::default());
-    state
-        .control()
-        .client_control()
-        .attach(
-            SPEC.client_type,
-            "session",
-            "runtime",
-            "native",
-            channel.clone(),
-        )
         .await
         .unwrap();
 

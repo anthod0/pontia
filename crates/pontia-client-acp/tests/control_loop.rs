@@ -907,7 +907,6 @@ fn composite_identity_is_reversible_and_namespaces_native_ids() {
 async fn creation_immediately_initializes_peer_and_persists_one_identity_and_runtime() {
     let h = Harness::new(&[]).await;
     let session = h.create("first").await.unwrap();
-    assert!(!h.app.client_control().available(&session).await.unwrap());
     let view = h
         .app
         .queries()

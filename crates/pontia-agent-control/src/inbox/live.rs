@@ -277,6 +277,9 @@ impl InboxCommandService {
                     Err(crate::DeliveryError::Unsupported(reason)) => {
                         return Err(crate::DeliveryError::Unsupported(reason));
                     }
+                    Err(crate::DeliveryError::Rejected(reason)) => {
+                        return Err(crate::DeliveryError::Rejected(reason));
+                    }
                     Err(
                         crate::DeliveryError::Offline(_) | crate::DeliveryError::StateChanged(_),
                     ) => {

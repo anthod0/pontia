@@ -21,7 +21,6 @@ pub struct ControlQueryService {
     clients: crate::clients::ClientRegistry,
     pool: SqlitePool,
     workspace_browser: pontia_config::WorkspaceBrowserConfig,
-    control: Option<crate::ClientControlService>,
 }
 impl ControlQueryService {
     pub fn domain_events(&self) -> DomainEventReader {
@@ -37,15 +36,10 @@ impl ControlQueryService {
             workspace_browser: Default::default(),
             pool,
             clients: Default::default(),
-            control: None,
         }
     }
     pub fn with_clients(mut self, clients: crate::clients::ClientRegistry) -> Self {
         self.clients = clients;
-        self
-    }
-    pub fn with_control(mut self, control: crate::ClientControlService) -> Self {
-        self.control = Some(control);
         self
     }
 }

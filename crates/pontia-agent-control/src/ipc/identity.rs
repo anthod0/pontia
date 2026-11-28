@@ -96,38 +96,4 @@ impl RuntimeAttachment {
             None => BindingConfirmation::Launch,
         }
     }
-
-    pub async fn attach(
-        &self,
-        state: &AgentControl,
-        client: &str,
-        channel: std::sync::Arc<dyn crate::ClientControlChannel>,
-    ) -> Result<()> {
-        let guard = state.client_control().lock_identity().await;
-        state
-            .client_control()
-            .validate_attachment(client, &self.session_id, &self.runtime_id, self.binding())
-            .await?;
-        let process = channel
-            .process_id()
-            .and_then(pontia_runtime::ProcessFingerprint::capture)
-            .ok_or_else(|| {
-                Error::StateConflict("Runtime peer process identity is unavailable".into())
-            })?;
-        // A provisioned runtime can claim its first process before the client
-        // creates a native conversation. Subsequent attachments must match it.
-        sqlx::query("UPDATE session_runtimes SET process_fingerprint=? WHERE runtime_id=? AND session_id=? AND state='starting' AND process_fingerprint IS NULL AND EXISTS(SELECT 1 FROM sessions WHERE session_id=? AND client_type=? AND state!='exited')")
-            .bind(serde_json::to_string(&process)?).bind(&self.runtime_id).bind(&self.session_id).bind(&self.session_id).bind(client).execute(&state.db()).await?;
-        state
-            .client_control()
-            .attach_binding_locked(
-                &guard,
-                client,
-                &self.session_id,
-                &self.runtime_id,
-                self.binding(),
-                channel,
-            )
-            .await
-    }
 }

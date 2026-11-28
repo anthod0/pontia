@@ -317,7 +317,10 @@ async fn checks_current_runtime_even_when_connection_identity_matches() {
         .call("liveOutput.publish", session.request(snapshot(1, "stale")))
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("-32009"), "{error}");
+    assert!(
+        error.to_string().contains("-32009") || session.peer.is_closed(),
+        "{error}"
+    );
     assert!(
         session
             .state

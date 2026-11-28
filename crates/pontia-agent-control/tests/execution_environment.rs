@@ -1,7 +1,13 @@
 use pontia_agent_control::{
-    AgentControl, CreateSessionRequest, PontiaEvent, PontiaEventSource, PontiaEventType,
-    client_contract::{ClientLaunchRequest, ClientLauncher, test_registration},
+    AgentControl, CreateSessionRequest, EventIngestService, PontiaEvent, PontiaEventSource,
+    PontiaEventType,
+    client_contract::{
+        ClientExitMode, ClientExitOutcome, ClientLaunchRequest, ClientOperation, ClientSession,
+        ClientSessionDetails, DeliveryError, DeliveryOperation, InputPayload, test_registration,
+    },
     clients::ClientRegistry,
+    control::InputReceipt,
+    runtime::ControlTarget,
 };
 use pontia_core::Result;
 use pontia_runtime::{GenericRuntimeManager, RuntimeStartRequest, RuntimeStartResult};
@@ -35,10 +41,7 @@ impl pontia_agent_control::client_contract::ClientConfiguration for Launcher {
         Ok(json!({}))
     }
 }
-impl ClientLauncher for Launcher {
-    fn validate_resume(&self, _: &str, _: Option<&Path>) -> Result<()> {
-        Ok(())
-    }
+impl Launcher {
     fn launch(&self, request: ClientLaunchRequest<'_>) -> Result<RuntimeStartResult> {
         self.0.lock().unwrap().push(request.runtime.clone());
         GenericRuntimeManager.start_in_process(
@@ -47,6 +50,65 @@ impl ClientLauncher for Launcher {
             Default::default(),
             request.restart_count,
         )
+    }
+}
+impl ClientSession for Launcher {
+    fn provision<'a>(
+        &'a self,
+        _events: EventIngestService,
+        root: &'a Path,
+        request: RuntimeStartRequest,
+    ) -> ClientOperation<'a, Option<RuntimeStartResult>> {
+        Box::pin(async move {
+            self.launch(ClientLaunchRequest {
+                root,
+                runtime: request,
+                restart_count: 0,
+                reuse_pane: None,
+                native_session_key: None,
+                native_session_file: None,
+            })
+            .map(Some)
+        })
+    }
+    fn resume_with_runtime<'a>(
+        &'a self,
+        _events: EventIngestService,
+        _target: &'a ControlTarget,
+        request: ClientLaunchRequest<'a>,
+    ) -> ClientOperation<'a, Option<RuntimeStartResult>> {
+        Box::pin(async move { self.launch(request).map(Some) })
+    }
+    fn start_turn<'a>(
+        &'a self,
+        _events: EventIngestService,
+        _target: &'a ControlTarget,
+        _payload: &'a InputPayload,
+        _turn: Option<&'a str>,
+    ) -> DeliveryOperation<'a, InputReceipt> {
+        Box::pin(async { Err(DeliveryError::Unsupported("unused".into())) })
+    }
+    fn exit<'a>(
+        &'a self,
+        _events: EventIngestService,
+        _target: &'a ControlTarget,
+        _mode: ClientExitMode,
+    ) -> ClientOperation<'a, ClientExitOutcome> {
+        Box::pin(async { Ok(ClientExitOutcome::Requested) })
+    }
+    fn available<'a>(
+        &'a self,
+        _pool: sqlx::SqlitePool,
+        _session: &'a str,
+    ) -> ClientOperation<'a, bool> {
+        Box::pin(async { Ok(true) })
+    }
+    fn details<'a>(
+        &'a self,
+        _pool: sqlx::SqlitePool,
+        _session: &'a str,
+    ) -> ClientOperation<'a, ClientSessionDetails> {
+        Box::pin(async { Ok(ClientSessionDetails { data: json!({}) }) })
     }
 }
 #[tokio::test]
@@ -69,7 +131,7 @@ async fn creation_restart_and_recovered_resume_keep_launch_context_out_of_events
     .unwrap();
     let launcher = Arc::new(Launcher::default());
     let mut client = test_registration();
-    client.launcher = Some(launcher.clone());
+    client.session = Some(launcher.clone());
     client.configuration = Some(launcher.clone());
     let mut clients = ClientRegistry::default();
     clients.register(client);
@@ -293,7 +355,7 @@ async fn owned_creation_is_idempotent_and_keeps_the_original_environment() {
     .unwrap();
     let launcher = Arc::new(Launcher::default());
     let mut client = test_registration();
-    client.launcher = Some(launcher.clone());
+    client.session = Some(launcher.clone());
     let mut clients = ClientRegistry::default();
     clients.register(client);
     let app = AgentControl::builder(pool, root.path().into())

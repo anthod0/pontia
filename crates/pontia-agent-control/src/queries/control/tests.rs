@@ -61,12 +61,7 @@ impl ClientSession for Client {
     ) -> ClientOperation<'a, ClientSessionDetails> {
         Box::pin(async { Err(Error::Domain("display details unavailable".into())) })
     }
-    fn available<'a>(
-        &'a self,
-        _: SqlitePool,
-        _: Option<crate::ClientControlService>,
-        _: &'a str,
-    ) -> ClientOperation<'a, bool> {
+    fn available<'a>(&'a self, _: SqlitePool, _: &'a str) -> ClientOperation<'a, bool> {
         Box::pin(async { Ok(true) })
     }
     fn provision<'a>(
@@ -108,7 +103,7 @@ async fn session_resolver_can_narrow_but_not_expand_static_implementation_capabi
     let db = pontia_storage_sqlite::connect_sqlite("sqlite::memory:").await?;
     pontia_storage_sqlite::run_migrations(&db).await?;
     let mut registration = crate::client_contract::test_registration();
-    registration.in_process = None;
+    registration.spec = &crate::client_contract::TEST_SPEC;
     registration.session = Some(Arc::new(Client {
         inputs: AtomicUsize::new(0),
         reasoning_efforts: Mutex::new(Vec::new()),
@@ -208,7 +203,6 @@ async fn reasoning_effort_control_dispatches_without_projecting_unconfirmed_valu
     let mut spec = registration.spec.clone();
     spec.capabilities.reasoning_effort_control = true;
     registration.spec = Box::leak(Box::new(spec));
-    registration.in_process = None;
     registration.session = Some(client.clone());
     let mut clients = crate::clients::ClientRegistry::default();
     clients.register(registration);

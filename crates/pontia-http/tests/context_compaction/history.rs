@@ -1,14 +1,10 @@
 use super::fixture::*;
-use pontia_agent_control::ClientControlChannel;
-use pontia_agent_control::{
-    ClientControlService,
-    client_contract::{
-        BranchTargetRequest, ClientData, NativeEventEvidence, TimelineBoundaryBackend,
-        TurnTimelineBackend, TurnTopologyBackend,
-        history::{RecoveredTurnHistory, TurnHistoryCandidate},
-        native_history::{HistoryRead, NativeHistory},
-        raw_transcripts::*,
-    },
+use pontia_agent_control::client_contract::{
+    BranchTargetRequest, ClientData, NativeEventEvidence, TimelineBoundaryBackend,
+    TurnTimelineBackend, TurnTopologyBackend,
+    history::{RecoveredTurnHistory, TurnHistoryCandidate},
+    native_history::{HistoryRead, NativeHistory},
+    raw_transcripts::*,
 };
 use pontia_core::{
     Error, Result,
@@ -22,7 +18,6 @@ use std::sync::{
 
 pub struct History {
     pub rpc: bool,
-    pub reads: Arc<AtomicUsize>,
 }
 impl ClientData for History {
     fn timeline_cache_policy(
@@ -42,14 +37,6 @@ impl ClientData for History {
     }
     fn take_evidence(&self, _: &mut DomainEvent) -> NativeEventEvidence {
         NativeEventEvidence::default()
-    }
-    fn native_history(
-        &self,
-        _: AgentBindingResolveRequest,
-        _: Option<ClientControlService>,
-    ) -> Option<Arc<dyn NativeHistory>> {
-        self.rpc
-            .then(|| Arc::new(NativeReader(self.reads.clone())) as Arc<dyn NativeHistory>)
     }
     fn timeline(&self) -> TurnTimelineBackend {
         TurnTimelineBackend {
@@ -162,7 +149,7 @@ impl TurnTimelineReader for Reader {
             .collect())
     }
 }
-struct NativeReader(Arc<AtomicUsize>);
+pub struct NativeReader(pub Arc<AtomicUsize>);
 impl NativeHistory for NativeReader {
     fn read_session_timeline(
         &self,
@@ -275,7 +262,7 @@ async fn paginated_history_keeps_gap_checkpoints_with_the_following_turn() {
 async fn native_checkpoints_can_be_read_without_any_pontia_turns_or_writable_channel() {
     let fixture = Fixture::new(&SPEC, false).await;
     fixture.seed().await;
-    fixture.channel.invalidate();
+    fixture.channel.closed.store(true, Ordering::SeqCst);
     let (status, body) = fixture
         .request(
             "GET",

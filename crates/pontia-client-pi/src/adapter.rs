@@ -32,21 +32,17 @@ pub fn registration(tui_command: Option<String>) -> ClientRegistration {
         })),
         instructions: Some(Arc::new(crate::instructions::InstructionsPolicy)),
         events: Some(Arc::new(crate::lifecycle::PiEventInterpreter)),
-        in_process: None,
         session: Some(Arc::new(PiSession {
             tui_command,
             connections: connections.clone(),
         })),
         prepare_on_input: false,
         spec: &crate::SPEC,
-        data: Some(Arc::new(PiData { connections })),
-        launcher: None,
+        data: Some(Arc::new(PiData)),
     }
 }
 
-struct PiData {
-    connections: crate::connections::PiConnections,
-}
+struct PiData;
 impl ClientData for PiData {
     fn timeline_cache_policy(&self) -> Option<TimelineCachePolicy> {
         Some(TimelineCachePolicy {
@@ -96,16 +92,6 @@ impl ClientData for PiData {
             entry_anchor,
             topology,
         }
-    }
-    fn native_history(
-        &self,
-        binding: pontia_agent_control::client_contract::raw_transcripts::AgentBindingResolveRequest,
-        _control: Option<pontia_agent_control::clients::ClientControlService>,
-    ) -> Option<Arc<dyn pontia_agent_control::client_contract::native_history::NativeHistory>> {
-        Some(crate::history::PiHistory::new(
-            binding,
-            self.connections.clone(),
-        ))
     }
     fn capture_native_boundary(
         &self,

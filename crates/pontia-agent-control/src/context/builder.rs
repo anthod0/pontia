@@ -12,14 +12,12 @@ pub struct AgentControlBuilder {
     pub(super) shutdown: ShutdownSignal,
     pub(super) agent_events: AgentEventBroker,
     pub(super) live_output: LiveOutputStore,
-    pub(super) client_control: crate::ClientControlService,
 }
 
 impl AgentControlBuilder {
     pub(super) fn new(db: SqlitePool, pontia_home: PathBuf) -> Self {
         Self {
             clients: Default::default(),
-            client_control: crate::ClientControlService::new(db.clone(), pontia_home.clone()),
             db,
             pontia_home,
             shutdown: ShutdownSignal::default(),

@@ -466,18 +466,6 @@ impl ClientData for AcpAdapter {
             topology: None,
         }
     }
-    fn native_history(
-        &self,
-        binding: AgentBindingResolveRequest,
-        _control: Option<pontia_agent_control::clients::ClientControlService>,
-    ) -> Option<Arc<dyn NativeHistory>> {
-        Some(Arc::new(AcpHistory {
-            adapter: self.clone(),
-            resident: false,
-            snapshot: Default::default(),
-            binding,
-        }))
-    }
     fn capture_native_boundary(
         &self,
         binding: &AgentBindingResolveRequest,
@@ -531,6 +519,18 @@ struct AcpHistory {
     snapshot: tokio::sync::OnceCell<Snapshot>,
     adapter: AcpAdapter,
     binding: AgentBindingResolveRequest,
+}
+
+pub(crate) fn native_history(
+    adapter: crate::adapter::AcpAdapter,
+    binding: AgentBindingResolveRequest,
+) -> Arc<dyn NativeHistory> {
+    Arc::new(AcpHistory {
+        adapter,
+        resident: false,
+        snapshot: Default::default(),
+        binding,
+    })
 }
 impl AcpHistory {
     async fn read_snapshot<T>(

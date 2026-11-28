@@ -121,9 +121,12 @@ impl Fixture {
     ) -> Arc<dyn pontia_agent_control::client_contract::native_history::NativeHistory> {
         self.state
             .clients()
-            .data("pi")
+            .get("pi")
             .unwrap()
-            .native_history(self.binding.clone(), None)
+            .session
+            .as_ref()
+            .unwrap()
+            .native_history(self.state.db(), self.binding.clone())
             .unwrap()
     }
     async fn peer(&self) -> (Arc<PiRpcPeer>, mpsc::Receiver<RpcRequest>, Arc<PiRpcPeer>) {

@@ -34,10 +34,8 @@ pub fn registration() -> ClientRegistration {
         service: Some(Arc::new(crate::service::CodexBackgroundService)),
         instructions: Some(Arc::new(crate::instructions::CodexInstructionsPolicy)),
         events: None,
-        in_process: None,
         spec: &crate::SPEC,
         data: Some(Arc::new(CodexData)),
-        launcher: None,
         session: Some(Arc::new(CodexClient)),
         prepare_on_input: true,
     }
@@ -56,16 +54,6 @@ impl ClientData for CodexData {
         })
     }
 
-    fn native_history(
-        &self,
-        binding: pontia_agent_control::client_contract::raw_transcripts::AgentBindingResolveRequest,
-        control: Option<pontia_agent_control::clients::ClientControlService>,
-    ) -> Option<Arc<dyn pontia_agent_control::client_contract::native_history::NativeHistory>> {
-        Some(Arc::new(crate::history::CodexHistory::new(
-            binding,
-            control.map(|control| control.db()),
-        )))
-    }
     fn capture_native_boundary(
         &self,
         binding: &pontia_agent_control::client_contract::raw_transcripts::AgentBindingResolveRequest,
@@ -191,6 +179,17 @@ impl pontia_agent_control::client_contract::ClientInteractions for CodexClient {
 }
 
 impl ClientSession for CodexClient {
+    fn native_history(
+        &self,
+        pool: SqlitePool,
+        binding: pontia_agent_control::client_contract::raw_transcripts::AgentBindingResolveRequest,
+    ) -> Option<Arc<dyn pontia_agent_control::client_contract::native_history::NativeHistory>> {
+        Some(Arc::new(crate::history::CodexHistory::new(
+            binding,
+            Some(pool),
+        )))
+    }
+
     fn fork_session<'a>(
         &'a self,
         events: EventIngestService,
@@ -310,12 +309,7 @@ impl ClientSession for CodexClient {
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move { CodexService::new(events).resume(target).await })
     }
-    fn available<'a>(
-        &'a self,
-        pool: SqlitePool,
-        _: Option<pontia_agent_control::ClientControlService>,
-        session: &'a str,
-    ) -> ClientOperation<'a, bool> {
+    fn available<'a>(&'a self, pool: SqlitePool, session: &'a str) -> ClientOperation<'a, bool> {
         Box::pin(async move {
             let Some(runtime) = CodexRuntime::for_session(&pool, session).await? else {
                 return Ok(false);
@@ -337,7 +331,6 @@ impl ClientSession for CodexClient {
     fn manual_compaction_available<'a>(
         &'a self,
         pool: SqlitePool,
-        _: Option<pontia_agent_control::ClientControlService>,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
         Box::pin(async move {
@@ -355,7 +348,6 @@ impl ClientSession for CodexClient {
     fn reasoning_effort_control_available<'a>(
         &'a self,
         pool: SqlitePool,
-        _: Option<pontia_agent_control::ClientControlService>,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
         Box::pin(async move {

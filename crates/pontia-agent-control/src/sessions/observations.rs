@@ -96,11 +96,6 @@ impl NativeSessionService {
         } = subscription;
         let workspace =
             crate::workspaces::require_active_workspace(&self.pool, &identity.launch_cwd).await?;
-        let control = self.events.history_control();
-        let _identity = match &control {
-            Some(control) => Some(control.lock_identity().await),
-            None => None,
-        };
         if let Some(binding) = crate::AgentBindingService::new(self.pool.clone())
             .binding_for_client_session(client, native_key)
             .await?

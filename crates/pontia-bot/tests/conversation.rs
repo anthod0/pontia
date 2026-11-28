@@ -7,11 +7,14 @@ use pontia_agent_control::{
     AgentControl, EventIngestService, ReportedFact, UpsertAgentProfileRequest,
     agent_clients::AgentClientService,
     client_contract::{
-        AgentInput, ClientConfiguration, ClientInteractions, ClientLaunchRequest, ClientLauncher,
-        ClientOperation, GenericTestClient, InProcessClient, test_registration,
+        AgentInput, ClientConfiguration, ClientExitMode, ClientExitOutcome, ClientInteractions,
+        ClientLaunchRequest, ClientOperation, ClientSession, ClientSessionDetails,
+        DeliveryOperation, GenericTestClient, InputPayload, test_registration,
     },
     clients::ClientRegistry,
+    control::InputReceipt,
     interactions::InteractionResponse,
+    runtime::ControlTarget,
 };
 use pontia_bot::{
     conversation::{ConversationService, ConversationUpdate, Reply, ReplyRequest, WorkStatus},
@@ -24,7 +27,7 @@ use pontia_core::{
     client_capabilities::AgentClientCapabilities,
     domain::{EventType, ReportedEvent},
 };
-use pontia_runtime::{GenericRuntimeManager, RuntimeStartResult};
+use pontia_runtime::{GenericRuntimeManager, RuntimeStartRequest, RuntimeStartResult};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
 
@@ -113,11 +116,7 @@ impl ClientConfiguration for Client {
     }
 }
 
-impl ClientLauncher for Client {
-    fn validate_resume(&self, _: &str, _: Option<&Path>) -> Result<()> {
-        Ok(())
-    }
-
+impl Client {
     fn launch(&self, request: ClientLaunchRequest<'_>) -> Result<RuntimeStartResult> {
         self.launch_modes.lock().unwrap().insert(
             request.runtime.session_id.clone(),
@@ -157,6 +156,102 @@ impl ClientLauncher for Client {
             request.runtime.environment[TOOL_TOKEN_ENV].clone(),
         );
         GenericRuntimeManager.start_in_process(request.root, request.runtime, CAPABILITIES, 0)
+    }
+}
+
+impl ClientSession for Client {
+    fn provision<'a>(
+        &'a self,
+        _events: EventIngestService,
+        root: &'a Path,
+        request: RuntimeStartRequest,
+    ) -> ClientOperation<'a, Option<RuntimeStartResult>> {
+        Box::pin(async move {
+            self.launch(ClientLaunchRequest {
+                root,
+                runtime: request,
+                restart_count: 0,
+                reuse_pane: None,
+                native_session_key: None,
+                native_session_file: None,
+            })
+            .map(Some)
+        })
+    }
+    fn resume_with_runtime<'a>(
+        &'a self,
+        _events: EventIngestService,
+        _target: &'a ControlTarget,
+        request: ClientLaunchRequest<'a>,
+    ) -> ClientOperation<'a, Option<RuntimeStartResult>> {
+        Box::pin(async move { self.launch(request).map(Some) })
+    }
+    fn start_turn<'a>(
+        &'a self,
+        _events: EventIngestService,
+        target: &'a ControlTarget,
+        payload: &'a InputPayload,
+        _turn: Option<&'a str>,
+    ) -> DeliveryOperation<'a, InputReceipt> {
+        Box::pin(async move {
+            self.submit(AgentInput {
+                session_id: target.session_id.clone(),
+                dispatch_id: pontia_core::ids::new_dispatch_id().to_string(),
+                input: payload.text.clone(),
+            })
+            .map_err(|error| match error {
+                Error::Domain(message) => pontia_agent_control::DeliveryError::Rejected(message),
+                error => pontia_agent_control::DeliveryError::from(error),
+            })?;
+            Ok(InputReceipt {
+                turn_pending: false,
+                native_turn_id: None,
+                runtime_id: target.runtime_id.clone(),
+            })
+        })
+    }
+    fn steer<'a>(
+        &'a self,
+        events: EventIngestService,
+        target: &'a ControlTarget,
+        payload: &'a InputPayload,
+    ) -> DeliveryOperation<'a, InputReceipt> {
+        self.start_turn(events, target, payload, None)
+    }
+    fn exit<'a>(
+        &'a self,
+        _events: EventIngestService,
+        target: &'a ControlTarget,
+        _mode: ClientExitMode,
+    ) -> ClientOperation<'a, ClientExitOutcome> {
+        Box::pin(async move {
+            GenericRuntimeManager.terminate_session(target.instance()?)?;
+            Ok(ClientExitOutcome::Requested)
+        })
+    }
+    fn available<'a>(
+        &'a self,
+        _pool: sqlx::SqlitePool,
+        _session: &'a str,
+    ) -> ClientOperation<'a, bool> {
+        Box::pin(async { Ok(true) })
+    }
+    fn capabilities<'a>(
+        &'a self,
+        _session: &'a str,
+        _implementation: &'a AgentClientCapabilities,
+    ) -> ClientOperation<'a, AgentClientCapabilities> {
+        Box::pin(async move { Ok(self.capabilities()) })
+    }
+    fn ready(&self, session: &str, instance: &str) -> Option<ReportedEvent> {
+        Some(GenericTestClient::ready_event(session, instance))
+    }
+    fn details<'a>(
+        &'a self,
+        _pool: sqlx::SqlitePool,
+        _session: &'a str,
+    ) -> ClientOperation<'a, ClientSessionDetails> {
+        Box::pin(async { Ok(ClientSessionDetails { data: json!({}) }) })
     }
 }
 
@@ -206,17 +301,13 @@ impl ClientInteractions for Client {
     }
 }
 
-impl InProcessClient for Client {
+impl Client {
     fn capabilities(&self) -> AgentClientCapabilities {
         AgentClientCapabilities {
             steer: self.steer.lock().unwrap().unwrap_or(CAPABILITIES.steer),
             ..CAPABILITIES
         }
     }
-    fn ready(&self, session: &str, instance: &str) -> ReportedEvent {
-        GenericTestClient::ready_event(session, instance)
-    }
-
     fn submit(&self, input: AgentInput) -> Result<()> {
         let mut inputs = self.inputs.lock().unwrap();
         let first = !inputs.iter().any(|previous| previous.input == input.input);
@@ -782,8 +873,7 @@ async fn fixture_with_clients(
         registration.spec = spec;
         registration.configuration = Some(client.clone());
         registration.interactions = Some(client.clone());
-        registration.launcher = Some(client.clone());
-        registration.in_process = Some(client.clone());
+        registration.session = Some(client.clone());
         registration.instructions = Some(client.clone());
         registry.register(registration);
     }

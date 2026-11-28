@@ -244,12 +244,10 @@ pub(super) fn clients() -> pontia_agent_control::clients::ClientRegistry {
         service: None,
         instructions: None,
         events: None,
-        in_process: None,
         session: None,
         prepare_on_input: false,
         spec,
         data: None,
-        launcher: None,
     });
     clients
 }

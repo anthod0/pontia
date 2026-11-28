@@ -181,7 +181,6 @@ impl SessionCommandService {
                 }),
             ))
             .await?;
-        let mut launch_guard = Some(self.control.lock_identity().await);
         let adapter = self.clients.for_client(&request.client_type)?;
         if !adapter.prepares_on_input() {
             ingest
@@ -196,10 +195,6 @@ impl SessionCommandService {
                 .await?;
         }
 
-        // Backend-managed Session clients complete launch through their own attachment.
-        if adapter.session_client().is_some() && !adapter.provisions_runtime_binding() {
-            drop(launch_guard.take());
-        }
         let runtime = adapter
             .start(
                 &self.pontia_home,
@@ -273,7 +268,6 @@ impl SessionCommandService {
             .ingest_in_process_ready_event(&request.client_type, &session_id, runtime.runtime_id())
             .await?;
 
-        drop(launch_guard);
         let (initial_turn, initial_delivery) = if let Some(task) = request.initial_task {
             let initial_turn = self
                 .turns

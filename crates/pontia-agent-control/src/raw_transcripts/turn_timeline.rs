@@ -123,9 +123,14 @@ impl TurnTimelineService {
     ) -> Option<std::sync::Arc<dyn crate::client_contract::native_history::NativeHistory>> {
         self.history
             .get_or_init(|| async {
-                self.clients.data(&binding.client_type).and_then(|data| {
-                    data.native_history(binding.into(), self.events.history_control())
-                })
+                self.clients
+                    .get(&binding.client_type)
+                    .and_then(|registration| {
+                        registration
+                            .session
+                            .as_ref()?
+                            .native_history(self.pool.clone(), binding.into())
+                    })
             })
             .await
             .clone()

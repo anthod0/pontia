@@ -2,17 +2,48 @@ use super::*;
 
 struct UnavailableStatusClient;
 
-impl InProcessClient for UnavailableStatusClient {
-    fn capabilities(&self) -> AgentClientCapabilities {
+impl ClientSession for UnavailableStatusClient {
+    fn provision<'a>(
+        &'a self,
+        _: EventIngestService,
+        _: &'a Path,
+        _: RuntimeStartRequest,
+    ) -> ClientOperation<'a, Option<RuntimeStartResult>> {
+        unreachable!()
+    }
+    fn start_turn<'a>(
+        &'a self,
+        _: EventIngestService,
+        _: &'a ControlTarget,
+        _: &'a InputPayload,
+        _: Option<&'a str>,
+    ) -> DeliveryOperation<'a, InputReceipt> {
+        unreachable!()
+    }
+    fn exit<'a>(
+        &'a self,
+        _: EventIngestService,
+        _: &'a ControlTarget,
+        _: ClientExitMode,
+    ) -> ClientOperation<'a, ClientExitOutcome> {
+        unreachable!()
+    }
+    fn available<'a>(&'a self, _: sqlx::SqlitePool, _: &'a str) -> ClientOperation<'a, bool> {
+        unreachable!()
+    }
+    fn details<'a>(
+        &'a self,
+        _: sqlx::SqlitePool,
+        _: &'a str,
+    ) -> ClientOperation<'a, ClientSessionDetails> {
+        unreachable!()
+    }
+    fn capabilities<'a>(
+        &'a self,
+        _: &'a str,
+        _: &'a AgentClientCapabilities,
+    ) -> ClientOperation<'a, AgentClientCapabilities> {
         panic!("Work status must not probe a client")
-    }
-
-    fn ready(&self, _: &str, _: &str) -> ReportedEvent {
-        unreachable!()
-    }
-
-    fn submit(&self, _: AgentInput) -> Result<()> {
-        unreachable!()
     }
 }
 
@@ -49,7 +80,7 @@ async fn chat_and_timeline_keep_helper_status_without_client_probes() {
     );
 
     let mut registration = test_registration();
-    registration.in_process = Some(Arc::new(UnavailableStatusClient));
+    registration.session = Some(Arc::new(UnavailableStatusClient));
     let mut registry = ClientRegistry::default();
     registry.register(registration);
     let read_control = AgentControl::builder(pool.clone(), root.path().into())

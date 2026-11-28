@@ -1467,15 +1467,14 @@ async fn initial_input_binds_identity_once_and_queue_waits_for_authoritative_end
         .unwrap();
     assert!(!binding.client_session_key.is_empty());
     assert_eq!(binding.launch_cwd, h.root.path().to_str().unwrap());
-    let inbox: Vec<(String, Option<String>)> = sqlx::query_as(
-        "SELECT state,turn_id FROM inbox_messages WHERE session_id=? ORDER BY rowid",
+    let inbox: Vec<String> = sqlx::query_scalar(
+        "SELECT input_summary FROM inbox_messages WHERE session_id=? ORDER BY rowid",
     )
     .bind(&session)
     .fetch_all(&h.app.db())
     .await
     .unwrap();
-    assert_eq!(inbox[0], ("dispatched".into(), None));
-    assert_eq!(inbox[1], ("pending".into(), None));
+    assert_eq!(inbox, ["second"]);
     assert_eq!(
         h.wire(&session)
             .iter()
@@ -1647,23 +1646,29 @@ async fn explicit_sdk_close_interrupts_active_turn_without_fabricating_result() 
 #[tokio::test]
 async fn lost_input_receipt_is_unknown_and_never_replayed() {
     let h = Harness::new().await;
-    let session = h.create("unknown").await;
-    tokio::time::timeout(Duration::from_secs(5), async {
-        loop {
-            let state: String =
-                sqlx::query_scalar("SELECT state FROM inbox_messages WHERE session_id=?")
-                    .bind(&session)
-                    .fetch_one(&h.app.db())
-                    .await
-                    .unwrap();
-            if state == "unknown" {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(5)).await;
-        }
-    })
-    .await
+    let request: CreateSessionRequest = serde_json::from_value(json!({
+        "client_type":"claude-agent",
+        "workspace":h.root.path(),
+        "initial_task":{"input":"unknown"}
+    }))
     .unwrap();
+    let error = h
+        .app
+        .session_commands()
+        .create_session(request)
+        .await
+        .expect_err("a lost input receipt must remain unconfirmed");
+    assert!(matches!(error, pontia_core::Error::ControlUnknown(_)));
+    let session: String = sqlx::query_scalar("SELECT session_id FROM sessions")
+        .fetch_one(&h.app.db())
+        .await
+        .unwrap();
+    let queued: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM inbox_messages WHERE session_id=?")
+        .bind(&session)
+        .fetch_one(&h.app.db())
+        .await
+        .unwrap();
+    assert_eq!(queued, 0);
     h.app.inbox_commands().notify_available(&session);
     h.app.inbox_commands().drain_inbox(&session).await.unwrap();
     assert_eq!(
@@ -2536,7 +2541,6 @@ async fn running_host_reattaches_its_turn_then_accepts_input_approvals_interrupt
     })
     .await
     .unwrap();
-    assert!(!h.app.client_control().available(&session).await.unwrap());
     h.gate(&session, 1, "finish");
     let completed = h.wait_states(&session, &["completed"]).await;
     assert_eq!(completed[0].0, turn);

@@ -2,10 +2,11 @@ use std::{
     fs::File,
     io::{BufRead, BufReader},
     path::Path,
+    sync::Arc,
 };
 
 use pontia_agent_control::{
-    AgentBindingService, ClientControlService, EventIngestService, RuntimeReadinessService,
+    AgentBindingService, EventIngestService, RuntimeReadinessService,
     client_contract::{
         ClientExitMode, ClientExitOutcome, ClientLaunchRequest, ClientOperation, ClientSession,
         ClientSessionDetails, DeliveryError, DeliveryOperation, InputPayload,
@@ -124,8 +125,15 @@ impl PiSession {
 }
 
 impl ClientSession for PiSession {
-    fn provisions_runtime_binding(&self) -> bool {
-        true
+    fn native_history(
+        &self,
+        _pool: SqlitePool,
+        binding: pontia_agent_control::client_contract::raw_transcripts::AgentBindingResolveRequest,
+    ) -> Option<Arc<dyn pontia_agent_control::client_contract::native_history::NativeHistory>> {
+        Some(crate::history::PiHistory::new(
+            binding,
+            self.connections.clone(),
+        ))
     }
 
     fn provision<'a>(
@@ -363,12 +371,7 @@ impl ClientSession for PiSession {
         })
     }
 
-    fn available<'a>(
-        &'a self,
-        pool: SqlitePool,
-        _control: Option<ClientControlService>,
-        session: &'a str,
-    ) -> ClientOperation<'a, bool> {
+    fn available<'a>(&'a self, pool: SqlitePool, session: &'a str) -> ClientOperation<'a, bool> {
         Box::pin(async move {
             Ok(match Self::single_running_runtime(&pool, session).await? {
                 Some(runtime) => self.connections.connected_to(session, &runtime).await?,
@@ -380,16 +383,14 @@ impl ClientSession for PiSession {
     fn manual_compaction_available<'a>(
         &'a self,
         pool: SqlitePool,
-        _control: Option<ClientControlService>,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
-        self.available(pool, None, session)
+        self.available(pool, session)
     }
 
     fn reasoning_effort_control_available<'a>(
         &'a self,
         pool: SqlitePool,
-        _control: Option<ClientControlService>,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
         Box::pin(async move {
@@ -414,7 +415,6 @@ impl ClientSession for PiSession {
     fn control_connected<'a>(
         &'a self,
         pool: SqlitePool,
-        _control: Option<ClientControlService>,
         session: &'a str,
     ) -> ClientOperation<'a, Option<bool>> {
         Box::pin(async move {

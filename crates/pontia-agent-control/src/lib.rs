@@ -30,10 +30,7 @@ pub use branch_replay::{
     BranchReplayOutcome, BranchReplayService, ResolveBranchReplayRequest, ResolvedBranchReplay,
     SubmitBranchReplayRequest,
 };
-pub use client_contract::{
-    ClientControlChannel, ClientControlOperation, DeliveryError, DeliveryOperation, InputPayload,
-};
-pub use clients::ClientControlService;
+pub use client_contract::{DeliveryError, DeliveryOperation, InputPayload};
 pub use context::AgentControl;
 pub use control::ControlCommandOutcome;
 pub use inbox::{InboxCommandService, SendMode, SendOutcome};

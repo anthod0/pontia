@@ -308,7 +308,7 @@ async fn dispatch(
             .and_then(Value::as_str)
             == Some("session.ready");
     if let Some(identity) = registered.as_ref() {
-        let current: Arc<dyn pontia_agent_control::ClientControlChannel> = channel.clone();
+        let current: Arc<dyn crate::connections::ControlChannel> = channel.clone();
         connections
             .validate_connection(&identity.session_id, &identity.runtime_id, &current)
             .await?;
@@ -340,7 +340,7 @@ async fn dispatch(
         drop(identity_guard);
         let replay = state.branch_replays().resolve_command(query).await?;
         let _guard = connections.lock_identity().await;
-        let current: Arc<dyn pontia_agent_control::ClientControlChannel> = channel.clone();
+        let current: Arc<dyn crate::connections::ControlChannel> = channel.clone();
         connections
             .validate_connection(&identity.session_id, &identity.runtime_id, &current)
             .await?;
@@ -455,23 +455,17 @@ impl Drop for ReplyGuard<'_> {
     }
 }
 
-impl pontia_agent_control::ClientControlChannel for PiChannel {
+impl crate::connections::ControlChannel for PiChannel {
     fn set_reasoning_effort<'a>(
         &'a self,
         reasoning_effort: &'a str,
-    ) -> pontia_agent_control::ClientControlOperation<'a> {
-        self.peer.set_reasoning_effort(reasoning_effort)
+    ) -> crate::connections::ControlOperation<'a> {
+        Box::pin(self.peer.set_reasoning_effort(reasoning_effort))
     }
-    fn compact<'a>(
-        &'a self,
-        operation_id: &'a str,
-    ) -> pontia_agent_control::ClientControlOperation<'a> {
+    fn compact<'a>(&'a self, operation_id: &'a str) -> crate::connections::ControlOperation<'a> {
         self.peer.compact(operation_id)
     }
-    fn native_history(
-        &self,
-        params: Value,
-    ) -> pontia_agent_control::ClientControlOperation<'_, Value> {
+    fn native_history(&self, params: Value) -> crate::connections::ControlOperation<'_, Value> {
         self.peer.native_history(params)
     }
     fn process_id(&self) -> Option<u32> {
@@ -492,19 +486,13 @@ impl pontia_agent_control::ClientControlChannel for PiChannel {
     fn interrupt(&self) -> pontia_agent_control::DeliveryOperation<'_> {
         self.peer.interrupt()
     }
-    fn shutdown(&self) -> pontia_agent_control::ClientControlOperation<'_> {
+    fn shutdown(&self) -> crate::connections::ControlOperation<'_> {
         self.peer.shutdown()
     }
-    fn shutdown_if_idle(&self) -> pontia_agent_control::ClientControlOperation<'_, bool> {
+    fn shutdown_if_idle(&self) -> crate::connections::ControlOperation<'_, bool> {
         self.peer.shutdown_if_idle()
     }
-    fn ping(&self) -> pontia_agent_control::ClientControlOperation<'_> {
-        self.peer.ping()
-    }
-    fn replay<'a>(
-        &'a self,
-        replay_id: &'a str,
-    ) -> pontia_agent_control::ClientControlOperation<'a> {
+    fn replay<'a>(&'a self, replay_id: &'a str) -> crate::connections::ControlOperation<'a> {
         self.peer.replay(replay_id)
     }
     fn start_turn<'a>(
@@ -517,6 +505,6 @@ impl pontia_agent_control::ClientControlChannel for PiChannel {
         &'a self,
         payload: &'a pontia_agent_control::InputPayload,
     ) -> pontia_agent_control::DeliveryOperation<'a> {
-        pontia_agent_control::ClientControlChannel::steer(self.peer.as_ref(), payload)
+        crate::connections::ControlChannel::steer(self.peer.as_ref(), payload)
     }
 }

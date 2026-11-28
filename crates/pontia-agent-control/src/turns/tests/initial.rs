@@ -40,27 +40,16 @@ async fn initial_input_uses_the_injected_channel_after_ready() {
         .await
         .unwrap();
     sqlx::query("INSERT INTO agent_bindings (id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES ('binding_pi','sess_pi','test-channel','/unused','native_pi','{}')").execute(&pool).await.unwrap();
+    let channel = crate::clients::testing::channel();
     let state = crate::AgentControl::builder(pool.clone(), root.path().into())
         .clients({
-            let mut clients = crate::clients::testing::clients();
+            let mut clients = crate::clients::testing::clients_with_channel(channel.clone());
             let mut registration = clients.get("test-channel").unwrap().clone();
             registration.events = Some(std::sync::Arc::new(ReadyRuntimeEvent));
             clients.register(registration);
             clients
         })
         .build();
-    let control = state.client_control();
-    let channel = crate::clients::testing::channel();
-    control
-        .attach(
-            "test-channel",
-            "sess_pi",
-            "rtinst_pi",
-            "native_pi",
-            channel.clone(),
-        )
-        .await
-        .unwrap();
     let events = state.event_ingest_service();
     let delivery = state
         .inbox_commands()

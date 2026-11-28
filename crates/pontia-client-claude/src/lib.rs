@@ -56,12 +56,10 @@ pub fn registration_with_host(host: Option<PathBuf>) -> ClientRegistration {
         events: Some(adapter.clone()),
         service: Some(adapter.clone()),
         instructions: Some(Arc::new(instructions::InstructionsPolicy)),
-        in_process: None,
         session: Some(adapter.clone()),
         prepare_on_input: true,
         spec: &spec::SPEC,
         data: Some(adapter),
-        launcher: None,
     }
 }
 
@@ -237,6 +235,14 @@ impl Adapter {
     }
 }
 impl ClientSession for Adapter {
+    fn native_history(
+        &self,
+        _pool: SqlitePool,
+        binding: raw_transcripts::AgentBindingResolveRequest,
+    ) -> Option<Arc<dyn native_history::NativeHistory>> {
+        Some(history::native_history(self.clone(), binding))
+    }
+
     fn fork_session<'a>(
         &'a self,
         events: EventIngestService,
@@ -430,7 +436,6 @@ impl ClientSession for Adapter {
     fn manual_compaction_available<'a>(
         &'a self,
         _: SqlitePool,
-        _: Option<pontia_agent_control::ClientControlService>,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
         Box::pin(async move {
@@ -448,7 +453,6 @@ impl ClientSession for Adapter {
     fn reasoning_effort_control_available<'a>(
         &'a self,
         _: SqlitePool,
-        _: Option<pontia_agent_control::ClientControlService>,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
         Box::pin(async move {
@@ -539,12 +543,7 @@ impl ClientSession for Adapter {
             Ok(implementation.clone())
         })
     }
-    fn available<'a>(
-        &'a self,
-        _: SqlitePool,
-        _: Option<pontia_agent_control::ClientControlService>,
-        session: &'a str,
-    ) -> ClientOperation<'a, bool> {
+    fn available<'a>(&'a self, _: SqlitePool, session: &'a str) -> ClientOperation<'a, bool> {
         Box::pin(async move {
             let Ok(peer) = self.peer(session).await else {
                 return Ok(false);

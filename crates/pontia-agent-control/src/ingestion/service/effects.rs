@@ -1,5 +1,5 @@
 use crate::{
-    AgentEventBroker, ClientControlService, LiveOutputService,
+    AgentEventBroker, LiveOutputService,
     inbox::{InboxScheduler, SessionPhase},
 };
 use pontia_core::{
@@ -9,7 +9,6 @@ use pontia_core::{
 
 #[derive(Clone, Default)]
 pub(crate) struct PostCommitEffects {
-    pub(super) client_control: Option<ClientControlService>,
     pub(super) agent_events: Option<AgentEventBroker>,
     pub(super) live_output: Option<LiveOutputService>,
     pub(super) scheduler: InboxScheduler,
@@ -17,13 +16,11 @@ pub(crate) struct PostCommitEffects {
 
 impl PostCommitEffects {
     pub(crate) fn new(
-        client_control: ClientControlService,
         agent_events: AgentEventBroker,
         live_output: LiveOutputService,
         scheduler: InboxScheduler,
     ) -> Self {
         Self {
-            client_control: Some(client_control),
             agent_events: Some(agent_events),
             live_output: Some(live_output),
             scheduler,
@@ -31,14 +28,6 @@ impl PostCommitEffects {
     }
 
     pub(super) async fn apply(&self, event: &DomainEvent) -> Result<()> {
-        if matches!(
-            event.event_type,
-            EventType::SessionExited | EventType::SessionError
-        ) && let Some(control) = &self.client_control
-        {
-            control.refresh_session(&event.session_id).await;
-        }
-
         if let Some(agent_events) = &self.agent_events {
             agent_events.publish(event.clone());
         }

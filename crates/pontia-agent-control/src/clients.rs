@@ -1,21 +1,17 @@
 mod input;
 pub use crate::client_contract::{
     BranchTargetRequest, ClientData, ClientExitMode, ClientExitOutcome, ClientLaunchRequest,
-    ClientLauncher, ClientOperation, ClientSession, ClientSessionDetails, InProcessClient,
-    NativeEventEvidence,
+    ClientOperation, ClientSession, ClientSessionDetails, NativeEventEvidence,
 };
-mod connections;
-pub use connections::{ClientControlService, NativeHistoryConnection};
 mod compaction;
 mod lifecycle;
 mod reasoning_effort;
 pub(crate) use lifecycle::discard_unbound_runtime;
-mod channel;
 mod registry;
 pub use registry::{ClientRegistration, ClientRegistry, ClientServiceTasks};
 
 use crate::EventIngestService;
-use crate::client_contract::{AgentClientSpec, DispatchMode};
+use crate::client_contract::AgentClientSpec;
 use pontia_core::{Error, Result};
 
 /// Selects a registered client and executes its application-owned control operations.
@@ -24,27 +20,24 @@ pub(crate) struct ClientExecutionService {
     pool: sqlx::SqlitePool,
     registry: ClientRegistry,
     events: EventIngestService,
-    control: ClientControlService,
+    pontia_home: std::path::PathBuf,
 }
 
 impl ClientExecutionService {
     pub(crate) fn registry(&self) -> &ClientRegistry {
         &self.registry
     }
-    pub(crate) fn control_service(&self) -> ClientControlService {
-        self.control.clone()
-    }
     pub(crate) fn new(
         pool: sqlx::SqlitePool,
         registry: ClientRegistry,
         events: EventIngestService,
-        control: ClientControlService,
+        pontia_home: std::path::PathBuf,
     ) -> Self {
         Self {
             pool,
             registry,
             events,
-            control,
+            pontia_home,
         }
     }
 
@@ -58,7 +51,7 @@ impl ClientExecutionService {
             pool: self.pool.clone(),
             registry: self.registry.clone(),
             events: self.events.clone(),
-            control: self.control.clone(),
+            pontia_home: self.pontia_home.clone(),
         })
     }
 }
@@ -68,7 +61,7 @@ pub(crate) struct ClientAdapter {
     pool: sqlx::SqlitePool,
     registry: ClientRegistry,
     events: EventIngestService,
-    control: ClientControlService,
+    pontia_home: std::path::PathBuf,
 }
 
 impl ClientAdapter {
@@ -76,11 +69,6 @@ impl ClientAdapter {
         self.registry
             .get(self.spec.client_type)
             .and_then(|entry| entry.session.clone())
-    }
-
-    pub(crate) fn provisions_runtime_binding(&self) -> bool {
-        self.session_client()
-            .is_some_and(|client| client.provisions_runtime_binding())
     }
 
     pub fn prepares_on_input(&self) -> bool {
@@ -96,15 +84,15 @@ impl ClientAdapter {
     }
 
     pub async fn input_available(&self, session: &str) -> Result<bool> {
-        if let Some(client) = self.session_client() {
-            return client
-                .available(self.pool.clone(), Some(self.control.clone()), session)
-                .await;
-        }
-        if self.spec.adapter.dispatch == DispatchMode::Connected {
-            return self.control.available(session).await;
-        }
-        Ok(true)
+        self.session_client()
+            .ok_or_else(|| {
+                Error::CapabilityUnavailable(format!(
+                    "Client {} has no Session control implementation",
+                    self.spec.client_type
+                ))
+            })?
+            .available(self.pool.clone(), session)
+            .await
     }
 }
 

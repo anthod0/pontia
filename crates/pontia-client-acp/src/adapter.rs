@@ -72,12 +72,10 @@ fn register(agents: AcpAgents, relay_executable: Option<std::path::PathBuf>) -> 
         events: None,
         service: Some(adapter.clone()),
         instructions: Some(Arc::new(crate::instructions::InstructionsPolicy)),
-        in_process: None,
         session: Some(adapter.clone()),
         prepare_on_input: false,
         spec: &SPEC,
         data: Some(adapter),
-        launcher: None,
     }
 }
 
@@ -121,6 +119,14 @@ impl AcpAdapter {
 }
 
 impl ClientSession for AcpAdapter {
+    fn native_history(
+        &self,
+        _pool: SqlitePool,
+        binding: pontia_agent_control::client_contract::raw_transcripts::AgentBindingResolveRequest,
+    ) -> Option<Arc<dyn pontia_agent_control::client_contract::native_history::NativeHistory>> {
+        Some(crate::history::native_history(self.clone(), binding))
+    }
+
     fn creation_options(&self) -> ClientOperation<'_, Option<Vec<SessionCreationOption>>> {
         Box::pin(async move {
             let mut options = Vec::new();
@@ -759,12 +765,7 @@ impl ClientSession for AcpAdapter {
         })
     }
 
-    fn available<'a>(
-        &'a self,
-        _pool: SqlitePool,
-        _: Option<pontia_agent_control::ClientControlService>,
-        session: &'a str,
-    ) -> ClientOperation<'a, bool> {
+    fn available<'a>(&'a self, _pool: SqlitePool, session: &'a str) -> ClientOperation<'a, bool> {
         Box::pin(async move {
             let Ok(peer) = self.peer(session).await else {
                 return Ok(false);

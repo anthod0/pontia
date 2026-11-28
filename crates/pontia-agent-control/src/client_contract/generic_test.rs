@@ -54,6 +54,28 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     },
 };
 
+const REGISTRATION_SPEC: AgentClientSpec = AgentClientSpec {
+    capabilities: AgentClientCapabilities {
+        accept_task: true,
+        steer: true,
+        report_turn_started: true,
+        report_turn_finished: true,
+        interrupt: true,
+        stream_output: true,
+        heartbeat: true,
+        timeline: true,
+        topology: true,
+        branch_control: true,
+        fork_session: true,
+        reasoning_effort_control: true,
+        manual_compaction: true,
+        compaction_events: true,
+        compaction_history: true,
+        context_usage: ContextUsageCapability::Exact,
+    },
+    ..SPEC
+};
+
 #[derive(Debug, Default, Clone)]
 pub struct GenericTestClient;
 
@@ -118,15 +140,106 @@ fn test_capabilities() -> &'static Mutex<AgentClientCapabilities> {
     TEST_CAPABILITIES.get_or_init(|| Mutex::new(AgentClientCapabilities::generic_default()))
 }
 
-impl crate::clients::InProcessClient for GenericTestClient {
-    fn capabilities(&self) -> AgentClientCapabilities {
-        self.capabilities()
+impl crate::client_contract::ClientSession for GenericTestClient {
+    fn provision<'a>(
+        &'a self,
+        _events: crate::EventIngestService,
+        root: &'a std::path::Path,
+        request: pontia_runtime::RuntimeStartRequest,
+    ) -> crate::client_contract::ClientOperation<'a, Option<pontia_runtime::RuntimeStartResult>>
+    {
+        Box::pin(async move {
+            pontia_runtime::GenericRuntimeManager
+                .start_in_process(root, request, self.capabilities(), 0)
+                .map(Some)
+        })
     }
-    fn submit(&self, input: AgentInput) -> pontia_core::Result<()> {
-        self.accept_input(input)
+    fn resume_with_runtime<'a>(
+        &'a self,
+        _events: crate::EventIngestService,
+        _target: &'a crate::runtime::ControlTarget,
+        request: crate::client_contract::ClientLaunchRequest<'a>,
+    ) -> crate::client_contract::ClientOperation<'a, Option<pontia_runtime::RuntimeStartResult>>
+    {
+        Box::pin(async move {
+            pontia_runtime::GenericRuntimeManager
+                .start_in_process(
+                    request.root,
+                    request.runtime,
+                    self.capabilities(),
+                    request.restart_count,
+                )
+                .map(Some)
+        })
     }
-    fn ready(&self, session: &str, instance: &str) -> ReportedEvent {
-        Self::ready_event(session, instance)
+    fn start_turn<'a>(
+        &'a self,
+        _events: crate::EventIngestService,
+        target: &'a crate::runtime::ControlTarget,
+        payload: &'a crate::InputPayload,
+        _turn: Option<&'a str>,
+    ) -> crate::DeliveryOperation<'a, crate::control::InputReceipt> {
+        Box::pin(async move {
+            self.accept_input(AgentInput {
+                session_id: target.session_id.clone(),
+                dispatch_id: pontia_core::ids::new_dispatch_id().to_string(),
+                input: payload.text.clone(),
+            })
+            .map_err(|error| match error {
+                pontia_core::Error::Domain(message) => crate::DeliveryError::Rejected(message),
+                error => crate::DeliveryError::from(error),
+            })?;
+            Ok(crate::control::InputReceipt {
+                turn_pending: false,
+                native_turn_id: None,
+                runtime_id: target.runtime_id.clone(),
+            })
+        })
+    }
+    fn steer<'a>(
+        &'a self,
+        events: crate::EventIngestService,
+        target: &'a crate::runtime::ControlTarget,
+        payload: &'a crate::InputPayload,
+    ) -> crate::DeliveryOperation<'a, crate::control::InputReceipt> {
+        self.start_turn(events, target, payload, None)
+    }
+    fn exit<'a>(
+        &'a self,
+        _events: crate::EventIngestService,
+        target: &'a crate::runtime::ControlTarget,
+        _mode: crate::client_contract::ClientExitMode,
+    ) -> crate::client_contract::ClientOperation<'a, crate::client_contract::ClientExitOutcome>
+    {
+        Box::pin(async move {
+            pontia_runtime::GenericRuntimeManager.terminate_session(target.instance()?)?;
+            Ok(crate::client_contract::ClientExitOutcome::Requested)
+        })
+    }
+    fn capabilities<'a>(
+        &'a self,
+        _session: &'a str,
+        _implementation: &'a AgentClientCapabilities,
+    ) -> crate::client_contract::ClientOperation<'a, AgentClientCapabilities> {
+        Box::pin(async move { Ok(self.capabilities()) })
+    }
+    fn ready(&self, session: &str, instance: &str) -> Option<ReportedEvent> {
+        Some(Self::ready_event(session, instance))
+    }
+    fn available<'a>(
+        &'a self,
+        _pool: sqlx::SqlitePool,
+        _session: &'a str,
+    ) -> crate::client_contract::ClientOperation<'a, bool> {
+        Box::pin(async { Ok(true) })
+    }
+    fn details<'a>(
+        &'a self,
+        _pool: sqlx::SqlitePool,
+        _session: &'a str,
+    ) -> crate::client_contract::ClientOperation<'a, crate::client_contract::ClientSessionDetails>
+    {
+        Box::pin(async { Ok(crate::client_contract::ClientSessionDetails { data: json!({}) }) })
     }
 }
 pub fn registration() -> crate::clients::ClientRegistration {
@@ -137,11 +250,9 @@ pub fn registration() -> crate::clients::ClientRegistration {
         service: None,
         instructions: None,
         events: None,
-        spec: &SPEC,
+        spec: &REGISTRATION_SPEC,
         data: None,
-        launcher: None,
-        session: None,
+        session: Some(std::sync::Arc::new(GenericTestClient)),
         prepare_on_input: false,
-        in_process: Some(std::sync::Arc::new(GenericTestClient)),
     }
 }

@@ -29,11 +29,16 @@ fn turn(id: &str) -> SessionTimelineTurn {
         tail_cursor: Some(format!("codex-turn-v2:binding:thread:{id}:after")),
     }
 }
-fn history(path: &Path) -> Arc<dyn NativeHistory> {
+async fn history(path: &Path) -> Arc<dyn NativeHistory> {
+    let pool = pontia_storage_sqlite::connect_sqlite("sqlite::memory:")
+        .await
+        .unwrap();
+    pontia_storage_sqlite::run_migrations(&pool).await.unwrap();
     pontia_client_codex::registration()
-        .data
+        .session
         .unwrap()
         .native_history(
+            pool,
             AgentBindingResolveRequest {
                 id: "binding".into(),
                 session_id: "session".into(),
@@ -41,7 +46,6 @@ fn history(path: &Path) -> Arc<dyn NativeHistory> {
                 client_session_key: "thread".into(),
                 client_session_file: Some(path.into()),
             },
-            None,
         )
         .unwrap()
 }
@@ -92,7 +96,7 @@ async fn file_preview_uses_current_sqlite_path_and_multilevel_compressed_prefixe
         .await
         .unwrap();
     db.close().await;
-    let reader = history(&f2); // The stored binding still points to the obsolete file.
+    let reader = history(&f2).await; // The stored binding still points to the obsolete file.
     let mut turns = vec![
         turn("A"),
         turn("B:colon"),
@@ -137,11 +141,13 @@ async fn pinned_native_source_does_not_fall_back_and_file_failures_are_errors() 
     write(&file, &[head(Value::Null)]);
     assert!(
         history(&file)
+            .await
             .select_timeline(vec![], Some(HistorySource::Native))
             .await
             .is_err()
     );
     let file_source = history(&file)
+        .await
         .select_timeline(vec![], Some(HistorySource::File))
         .await
         .unwrap()
@@ -150,6 +156,7 @@ async fn pinned_native_source_does_not_fall_back_and_file_failures_are_errors() 
     std::fs::remove_file(&file).unwrap();
     assert!(
         history(&file)
+            .await
             .select_timeline(vec![], Some(HistorySource::File))
             .await
             .is_err()

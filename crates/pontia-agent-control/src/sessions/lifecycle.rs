@@ -167,7 +167,6 @@ impl SessionCommandService {
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
         if session.state == "error" {
-            let _guard = self.control.lock_identity().await;
             let current = query
                 .session_snapshot(session_id)
                 .await?
@@ -280,7 +279,6 @@ impl SessionCommandService {
         pontia_home: &Path,
     ) -> Result<ControlCommandOutcome> {
         let _launch = pontia_runtime::launch_lock::launch(pontia_home)?;
-        let mut launch_guard = Some(self.control.lock_identity().await);
         let query = &self.queries;
         let session = query
             .get_session_control(session_id)
@@ -313,7 +311,6 @@ impl SessionCommandService {
         )
         .await?;
         adapter.validate_resume(&target).await?;
-        self.control.retire_connection_locked(session_id).await;
         let ingest = self.event_ingest.clone();
         ingest
             .ingest_pontia_event(PontiaEvent::new(
@@ -335,10 +332,6 @@ impl SessionCommandService {
         let persisted_start_command = self
             .start_command(session_id, target.control_runtime_role)
             .await?;
-        // Backend-managed Session clients complete launch through their own attachment.
-        if adapter.session_client().is_some() && !adapter.provisions_runtime_binding() {
-            drop(launch_guard.take());
-        }
         let runtime = adapter
             .resume(
                 &target,

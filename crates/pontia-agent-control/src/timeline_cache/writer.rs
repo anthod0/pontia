@@ -189,7 +189,16 @@ impl TimelineCacheWriter {
             .await?;
         let request = AgentBindingResolveRequest::from(&binding);
         let (history, session_checkpoints, validator) = if history_source.is_some() {
-            let Some(history) = data.native_history(request.clone(), None) else {
+            let Some(history) = self
+                .clients
+                .get(&binding.client_type)
+                .and_then(|registration| {
+                    registration
+                        .session
+                        .as_ref()?
+                        .native_history(db.clone(), request.clone())
+                })
+            else {
                 return Ok(());
             };
             let Some(probe) = history.cache_fingerprint() else {

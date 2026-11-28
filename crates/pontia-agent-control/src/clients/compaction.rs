@@ -1,5 +1,5 @@
 use super::ClientAdapter;
-use crate::{client_contract::DispatchMode, control::ControlResult, runtime::ControlTarget};
+use crate::{control::ControlResult, runtime::ControlTarget};
 use pontia_core::Error;
 
 impl ClientAdapter {
@@ -12,16 +12,9 @@ impl ClientAdapter {
                         .compact(self.events.clone(), target, operation_id)
                         .await;
                 }
-                match self.spec.adapter.dispatch {
-                    DispatchMode::Connected => {
-                        self.control
-                            .compact(&target.session_id, target.instance()?, operation_id)
-                            .await
-                    }
-                    _ => Err(Error::CapabilityUnavailable(
-                        "Manual compaction is unsupported".into(),
-                    )),
-                }
+                Err(Error::CapabilityUnavailable(
+                    "Manual compaction is unsupported".into(),
+                ))
             }
             .await,
         )

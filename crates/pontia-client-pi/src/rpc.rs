@@ -10,6 +10,28 @@ pub struct PiRpcPeer {
     rpc: Arc<RpcPeer>,
 }
 impl PiRpcPeer {
+    pub async fn set_reasoning_effort(&self, reasoning_effort: &str) -> Result<()> {
+        crate::connections::ControlChannel::set_reasoning_effort(self, reasoning_effort).await
+    }
+
+    pub fn start_turn<'a>(
+        &'a self,
+        payload: &'a pontia_agent_control::InputPayload,
+    ) -> pontia_agent_control::DeliveryOperation<'a> {
+        crate::connections::ControlChannel::start_turn(self, payload)
+    }
+
+    pub fn steer<'a>(
+        &'a self,
+        payload: &'a pontia_agent_control::InputPayload,
+    ) -> pontia_agent_control::DeliveryOperation<'a> {
+        crate::connections::ControlChannel::steer(self, payload)
+    }
+
+    pub fn interrupt(&self) -> pontia_agent_control::DeliveryOperation<'_> {
+        crate::connections::ControlChannel::interrupt(self)
+    }
+
     pub fn new(stream: UnixStream) -> (Arc<Self>, Requests) {
         let (rpc, requests) = RpcPeer::new(stream);
         (Self::from_rpc(rpc), requests)
@@ -96,11 +118,11 @@ impl PiRpcPeer {
     }
 }
 
-impl pontia_agent_control::ClientControlChannel for PiRpcPeer {
+impl crate::connections::ControlChannel for PiRpcPeer {
     fn set_reasoning_effort<'a>(
         &'a self,
         reasoning_effort: &'a str,
-    ) -> pontia_agent_control::ClientControlOperation<'a> {
+    ) -> crate::connections::ControlOperation<'a> {
         Box::pin(async move {
             if self
                 .call(
@@ -148,10 +170,7 @@ impl pontia_agent_control::ClientControlChannel for PiRpcPeer {
             Ok(())
         })
     }
-    fn compact<'a>(
-        &'a self,
-        operation_id: &'a str,
-    ) -> pontia_agent_control::ClientControlOperation<'a> {
+    fn compact<'a>(&'a self, operation_id: &'a str) -> crate::connections::ControlOperation<'a> {
         Box::pin(async move {
             if self
                 .call("compact", json!({"operation_id": operation_id}))
@@ -165,10 +184,7 @@ impl pontia_agent_control::ClientControlChannel for PiRpcPeer {
             Ok(())
         })
     }
-    fn native_history(
-        &self,
-        params: Value,
-    ) -> pontia_agent_control::ClientControlOperation<'_, Value> {
+    fn native_history(&self, params: Value) -> crate::connections::ControlOperation<'_, Value> {
         Box::pin(async move { self.call("history.read", params).await })
     }
     fn available(&self) -> bool {
@@ -177,10 +193,7 @@ impl pontia_agent_control::ClientControlChannel for PiRpcPeer {
     fn invalidate(&self) {
         self.close();
     }
-    fn replay<'a>(
-        &'a self,
-        replay_id: &'a str,
-    ) -> pontia_agent_control::ClientControlOperation<'a> {
+    fn replay<'a>(&'a self, replay_id: &'a str) -> crate::connections::ControlOperation<'a> {
         Box::pin(async move {
             if self
                 .call("branch.replay", json!({"replay_id": replay_id}))
@@ -204,7 +217,7 @@ impl pontia_agent_control::ClientControlChannel for PiRpcPeer {
             Ok(())
         })
     }
-    fn shutdown_if_idle(&self) -> pontia_agent_control::ClientControlOperation<'_, bool> {
+    fn shutdown_if_idle(&self) -> crate::connections::ControlOperation<'_, bool> {
         Box::pin(async {
             let response = self.call("shutdown_if_idle", json!({})).await?;
             if response == json!({"accepted":true}) {
@@ -218,20 +231,12 @@ impl pontia_agent_control::ClientControlChannel for PiRpcPeer {
             }
         })
     }
-    fn shutdown(&self) -> pontia_agent_control::ClientControlOperation<'_> {
+    fn shutdown(&self) -> crate::connections::ControlOperation<'_> {
         Box::pin(async {
             if self.call("shutdown", json!({})).await? != json!({"accepted":true}) {
                 return Err(Error::ControlUnknown(
                     "Invalid Pi shutdown acknowledgement".into(),
                 ));
-            }
-            Ok(())
-        })
-    }
-    fn ping(&self) -> pontia_agent_control::ClientControlOperation<'_> {
-        Box::pin(async {
-            if self.call("ping", json!({})).await? != json!({"pong":true}) {
-                return Err(Error::ControlUnknown("Invalid Pi ping response".into()));
             }
             Ok(())
         })

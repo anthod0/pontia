@@ -1,6 +1,5 @@
 use crate::client_contract::{DeliveryError, DispatchMode, InputPayload};
-use pontia_core::{Error, Result, ids::new_dispatch_id};
-use pontia_runtime::AgentInput;
+use pontia_core::Result;
 
 use super::ClientAdapter;
 use crate::{
@@ -49,47 +48,17 @@ impl ClientAdapter {
             .validate(&self.pool.clone())
             .await
             .map_err(DeliveryError::from)?;
-        if let Some(client) = self.session_client() {
-            let _launch = self
-                .prepares_on_input()
-                .then(|| pontia_runtime::launch_lock::launch(&self.control.pontia_home))
-                .transpose()
-                .map_err(DeliveryError::from)?;
-            return client
-                .start_turn(self.events.clone(), target, &payload, turn)
-                .await;
-        }
-        let input = AgentInput {
-            session_id: target.session_id.clone(),
-            dispatch_id: new_dispatch_id().to_string(),
-            input: payload.text.clone(),
-        };
-        match self.spec.adapter.dispatch {
-            DispatchMode::Connected => self.channel_start_turn(target, &payload).await?,
-            DispatchMode::InProcessRecorded => {
-                self.registry
-                    .get(self.spec.client_type)
-                    .and_then(|entry| entry.in_process.as_ref())
-                    .ok_or_else(|| {
-                        DeliveryError::Offline("in-process client is unavailable".into())
-                    })?
-                    .submit(input)
-                    .map_err(|error| match error {
-                        Error::Domain(message) => DeliveryError::StateChanged(message),
-                        error => DeliveryError::from(error),
-                    })?;
-            }
-            DispatchMode::None => {
-                return Err(DeliveryError::Unsupported(
-                    "client has no input channel".into(),
-                ));
-            }
-        }
-        Ok(InputReceipt {
-            turn_pending: false,
-            native_turn_id: None,
-            runtime_id: target.runtime_id.clone(),
-        })
+        let client = self.session_client().ok_or_else(|| {
+            DeliveryError::Offline("client Session control is unavailable".into())
+        })?;
+        let _launch = self
+            .prepares_on_input()
+            .then(|| pontia_runtime::launch_lock::launch(&self.pontia_home))
+            .transpose()
+            .map_err(DeliveryError::from)?;
+        client
+            .start_turn(self.events.clone(), target, &payload, turn)
+            .await
     }
 
     pub async fn steer(
@@ -100,54 +69,17 @@ impl ClientAdapter {
         if self.spec.adapter.dispatch == DispatchMode::None {
             return ControlResult::Unsupported("client has no input channel".into());
         }
-        if self.spec.adapter.dispatch == DispatchMode::InProcessRecorded {
-            let result = async {
-                target.validate(&self.pool.clone()).await?;
-                self.registry
-                    .get(self.spec.client_type)
-                    .and_then(|entry| entry.in_process.as_ref())
-                    .ok_or_else(|| {
-                        pontia_core::Error::CapabilityUnavailable(
-                            "in-process client is unavailable".into(),
-                        )
-                    })?
-                    .submit(AgentInput {
-                        session_id: target.session_id.clone(),
-                        dispatch_id: new_dispatch_id().to_string(),
-                        input: payload.text.clone(),
-                    })?;
-                Ok(InputReceipt {
-                    turn_pending: false,
-                    native_turn_id: None,
-                    runtime_id: target.runtime_id.clone(),
-                })
-            }
-            .await;
-            return ControlResult::from_result(result);
-        }
         let result = async {
             target
                 .validate(&self.pool.clone())
                 .await
                 .map_err(DeliveryError::from)?;
-            if let Some(client) = self.session_client() {
-                return client.steer(self.events.clone(), target, &payload).await;
-            }
-            match self.spec.adapter.dispatch {
-                DispatchMode::Connected => {
-                    self.channel_steer(target, &payload).await?;
-                }
-                DispatchMode::InProcessRecorded | DispatchMode::None => {
-                    return Err(DeliveryError::Unsupported(
-                        "client does not support steer".into(),
-                    ));
-                }
-            }
-            Ok(InputReceipt {
-                turn_pending: false,
-                native_turn_id: None,
-                runtime_id: target.runtime_id.clone(),
-            })
+            self.session_client()
+                .ok_or_else(|| {
+                    DeliveryError::Offline("client Session control is unavailable".into())
+                })?
+                .steer(self.events.clone(), target, &payload)
+                .await
         }
         .await;
         ControlResult::from_delivery(result)
@@ -157,11 +89,52 @@ impl ClientAdapter {
         if !self.spec.capabilities.interrupt {
             return ControlResult::Unsupported("client does not support interrupt".into());
         }
-        if let Some(client) = self.session_client() {
-            return ControlResult::from_delivery(
-                client.interrupt(self.events.clone(), target).await,
+        let Some(client) = self.session_client() else {
+            return ControlResult::from_result(Err(pontia_core::Error::CapabilityUnavailable(
+                "client Session control is unavailable".into(),
+            )));
+        };
+        ControlResult::from_delivery(client.interrupt(self.events.clone(), target).await)
+    }
+
+    pub async fn replay(
+        &self,
+        target: &ControlTarget,
+        message: &str,
+    ) -> crate::control::ControlResult<()> {
+        if !self.spec.capabilities.branch_control {
+            return crate::control::ControlResult::Unsupported(
+                "client does not support branch control".into(),
             );
         }
-        ControlResult::from_delivery(self.channel_interrupt(target).await)
+        let prepared = async {
+            crate::RuntimeReadinessService::new(
+                self.pool.clone(),
+                self.spec.adapter.control_runtime_role,
+            )
+            .wait_until_ready(
+                &target.session_id,
+                self.spec.client_type,
+                target.instance()?,
+            )
+            .await?;
+            target.validate(&self.pool).await?;
+            Ok(())
+        }
+        .await;
+        if let Err(error) = prepared {
+            return crate::control::ControlResult::from_result(Err(error));
+        }
+        let Some(client) = self.session_client() else {
+            return crate::control::ControlResult::from_result(Err(
+                pontia_core::Error::CapabilityUnavailable(
+                    "client Session control is unavailable".into(),
+                ),
+            ));
+        };
+        match client.replay(self.events.clone(), target, message).await {
+            Ok(()) => crate::control::ControlResult::Sent(()),
+            Err(error) => crate::control::ControlResult::from_delivery(Err(error)),
+        }
     }
 }

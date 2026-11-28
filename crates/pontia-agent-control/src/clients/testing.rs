@@ -1,14 +1,25 @@
 use crate::client_contract::{
-    AgentClientSpec, DispatchBehavior, RuntimeBehavior, RuntimeBindingBehavior, TerminateBehavior,
-    TmuxRuntimeBehavior, TurnLifecycleBehavior,
+    AgentClientSpec, ClientExitMode, ClientExitOutcome, ClientOperation, ClientSession,
+    ClientSessionDetails, DispatchBehavior, RuntimeBehavior, RuntimeBindingBehavior,
+    TerminateBehavior, TmuxRuntimeBehavior, TurnLifecycleBehavior,
 };
-use crate::{ClientControlChannel, ClientControlOperation, DeliveryOperation, InputPayload};
+use crate::{
+    DeliveryOperation, EventIngestService, InputPayload, control::InputReceipt,
+    runtime::ControlTarget,
+};
+use pontia_runtime::{RuntimeStartRequest, RuntimeStartResult};
+use sqlx::SqlitePool;
+use std::path::Path;
 use std::sync::{
     Arc, OnceLock,
     atomic::{AtomicBool, Ordering},
 };
 
 pub(crate) fn clients() -> super::ClientRegistry {
+    clients_with_channel(channel())
+}
+
+pub(crate) fn clients_with_channel(channel: Arc<Channel>) -> super::ClientRegistry {
     static SPEC: OnceLock<AgentClientSpec> = OnceLock::new();
     let spec = SPEC.get_or_init(|| {
         let mut spec = crate::client_contract::TEST_SPEC.clone();
@@ -32,12 +43,10 @@ pub(crate) fn clients() -> super::ClientRegistry {
         service: None,
         instructions: None,
         events: None,
-        in_process: None,
-        session: None,
+        session: Some(channel),
         prepare_on_input: false,
         spec,
         data: None,
-        launcher: None,
     });
     registry
 }
@@ -60,8 +69,21 @@ impl Channel {
         }
     }
 }
-impl ClientControlChannel for Channel {
-    fn set_reasoning_effort<'a>(&'a self, reasoning_effort: &'a str) -> ClientControlOperation<'a> {
+impl ClientSession for Channel {
+    fn provision<'a>(
+        &'a self,
+        _events: EventIngestService,
+        _root: &'a Path,
+        _request: RuntimeStartRequest,
+    ) -> ClientOperation<'a, Option<RuntimeStartResult>> {
+        Box::pin(async { Ok(None) })
+    }
+    fn set_reasoning_effort<'a>(
+        &'a self,
+        _events: EventIngestService,
+        _target: &'a ControlTarget,
+        reasoning_effort: &'a str,
+    ) -> ClientOperation<'a, ()> {
         Box::pin(async move {
             self.reasoning_efforts
                 .lock()
@@ -70,16 +92,21 @@ impl ClientControlChannel for Channel {
             Ok(())
         })
     }
-    fn steer<'a>(&'a self, payload: &'a InputPayload) -> DeliveryOperation<'a> {
-        self.start_turn(payload)
+    fn steer<'a>(
+        &'a self,
+        events: EventIngestService,
+        target: &'a ControlTarget,
+        payload: &'a InputPayload,
+    ) -> DeliveryOperation<'a, InputReceipt> {
+        self.start_turn(events, target, payload, None)
     }
-    fn available(&self) -> bool {
-        !self.closed.load(Ordering::SeqCst)
-    }
-    fn invalidate(&self) {
-        self.closed.store(true, Ordering::SeqCst);
-    }
-    fn start_turn<'a>(&'a self, payload: &'a InputPayload) -> DeliveryOperation<'a> {
+    fn start_turn<'a>(
+        &'a self,
+        _events: EventIngestService,
+        target: &'a ControlTarget,
+        payload: &'a InputPayload,
+        _turn: Option<&'a str>,
+    ) -> DeliveryOperation<'a, InputReceipt> {
         Box::pin(async move {
             if let Some(error) = self.next_error.lock().unwrap().take() {
                 if matches!(error, pontia_core::Error::ControlUnknown(_)) {
@@ -89,23 +116,44 @@ impl ClientControlChannel for Channel {
             }
             self.input.lock().unwrap().push(payload.text.clone());
             self.await_receipt().await;
-            Ok(())
+            Ok(InputReceipt {
+                turn_pending: false,
+                native_turn_id: None,
+                runtime_id: target.runtime_id.clone(),
+            })
         })
     }
-    fn interrupt(&self) -> DeliveryOperation<'_> {
+    fn interrupt<'a>(
+        &'a self,
+        _events: EventIngestService,
+        _target: &'a ControlTarget,
+    ) -> DeliveryOperation<'a> {
         Box::pin(async { Ok(()) })
     }
-    fn shutdown(&self) -> ClientControlOperation<'_> {
-        Box::pin(async {
+    fn exit<'a>(
+        &'a self,
+        _events: EventIngestService,
+        _target: &'a ControlTarget,
+        _mode: ClientExitMode,
+    ) -> ClientOperation<'a, ClientExitOutcome> {
+        Box::pin(async move {
             self.await_receipt().await;
-            Ok(())
+            Ok(ClientExitOutcome::Requested)
         })
     }
-    fn ping(&self) -> ClientControlOperation<'_> {
-        Box::pin(async { Ok(()) })
+    fn available<'a>(&'a self, _pool: SqlitePool, _session: &'a str) -> ClientOperation<'a, bool> {
+        Box::pin(async move { Ok(!self.closed.load(Ordering::SeqCst)) })
     }
-    fn replay<'a>(&'a self, _: &'a str) -> ClientControlOperation<'a> {
-        Box::pin(async { Ok(()) })
+    fn details<'a>(
+        &'a self,
+        _pool: SqlitePool,
+        _session: &'a str,
+    ) -> ClientOperation<'a, ClientSessionDetails> {
+        Box::pin(async {
+            Ok(ClientSessionDetails {
+                data: serde_json::json!({}),
+            })
+        })
     }
 }
 

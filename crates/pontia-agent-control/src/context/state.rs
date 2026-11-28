@@ -45,7 +45,6 @@ struct LifecycleState {
 struct IntegrationState {
     clients: crate::clients::ClientRegistry,
     client_auth: crate::client_auth::ClientAuthService,
-    client_control: crate::ClientControlService,
 }
 
 struct CommandServices {
@@ -60,14 +59,12 @@ impl AgentControl {
         AgentControlBuilder::new(db, pontia_home)
     }
 
-    pub(super) fn from_builder(mut builder: AgentControlBuilder) -> Self {
-        builder.client_control = builder.client_control.with_clients(builder.clients.clone());
+    pub(super) fn from_builder(builder: AgentControlBuilder) -> Self {
         let scheduler = crate::inbox::InboxScheduler::default();
         let mut ingest = crate::EventIngestService::new(
             builder.db.clone(),
             builder.clients.clone(),
             crate::ingestion::PostCommitEffects::new(
-                builder.client_control.clone(),
                 builder.agent_events.clone(),
                 crate::LiveOutputService::new(builder.db.clone(), builder.live_output.clone())
                     .with_clients(builder.clients.clone()),
@@ -79,13 +76,12 @@ impl AgentControl {
             &builder.pontia_home,
         ));
         let queries = crate::ControlQueryService::new(builder.db.clone())
-            .with_clients(builder.clients.clone())
-            .with_control(builder.client_control.clone());
+            .with_clients(builder.clients.clone());
         let execution = crate::clients::ClientExecutionService::new(
             builder.db.clone(),
             builder.clients.clone(),
             ingest.clone(),
-            builder.client_control.clone(),
+            builder.pontia_home.clone(),
         );
         let turns = crate::TurnCommandService::new(
             builder.db.clone(),
@@ -98,7 +94,6 @@ impl AgentControl {
             builder.db.clone(),
             builder.clients.clone(),
             execution.clone(),
-            builder.client_control.clone(),
             scheduler.clone(),
         );
         let inbox = Arc::new(crate::InboxCommandService::new(
@@ -154,7 +149,6 @@ impl AgentControl {
                 integrations: IntegrationState {
                     client_auth,
                     clients: builder.clients,
-                    client_control: builder.client_control,
                 },
             }),
         }
@@ -216,10 +210,6 @@ impl AgentControl {
         self.inner.events.ingest.clone()
     }
 
-    pub fn client_control(&self) -> crate::ClientControlService {
-        self.inner.integrations.client_control.clone()
-    }
-
     pub fn session_commands(&self) -> crate::SessionCommandService {
         self.inner.commands.sessions.as_ref().clone()
     }
@@ -233,16 +223,13 @@ impl AgentControl {
         self.inner.commands.branches.clone()
     }
     pub fn queries(&self) -> crate::ControlQueryService {
-        crate::ControlQueryService::new(self.db())
-            .with_clients(self.clients())
-            .with_control(self.client_control())
+        crate::ControlQueryService::new(self.db()).with_clients(self.clients())
     }
     pub fn runtime_observer(&self) -> crate::RuntimeObservationService {
         crate::RuntimeObservationService::new(
             self.db(),
             self.clients(),
             self.event_ingest_service(),
-            self.client_control(),
         )
     }
     pub fn session_runtimes(&self) -> crate::RuntimeBindingUpsertService {

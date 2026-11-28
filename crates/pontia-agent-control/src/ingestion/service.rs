@@ -45,9 +45,6 @@ impl EventIngestService {
         }
     }
 
-    pub fn history_control(&self) -> Option<crate::clients::ClientControlService> {
-        self.effects.client_control.clone()
-    }
     pub fn clients(&self) -> crate::clients::ClientRegistry {
         self.clients.clone()
     }
@@ -209,8 +206,8 @@ impl EventIngestService {
         let Some(event) = runtime_id.and_then(|runtime_id| {
             self.clients
                 .get(client_type)
-                .and_then(|entry| entry.in_process.as_ref())
-                .map(|client| client.ready(session_id, runtime_id))
+                .and_then(|entry| entry.session.as_ref())
+                .and_then(|client| client.ready(session_id, runtime_id))
         }) else {
             return Ok(());
         };

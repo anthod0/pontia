@@ -1,4 +1,4 @@
-use pontia_agent_control::{ClientControlChannel, DeliveryError, InputPayload};
+use pontia_agent_control::{DeliveryError, DeliveryOperation, InputPayload};
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
@@ -14,9 +14,32 @@ use std::{
 };
 use tokio::sync::Mutex;
 
+pub(crate) type ControlOperation<'a, T = ()> =
+    std::pin::Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
+
+pub(crate) trait ControlChannel: Send + Sync {
+    fn native_history(&self, params: Value) -> ControlOperation<'_, Value>;
+    fn compact<'a>(&'a self, operation_id: &'a str) -> ControlOperation<'a>;
+    fn set_reasoning_effort<'a>(&'a self, reasoning_effort: &'a str) -> ControlOperation<'a>;
+    fn reasoning_effort_control_available(&self) -> bool {
+        self.available()
+    }
+    fn available(&self) -> bool;
+    fn process_id(&self) -> Option<u32> {
+        None
+    }
+    fn invalidate(&self);
+    fn interrupt(&self) -> DeliveryOperation<'_>;
+    fn shutdown(&self) -> ControlOperation<'_>;
+    fn shutdown_if_idle(&self) -> ControlOperation<'_, bool>;
+    fn replay<'a>(&'a self, replay_id: &'a str) -> ControlOperation<'a>;
+    fn start_turn<'a>(&'a self, payload: &'a InputPayload) -> DeliveryOperation<'a>;
+    fn steer<'a>(&'a self, payload: &'a InputPayload) -> DeliveryOperation<'a>;
+}
+
 struct Connection {
     runtime_id: String,
-    channel: Arc<dyn ClientControlChannel>,
+    channel: Arc<dyn ControlChannel>,
     retired: AtomicBool,
 }
 
@@ -100,7 +123,7 @@ impl PiConnections {
         &self,
         session_id: &str,
         runtime_id: &str,
-        channel: &Arc<dyn ClientControlChannel>,
+        channel: &Arc<dyn ControlChannel>,
     ) -> Result<()> {
         let connections = self.connections.lock().await;
         if connections.stopped
@@ -131,7 +154,7 @@ impl PiConnections {
         session_id: &str,
         runtime_id: &str,
         client_session_key: &str,
-        channel: Arc<dyn ClientControlChannel>,
+        channel: Arc<dyn ControlChannel>,
     ) -> Result<()> {
         let mut connections = self.connections.lock().await;
         if connections.stopped || !channel.available() {
@@ -337,7 +360,7 @@ impl PiConnections {
         session_id: &str,
         runtime_id: &str,
         expect_exit: bool,
-        operation: impl FnOnce(Arc<dyn ClientControlChannel>) -> F,
+        operation: impl FnOnce(Arc<dyn ControlChannel>) -> F,
     ) -> std::result::Result<T, E>
     where
         E: From<Error> + std::fmt::Display,

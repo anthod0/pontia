@@ -48,8 +48,6 @@ async fn record_rejection(
         return Ok(());
     };
     let params = &request.params;
-    let control = state.client_control();
-    let _guard = control.lock_identity().await;
     let bound_session;
     let (session, expected_runtime, client_type) = if request.method == "runtime.attach" {
         let (Some(session), Some(runtime)) =
@@ -87,8 +85,23 @@ async fn record_rejection(
     let Some(runtime) = target.runtime_id else {
         return Ok(());
     };
+    let session_client_type: String =
+        sqlx::query_scalar("SELECT client_type FROM sessions WHERE session_id=?")
+            .bind(session)
+            .fetch_one(&state.db())
+            .await?;
     if expected_runtime.is_some_and(|id| id != runtime)
-        || control.connected_to(session, &runtime).await
+        || match state
+            .clients()
+            .get(&session_client_type)
+            .and_then(|registration| registration.session.as_ref())
+        {
+            Some(client) => client
+                .control_connected(state.db(), session)
+                .await?
+                .unwrap_or(false),
+            None => false,
+        }
     {
         return Ok(());
     }

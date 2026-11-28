@@ -18,8 +18,11 @@ async fn runtime_scoped_exit_and_interrupt_reject_replaced_instances_before_nati
     .await
     .unwrap();
     sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, role, state, created_at) VALUES ('session', 'replacement', 'generic_control', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#).execute(&pool).await.unwrap();
+    let channel = crate::clients::testing::channel();
     let state = crate::AgentControl::builder(pool.clone(), root.path().into())
-        .clients(crate::clients::testing::clients())
+        .clients(crate::clients::testing::clients_with_channel(
+            channel.clone(),
+        ))
         .build();
     let session = state.session_commands();
     for error in [
@@ -51,24 +54,15 @@ async fn cloned_control_preserves_session_actor_and_event_wakeup() {
     let root = tempfile::tempdir().unwrap();
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
+    let channel = crate::clients::testing::channel();
     let state = crate::AgentControl::builder(pool.clone(), root.path().into())
-        .clients(crate::clients::testing::clients())
+        .clients(crate::clients::testing::clients_with_channel(
+            channel.clone(),
+        ))
         .build();
     sqlx::query("INSERT INTO sessions(session_id,client_type,state) VALUES ('session','test-channel','idle')").execute(&pool).await.unwrap();
     sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES ('session', 'runtime', '/unused/tmux', '%1', 'generic_control', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#).execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO agent_bindings(id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES ('binding','session','test-channel','/unused','native','{}')").execute(&pool).await.unwrap();
-    let channel = crate::clients::testing::channel();
-    state
-        .client_control()
-        .attach(
-            "test-channel",
-            "session",
-            "runtime",
-            "native",
-            channel.clone(),
-        )
-        .await
-        .unwrap();
     state
         .event_ingest_service()
         .report_fact(crate::ReportedFact {
@@ -129,24 +123,15 @@ async fn connected_inbox() -> (
     let root = tempfile::tempdir().unwrap();
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
+    let channel = crate::clients::testing::channel();
     let state = crate::AgentControl::builder(pool.clone(), root.path().into())
-        .clients(crate::clients::testing::clients())
+        .clients(crate::clients::testing::clients_with_channel(
+            channel.clone(),
+        ))
         .build();
     sqlx::query("INSERT INTO sessions(session_id,client_type,state) VALUES ('session','test-channel','idle')").execute(&pool).await.unwrap();
     sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES ('session', 'runtime', '/unused/tmux', '%1', 'generic_control', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#).execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO agent_bindings(id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES ('binding','session','test-channel','/unused','native','{}')").execute(&pool).await.unwrap();
-    let channel = crate::clients::testing::channel();
-    state
-        .client_control()
-        .attach(
-            "test-channel",
-            "session",
-            "runtime",
-            "native",
-            channel.clone(),
-        )
-        .await
-        .unwrap();
     state
         .event_ingest_service()
         .report_fact(crate::ReportedFact {

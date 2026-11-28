@@ -3,7 +3,7 @@ use pontia_core::{
     Result,
     domain::{DomainEvent, EventType},
 };
-use pontia_runtime::{RuntimeStartRequest, RuntimeStartResult};
+use pontia_runtime::RuntimeStartRequest;
 use serde_json::Value;
 use std::path::Path;
 
@@ -89,13 +89,6 @@ pub trait ClientData: Send + Sync {
     ) -> Option<Result<()>> {
         None
     }
-    fn native_history(
-        &self,
-        _binding: super::raw_transcripts::AgentBindingResolveRequest,
-        _control: Option<crate::clients::ClientControlService>,
-    ) -> Option<std::sync::Arc<dyn super::native_history::NativeHistory>> {
-        None
-    }
     /// Optional identity-based capture. None retains the client's file boundary backend.
     fn capture_native_boundary(
         &self,
@@ -125,20 +118,4 @@ pub struct ClientLaunchRequest<'a> {
     pub reuse_pane: Option<(&'a str, &'a str)>,
     pub native_session_key: Option<&'a str>,
     pub native_session_file: Option<&'a Path>,
-}
-
-pub trait ClientLauncher: Send + Sync {
-    fn validate_resume(
-        &self,
-        native_session_key: &str,
-        native_session_file: Option<&Path>,
-    ) -> Result<()>;
-    fn launch(&self, request: ClientLaunchRequest<'_>) -> Result<RuntimeStartResult>;
-    fn launch_configured(
-        &self,
-        request: ClientLaunchRequest<'_>,
-        _configuration: &Value,
-    ) -> Result<RuntimeStartResult> {
-        self.launch(request)
-    }
 }

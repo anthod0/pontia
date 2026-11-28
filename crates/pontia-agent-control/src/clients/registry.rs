@@ -1,7 +1,7 @@
 use crate::client_contract::install::ClientInstaller;
 use crate::client_contract::{
-    AgentClientSpec, ClientData, ClientLauncher, ClientService, ClientServicePhase, ClientSession,
-    InProcessClient, TimelineBoundaryBackend, TurnTimelineBackend,
+    AgentClientSpec, ClientData, ClientService, ClientServicePhase, ClientSession,
+    TimelineBoundaryBackend, TurnTimelineBackend,
 };
 use pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository;
 use sqlx::SqlitePool;
@@ -15,12 +15,10 @@ pub struct ClientRegistration {
     pub events: Option<Arc<dyn crate::client_contract::ClientEventInterpreter>>,
     pub service: Option<Arc<dyn ClientService>>,
     pub instructions: Option<Arc<dyn crate::client_contract::ClientInstructions>>,
-    pub in_process: Option<Arc<dyn InProcessClient>>,
     pub session: Option<Arc<dyn ClientSession>>,
     pub prepare_on_input: bool,
     pub spec: &'static AgentClientSpec,
     pub data: Option<Arc<dyn ClientData>>,
-    pub launcher: Option<Arc<dyn ClientLauncher>>,
 }
 
 pub struct ClientServiceTasks {

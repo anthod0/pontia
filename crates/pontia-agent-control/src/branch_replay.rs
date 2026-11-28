@@ -46,7 +46,6 @@ pub struct ResolvedBranchReplay {
 pub struct BranchReplayService {
     clients: crate::clients::ClientRegistry,
     execution: crate::clients::ClientExecutionService,
-    history_control: crate::clients::ClientControlService,
     pending: Arc<Mutex<HashMap<String, ResolvedBranchReplay>>>,
     pool: SqlitePool,
     scheduler: crate::inbox::InboxScheduler,
@@ -57,14 +56,12 @@ impl BranchReplayService {
         pool: SqlitePool,
         clients: crate::clients::ClientRegistry,
         execution: crate::clients::ClientExecutionService,
-        history_control: crate::clients::ClientControlService,
         scheduler: crate::inbox::InboxScheduler,
     ) -> Self {
         Self {
             pool,
             clients,
             execution,
-            history_control,
             pending: Default::default(),
             scheduler,
         }
@@ -204,18 +201,22 @@ impl BranchReplayService {
         let is_first_session_turn = all_turns
             .first()
             .is_some_and(|turn| turn.turn_id == target_turn_id);
-        if let Some(history) = self.clients.data(&session.client_type).and_then(|data| {
-            data.native_history(
-                crate::client_contract::raw_transcripts::AgentBindingResolveRequest {
-                    id: binding.id.clone(),
-                    session_id: binding.session_id.clone(),
-                    client_type: binding.client_type.clone(),
-                    client_session_key: binding.client_session_key.clone(),
-                    client_session_file: binding.client_session_file.clone().map(Into::into),
-                },
-                Some(self.history_control.clone()),
-            )
-        }) {
+        if let Some(history) = self
+            .clients
+            .get(&session.client_type)
+            .and_then(|registration| {
+                registration.session.as_ref()?.native_history(
+                    self.pool.clone(),
+                    crate::client_contract::raw_transcripts::AgentBindingResolveRequest {
+                        id: binding.id.clone(),
+                        session_id: binding.session_id.clone(),
+                        client_type: binding.client_type.clone(),
+                        client_session_key: binding.client_session_key.clone(),
+                        client_session_file: binding.client_session_file.clone().map(Into::into),
+                    },
+                )
+            })
+        {
             return history
                 .branch_target(crate::client_contract::raw_transcripts::TurnTimelineRange {
                     turn_id: target.turn_id.clone(),

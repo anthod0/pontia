@@ -39,9 +39,6 @@ pub struct NativeSessionFork {
 
 /// Session-level lifecycle and control operations implemented by an Agent Client integration.
 pub trait ClientSession: Send + Sync {
-    fn provisions_runtime_binding(&self) -> bool {
-        false
-    }
     fn creation_options(&self) -> ClientOperation<'_, Option<Vec<SessionCreationOption>>> {
         Box::pin(async { Ok(None) })
     }
@@ -192,32 +189,34 @@ pub trait ClientSession: Send + Sync {
     ) -> ClientOperation<'a, crate::client_contract::AgentClientCapabilities> {
         Box::pin(async move { Ok(implementation.clone()) })
     }
-    fn available<'a>(
-        &'a self,
-        pool: SqlitePool,
-        control: Option<crate::clients::ClientControlService>,
-        session: &'a str,
-    ) -> ClientOperation<'a, bool>;
+    fn ready(&self, _session: &str, _instance: &str) -> Option<pontia_core::domain::ReportedEvent> {
+        None
+    }
+    fn native_history(
+        &self,
+        _pool: SqlitePool,
+        _binding: crate::client_contract::raw_transcripts::AgentBindingResolveRequest,
+    ) -> Option<std::sync::Arc<dyn crate::client_contract::native_history::NativeHistory>> {
+        None
+    }
+    fn available<'a>(&'a self, pool: SqlitePool, session: &'a str) -> ClientOperation<'a, bool>;
     fn manual_compaction_available<'a>(
         &'a self,
         pool: SqlitePool,
-        control: Option<crate::clients::ClientControlService>,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
-        self.available(pool, control, session)
+        self.available(pool, session)
     }
     fn reasoning_effort_control_available<'a>(
         &'a self,
         pool: SqlitePool,
-        control: Option<crate::clients::ClientControlService>,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
-        self.available(pool, control, session)
+        self.available(pool, session)
     }
     fn control_connected<'a>(
         &'a self,
         _pool: SqlitePool,
-        _control: Option<crate::clients::ClientControlService>,
         _session: &'a str,
     ) -> ClientOperation<'a, Option<bool>> {
         Box::pin(async { Ok(None) })
@@ -231,10 +230,4 @@ pub trait ClientSession: Send + Sync {
 
 pub struct ClientSessionDetails {
     pub data: Value,
-}
-
-pub trait InProcessClient: Send + Sync {
-    fn capabilities(&self) -> crate::client_contract::AgentClientCapabilities;
-    fn submit(&self, input: crate::client_contract::AgentInput) -> Result<()>;
-    fn ready(&self, session: &str, instance: &str) -> pontia_core::domain::ReportedEvent;
 }

@@ -54,6 +54,8 @@ pub enum DeliveryError {
     Unsupported(String),
     #[error("delivery offline: {0}")]
     Offline(String),
+    #[error("delivery rejected: {0}")]
+    Rejected(String),
     #[error("delivery state changed: {0}")]
     StateChanged(String),
     #[error("delivery uncertain: {0}")]
@@ -64,6 +66,7 @@ impl From<Error> for DeliveryError {
     fn from(error: Error) -> Self {
         match error {
             Error::CapabilityUnavailable(message) => Self::Offline(message),
+            Error::Domain(message) => Self::Rejected(message),
             Error::ControlUnknown(message) => Self::Uncertain(message),
             Error::StateConflict(message) | Error::Conflict { message, .. } => {
                 Self::StateChanged(message)
@@ -79,6 +82,7 @@ impl From<DeliveryError> for Error {
             DeliveryError::Unsupported(message) | DeliveryError::Offline(message) => {
                 Self::CapabilityUnavailable(message)
             }
+            DeliveryError::Rejected(message) => Self::Domain(message),
             DeliveryError::StateChanged(message) => Self::StateConflict(message),
             DeliveryError::Uncertain(message) => Self::ControlUnknown(message),
         }
@@ -101,6 +105,10 @@ mod tests {
         assert!(matches!(
             Error::from(DeliveryError::Offline("offline".into())),
             Error::CapabilityUnavailable(message) if message == "offline"
+        ));
+        assert!(matches!(
+            Error::from(DeliveryError::Rejected("rejected".into())),
+            Error::Domain(message) if message == "rejected"
         ));
         assert!(matches!(
             Error::from(DeliveryError::StateChanged("changed".into())),
@@ -127,8 +135,8 @@ mod tests {
             DeliveryError::Uncertain(message) if message == "uncertain"
         ));
         assert!(matches!(
-            DeliveryError::from(Error::Domain("offline".into())),
-            DeliveryError::Offline(message) if message == "domain error: offline"
+            DeliveryError::from(Error::Domain("rejected".into())),
+            DeliveryError::Rejected(message) if message == "rejected"
         ));
     }
 }

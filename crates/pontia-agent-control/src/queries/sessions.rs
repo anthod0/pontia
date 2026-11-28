@@ -53,24 +53,12 @@ impl ControlQueryService {
         {
             session.control_connected = Some(false);
             session.control_disconnected_reason = Some("unsupported_protocol_version");
-        } else if let Some(entry) = self.clients.get(&session.client_type) {
-            if let Some(client) = &entry.session {
-                session.control_connected = client
-                    .control_connected(self.pool.clone(), self.control.clone(), &session.session_id)
-                    .await?;
-            } else if entry.spec.adapter.dispatch == crate::client_contract::DispatchMode::Connected
-                && let Some(control) = &self.control
-                && let Some(runtime) = session.runtimes.iter().find(|runtime| {
-                    Some(runtime.role.as_str()) == entry.spec.adapter.control_runtime_role
-                        && runtime.state == "running"
-                })
-            {
-                session.control_connected = Some(
-                    control
-                        .connected_to(&session.session_id, &runtime.runtime_id)
-                        .await,
-                );
-            }
+        } else if let Some(entry) = self.clients.get(&session.client_type)
+            && let Some(client) = &entry.session
+        {
+            session.control_connected = client
+                .control_connected(self.pool.clone(), &session.session_id)
+                .await?;
         }
         session.lineage = self.session_lineage(&session.session_id).await?;
         if let Some(client) = self
@@ -100,11 +88,7 @@ impl ControlQueryService {
         let repository = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone());
         let runtimes = repository.list(session_id).await?;
         let entry = self.clients.get(client_type).expect("checked client");
-        let mut capabilities = entry
-            .in_process
-            .as_ref()
-            .map(|client| client.capabilities())
-            .unwrap_or_else(|| entry.spec.capabilities.clone());
+        let mut capabilities = entry.spec.capabilities.clone();
         if let Some(client) = &entry.session {
             capabilities = client.capabilities(session_id, &capabilities).await?;
             capabilities = capabilities.intersection(&entry.spec.capabilities);
@@ -130,15 +114,8 @@ impl ControlQueryService {
         if capabilities.manual_compaction {
             capabilities.manual_compaction = if let Some(client) = &entry.session {
                 client
-                    .manual_compaction_available(
-                        self.pool.clone(),
-                        self.control.clone(),
-                        session_id,
-                    )
+                    .manual_compaction_available(self.pool.clone(), session_id)
                     .await?
-            } else if entry.spec.adapter.dispatch == crate::client_contract::DispatchMode::Connected
-            {
-                self.connected_control_available(session_id).await?
             } else {
                 false
             };
@@ -146,15 +123,7 @@ impl ControlQueryService {
         if capabilities.reasoning_effort_control {
             capabilities.reasoning_effort_control = if let Some(client) = &entry.session {
                 client
-                    .reasoning_effort_control_available(
-                        self.pool.clone(),
-                        self.control.clone(),
-                        session_id,
-                    )
-                    .await?
-            } else if entry.spec.adapter.dispatch == crate::client_contract::DispatchMode::Connected
-            {
-                self.connected_reasoning_effort_control_available(session_id)
+                    .reasoning_effort_control_available(self.pool.clone(), session_id)
                     .await?
             } else {
                 false
@@ -169,32 +138,6 @@ impl ControlQueryService {
             ))
         } else {
             Ok(capabilities)
-        }
-    }
-
-    async fn connected_control_available(&self, session_id: &str) -> Result<bool> {
-        let Some(control) = &self.control else {
-            return Ok(false);
-        };
-        match control.available(session_id).await {
-            Ok(available) => Ok(available),
-            Err(
-                pontia_core::Error::StateConflict(_) | pontia_core::Error::CapabilityUnavailable(_),
-            ) => Ok(false),
-            Err(error) => Err(error),
-        }
-    }
-
-    async fn connected_reasoning_effort_control_available(&self, session_id: &str) -> Result<bool> {
-        let Some(control) = &self.control else {
-            return Ok(false);
-        };
-        match control.reasoning_effort_control_available(session_id).await {
-            Ok(available) => Ok(available),
-            Err(
-                pontia_core::Error::StateConflict(_) | pontia_core::Error::CapabilityUnavailable(_),
-            ) => Ok(false),
-            Err(error) => Err(error),
         }
     }
 

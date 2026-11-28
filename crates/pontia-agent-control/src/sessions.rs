@@ -105,7 +105,6 @@ pub struct SessionCommandService {
     turns: crate::TurnCommandService,
     inbox: std::sync::Arc<crate::InboxCommandService>,
     pontia_home: PathBuf,
-    control: crate::ClientControlService,
     creation_gate: std::sync::Arc<tokio::sync::Mutex<()>>,
     fork_gate: std::sync::Arc<tokio::sync::Mutex<()>>,
 }
@@ -124,9 +123,7 @@ impl SessionCommandService {
         inbox: std::sync::Arc<crate::InboxCommandService>,
         pontia_home: PathBuf,
     ) -> Self {
-        let control = clients.control_service();
         Self {
-            control,
             creation_gate: std::sync::Arc::default(),
             fork_gate: std::sync::Arc::default(),
             pool,

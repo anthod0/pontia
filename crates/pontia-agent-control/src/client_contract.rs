@@ -1,5 +1,4 @@
 pub mod auth;
-mod channel;
 mod detection;
 pub mod install;
 pub use detection::{ClientDetection, DetectionContext, DetectionStatus};
@@ -22,16 +21,15 @@ mod service;
 mod session;
 mod setup;
 pub use auth::ClientAuth;
-pub use channel::{ClientControlChannel, ClientControlOperation};
 pub use data::{
-    BranchTargetRequest, ClientData, ClientLaunchRequest, ClientLauncher, NativeEventEvidence,
-    ResidentTimeline, TimelineCachePolicy,
+    BranchTargetRequest, ClientData, ClientLaunchRequest, NativeEventEvidence, ResidentTimeline,
+    TimelineCachePolicy,
 };
 pub use delivery::{DeliveryError, DeliveryOperation, InputPayload};
 pub use service::{ClientService, ClientServicePhase, PreparedServiceShutdown};
 pub use session::{
     ClientExitMode, ClientExitOutcome, ClientOperation, ClientSession, ClientSessionDetails,
-    InProcessClient, NativeSessionFork, SessionCreationOption,
+    NativeSessionFork, SessionCreationOption,
 };
 pub use setup::{
     ClientIntegration, ClientSetup, PreparedClientIntegration, PreparedClientUninstall,

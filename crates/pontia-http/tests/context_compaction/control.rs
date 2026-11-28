@@ -182,26 +182,12 @@ async fn replacement_during_compaction_returns_unknown_and_does_not_send_to_repl
         .execute(&fixture.state.db())
         .await
         .unwrap();
-    let replacement = std::sync::Arc::new(Channel::default());
-    fixture
-        .state
-        .control()
-        .client_control()
-        .attach(
-            SPEC.client_type,
-            "session",
-            "replacement",
-            "native",
-            replacement.clone(),
-        )
-        .await
-        .unwrap();
+    fixture.channel.generation.fetch_add(1, Ordering::SeqCst);
     fixture.channel.finish.notify_one();
     let (status, body) = first.await.unwrap();
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(body["error"]["code"], "control_unknown");
     assert_eq!(fixture.channel.operations.lock().unwrap().len(), 1);
-    assert!(replacement.operations.lock().unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -281,69 +267,5 @@ async fn a_lost_compaction_receipt_is_replayed_as_unknown_without_a_second_nativ
             .unwrap()
             .len(),
         2
-    );
-}
-
-#[tokio::test]
-async fn dynamically_advertised_compaction_can_execute_against_a_default_false_static_spec() {
-    use pontia_agent_control::client_contract::{AgentInput, InProcessClient, test_registration};
-    use pontia_application::AppState;
-    struct AdvertisedClient;
-    impl InProcessClient for AdvertisedClient {
-        fn capabilities(&self) -> AgentClientCapabilities {
-            AgentClientCapabilities {
-                manual_compaction: true,
-                ..AgentClientCapabilities::default()
-            }
-        }
-        fn submit(&self, _: AgentInput) -> pontia_core::Result<()> {
-            Ok(())
-        }
-        fn ready(&self, _: &str, _: &str) -> pontia_core::domain::ReportedEvent {
-            unreachable!("this test attaches an existing control target")
-        }
-    }
-    let fixture = Fixture::new(&UNSUPPORTED, true).await;
-    fixture.seed().await;
-    let mut registration = test_registration();
-    registration.spec = &UNSUPPORTED;
-    registration.in_process = Some(std::sync::Arc::new(AdvertisedClient));
-    let mut clients = fixture.state.control().clients();
-    clients.register(registration);
-    let state = AppState::builder(
-        pontia_agent_control::AgentControl::builder(fixture.state.db(), fixture.root.path().into())
-            .clients(clients)
-            .build(),
-    )
-    .external_api_token(Some("test-token".into()))
-    .build();
-    state
-        .control()
-        .client_control()
-        .attach(
-            SPEC.client_type,
-            "session",
-            "runtime",
-            "native",
-            fixture.channel.clone(),
-        )
-        .await
-        .unwrap();
-    assert!(
-        state
-            .control()
-            .queries()
-            .get_session("session")
-            .await
-            .unwrap()
-            .unwrap()
-            .capabilities
-            .manual_compaction
-    );
-    let (status, body) = request(state, "POST", COMPACT, None, true).await;
-    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
-    assert_eq!(
-        fixture.channel.operations.lock().unwrap().as_slice(),
-        [body["data"]["operation_id"].as_str().unwrap()]
     );
 }
