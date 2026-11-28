@@ -27,12 +27,12 @@
 	</p>
 	<div class="choices">
 		<form method="POST" action={`/api/auth/pending/bind?locale=${getLocale()}`}>
-			<Button type="submit" class="button"
+			<Button type="submit" size="lg" class="w-full"
 				>{m.conflict_connect()}</Button
 			>
 		</form>
 		<form method="POST" action={`/api/auth/pending/create?locale=${getLocale()}`}>
-			<Button type="submit" class="button button-secondary"
+			<Button type="submit" size="lg" variant="outline" class="w-full"
 				>{m.conflict_create()}</Button
 			>
 		</form>
@@ -45,6 +45,6 @@
 		margin-block: 28px;
 	}
 	.hint {
-		font-size: 12px !important;
+		font-size: var(--text-13);
 	}
 </style>

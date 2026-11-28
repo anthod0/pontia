@@ -8,7 +8,7 @@
 	const blocks = $derived(markdownBlocks(source));
 </script>
 
-<div class="demo-md min-w-0 text-sm leading-[1.85] text-foreground [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+<div class="min-w-0 text-sm leading-[1.85] text-foreground [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
 	{#each blocks as block}
 		{#if block.kind === 'h1'}<h1 class="mt-6 mb-4 text-2xl font-bold text-heading"><DemoInline text={block.text} /></h1>
 		{:else if block.kind === 'h2'}<h2 class="mt-5 mb-3 text-xl font-semibold text-heading"><DemoInline text={block.text} /></h2>
@@ -35,18 +35,3 @@
 		{/if}
 	{/each}
 </div>
-
-<style>
-	/* The site resets heading and paragraph margins outside any layer; the preview keeps the Dashboard's Markdown spacing. */
-	.demo-md :global(h1),
-	.demo-md :global(h2),
-	.demo-md :global(h3) {
-		letter-spacing: normal;
-		line-height: 1.4;
-	}
-	.demo-md h1 { margin: 24px 0 16px; font-size: 24px; }
-	.demo-md h2 { margin: 20px 0 12px; font-size: 20px; }
-	.demo-md h3 { margin: 16px 0 8px; font-size: 18px; }
-	.demo-md p { margin: 12px 0; }
-	.demo-md > :first-child { margin-top: 0; }
-</style>

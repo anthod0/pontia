@@ -1,4 +1,6 @@
 <script lang="ts">
+  import ManagementList from "$lib/components/ManagementList.svelte";
+  import { Alert } from "$lib/components/ui/alert";
   import TrashIcon from "phosphor-svelte/lib/TrashIcon";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { buttonVariants } from "$lib/components/ui/button";
@@ -21,17 +23,17 @@
 
 <h1>{m.settings_sessions()}</h1>
 <p>{m.sessions_intro()}</p>
-{#if form?.error}<p class="auth-error" role="alert">{form.error}</p>{/if}
+{#if form?.error}<Alert variant="destructive" class="my-4">{form.error}</Alert>{/if}
 
 <section>
   {#if data.sessions.length > 0}
-    <ul class="management-list">
+    <ManagementList>
       {#each data.sessions as session (session.id)}
         {@const revokeLabel = session.kind === "cli" ? m.sessions_revoke_cli() : session.current ? m.sessions_revoke_current() : m.sessions_revoke_browser()}
         <li>
           <div>
             <h3>{session.kind === "cli" ? m.sessions_cli() : session.current ? m.sessions_current() : m.sessions_browser()}</h3>
-            <p>
+            <p class="metadata">
               {session.lastSeenAt ? m.sessions_last_active({ date: date(session.lastSeenAt) }) : m.sessions_last_active_unavailable()}{session.country ? ` · ${session.country}` : ""}{session.provider ? ` · ${session.provider}` : ""}
             </p>
           </div>
@@ -40,7 +42,7 @@
             <AlertDialog.Root>
               <AlertDialog.Trigger
                 type="button"
-                class={buttonVariants({ variant: "destructive", size: "icon" })}
+                class={buttonVariants({ variant: "ghost", size: "icon-sm", class: "hover:text-destructive focus-visible:text-destructive" })}
                 aria-label={revokeLabel}
                 title={revokeLabel}
               >
@@ -64,14 +66,14 @@
           </form>
         </li>
       {/each}
-    </ul>
+    </ManagementList>
   {:else}
     <p>{m.sessions_none()}</p>
   {/if}
   {#if hasOtherBrowser}
     <div class="batch-action">
       <AlertDialog.Root>
-        <AlertDialog.Trigger class="batch-link">{m.sessions_sign_out_others()}</AlertDialog.Trigger>
+        <AlertDialog.Trigger class="content-link focus-visible:ring-2 focus-visible:ring-ring">{m.sessions_sign_out_others()}</AlertDialog.Trigger>
         <AlertDialog.Content>
           <AlertDialog.Header>
             <AlertDialog.Title>{m.sessions_sign_out_others_title()}</AlertDialog.Title>
@@ -96,55 +98,9 @@
   section {
     margin-top: 40px;
   }
-  h3 {
-    margin-bottom: 4px;
-    font-size: 15px;
-    font-weight: 500;
-  }
-  section p {
-    color: var(--muted-foreground);
-    font-size: 14px;
-    line-height: 1.7;
-  }
-  .management-list form {
-    margin: 0;
-  }
   .batch-action {
     display: flex;
     justify-content: flex-end;
     margin-top: 8px;
-  }
-  .batch-action :global(.batch-link) {
-    height: auto;
-    padding: 2px 0;
-    border: 0;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    text-decoration: underline;
-    text-underline-offset: 3px;
-    cursor: pointer;
-  }
-  .management-list {
-    margin: 16px 0 0;
-    padding: 0;
-    list-style: none;
-  }
-  .management-list li {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 20px;
-    align-items: center;
-    border-top: 1px solid var(--border);
-    padding-block: 16px;
-  }
-  .management-list li:last-child {
-    border-bottom: 1px solid var(--border);
-  }
-
-  @media (max-width: 600px) {
-    .management-list li {
-      grid-template-columns: 1fr;
-    }
   }
 </style>

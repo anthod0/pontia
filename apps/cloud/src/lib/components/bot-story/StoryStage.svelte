@@ -37,7 +37,7 @@
 	.stage :global(.dot) { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 	.stage :global(.state.running .dot) { animation: story-pulse 1.6s ease-out infinite; }
 	.stage :global(.msg) { width: fit-content; max-width: 86%; padding: 8px 12px; border-radius: 14px; font-size: 13px; line-height: 1.45; }
-	.stage :global(.msg.user) { align-self: flex-end; border-bottom-right-radius: 4px; background: var(--button); color: white; }
+	.stage :global(.msg.user) { align-self: flex-end; border-bottom-right-radius: 4px; background: var(--primary-solid); color: var(--primary-foreground); }
 	.stage :global(.msg.bot) { align-self: flex-start; border: 1px solid var(--border); border-bottom-left-radius: 4px; background: var(--surface); color: var(--foreground); }
 	.stage :global(.mono) { font: 11px var(--font-mono); color: var(--muted-foreground); }
 

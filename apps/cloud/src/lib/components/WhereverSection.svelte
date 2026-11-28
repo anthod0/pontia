@@ -148,7 +148,7 @@
 	{#if agent.darkLogo}<img class="codex-dark" src={agent.darkLogo} alt="" width="14" height="14" />{/if}
 {/snippet}
 <section bind:this={section} class="wherever page-width" aria-labelledby="wherever-title" {@attach reveal()}>
-	<h2 id="wherever-title" class="reveal">
+	<h2 id="wherever-title" class="section-title reveal">
 		{prefix}<button type="button" class="slot" aria-label={m.wherever_next({ place: word })}
 			><span class="slot-track" style:width={wordWidth ? wordWidth + 'px' : undefined}
 				><span class="word-size" aria-hidden="true" bind:offsetWidth={wordWidth}>{word}</span

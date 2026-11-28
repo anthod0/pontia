@@ -350,7 +350,7 @@
 				{/key}
 			{:else}
 				<section class="demo-scroll min-h-0 flex-1 overflow-auto p-3" aria-label="Choose a workspace">
-					<h2 class="panel-heading px-2 font-medium text-heading">Choose a workspace</h2>
+					<h2 class="px-2 font-medium text-heading">Choose a workspace</h2>
 					<p class="px-2 pt-0.5 pb-2 text-xs text-muted-foreground">Choose a workspace to explore its Git changes.</p>
 					<ul>
 						{#each workspaces as item (item.id)}
@@ -374,11 +374,5 @@
 	}
 	.no-scrollbar::-webkit-scrollbar {
 		display: none;
-	}
-	/* The site's section headings style every h2; the panel keeps the Dashboard's size. */
-	.panel-heading {
-		font-size: 14px;
-		line-height: 20px;
-		letter-spacing: normal;
 	}
 </style>

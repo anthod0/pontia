@@ -625,8 +625,8 @@
     gap: 6px;
     padding: 6px 10px 6px 12px;
     border-radius: 999px;
-    background: var(--button);
-    color: #fff;
+    background: var(--primary-solid);
+    color: var(--primary-foreground);
     font-size: 13px;
     font-weight: 600;
     line-height: 1.35;
@@ -660,7 +660,7 @@
   }
   .cta:hover,
   .cta:focus-visible {
-    background: var(--button-hover);
+    background: var(--primary-solid-active);
   }
   .cta:focus-visible {
     outline-offset: 3px;
@@ -777,12 +777,12 @@
     font-size: 12px;
   }
   .ask-actions .approve {
-    border: 1px solid var(--button);
-    background: var(--button);
-    color: #fff;
+    border: 1px solid var(--primary-solid);
+    background: var(--primary-solid);
+    color: var(--primary-foreground);
   }
   .ask-actions .approve:hover {
-    background: var(--button-hover);
+    background: var(--primary-solid-active);
   }
   .ask-actions kbd {
     margin-left: 6px;

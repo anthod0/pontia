@@ -44,7 +44,7 @@
 					aria-invalid={invalid}
 					bind:value={address}
 					oninput={() => (rejected = null)}
-					class="h-8 w-full min-w-0 rounded-(--radius-field) border border-border bg-transparent px-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary/20 aria-invalid:border-destructive"
+					class="h-8 w-full min-w-0 rounded-field border border-border bg-transparent px-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary/20 aria-invalid:border-destructive"
 				/>
 			</form>
 			<button type="button" class={iconButton} aria-label="Refresh" title="Refresh" onclick={() => reloads++}><ArrowClockwiseIcon class="size-4" /></button>

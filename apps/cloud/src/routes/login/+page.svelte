@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Alert } from "$lib/components/ui/alert";
 	import AuthProviderIcon from '$lib/components/AuthProviderIcon.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { authError } from '$lib/auth-errors';
@@ -67,15 +68,15 @@
 		<div class="card">
 			<h1>{m.login_heading()}</h1>
 			<p class="lead">{m.login_lead()}</p>
-			{#if message}<p class="auth-error" role="alert">{message}</p>{/if}
+			{#if message}<Alert variant="destructive" class="my-4">{message}</Alert>{/if}
 			<div class="providers">
 				<form method="POST" action={`/api/auth/google/login${returnToQuery}`}>
-					<Button type="submit" class="button button-secondary provider"
+					<Button type="submit" size="lg" variant="outline" class="w-full"
 						><AuthProviderIcon provider="google" />{m.continue_with_google()}</Button
 					>
 				</form>
 				<form method="POST" action={`/api/auth/github/login${returnToQuery}`}>
-					<Button type="submit" class="button button-secondary provider"
+					<Button type="submit" size="lg" variant="outline" class="w-full"
 						><AuthProviderIcon provider="github" />{m.continue_with_github()}</Button
 					>
 				</form>
@@ -115,10 +116,10 @@
 		padding: 40px 56px;
 		overflow: hidden;
 		background:
-			radial-gradient(ellipse 70% 45% at 35% 55%, rgb(69 133 136 / 28%), transparent 70%),
-			radial-gradient(circle at 1px 1px, rgb(235 219 178 / 9%) 1px, transparent 0) 0 0 / 22px 22px,
-			#282828;
-		color: #ebdbb2;
+			radial-gradient(ellipse 70% 45% at 35% 55%, color-mix(in srgb, var(--primary-solid) 28%, transparent), transparent 70%),
+			radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--code-fg) 9%, transparent) 1px, transparent 0) 0 0 / 22px 22px,
+			var(--code-bg);
+		color: var(--code-fg);
 	}
 	.showcase-brand,
 	.panel-brand {
@@ -147,24 +148,24 @@
 		font-weight: 500;
 		line-height: 1.08;
 		letter-spacing: -0.045em;
-		color: #fbf1c7;
+		color: var(--code-heading);
 	}
 	.showcase-title span {
-		color: #8ec07c;
+		color: var(--code-aqua);
 	}
 	.showcase-text {
 		max-width: 400px;
 		margin-top: 18px;
 		font-size: 15px;
 		line-height: 1.65;
-		color: #bdae93;
+		color: var(--code-muted);
 	}
 
 	.preview {
 		max-width: 460px;
-		border: 1px solid #45433e;
+		border: 1px solid var(--code-border);
 		border-radius: 10px;
-		background: rgb(29 32 33 / 72%);
+		background: color-mix(in srgb, var(--code-panel) 72%, transparent);
 		box-shadow: 0 30px 60px -30px rgb(0 0 0 / 60%);
 		font-size: 13px;
 	}
@@ -173,21 +174,21 @@
 		align-items: center;
 		gap: 8px;
 		padding: 12px 16px;
-		border-bottom: 1px solid #3c3836;
-		color: #d5c4a1;
+		border-bottom: 1px solid var(--code-surface);
+		color: var(--code-label);
 		font-weight: 500;
 	}
 	.device-dot {
 		width: 8px;
 		height: 8px;
 		border-radius: 50%;
-		background: #98971a;
-		box-shadow: 0 0 0 3px rgb(152 151 26 / 20%);
+		background: var(--success);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 20%, transparent);
 	}
 	.preview-status {
 		margin-left: auto;
 		font: 11px var(--font-mono);
-		color: #928374;
+		color: var(--code-inactive);
 	}
 	.preview ul {
 		margin: 0;
@@ -203,7 +204,7 @@
 		border-radius: 6px;
 	}
 	.preview li:first-child {
-		background: rgb(235 219 178 / 6%);
+		background: color-mix(in srgb, var(--code-fg) 6%, transparent);
 	}
 	.state {
 		width: 7px;
@@ -211,24 +212,24 @@
 		border-radius: 50%;
 	}
 	.state.idle {
-		background: #98971a;
+		background: var(--success);
 	}
 	.state.busy {
-		background: #d79921;
+		background: var(--warning);
 		animation: pulse 1.6s ease-in-out infinite;
 	}
 	.state.waiting {
-		background: #d3869b;
+		background: var(--code-purple);
 	}
 	.session-title {
 		overflow: hidden;
 		white-space: nowrap;
 		text-overflow: ellipsis;
-		color: #ebdbb2;
+		color: var(--code-fg);
 	}
 	.session-meta {
 		font: 11px var(--font-mono);
-		color: #928374;
+		color: var(--code-inactive);
 	}
 	.badge {
 		padding: 2px 8px;
@@ -237,16 +238,16 @@
 		white-space: nowrap;
 	}
 	.badge.idle {
-		background: rgb(152 151 26 / 16%);
-		color: #b8bb26;
+		background: color-mix(in srgb, var(--success) 16%, transparent);
+		color: var(--code-green);
 	}
 	.badge.busy {
-		background: rgb(215 153 33 / 16%);
-		color: #fabd2f;
+		background: color-mix(in srgb, var(--warning) 16%, transparent);
+		color: var(--code-yellow);
 	}
 	.badge.waiting {
-		background: rgb(211 134 155 / 16%);
-		color: #d3869b;
+		background: color-mix(in srgb, var(--code-purple) 16%, transparent);
+		color: var(--code-purple);
 	}
 
 	.panel {
@@ -257,7 +258,7 @@
 		gap: 24px;
 		padding: 48px 24px;
 		background:
-			radial-gradient(ellipse 60% 40% at 50% 40%, rgb(69 133 136 / 7%), transparent 70%),
+			radial-gradient(ellipse 60% 40% at 50% 40%, color-mix(in srgb, var(--primary-solid) 7%, transparent), transparent 70%),
 			var(--background);
 	}
 	.panel-brand {
@@ -267,13 +268,12 @@
 		width: min(400px, 100%);
 		padding: 36px 32px 28px;
 		border: 1px solid var(--border);
-		border-radius: 10px;
-		background: var(--background);
-		box-shadow: 0 24px 48px -32px rgb(40 60 60 / 30%);
+		border-radius: var(--radius-panel);
+		background: var(--card);
 	}
 	h1 {
-		font-size: 26px;
-		font-weight: 500;
+		font-size: var(--text-28);
+		font-weight: 600;
 		letter-spacing: -0.035em;
 	}
 	.lead {
@@ -282,23 +282,10 @@
 		line-height: 1.6;
 		color: var(--muted-foreground);
 	}
-	.auth-error {
-		margin-top: 20px;
-		padding: 12px;
-		border: 1px solid var(--destructive-border);
-		border-radius: 4px;
-		color: var(--destructive);
-		font-size: 14px;
-	}
 	.providers {
 		display: grid;
 		gap: 10px;
 		margin-block: 28px 20px;
-	}
-	.providers :global(.provider) {
-		width: 100%;
-		background: var(--background);
-		font-size: 14px;
 	}
 	.sign-out {
 		margin-bottom: 16px;
@@ -352,7 +339,6 @@
 		.card {
 			padding: 28px 20px 22px;
 			border: 0;
-			box-shadow: none;
 		}
 	}
 </style>

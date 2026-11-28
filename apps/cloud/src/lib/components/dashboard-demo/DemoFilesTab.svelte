@@ -40,7 +40,7 @@
 	{#if file}
 		{@const parts = split(file)}
 		<header class="flex shrink-0 items-center gap-1 border-b border-border px-2 py-2">
-			<h2 class="panel-heading min-w-0 flex-1 truncate px-1 font-medium" title={file}>{parts.name}</h2>
+			<h2 class="min-w-0 flex-1 truncate px-1 font-medium" title={file}>{parts.name}</h2>
 			{#if markdown}
 				<Tabs.Root value={view} onValueChange={(value) => (sourceFile = value === 'source' ? file : null)}>
 					<Tabs.List aria-label="File view" class="h-7 shrink-0 gap-0 rounded-full p-0.5">
@@ -68,7 +68,7 @@
 	{:else if recent.length}
 		<section class="demo-scroll min-h-0 flex-1 overflow-auto p-3" aria-label="Recently opened">
 			<div class="flex items-center justify-between gap-2 pb-1 pl-2">
-				<h2 class="panel-heading text-xs! font-medium text-muted-foreground">Recently opened</h2>
+				<h2 class="text-xs! font-medium text-muted-foreground">Recently opened</h2>
 				<button type="button" class="inline-flex h-6 items-center rounded-full px-2 text-xs font-medium hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary" onclick={onclear}>Clear list</button>
 			</div>
 			<ul>
@@ -97,12 +97,3 @@
 		</Empty.Root>
 	{/if}
 </Tabs.Content>
-
-<style>
-	/* The site's section headings style every h2; the panel keeps the Dashboard's size. */
-	.panel-heading {
-		font-size: 14px;
-		line-height: 20px;
-		letter-spacing: normal;
-	}
-</style>

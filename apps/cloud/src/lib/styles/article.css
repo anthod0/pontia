@@ -1,4 +1,5 @@
 /* Typography for long-form Markdown content in docs and blog posts. */
+.article-title,
 .article-content h1 {
   margin-bottom: 18px;
   color: var(--heading);
@@ -11,6 +12,8 @@
   margin: 48px 0 16px;
   padding-top: 8px;
   font-size: 25px;
+  font-weight: 500;
+  line-height: 1.2;
   letter-spacing: -0.025em;
 }
 .article-content h3 {
@@ -35,35 +38,17 @@
 .article-content li + li {
   margin-top: 7px;
 }
-.article-content a {
-  color: var(--link);
-  text-decoration: underline;
-  text-decoration-color: var(--link-decoration);
-  text-underline-offset: 3px;
-}
-.article-content a:hover {
-  color: var(--primary);
-  text-decoration-color: currentColor;
-}
 .article-content strong {
   color: var(--foreground);
   font-weight: 500;
-}
-.article-content code {
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--muted);
-  padding: 2px 5px;
-  color: var(--foreground);
-  font-size: 0.85em;
 }
 .article-content pre {
   position: relative;
   overflow-x: auto;
   margin: 20px 0;
-  border: 1px solid #45433e;
+  border: 1px solid var(--code-border);
   border-radius: 6px;
-  background: #282828;
+  background: var(--code-bg);
   padding: 18px 82px 18px 20px;
 }
 .article-content pre code {
@@ -71,7 +56,7 @@
   border-radius: 0;
   background: transparent;
   padding: 0;
-  color: #ebdbb2;
+  color: var(--code-fg);
   font-size: 13px;
   line-height: 1.7;
   white-space: pre;
@@ -80,39 +65,39 @@
   display: inline;
 }
 .article-content pre code .token.punctuation {
-  color: #bdae93;
+  color: var(--code-muted);
 }
 .article-content pre code .token.key,
 .article-content pre code .token.property {
-  color: #83a598;
+  color: var(--code-key);
 }
 .article-content pre code .token.table,
 .article-content pre code .token.class-name {
-  color: #fabd2f;
+  color: var(--code-yellow);
 }
 .article-content pre code .token.string {
-  color: #b8bb26;
+  color: var(--code-green);
 }
 .article-content pre code .token.boolean {
-  color: #d3869b;
+  color: var(--code-purple);
 }
 .article-content pre code .token.number {
-  color: #fe8019;
+  color: var(--code-orange);
 }
 .article-content pre code .token.comment {
-  color: #a89984;
+  color: var(--code-comment);
   font-style: italic;
 }
 .article-content pre code .token.function {
-  color: #8ec07c;
+  color: var(--code-aqua);
 }
 .article-content pre code .token.variable,
 .article-content pre code .token.parameter {
-  color: #d3869b;
+  color: var(--code-purple);
 }
 .article-content pre code .token.operator,
 .article-content pre code .token.keyword {
-  color: #fe8019;
+  color: var(--code-orange);
 }
 .article-content .code-copy-button {
   position: absolute;
@@ -120,18 +105,18 @@
   right: 9px;
   min-width: 58px;
   height: 32px;
-  border: 1px solid #5d584e;
+  border: 1px solid var(--code-button-border);
   border-radius: 4px;
-  background: #282828;
-  color: #bdae93;
+  background: var(--code-bg);
+  color: var(--code-muted);
   font: 11px var(--font-mono);
 }
 .article-content .code-copy-button:hover {
-  background: #3c3836;
-  color: #ebdbb2;
+  background: var(--code-surface);
+  color: var(--code-fg);
 }
 .article-content .code-copy-button:focus-visible {
-  outline-color: #8ec07c;
+  outline-color: var(--code-aqua);
 }
 .article-content blockquote {
   margin: 24px 0;

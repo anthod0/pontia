@@ -16,28 +16,18 @@
 		width: min(800px, calc(100% - 40px));
 	}
 	.auth-content :global(h1) {
-		font-size: 32px;
-		font-weight: 500;
-		letter-spacing: -0.04em;
+		font-size: var(--text-28);
+		font-weight: 600;
+		letter-spacing: -0.025em;
 		margin-bottom: 16px;
 	}
-	.auth-content :global(p) {
+	.auth-content :global(:where(p)) {
 		color: var(--muted-foreground);
-		line-height: 1.7;
+		line-height: 1.6;
 		font-size: 14px;
 	}
 	.auth-content :global(form) {
 		margin-top: 14px;
-	}
-	.auth-content :global(.button) {
-		width: 100%;
-	}
-	.auth-content :global(.auth-error) {
-		color: var(--destructive);
-		border: 1px solid var(--destructive-border);
-		border-radius: 4px;
-		padding: 12px;
-		margin-block: 20px;
 	}
 	@media (max-width: 600px) {
 		.auth-content {

@@ -72,23 +72,32 @@
   .settings-content :global(h1) {
     margin-bottom: 18px;
     color: var(--heading);
-    font-size: clamp(36px, 5vw, 52px);
-    font-weight: 500;
+    font-size: var(--text-28);
+    font-weight: 600;
     line-height: 1.1;
-    letter-spacing: -0.045em;
+    letter-spacing: -0.025em;
+  }
+
+  .settings-content :global(h2) {
+    font-size: 18px;
+    font-weight: 500;
+    margin-bottom: 8px;
+  }
+  .settings-content :global(h3) {
+    font-size: var(--text-15);
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+  .settings-content :global(:where(p)) {
+    color: var(--muted-foreground);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .settings-content :global(.metadata) {
+    font: 12px/1.6 var(--font-mono);
   }
   .settings-content :global(> p) {
     margin-block: 14px;
-    color: var(--muted-foreground);
-    font-size: 15px;
-    line-height: 1.8;
-  }
-  .settings-content :global(.auth-error) {
-    border: 1px solid var(--destructive-border);
-    border-radius: 4px;
-    margin-block: 20px;
-    padding: 12px;
-    color: var(--destructive);
   }
 
   @media (max-width: 760px) {
@@ -107,9 +116,4 @@
     }
   }
 
-  @media (max-width: 600px) {
-    .settings-content :global(> p) {
-      font-size: 14px;
-    }
-  }
 </style>

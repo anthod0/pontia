@@ -14,13 +14,13 @@
 </script>
 
 <DropdownMenu.Root>
-	<DropdownMenu.Trigger class="theme-trigger" aria-label={m.theme_label()}>
+	<DropdownMenu.Trigger class="theme-trigger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={m.theme_label()}>
 		{#if $resolvedTheme === 'dark'}<MoonIcon size={16} />{:else}<SunIcon size={16} />{/if}
 	</DropdownMenu.Trigger>
-	<DropdownMenu.Content align="end" class="w-32 min-w-0 rounded-md p-1 shadow-md">
+	<DropdownMenu.Content align="end" class="w-32 min-w-0 p-1">
 		<DropdownMenu.RadioGroup value={$themePreference} onValueChange={(value) => themePreference.set(value as ThemePreference)}>
 			{#each options as option (option.value)}
-				<DropdownMenu.RadioItem closeOnSelect value={option.value} class="rounded-sm py-1.5 text-[13px]">
+				<DropdownMenu.RadioItem closeOnSelect value={option.value} class="py-1.5">
 					<option.icon />
 					{option.label()}
 				</DropdownMenu.RadioItem>

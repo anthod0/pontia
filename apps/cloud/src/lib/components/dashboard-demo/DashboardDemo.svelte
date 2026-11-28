@@ -399,8 +399,9 @@
 	}
 	/* Radii of the Dashboard's desktop shell. The site's radius-xl is 12px; the Dashboard's is 10px. */
 	.dashboard-demo {
+		contain: paint;
 		--radius-xl: 10px;
-		--radius-field: var(--radius-xl);
+		--field-radius: var(--radius-xl);
 		--demo-code-heading: #9d0006;
 		--demo-code-strong: #af3a03;
 		--glass-line: rgb(0 0 0 / 7%);
@@ -442,10 +443,6 @@
 	/* The site styles focused buttons with an offset outline; the demo uses the Dashboard's focus ring. */
 	.dashboard-demo :global(button:focus-visible) {
 		outline: none;
-	}
-	/* The site sets `font: inherit` on buttons outside any layer, which overrides the demo's text size utilities. */
-	.dashboard-demo :global(button) {
-		font: revert-layer;
 	}
 	/* Chromium ignores ::-webkit-scrollbar when scrollbar-width or scrollbar-color is set, and its thin width is wider than 6px. */
 	@supports not selector(::-webkit-scrollbar) {

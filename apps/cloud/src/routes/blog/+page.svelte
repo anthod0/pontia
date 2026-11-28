@@ -1,4 +1,5 @@
 <script lang="ts">
+  import "$lib/styles/article.css";
 	import { siteOrigin } from '$lib/site';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
@@ -39,7 +40,7 @@
 <SiteHeader />
 
 <main id="blog" class="blog page-width">
-	<h1>{m.blog_heading()}</h1>
+	<h1 class="article-title">{m.blog_heading()}</h1>
 	<p class="intro">{description}</p>
 	<ul>
 		{#each data.posts as post (post.slug)}
@@ -58,13 +59,12 @@
 
 <style>
 	.blog { max-width: 720px; padding-block: 64px 96px; }
-	h1 { font-size: clamp(36px, 5vw, 52px); font-weight: 500; line-height: 1.1; letter-spacing: -0.045em; }
 	.intro { margin-top: 16px; color: var(--muted-foreground); font-size: 15px; line-height: 1.75; }
 	ul { margin: 40px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--border); }
 	li { border-bottom: 1px solid var(--border); }
 	li a { display: grid; gap: 8px; padding-block: 28px; }
 	time { color: var(--muted-foreground); font: 12px var(--font-mono); }
-	h2 { font-size: 21px; line-height: 1.35; letter-spacing: -0.02em; }
+	h2 { font-weight: 500; font-size: 21px; line-height: 1.35; letter-spacing: -0.02em; }
 	li a:hover h2 { color: var(--primary); }
 	li p { color: var(--muted-foreground); font-size: 14px; line-height: 1.7; }
 	@media (max-width: 760px) {

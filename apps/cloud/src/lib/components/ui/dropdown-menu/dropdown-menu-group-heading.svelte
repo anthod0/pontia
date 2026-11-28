@@ -17,6 +17,6 @@
 	bind:ref
 	data-slot="dropdown-menu-group-heading"
 	data-inset={inset}
-	class={cn("text-muted-foreground px-2 py-2 text-xs data-inset:pl-7", className)}
+	class={cn("text-muted-foreground px-2 py-2 text-sm data-inset:pl-7", className)}
 	{...restProps}
 />

@@ -20,7 +20,7 @@
 	<div class="panel">
 		<div class="glow" aria-hidden="true"></div>
 		<div class="copy reveal">
-			<h2 id="open-source-title">{m.open_source_title()}</h2>
+			<h2 id="open-source-title" class="section-title">{m.open_source_title()}</h2>
 			<p class="lede">{m.open_source_text()}</p>
 			<div class="actions">
 				<a class="button" href={repository} target="_blank" rel="noreferrer"><StarIcon size={16} aria-hidden="true" />{m.star_on_github()}<ArrowUpRightIcon size={16} /></a>

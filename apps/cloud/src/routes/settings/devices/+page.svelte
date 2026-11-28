@@ -1,4 +1,6 @@
 <script lang="ts">
+  import ManagementList from "$lib/components/ManagementList.svelte";
+  import { Alert } from "$lib/components/ui/alert";
   import ArrowSquareOutIcon from "phosphor-svelte/lib/ArrowSquareOutIcon";
   import PencilSimpleIcon from "phosphor-svelte/lib/PencilSimpleIcon";
   import TrashIcon from "phosphor-svelte/lib/TrashIcon";
@@ -25,15 +27,15 @@
 
 <h1>{m.settings_devices()}</h1>
 <p>{m.devices_intro()}</p>
-{#if form?.error}<p class="auth-error" role="alert">{form.error}</p>{/if}
+{#if form?.error}<Alert variant="destructive" class="my-4">{form.error}</Alert>{/if}
 
 {#if data.devices.length > 0}
-  <ul class="management-list">
+  <ManagementList>
     {#each data.devices as device (device.id)}
       <li>
         <div class="device-details">
           <div class="device-heading">
-            <h2>{device.name}</h2>
+            <h3>{device.name}</h3>
             <a
               class="device-handle"
               href={`https://app.pontia.dev/${device.handle}`}
@@ -41,15 +43,15 @@
               rel="noreferrer"
               title={m.devices_open({ name: device.name })}
             >
-              <code>{device.handle}</code>
+              <code class="inline-code">{device.handle}</code>
               <ArrowSquareOutIcon size={13} />
             </a>
           </div>
-          <p>{m.devices_registered({ edge: device.edgeName, date: date(device.createdAt) })}</p>
+          <p class="metadata">{m.devices_registered({ edge: device.edgeName, date: date(device.createdAt) })}</p>
         </div>
         <div class="device-actions">
           <Dialog.Root>
-            <Dialog.Trigger class="row-action" aria-label={m.devices_edit_named({ name: device.name })} title={m.devices_edit()}>
+            <Dialog.Trigger class={buttonVariants({ variant: "ghost", size: "icon-sm" })} aria-label={m.devices_edit_named({ name: device.name })} title={m.devices_edit()}>
               <PencilSimpleIcon size={16} />
             </Dialog.Trigger>
             <Dialog.Content>
@@ -96,7 +98,7 @@
             <AlertDialog.Root>
               <AlertDialog.Trigger
                 type="button"
-                class={buttonVariants({ variant: "destructive", size: "icon" })}
+                class={buttonVariants({ variant: "ghost", size: "icon-sm", class: "hover:text-destructive focus-visible:text-destructive" })}
                 aria-label={m.devices_remove_named({ name: device.name })}
                 title={m.devices_remove()}
               >
@@ -121,7 +123,7 @@
         </div>
       </li>
     {/each}
-  </ul>
+  </ManagementList>
 {:else}
   <p class="empty">{m.devices_none()}</p>
 {/if}
@@ -129,32 +131,6 @@
 <style>
   .empty {
     margin-top: 28px;
-    color: var(--muted-foreground);
-    font-size: 14px;
-    line-height: 1.7;
-  }
-  .management-list {
-    margin: 28px 0 0;
-    padding: 0;
-    list-style: none;
-  }
-  .management-list li {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 20px;
-    align-items: center;
-    border-top: 1px solid var(--border);
-    padding-block: 16px;
-  }
-  .management-list li:last-child {
-    border-bottom: 1px solid var(--border);
-  }
-  h2 {
-    margin-bottom: 4px;
-    font-size: 15px;
-    font-weight: 500;
-  }
-  .management-list p {
     color: var(--muted-foreground);
     font-size: 14px;
     line-height: 1.7;
@@ -182,9 +158,6 @@
     text-decoration: underline;
     text-underline-offset: 3px;
   }
-  code {
-    font-size: 13px;
-  }
   form {
     margin: 0;
   }
@@ -193,23 +166,6 @@
     align-items: center;
     justify-content: flex-end;
     gap: 8px;
-  }
-  .device-actions :global(.row-action) {
-    display: inline-flex;
-    width: 32px;
-    height: 32px;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    background: var(--background);
-    color: var(--muted-foreground);
-    cursor: pointer;
-  }
-  .device-actions :global(.row-action:hover),
-  .device-actions :global(.row-action:focus-visible) {
-    background: var(--muted);
-    color: var(--foreground);
   }
   .edit-dialog-form {
     display: grid;
@@ -222,13 +178,12 @@
     font-weight: 500;
   }
   .field-help {
+    color: var(--muted-foreground);
+    font-size: var(--text-13);
     margin-top: -8px;
   }
 
   @media (max-width: 760px) {
-    .management-list li {
-      grid-template-columns: 1fr;
-    }
     .device-actions {
       flex-wrap: wrap;
       justify-content: flex-start;

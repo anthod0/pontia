@@ -13,22 +13,28 @@ export function addCodeCopyButtons(root: Element): void {
     button.className = "code-copy-button";
     button.textContent = m.code_copy();
     button.setAttribute("aria-label", m.code_copy_label());
+    const status = document.createElement("span");
+    status.className = "sr-only";
+    status.setAttribute("role", "status");
     button.addEventListener("click", async () => {
       try {
         await navigator.clipboard.writeText(code.textContent ?? "");
-        button.textContent = m.code_copied();
+        button.textContent = status.textContent = m.code_copied();
         button.setAttribute("aria-label", m.code_copy_again());
         setTimeout(() => {
+          status.textContent = "";
           button.textContent = m.code_copy();
           button.setAttribute("aria-label", m.code_copy_label());
         }, 2000);
       } catch {
-        button.textContent = m.code_copy_failed();
+        button.textContent = status.textContent = m.code_copy_failed();
         setTimeout(() => {
+          status.textContent = "";
           button.textContent = m.code_copy();
         }, 2000);
       }
     });
     block.appendChild(button);
+    block.appendChild(status);
   }
 }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Alert } from "$lib/components/ui/alert";
 	import AuthProviderIcon from '$lib/components/AuthProviderIcon.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -87,12 +88,14 @@
 	{#if registration}
 		<p role="status">{timedOut || !registration.remainingMs ? m.device_wait_timeout() : m.device_wait_registration()}</p>
 		<div class="dashboard-link">
-			<Button href={data.dashboard} class="button button-secondary">{m.device_open_dashboard()}</Button>
+			<Button href={data.dashboard} size="lg" variant="outline" class="w-full">{m.device_open_dashboard()}</Button>
 		</div>
 	{:else if resultMessage}
-		<p class:auth-error={data.result === 'invalid'} role="status">
-			{resultMessage}
-		</p>
+		{#if data.result === 'invalid'}
+      <Alert variant="destructive" class="my-4">{resultMessage}</Alert>
+    {:else}
+      <p role="status">{resultMessage}</p>
+    {/if}
 	{:else if !data.user}
 		<p>{m.device_sign_in_prompt()}</p>
 		{#if data.userCode}<p class="device-code">{data.userCode}</p>{/if}
@@ -101,7 +104,7 @@
 				method="POST"
 				action={`/api/auth/google/login?locale=${getLocale()}&return_to=${encodeURIComponent(data.returnTo)}`}
 			>
-				<Button type="submit" class="button button-secondary"
+				<Button type="submit" size="lg" variant="outline" class="w-full"
 					><AuthProviderIcon provider="google" />{m.continue_with_google()}</Button
 				>
 			</form>
@@ -109,7 +112,7 @@
 				method="POST"
 				action={`/api/auth/github/login?locale=${getLocale()}&return_to=${encodeURIComponent(data.returnTo)}`}
 			>
-				<Button type="submit" class="button button-secondary"
+				<Button type="submit" size="lg" variant="outline" class="w-full"
 					><AuthProviderIcon provider="github" />{m.continue_with_github()}</Button
 				>
 			</form>
@@ -134,15 +137,15 @@
 				pattern={'[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}'}
 				required
 			/>
-			{#if form?.error}<p class="auth-error" role="alert">{form.error}</p>{/if}
+			{#if form?.error}<Alert variant="destructive" class="my-4">{form.error}</Alert>{/if}
 			<div class="decisions">
-				<Button type="submit" formaction="?/approve" class="button approve"
+				<Button type="submit" formaction="?/approve" size="lg" class="w-full order-1"
 					>{m.device_approve()}</Button
 				>
 				<Button
 					type="submit"
 					formaction="?/deny"
-					class="button button-secondary">{m.device_deny()}</Button
+					size="lg" variant="outline" class="w-full">{m.device_deny()}</Button
 				>
 			</div>
 		</form>
@@ -160,7 +163,7 @@
 		width: 100%;
 		padding: 22px;
 		border: 1px solid var(--border);
-		border-radius: 4px;
+		border-radius: var(--field-radius);
 		background: var(--background);
 		font: 24px var(--font-mono);
 		letter-spacing: 0.12em;
@@ -171,7 +174,7 @@
 		margin-top: 28px;
 		padding: 20px;
 		border: 1px solid var(--border);
-		border-radius: 4px;
+		border-radius: var(--field-radius);
 		color: var(--heading) !important;
 		font: 28px var(--font-mono) !important;
 		letter-spacing: 0.12em;
@@ -181,9 +184,5 @@
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 12px;
-	}
-	/* Approve stays first in the DOM so Enter submits it; show it on the right. */
-	.decisions :global(.approve) {
-		order: 1;
 	}
 </style>

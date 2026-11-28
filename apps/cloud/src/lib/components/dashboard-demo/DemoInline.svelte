@@ -17,11 +17,6 @@
 		<button type="button" class={link} title={path} aria-label={`Preview ${token.value}`} onclick={() => onlink(path)}>{token.value}<FileTextIcon class={icon} aria-hidden="true" /></button>
 	{:else if token.kind === 'preview' && onpreview}
 		{@const url = token.url}
-		<a href={url} class="{link} demo-link" title={url} onclick={(event) => { event.preventDefault(); onpreview(url); }}>{token.value}<ArrowSquareOutIcon class={icon} aria-hidden="true" /></a>
+		<a href={url} class={link} title={url} onclick={(event) => { event.preventDefault(); onpreview(url); }}>{token.value}<ArrowSquareOutIcon class={icon} aria-hidden="true" /></a>
 	{:else}{token.value}{/if}
 {/each}
-
-<style>
-	/* The site resets link colour and underline outside any layer. */
-	.demo-link { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
-</style>

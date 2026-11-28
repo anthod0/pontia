@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Alert } from "$lib/components/ui/alert";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { ParaglideMessage } from "@inlang/paraglide-js-svelte";
@@ -34,7 +35,7 @@
         <pre><code>sudo pontia-edge retry</code></pre>
       </div>
     </div>
-    <p class="another-link"><a href={localizeHref("/settings/edges/deploy")}>{m.deploy_another()}</a></p>
+    <p class="another-link"><a class="content-link" href={localizeHref("/settings/edges/deploy")}>{m.deploy_another()}</a></p>
   </section>
 {:else}
   <p class="intro">{m.edges_deploy_text()}</p>
@@ -63,18 +64,18 @@
       />
     </div>
     {#if form?.error}
-      <p id="deployment-error" class="auth-error" role="alert">{form.error}</p>
+      <Alert id="deployment-error" variant="destructive" class="my-4">{form.error}</Alert>
     {/if}
-    <Button type="submit" class="button">{m.edges_deploy_generate()}</Button>
+    <Button type="submit" size="lg">{m.edges_deploy_generate()}</Button>
     <p class="agreement">
       <ParaglideMessage message={m.edges_deploy_agreement}>
-        {#snippet agreement({ children })}<a href="https://letsencrypt.org/repository/" target="_blank" rel="noreferrer">{@render children?.()}</a>{/snippet}
+        {#snippet agreement({ children })}<a class="content-link" href="https://letsencrypt.org/repository/" target="_blank" rel="noreferrer">{@render children?.()}</a>{/snippet}
       </ParaglideMessage>
     </p>
   </form>
 {/if}
 
-<p class="back-link"><a href={localizeHref("/settings/edges")}>{m.deploy_back()}</a></p>
+<p class="back-link"><a class="content-link" href={localizeHref("/settings/edges")}>{m.deploy_back()}</a></p>
 
 <style>
   section {
@@ -86,14 +87,10 @@
   }
 
   h2 {
-    font-size: 18px;
-    margin-bottom: 8px;
     overflow-wrap: anywhere;
   }
 
   h3 {
-    font-size: 14px;
-    font-weight: 500;
     margin-top: 20px;
   }
 
@@ -103,7 +100,7 @@
   .retry-help p {
     color: var(--muted-foreground);
     font-size: 14px;
-    line-height: 1.7;
+    line-height: 1.6;
   }
 
   .requirements {
@@ -135,11 +132,6 @@
     margin: 0;
   }
 
-  .agreement a {
-    color: var(--primary);
-    text-decoration: underline;
-    text-underline-offset: 3px;
-  }
 
   .retry-help {
     margin-top: 28px;

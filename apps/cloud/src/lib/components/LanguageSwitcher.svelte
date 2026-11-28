@@ -11,12 +11,12 @@
 </script>
 
 <DropdownMenu.Root>
-	<DropdownMenu.Trigger class="theme-trigger" aria-label={m.language_label()}>
+	<DropdownMenu.Trigger class="theme-trigger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={m.language_label()}>
 		<TranslateIcon size={16} />
 	</DropdownMenu.Trigger>
-	<DropdownMenu.Content align="end" class="w-max min-w-0 rounded-md p-1 shadow-md">
+	<DropdownMenu.Content align="end" class="w-max min-w-0 p-1">
 		{#each locales as locale (locale)}
-			<DropdownMenu.Item class="rounded-sm py-1.5 text-[13px] whitespace-nowrap">
+			<DropdownMenu.Item class="py-1.5 whitespace-nowrap">
 				{#snippet child({ props })}
 					<!-- A full reload loads the messages and server data of the new locale. -->
 					<a

@@ -1,6 +1,8 @@
 <script lang="ts">
-  import CheckIcon from "phosphor-svelte/lib/CheckIcon";
-  import CopyIcon from "phosphor-svelte/lib/CopyIcon";
+  import ManagementList from "$lib/components/ManagementList.svelte";
+  import { Alert } from "$lib/components/ui/alert";
+  import { addCodeCopyButtons } from "$lib/code-copy";
+  import "$lib/styles/article.css";
   import { Button } from "$lib/components/ui/button";
   import { authError } from "$lib/auth-errors";
   import { m } from "$lib/paraglide/messages";
@@ -10,16 +12,6 @@
   let { data, form }: { data: PageData; form: ActionData } = $props();
   const message = $derived(authError(data.error) ?? form?.error);
   const installCommand = 'npx @pontia/cli init';
-  let copyStatus = $state<"idle" | "copied" | "error">("idle");
-
-  async function copyCommand() {
-    try {
-      await navigator.clipboard.writeText(installCommand);
-      copyStatus = "copied";
-    } catch {
-      copyStatus = "error";
-    }
-  }
   const providers = [
     { id: "google", name: "Google" },
     { id: "github", name: "GitHub" },
@@ -33,28 +25,16 @@
 
 <h1>{m.settings_account()}</h1>
 <p>{m.account_intro()}</p>
-{#if message}<p class="auth-error" role="alert">{message}</p>{/if}
+{#if message}<Alert variant="destructive" class="my-4">{message}</Alert>{/if}
 
 {#if !data.hasDevices}
   <section class="getting-started" aria-labelledby="getting-started-heading">
     <h2 id="getting-started-heading">{m.account_first_device_heading()}</h2>
     <p>{m.account_first_device_text()}</p>
-    <div class="install-command">
-      <code>{installCommand}</code>
-      <Button
-        variant="outline"
-        size="icon"
-        onclick={copyCommand}
-        aria-label={copyStatus === "copied" ? m.copy_install_command_again() : m.copy_install_command()}
-        title={m.copy_install_command()}
-      >
-        {#if copyStatus === "copied"}<CheckIcon size={17} />{:else}<CopyIcon size={17} />{/if}
-      </Button>
+    <div class="article-content" {@attach addCodeCopyButtons}>
+      <pre><code>{installCommand}</code></pre>
     </div>
-    <p class="copy-feedback" aria-live="polite">
-      {copyStatus === "copied" ? m.copied_to_clipboard() : copyStatus === "error" ? m.account_copy_failed() : ""}
-    </p>
-    <Button href={localizeHref("/docs/getting-started")} class="button">{m.docs_getting_started()}</Button>
+    <Button href={localizeHref("/docs/getting-started")} size="lg">{m.docs_getting_started()}</Button>
   </section>
 {/if}
 
@@ -70,7 +50,7 @@
 
 <section aria-labelledby="methods-heading">
   <h2 id="methods-heading">{m.account_sign_in_methods()}</h2>
-  <ul class="management-list">
+  <ManagementList>
     {#each providers as provider}
       {@const account = data.accounts.find((item) => item.provider === provider.id)}
       <li>
@@ -91,65 +71,29 @@
         {#if account}
           <form method="POST" action="?/unlinkProvider">
             <input type="hidden" name="provider" value={provider.id} />
-            <Button type="submit" class="button button-secondary">{m.account_unlink()}</Button>
+            <Button type="submit" size="lg" variant="outline">{m.account_unlink()}</Button>
           </form>
         {:else}
           <form method="POST" action={`/api/auth/${provider.id}/bind?locale=${getLocale()}`}>
-            <Button type="submit" class="button button-secondary">{m.account_link()}</Button>
+            <Button type="submit" size="lg" variant="outline">{m.account_link()}</Button>
           </form>
         {/if}
       </li>
     {/each}
-  </ul>
+  </ManagementList>
 </section>
 
 <form method="POST" action={`/api/auth/logout?locale=${getLocale()}`} class="sign-out-form">
-  <Button type="submit" class="button">{m.sign_out()}</Button>
+  <Button type="submit" size="lg" class="w-full">{m.sign_out()}</Button>
 </form>
 
 <style>
   section {
     margin-top: 40px;
   }
-  h2 {
-    margin-bottom: 8px;
-    font-size: 20px;
-    letter-spacing: -0.02em;
-  }
-  h3 {
-    margin-bottom: 4px;
-    font-size: 15px;
-    font-weight: 500;
-  }
-  section p {
-    color: var(--muted-foreground);
-    font-size: 14px;
-    line-height: 1.7;
-  }
   .getting-started {
     border-block: 1px solid var(--border);
     padding-block: 24px;
-  }
-  .install-command {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    margin-top: 20px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 12px;
-    background: var(--muted);
-  }
-  .install-command code {
-    min-width: 0;
-    flex: 1;
-    overflow-wrap: anywhere;
-    font-size: 13px;
-    line-height: 1.7;
-  }
-  .copy-feedback {
-    min-height: 20px;
-    margin-block: 6px 12px;
   }
   .profile {
     display: grid;
@@ -163,36 +107,8 @@
     height: 56px;
     border-radius: 50%;
   }
-  .management-list {
-    margin: 16px 0 0;
-    padding: 0;
-    list-style: none;
-  }
-  .management-list li {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 20px;
-    align-items: center;
-    border-top: 1px solid var(--border);
-    padding-block: 16px;
-  }
-  .management-list li:last-child {
-    border-bottom: 1px solid var(--border);
-  }
-  .management-list form {
-    margin: 0;
-  }
   .sign-out-form {
     max-width: 220px;
     margin-top: 40px;
-  }
-  .sign-out-form :global(.button) {
-    width: 100%;
-  }
-
-  @media (max-width: 600px) {
-    .management-list li {
-      grid-template-columns: 1fr;
-    }
   }
 </style>

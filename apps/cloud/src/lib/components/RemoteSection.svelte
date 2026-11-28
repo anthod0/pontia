@@ -95,7 +95,7 @@
 
 <section id="remote" class="page-width section-block" aria-labelledby="remote-title" {@attach reveal()}>
 	<div class="intro reveal">
-		<h2 id="remote-title">{m.remote_title()}</h2>
+		<h2 id="remote-title" class="section-title">{m.remote_title()}</h2>
 		<p>{m.remote_text()}</p>
 	</div>
 
@@ -297,8 +297,8 @@
 	.approval-actions button:active { scale: 0.96; }
 	.deny { border: 1px solid var(--border-strong); color: var(--foreground); }
 	.deny:hover { border-color: var(--border-stronger); background: var(--muted); }
-	.approve { background: var(--button); color: white }
-	.approve:hover { background: color-mix(in srgb, var(--button) 86%, black) }
+	.approve { background: var(--primary-solid); color: var(--primary-foreground) }
+	.approve:hover { background: var(--primary-solid-active) }
 	.p-answer { display: flex; align-items: center; justify-content: space-between; gap: 0.6em; padding: 0.6em 0.9em; border: 1px solid var(--border); border-radius: 0.7em; background: var(--background); font-weight: 500; color: var(--coverage-supported); }
 	.p-answer.answer-deny { color: var(--muted-foreground); }
 	.composer { display: flex; flex-shrink: 0; align-items: center; height: 2.4em; margin: 0.8em 0 1.6em; padding: 0 0.3em 0 0.9em; border: 1px solid var(--border); border-radius: 1.2em; background: var(--background); font-size: inherit; transition: border-color 0.2s; }
@@ -306,7 +306,7 @@
 	.placeholder { font-size: 0.72em; color: var(--muted-foreground); }
 	.suggestion { display: flex; flex: 1; align-items: center; gap: 0.5em; min-width: 0; height: 100%; font-size: 0.72em; color: var(--foreground); text-align: left; }
 	.suggestion > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; animation: type-in 0.5s steps(18) both; }
-	.send { display: grid; flex-shrink: 0; place-items: center; width: 2.2em; height: 2.2em; border-radius: 50%; background: var(--button); color: white; transition: scale 0.15s var(--ease-out); }
+	.send { display: grid; flex-shrink: 0; place-items: center; width: 2.2em; height: 2.2em; border-radius: 50%; background: var(--primary-solid); color: var(--primary-foreground); transition: scale 0.15s var(--ease-out); }
 	.suggestion:hover .send { scale: 1.08; }
 
 	.enter { animation: enter 0.36s var(--ease-out) both; }

@@ -113,7 +113,7 @@
 	</aside>
 	<div class="docs-menu">
 		<Popover.Root bind:open={menuOpen}>
-			<Popover.Trigger class="docs-menu-toggle">
+			<Popover.Trigger class="docs-menu-toggle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
 				<span>{currentTitle}</span>
 				<CaretDownIcon size={16} />
 			</Popover.Trigger>
@@ -148,7 +148,7 @@
 	}
 
 	/* Popover content is portalled to <body>, so these rules are global. */
-	:global(.docs-menu-content) { width: var(--bits-floating-anchor-width); max-height: min(70vh, calc(var(--bits-floating-available-height) - 16px)); overflow-y: auto; padding: 18px 16px; border-radius: 6px; }
+	:global(.docs-menu-content) { width: var(--bits-floating-anchor-width); max-height: min(70vh, calc(var(--bits-floating-available-height) - 16px)); overflow-y: auto; padding: 18px 16px; }
 	:global(.docs-menu-content nav) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 16px; color: var(--muted-foreground); font-size: 14px; }
 	:global(.docs-menu-content .nav-group) { display: grid; align-content: start; gap: 10px; }
 	:global(.docs-menu-content .nav-group span) { color: var(--heading); font-size: 10px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; }

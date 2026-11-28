@@ -52,7 +52,7 @@
 
 <section id="bots" class="page-width section-block section" aria-labelledby="bots-title" {@attach reveal(() => { visible = true; })}>
 	<div class="intro reveal">
-		<h2 id="bots-title">{m.bots_title()}</h2>
+		<h2 id="bots-title" class="section-title">{m.bots_title()}</h2>
 		<p>{m.bots_intro()}</p>
 	</div>
 

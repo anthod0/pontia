@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { Alert } from "$lib/components/ui/alert";
   import PencilSimpleIcon from "phosphor-svelte/lib/PencilSimpleIcon";
   import TrashIcon from "phosphor-svelte/lib/TrashIcon";
   import { onMount } from "svelte";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
+  import { Button, buttonVariants } from "$lib/components/ui/button";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Input } from "$lib/components/ui/input";
   import * as Table from "$lib/components/ui/table";
@@ -53,8 +54,7 @@
 {#snippet healthBadge(edgeId: string)}
   {@const status = healthByEdge[edgeId]?.status ?? "checking"}
   <Badge
-    variant={status === "unreachable" ? "destructive" : status === "healthy" ? "secondary" : "outline"}
-    class={status === "healthy" ? "health-healthy" : undefined}
+    variant={status === "unreachable" ? "destructive" : status === "healthy" ? "success" : "outline"}
     aria-live="polite"
   >
     {status === "checking" ? m.edges_health_checking() : status === "healthy" ? m.edges_health_healthy() : m.edges_health_unreachable()}
@@ -76,7 +76,7 @@
 
 <h1>{m.settings_edges()}</h1>
 <p>{m.edges_intro()}</p>
-{#if form?.error}<p class="auth-error" role="alert">{form.error}</p>{/if}
+{#if form?.error}<Alert variant="destructive" class="my-4">{form.error}</Alert>{/if}
 
 <section aria-labelledby="your-edges">
   <h2 id="your-edges">{m.edges_yours()}</h2>
@@ -101,14 +101,14 @@
             <Table.Cell class="max-w-0">
               <div class="truncate" title={edge.tunnelUrl}>{edge.tunnelUrl}</div>
             </Table.Cell>
-            <Table.Cell>{new Date(edge.createdAt).toLocaleDateString(getLocale())}</Table.Cell>
+            <Table.Cell class="metadata">{new Date(edge.createdAt).toLocaleDateString(getLocale())}</Table.Cell>
             <Table.Cell>{@render healthBadge(edge.id)}</Table.Cell>
             {@render versionCell(edge.id)}
             <Table.Cell>
               <div class="row-actions">
                 <Dialog.Root>
                   <Dialog.Trigger
-                    class="row-action"
+                    class={buttonVariants({ variant: "ghost", size: "icon-sm" })}
                     aria-label={m.edges_rename_named({ name: edge.name })}
                     title={m.edges_rename()}
                   >
@@ -141,7 +141,7 @@
                 </Dialog.Root>
                 <AlertDialog.Root>
                   <AlertDialog.Trigger
-                    class="row-action delete-action"
+                    class={buttonVariants({ variant: "ghost", size: "icon-sm", class: "hover:text-destructive focus-visible:text-destructive" })}
                     aria-label={m.edges_delete_named({ name: edge.name })}
                     title={m.edges_delete()}
                   >
@@ -213,27 +213,18 @@
   <p>{m.edges_deploy_text()}</p>
   <p>
     <ParaglideMessage message={m.edges_deploy_retry}>
-      {#snippet code({ children })}<code>{@render children?.()}</code>{/snippet}
+      {#snippet code({ children })}<code class="inline-code">{@render children?.()}</code>{/snippet}
     </ParaglideMessage>
   </p>
 
   <div class="deployment-action">
-    <Button href={localizeHref("/settings/edges/deploy")} class="button">{m.edges_deploy_start()}</Button>
+    <Button href={localizeHref("/settings/edges/deploy")} size="lg">{m.edges_deploy_start()}</Button>
   </div>
 </section>
 
 <style>
   section {
     margin-top: 40px;
-  }
-  h2 {
-    margin-bottom: 8px;
-    font-size: 18px;
-  }
-  section > p {
-    color: var(--muted-foreground);
-    font-size: 14px;
-    line-height: 1.7;
   }
   .visually-hidden {
     position: absolute;
@@ -249,43 +240,11 @@
   .deployment-action {
     margin-top: 20px;
   }
-  code {
-    border-radius: 4px;
-    background: var(--muted);
-    padding: 2px 5px;
-    color: var(--foreground);
-  }
-  :global(.health-healthy) {
-    border-color: color-mix(in oklab, var(--success) 35%, transparent);
-    background: color-mix(in oklab, var(--success) 12%, transparent);
-    color: var(--success);
-  }
   .row-actions {
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 2px;
-  }
-  .row-actions :global(.row-action) {
-    display: inline-flex;
-    width: 28px;
-    height: 28px;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: var(--muted-foreground);
-    cursor: pointer;
-  }
-  .row-actions :global(.row-action:hover),
-  .row-actions :global(.row-action:focus-visible) {
-    background: var(--muted);
-    color: var(--foreground);
-  }
-  .row-actions :global(.delete-action:hover),
-  .row-actions :global(.delete-action:focus-visible) {
-    color: var(--color-destructive);
   }
   .rename-dialog-form {
     display: grid;
