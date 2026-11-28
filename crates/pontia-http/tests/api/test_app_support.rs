@@ -34,7 +34,6 @@ fn env_guard_restores_variables_and_can_be_reused_after_a_test_panics() {
 async fn test_app_creates_isolated_state_home_and_workspace() {
     let app = TestApp::builder()
         .external_api_token(Some("token".to_string()))
-        .pi_runtime_stub(true)
         .build()
         .await;
 
@@ -47,10 +46,6 @@ async fn test_app_creates_isolated_state_home_and_workspace() {
     );
     assert!(app.workspace().path().exists());
     assert_eq!(app.state.pontia_home(), app.pontia_home().path());
-    assert_eq!(
-        std::env::var("PONTIA_PI_TUI_COMMAND").ok().as_deref(),
-        Some("sh -c 'cat >> \"$PWD/pi-tui-input.log\"' --")
-    );
 }
 
 #[tokio::test]

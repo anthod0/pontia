@@ -12,7 +12,7 @@ pub fn load(vars: &HashMap<String, String>) -> Result<AppConfig, String> {
         .into_iter()
         .filter_map(|key| vars.get(key).map(|value| (key.to_string(), value.clone())))
         .collect();
-    pontia_clients::config_from_vars(&persistent_vars).map_err(|_| {
+    pontia_config::AppConfig::from_vars(&persistent_vars).map_err(|_| {
         "failed to load Pontia configuration; verify PONTIA_HOME, config.toml syntax, and configured values"
             .to_string()
     })

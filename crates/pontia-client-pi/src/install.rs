@@ -1,5 +1,4 @@
 use crate::config::PiConfiguration;
-use pontia_agent_control::client_contract::ClientConfiguration;
 use pontia_agent_control::client_contract::{
     DetectionContext,
     install::{
@@ -152,15 +151,7 @@ impl ClientInstaller for PiConfiguration {
                 .filter(|d| d.is_absolute())
                 .and_then(|d| d.join("auth.json").metadata().ok())
                 .is_some_and(|m| m.is_file() && m.len() > 0);
-        let provenance = if crate::config::command(&self.merged("default"))
-            .as_deref()
-            .ok()
-            == Some(BINARY)
-        {
-            provenance(context)
-        } else {
-            InstallProvenance::ExternalUnmanaged
-        };
+        let provenance = provenance(context);
         let login_binary = match provenance {
             InstallProvenance::NotInstalled | InstallProvenance::PontiaManaged => {
                 let path = context.pontia_home.join("tools/bin/pi");
@@ -276,7 +267,7 @@ mod tests {
         fs::set_permissions(&node, fs::Permissions::from_mode(0o700)).unwrap();
         symlink("/bin/true", bin.join("npm")).unwrap();
         let vars = HashMap::from([("PATH".into(), bin.display().to_string())]);
-        let installer = PiConfiguration::new(serde_json::json!({}), serde_json::json!({}));
+        let installer = PiConfiguration;
         for (version, expected) in [("invalid", Status::Failed), ("1.2.3", Status::Succeeded)] {
             let home = root.path().join(version);
             let state = client_operations::run(&home, BINARY, "default", "npm_managed", |op| {

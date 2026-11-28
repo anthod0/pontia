@@ -256,7 +256,7 @@ fn default_initialization_installs_pi_writes_config_starts_service_and_returns_d
     let token = config["external_api_token"].as_str().expect("token");
     assert_eq!(token.len(), 43);
     assert_eq!(config.as_table().unwrap().len(), 1);
-    let loaded = pontia_clients::config_from_vars(&vars(&user_home, &pontia_home)).unwrap();
+    let loaded = pontia_config::AppConfig::from_vars(&vars(&user_home, &pontia_home)).unwrap();
     assert_eq!(loaded.bind_addr.to_string(), "127.0.0.1:8080");
     assert_eq!(loaded.workspace_browser.roots[0].root_id, "home");
     assert_eq!(

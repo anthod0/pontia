@@ -1,4 +1,4 @@
-use std::{collections::HashMap, os::unix::fs::PermissionsExt};
+use std::{collections::HashMap, os::unix::fs::PermissionsExt, sync::Arc};
 
 use pontia_agent_control::client_contract::auth::AuthState;
 
@@ -12,7 +12,7 @@ struct Fixture {
 impl Fixture {
     fn new(models: &str, auth_command: &str) -> Self {
         let root = tempfile::tempdir().unwrap();
-        let program = root.path().join("pi-test");
+        let program = root.path().join("pi");
         let script = format!(
             r#"#!/bin/sh
 printf '%s\n' "$*" >> "$OUT/args"
@@ -32,14 +32,7 @@ esac
         );
         std::fs::write(&program, script).unwrap();
         std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let configuration = Arc::new(PiConfiguration::new(
-            json!({"tui_command": program}),
-            json!({}),
-        ));
-        Self {
-            root,
-            auth: PiAuth::new(configuration),
-        }
+        Self { root, auth: PiAuth }
     }
 
     fn context(&self) -> AuthContext {
@@ -47,7 +40,10 @@ esac
             pontia_home: self.root.path().to_path_buf(),
             vars: Arc::new(HashMap::from([
                 ("OUT".into(), self.root.path().display().to_string()),
-                ("PATH".into(), "/usr/bin:/bin".into()),
+                (
+                    "PATH".into(),
+                    format!("{}:/usr/bin:/bin", self.root.path().display()),
+                ),
             ])),
         }
     }
@@ -63,7 +59,7 @@ esac
 
 #[test]
 fn registration_exposes_status_only_authentication() {
-    let registration = crate::registration(None);
+    let registration = crate::registration();
     let auth = registration.auth.unwrap();
     assert!(auth.supports_auth("default"));
     assert!(!auth.supports_auth("other"));

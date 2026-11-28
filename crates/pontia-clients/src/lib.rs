@@ -20,44 +20,12 @@ pub fn service_path_variables() -> Vec<&'static str> {
         .flat_map(|client| client.service_path_variables().iter().copied())
         .collect()
 }
-use pontia_config::{AppConfig, RuntimeCommandOverride};
-
-const RUNTIME_COMMANDS: &[RuntimeCommandOverride] = &[RuntimeCommandOverride {
-    client_type: "pi",
-    environment_variable: "PONTIA_PI_TUI_COMMAND",
-}];
-
-pub fn config_from_env() -> pontia_core::Result<AppConfig> {
-    AppConfig::from_env(RUNTIME_COMMANDS)
-}
-
-pub fn config_from_vars(
-    vars: &std::collections::HashMap<String, String>,
-) -> pontia_core::Result<AppConfig> {
-    AppConfig::from_vars(vars, RUNTIME_COMMANDS)
-}
-
 /// The composition root for the Agent Clients included in Pontia.
-pub fn registration(config: &AppConfig) -> ClientRegistry {
+pub fn registration() -> ClientRegistry {
     let mut clients = ClientRegistry::default();
-    let sources = &config.client_configuration;
-    let mut pi = pontia_client_pi::registration(None);
-    let pi_configuration = Arc::new(pontia_client_pi::config::PiConfiguration::new(
-        sources
-            .runtime_file
-            .get("pi")
-            .cloned()
-            .unwrap_or_else(|| serde_json::json!({})),
-        sources
-            .runtime_environment
-            .get("pi")
-            .cloned()
-            .unwrap_or_else(|| serde_json::json!({})),
-    ));
-    pi.configuration = Some(pi_configuration.clone());
-    clients.register_installer(pi_configuration);
+    clients.register_installer(Arc::new(pontia_client_pi::config::PiConfiguration));
     clients.register_installer(Arc::new(pontia_client_codex::install::CodexInstaller));
-    clients.register(pi);
+    clients.register(pontia_client_pi::registration());
     clients.register(pontia_client_codex::registration());
     clients.register(pontia_client_claude::registration());
     clients.register(pontia_client_acp::registration());

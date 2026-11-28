@@ -5,21 +5,7 @@ use std::{
     sync::{Mutex, MutexGuard},
 };
 
-use pontia_config::{FilePickerConfig, RuntimeClientConfig, RuntimeCommandOverride, RuntimeConfig};
-
-struct AppConfig;
-impl AppConfig {
-    const RUNTIME_COMMANDS: &[RuntimeCommandOverride] = &[RuntimeCommandOverride {
-        client_type: "pi",
-        environment_variable: "PONTIA_PI_TUI_COMMAND",
-    }];
-    fn from_vars(vars: &HashMap<String, String>) -> pontia_core::Result<pontia_config::AppConfig> {
-        pontia_config::AppConfig::from_vars(vars, Self::RUNTIME_COMMANDS)
-    }
-    fn from_env() -> pontia_core::Result<pontia_config::AppConfig> {
-        pontia_config::AppConfig::from_env(Self::RUNTIME_COMMANDS)
-    }
-}
+use pontia_config::{AppConfig, FilePickerConfig};
 
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
@@ -186,12 +172,6 @@ run_migrations = false
 [dashboard]
 source = "/opt/pontia/dashboard"
 
-[runtime.pi]
-tui_command = "custom-pi from file"
-
-[runtime.custom]
-tui_command = "custom-agent from file"
-
 [workspace_browser]
 roots = [
   { root_id = "projects", label = "Projects", path = "/home/me/projects" }
@@ -216,14 +196,6 @@ roots = [
         Some("/opt/pontia/dashboard")
     );
     assert!(!config.run_migrations);
-    assert_eq!(
-        config.client_configuration.runtime_file["pi"]["tui_command"],
-        "custom-pi from file"
-    );
-    assert_eq!(
-        config.client_configuration.runtime_file["custom"]["tui_command"],
-        "custom-agent from file"
-    );
     assert_eq!(config.workspace_browser.roots.len(), 1);
     assert_eq!(config.workspace_browser.roots[0].root_id, "projects");
 }
@@ -240,9 +212,6 @@ external_api_token = "file-token"
 
 [dashboard]
 source = "/from/file/dashboard"
-
-[runtime.pi]
-tui_command = "pi from file"
 "#,
     )
     .expect("write config");
@@ -251,10 +220,6 @@ tui_command = "pi from file"
         (
             "PONTIA_EXTERNAL_API_TOKEN".to_string(),
             "env-token".to_string(),
-        ),
-        (
-            "PONTIA_PI_TUI_COMMAND".to_string(),
-            "pi from env".to_string(),
         ),
         (
             "PONTIA_DASHBOARD_SOURCE".to_string(),
@@ -267,31 +232,9 @@ tui_command = "pi from file"
     assert_eq!(config.bind_addr.to_string(), "127.0.0.1:4040");
     assert_eq!(config.external_api_token.as_deref(), Some("env-token"));
     assert_eq!(
-        config.client_configuration.runtime_environment["pi"]["tui_command"],
-        "pi from env"
-    );
-    assert_eq!(
         config.dashboard.source.as_deref(),
         Some("/from/env/dashboard")
     );
-}
-
-#[test]
-fn runtime_config_resolves_tui_commands_by_agent_client_config_key() {
-    let config = RuntimeConfig {
-        clients: HashMap::from([(
-            "pi".to_string(),
-            RuntimeClientConfig {
-                tui_command: Some("pi from config".to_string()),
-            },
-        )]),
-    };
-
-    assert_eq!(
-        config.tui_command_for_client_config_key("pi").as_deref(),
-        Some("pi from config")
-    );
-    assert_eq!(config.tui_command_for_client_config_key("unknown"), None);
 }
 
 #[test]

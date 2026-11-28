@@ -49,7 +49,7 @@ npx @pontia/cli init   # Pi is selected by default
 
 `pontia init` 会安装 Pi 插件，启动 Pontia 服务，让你通过 Google 或 GitHub 登录，并将机器注册到一个官方中继。在无头机器上，登录过程会打印一个 URL 和一个一次性代码，你可以在手机上批准。完成后，打开 [app.pontia.dev](https://app.pontia.dev)，选择这台机器，然后启动一个 Session。
 
-[Pi Agent Client 参考](/docs/agent-clients/pi)介绍了自定义 Pi 命令和诊断方法。高级用户可以[运行自己的中继](/docs/self-hosted-edge)来代替官方中继。
+[Pi Agent Client 参考](/docs/agent-clients/pi)介绍了Pi 的安装和诊断方法。高级用户可以[运行自己的中继](/docs/self-hosted-edge)来代替官方中继。
 
 ## 方案 2：用 SSH 和 tmux 自行搭建
 

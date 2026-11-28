@@ -2,8 +2,6 @@ use std::{collections::HashMap, net::SocketAddr, path::PathBuf};
 
 use serde::Deserialize;
 
-mod client_configuration;
-pub use client_configuration::{ClientConfigurationSources, ConfigurationLayers};
 mod bot;
 mod environment;
 mod file_config;
@@ -14,11 +12,6 @@ mod uploads;
 pub use bot::BotConfig;
 mod workspace_roots;
 pub use uploads::UploadsConfig;
-
-pub struct RuntimeCommandOverride {
-    pub client_type: &'static str,
-    pub environment_variable: &'static str,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppConfig {
@@ -32,7 +25,6 @@ pub struct AppConfig {
     pub file_picker: FilePickerConfig,
     pub uploads: UploadsConfig,
     pub bot: BotConfig,
-    pub client_configuration: ClientConfigurationSources,
     pub dashboard: DashboardConfig,
     pub remote: Option<RemoteConfig>,
     pub preview: PreviewConfig,
@@ -78,25 +70,6 @@ fn default_dashboard_source() -> Option<String> {
         "https://get.pontia.dev/releases/v{}/pontia-dashboard.tar.gz",
         pontia_version::version()
     ))
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
-pub struct RuntimeConfig {
-    #[serde(default, flatten)]
-    pub clients: HashMap<String, RuntimeClientConfig>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
-pub struct RuntimeClientConfig {
-    pub tui_command: Option<String>,
-}
-
-impl RuntimeConfig {
-    pub fn tui_command_for_client_config_key(&self, runtime_config_key: &str) -> Option<String> {
-        self.clients
-            .get(runtime_config_key)
-            .and_then(|client| client.tui_command.clone())
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]

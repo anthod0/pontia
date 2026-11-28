@@ -20,9 +20,6 @@ bind_addr = "127.0.0.1:8080"
 external_api_token = "replace-with-a-long-secret"
 run_migrations = true
 
-[runtime.pi]
-tui_command = "pi"
-
 [workspace_browser]
 roots = [
   { root_id = "projects", label = "Projects", path = "/home/me/projects" }
@@ -35,7 +32,6 @@ roots = [
 | `external_api_token` | Local Dashboard 和 External API 所需的 Bearer token |
 | `run_migrations` | `pontiad` 是否应用其内置的数据库迁移；默认为 `true` |
 | `dashboard.source` | 本地 Dashboard 构建目录，或仅包含一个 `index.html` 的远程 `.tar.gz`、`.tgz` 或 `.zip` 归档 |
-| `runtime.pi.tui_command` | 启动 Pi Session 时使用的 Pi 可执行文件或命令 |
 | `workspace_browser.roots` | Dashboard 可浏览以激活 Workspace 的目录 |
 | `preview.enabled` | 启用 localhost Web 应用预览；默认为 `true` |
 | `preview.allowed_ports` | 额外明确开放给预览的敏感开发或管理端口 |
@@ -107,7 +103,6 @@ cleanup_interval_hours = 24
 | `PONTIA_RUN_MIGRATIONS` | `run_migrations` |
 | `PONTIA_WORKSPACE_ROOTS` | Workspace 根目录，格式为以分号分隔的 `root_id|label|path` 条目 |
 | `PONTIA_DASHBOARD_SOURCE` | `dashboard.source`；空值会禁用 Dashboard 服务 |
-| `PONTIA_PI_TUI_COMMAND` | `runtime.pi.tui_command`；空值表示使用 `pi` |
 | `PONTIA_AUTH_ORIGIN` | Pontia Cloud HTTPS origin；用于受控部署和开发 |
 
 对于运行中的进程，环境变量的值优先于文件中的值。持久服务配置请使用 `config.toml`。已安装的服务会单独保存 `PONTIA_HOME`、`PONTIA_AUTH_ORIGIN` 和所需的 Agent Client 路径。

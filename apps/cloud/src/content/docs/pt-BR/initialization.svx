@@ -112,7 +112,7 @@ Agora liste as entradas de Client disponíveis:
 pontia client list
 ```
 
-Confirme que cada entrada selecionada aparece como `enabled`. Se o serviço do Pontia não encontrar `pi`, veja [Substituir o comando do Pi](/docs/agent-clients/pi#override-the-pi-command). A etapa 7 verifica esses Clients iniciando Sessions pelo Remote Dashboard.
+Confirme que cada entrada selecionada aparece como `enabled`. A etapa 7 verifica esses Clients iniciando Sessions pelo Remote Dashboard.
 
 ### 5. Entre no Pontia Cloud
 

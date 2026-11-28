@@ -9,7 +9,7 @@ async fn registered_service_owns_the_listener_until_shutdown() {
     let root = tempfile::tempdir().unwrap();
     let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
     let mut clients = ClientRegistry::default();
-    clients.register(pontia_client_pi::registration(None));
+    clients.register(pontia_client_pi::registration());
     let state = AgentControl::builder(pool, root.path().to_path_buf())
         .clients(clients.clone())
         .build();
@@ -56,10 +56,10 @@ async fn background_rpc_process_reconnects_and_confirms_idle_exit() {
         .canonicalize()
         .unwrap();
     let mut clients = ClientRegistry::default();
-    clients.register(pontia_client_pi::registration(Some(format!(
-        "pi -e '{}'",
-        extension.display()
-    ))));
+    clients.register(pontia_client_pi::registration());
+    let extensions = root.path().join("pi/extensions");
+    std::fs::create_dir_all(&extensions).unwrap();
+    std::os::unix::fs::symlink(extension, extensions.join("pontia.ts")).unwrap();
     pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
         pool.clone(),
     )

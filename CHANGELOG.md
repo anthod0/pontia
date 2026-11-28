@@ -304,7 +304,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - Removed the `GET /api/v1/update/blockers` endpoint.
-- Removed Agent Client configuration overrides: the JSON editor and effective configuration on the Dashboard Agent Clients page, `pontia client set`, and the `config_overrides` and `effective_config` fields of the Agent Client API. `PATCH /api/v1/agent-clients/{client}/{key}` now accepts only `enabled`. Upgrading deletes saved overrides. Set the Pi command with `[runtime.pi].tui_command` in `config.toml` or `PONTIA_PI_TUI_COMMAND`.
+- Removed Agent Client configuration overrides: the JSON editor and effective configuration on the Dashboard Agent Clients page, `pontia client set`, and the `config_overrides` and `effective_config` fields of the Agent Client API. `PATCH /api/v1/agent-clients/{client}/{key}` now accepts only `enabled`. Upgrading deletes saved overrides.
 
 ## [0.8.10] - 2026-11-23
 

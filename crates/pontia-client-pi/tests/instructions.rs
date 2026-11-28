@@ -9,7 +9,7 @@ async fn instructions_compose_only_the_requested_sources() {
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
     let mut clients = ClientRegistry::default();
-    clients.register(pontia_client_pi::registration(None));
+    clients.register(pontia_client_pi::registration());
     let service = SessionInstructionsService::new(pool).with_clients(clients);
     let standalone = standalone_session_instructions();
     for (system, include_standalone, expected) in [

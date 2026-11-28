@@ -1,23 +1,20 @@
+mod common;
 use axum::{
     Router,
     body::{Body, to_bytes},
     http::{Request, StatusCode},
 };
+use common::test_app::EnvGuard;
 use pontia_agent_control::{agent_clients::AgentClientService, clients::ClientRegistry};
 use pontia_application::AppState;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
-use std::{os::unix::fs::PermissionsExt, path::Path, sync::Arc};
+use std::os::unix::fs::PermissionsExt;
 use tower::ServiceExt;
 
-fn clients_with_pi(script: &Path) -> ClientRegistry {
+fn clients_with_pi() -> ClientRegistry {
     let mut clients = ClientRegistry::default();
-    let mut pi = pontia_client_pi::registration(None);
-    pi.configuration = Some(Arc::new(pontia_client_pi::config::PiConfiguration::new(
-        json!({"tui_command":script}),
-        json!({}),
-    )));
-    clients.register(pi);
+    clients.register(pontia_client_pi::registration());
     clients.register(pontia_client_codex::registration());
     clients
 }
@@ -25,9 +22,18 @@ fn clients_with_pi(script: &Path) -> ClientRegistry {
 async fn fixture_with_state(
     response: Value,
     state: Value,
-) -> (Router, sqlx::SqlitePool, tempfile::TempDir) {
+) -> (Router, sqlx::SqlitePool, tempfile::TempDir, EnvGuard) {
     let root = tempfile::tempdir().unwrap();
-    let script = root.path().join("catalog.py");
+    let mut env = EnvGuard::new();
+    env.set(
+        "PATH",
+        std::env::join_paths(
+            std::iter::once(root.path().to_owned())
+                .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
+        )
+        .unwrap(),
+    );
+    let script = root.path().join("pi");
     std::fs::write(
         &script,
         format!(
@@ -66,7 +72,7 @@ Path('closed').touch()
     let db = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&db).await.unwrap();
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
-    let clients = clients_with_pi(&script);
+    let clients = clients_with_pi();
     AgentClientService::new(db.clone(), clients.clone())
         .save("pi", "default", true)
         .await
@@ -78,10 +84,10 @@ Path('closed').touch()
     )
     .external_api_token(Some("test-token".into()))
     .build();
-    (pontia_http::router(state), db, root)
+    (pontia_http::router(state), db, root, env)
 }
 
-async fn fixture(response: Value) -> (Router, sqlx::SqlitePool, tempfile::TempDir) {
+async fn fixture(response: Value) -> (Router, sqlx::SqlitePool, tempfile::TempDir, EnvGuard) {
     fixture_with_state(response, json!({"success":true,"data":{}})).await
 }
 
@@ -112,7 +118,7 @@ async fn models_request(
 
 #[tokio::test]
 async fn lists_configured_client_models_without_a_session_and_closes_the_process() {
-    let (app, db, root) = fixture_with_state(
+    let (app, db, root, _env) = fixture_with_state(
         json!({"success":true,"data":{"models":[
             {"provider":"one","id":"same","name":"First"},
             {"provider":"two","id":"same","name":"Second","reasoning":true,"thinkingLevelMap":{"off":null,"minimal":null,"low":null,"max":"max"}}
@@ -144,12 +150,12 @@ async fn lists_configured_client_models_without_a_session_and_closes_the_process
 
 #[tokio::test]
 async fn startup_probe_warms_the_catalog_used_by_cached_http_queries() {
-    let (app, db, root) = fixture(json!({"success":true,"data":{"models":[
+    let (app, db, root, _env) = fixture(json!({"success":true,"data":{"models":[
         {"provider":"one","id":"first","name":"First"}
     ]}}))
     .await;
-    let script = root.path().join("catalog.py");
-    let service = AgentClientService::new(db, clients_with_pi(&script));
+    let script = root.path().join("pi");
+    let service = AgentClientService::new(db, clients_with_pi());
     service
         .clone()
         .probe_enabled(root.path().into(), false)
@@ -180,7 +186,7 @@ async fn startup_probe_warms_the_catalog_used_by_cached_http_queries() {
 
 #[tokio::test]
 async fn cached_catalog_survives_version_change_and_failed_refresh() {
-    let (app, db, root) = fixture(json!({"success":true,"data":{"models":[
+    let (app, db, root, _env) = fixture(json!({"success":true,"data":{"models":[
         {"provider":"one","id":"first","name":"First","reasoning":true}
     ]}}))
     .await;
@@ -193,7 +199,7 @@ async fn cached_catalog_survives_version_change_and_failed_refresh() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(first["data"]["version"], "v1");
     assert!(first["data"]["fetched_at"].is_i64());
-    let script = root.path().join("catalog.py");
+    let script = root.path().join("pi");
     let original = std::fs::read_to_string(&script).unwrap();
     std::fs::write(&script, "raise RuntimeError('offline')").unwrap();
     sqlx::query("UPDATE agent_clients SET version = 'v2'")
@@ -228,7 +234,7 @@ async fn cached_catalog_survives_version_change_and_failed_refresh() {
 #[tokio::test]
 async fn non_reasoning_default_model_reports_its_native_default_without_selectable_efforts() {
     let model = json!({"provider":"provider","id":"chat","name":"Chat","reasoning":false});
-    let (app, _, _root) = fixture_with_state(
+    let (app, _, _root, _env) = fixture_with_state(
         json!({"success":true,"data":{"models":[model]}}),
         json!({"success":true,"data":{"model":model,"thinkingLevel":"off"}}),
     )
@@ -242,7 +248,7 @@ async fn non_reasoning_default_model_reports_its_native_default_without_selectab
 
 #[tokio::test]
 async fn requires_authentication_and_an_enabled_client_before_starting_a_process() {
-    let (app, db, root) = fixture(json!({"success":true,"data":{"models":[]}})).await;
+    let (app, db, root, _env) = fixture(json!({"success":true,"data":{"models":[]}})).await;
     assert_eq!(
         request(&app, "pi/default", false).await.0,
         StatusCode::UNAUTHORIZED
@@ -260,23 +266,24 @@ async fn requires_authentication_and_an_enabled_client_before_starting_a_process
 
 #[tokio::test]
 async fn returns_empty_catalog_and_propagates_native_failures() {
-    let (app, _, _root) = fixture(json!({"success":true,"data":{"models":[]}})).await;
+    let (app, _, _root, _env) = fixture(json!({"success":true,"data":{"models":[]}})).await;
     let (status, response) = request(&app, "pi/default", true).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(response["data"]["models"], json!([]));
     assert_eq!(response["data"].get("default_model"), Some(&Value::Null));
+    drop(_env);
     for response in [
         json!({"success":false,"error":"Cannot load models"}),
         json!({"success":true,"data":{"models":[{"provider":"one","id":"","name":"Invalid"}]}}),
     ] {
-        let (app, _, _root) = fixture(response).await;
+        let (app, _, _root, _env) = fixture(response).await;
         assert!(!request(&app, "pi/default", true).await.0.is_success());
     }
 }
 
 #[tokio::test]
 async fn default_model_lookup_failure_is_not_reported_as_no_default() {
-    let (app, _, _root) = fixture_with_state(
+    let (app, _, _root, _env) = fixture_with_state(
         json!({"success":true,"data":{"models":[]}}),
         json!({"success":false,"error":"Cannot read state"}),
     )
@@ -288,7 +295,7 @@ async fn default_model_lookup_failure_is_not_reported_as_no_default() {
 
 #[tokio::test]
 async fn times_out_a_stalled_catalog_and_stops_its_process() {
-    let (app, _, root) = fixture(json!({"hang": true})).await;
+    let (app, _, root, _env) = fixture(json!({"hang": true})).await;
     let (status, response) = request(&app, "pi/default", true).await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(response["error"]["code"], "unavailable");

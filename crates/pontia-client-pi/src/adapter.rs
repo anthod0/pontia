@@ -13,29 +13,18 @@ use pontia_core::{
 use serde_json::Value;
 use std::sync::Arc;
 
-pub fn registration(tui_command: Option<String>) -> ClientRegistration {
+pub fn registration() -> ClientRegistration {
     let connections = crate::connections::PiConnections::default();
-    let file = tui_command
-        .as_ref()
-        .map(|command| serde_json::json!({"tui_command":command}))
-        .unwrap_or_else(|| serde_json::json!({}));
-    let environment = std::env::var("PONTIA_PI_TUI_COMMAND").ok()
-        .map(|command| serde_json::json!({"tui_command": if command.trim().is_empty() { "pi" } else { &command }}))
-        .unwrap_or_else(|| serde_json::json!({}));
-    let configuration = Arc::new(crate::config::PiConfiguration::new(file, environment));
     ClientRegistration {
-        auth: Some(Arc::new(crate::auth::PiAuth::new(configuration.clone()))),
-        configuration: Some(configuration),
+        auth: Some(Arc::new(crate::auth::PiAuth)),
+        configuration: Some(Arc::new(crate::config::PiConfiguration)),
         interactions: None,
         service: Some(Arc::new(crate::service::PiService {
             connections: connections.clone(),
         })),
         instructions: Some(Arc::new(crate::instructions::InstructionsPolicy)),
         events: Some(Arc::new(crate::lifecycle::PiEventInterpreter)),
-        session: Some(Arc::new(PiSession {
-            tui_command,
-            connections: connections.clone(),
-        })),
+        session: Some(Arc::new(PiSession { connections })),
         prepare_on_input: false,
         spec: &crate::SPEC,
         data: Some(Arc::new(PiData)),

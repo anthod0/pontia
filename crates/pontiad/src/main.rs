@@ -26,7 +26,7 @@ async fn main() -> Result<()> {
         }
         _ => {}
     }
-    let config = pontia_clients::config_from_env()?;
+    let config = pontia_config::AppConfig::from_env()?;
     init_tracing();
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
     let bound_addr = listener.local_addr()?;

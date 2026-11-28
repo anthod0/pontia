@@ -92,12 +92,7 @@ async fn app_with_acp_and_prerequisite(
     let mut clients = ClientRegistry::default();
     clients.register_integration(pontia_client_codex::setup::integration());
     clients.register_integration(pontia_client_pi::setup::integration());
-    let mut pi = pontia_client_pi::registration(None);
-    pi.configuration = Some(Arc::new(pontia_client_pi::config::PiConfiguration::new(
-        json!({"tui_command":"file-pi"}),
-        json!({"tui_command":"env-pi"}),
-    )));
-    clients.register(pi);
+    clients.register(pontia_client_pi::registration());
     clients.register(pontia_client_codex::registration());
     clients.register(registration(root.path()));
     clients.register_installer(Arc::new(TestInstaller {
@@ -166,57 +161,6 @@ async fn external_request(
         )
         .await
         .unwrap()
-}
-
-#[tokio::test]
-async fn invalid_file_values_remain_listable_and_block_enabling() {
-    let root = tempfile::tempdir().unwrap();
-    let db = connect_sqlite("sqlite::memory:").await.unwrap();
-    run_migrations(&db).await.unwrap();
-    let mut clients = ClientRegistry::default();
-    let mut pi = pontia_client_pi::registration(None);
-    pi.configuration = Some(Arc::new(pontia_client_pi::config::PiConfiguration::new(
-        json!({"tui_command":" "}),
-        json!({}),
-    )));
-    clients.register(pi);
-    clients.register(pontia_client_codex::registration());
-    let app = pontia_http::router(
-        AppState::builder(
-            pontia_agent_control::AgentControl::builder(db, root.path().into())
-                .clients(clients)
-                .build(),
-        )
-        .external_api_token(Some("test-token".into()))
-        .build(),
-    );
-    let (status, listed) = request(&app, "GET", "", None, true).await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(listed["data"]["agent_clients"].as_array().unwrap().len(), 2);
-    assert_eq!(
-        request(
-            &app,
-            "PATCH",
-            "/pi/default",
-            Some(json!({"enabled":true})),
-            true
-        )
-        .await
-        .0,
-        StatusCode::BAD_REQUEST
-    );
-    assert_eq!(
-        request(
-            &app,
-            "PATCH",
-            "/codex/default",
-            Some(json!({"enabled":true})),
-            true
-        )
-        .await
-        .0,
-        StatusCode::OK
-    );
 }
 
 #[tokio::test]
@@ -630,12 +574,12 @@ async fn detection_refreshes_from_files_without_changing_enabled_settings() {
 async fn listing_returns_saved_details_while_the_version_check_runs() {
     use std::{fs, os::unix::fs::PermissionsExt, time::Duration};
     let root = tempfile::tempdir().unwrap();
-    let program = root.path().join("pi");
+    let program = root.path().join("grok");
     let gate = root.path().join("continue");
     fs::write(
         &program,
         format!(
-            "#!/bin/sh\nwhile [ ! -e '{}' ]; do sleep 0.02; done\necho 2.3.4\n",
+            "#!/bin/sh\nwhile [ ! -e '{}' ]; do sleep 0.02; done\necho 'grok 2.3.4'\n",
             gate.display()
         ),
     )
@@ -647,14 +591,20 @@ async fn listing_returns_saved_details_while_the_version_check_runs() {
     let repo = pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
         db.clone(),
     );
-    repo.save("pi", "default", true).await.unwrap();
+    repo.save("acp", "grok", true).await.unwrap();
     let mut registry = ClientRegistry::default();
-    let mut pi = pontia_client_pi::registration(None);
-    pi.configuration = Some(Arc::new(pontia_client_pi::config::PiConfiguration::new(
-        json!({"tui_command": program}),
-        json!({}),
-    )));
-    registry.register(pi);
+    let mut agent = pontia_client_acp::AcpAgents::builtin()
+        .get("grok")
+        .unwrap()
+        .clone();
+    agent.launch.env.insert(
+        "PATH".into(),
+        format!("{}:/usr/bin:/bin", root.path().display()),
+    );
+    registry.register(pontia_client_acp::registration_with_relay(
+        pontia_client_acp::AcpAgents::new([("grok".into(), agent)]),
+        acp_relay::executable(),
+    ));
     let app = pontia_http::router(
         AppState::builder(
             pontia_agent_control::AgentControl::builder(db, root.path().into())
@@ -670,7 +620,7 @@ async fn listing_returns_saved_details_while_the_version_check_runs() {
     fs::write(gate, "").unwrap();
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            let (_, data) = request(&app, "GET", "/pi/default", None, true).await;
+            let (_, data) = request(&app, "GET", "/acp/grok", None, true).await;
             if data["data"]["agent_client"]["version"] == "2.3.4" {
                 break;
             }

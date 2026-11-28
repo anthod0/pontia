@@ -112,7 +112,7 @@ pontia status
 pontia client list
 ```
 
-确认每个所选条目都显示 `enabled`。如果 Pontia 服务找不到 `pi`，请参阅[覆盖 Pi 命令](/docs/agent-clients/pi#override-the-pi-command)。第 7 步会通过从 Remote Dashboard 启动 Session 来验证这些 Client。
+确认每个所选条目都显示 `enabled`。第 7 步会通过从 Remote Dashboard 启动 Session 来验证这些 Client。
 
 ### 5. 登录 Pontia Cloud
 

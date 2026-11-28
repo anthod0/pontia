@@ -49,7 +49,7 @@ npx @pontia/cli init   # Pi is selected by default
 
 `pontia init` installs the Pi plugin, starts the Pontia service, signs you in with Google or GitHub, and registers the machine with an official relay. On a headless machine, the sign-in prints a URL and a one-time code that you can approve from your phone. When it finishes, open [app.pontia.dev](https://app.pontia.dev), pick the machine, and start a session.
 
-The [Pi Agent Client reference](/docs/agent-clients/pi) covers custom Pi commands and diagnostics. Advanced users can [run their own relay](/docs/self-hosted-edge) instead of the official one.
+The [Pi Agent Client reference](/docs/agent-clients/pi) covers Pi installation and diagnostics. Advanced users can [run their own relay](/docs/self-hosted-edge) instead of the official one.
 
 ## Option 2: Build it yourself with SSH and tmux
 

@@ -25,7 +25,7 @@ fn resolve(
     evidence: Option<serde_json::Value>,
     earlier_turns: Vec<TurnTopologyCandidate>,
 ) -> pontia_agent_control::client_contract::TopologyResolveResult {
-    pontia_client_pi::registration(None)
+    pontia_client_pi::registration()
         .data
         .unwrap()
         .topology()

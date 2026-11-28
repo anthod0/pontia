@@ -49,7 +49,7 @@ fn first_turn_recovery_treats_the_session_header_as_file_identity() {
         path,
         fingerprint: None,
     };
-    let recovered = pontia_client_pi::registration(None)
+    let recovered = pontia_client_pi::registration()
         .data
         .unwrap()
         .history_recovery()
@@ -133,7 +133,7 @@ fn recovers_a_sealed_crash_range_and_links_the_native_branch() {
             TurnState::Completed,
         ),
     ];
-    let data = pontia_client_pi::registration(None).data.unwrap();
+    let data = pontia_client_pi::registration().data.unwrap();
     let recovered = data
         .history_recovery()
         .unwrap()
@@ -179,7 +179,7 @@ fn a_resume_on_an_older_branch_does_not_link_to_the_crashed_turn() {
     let contents = before.clone() + &crash + &entry("edited_user", Some("answer1"), "user");
     let path = root.path().join("native.jsonl");
     std::fs::write(&path, contents).unwrap();
-    let recovered = pontia_client_pi::registration(None)
+    let recovered = pontia_client_pi::registration()
         .data
         .unwrap()
         .history_recovery()
@@ -257,7 +257,7 @@ fn ambiguous_or_unsealed_crash_ranges_remain_unresolved() {
         if seal {
             turns.push(turn("turn3", cursor(end, anchor), None, TurnState::Running));
         }
-        let recovered = pontia_client_pi::registration(None)
+        let recovered = pontia_client_pi::registration()
             .data
             .unwrap()
             .history_recovery()

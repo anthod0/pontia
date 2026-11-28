@@ -126,7 +126,7 @@ async fn workflow_run_rejects_duplicate_output_owners_with_an_actionable_error()
 
 #[tokio::test]
 async fn workflow_run_creates_and_starts_a_linear_agent_workflow() {
-    let app = TestApp::builder().pi_runtime_stub(true).build().await;
+    let app = TestApp::new().await;
     let _peer = super::workflow_submission::seed_running_workflow(&app).await;
     app.state
         .control()

@@ -5,10 +5,10 @@ use pontia_config::AppConfig;
 fn load(contents: &str) -> pontia_core::Result<AppConfig> {
     let root = tempfile::tempdir().unwrap();
     std::fs::write(root.path().join("config.toml"), contents).unwrap();
-    AppConfig::from_vars(
-        &HashMap::from([("PONTIA_HOME".into(), root.path().display().to_string())]),
-        &[],
-    )
+    AppConfig::from_vars(&HashMap::from([(
+        "PONTIA_HOME".into(),
+        root.path().display().to_string(),
+    )]))
 }
 
 #[test]
@@ -59,16 +59,11 @@ fn unknown_top_level_and_nested_keys_are_ignored() {
          [remote]\nfuture_field = \"x\"\n\
          [dashboard]\nfuture_field = 1\n\
          [file_picker]\nfuture_field = 1\n\
-         [workspace_browser]\nfuture_field = 1\n\
-         [runtime.pi]\ntui_command = \"custom-pi\"\nfuture_field = 1\n",
+         [workspace_browser]\nfuture_field = 1\n",
     )
     .unwrap();
     assert_eq!(config.uploads.completed_retention_days.get(), 90);
     assert_eq!(config.uploads.incomplete_retention_days.get(), 7);
     assert_eq!(config.bot.context_window_percent, 70);
     assert_eq!(config.remote.unwrap().device_id, None);
-    assert_eq!(
-        config.client_configuration.runtime_file["pi"]["tui_command"],
-        "custom-pi"
-    );
 }

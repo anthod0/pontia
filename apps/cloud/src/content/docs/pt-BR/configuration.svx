@@ -20,9 +20,6 @@ bind_addr = "127.0.0.1:8080"
 external_api_token = "replace-with-a-long-secret"
 run_migrations = true
 
-[runtime.pi]
-tui_command = "pi"
-
 [workspace_browser]
 roots = [
   { root_id = "projects", label = "Projects", path = "/home/me/projects" }
@@ -35,7 +32,6 @@ roots = [
 | `external_api_token` | Token Bearer exigido pelo Dashboard local e pela External API |
 | `run_migrations` | Se o `pontiad` aplica as migrações de banco de dados incluídas; o padrão é `true` |
 | `dashboard.source` | Diretório de build do Dashboard local ou arquivo remoto `.tar.gz`, `.tgz` ou `.zip` contendo exatamente um `index.html` |
-| `runtime.pi.tui_command` | Executável ou comando do Pi usado nas Sessions do Pi iniciadas |
 | `workspace_browser.roots` | Diretórios que o Dashboard pode navegar para ativar Workspaces |
 | `preview.enabled` | Ativa pré-visualizações de apps Web em localhost; o padrão é `true` |
 | `preview.allowed_ports` | Portas sensíveis adicionais de desenvolvimento ou administração liberadas explicitamente para pré-visualização |
@@ -107,7 +103,6 @@ O processo em execução aceita estas substituições:
 | `PONTIA_RUN_MIGRATIONS` | `run_migrations` |
 | `PONTIA_WORKSPACE_ROOTS` | Raízes de Workspace como entradas `root_id|label|path` separadas por ponto e vírgula |
 | `PONTIA_DASHBOARD_SOURCE` | `dashboard.source`; um valor vazio desativa o serviço do Dashboard |
-| `PONTIA_PI_TUI_COMMAND` | `runtime.pi.tui_command`; um valor vazio usa `pi` |
 | `PONTIA_AUTH_ORIGIN` | Origem HTTPS do Pontia Cloud; destinada a implantações controladas e desenvolvimento |
 
 Os valores de ambiente têm precedência sobre os valores do arquivo para o processo em execução. Para a configuração persistente do serviço, use o `config.toml`. O serviço instalado armazena `PONTIA_HOME`, `PONTIA_AUTH_ORIGIN` e os caminhos necessários dos Agent Clients separadamente.

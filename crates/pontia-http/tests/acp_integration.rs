@@ -62,7 +62,7 @@ async fn creation_options_follow_enabled_settings_for_native_and_acp_clients() {
     .await
     .unwrap();
     let mut clients = ClientRegistry::default();
-    clients.register(pontia_client_pi::registration(None));
+    clients.register(pontia_client_pi::registration());
     clients.register(pontia_client_codex::registration());
     clients.register(pontia_client_claude::registration());
     let acp = pontia_client_acp::registration();
@@ -567,7 +567,7 @@ async fn client_choices_carry_recorded_versions() {
         }
     }
     let mut clients = ClientRegistry::default();
-    clients.register(pontia_client_pi::registration(None));
+    clients.register(pontia_client_pi::registration());
     let acp = pontia_client_acp::registration();
     let service = acp.service.clone().unwrap();
     clients.register(acp);

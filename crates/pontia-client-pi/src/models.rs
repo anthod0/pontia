@@ -50,11 +50,10 @@ impl Model {
     }
 }
 
-pub(crate) async fn list(command: &str, directory: &Path) -> Result<AgentClientModels> {
+pub(crate) async fn list(directory: &Path) -> Result<AgentClientModels> {
     let operation = async {
-        let mut child = Command::new("bash")
-            .arg("-c")
-            .arg(format!("{command} --mode rpc --no-session"))
+        let mut child = Command::new("pi")
+            .args(["--mode", "rpc", "--no-session"])
             .current_dir(directory)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

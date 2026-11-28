@@ -22,7 +22,7 @@ fn registered_installers_check_each_method_and_recognize_managed_links() {
         ("PONTIA_HOME".into(), home.display().to_string()),
         ("PATH".into(), bin.display().to_string()),
     ]);
-    let registry = pontia_clients::registration(&pontia_clients::config_from_vars(&vars).unwrap());
+    let registry = pontia_clients::registration();
     let context = DetectionContext {
         vars: &vars,
         pontia_home: &home,

@@ -25,8 +25,8 @@ async fn profile_tool(
     (status, serde_json::from_slice(&body).unwrap())
 }
 
-async fn bot_fixture() -> (Router, sqlx::SqlitePool, tempfile::TempDir) {
-    let (app, db, root) = fixture(json!({"success":true,"data":{"models":[
+async fn bot_fixture() -> (Router, sqlx::SqlitePool, tempfile::TempDir, EnvGuard) {
+    let (app, db, root, _env) = fixture(json!({"success":true,"data":{"models":[
         {"provider":"p","id":"one","name":"One"}, {"provider":"p","id":"two","name":"Two"}
     ]}}))
     .await;
@@ -43,12 +43,12 @@ async fn bot_fixture() -> (Router, sqlx::SqlitePool, tempfile::TempDir) {
     }
     sqlx::query("INSERT INTO bots(bot_id,name,client_type,client_key,model,current_session_id) VALUES ('bot-a','Bot','pi','default','p/one','current')")
         .execute(&db).await.unwrap();
-    (app, db, root)
+    (app, db, root, _env)
 }
 
 #[tokio::test]
 async fn only_the_current_bot_can_read_or_change_profiles() {
-    let (app, _, _root) = bot_fixture().await;
+    let (app, _, _root, _env) = bot_fixture().await;
     for (session, token) in [
         ("current", "wrong"),
         ("old", "old"),
@@ -70,7 +70,7 @@ async fn only_the_current_bot_can_read_or_change_profiles() {
 
 #[tokio::test]
 async fn bot_profile_crud_uses_catalog_models_and_preserves_omitted_fields() {
-    let (app, db, _root) = bot_fixture().await;
+    let (app, db, _root, _env) = bot_fixture().await;
     let target = json!({"profile_id":"reviewer"});
     let client = json!({"client_type":"pi","client_key":"default"});
     let input = json!({"profile_id":"reviewer","name":"Reviewer","description":"Review changes","client":client,"model":"p/one","system_prompt":"Review carefully"});

@@ -110,7 +110,6 @@ fn run(
         .args(args)
         .current_dir(root.path())
         .env("PONTIA_HOME", root.path())
-        .env("PONTIA_PI_TUI_COMMAND", "caller-only-command")
         .output()
         .unwrap();
     let _ = finished.send(());

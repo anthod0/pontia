@@ -49,17 +49,6 @@ pi install npm:@pontia/pi-client-plugin
 
 对话历史从 Pi 的原生数据中读取。请保留这些数据，以便通过 Pontia 浏览和恢复对话。
 
-<h2 id="override-the-pi-command">覆盖 Pi 命令</h2>
-
-默认的 TUI 命令是 `pi`。要使用其他可执行文件或包装脚本，在 `$PONTIA_HOME/config.toml` 中设置：
-
-```toml
-[runtime.pi]
-tui_command = "/absolute/path/to/pi"
-```
-
-如需仅对单个命令生效的覆盖，使用 `PONTIA_PI_TUI_COMMAND`。如需持久的服务设置，更新 `config.toml` 并运行 `pontia up`。
-
 ## 诊断集成
 
 Pontia 的 Pi hook 日志位于：

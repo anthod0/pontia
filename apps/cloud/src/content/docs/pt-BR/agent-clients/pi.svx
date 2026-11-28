@@ -49,17 +49,6 @@ Ao criar ou retomar uma Session pelo Pontia, o Pi é iniciado em `tmux` na Works
 
 O histórico de conversas é lido dos dados nativos do Pi. Mantenha esses dados disponíveis para navegar pelas conversas e retomá-las pelo Pontia.
 
-<h2 id="override-the-pi-command">Substituir o comando do Pi</h2>
-
-O comando padrão da TUI é `pi`. Para usar outro executável ou wrapper, defina-o em `$PONTIA_HOME/config.toml`:
-
-```toml
-[runtime.pi]
-tui_command = "/absolute/path/to/pi"
-```
-
-Para uma substituição restrita a um comando, use `PONTIA_PI_TUI_COMMAND`. Para uma configuração persistente do serviço, atualize o `config.toml` e execute `pontia up`.
-
 ## Diagnosticar a integração
 
 O log de hooks do Pi do Pontia fica em:

@@ -5,7 +5,7 @@ use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use pontia_application::AppState;
 
 pub async fn initialize(config: &AppConfig) -> Result<AppState> {
-    let clients = pontia_clients::registration(config);
+    let clients = pontia_clients::registration();
     config.prepare_home()?;
     let db = connect_sqlite(&config.database_url).await?;
 

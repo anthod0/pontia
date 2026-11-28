@@ -62,7 +62,6 @@ pub(crate) struct TestAppBuilder {
     file_picker: Option<FilePickerConfig>,
     in_memory_db: bool,
     database_name: Option<String>,
-    pi_runtime_stub: bool,
 }
 
 impl TestAppBuilder {
@@ -91,21 +90,10 @@ impl TestAppBuilder {
         self
     }
 
-    pub(crate) fn pi_runtime_stub(mut self, enabled: bool) -> Self {
-        self.pi_runtime_stub = enabled;
-        self
-    }
-
     pub(crate) async fn build(self) -> TestApp {
         let pontia_home = tempfile::tempdir().expect("pontia home");
         let workspace = tempfile::tempdir_in(pontia_home.path()).expect("workspace");
-        let mut env = EnvGuard::new();
-        if self.pi_runtime_stub {
-            env.set(
-                "PONTIA_PI_TUI_COMMAND",
-                OsString::from("sh -c 'cat >> \"$PWD/pi-tui-input.log\"' --"),
-            );
-        }
+        let env = EnvGuard::new();
 
         let db = self.open_database(Some(pontia_home.path())).await;
         pontia_agent_control::workspaces::upsert_canonical_workspace(

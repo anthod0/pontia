@@ -49,7 +49,7 @@ npx @pontia/cli init   # Pi is selected by default
 
 `pontia init` は Pi プラグインをインストールし、Pontia サービスを起動し、Google または GitHub でサインインして、マシンを公式リレーに登録します。ヘッドレスマシンでは、サインイン時に URL とワンタイムコードが表示され、スマートフォンから承認できます。完了したら [app.pontia.dev](https://app.pontia.dev) を開き、マシンを選んで Session を開始します。
 
-[Pi Agent Client リファレンス](/docs/agent-clients/pi) では、Pi のカスタムコマンドと診断について説明しています。上級ユーザーは、公式のリレーの代わりに [自分のリレーを運用する](/docs/self-hosted-edge) こともできます。
+[Pi Agent Client リファレンス](/docs/agent-clients/pi) では、Pi のインストールと診断について説明しています。上級ユーザーは、公式のリレーの代わりに [自分のリレーを運用する](/docs/self-hosted-edge) こともできます。
 
 ## 選択肢2: SSH と tmux で自分で組む
 

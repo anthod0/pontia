@@ -10,19 +10,11 @@ impl ClientAdapter {
         &self,
         root: &Path,
         request: RuntimeStartRequest,
-        configuration: Option<serde_json::Value>,
     ) -> Result<Option<RuntimeStartResult>> {
         let client = self
             .session_client()
             .ok_or_else(|| Error::Unsupported("Client Session control is unavailable".into()))?;
-        match configuration {
-            Some(configuration) => {
-                client
-                    .provision_configured(self.events.clone(), root, request, configuration)
-                    .await
-            }
-            None => client.provision(self.events.clone(), root, request).await,
-        }
+        client.provision(self.events.clone(), root, request).await
     }
 
     pub async fn exit(

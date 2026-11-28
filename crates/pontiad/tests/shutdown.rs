@@ -52,7 +52,7 @@ impl Drop for Sleeper {
 async fn shutdown_only_stops_owned_processes_and_records_exit_before_service_cleanup() {
     for operation in ["down", "uninstall"] {
         let root = tempdir().unwrap();
-        let config = pontia_clients::config_from_vars(&HashMap::from([(
+        let config = pontia_config::AppConfig::from_vars(&HashMap::from([(
             "PONTIA_HOME".into(),
             root.path().display().to_string(),
         )]))

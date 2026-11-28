@@ -1,25 +1,10 @@
 use pontia_agent_control::client_contract::{
     ClientConfiguration, ClientOperation, DetectionContext,
 };
-use pontia_config::ConfigurationLayers;
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 
-pub struct PiConfiguration(pub ConfigurationLayers);
-
-impl PiConfiguration {
-    pub fn new(file: Value, mut environment: Value) -> Self {
-        // An empty PONTIA_PI_TUI_COMMAND selects the built-in command.
-        if environment.get("tui_command").is_some_and(Value::is_null) {
-            environment["tui_command"] = json!("pi");
-        }
-        Self(ConfigurationLayers {
-            defaults: json!({"tui_command":"pi"}),
-            file,
-            environment,
-        })
-    }
-}
+pub struct PiConfiguration;
 
 impl ClientConfiguration for PiConfiguration {
     fn supports_mode(&self, _key: &str, _mode: pontia_core::SessionMode) -> bool {
@@ -45,22 +30,22 @@ impl ClientConfiguration for PiConfiguration {
 
     fn list_models<'a>(
         &'a self,
-        effective: &'a Value,
+        _effective: &'a Value,
         directory: &'a std::path::Path,
     ) -> pontia_agent_control::client_contract::ClientOperation<
         'a,
         pontia_agent_control::agent_clients::AgentClientModels,
     > {
-        Box::pin(async move { crate::models::list(&command(effective)?, directory).await })
+        Box::pin(async move { crate::models::list(directory).await })
     }
 
     fn probe_version<'a>(
         &'a self,
-        key: &'a str,
+        _key: &'a str,
         context: &'a DetectionContext<'_>,
     ) -> ClientOperation<'a, Option<String>> {
         Box::pin(async move {
-            let Ok(Some(path)) = context.executable(&command(&self.merged(key))?) else {
+            let Ok(Some(path)) = context.executable("pi") else {
                 return Ok(None);
             };
             Ok(context.cli_version(&path, "").await)
@@ -69,23 +54,10 @@ impl ClientConfiguration for PiConfiguration {
 
     fn detect(
         &self,
-        effective: &Value,
+        _effective: &Value,
         context: &pontia_agent_control::client_contract::DetectionContext<'_>,
     ) -> pontia_agent_control::client_contract::ClientDetection {
-        use pontia_agent_control::client_contract::ClientDetection;
-        let command = match command(effective) {
-            Ok(command) => command,
-            Err(error) => return ClientDetection::unknown(error.to_string()),
-        };
-        if command
-            .chars()
-            .any(|c| c.is_whitespace() || "'\"$`;|&()<>{}*?~\\".contains(c))
-        {
-            return ClientDetection::unknown(
-                "This shell command must be checked in its launch environment",
-            );
-        }
-        context.command(&command)
+        context.command("pi")
     }
     fn keys(&self) -> Vec<String> {
         vec!["default".into()]
@@ -98,22 +70,12 @@ impl ClientConfiguration for PiConfiguration {
     }
 
     fn merged(&self, _key: &str) -> Value {
-        self.0.resolve()
+        json!({})
     }
     fn resolve(&self, key: &str) -> Result<Value> {
         if key != "default" {
             return Err(Error::Domain("Pi requires the default client key".into()));
         }
-        let value = self.merged(key);
-        command(&value)?;
-        Ok(value)
+        Ok(self.merged(key))
     }
-}
-
-pub(crate) fn command(value: &Value) -> Result<String> {
-    let config: pontia_config::RuntimeClientConfig = serde_json::from_value(value.clone())?;
-    config
-        .tui_command
-        .filter(|command| !command.trim().is_empty())
-        .ok_or_else(|| Error::Domain("Pi tui_command must be nonempty".into()))
 }

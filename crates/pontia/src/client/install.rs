@@ -74,7 +74,7 @@ fn display_log(home: &Path, id: uuid::Uuid, offset: &mut u64) -> io::Result<()> 
 }
 
 pub(super) async fn run(options: Options, config: AppConfig) -> Result<Value, String> {
-    let registry = pontia_clients::registration(&config);
+    let registry = pontia_clients::registration();
     let vars = std::env::vars().collect();
     let context = DetectionContext {
         vars: &vars,

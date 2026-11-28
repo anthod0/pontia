@@ -60,8 +60,6 @@ tmux -V
 $PONTIA_HOME/state/pi-hook.log
 ```
 
-同时检查自定义的 `[runtime.pi].tui_command` 是否包含无效路径或包装脚本。
-
 ## Codex 无法连接
 
 确认你的 Codex 构建支持 app-server 守护进程，然后检查其按用户运行的服务。各平台命令见 [Codex](/docs/agent-clients/codex)。如果可执行文件或 `CODEX_HOME` 发生变化，或者启动器或其 shell PATH 配置缺失，请运行 `pontia setup codex`。

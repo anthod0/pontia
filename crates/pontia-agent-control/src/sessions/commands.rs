@@ -90,7 +90,7 @@ impl SessionCommandService {
             self.pool.clone(),
             self.clients.registry().clone(),
         );
-        let configuration = client_settings
+        client_settings
             .for_creation_key(&request.client_type, &client_key)
             .await?;
 
@@ -210,7 +210,6 @@ impl SessionCommandService {
                     start_command: None,
                     environment: self.queries.runtime_environment(&session_id).await?,
                 },
-                configuration,
             )
             .await;
         let runtime = match runtime {

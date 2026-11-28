@@ -17,26 +17,12 @@ use pontia_agent_control::{
 };
 use pontia_core::{Error, Result};
 use pontia_runtime::{RuntimeStartRequest, RuntimeStartResult};
-use serde_json::{Value, json};
+use serde_json::json;
 
 pub(crate) struct PiSession {
-    pub tui_command: Option<String>,
     pub connections: crate::connections::PiConnections,
 }
 impl PiSession {
-    fn launch_configured(
-        &self,
-        request: ClientLaunchRequest<'_>,
-        configuration: &Value,
-    ) -> Result<RuntimeStartResult> {
-        let mut request = request;
-        request.runtime.start_command = Some(format!(
-            "{} --approve",
-            crate::config::command(configuration)?
-        ));
-        self.launch(request)
-    }
-
     fn validate_native_session(&self, key: &str, file: Option<&Path>) -> Result<()> {
         let path = file.ok_or_else(|| {
             Error::Unavailable(format!(
@@ -59,13 +45,10 @@ impl PiSession {
                     .map_err(|_| Error::Domain("PATH is not UTF-8".into()))?,
             );
         }
-        let command = runtime.start_command.take().unwrap_or_else(|| {
-            let command = std::env::var("PONTIA_PI_TUI_COMMAND")
-                .ok()
-                .or_else(|| self.tui_command.clone())
-                .unwrap_or_else(|| "pi".into());
-            format!("{command} --approve")
-        });
+        let command = runtime
+            .start_command
+            .take()
+            .unwrap_or_else(|| "pi --approve".into());
         let command = match &runtime.model {
             Some(model) => format!("{command} --model {}", quote(model)),
             None => command,
@@ -155,29 +138,6 @@ impl ClientSession for PiSession {
                 native_session_key: None,
                 native_session_file: None,
             })
-            .map(Some)
-        })
-    }
-
-    fn provision_configured<'a>(
-        &'a self,
-        _events: EventIngestService,
-        root: &'a Path,
-        request: RuntimeStartRequest,
-        configuration: Value,
-    ) -> ClientOperation<'a, Option<RuntimeStartResult>> {
-        Box::pin(async move {
-            self.launch_configured(
-                ClientLaunchRequest {
-                    root,
-                    runtime: request,
-                    restart_count: 0,
-                    reuse_pane: None,
-                    native_session_key: None,
-                    native_session_file: None,
-                },
-                &configuration,
-            )
             .map(Some)
         })
     }

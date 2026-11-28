@@ -255,7 +255,7 @@ fn cli_command() -> clap::Command {
 async fn execute(command: Command) -> Result<bool, String> {
     match command {
         Command::WorkspaceCheck { path } => {
-            let config = pontia_clients::config_from_env().map_err(|error| error.to_string())?;
+            let config = pontia_config::AppConfig::from_env().map_err(|error| error.to_string())?;
             workspace::is_active(&config, &path).await
         }
         Command::Init => run_init().await,
@@ -306,7 +306,7 @@ async fn execute(command: Command) -> Result<bool, String> {
             result.map(|_| true)
         }
         Command::Client(command) => {
-            let config = pontia_clients::config_from_env().map_err(|error| error.to_string())?;
+            let config = pontia_config::AppConfig::from_env().map_err(|error| error.to_string())?;
             println!("{}", pontia::client::run(command, &config).await?);
             Ok(true)
         }
@@ -320,7 +320,7 @@ async fn execute(command: Command) -> Result<bool, String> {
             Ok(true)
         }
         Command::Workflow(command) => {
-            let config = pontia_clients::config_from_env().map_err(|error| error.to_string())?;
+            let config = pontia_config::AppConfig::from_env().map_err(|error| error.to_string())?;
             workflow::run(command, &config).await?;
             Ok(true)
         }
@@ -593,7 +593,7 @@ fn update_service_config<M: ServiceManager>(
         RunState::Stopped | RunState::Failed => return Ok(None),
     }
     let pontia_home = manager.persisted_home(&definition)?;
-    pontia_clients::config_from_vars(&HashMap::from([(
+    pontia_config::AppConfig::from_vars(&HashMap::from([(
         "PONTIA_HOME".to_string(),
         pontia_home.display().to_string(),
     )]))
@@ -640,7 +640,7 @@ async fn run_lifecycle(command: LifecycleCommand) -> Result<bool, String> {
 }
 
 fn apply_remote_edge() -> Result<RemoteServiceState, String> {
-    let config = pontia_clients::config_from_env().map_err(|error| error.to_string())?;
+    let config = pontia_config::AppConfig::from_env().map_err(|error| error.to_string())?;
     let definitions = FileDefinitionStore;
     let health = HttpHealthProbe;
     let runner = ProcessCommandRunner;
@@ -691,7 +691,7 @@ fn restart_with_manager_if_running<M: ServiceManager>(manager: &M) -> Result<(),
     if manager.status()?.run_state != RunState::Running {
         return Ok(());
     }
-    let config = pontia_clients::config_from_env().map_err(|error| error.to_string())?;
+    let config = pontia_config::AppConfig::from_env().map_err(|error| error.to_string())?;
     let definitions = FileDefinitionStore;
     let health = HttpHealthProbe;
     Lifecycle::new(manager, &definitions, &health).up(
@@ -759,11 +759,11 @@ async fn run_with_manager<M: ServiceManager>(
         LifecycleCommand::Down { force } => {
             let definition = definitions.read(&manager.definition_path(&user_home()?))?;
             let config = match definition {
-                Some(definition) => pontia_clients::config_from_vars(&HashMap::from([(
+                Some(definition) => pontia_config::AppConfig::from_vars(&HashMap::from([(
                     "PONTIA_HOME".into(),
                     manager.persisted_home(&definition)?.display().to_string(),
                 )])),
-                None => pontia_clients::config_from_env(),
+                None => pontia_config::AppConfig::from_env(),
             }
             .map_err(|e| e.to_string())?;
             let _guard = shutdown::run(

@@ -2813,7 +2813,6 @@ name = "pontia-client-pi"
 version = "0.0.0"
 dependencies = [
  "pontia-agent-control",
- "pontia-config",
  "pontia-core",
  "pontia-runtime",
  "pontia-storage-sqlite",
@@ -2835,10 +2834,7 @@ dependencies = [
  "pontia-client-claude",
  "pontia-client-codex",
  "pontia-client-pi",
- "pontia-config",
- "pontia-core",
  "pontia-version",
- "serde_json",
  "tempfile",
 ]
 
@@ -2849,7 +2845,6 @@ dependencies = [
  "pontia-core",
  "pontia-version",
  "serde",
- "serde_json",
  "tempfile",
  "toml",
  "url",

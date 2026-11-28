@@ -60,8 +60,6 @@ tmux -V
 $PONTIA_HOME/state/pi-hook.log
 ```
 
-カスタムの `[runtime.pi].tui_command` に、不正なパスやラッパーがないかも確認してください。
-
 ## Codex に接続できない
 
 使っている Codex のビルドが app-server デーモンに対応していることを確認し、そのユーザーごとのサービスを確認します。プラットフォームごとのコマンドは [Codex](/docs/agent-clients/codex) を参照してください。実行ファイルや `CODEX_HOME` が変わった場合、またはランチャーやそのシェルの PATH 設定がない場合は、`pontia setup codex` を実行してください。

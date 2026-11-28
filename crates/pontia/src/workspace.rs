@@ -47,12 +47,10 @@ mod tests {
         std::os::unix::fs::symlink(&project, &link).unwrap();
         for (state, expected) in [("active", true), ("archived", false), ("deleted", false)] {
             let server = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-            let mut config =
-                pontia_clients::config_from_vars(&std::collections::HashMap::from([(
-                    "PONTIA_HOME".into(),
-                    root.path().display().to_string(),
-                )]))
-                .unwrap();
+            let mut config = pontia_config::AppConfig::from_vars(&std::collections::HashMap::from(
+                [("PONTIA_HOME".into(), root.path().display().to_string())],
+            ))
+            .unwrap();
             config.bind_addr = server.local_addr().unwrap();
             config.external_api_token = Some("fixture-token".into());
             let body = json!({"data":{"workspaces":[{"state":state,"canonical_path":project}]}})

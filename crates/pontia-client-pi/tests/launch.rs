@@ -1,11 +1,9 @@
 use std::{
-    collections::HashMap,
     os::unix::fs::PermissionsExt,
     path::Path,
     sync::{Mutex, OnceLock},
 };
 
-use pontia_config::{RuntimeClientConfig, RuntimeConfig};
 use pontia_runtime::{GenericRuntimeManager, RuntimeStartRequest};
 
 fn path_env_lock() -> &'static Mutex<()> {
@@ -30,7 +28,7 @@ time.sleep(8)
     let mut runtime = launch_request(root.path(), Some("python3 pi.py --approve".into()));
     runtime.reasoning_effort = Some("high".into());
     runtime.launch_mode = pontia_core::LaunchMode::Background;
-    let started = start_session(&RuntimeConfig::default(), root.path(), runtime).unwrap();
+    let started = start_session(root.path(), runtime).unwrap();
     let fingerprint =
         serde_json::from_value(started.metadata["process_fingerprint"].clone()).unwrap();
     let args = root.path().join("args.json");
@@ -91,17 +89,14 @@ fn session_mode_is_applied_on_initial_launch_and_resume_without_accumulating_fla
         );
         runtime.mode = mode;
         for resume in [false, true] {
-            let result = launch_session(
-                Some("test-pi".into()),
-                pontia_agent_control::clients::ClientLaunchRequest {
-                    root: root.path(),
-                    runtime: runtime.clone(),
-                    restart_count: i64::from(resume),
-                    reuse_pane: None,
-                    native_session_key: resume.then_some("native-policy"),
-                    native_session_file: resume.then_some(native.as_path()),
-                },
-            )
+            let result = launch_session(pontia_agent_control::clients::ClientLaunchRequest {
+                root: root.path(),
+                runtime: runtime.clone(),
+                restart_count: i64::from(resume),
+                reuse_pane: None,
+                native_session_key: resume.then_some("native-policy"),
+                native_session_file: resume.then_some(native.as_path()),
+            })
             .unwrap();
             let text = std::fs::read_to_string(&log).unwrap();
             assert!(
@@ -123,27 +118,14 @@ fn session_mode_is_applied_on_initial_launch_and_resume_without_accumulating_fla
 }
 
 #[test]
-fn start_session_uses_configured_tui_command_when_env_is_absent() {
+fn start_session_launches_pi_with_selected_model() {
     let _guard = path_env_lock().lock().expect("path env lock");
     let tempdir = tempfile::tempdir().expect("tempdir");
     let tmux_log = tempdir.path().join("tmux.log");
     let fake_tmux = tempdir.path().join("tmux");
     write_fake_tmux(&fake_tmux);
     let original_path = install_fake_tmux(tempdir.path(), &tmux_log);
-    unsafe {
-        std::env::remove_var("PONTIA_PI_TUI_COMMAND");
-    }
-    let config = RuntimeConfig {
-        clients: HashMap::from([(
-            "pi".to_string(),
-            RuntimeClientConfig {
-                tui_command: Some("custom-pi --profile configured".to_string()),
-            },
-        )]),
-    };
-
     let started = start_session(
-        &config,
         tempdir.path().join("pontia-home").as_path(),
         RuntimeStartRequest {
             reasoning_effort: None,
@@ -166,7 +148,7 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
     restore_fake_tmux(original_path);
     assert_eq!(
         started.metadata["start_command"],
-        "custom-pi --profile configured --approve --model 'provider/model'"
+        "pi --approve --model 'provider/model'"
     );
 
     let pontia_home = tempdir.path().join("pontia-home");
@@ -187,71 +169,10 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
         "{launch_script}"
     );
     assert!(
-        launch_script.contains("custom-pi --profile configured --approve --model")
-            && launch_script.contains("--session-id"),
+        launch_script.contains("pi --approve --model") && launch_script.contains("--session-id"),
         "{launch_script}"
     );
     assert!(launch_script.contains("sess_configured"), "{launch_script}");
-}
-
-#[test]
-fn start_session_prefers_env_tui_command_over_configured_command() {
-    let _guard = path_env_lock().lock().expect("path env lock");
-    let tempdir = tempfile::tempdir().expect("tempdir");
-    let tmux_log = tempdir.path().join("tmux.log");
-    let fake_tmux = tempdir.path().join("tmux");
-    write_fake_tmux(&fake_tmux);
-    let original_path = install_fake_tmux(tempdir.path(), &tmux_log);
-    unsafe {
-        std::env::set_var("PONTIA_PI_TUI_COMMAND", "custom-pi from-env");
-    }
-    let config = RuntimeConfig {
-        clients: HashMap::from([(
-            "pi".to_string(),
-            RuntimeClientConfig {
-                tui_command: Some("pi from config".to_string()),
-            },
-        )]),
-    };
-
-    start_session(
-        &config,
-        tempdir.path().join("pontia-home").as_path(),
-        RuntimeStartRequest {
-            reasoning_effort: None,
-            launch_mode: Default::default(),
-            mode: Default::default(),
-            model: None,
-            runtime_id: None,
-            session_id: "sess_env_override".to_string(),
-            client_type: "pi".to_string(),
-            workspace: Some(tempdir.path().display().to_string()),
-            workspace_name: None,
-            handle: None,
-            role: None,
-            start_command: None,
-            environment: Default::default(),
-        },
-    )
-    .expect("start session");
-
-    restore_fake_tmux(original_path);
-    unsafe {
-        std::env::remove_var("PONTIA_PI_TUI_COMMAND");
-    }
-
-    let log = std::fs::read_to_string(tmux_log).expect("tmux log");
-    let launch_script = std::fs::read_to_string(launch_script_path_from_tmux_log(&log))
-        .expect("ephemeral launch script");
-    assert!(
-        launch_script.contains("custom-pi from-env --approve --session-id"),
-        "{launch_script}"
-    );
-    assert!(
-        launch_script.contains("sess_env_override"),
-        "{launch_script}"
-    );
-    assert!(!launch_script.contains("pi from config"), "{launch_script}");
 }
 
 #[test]
@@ -308,17 +229,14 @@ fn repeated_resume_preserves_command_and_passes_exact_quoted_session_file() {
     let mut persisted = command.clone();
     for restart_count in 1..=2 {
         std::fs::write(&tmux_log, "").unwrap();
-        let launched = launch_session(
-            Some("unused-pi --different-config".into()),
-            pontia_agent_control::clients::ClientLaunchRequest {
-                root: root.path(),
-                runtime: launch_request(root.path(), Some(persisted)),
-                restart_count,
-                reuse_pane: None,
-                native_session_key: Some("native-id"),
-                native_session_file: Some(&native_file),
-            },
-        )
+        let launched = launch_session(pontia_agent_control::clients::ClientLaunchRequest {
+            root: root.path(),
+            runtime: launch_request(root.path(), Some(persisted)),
+            restart_count,
+            reuse_pane: None,
+            native_session_key: Some("native-id"),
+            native_session_file: Some(&native_file),
+        })
         .expect("resume");
         let log = std::fs::read_to_string(&tmux_log).unwrap();
         let status = std::process::Command::new("sh")
@@ -352,17 +270,14 @@ fn resume_rejects_missing_invalid_or_different_native_session_before_launch() {
     let root = tempfile::tempdir().unwrap();
     let file = root.path().join("session.jsonl");
     assert!(
-        launch_session(
-            None,
-            pontia_agent_control::clients::ClientLaunchRequest {
-                root: root.path(),
-                runtime: launch_request(root.path(), Some("must-not-run".into())),
-                restart_count: 1,
-                reuse_pane: None,
-                native_session_key: Some("native-id"),
-                native_session_file: None,
-            },
-        )
+        launch_session(pontia_agent_control::clients::ClientLaunchRequest {
+            root: root.path(),
+            runtime: launch_request(root.path(), Some("must-not-run".into())),
+            restart_count: 1,
+            reuse_pane: None,
+            native_session_key: Some("native-id"),
+            native_session_file: None,
+        },)
         .is_err()
     );
     for contents in [
@@ -374,17 +289,14 @@ fn resume_rejects_missing_invalid_or_different_native_session_before_launch() {
         if let Some(contents) = contents {
             std::fs::write(&file, contents).unwrap();
         }
-        let result = launch_session(
-            None,
-            pontia_agent_control::clients::ClientLaunchRequest {
-                root: root.path(),
-                runtime: launch_request(root.path(), Some("must-not-run".into())),
-                restart_count: 1,
-                reuse_pane: None,
-                native_session_key: Some("native-id"),
-                native_session_file: Some(&file),
-            },
-        );
+        let result = launch_session(pontia_agent_control::clients::ClientLaunchRequest {
+            root: root.path(),
+            runtime: launch_request(root.path(), Some("must-not-run".into())),
+            restart_count: 1,
+            reuse_pane: None,
+            native_session_key: Some("native-id"),
+            native_session_file: Some(&file),
+        });
         assert!(
             matches!(
                 result,
@@ -397,7 +309,7 @@ fn resume_rejects_missing_invalid_or_different_native_session_before_launch() {
 }
 
 #[test]
-fn creation_uses_environment_file_and_default_command_precedence() {
+fn creation_requires_an_enabled_pi_client() {
     let _guard = path_env_lock().lock().unwrap();
     let root = tempfile::tempdir().unwrap();
     let log = root.path().join("tmux.log");
@@ -421,71 +333,56 @@ fn creation_uses_environment_file_and_default_command_precedence() {
         )
         .await
         .unwrap();
-        for (file, environment, expected) in [
-            (
-                json!({"tui_command":"file-pi"}),
-                json!({"tui_command":"env-pi"}),
-                "env-pi",
-            ),
-            (json!({"tui_command":"file-pi"}), json!({}), "file-pi"),
-            (json!({}), json!({}), "pi"),
-        ] {
-            let mut client = pontia_client_pi::registration(None);
-            client.configuration = Some(std::sync::Arc::new(
-                pontia_client_pi::config::PiConfiguration::new(file, environment.clone()),
-            ));
-            let mut clients = ClientRegistry::default();
-            clients.register(client);
-            let app = AgentControl::builder(pool.clone(), root.path().into())
-                .clients(clients.clone())
-                .build();
-            let service = AgentClientService::new(pool.clone(), clients);
-            service.save("pi", "default", true).await.unwrap();
-            let create = || async {
-                let result = app
-                    .session_commands()
-                    .create_session(
-                        serde_json::from_value(json!({"client_type":"pi","workspace":root.path()}))
-                            .unwrap(),
-                    )
-                    .await
-                    .unwrap();
-                let session = result.session_id().unwrap().to_owned();
-                let command: String = sqlx::query_scalar(
-                    "SELECT start_command FROM session_runtimes WHERE session_id=?",
+        let mut clients = ClientRegistry::default();
+        clients.register(pontia_client_pi::registration());
+        let app = AgentControl::builder(pool.clone(), root.path().into())
+            .clients(clients.clone())
+            .build();
+        let service = AgentClientService::new(pool.clone(), clients);
+        service.save("pi", "default", true).await.unwrap();
+        let create = || async {
+            let result = app
+                .session_commands()
+                .create_session(
+                    serde_json::from_value(json!({"client_type":"pi","workspace":root.path()}))
+                        .unwrap(),
                 )
-                .bind(&session)
-                .fetch_one(&pool)
                 .await
                 .unwrap();
-                (session, command)
-            };
-            assert_eq!(create().await.1, format!("{expected} --approve"));
-            service.save("pi", "default", false).await.unwrap();
-            assert!(matches!(
-                app.session_commands()
-                    .create_session(serde_json::from_value(json!({"client_type":"pi"})).unwrap())
-                    .await,
-                Err(pontia_core::Error::Conflict {
-                    code: "client_disabled",
-                    ..
-                })
-            ));
-            service.delete("pi", "default").await.unwrap();
-            assert!(matches!(
-                app.session_commands()
-                    .create_session(serde_json::from_value(json!({"client_type":"pi"})).unwrap())
-                    .await,
-                Err(pontia_core::Error::Conflict {
-                    code: "client_disabled",
-                    ..
-                })
-            ));
-            service.save("pi", "default", true).await.unwrap();
-            assert_eq!(create().await.1, format!("{expected} --approve"));
-            service.delete("pi", "default").await.unwrap();
-            app.shutdown().notify();
-        }
+            let session = result.session_id().unwrap().to_owned();
+            let command: String =
+                sqlx::query_scalar("SELECT start_command FROM session_runtimes WHERE session_id=?")
+                    .bind(&session)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            (session, command)
+        };
+        assert_eq!(create().await.1, "pi --approve");
+        service.save("pi", "default", false).await.unwrap();
+        assert!(matches!(
+            app.session_commands()
+                .create_session(serde_json::from_value(json!({"client_type":"pi"})).unwrap())
+                .await,
+            Err(pontia_core::Error::Conflict {
+                code: "client_disabled",
+                ..
+            })
+        ));
+        service.delete("pi", "default").await.unwrap();
+        assert!(matches!(
+            app.session_commands()
+                .create_session(serde_json::from_value(json!({"client_type":"pi"})).unwrap())
+                .await,
+            Err(pontia_core::Error::Conflict {
+                code: "client_disabled",
+                ..
+            })
+        ));
+        service.save("pi", "default", true).await.unwrap();
+        assert_eq!(create().await.1, "pi --approve");
+        service.delete("pi", "default").await.unwrap();
+        app.shutdown().notify();
         pool.close().await;
     });
     restore_fake_tmux(original_path);
@@ -554,25 +451,20 @@ exit 0
 }
 
 fn start_session(
-    config: &RuntimeConfig,
     root: &Path,
     runtime: RuntimeStartRequest,
 ) -> pontia_core::Result<pontia_runtime::RuntimeStartResult> {
-    launch_session(
-        config.tui_command_for_client_config_key("pi"),
-        pontia_agent_control::clients::ClientLaunchRequest {
-            root,
-            runtime,
-            restart_count: 0,
-            reuse_pane: None,
-            native_session_key: None,
-            native_session_file: None,
-        },
-    )
+    launch_session(pontia_agent_control::clients::ClientLaunchRequest {
+        root,
+        runtime,
+        restart_count: 0,
+        reuse_pane: None,
+        native_session_key: None,
+        native_session_file: None,
+    })
 }
 
 fn launch_session(
-    tui_command: Option<String>,
     request: pontia_agent_control::clients::ClientLaunchRequest<'_>,
 ) -> pontia_core::Result<pontia_runtime::RuntimeStartResult> {
     let runtime = tokio::runtime::Runtime::new()?;
@@ -580,7 +472,7 @@ fn launch_session(
         let pool = pontia_storage_sqlite::connect_sqlite("sqlite::memory:").await?;
         pontia_storage_sqlite::run_migrations(&pool).await?;
         let events = pontia_agent_control::EventIngestService::for_projection_tests(pool);
-        let session = pontia_client_pi::registration(tui_command)
+        let session = pontia_client_pi::registration()
             .session
             .expect("Pi ClientSession");
         let result = if request.restart_count == 0 {
@@ -608,10 +500,7 @@ fn persistent_launch_directory_reapplies_steering() {
     use pontia_agent_control::client_contract::ClientConfiguration;
 
     let root = tempfile::tempdir().unwrap();
-    let config = pontia_client_pi::config::PiConfiguration::new(
-        serde_json::json!({}),
-        serde_json::json!({}),
-    );
+    let config = pontia_client_pi::config::PiConfiguration;
     let initialize = || {
         for file in config.private_directory_files() {
             file.install(root.path()).unwrap();

@@ -65,15 +65,6 @@ pub trait ClientSession: Send + Sync {
         root: &'a Path,
         request: RuntimeStartRequest,
     ) -> ClientOperation<'a, Option<RuntimeStartResult>>;
-    fn provision_configured<'a>(
-        &'a self,
-        events: EventIngestService,
-        root: &'a Path,
-        request: RuntimeStartRequest,
-        _configuration: Value,
-    ) -> ClientOperation<'a, Option<RuntimeStartResult>> {
-        self.provision(events, root, request)
-    }
     fn start_turn<'a>(
         &'a self,
         events: EventIngestService,

@@ -18,15 +18,12 @@ impl AppConfig {
         pontia_core::private_fs::directory(&self.pontia_home)
     }
 
-    pub fn from_env(runtime_commands: &[super::RuntimeCommandOverride]) -> Result<Self> {
+    pub fn from_env() -> Result<Self> {
         let vars: HashMap<String, String> = env::vars().collect();
-        Self::from_vars(&vars, runtime_commands)
+        Self::from_vars(&vars)
     }
 
-    pub fn from_vars(
-        vars: &HashMap<String, String>,
-        runtime_commands: &[super::RuntimeCommandOverride],
-    ) -> Result<Self> {
+    pub fn from_vars(vars: &HashMap<String, String>) -> Result<Self> {
         let pontia_home = pontia_home(vars)?;
         let config_path = config_path(&pontia_home);
         let file = if config_path.exists() {
@@ -91,23 +88,6 @@ impl AppConfig {
             dashboard.source = non_empty(value);
         }
 
-        let client_configuration = super::ClientConfigurationSources {
-            runtime_file: file
-                .and_then(|config| config.runtime.clone())
-                .unwrap_or_default(),
-            runtime_environment: runtime_commands
-                .iter()
-                .filter_map(|command| {
-                    get(vars, command.environment_variable).map(|value| {
-                        (
-                            command.client_type.to_string(),
-                            serde_json::json!({"tui_command": non_empty(value)}),
-                        )
-                    })
-                })
-                .collect(),
-        };
-
         Ok(Self {
             pontia_home,
             bind_addr,
@@ -119,7 +99,6 @@ impl AppConfig {
             file_picker,
             uploads: file.and_then(|config| config.uploads).unwrap_or_default(),
             bot: file.and_then(|config| config.bot).unwrap_or_default(),
-            client_configuration,
             dashboard,
             preview: file
                 .and_then(|config| config.preview.clone())

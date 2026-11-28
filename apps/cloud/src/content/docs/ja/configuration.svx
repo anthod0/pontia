@@ -20,9 +20,6 @@ bind_addr = "127.0.0.1:8080"
 external_api_token = "replace-with-a-long-secret"
 run_migrations = true
 
-[runtime.pi]
-tui_command = "pi"
-
 [workspace_browser]
 roots = [
   { root_id = "projects", label = "Projects", path = "/home/me/projects" }
@@ -35,7 +32,6 @@ roots = [
 | `external_api_token` | Local Dashboard と External API が必要とする Bearer トークン |
 | `run_migrations` | `pontiad` が同梱のデータベースマイグレーションを適用するかどうか。デフォルトは `true` |
 | `dashboard.source` | Local Dashboard のビルドディレクトリ、または `index.html` をちょうど 1 つ含むリモートの `.tar.gz`、`.tgz`、`.zip` アーカイブ |
-| `runtime.pi.tui_command` | 起動する Pi の Session に使う Pi の実行ファイルまたはコマンド |
 | `workspace_browser.roots` | Workspace を有効にするために Dashboard が参照できるディレクトリ |
 | `preview.enabled` | localhost Web アプリのプレビューを有効にします。既定値は `true` です |
 | `preview.allowed_ports` | プレビューに明示的に追加する機密性の高い開発・管理ポート |
@@ -107,7 +103,6 @@ cleanup_interval_hours = 24
 | `PONTIA_RUN_MIGRATIONS` | `run_migrations` |
 | `PONTIA_WORKSPACE_ROOTS` | セミコロン区切りの `root_id|label|path` エントリーで指定する Workspace のルート |
 | `PONTIA_DASHBOARD_SOURCE` | `dashboard.source`。空の値にすると Dashboard の配信が無効になる |
-| `PONTIA_PI_TUI_COMMAND` | `runtime.pi.tui_command`。空の値にすると `pi` を使う |
 | `PONTIA_AUTH_ORIGIN` | Pontia Cloud の HTTPS オリジン。管理されたデプロイと開発向け |
 
 実行中のプロセスでは、環境変数の値がファイルの値より優先されます。永続的なサービス設定には `config.toml` を使ってください。インストールされたサービスは、`PONTIA_HOME`、`PONTIA_AUTH_ORIGIN`、必要な Agent Client のパスを別に保存します。

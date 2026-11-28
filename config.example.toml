@@ -21,11 +21,6 @@ source = "apps/dashboard/dist"
 # Remote sources are cached beneath $PONTIA_HOME/cache/dashboard. If refresh
 # fails, an existing cached dashboard is served.
 
-[runtime.pi]
-# Install the plugin once with `pi install ./clients/pi`; pi then loads it from user settings.
-tui_command = "pi"
-
-
 [workspace_browser]
 roots = [
   { root_id = "projects", label = "Projects", path = "/home/me/projects" }

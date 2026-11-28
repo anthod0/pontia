@@ -2,14 +2,13 @@ use std::{
     collections::{HashMap, HashSet},
     path::Path,
     process::{Output, Stdio},
-    sync::Arc,
     time::Duration,
 };
 
 use pontia_agent_control::{
     client_auth::sanitize_output,
     client_contract::{
-        ClientAuth, ClientConfiguration, ClientOperation,
+        ClientAuth, ClientOperation,
         auth::{
             AuthAccountInfo, AuthContext, AuthEventSink, AuthFlowHandle, AuthState,
             ClientAuthStatus, StartLoginParams,
@@ -21,37 +20,30 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::io::{AsyncWriteExt, BufReader};
 
-use crate::config::PiConfiguration;
-
 const STATUS_TIMEOUT: Duration = if cfg!(test) {
     Duration::from_millis(200)
 } else {
     Duration::from_secs(4)
 };
 
-pub(crate) struct PiAuth {
-    configuration: Arc<PiConfiguration>,
-}
+pub(crate) struct PiAuth;
 
 impl PiAuth {
-    pub(crate) fn new(configuration: Arc<PiConfiguration>) -> Self {
-        Self { configuration }
-    }
-
     async fn probe(&self, key: &str, context: &AuthContext) -> Result<ClientAuthStatus> {
-        let command = crate::config::command(&self.configuration.resolve(key)?)?;
-        let providers = available_providers(&command, &context.pontia_home, &context.vars).await?;
+        if !self.supports_auth(key) {
+            return Err(Error::Domain("Pi requires the default client key".into()));
+        }
+        let providers = available_providers(&context.pontia_home, &context.vars).await?;
         if providers.is_empty() {
             return Ok(status(AuthState::Unauthenticated));
         }
 
         let mut checks = tokio::task::JoinSet::new();
         for provider in providers {
-            let command = command.clone();
             let directory = context.pontia_home.clone();
             let vars = context.vars.clone();
             checks.spawn(async move {
-                let output = run_auth_check(&command, &provider, &directory, &vars).await?;
+                let output = run_auth_check(&provider, &directory, &vars).await?;
                 parse_auth_check(&output, &provider)
             });
         }
@@ -158,15 +150,21 @@ struct AvailableModel {
 }
 
 async fn available_providers(
-    command: &str,
     directory: &Path,
     vars: &HashMap<String, String>,
 ) -> Result<Vec<String>> {
-    let mut child = tokio::process::Command::new("bash")
-        .arg("-c")
-        .arg(format!(
-            "{command} --offline --no-approve --no-mcp --no-skills --no-prompt-templates --no-context-files --mode rpc --no-session"
-        ))
+    let mut child = tokio::process::Command::new("pi")
+        .args([
+            "--offline",
+            "--no-approve",
+            "--no-mcp",
+            "--no-skills",
+            "--no-prompt-templates",
+            "--no-context-files",
+            "--mode",
+            "rpc",
+            "--no-session",
+        ])
         .current_dir(directory)
         .env_clear()
         .envs(vars)
@@ -210,17 +208,19 @@ async fn available_providers(
 }
 
 async fn run_auth_check(
-    command: &str,
     provider: &str,
     directory: &Path,
     vars: &HashMap<String, String>,
 ) -> Result<Output> {
-    tokio::process::Command::new("bash")
-        .arg("-c")
-        .arg(format!(
-            "{command} auth check --provider {} --json --no-refresh",
-            shell_quote(provider)
-        ))
+    tokio::process::Command::new("pi")
+        .args([
+            "auth",
+            "check",
+            "--provider",
+            provider,
+            "--json",
+            "--no-refresh",
+        ])
         .current_dir(directory)
         .env_clear()
         .envs(vars)
@@ -230,10 +230,6 @@ async fn run_auth_check(
         .output()
         .await
         .map_err(Error::from)
-}
-
-fn shell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\\''"))
 }
 
 #[derive(Clone, Copy, Deserialize, PartialEq, Eq)]

@@ -10,18 +10,15 @@ fn executable(path: &Path, body: &str) {
 }
 
 #[test]
-fn pi_checks_effective_command_without_executing_it() {
+fn pi_checks_executable_without_running_it() {
     let root = tempfile::tempdir().unwrap();
-    let program = root.path().join("custom-pi");
+    let program = root.path().join("pi");
     let vars = HashMap::from([("PATH".into(), root.path().display().to_string())]);
     let context = DetectionContext {
         vars: &vars,
         pontia_home: root.path(),
     };
-    let config = pontia_client_pi::config::PiConfiguration::new(
-        json!({"tui_command":"custom-pi"}),
-        json!({}),
-    );
+    let config = pontia_client_pi::config::PiConfiguration;
     let effective = config.merged("default");
     assert_eq!(
         config.detect(&effective, &context).status,
@@ -36,16 +33,6 @@ fn pi_checks_effective_command_without_executing_it() {
     assert_eq!(
         config.detect(&effective, &context).status,
         DetectionStatus::NotDetected
-    );
-    assert_eq!(
-        config
-            .detect(&json!({"tui_command":"env KEY=value pi"}), &context)
-            .status,
-        DetectionStatus::Unknown
-    );
-    assert_eq!(
-        config.detect(&json!({"tui_command":null}), &context).status,
-        DetectionStatus::Unknown
     );
 }
 

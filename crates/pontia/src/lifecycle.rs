@@ -216,7 +216,7 @@ where
             .transpose()?;
         let http_healthy = match persisted_home.as_ref() {
             Some(home) if service.run_state == RunState::Running => {
-                let config = pontia_clients::config_from_vars(&HashMap::from([(
+                let config = pontia_config::AppConfig::from_vars(&HashMap::from([(
                     "PONTIA_HOME".to_string(),
                     home.display().to_string(),
                 )]))

@@ -112,7 +112,7 @@ pontia status
 pontia client list
 ```
 
-選択した各エントリーが `enabled` になっていることを確認します。Pontia サービスが `pi` を見つけられない場合は、[Pi コマンドの上書き](/docs/agent-clients/pi#override-the-pi-command)を参照してください。ステップ 7 では、Remote Dashboard から Session を開始して、これらの Client を確認します。
+選択した各エントリーが `enabled` になっていることを確認します。ステップ 7 では、Remote Dashboard から Session を開始して、これらの Client を確認します。
 
 ### 5. Pontia Cloud にサインインする
 

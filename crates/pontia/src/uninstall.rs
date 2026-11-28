@@ -68,7 +68,7 @@ impl PreparedUninstall {
     }
 
     pub fn service_config(&self) -> Result<pontia_config::AppConfig, String> {
-        pontia_clients::config_from_vars(&HashMap::from([(
+        pontia_config::AppConfig::from_vars(&HashMap::from([(
             "PONTIA_HOME".into(),
             self.pontia_home.display().to_string(),
         )]))

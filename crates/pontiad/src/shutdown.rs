@@ -15,8 +15,8 @@ pub(crate) async fn run() -> Result<(), Box<dyn std::error::Error>> {
         "PONTIA_HOME".into(),
         request.pontia_home.display().to_string(),
     )]);
-    let config = pontia_clients::config_from_vars(&vars)?;
-    let clients = pontia_clients::registration(&config);
+    let config = pontia_config::AppConfig::from_vars(&vars)?;
+    let clients = pontia_clients::registration();
     let shutdown = Shutdown::inspect(
         &config.pontia_home,
         &clients,

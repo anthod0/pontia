@@ -60,8 +60,6 @@ Execute `pontia setup pi` para reinstalar o plugin. Inspecione:
 $PONTIA_HOME/state/pi-hook.log
 ```
 
-Confira também se um `[runtime.pi].tui_command` personalizado tem um caminho ou wrapper inválido.
-
 ## O Codex não conecta
 
 Confirme que sua build do Codex suporta o daemon app-server e depois inspecione o serviço por usuário dele. Veja [Codex](/docs/agent-clients/codex) para os comandos de cada plataforma. Execute `pontia setup codex` se o executável ou o `CODEX_HOME` mudou, ou se o launcher ou a configuração de PATH do shell dele estiver ausente.
