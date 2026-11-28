@@ -2,10 +2,12 @@
   import { onDestroy, onMount, tick, type Snippet } from 'svelte'
   import { t } from '$lib/i18n'
   import * as AlertDialog from '$lib/components/ui/alert-dialog'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import MinusIcon from 'phosphor-svelte/lib/MinusIcon'
-  import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
-  import ArrowCounterClockwiseIcon from 'phosphor-svelte/lib/ArrowCounterClockwiseIcon'
+  import { MediaQuery } from 'svelte/reactivity'
+  import * as Tooltip from '$lib/components/ui/tooltip'
+  import type { MessageKey } from '$lib/i18n'
+  import GitMoreActions from './GitMoreActions.svelte'
+  import GitCommitBox from './GitCommitBox.svelte'
+  import GitActionIcon from './GitActionIcon.svelte'
   import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
   import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon'
@@ -89,38 +91,63 @@
   })
 
   let message = $state('')
-  let pending = $state<GitWriteOperation['action'] | null>(null)
-  let failure = $state('')
-  let completed = $state<GitWriteOperation['action'] | null>(null)
-  let discardTarget = $state<GitChangedFile | null>(null)
+  let pending = $state<GitWriteOperation['action'] | 'sync' | null>(null)
+  let failure = $state<{ title: MessageKey; detail: string } | null>(null)
+  let discardPaths = $state<string[] | null>(null)
+  let discardAll = $state(false)
   let destroyed = false
+  const touch = new MediaQuery('(width < 48rem), (pointer: coarse), (hover: none)')
   const busy = $derived(!!pending || refreshing)
-  const stageAll = $derived(!(status?.staged_count ?? changes?.files.some(file => file.group === 'staged')))
+  const groups = $derived(groupChanges(changes?.files ?? []))
+  const staged = $derived(!!(status?.staged_count || groups.some(group => group.group === 'staged')))
+  const unstaged = $derived(groups.find(group => group.group === 'unstaged')?.files ?? [])
+  const conflicted = $derived(!!(status?.conflicted_count || groups.some(group => group.group === 'conflicted')))
+  const canDiscardAll = $derived(!changes?.truncated && unstaged.length > 0 && unstaged.every(file => !file.path.endsWith('/')))
+  const titles = {
+    stage: 'git.stageFailed', unstage: 'git.unstageFailed', commit: 'git.commitWriteFailed',
+    discard: 'git.discardFailed', sync: 'git.syncFailed', pull: 'git.pullFailed', push: 'git.pushFailed',
+  } as const
   onDestroy(() => {
     destroyed = true
     refreshController?.abort()
   })
 
-  async function write(operation: GitWriteOperation) {
+  async function write(operation: GitWriteOperation | { action: 'sync' }) {
     if (busy) return
     pending = operation.action
-    failure = ''
-    completed = null
+    failure = null
     try {
-      await queries.writeWorkspaceGit(workspaceId, operation)
+      if (operation.action === 'sync') {
+        const push = !!status?.ahead
+        if (status?.behind) await queries.writeWorkspaceGit(workspaceId, { action: 'pull' })
+        if (push) await queries.writeWorkspaceGit(workspaceId, { action: 'push' })
+      } else await queries.writeWorkspaceGit(workspaceId, operation)
       if (destroyed) return
       if (operation.action === 'commit') message = ''
-      completed = operation.action
       if (git.diff && changes && !changesQuery.isError && !change) {
         const moved = changes.files.find(file => file.path === git.diff?.path)
         if (moved) selectChange(moved)
         else git.diff = null
       }
     } catch (error) {
-      failure = error instanceof Error ? error.message : String(error)
+      failure = { title: titles[operation.action], detail: error instanceof Error ? error.message : String(error) }
     } finally {
       pending = null
     }
+  }
+
+  function stageFile(file: GitChangedFile) {
+    const paths = file.status === 'R' && file.orig_path ? [file.orig_path, file.path] : [file.path.replace(/\/$/, '')]
+    void write({ action: file.group === 'staged' ? 'unstage' : 'stage', body: { paths } })
+  }
+
+  function menuAction(action: 'stageAll' | 'unstageAll' | 'discardAll' | 'pull' | 'push') {
+    if (action === 'discardAll') {
+      discardAll = true
+      discardPaths = unstaged.map(file => file.path)
+    } else if (action === 'stageAll' || action === 'unstageAll') {
+      void write({ action: action === 'stageAll' ? 'stage' : 'unstage', body: { all: true } })
+    } else void write({ action })
   }
 
   $effect(() => {
@@ -226,9 +253,9 @@
 {/snippet}
 
 {#snippet toolbar()}
-  <header class="flex h-11 shrink-0 items-center gap-1 border-b pr-2.5 pl-2 md:max-lg:h-[52px] max-md:h-auto max-md:flex-wrap max-md:gap-y-0 max-md:py-1">
+  <header class="flex h-11 shrink-0 items-center gap-1 border-b pr-2.5 pl-2 max-lg:h-[52px]">
     {#if workspaceHeading}
-      <div class="flex min-w-0 items-center max-md:max-w-[45%]">{@render workspaceHeading()}</div>
+      <div class="flex min-w-0 items-center">{@render workspaceHeading()}</div>
       <span class="mx-1 h-4 w-px shrink-0 bg-border"></span>
     {/if}
     {#if status?.repo_root}
@@ -240,73 +267,45 @@
       </div>
       {#if status.upstream}<span class={['upstream min-w-0 truncate font-mono text-11 text-muted-foreground', workspaceHeading && 'bot-upstream']}>→ {status.upstream}</span>{/if}
     {/if}
-    <span class="min-w-0 flex-1 max-md:basis-full"></span>
+    <span class="min-w-0 flex-1"></span>
     {#if changesQuery.dataUpdatedAt && minutes > 5}<time class="shrink-0 text-11 text-muted-foreground tabular-nums" datetime={new Date(changesQuery.dataUpdatedAt).toISOString()}>{$t('git.minutesAgo', { count: minutes })}</time>{/if}
+    <Button variant="ghost" size="icon-circle-sm" class={['size-7 p-0 max-lg:size-10 touch-target:size-10 touch-target:min-h-0! touch-target:min-w-0!', !changes?.repo_root && '-mr-1.5']} disabled={busy} onclick={refresh} aria-label={$t('common.refresh')} title={`${$t('common.refresh')} · ${$t('git.updatedMinutesAgo', { count: minutes })}`}><ArrowClockwiseIcon class={['size-4', refreshing && 'animate-spin']} /></Button>
     {#if changes?.repo_root}
-      {#each ['pull', 'push'] as const as action}
-        {@const count = action === 'pull' ? status?.behind : status?.ahead}
-        <Button size="xs" variant="outline" class="max-md:h-11 max-md:px-3" disabled={busy} onclick={() => write({ action })}>
-          {#if pending === action}<ArrowClockwiseIcon class="animate-spin" />{/if}
-          {$t(`git.${action}`)}{#if count}<span class="tabular-nums">{count}</span>{/if}
-        </Button>
-      {/each}
+      <GitMoreActions touch={touch.current} branch={branchName} upstream={status?.upstream} ahead={status?.ahead ?? 0} behind={status?.behind ?? 0}
+        {busy} {staged} unstaged={!!(unstaged.length || status?.unstaged_count || status?.untracked_count)} discardable={canDiscardAll} onaction={menuAction} />
     {/if}
-    <Button variant="ghost" size="icon-circle-sm" class="-mr-1.5 size-7 p-0 md:max-lg:size-10 max-md:ml-auto max-md:size-11" disabled={busy} onclick={refresh} aria-label={$t('common.refresh')} title={`${$t('common.refresh')} · ${$t('git.updatedMinutesAgo', { count: minutes })}`}><ArrowClockwiseIcon class={['size-4', refreshing && 'animate-spin']} /></Button>
   </header>
 {/snippet}
 
 {#snippet groupActions(group: GitChangedFile['group'])}
-  {#if group !== 'conflicted'}
-    {@const staged = group === 'staged'}
-    <Button size="xs" variant="ghost" class="max-md:h-11" disabled={busy} onclick={() => write({ action: staged ? 'unstage' : 'stage', body: { all: true } })}>
-      {$t(staged ? 'git.unstageAll' : 'git.stageAll')}
-    </Button>
+  {#if group !== 'conflicted' && !busy}
+    <div class="flex gap-0.5 opacity-0 group-hover/label:opacity-100 group-hover/section:opacity-100 group-focus-within/section:opacity-100 focus-within:opacity-100 touch-target:-mr-2 touch-target:opacity-100">
+      {#if group !== 'staged' && !touch.current}<GitActionIcon action="discard" label={$t('git.discardAll')} disabled={!canDiscardAll} onclick={() => menuAction('discardAll')} />{/if}
+      <GitActionIcon action={group === 'staged' ? 'unstage' : 'stage'} label={$t(group === 'staged' ? 'git.unstageAll' : 'git.stageAll')} onclick={() => menuAction(group === 'staged' ? 'unstageAll' : 'stageAll')} />
+    </div>
   {/if}
-{/snippet}
-
-{#snippet fileActions(file: GitChangedFile)}
-  {@const staged = file.group === 'staged'}
-  {@const paths = file.status === 'R' && file.orig_path ? [file.orig_path, file.path] : [file.path.replace(/\/$/, '')]}
-  {#if file.group === 'unstaged' || (file.group === 'untracked' && !file.path.endsWith('/'))}
-    <Button size="icon-circle-sm" variant="ghost" class="size-6 max-md:size-11" disabled={busy}
-      title={$t('git.discard')} aria-label={`${$t('git.discard')}: ${file.path}`} onclick={() => discardTarget = file}><ArrowCounterClockwiseIcon /></Button>
-  {/if}
-  <Button size="icon-circle-sm" variant="ghost" class="size-6 max-md:size-11" disabled={busy}
-    title={$t(staged ? 'git.unstage' : 'git.stage')} aria-label={`${$t(staged ? 'git.unstage' : 'git.stage')}: ${file.path}`}
-    onclick={() => write({ action: staged ? 'unstage' : 'stage', body: { paths } })}>
-    {#if staged}<MinusIcon />{:else}<PlusIcon />{/if}
-  </Button>
 {/snippet}
 
 {#snippet sections()}
   <div bind:this={scrollRoot} class="min-h-0 flex-1 overflow-auto overscroll-contain pb-3 max-lg:pb-6">
     {#if changes?.repo_root}
-      <form class="space-y-2 border-b p-3" onsubmit={(event) => {
-        event.preventDefault()
-        if (message.trim() && changes?.files.length) void write({ action: 'commit', body: { message, stage_all: stageAll } })
-      }}>
-        <Textarea bind:value={message} disabled={!!pending} rows={2} placeholder={$t('git.commitMessage')} aria-label={$t('git.commitMessage')} />
-        <div class="flex items-center justify-between gap-2">
-          <div class="min-w-0 text-xs text-muted-foreground" role="status">
-            {#if pending}{$t(`git.${pending}`)}…{:else if completed}{$t('git.operationDone', { action: $t(`git.${completed}`) })}{/if}
-          </div>
-          <Button type="submit" size="sm" class="max-md:h-11" disabled={busy || !message.trim() || !changes.files.length}>
-            {$t(stageAll && changes.files.length ? 'git.stageCommit' : 'git.commit')}
-          </Button>
-        </div>
-        {#if failure}<p role="alert" class="text-xs break-words text-destructive">{failure}</p>{/if}
-      </form>
+      <GitCommitBox dirty={!!changes.files.length} {conflicted} branch={branchName} ahead={status?.upstream ? status.ahead : 0}
+        behind={status?.upstream ? status.behind : 0} touch={touch.current} {pending} {busy} {failure} bind:message
+        dismiss={() => failure = null} commit={() => write({ action: 'commit', body: { message, stage_all: !staged } })} sync={() => write({ action: 'sync' })} />
     {/if}
     <GitSection kind="changes" title={$t('git.changesView')} count={changes?.files.length ? changes.total : undefined}
       description={changes && !changes.files.length ? $t('git.noChanges') : undefined} open={git.changesOpen}
       disabled={!!changes && !changes.files.length} {scrollRoot} onchange={(open) => { git.changesOpen = open }}>
+      {#snippet actions()}
+        {#if groups.length === 1 && !touch.current}{@render groupActions(groups[0]!.group)}{/if}
+      {/snippet}
       {#snippet children()}
         {#if changesQuery.isError && !changes}
           <Alert.Root variant="destructive" class="m-3 w-auto"><WarningCircleIcon /><Alert.Title>{$t('git.readFailed')}</Alert.Title><Alert.Description><span class="font-mono text-xs break-words text-foreground">{changesQuery.error.message}</span><Button variant="outline" size="sm" class="mt-2" onclick={refresh}><ArrowClockwiseIcon data-icon="inline-start" />{$t('common.retry')}</Button></Alert.Description></Alert.Root>
         {:else if !changes}
           <div role="status" aria-label={$t('common.loading')} class="space-y-2 p-3">{#each [60, 80, 52, 74] as width}<div class="flex h-[30px] items-center gap-2.5 px-2"><Skeleton class="h-3 w-3" /><Skeleton class="h-3" style="width: {width}%" /></div>{/each}</div>
         {:else if changes.files.length}
-          <GitChangeList {groupActions} {fileActions} files={changes.files} selected={wide ? git.diff : null} onopen={openChange} />
+          <GitChangeList {groupActions} {busy} touch={touch.current} onstage={stageFile} ondiscard={file => { discardAll = false; discardPaths = [file.path] }} files={changes.files} selected={wide ? git.diff : null} onopen={openChange} />
           {#if changes.truncated}<p class="px-4 pb-4 text-center text-xs text-muted-foreground">{$t('git.listTruncated', { shown: changes.files.length, total: changes.total })}</p>{/if}
         {/if}
       {/snippet}
@@ -330,6 +329,7 @@
   </div>
 {/snippet}
 
+<Tooltip.Provider>
 <div bind:this={element} bind:clientWidth={panelWidth} tabindex="-1" class="git-panel flex h-full min-h-0 flex-1 flex-col outline-none">
   {#if !wide && canReadRepository && git.diff && !onopen}
     <GitDiffView {device} {workspaceId} file={git.diff} files={orderedFiles} {change} onback={closeDiff} onselect={selectChange} />
@@ -358,19 +358,21 @@
   {/if}
 </div>
 
-<AlertDialog.Root open={!!discardTarget} onOpenChange={(open) => { if (!open) discardTarget = null }}>
+</Tooltip.Provider>
+
+<AlertDialog.Root open={!!discardPaths} onOpenChange={(open) => { if (!open) discardPaths = null }}>
   <AlertDialog.Content>
     <AlertDialog.Header>
       <AlertDialog.Title>{$t('git.discard')}</AlertDialog.Title>
-      <AlertDialog.Description class="break-words">{$t('git.discardConfirm', { path: discardTarget?.path ?? '' })}</AlertDialog.Description>
+      <AlertDialog.Description class="break-words">{$t(discardAll ? 'git.discardAllConfirm' : 'git.discardConfirm', { path: discardPaths?.[0] ?? '' })}</AlertDialog.Description>
     </AlertDialog.Header>
     <AlertDialog.Footer>
       <AlertDialog.Cancel>{$t('common.cancel')}</AlertDialog.Cancel>
       <AlertDialog.Action variant="destructive" onclick={() => {
-        if (!discardTarget) return
-        const path = discardTarget.path
-        discardTarget = null
-        void write({ action: 'discard', body: { paths: [path] } })
+        if (!discardPaths) return
+        const paths = discardPaths
+        discardPaths = null
+        void write({ action: 'discard', body: { paths } })
       }}>{$t('git.discard')}</AlertDialog.Action>
     </AlertDialog.Footer>
   </AlertDialog.Content>

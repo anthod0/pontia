@@ -2,7 +2,6 @@
   import ResponsiveSelect from '$lib/components/ui/overlay/ResponsiveSelect.svelte'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
   import FolderSimpleIcon from 'phosphor-svelte/lib/FolderSimpleIcon'
-  import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
   import GearIcon from 'phosphor-svelte/lib/GearIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -66,7 +65,6 @@
               {#snippet trigger()}
                 <FolderIcon class="size-3.5 text-muted-foreground" />
                 <span class="min-w-0 flex-1 truncate text-left text-13 font-medium text-heading">{workspaceTitle(workspace)}</span>
-                <CaretDownIcon class="size-3 shrink-0 text-muted-foreground" />
               {/snippet}
               {#snippet option(item)}{@render workspaceLabel(item)}{/snippet}
             </ResponsiveSelect>

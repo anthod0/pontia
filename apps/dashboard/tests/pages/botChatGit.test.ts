@@ -308,12 +308,17 @@ test("keeps the commit draft after failure and sends one stage-all commit while 
   const panel = await openGitTab();
   await fireEvent.click(await within(panel).findByRole("button", { name: /^pontia / }));
   const input = await within(panel).findByRole("textbox", { name: "Commit message" });
+  const commit = within(panel).getByRole("button", { name: "Commit" });
+  await fireEvent.click(commit);
+  expect(input).toHaveFocus();
+  expect(input).toHaveAttribute("aria-invalid", "true");
+  expect(write).not.toHaveBeenCalled();
   await fireEvent.input(input, { target: { value: "Save work" } });
-  const commit = within(panel).getByRole("button", { name: "Stage all and commit" });
+  expect(input).toHaveAttribute("aria-invalid", "false");
   await fireEvent.click(commit);
   await waitFor(() => expect(within(panel).getByText("Git identity missing")).toBeInTheDocument());
   expect(input).toHaveValue("Save work");
-  await fireEvent.click(commit);
+  await fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
   expect(commit).toBeDisabled();
   await fireEvent.click(commit);
   expect(write).toHaveBeenCalledTimes(2);
@@ -323,4 +328,116 @@ test("keeps the commit draft after failure and sends one stage-all commit while 
   });
   response.resolve({ ...status, clean: true });
   await waitFor(() => expect(input).toHaveValue(""));
+});
+
+test("stops sync at a rejected fast-forward and keeps the failure dismissible", async () => {
+  const status = { ...(await testDevice.api.refreshWorkspaceGitStatus("workspace-1")), behind: 1 };
+  vi.mocked(testDevice.api.refreshWorkspaceGitStatus).mockResolvedValue(status);
+  vi.mocked(testDevice.api.getWorkspaceGitChanges).mockResolvedValue({
+    ...changes,
+    files: [],
+    total: 0,
+  });
+  const write = vi
+    .spyOn(testDevice.api, "writeWorkspaceGit")
+    .mockRejectedValue(new Error("fatal: Not possible to fast-forward, aborting."));
+  localStorage.setItem('pontia.botGitWorkspace:["local","a"]', "workspace-1");
+  render(BotChatPreviewHarness, { botId: bot.bot_id });
+  const panel = await openGitTab();
+  await fireEvent.click(await within(panel).findByRole("button", { name: /Sync Changes/ }));
+  const error = await within(panel).findByRole("alert");
+  expect(error).toHaveTextContent("fatal: Not possible to fast-forward, aborting.");
+  expect(write).toHaveBeenCalledExactlyOnceWith("workspace-1", { action: "pull" });
+  await fireEvent.click(within(error).getByRole("button", { name: "Close" }));
+  expect(error).not.toBeInTheDocument();
+});
+
+test("syncs an incoming change before pushing and hides the primary action when up to date", async () => {
+  const initial = { ...(await testDevice.api.refreshWorkspaceGitStatus("workspace-1")), behind: 1 };
+  vi.mocked(testDevice.api.refreshWorkspaceGitStatus).mockResolvedValue(initial);
+  vi.mocked(testDevice.api.getWorkspaceGitChanges).mockResolvedValue({
+    ...changes,
+    files: [],
+    total: 0,
+  });
+  const write = vi
+    .spyOn(testDevice.api, "writeWorkspaceGit")
+    .mockResolvedValueOnce({ ...initial, behind: 0 })
+    .mockResolvedValueOnce({ ...initial, ahead: 0, behind: 0 });
+  localStorage.setItem('pontia.botGitWorkspace:["local","a"]', "workspace-1");
+  render(BotChatPreviewHarness, { botId: bot.bot_id });
+  const panel = await openGitTab();
+  const sync = await within(panel).findByRole("button", { name: /Sync Changes/ });
+  await fireEvent.click(sync);
+  await waitFor(() => expect(sync).not.toBeInTheDocument());
+  expect(write.mock.calls).toEqual([
+    ["workspace-1", { action: "pull" }],
+    ["workspace-1", { action: "push" }],
+  ]);
+});
+
+test("offers push from the menu on a clean branch without an upstream", async () => {
+  const status = {
+    ...(await testDevice.api.refreshWorkspaceGitStatus("workspace-1")),
+    upstream: null,
+    ahead: 0,
+  };
+  vi.mocked(testDevice.api.refreshWorkspaceGitStatus).mockResolvedValue(status);
+  vi.mocked(testDevice.api.getWorkspaceGitChanges).mockResolvedValue({
+    ...changes,
+    files: [],
+    total: 0,
+  });
+  const write = vi.spyOn(testDevice.api, "writeWorkspaceGit").mockResolvedValue(status);
+  localStorage.setItem('pontia.botGitWorkspace:["local","a"]', "workspace-1");
+  render(BotChatPreviewHarness, { botId: bot.bot_id });
+  const panel = await openGitTab();
+  const menu = await within(panel).findByRole("button", { name: "More Git actions" });
+  expect(within(panel).queryByRole("textbox", { name: "Commit message" })).toBeNull();
+  await fireEvent.keyDown(menu, { key: "Enter" });
+  await fireEvent.click(await screen.findByRole("menuitem", { name: "Push" }));
+  await waitFor(() =>
+    expect(write).toHaveBeenCalledExactlyOnceWith("workspace-1", { action: "push" }),
+  );
+});
+
+test("blocks commit shortcuts while the workspace has conflicts", async () => {
+  const file = { ...changes.files[0]!, group: "conflicted" as const, status: "U" };
+  vi.mocked(testDevice.api.getWorkspaceGitChanges).mockResolvedValue({ ...changes, files: [file] });
+  const write = vi.spyOn(testDevice.api, "writeWorkspaceGit");
+  localStorage.setItem('pontia.botGitWorkspace:["local","a"]', "workspace-1");
+  render(BotChatPreviewHarness, { botId: bot.bot_id });
+  const panel = await openGitTab();
+  const input = await within(panel).findByRole("textbox", { name: "Commit message" });
+  await fireEvent.input(input, { target: { value: "Still resolving" } });
+  await fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
+  expect(within(panel).getByRole("button", { name: "Commit" })).toBeDisabled();
+  expect(write).not.toHaveBeenCalled();
+});
+
+test("stages all from a truncated list whose visible files are staged", async () => {
+  const status = {
+    ...(await testDevice.api.refreshWorkspaceGitStatus("workspace-1")),
+    unstaged_count: 1,
+  };
+  vi.mocked(testDevice.api.refreshWorkspaceGitStatus).mockResolvedValue(status);
+  vi.mocked(testDevice.api.getWorkspaceGitChanges).mockResolvedValue({
+    ...changes,
+    total: 2,
+    truncated: true,
+  });
+  const write = vi.spyOn(testDevice.api, "writeWorkspaceGit").mockResolvedValue(status);
+  localStorage.setItem('pontia.botGitWorkspace:["local","a"]', "workspace-1");
+  render(BotChatPreviewHarness, { botId: bot.bot_id });
+  const panel = await openGitTab();
+  await fireEvent.keyDown(await within(panel).findByRole("button", { name: "More Git actions" }), {
+    key: "Enter",
+  });
+  await fireEvent.click(await screen.findByRole("menuitem", { name: "Stage all" }));
+  await waitFor(() =>
+    expect(write).toHaveBeenCalledExactlyOnceWith("workspace-1", {
+      action: "stage",
+      body: { all: true },
+    }),
+  );
 });
