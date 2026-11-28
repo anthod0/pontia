@@ -3,11 +3,12 @@ use crate::{
     peer::{Peer, State, field, invalid},
 };
 use pontia_agent_control::{
-    EventIngestService, EventReportError, ReportedFact, client_contract::ClientEventInterpreter,
+    ControlQueryService, EventIngestService, EventReportError, ReportedFact,
+    client_contract::ClientEventInterpreter,
 };
 use pontia_core::{
     Error, Result,
-    domain::{DomainEvent, EventSource, EventType, TurnState},
+    domain::{DomainEvent, EventSource, EventType},
 };
 use serde_json::{Value, json};
 
@@ -89,15 +90,8 @@ impl Peer {
         let HostReport { kind, key, event } = report;
         // The host identifies input and result messages. Pontia supplied the input
         // summary, inbox association and canonical Turn, which can outlive this Peer.
-        let existing: Option<Option<String>> = sqlx::query_scalar(
-            "SELECT turn_id FROM events
-             WHERE session_id=? AND event_type=? AND report_key=?",
-        )
-        .bind(&self.session)
-        .bind(kind.to_string())
-        .bind(key)
-        .fetch_optional(&events.db())
-        .await?;
+        let queries = ControlQueryService::new(events.db());
+        let existing = queries.find_by_report_key(&self.session, kind, key).await?;
         let mut replay = existing.is_some();
         let mut turn_id = None;
         let mut data = match kind {
@@ -129,21 +123,20 @@ impl Peer {
             }
             EventType::TurnCompleted | EventType::TurnFailed | EventType::TurnInterrupted => {
                 let id = field(event, "input_id")?;
-                turn_id = if let Some(turn) = &existing {
-                    turn.clone()
+                turn_id = if let Some(report) = &existing {
+                    report.turn_id.clone()
                 } else if let Some(input) = state.input.as_ref().filter(|i| i.id == id) {
                     Some(input.turn.clone().ok_or_else(invalid)?)
                 } else {
                     // A later result for an already finished input belongs to the
                     // original Turn, even when a different input is now active.
-                    let original: Option<(String, TurnState)> = sqlx::query_as(
-                        "SELECT t.turn_id,t.state FROM events e JOIN turns t ON t.turn_id=e.turn_id
-                         WHERE e.session_id=? AND e.event_type='turn.started' AND e.report_key=?",
-                    )
-                    .bind(&self.session)
-                    .bind(format!("claude:{host}:{id}:start"))
-                    .fetch_optional(&events.db())
-                    .await?;
+                    let original = queries
+                        .find_turn_by_report_key(
+                            &self.session,
+                            EventType::TurnStarted,
+                            &format!("claude:{host}:{id}:start"),
+                        )
+                        .await?;
                     replay = true;
                     Some(
                         original

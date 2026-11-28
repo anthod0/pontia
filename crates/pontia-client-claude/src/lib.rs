@@ -17,8 +17,9 @@ mod transport;
 
 use peer::{Input, Peer};
 use pontia_agent_control::{
-    AgentControl, EventIngestService, client_contract::*, clients::ClientRegistration,
-    control::InputReceipt, interactions::InteractionResponse, runtime::ControlTarget,
+    AgentControl, ControlQueryService, EventIngestService, client_contract::*,
+    clients::ClientRegistration, control::InputReceipt, interactions::InteractionResponse,
+    runtime::ControlTarget,
 };
 use pontia_core::{Error, Result};
 use pontia_runtime::RuntimeStartRequest;
@@ -530,8 +531,10 @@ impl ClientSession for Adapter {
                 ..Default::default()
             };
             if let Some((pool, _)) = self.context.get() {
-                offline.accept_task = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM sessions s WHERE s.session_id=? AND s.state='exited' AND (json_extract((SELECT payload FROM events WHERE session_id=s.session_id AND event_type='session.exited' ORDER BY rowid DESC LIMIT 1),'$.reason')='claude_sdk_closed' OR EXISTS(SELECT 1 FROM session_runtimes r WHERE r.session_id=s.session_id AND r.state='exited' AND r.runtime_id=json_extract((SELECT payload FROM events WHERE session_id=s.session_id AND event_type='session.exited' ORDER BY rowid DESC LIMIT 1),'$.runtime_id'))))")
-                    .bind(session).fetch_one(pool).await?;
+                let queries = ControlQueryService::new(pool.clone());
+                offline.accept_task = queries.session_state(session).await?
+                    == Some(pontia_core::domain::SessionState::Exited)
+                    && resume::exit_allows_resume(&queries, session, None).await?;
             }
             let Ok(peer) = self.peer(session).await else {
                 return Ok(offline);

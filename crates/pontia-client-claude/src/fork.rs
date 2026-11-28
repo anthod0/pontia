@@ -1,10 +1,13 @@
 use crate::{Adapter, Peer, peer::State, unavailable};
 use pontia_agent_control::{
-    AgentBindingService, EventIngestService, ReportedFact,
+    AgentBindingService, ControlQueryService, EventIngestService, ReportedFact,
     client_contract::NativeSessionFork,
     sessions::{NativeSessionIdentity, NativeSessionService, NativeSubscription},
 };
-use pontia_core::{Error, Result, domain::EventType};
+use pontia_core::{
+    Error, Result,
+    domain::{EventType, TurnState},
+};
 use serde_json::{Map, Value, json};
 use std::sync::Arc;
 
@@ -13,7 +16,7 @@ struct InheritedTurn {
     input_summary: Option<String>,
     output_summary: Option<String>,
     failure_message: Option<String>,
-    state: String,
+    state: TurnState,
     head: String,
     tail: String,
 }
@@ -33,15 +36,13 @@ impl Adapter {
             .native
             .clone()
             .ok_or_else(unavailable)?;
-        let target: String = sqlx::query_scalar(
-            "SELECT json_extract(payload,'$.claude_input_id') FROM events WHERE session_id=? AND turn_id=? AND event_type='turn.started' ORDER BY rowid LIMIT 1",
-        )
-        .bind(session)
-        .bind(turn)
-        .fetch_optional(&events.db())
-        .await?
-        .flatten()
-        .ok_or_else(|| Error::StateConflict("Claude fork target is unavailable".into()))?;
+        let starts = ControlQueryService::new(events.db())
+            .list_events_by_type(session, EventType::TurnStarted, Some(turn))
+            .await?;
+        let target = starts
+            .first()
+            .and_then(|payload| payload["claude_input_id"].as_str())
+            .ok_or_else(|| Error::StateConflict("Claude fork target is unavailable".into()))?;
         let inherited = inherited_turns(&events, session, turn).await?;
         let message_ids = inherited
             .iter()
@@ -131,18 +132,12 @@ impl Adapter {
         let instructions = pontia_agent_control::SessionInstructionsService::new(events.db())
             .session_instructions(parent)
             .await?;
-        let (environment, credential_env): (String, Option<String>) = sqlx::query_as(
-            "SELECT runtime_environment,credential_env FROM sessions WHERE session_id=?",
-        )
-        .bind(parent)
-        .fetch_one(&events.db())
-        .await?;
-        let reasoning_effort: Option<String> = sqlx::query_scalar(
-            "SELECT json_extract(metadata,'$.reasoning_effort') FROM sessions WHERE session_id=?",
-        )
-        .bind(parent)
-        .fetch_one(&events.db())
-        .await?;
+        let queries = ControlQueryService::new(events.db());
+        let settings = queries
+            .session_launch_settings(parent)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("Session {parent} not found")))?;
+        let reasoning_effort = settings.reasoning_effort;
         let session = match existing {
             Some(binding) => binding.session_id,
             None => {
@@ -158,13 +153,9 @@ impl Adapter {
                             metadata: json!({"reasoning_effort": reasoning_effort}),
                             binding_metadata: source.metadata.clone(),
                             session_instructions: instructions,
-                            launch_mode: pontia_agent_control::ControlQueryService::new(
-                                events.db(),
-                            )
-                            .session_launch_mode(parent)
-                            .await?,
-                            runtime_environment: serde_json::from_str(&environment)?,
-                            credential_env,
+                            launch_mode: queries.session_launch_mode(parent).await?,
+                            runtime_environment: json!(settings.runtime_environment),
+                            credential_env: settings.credential_env,
                         },
                         Some(child),
                     )
@@ -207,9 +198,7 @@ impl Adapter {
             .insert(session.clone(), peer.clone());
         let (_, root) = self.context.get().ok_or_else(unavailable)?;
         let script = self.script(root)?;
-        let environment = pontia_agent_control::ControlQueryService::new(events.db())
-            .runtime_environment(&session)
-            .await?;
+        let environment = queries.runtime_environment(&session).await?;
         peer.start(
             &events,
             root,
@@ -263,13 +252,11 @@ impl Adapter {
             let turn_id = started
                 .turn_id
                 .ok_or_else(|| Error::Domain("Forked Claude Turn identity is missing".into()))?;
-            let state: String =
-                sqlx::query_scalar("SELECT state FROM turns WHERE turn_id=? AND session_id=?")
-                    .bind(&turn_id)
-                    .bind(child)
-                    .fetch_one(&events.db())
-                    .await?;
-            if matches!(state.as_str(), "completed" | "failed" | "interrupted") {
+            let turn = ControlQueryService::new(events.db())
+                .get_turn(child, &turn_id)
+                .await?
+                .ok_or_else(|| Error::NotFound(format!("Turn {turn_id} not found")))?;
+            if matches!(turn.state.as_str(), "completed" | "failed" | "interrupted") {
                 continue;
             }
             if let Some(summary) = inherited.output_summary {
@@ -284,10 +271,10 @@ impl Adapter {
                     .await
                     .map_err(report_error)?;
             }
-            let terminal = match inherited.state.as_str() {
-                "completed" => EventType::TurnCompleted,
-                "failed" => EventType::TurnFailed,
-                "interrupted" => EventType::TurnInterrupted,
+            let terminal = match inherited.state {
+                TurnState::Completed => EventType::TurnCompleted,
+                TurnState::Failed => EventType::TurnFailed,
+                TurnState::Interrupted => EventType::TurnInterrupted,
                 _ => continue,
             };
             events
@@ -332,45 +319,22 @@ async fn inherited_turns(
     session: &str,
     target: &str,
 ) -> Result<Vec<InheritedTurn>> {
-    type InheritedTurnRow = (
-        String,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        String,
-        String,
-        String,
-    );
-    let rows: Vec<InheritedTurnRow> = sqlx::query_as(
-            "SELECT t.turn_id,t.input_summary,t.output_summary,
-                    json_extract((SELECT payload FROM events e WHERE e.session_id=t.session_id AND e.turn_id=t.turn_id AND e.event_type IN ('turn.completed','turn.failed','turn.interrupted') ORDER BY rowid DESC LIMIT 1),'$.failure.message'),t.state,
-                    json_extract((SELECT timeline_boundary FROM events e WHERE e.session_id=t.session_id AND e.turn_id=t.turn_id AND e.event_type='turn.started' ORDER BY rowid LIMIT 1),'$.cursor'),
-                    json_extract((SELECT timeline_boundary FROM events e WHERE e.session_id=t.session_id AND e.turn_id=t.turn_id AND e.event_type IN ('turn.completed','turn.failed','turn.interrupted') ORDER BY rowid DESC LIMIT 1),'$.cursor')
-             FROM turns t JOIN turns target ON target.session_id=t.session_id AND target.turn_id=?
-             WHERE t.session_id=? AND t.rowid<target.rowid AND t.state IN ('completed','failed','interrupted')
-               AND EXISTS(SELECT 1 FROM events e WHERE e.session_id=t.session_id AND e.turn_id=t.turn_id AND e.event_type='turn.started' AND e.timeline_boundary IS NOT NULL)
-               AND EXISTS(SELECT 1 FROM events e WHERE e.session_id=t.session_id AND e.turn_id=t.turn_id AND e.event_type IN ('turn.completed','turn.failed','turn.interrupted') AND e.timeline_boundary IS NOT NULL)
-             ORDER BY t.rowid",
-        )
-        .bind(target)
-        .bind(session)
-        .fetch_all(&events.db())
-        .await?;
-    rows.into_iter()
-        .map(
-            |(turn_id, input_summary, output_summary, failure_message, state, head, tail)| {
-                Ok(InheritedTurn {
-                    turn_id,
-                    input_summary,
-                    output_summary,
-                    failure_message,
-                    state,
-                    head: cursor_message_id(&head)?,
-                    tail: cursor_message_id(&tail)?,
-                })
-            },
-        )
-        .collect::<Result<Vec<_>>>()
+    ControlQueryService::new(events.db())
+        .completed_turns_before_with_boundaries(session, target)
+        .await?
+        .into_iter()
+        .map(|turn| {
+            Ok(InheritedTurn {
+                turn_id: turn.turn_id,
+                state: turn.state,
+                input_summary: turn.input_summary,
+                output_summary: turn.output_summary,
+                failure_message: turn.failure_message,
+                head: cursor_message_id(&turn.start_cursor)?,
+                tail: cursor_message_id(&turn.end_cursor)?,
+            })
+        })
+        .collect()
 }
 
 fn cursor_message_id(cursor: &str) -> Result<String> {

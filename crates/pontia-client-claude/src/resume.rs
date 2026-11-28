@@ -1,8 +1,36 @@
 use crate::{Adapter, Peer, unavailable};
-use pontia_agent_control::{AgentBindingService, EventIngestService, runtime::ControlTarget};
-use pontia_core::{Error, Result};
-use serde_json::Value;
+use pontia_agent_control::{
+    AgentBindingService, ControlQueryService, EventIngestService, runtime::ControlTarget,
+};
+use pontia_core::{Error, Result, domain::EventType};
 use std::sync::Arc;
+
+pub(super) async fn exit_allows_resume(
+    queries: &ControlQueryService,
+    session: &str,
+    expected_runtime: Option<&str>,
+) -> Result<bool> {
+    let Some(exit) = queries
+        .latest_event(session, EventType::SessionExited)
+        .await?
+    else {
+        return Ok(false);
+    };
+    let runtime = exit["runtime_id"].as_str();
+    if expected_runtime.is_some() && runtime != expected_runtime {
+        return Ok(false);
+    }
+    if exit["reason"] == "claude_sdk_closed" {
+        return Ok(true);
+    }
+    let Some(runtime) = runtime else {
+        return Ok(false);
+    };
+    Ok(queries
+        .session_runtime(runtime)
+        .await?
+        .is_some_and(|row| row.session_id == session && row.state == "exited"))
+}
 
 impl Adapter {
     pub(crate) async fn resume_bound(
@@ -31,20 +59,9 @@ impl Adapter {
                 "Claude Code previous execution has not exited".into(),
             ));
         }
-        let payload: Option<String> = sqlx::query_scalar("SELECT payload FROM events WHERE session_id=? AND event_type='session.exited' ORDER BY rowid DESC LIMIT 1")
-            .bind(&target.session_id).fetch_optional(&events.db()).await?;
-        let payload: Value = payload
-            .map(|s| serde_json::from_str(&s))
-            .transpose()?
-            .unwrap_or(Value::Null);
-        let runtime_exited: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM session_runtimes WHERE session_id=? AND runtime_id=? AND state='exited')")
-            .bind(&target.session_id)
-            .bind(target.runtime_id.as_deref())
-            .fetch_one(&events.db())
-            .await?;
-        if payload["runtime_id"].as_str() != target.runtime_id.as_deref()
-            || (payload["reason"] != "claude_sdk_closed" && !runtime_exited)
-        {
+        let runtime = target.instance()?;
+        let queries = ControlQueryService::new(events.db());
+        if !exit_allows_resume(&queries, &target.session_id, Some(runtime)).await? {
             return Err(Error::StateConflict(
                 "Claude Code previous execution state is unknown".into(),
             ));
@@ -69,7 +86,7 @@ impl Adapter {
         .await?;
         let peer = Arc::new(Peer {
             session: target.session_id.clone(),
-            runtime: target.instance()?.into(),
+            runtime: runtime.into(),
             cwd: binding.launch_cwd.into(),
             config_dir,
             model: metadata["launch_model"].as_str().map(str::to_owned),
@@ -79,19 +96,21 @@ impl Adapter {
             state: Default::default(),
             connection: Default::default(),
         });
-        let effort: Option<String> = sqlx::query_scalar(
-            "SELECT json_extract(metadata, '$.reasoning_effort') FROM sessions WHERE session_id=?",
-        )
-        .bind(&target.session_id)
-        .fetch_one(&events.db())
-        .await?;
-        let environment = pontia_agent_control::ControlQueryService::new(events.db())
-            .runtime_environment(&target.session_id)
-            .await?;
+        let session_metadata = queries
+            .session_metadata(&target.session_id)
+            .await?
+            .ok_or_else(unavailable)?;
+        let environment = queries.runtime_environment(&target.session_id).await?;
         peers.insert(peer.session.clone(), peer.clone());
         drop(peers);
-        peer.start(&events, root, &script, &environment, effort.as_deref())
-            .await?;
+        peer.start(
+            &events,
+            root,
+            &script,
+            &environment,
+            session_metadata["reasoning_effort"].as_str(),
+        )
+        .await?;
         Ok(())
     }
 }

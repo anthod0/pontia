@@ -1,6 +1,6 @@
 use crate::Adapter;
 use pontia_agent_control::{
-    AgentBindingService,
+    AgentBindingService, ControlQueryService,
     client_contract::{
         history::{RecoveredTurnHistory, TurnHistoryCandidate},
         native_history::{HistoryRead, HistorySelection, HistorySource, NativeHistory},
@@ -353,11 +353,12 @@ impl NativeHistory for History {
             let messages = self.messages().await?;
             let (pool, _) = self.adapter.context.get().ok_or_else(source_unavailable)?;
             let mut recovered = Vec::new();
-            let closes: Vec<String> = sqlx::query_scalar("SELECT payload FROM events WHERE session_id=? AND event_type='runtime.exited' ORDER BY rowid")
-                .bind(&self.binding.session_id).fetch_all(pool).await?;
+            let queries = ControlQueryService::new(pool.clone());
+            let closes = queries
+                .list_events_by_type(&self.binding.session_id, EventType::RuntimeExited, None)
+                .await?;
             let mut closed_anchors = std::collections::HashMap::new();
             for payload in closes {
-                let payload: Value = serde_json::from_str(&payload)?;
                 if let (Some(input), Some(anchor)) = (
                     payload["claude_closed_input"].as_str(),
                     payload["claude_closed_history_anchor"].as_str(),
@@ -366,11 +367,11 @@ impl NativeHistory for History {
                 }
             }
             // Input UUIDs are durable execution evidence, never matched by text.
-            let rows: Vec<(String, String)> = sqlx::query_as("SELECT turn_id, payload FROM events WHERE session_id=? AND event_type='turn.started' AND turn_id IS NOT NULL ORDER BY rowid")
-                .bind(&self.binding.session_id).fetch_all(pool).await?;
+            let rows = queries
+                .list_turn_payloads_by_type(&self.binding.session_id, EventType::TurnStarted)
+                .await?;
             let mut positions = Vec::new();
             for (turn, payload) in rows {
-                let payload: Value = serde_json::from_str(&payload)?;
                 if let Some(id) = payload["claude_input_id"].as_str()
                     && let Some(position) = messages.iter().position(|m| m["uuid"] == id)
                 {
