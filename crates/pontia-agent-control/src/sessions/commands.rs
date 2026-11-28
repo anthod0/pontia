@@ -64,7 +64,7 @@ impl SessionCommandService {
         if !client_config.map_or(request.mode == Default::default(), |config| {
             config.supports_mode(&client_key, request.mode)
         }) {
-            return Err(Error::CapabilityUnavailable(format!(
+            return Err(Error::Unsupported(format!(
                 "Client {} cannot start in {:?} mode",
                 request.client_type, request.mode
             )));
@@ -74,7 +74,7 @@ impl SessionCommandService {
                 return Err(Error::Domain("model must be non-empty".into()));
             }
             if !client_config.is_some_and(|config| config.supports_startup_model()) {
-                return Err(Error::CapabilityUnavailable(
+                return Err(Error::Unsupported(
                     "Model selection at startup is unavailable for this client".into(),
                 ));
             }
@@ -84,7 +84,7 @@ impl SessionCommandService {
                 return Err(Error::Domain("reasoning_effort must be non-empty".into()));
             }
             if !client_config.is_some_and(|config| config.supports_startup_reasoning_effort()) {
-                return Err(Error::CapabilityUnavailable(
+                return Err(Error::Unsupported(
                     "Reasoning effort selection at startup is unavailable for this client".into(),
                 ));
             }

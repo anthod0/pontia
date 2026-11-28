@@ -1,9 +1,6 @@
 use crate::SessionCapabilities;
 
-pub(crate) fn writable_capabilities(
-    mut capabilities: SessionCapabilities,
-    writable: bool,
-) -> SessionCapabilities {
+pub(crate) fn writable_capabilities(capabilities: &mut SessionCapabilities, writable: bool) {
     capabilities.accept_task = writable;
     capabilities.steer = capabilities.steer && writable;
     capabilities.interrupt = writable;
@@ -11,5 +8,4 @@ pub(crate) fn writable_capabilities(
     capabilities.reasoning_effort_control = capabilities.reasoning_effort_control && writable;
     capabilities.fork_session = capabilities.fork_session && writable;
     capabilities.branch_control = capabilities.branch_control && writable;
-    capabilities
 }

@@ -500,9 +500,7 @@ async fn resumed_approval_rebinds_the_original_interaction_before_answer() {
             .interactions()
             .respond(&f.app, &f.session, &id, "allow")
             .await,
-        Err(InteractionError::Other(
-            pontia_core::Error::CapabilityUnavailable(_)
-        ))
+        Err(InteractionError::Other(pontia_core::Error::Unavailable(_)))
     ));
     f.send(approval);
     tokio::time::timeout(Duration::from_secs(5), async {
@@ -517,7 +515,7 @@ async fn resumed_approval_rebinds_the_original_interaction_before_answer() {
                     assert_eq!(interaction.interaction_id, id);
                     break;
                 }
-                Err(InteractionError::Other(pontia_core::Error::CapabilityUnavailable(_))) => {
+                Err(InteractionError::Other(pontia_core::Error::Unavailable(_))) => {
                     tokio::time::sleep(Duration::from_millis(5)).await;
                 }
                 other => panic!("unexpected approval result: {other:?}"),

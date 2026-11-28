@@ -543,6 +543,18 @@ impl ClientSession for Adapter {
             Ok(implementation.clone())
         })
     }
+    fn capability_state<'a>(
+        &'a self,
+        session: &'a str,
+        implementation: &'a AgentClientCapabilities,
+    ) -> ClientOperation<'a, SessionCapabilityState> {
+        Box::pin(async move {
+            Ok(SessionCapabilityState {
+                supported: implementation.clone(),
+                available: self.capabilities(session, implementation).await?,
+            })
+        })
+    }
     fn available<'a>(&'a self, _: SqlitePool, session: &'a str) -> ClientOperation<'a, bool> {
         Box::pin(async move {
             let Ok(peer) = self.peer(session).await else {

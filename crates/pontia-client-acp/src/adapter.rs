@@ -19,7 +19,8 @@ use pontia_agent_control::{
     client_contract::{
         AgentClientCapabilities, ClientExitMode, ClientExitOutcome, ClientInteractions,
         ClientOperation, ClientService, ClientServicePhase, ClientSession, ClientSessionDetails,
-        DeliveryError, DeliveryOperation, InputPayload, SessionCreationOption,
+        DeliveryError, DeliveryOperation, InputPayload, SessionCapabilityState,
+        SessionCreationOption,
     },
     clients::ClientRegistration,
     control::InputReceipt,
@@ -189,9 +190,7 @@ impl ClientSession for AcpAdapter {
                 .ok_or_else(|| {
                     Error::Domain("metadata.acp_agent_id must be a nonempty string".into())
                 })?;
-            let definition = self.config.agents.get(selected).ok_or_else(|| {
-                Error::CapabilityUnavailable(format!("ACP Agent {selected} is not defined"))
-            })?;
+            let definition = self.config.definition(selected)?;
             let peers = self.peers.lock().await;
             if self.stopped.load(Ordering::Acquire) {
                 return Err(unavailable());
@@ -733,6 +732,19 @@ impl ClientSession for AcpAdapter {
         implementation: &'a AgentClientCapabilities,
     ) -> ClientOperation<'a, AgentClientCapabilities> {
         Box::pin(async move {
+            Ok(self
+                .capability_state(session, implementation)
+                .await?
+                .available)
+        })
+    }
+
+    fn capability_state<'a>(
+        &'a self,
+        session: &'a str,
+        implementation: &'a AgentClientCapabilities,
+    ) -> ClientOperation<'a, SessionCapabilityState> {
+        Box::pin(async move {
             // ACP has no capability flag for usage reports. The persisted observation
             // remains evidence of support even when the peer is disconnected.
             let (agent_id, usage) = match self.pool.get() {
@@ -751,17 +763,29 @@ impl ClientSession for AcpAdapter {
                 usage.as_deref(),
                 implementation,
             );
-            if let Some(bounds) = state.as_ref().map(|state| &state.agent.capabilities) {
-                caps.timeline = bounds.timeline;
-                caps.compaction_history = bounds.compaction_history;
+            let bounds = if let Some(state) = state.as_ref() {
+                let mut supported = state.agent.capabilities.clone();
+                if let Some(live) = &state.capabilities {
+                    supported.reasoning_effort_control = live.reasoning_effort_control;
+                    supported.steer = live.steer;
+                    supported.manual_compaction &= state.negotiated.compact_command;
+                }
+                Some(supported)
             } else if let Some(id) = agent_id
                 && let Ok(definition) = self.config.definition(&id)
             {
-                let bounds = AgentBounds::of(&id, Some(definition)).capabilities;
-                caps.timeline = bounds.timeline;
-                caps.compaction_history = bounds.compaction_history;
+                Some(AgentBounds::of(&id, Some(definition)).capabilities)
+            } else {
+                None
+            };
+            if let Some(supported) = &bounds {
+                caps.timeline = supported.timeline;
+                caps.compaction_history = supported.compaction_history;
             }
-            Ok(caps)
+            Ok(SessionCapabilityState {
+                supported: bounds.unwrap_or_else(|| implementation.clone()),
+                available: caps,
+            })
         })
     }
 

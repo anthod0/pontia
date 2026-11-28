@@ -135,7 +135,7 @@ async fn rejects_yolo_for_a_client_without_mode_support() {
     edited.use_yolo = true;
     assert!(matches!(
         service.update("reviewer", edited, None).await,
-        Err(Error::CapabilityUnavailable(_))
+        Err(Error::Unsupported(_))
     ));
     assert_eq!(
         service.resolve_launch("reviewer").await.unwrap().mode,
@@ -314,16 +314,25 @@ async fn rejects_unknown_and_disabled_clients_at_save_and_launch() {
     settings.save("generic", "default", false).await.unwrap();
     assert!(matches!(
         service.resolve_launch("reviewer").await,
-        Err(Error::CapabilityUnavailable(_))
+        Err(Error::Conflict {
+            code: "client_disabled",
+            ..
+        })
     ));
     assert!(matches!(
         service.update("reviewer", configured(), None).await,
-        Err(Error::CapabilityUnavailable(_))
+        Err(Error::Conflict {
+            code: "client_disabled",
+            ..
+        })
     ));
     service.delete("reviewer", None).await.unwrap();
     assert!(matches!(
         service.create(configured(), None).await,
-        Err(Error::CapabilityUnavailable(_))
+        Err(Error::Conflict {
+            code: "client_disabled",
+            ..
+        })
     ));
 }
 
@@ -343,7 +352,7 @@ async fn rejects_launch_defaults_for_clients_without_configuration() {
     input.system_prompt = None;
     assert!(matches!(
         service.create(input, None).await,
-        Err(Error::CapabilityUnavailable(_))
+        Err(Error::Unsupported(_))
     ));
 }
 

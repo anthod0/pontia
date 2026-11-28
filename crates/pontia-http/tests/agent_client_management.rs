@@ -313,11 +313,11 @@ async fn unconfigured_clients_cannot_create_sessions() {
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(response.status(), StatusCode::CONFLICT);
         let body: Value =
             serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
                 .unwrap();
-        assert_eq!(body["error"]["code"], "capability_unavailable");
+        assert_eq!(body["error"]["code"], "client_disabled");
     }
     let response = app
         .oneshot(

@@ -14,7 +14,10 @@ async fn disabling_and_deleting_a_record_only_affects_new_sessions() {
     management.save("acp", "first", false).await.unwrap();
     assert!(matches!(
         h.create("first").await,
-        Err(Error::CapabilityUnavailable(_))
+        Err(Error::Conflict {
+            code: "client_disabled",
+            ..
+        })
     ));
     assert_eq!(h.requests("session/new"), 1);
     let turn = h
@@ -43,7 +46,10 @@ async fn disabling_and_deleting_a_record_only_affects_new_sessions() {
     management.delete("acp", "first").await.unwrap();
     assert!(matches!(
         h.create("first").await,
-        Err(Error::CapabilityUnavailable(_))
+        Err(Error::Conflict {
+            code: "client_disabled",
+            ..
+        })
     ));
     assert_eq!(h.requests("session/new"), 1);
     management.save("acp", "first", true).await.unwrap();
@@ -98,9 +104,7 @@ async fn removed_definition_keeps_live_session_control_and_cold_binding_details(
         .unwrap()
         .resume(h.app.event_ingest_service(), &target)
         .await;
-    assert!(
-        matches!(result, Err(Error::CapabilityUnavailable(message)) if message == "ACP Agent first is not defined")
-    );
+    assert!(matches!(result, Err(Error::Domain(_))));
     let mut clients = ClientRegistry::default();
     clients.register(pontia_client_acp::registration());
     let cold = AgentControl::builder(h.app.db(), h.root.path().into())

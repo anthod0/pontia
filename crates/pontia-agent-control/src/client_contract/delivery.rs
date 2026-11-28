@@ -65,7 +65,10 @@ pub enum DeliveryError {
 impl From<Error> for DeliveryError {
     fn from(error: Error) -> Self {
         match error {
-            Error::CapabilityUnavailable(message) => Self::Offline(message),
+            Error::Unsupported(message) => Self::Unsupported(message),
+            Error::Unavailable(message) | Error::CapabilityUnavailable(message) => {
+                Self::Offline(message)
+            }
             Error::Domain(message) => Self::Rejected(message),
             Error::ControlUnknown(message) => Self::Uncertain(message),
             Error::StateConflict(message) | Error::Conflict { message, .. } => {
@@ -79,9 +82,8 @@ impl From<Error> for DeliveryError {
 impl From<DeliveryError> for Error {
     fn from(error: DeliveryError) -> Self {
         match error {
-            DeliveryError::Unsupported(message) | DeliveryError::Offline(message) => {
-                Self::CapabilityUnavailable(message)
-            }
+            DeliveryError::Unsupported(message) => Self::Unsupported(message),
+            DeliveryError::Offline(message) => Self::Unavailable(message),
             DeliveryError::Rejected(message) => Self::Domain(message),
             DeliveryError::StateChanged(message) => Self::StateConflict(message),
             DeliveryError::Uncertain(message) => Self::ControlUnknown(message),
@@ -100,11 +102,11 @@ mod tests {
     fn delivery_errors_map_to_existing_control_errors() {
         assert!(matches!(
             Error::from(DeliveryError::Unsupported("unsupported".into())),
-            Error::CapabilityUnavailable(message) if message == "unsupported"
+            Error::Unsupported(message) if message == "unsupported"
         ));
         assert!(matches!(
             Error::from(DeliveryError::Offline("offline".into())),
-            Error::CapabilityUnavailable(message) if message == "offline"
+            Error::Unavailable(message) if message == "offline"
         ));
         assert!(matches!(
             Error::from(DeliveryError::Rejected("rejected".into())),
@@ -122,8 +124,12 @@ mod tests {
 
     #[test]
     fn existing_control_errors_map_to_delivery_categories() {
+        assert_eq!(
+            DeliveryError::from(Error::Unsupported("unsupported".into())),
+            DeliveryError::Unsupported("unsupported".into())
+        );
         assert!(matches!(
-            DeliveryError::from(Error::CapabilityUnavailable("offline".into())),
+            DeliveryError::from(Error::Unavailable("offline".into())),
             DeliveryError::Offline(message) if message == "offline"
         ));
         assert!(matches!(

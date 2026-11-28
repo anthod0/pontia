@@ -24,8 +24,9 @@ impl EventReportError {
                 | Self::Ingestion(
                     pontia_core::Error::Domain(_)
                         | pontia_core::Error::StateConflict(_)
+                        | pontia_core::Error::Conflict { .. }
                         | pontia_core::Error::NotFound(_)
-                        | pontia_core::Error::CapabilityUnavailable(_)
+                        | pontia_core::Error::Unsupported(_)
                 )
         )
     }

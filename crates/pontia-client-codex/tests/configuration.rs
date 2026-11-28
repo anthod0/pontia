@@ -43,21 +43,30 @@ async fn codex_entry_settings_control_session_admission() {
     };
     assert!(matches!(
         create().await,
-        Err(pontia_core::Error::CapabilityUnavailable(_))
+        Err(pontia_core::Error::Conflict {
+            code: "client_disabled",
+            ..
+        })
     ));
     service.save("codex", "default", true).await.unwrap();
     create().await.unwrap();
     service.save("codex", "default", false).await.unwrap();
     assert!(matches!(
         create().await,
-        Err(pontia_core::Error::CapabilityUnavailable(_))
+        Err(pontia_core::Error::Conflict {
+            code: "client_disabled",
+            ..
+        })
     ));
     service.save("codex", "default", true).await.unwrap();
     create().await.unwrap();
     service.delete("codex", "default").await.unwrap();
     assert!(matches!(
         create().await,
-        Err(pontia_core::Error::CapabilityUnavailable(_))
+        Err(pontia_core::Error::Conflict {
+            code: "client_disabled",
+            ..
+        })
     ));
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM session_runtimes")

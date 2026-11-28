@@ -56,7 +56,7 @@ impl ControlTarget {
 
     pub fn instance(&self) -> Result<&str> {
         self.runtime_id.as_deref().ok_or_else(|| {
-            Error::CapabilityUnavailable(format!(
+            Error::Unavailable(format!(
                 "session {} has no current runtime binding",
                 self.session_id
             ))
@@ -67,7 +67,7 @@ impl ControlTarget {
         let binding = SqliteSessionRuntimeRepository::new(pool.clone())
             .tmux_pane_binding(&self.session_id, self.control_runtime_role)
             .await?
-            .ok_or_else(|| Error::CapabilityUnavailable("missing tmux pane binding".into()))?;
+            .ok_or_else(|| Error::Unavailable("missing tmux pane binding".into()))?;
         if binding.runtime_id != self.runtime_id {
             return Err(Error::StateConflict(
                 "runtime binding changed before control execution".into(),
@@ -77,6 +77,6 @@ impl ControlTarget {
             .socket_path
             .zip(binding.pane_id)
             .filter(|(socket, pane)| !socket.trim().is_empty() && !pane.trim().is_empty())
-            .ok_or_else(|| Error::CapabilityUnavailable("missing tmux pane binding".into()))
+            .ok_or_else(|| Error::Unavailable("missing tmux pane binding".into()))
     }
 }

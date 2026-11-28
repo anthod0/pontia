@@ -22,7 +22,7 @@ impl AgentBindingResolver for PiAgentBindingResolver {
 
     fn resolve(&self, request: &AgentBindingResolveRequest) -> Result<ResolvedAgentBinding> {
         if request.client_type != self.client_type() {
-            return Err(Error::CapabilityUnavailable(format!(
+            return Err(Error::Unsupported(format!(
                 "unsupported binding client_type {} for pi resolver",
                 request.client_type
             )));
@@ -34,13 +34,11 @@ impl AgentBindingResolver for PiAgentBindingResolver {
             .filter(|path| !path.as_os_str().is_empty())
             .cloned()
             .ok_or_else(|| {
-                Error::CapabilityUnavailable(
-                    "source_unavailable: pi agent binding has no client_session_file".to_string(),
-                )
+                Error::Unavailable("pi agent binding has no client_session_file".to_string())
             })?;
         fs::metadata(&path).map_err(|error| {
-            Error::CapabilityUnavailable(format!(
-                "source_unavailable: pi session file {} is unavailable: {error}",
+            Error::Unavailable(format!(
+                "pi session file {} is unavailable: {error}",
                 path.display()
             ))
         })?;

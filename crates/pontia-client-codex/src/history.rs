@@ -64,9 +64,7 @@ impl CodexHistory {
                         return Ok(Snapshot::Native(connection, OnceCell::new()));
                     }
                     if source == Some(HistorySource::Native) {
-                        return Err(Error::CapabilityUnavailable(
-                            "source_unavailable: Codex app-server disconnected".into(),
-                        ));
+                        return Err(Error::Unavailable("Codex app-server disconnected".into()));
                     }
                 }
                 let home = match runtime {
@@ -173,7 +171,7 @@ impl CodexHistory {
         let source = match file_history.snapshot(Some(HistorySource::File)).await {
             Ok(Snapshot::File(source)) => source,
             Ok(Snapshot::Native(..)) => unreachable!("file history was explicitly selected"),
-            Err(Error::CapabilityUnavailable(_)) => return Ok(()),
+            Err(Error::Unavailable(_)) => return Ok(()),
             Err(error) => return Err(error.into()),
         };
         let records = match CodexRollout.read_session_timeline(SessionTimelineReadRequest {
@@ -181,7 +179,7 @@ impl CodexHistory {
             selection,
         }) {
             Ok(records) => records,
-            Err(TurnTimelineReadError::Inner(Error::CapabilityUnavailable(_))) => return Ok(()),
+            Err(TurnTimelineReadError::Inner(Error::Unavailable(_))) => return Ok(()),
             Err(error) => return Err(error),
         };
         let mut timestamps = HashMap::new();
@@ -378,7 +376,7 @@ impl NativeHistory for CodexHistory {
     }
     fn branch_target(&self, _range: TurnTimelineRange) -> HistoryRead<'_, Result<String>> {
         Box::pin(async {
-            Err(Error::CapabilityUnavailable(
+            Err(Error::Unsupported(
                 "Codex branch control is unavailable".into(),
             ))
         })

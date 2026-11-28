@@ -7,11 +7,34 @@ pub(crate) struct SessionControlState {
     pub session_id: String,
     pub client_type: String,
     pub state: String,
+    pub supported_capabilities: SessionCapabilities,
     pub capabilities: SessionCapabilities,
     pub workspace_id: Option<String>,
     pub workspace: Option<String>,
     pub handle: Option<String>,
     pub role: Option<String>,
+}
+
+impl SessionControlState {
+    pub(crate) fn require_capability(
+        &self,
+        enabled: fn(&SessionCapabilities) -> bool,
+        operation: &str,
+    ) -> Result<()> {
+        if !enabled(&self.supported_capabilities) {
+            return Err(pontia_core::Error::Unsupported(format!(
+                "Session {} does not support {operation}",
+                self.session_id
+            )));
+        }
+        if !enabled(&self.capabilities) {
+            return Err(pontia_core::Error::Unavailable(format!(
+                "{operation} is unavailable for Session {}",
+                self.session_id
+            )));
+        }
+        Ok(())
+    }
 }
 
 impl ControlQueryService {
@@ -33,7 +56,8 @@ impl ControlQueryService {
             session_id: row.session_id,
             client_type: row.client_type,
             state: row.state,
-            capabilities,
+            supported_capabilities: capabilities.supported,
+            capabilities: capabilities.available,
             workspace_id: row.workspace_id,
             workspace: row.workspace_ref,
             handle: row.handle,

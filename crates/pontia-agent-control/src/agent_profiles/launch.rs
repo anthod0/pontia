@@ -10,7 +10,7 @@ impl AgentProfileService {
                 .and_then(|entry| entry.configuration.as_ref())
                 .is_some_and(|config| config.supports_mode(key, pontia_core::SessionMode::Yolo))
         {
-            return Err(Error::CapabilityUnavailable(format!(
+            return Err(Error::Unsupported(format!(
                 "Client {client}/{key} does not support YOLO mode"
             )));
         }
@@ -21,9 +21,7 @@ impl AgentProfileService {
         crate::agent_clients::AgentClientService::new(self.pool.clone(), self.clients.clone())
             .for_creation_key(client, key)
             .await?
-            .ok_or_else(|| {
-                Error::CapabilityUnavailable("Client configuration unavailable".into())
-            })?;
+            .ok_or_else(|| Error::Unsupported("Client configuration unavailable".into()))?;
         Ok(())
     }
 
@@ -40,7 +38,10 @@ impl AgentProfileService {
         {
             Ok(()) => Ok(None),
             Err(
-                error @ (Error::CapabilityUnavailable(_)
+                error @ (Error::Unsupported(_)
+                | Error::Unavailable(_)
+                | Error::StateConflict(_)
+                | Error::Conflict { .. }
                 | Error::Domain(_)
                 | Error::InvalidConfig { .. }
                 | Error::Serialization(_)),

@@ -483,10 +483,23 @@ async fn pi_interrupt_and_shutdown_use_rpc_and_wait_for_client_lifecycle_facts()
     .execute(&state.db())
     .await
     .unwrap();
-    for (method, resource) in [("POST", "interrupt"), ("POST", "exit")] {
+    for (method, resource, expected_status, code) in [
+        (
+            "POST",
+            "interrupt",
+            StatusCode::SERVICE_UNAVAILABLE,
+            "unavailable",
+        ),
+        (
+            "POST",
+            "exit",
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "capability_unavailable",
+        ),
+    ] {
         let (status, body) = control_request(&state, method, resource, Value::Null).await;
-        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
-        assert_eq!(body["error"]["code"], "capability_unavailable");
+        assert_eq!(status, expected_status, "{body}");
+        assert_eq!(body["error"]["code"], code);
     }
 }
 
@@ -535,10 +548,7 @@ async fn pi_lifecycle_controls_preserve_rejection_and_unknown_delivery() {
             let error = task.await.unwrap().unwrap_err();
             if outcome == "rejected" {
                 if method == "interrupt" {
-                    assert!(matches!(
-                        error,
-                        pontia_core::Error::CapabilityUnavailable(_)
-                    ));
+                    assert!(matches!(error, pontia_core::Error::Unavailable(_)));
                 } else {
                     assert!(matches!(error, pontia_core::Error::Domain(_)));
                 }

@@ -113,7 +113,7 @@ impl TimelineBoundaryCapturer for PiTimelineAdapter {
         request: TimelineBoundaryCaptureRequest,
     ) -> Result<CapturedTimelineBoundary> {
         if request.source.client_type != "pi" || request.source.format != "pi-jsonl" {
-            return Err(Error::CapabilityUnavailable(format!(
+            return Err(Error::Unsupported(format!(
                 "unsupported source {}/{} for pi timeline adapter",
                 request.source.client_type, request.source.format
             )));
@@ -174,7 +174,7 @@ pub(super) fn read_native_turn_ranges(
     request: TurnTimelineReadRequest,
 ) -> std::result::Result<Vec<PiNativeTurnEntry>, TurnTimelineReadError> {
     if request.source.client_type != "pi" || request.source.format != "pi-jsonl" {
-        return Err(Error::CapabilityUnavailable(
+        return Err(Error::Unsupported(
             "timeline capability unavailable for source format".to_string(),
         )
         .into());
@@ -334,17 +334,11 @@ impl PiTimelineAdapter {
         native_session: &str,
     ) -> std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError> {
         if request.source.client_type != "pi" || request.source.format != "pi-jsonl" {
-            return Err(Error::CapabilityUnavailable(
-                "Pi native history source unsupported".into(),
-            )
-            .into());
+            return Err(Error::Unsupported("Pi native history source unsupported".into()).into());
         }
         let length = source_len(&request.source)?;
         if length > crate::history::MAX_SNAPSHOT_BYTES {
-            return Err(Error::CapabilityUnavailable(
-                "source_unavailable: Pi history exceeds snapshot budget".into(),
-            )
-            .into());
+            return Err(Error::Unavailable("Pi history exceeds snapshot budget".into()).into());
         }
         let bytes = read_range_from_source(&request.source, 0, length)?;
         let (parsed, _) = parse_window("session", &bytes, 0)?;

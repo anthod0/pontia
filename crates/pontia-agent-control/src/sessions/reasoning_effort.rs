@@ -23,11 +23,10 @@ impl SessionCommandService {
             .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-        if !session.capabilities.reasoning_effort_control {
-            return Err(Error::CapabilityUnavailable(
-                "Reasoning effort control is unavailable".into(),
-            ));
-        }
+        session.require_capability(
+            |caps| caps.reasoning_effort_control,
+            "reasoning effort control",
+        )?;
         if !matches!(
             session.state.as_str(),
             "idle" | "busy" | "waiting_for_interaction"

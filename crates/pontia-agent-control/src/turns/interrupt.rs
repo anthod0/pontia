@@ -33,11 +33,7 @@ impl TurnCommandService {
                 "session {session_id} has no active turn to interrupt"
             )));
         }
-        if !session.capabilities.interrupt {
-            return Err(Error::CapabilityUnavailable(format!(
-                "session {session_id} runtime does not support interrupt"
-            )));
-        }
+        session.require_capability(|caps| caps.interrupt, "interrupt")?;
         let target = crate::runtime::ControlTarget::resolve(
             &self.pool,
             self.clients.registry(),
@@ -121,11 +117,7 @@ impl TurnCommandService {
                 "turn {turn_id} is not the active turn for session {session_id}"
             )));
         }
-        if !session.capabilities.interrupt {
-            return Err(Error::CapabilityUnavailable(format!(
-                "session {session_id} runtime does not support interrupt"
-            )));
-        }
+        session.require_capability(|caps| caps.interrupt, "interrupt")?;
         actor.set_phase(crate::inbox::SessionPhase::Interrupting);
         self.interrupt_validated(&session, &turn, target).await
     }

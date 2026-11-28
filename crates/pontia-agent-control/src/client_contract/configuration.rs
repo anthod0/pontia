@@ -35,7 +35,7 @@ pub trait ClientConfiguration: Send + Sync {
         _directory: &'a std::path::Path,
     ) -> super::ClientOperation<'a, crate::agent_clients::AgentClientModels> {
         Box::pin(async {
-            Err(pontia_core::Error::CapabilityUnavailable(
+            Err(pontia_core::Error::Unsupported(
                 "This client does not support model listing before Session creation".into(),
             ))
         })

@@ -10,8 +10,8 @@ use pontia_agent_control::client_contract::raw_transcripts::ResolvedAgentBinding
 pub(crate) fn source_len(source: &ResolvedAgentBinding) -> Result<usize> {
     let len = fs::metadata(&source.path)
         .map_err(|err| {
-            Error::CapabilityUnavailable(format!(
-                "source_unavailable: raw source {} is unavailable: {err}",
+            Error::Unavailable(format!(
+                "raw source {} is unavailable: {err}",
                 source.path.display()
             ))
         })?
@@ -26,21 +26,21 @@ pub(crate) fn read_range_from_source(
     end: usize,
 ) -> Result<Vec<u8>> {
     let mut file = File::open(&source.path).map_err(|err| {
-        Error::CapabilityUnavailable(format!(
-            "source_unavailable: raw source {} is unavailable: {err}",
+        Error::Unavailable(format!(
+            "raw source {} is unavailable: {err}",
             source.path.display()
         ))
     })?;
     file.seek(SeekFrom::Start(start as u64)).map_err(|err| {
-        Error::CapabilityUnavailable(format!(
-            "source_unavailable: raw source {} is unavailable: {err}",
+        Error::Unavailable(format!(
+            "raw source {} is unavailable: {err}",
             source.path.display()
         ))
     })?;
     let mut bytes = vec![0; end.saturating_sub(start)];
     file.read_exact(&mut bytes).map_err(|err| {
-        Error::CapabilityUnavailable(format!(
-            "source_unavailable: raw source {} is unavailable: {err}",
+        Error::Unavailable(format!(
+            "raw source {} is unavailable: {err}",
             source.path.display()
         ))
     })?;

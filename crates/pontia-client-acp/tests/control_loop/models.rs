@@ -398,7 +398,7 @@ async fn sessions_without_a_thought_level_selector_cannot_change_reasoning_effor
                 },
             )
             .await,
-        Err(Error::CapabilityUnavailable(_))
+        Err(Error::Unsupported(_))
     ));
     assert_eq!(h.requests("session/set_config_option"), 0);
     h.stop().await;

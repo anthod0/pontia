@@ -1,4 +1,5 @@
 use super::ControlQueryService;
+use crate::client_contract::SessionCapabilityState;
 use crate::views::sessions::{SessionCapabilities, SessionLineageView, SessionView, row_to_view};
 use pontia_core::Result;
 use pontia_storage_sqlite::repositories::sessions::SqliteSessionRepository;
@@ -24,7 +25,8 @@ impl ControlQueryService {
     async fn enrich_session_view(&self, session: &mut SessionView) -> Result<()> {
         session.capabilities = self
             .session_capabilities(&session.session_id, &session.client_type)
-            .await?;
+            .await?
+            .available;
 
         if let Some(data) = self.clients.data(&session.client_type)
             && let Some(binding) = crate::AgentBindingService::new(self.pool.clone())
@@ -81,18 +83,23 @@ impl ControlQueryService {
         &self,
         session_id: &str,
         client_type: &str,
-    ) -> Result<SessionCapabilities> {
-        if self.clients.spec(client_type).is_none() {
-            return Ok(SessionCapabilities::default());
-        }
+    ) -> Result<SessionCapabilityState> {
+        let Some(entry) = self.clients.get(client_type) else {
+            return Ok(Default::default());
+        };
         let repository = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone());
         let runtimes = repository.list(session_id).await?;
-        let entry = self.clients.get(client_type).expect("checked client");
-        let mut capabilities = entry.spec.capabilities.clone();
-        if let Some(client) = &entry.session {
-            capabilities = client.capabilities(session_id, &capabilities).await?;
-            capabilities = capabilities.intersection(&entry.spec.capabilities);
-        }
+        let mut state = if let Some(client) = &entry.session {
+            let mut state = client
+                .capability_state(session_id, &entry.spec.capabilities)
+                .await?;
+            state.supported = state.supported.intersection(&entry.spec.capabilities);
+            state.available = state.available.intersection(&entry.spec.capabilities);
+            state
+        } else {
+            entry.spec.capabilities.clone().into()
+        };
+        let capabilities = &mut state.available;
         if runtimes.is_empty()
             && entry
                 .spec
@@ -100,7 +107,7 @@ impl ControlQueryService {
                 .runtime_binding
                 .requires_session_runtime()
         {
-            return Ok(SessionCapabilities {
+            *capabilities = SessionCapabilities {
                 timeline: capabilities.timeline
                     && self
                         .clients
@@ -109,7 +116,8 @@ impl ControlQueryService {
                 compaction_events: capabilities.compaction_events,
                 compaction_history: capabilities.compaction_history,
                 ..SessionCapabilities::default()
-            });
+            };
+            return Ok(state);
         }
         if capabilities.manual_compaction {
             capabilities.manual_compaction = if let Some(client) = &entry.session {
@@ -122,23 +130,31 @@ impl ControlQueryService {
         }
         if capabilities.reasoning_effort_control {
             capabilities.reasoning_effort_control = if let Some(client) = &entry.session {
-                client
+                let available = client
                     .reasoning_effort_control_available(self.pool.clone(), session_id)
-                    .await?
+                    .await?;
+                if !available
+                    && client
+                        .control_connected(self.pool.clone(), session_id)
+                        .await?
+                        == Some(true)
+                {
+                    state.supported.reasoning_effort_control = false;
+                }
+                available
             } else {
                 false
             };
         }
         if entry.spec.owns_interactive_turn() {
-            Ok(crate::runtime::bindings::writable_capabilities(
+            crate::runtime::bindings::writable_capabilities(
                 capabilities,
                 runtimes.iter().any(|runtime| {
                     Some(runtime.role.as_str()) == entry.spec.adapter.control_runtime_role
                 }),
-            ))
-        } else {
-            Ok(capabilities)
+            );
         }
+        Ok(state)
     }
 
     async fn session_lineage(&self, session_id: &str) -> Result<Option<SessionLineageView>> {
@@ -176,7 +192,7 @@ fn timeline_unavailable_reason(error: pontia_core::Error) -> String {
             code: "timeline_source_identity_mismatch",
             ..
         } => "Native history belongs to a different session.",
-        Error::CapabilityUnavailable(message) if message.contains("source_unavailable:") => {
+        Error::Unavailable(_) => {
             "Native history is not available on disk yet. Retry when the source is available."
         }
         Error::Conflict {
@@ -199,7 +215,7 @@ mod tests {
             code: "timeline_pending",
             message: "Waiting for native history".into(),
         };
-        let invalid = Error::CapabilityUnavailable("invalid history format".into());
+        let invalid = Error::Unsupported("invalid history format".into());
 
         assert_ne!(
             timeline_unavailable_reason(reattached),

@@ -289,10 +289,8 @@ fn warn_timeline_capture_failure(
 fn safe_timeline_adapter_error(error: &Error) -> String {
     match error {
         Error::Domain(message) => message.clone(),
-        Error::CapabilityUnavailable(message) if message.contains("source_unavailable:") => {
-            "source_unavailable".to_string()
-        }
-        Error::CapabilityUnavailable(_) => "capability_unavailable".to_string(),
+        Error::Unavailable(_) => "source_unavailable".to_string(),
+        Error::Unsupported(_) => "capability_unavailable".to_string(),
         Error::Io(error) => format!("io_error:{:?}", error.kind()),
         Error::StateConflict(_) => "state_conflict".to_string(),
         Error::NotFound(_) => "not_found".to_string(),

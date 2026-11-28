@@ -41,6 +41,6 @@ fn pi_resolver_rejects_missing_client_session_file() {
         })
         .unwrap_err();
 
-    assert!(error.to_string().contains("source_unavailable:"));
+    assert!(matches!(error, pontia_core::Error::Unavailable(_)));
     assert!(error.to_string().contains("client_session_file"));
 }

@@ -223,22 +223,26 @@ impl ClientRegistry {
         client: &str,
         key: &str,
     ) -> pontia_core::Result<serde_json::Value> {
-        let configuration = self
+        let entry = self
             .get(client)
-            .and_then(|entry| entry.configuration.as_ref())
-            .ok_or_else(|| {
-                pontia_core::Error::CapabilityUnavailable(format!(
-                    "Client configuration unavailable: {client}"
-                ))
-            })?;
+            .ok_or_else(|| pontia_core::Error::Domain(format!("Unknown client: {client}")))?;
+        let configuration = entry.configuration.as_ref().ok_or_else(|| {
+            pontia_core::Error::Unsupported(format!("Client configuration unavailable: {client}"))
+        })?;
+        if !configuration.keys().iter().any(|known| known == key) {
+            return Err(pontia_core::Error::Domain(format!(
+                "Unknown client configuration: {client}/{key}"
+            )));
+        }
         for option in self.creation_options(pool).await? {
             if option.client_type == client && configuration.key(&option.metadata)? == key {
                 return Ok(option.metadata);
             }
         }
-        Err(pontia_core::Error::CapabilityUnavailable(format!(
-            "Client {client}/{key} is unavailable for Session creation"
-        )))
+        Err(pontia_core::Error::Conflict {
+            code: "client_disabled",
+            message: format!("Client {client}/{key} is unavailable for Session creation"),
+        })
     }
 
     pub fn default_client_type(&self) -> pontia_core::Result<&'static str> {
@@ -246,9 +250,7 @@ impl ClientRegistry {
             .find(|client| client.spec.default_for_creation)
             .map(|client| client.spec.client_type)
             .ok_or_else(|| {
-                pontia_core::Error::CapabilityUnavailable(
-                    "No default Agent Client is registered".into(),
-                )
+                pontia_core::Error::Unsupported("No default Agent Client is registered".into())
             })
     }
 

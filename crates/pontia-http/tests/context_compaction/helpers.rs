@@ -89,7 +89,7 @@ async fn helper_compaction_preserves_capability_state_and_unknown_errors() {
     seed_bot(&fixture).await;
     let (status, body) = compact(&fixture, "bot-token").await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(body["error"]["code"], "capability_unavailable");
+    assert_eq!(body["error"]["code"], "unsupported");
     assert!(fixture.channel.operations.lock().unwrap().is_empty());
 
     let fixture = Fixture::new(&SPEC, true).await;

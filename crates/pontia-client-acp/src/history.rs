@@ -61,9 +61,7 @@ pub(crate) fn append(messages: &mut Vec<Message>, role: &'static str, text: &str
 }
 
 pub(crate) fn unavailable() -> Error {
-    Error::CapabilityUnavailable(
-        "source_unavailable: ACP history requires a current successful session/load".into(),
-    )
+    Error::Unavailable("ACP history requires a current successful session/load".into())
 }
 
 #[derive(Clone)]

@@ -60,12 +60,12 @@ impl ClientData for PiData {
         _source: Option<pontia_agent_control::client_contract::native_history::HistorySource>,
     ) -> Result<Option<String>> {
         use std::os::unix::fs::MetadataExt;
-        let path = binding.client_session_file.as_ref().ok_or_else(|| {
-            Error::CapabilityUnavailable("source_unavailable: missing Pi session file".into())
-        })?;
-        let file = std::fs::File::open(path).map_err(|error| {
-            Error::CapabilityUnavailable(format!("source_unavailable: {}: {error}", path.display()))
-        })?;
+        let path = binding
+            .client_session_file
+            .as_ref()
+            .ok_or_else(|| Error::Unavailable("missing Pi session file".into()))?;
+        let file = std::fs::File::open(path)
+            .map_err(|error| Error::Unavailable(format!("{}: {error}", path.display())))?;
         let meta = file.metadata()?;
         Ok(Some(serde_json::to_string(&(
             path,

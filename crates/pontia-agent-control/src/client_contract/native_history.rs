@@ -46,10 +46,10 @@ pub trait NativeHistory: Send + Sync {
         _selection: super::raw_transcripts::SessionTimelineSelection,
     ) -> HistoryRead<'_, std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError>> {
         Box::pin(async {
-            Err(pontia_core::Error::CapabilityUnavailable(
-                "Session compaction history is unsupported".into(),
+            Err(
+                pontia_core::Error::Unsupported("Session compaction history is unsupported".into())
+                    .into(),
             )
-            .into())
         })
     }
     fn read_ranges(

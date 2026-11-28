@@ -56,7 +56,7 @@ pub(super) fn validate_request(
         {
             policy.validate_instructions(request.system_prompt.as_deref())?;
         } else if request.system_prompt.is_some() {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unsupported(
                 "Client cannot inject system instructions".into(),
             ));
         }

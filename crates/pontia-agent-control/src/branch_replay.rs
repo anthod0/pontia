@@ -152,11 +152,7 @@ impl BranchReplayService {
             .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-        if !session.capabilities.branch_control {
-            return Err(Error::CapabilityUnavailable(format!(
-                "session {session_id} does not support branch control"
-            )));
-        }
+        session.require_capability(|caps| caps.branch_control, "branch control")?;
 
         let turns = SqliteTurnRepository::new(self.pool.clone());
         if let Some(active_turn) = turns.active_turn(session_id).await? {
@@ -231,7 +227,7 @@ impl BranchReplayService {
         }
         self.clients
             .data(&session.client_type)
-            .ok_or_else(|| Error::CapabilityUnavailable("branch target source unavailable".into()))?
+            .ok_or_else(|| Error::Unsupported("branch target source unavailable".into()))?
             .branch_target(crate::client_contract::BranchTargetRequest {
                 binding,
                 turn: target,

@@ -573,11 +573,11 @@ async fn unmanaged_and_unknown_entries_are_reported() {
             .service
             .start_login(CLIENT, "unsupported", "device", StartLoginParams::default())
             .await,
-        Err(Error::CapabilityUnavailable(_))
+        Err(Error::Unsupported(_))
     ));
     assert!(matches!(
         fixture.service.logout(CLIENT, "unsupported", None).await,
-        Err(Error::CapabilityUnavailable(_))
+        Err(Error::Unsupported(_))
     ));
     assert!(matches!(
         fixture.service.status(CLIENT, "missing").await,

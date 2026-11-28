@@ -1,4 +1,6 @@
-use super::{ClientLaunchRequest, DeliveryError, DeliveryOperation, InputPayload};
+use super::{
+    AgentClientCapabilities, ClientLaunchRequest, DeliveryError, DeliveryOperation, InputPayload,
+};
 use crate::{EventIngestService, control::InputReceipt, runtime::ControlTarget};
 use pontia_core::Result;
 use pontia_runtime::{RuntimeStartRequest, RuntimeStartResult};
@@ -35,6 +37,21 @@ pub struct SessionCreationOption {
 pub struct NativeSessionFork {
     pub client_session_key: String,
     pub receipt: Value,
+}
+
+#[derive(Default)]
+pub struct SessionCapabilityState {
+    pub supported: AgentClientCapabilities,
+    pub available: AgentClientCapabilities,
+}
+
+impl From<AgentClientCapabilities> for SessionCapabilityState {
+    fn from(capabilities: AgentClientCapabilities) -> Self {
+        Self {
+            supported: capabilities.clone(),
+            available: capabilities,
+        }
+    }
 }
 
 /// Session-level lifecycle and control operations implemented by an Agent Client integration.
@@ -111,7 +128,7 @@ pub trait ClientSession: Send + Sync {
         _target: &'a ControlTarget,
     ) -> ClientOperation<'a, ()> {
         Box::pin(async {
-            Err(pontia_core::Error::CapabilityUnavailable(
+            Err(pontia_core::Error::Unsupported(
                 "Session resume is unavailable".into(),
             ))
         })
@@ -141,7 +158,7 @@ pub trait ClientSession: Send + Sync {
         _turn: &'a str,
     ) -> ClientOperation<'a, NativeSessionFork> {
         Box::pin(async {
-            Err(pontia_core::Error::CapabilityUnavailable(
+            Err(pontia_core::Error::Unsupported(
                 "Session fork is unavailable".into(),
             ))
         })
@@ -153,7 +170,7 @@ pub trait ClientSession: Send + Sync {
         _fork: &'a NativeSessionFork,
     ) -> ClientOperation<'a, String> {
         Box::pin(async {
-            Err(pontia_core::Error::CapabilityUnavailable(
+            Err(pontia_core::Error::Unsupported(
                 "Session fork is unavailable".into(),
             ))
         })
@@ -165,7 +182,7 @@ pub trait ClientSession: Send + Sync {
         _operation_id: &'a str,
     ) -> ClientOperation<'a, ()> {
         Box::pin(async {
-            Err(pontia_core::Error::CapabilityUnavailable(
+            Err(pontia_core::Error::Unsupported(
                 "Manual compaction is unsupported".into(),
             ))
         })
@@ -177,7 +194,7 @@ pub trait ClientSession: Send + Sync {
         _reasoning_effort: &'a str,
     ) -> ClientOperation<'a, ()> {
         Box::pin(async {
-            Err(pontia_core::Error::CapabilityUnavailable(
+            Err(pontia_core::Error::Unsupported(
                 "Reasoning effort control is unsupported".into(),
             ))
         })
@@ -188,6 +205,17 @@ pub trait ClientSession: Send + Sync {
         implementation: &'a crate::client_contract::AgentClientCapabilities,
     ) -> ClientOperation<'a, crate::client_contract::AgentClientCapabilities> {
         Box::pin(async move { Ok(implementation.clone()) })
+    }
+    fn capability_state<'a>(
+        &'a self,
+        session: &'a str,
+        implementation: &'a AgentClientCapabilities,
+    ) -> ClientOperation<'a, SessionCapabilityState> {
+        Box::pin(async move {
+            self.capabilities(session, implementation)
+                .await
+                .map(Into::into)
+        })
     }
     fn ready(&self, _session: &str, _instance: &str) -> Option<pontia_core::domain::ReportedEvent> {
         None

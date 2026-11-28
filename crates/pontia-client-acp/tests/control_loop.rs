@@ -2644,7 +2644,7 @@ async fn reconnected_permission_delivers_the_original_response_once() {
             {
                 Ok(_) => break,
                 Err(pontia_agent_control::interactions::InteractionError::Other(
-                    pontia_core::Error::CapabilityUnavailable(_),
+                    pontia_core::Error::Unavailable(_),
                 )) => tokio::time::sleep(Duration::from_millis(10)).await,
                 Err(e) => panic!("original permission was lost: {e}"),
             }

@@ -95,6 +95,12 @@ impl From<Error> for ApiError {
                 code,
                 message,
             },
+            Error::Unsupported(message) => {
+                Self::custom(StatusCode::UNPROCESSABLE_ENTITY, "unsupported", message)
+            }
+            Error::Unavailable(message) => {
+                Self::custom(StatusCode::SERVICE_UNAVAILABLE, "unavailable", message)
+            }
             Error::CapabilityUnavailable(message) => Self::capability_unavailable(message),
             Error::ControlUnknown(message) => Self {
                 status: StatusCode::SERVICE_UNAVAILABLE,

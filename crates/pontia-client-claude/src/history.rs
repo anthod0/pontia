@@ -1,4 +1,4 @@
-use crate::{Adapter, unavailable};
+use crate::Adapter;
 use pontia_agent_control::{
     AgentBindingService,
     client_contract::{
@@ -17,9 +17,7 @@ use std::{collections::HashMap, path::Path, process::Stdio, sync::Arc, time::Dur
 use tokio::{io::AsyncWriteExt, process::Command, sync::OnceCell};
 
 fn source_unavailable() -> Error {
-    Error::CapabilityUnavailable(
-        "source_unavailable: Claude Code native history is missing or unreadable".into(),
-    )
+    Error::Unavailable("Claude Code native history is missing or unreadable".into())
 }
 
 pub(crate) async fn read_sdk(
@@ -171,7 +169,9 @@ impl ClientData for Adapter {
         None
     }
     fn branch_target(&self, _: BranchTargetRequest) -> Result<String> {
-        Err(crate::unsupported())
+        Err(Error::Unsupported(
+            "Claude Code does not support branch control".into(),
+        ))
     }
 }
 
@@ -195,7 +195,7 @@ pub(crate) fn native_history(
 }
 impl History {
     async fn sdk_output(&self, mode: &str) -> Result<Vec<u8>> {
-        let (pool, root) = self.adapter.context.get().ok_or_else(unavailable)?;
+        let (pool, root) = self.adapter.context.get().ok_or_else(source_unavailable)?;
         let binding = AgentBindingService::new(pool.clone())
             .binding_for_session(&self.binding.session_id)
             .await?
@@ -210,7 +210,10 @@ impl History {
             .ok_or_else(source_unavailable)?;
         sdk_output(
             mode,
-            &self.adapter.script(root)?,
+            &self
+                .adapter
+                .script(root)
+                .map_err(|_| source_unavailable())?,
             &binding.client_session_key,
             &binding.launch_cwd,
             Path::new(config),
@@ -294,9 +297,10 @@ impl NativeHistory for History {
                 .iter()
                 .rposition(|message| message["isCompactSummary"] == true);
             if ranges.is_empty() && compacted.is_none() {
-                return Err(Error::CapabilityUnavailable(
-                    "Claude Code history has no confirmed Turn association".into(),
-                )
+                return Err(Error::Conflict {
+                    code: "timeline_native_association_unavailable",
+                    message: "Claude Code history has no confirmed Turn association".into(),
+                }
                 .into());
             }
             for range in ranges {
@@ -347,7 +351,7 @@ impl NativeHistory for History {
     ) -> HistoryRead<'_, Result<Vec<RecoveredTurnHistory>>> {
         Box::pin(async move {
             let messages = self.messages().await?;
-            let (pool, _) = self.adapter.context.get().ok_or_else(unavailable)?;
+            let (pool, _) = self.adapter.context.get().ok_or_else(source_unavailable)?;
             let mut recovered = Vec::new();
             let closes: Vec<String> = sqlx::query_scalar("SELECT payload FROM events WHERE session_id=? AND event_type='runtime.exited' ORDER BY rowid")
                 .bind(&self.binding.session_id).fetch_all(pool).await?;
@@ -418,7 +422,11 @@ impl NativeHistory for History {
         })
     }
     fn branch_target(&self, _: TurnTimelineRange) -> HistoryRead<'_, Result<String>> {
-        Box::pin(async { Err(crate::unsupported()) })
+        Box::pin(async {
+            Err(Error::Unsupported(
+                "Claude Code does not support branch control".into(),
+            ))
+        })
     }
 }
 

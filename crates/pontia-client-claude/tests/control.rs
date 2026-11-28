@@ -896,7 +896,12 @@ async fn closing_before_first_turn_reports_unassociated_history_instead_of_empty
         .await;
     assert!(matches!(
         result,
-        Err(pontia_agent_control::TurnTimelineServiceError::CapabilityUnavailable)
+        Err(pontia_agent_control::TurnTimelineServiceError::Inner(
+            pontia_core::Error::Conflict {
+                code: "timeline_native_association_unavailable",
+                ..
+            }
+        ))
     ));
     assert!(h.turns(&session).await.is_empty());
     h.stop().await;

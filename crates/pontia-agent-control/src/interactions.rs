@@ -783,7 +783,7 @@ impl InteractionService {
             InteractionState::Pending => {}
         }
         if self.awaiting_reconnect.lock().await.contains_key(id) {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unavailable(
                 "Waiting for the client to confirm this interaction".into(),
             )
             .into());
@@ -810,9 +810,7 @@ impl InteractionService {
             let resolver = clients
                 .get(&client)
                 .and_then(|r| r.interactions.as_ref())
-                .ok_or_else(|| {
-                    Error::CapabilityUnavailable("Interaction resolution unsupported".into())
-                })?;
+                .ok_or_else(|| Error::Unsupported("Interaction resolution unsupported".into()))?;
             resolver
                 .resolve(app.event_ingest_service(), session, id, response)
                 .await

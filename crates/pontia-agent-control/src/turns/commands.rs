@@ -125,11 +125,7 @@ impl TurnCommandService {
                 ),
             });
         }
-        if !session.capabilities.accept_task {
-            return Err(Error::CapabilityUnavailable(format!(
-                "session {session_id} runtime cannot accept tasks"
-            )));
-        }
+        session.require_capability(|caps| caps.accept_task, "accept task")?;
         let target = ControlTarget::resolve(
             &self.pool,
             self.clients.registry(),
@@ -179,11 +175,8 @@ impl TurnCommandService {
             .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-        if !session.capabilities.steer {
-            return Ok((
-                None,
-                ControlResult::Unsupported("This client does not support steer".into()),
-            ));
+        if let Err(error) = session.require_capability(|caps| caps.steer, "steer") {
+            return Ok((None, ControlResult::from_result(Err(error))));
         }
         let active = SqliteTurnRepository::new(self.pool.clone())
             .active_turn(session_id)
@@ -194,11 +187,7 @@ impl TurnCommandService {
                 message: "steer target is not the current Turn".into(),
             });
         }
-        if !session.capabilities.accept_task {
-            return Err(Error::CapabilityUnavailable(format!(
-                "session {session_id} runtime cannot accept tasks"
-            )));
-        }
+        session.require_capability(|caps| caps.accept_task, "accept task")?;
         let target = ControlTarget::resolve(
             &self.pool,
             self.clients.registry(),

@@ -72,7 +72,7 @@ fn invalid(message: &str) -> Error {
     Error::Domain(format!("range_invalid: {message}"))
 }
 fn unavailable(message: impl std::fmt::Display) -> Error {
-    Error::CapabilityUnavailable(format!("source_unavailable: {message}"))
+    Error::Unavailable(message.to_string())
 }
 
 #[derive(Deserialize)]
@@ -237,7 +237,7 @@ impl RuntimeSnapshot {
 pub(crate) struct PiHistory {
     binding: AgentBindingResolveRequest,
     connections: crate::connections::PiConnections,
-    snapshot: OnceCell<std::result::Result<RuntimeSnapshot, String>>,
+    snapshot: OnceCell<RuntimeSnapshot>,
 }
 impl PiHistory {
     pub(crate) fn new(
@@ -251,35 +251,22 @@ impl PiHistory {
         })
     }
     async fn runtime_snapshot(&self) -> Result<Option<&RuntimeSnapshot>> {
-        if self.snapshot.get().is_none() {
-            let connection = match self
+        let snapshot = if let Some(snapshot) = self.snapshot.get() {
+            snapshot
+        } else {
+            let Some(connection) = self
                 .connections
                 .history_source(&self.binding.session_id)
-                .await
-            {
-                Ok(connection) => connection,
-                Err(Error::CapabilityUnavailable(message))
-                    if message == "source_unavailable: no current native history connection" =>
-                {
-                    // Do not cache absence: the same handle may be used after reconnect.
-                    return Ok(None);
-                }
-                Err(error) => return Err(error),
+                .await?
+            else {
+                return Ok(None);
             };
             self.snapshot
-                .get_or_init(|| async {
+                .get_or_try_init(|| {
                     RuntimeSnapshot::load(connection, &self.binding.client_session_key)
-                        .await
-                        .map_err(|error| error.to_string())
                 })
-                .await;
-        }
-        let snapshot = self
-            .snapshot
-            .get()
-            .expect("initialized runtime snapshot")
-            .as_ref()
-            .map_err(unavailable)?;
+                .await?
+        };
         snapshot.connection.validate().await?;
         Ok(Some(snapshot))
     }
@@ -477,9 +464,7 @@ impl NativeHistory for PiHistory {
                 return Err(invalid("branch target tail missing"));
             }
             if !self.generation(&range)? {
-                let source = PiAgentBindingResolver::new()
-                    .resolve(&self.binding)
-                    .map_err(|_| unavailable("legacy history source unavailable"))?;
+                let source = PiAgentBindingResolver::new().resolve(&self.binding)?;
                 use crate::raw_transcripts::PiTurnUserEntryResolver;
                 return PiTimelineAdapter::new()
                     .resolve_user_entry(crate::raw_transcripts::PiTurnUserEntryResolveRequest {

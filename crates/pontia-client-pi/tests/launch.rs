@@ -467,7 +467,10 @@ fn creation_uses_environment_file_and_default_command_precedence() {
                     app.session_commands()
                         .create_session(serde_json::from_value(selection).unwrap())
                         .await,
-                    Err(pontia_core::Error::CapabilityUnavailable(_))
+                    Err(pontia_core::Error::Conflict {
+                        code: "client_disabled",
+                        ..
+                    })
                 ));
             }
             service.delete("pi", "default").await.unwrap();
@@ -475,7 +478,10 @@ fn creation_uses_environment_file_and_default_command_precedence() {
                 app.session_commands()
                     .create_session(serde_json::from_value(json!({})).unwrap())
                     .await,
-                Err(pontia_core::Error::CapabilityUnavailable(_))
+                Err(pontia_core::Error::Conflict {
+                    code: "client_disabled",
+                    ..
+                })
             ));
             service.save("pi", "default", true).await.unwrap();
             assert_eq!(create().await.1, format!("{expected} --approve"));

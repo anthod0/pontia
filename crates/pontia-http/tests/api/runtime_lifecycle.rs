@@ -131,7 +131,7 @@ async fn interrupt_current_turn_returns_capability_unavailable_for_generic_runti
     .await;
 
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(body["error"]["code"], "capability_unavailable");
+    assert_eq!(body["error"]["code"], "unsupported");
 
     let (events_status, events_body) = request(
         state,
@@ -170,7 +170,7 @@ async fn interrupt_specified_turn_returns_capability_unavailable_for_generic_run
     .await;
 
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(body["error"]["code"], "capability_unavailable");
+    assert_eq!(body["error"]["code"], "unsupported");
 }
 
 #[tokio::test]

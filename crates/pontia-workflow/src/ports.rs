@@ -113,7 +113,8 @@ impl GracefulExitRequester for SessionCommandService {
         SessionCommandService::ensure_current_runtime(self, session_id, runtime_id)
             .await
             .map_err(|error| match error {
-                pontia_core::Error::CapabilityUnavailable(message)
+                pontia_core::Error::Unavailable(message)
+                | pontia_core::Error::Unsupported(message)
                 | pontia_core::Error::NotFound(message) => Error::RuntimeControlUnavailable {
                     session_id: session_id.to_string(),
                     message,
@@ -130,7 +131,8 @@ impl GracefulExitRequester for SessionCommandService {
         SessionCommandService::ensure_control_target(self, session_id, runtime_id)
             .await
             .map_err(|error| match error {
-                pontia_core::Error::CapabilityUnavailable(message)
+                pontia_core::Error::Unavailable(message)
+                | pontia_core::Error::Unsupported(message)
                 | pontia_core::Error::NotFound(message) => Error::RuntimeControlUnavailable {
                     session_id: session_id.to_string(),
                     message,

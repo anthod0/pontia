@@ -465,7 +465,7 @@ impl SessionCommandService {
         }
         let adapter = self.clients.for_client(&session.client_type)?;
         if !adapter.supports_restart() {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unsupported(
                 "A Session cannot restart a shared runtime".into(),
             ));
         }

@@ -49,7 +49,7 @@ impl ClientAdapter {
             .await
             .map_err(DeliveryError::from)?;
         let client = self.session_client().ok_or_else(|| {
-            DeliveryError::Offline("client Session control is unavailable".into())
+            DeliveryError::Unsupported("client Session control is unavailable".into())
         })?;
         let _launch = self
             .prepares_on_input()
@@ -76,7 +76,7 @@ impl ClientAdapter {
                 .map_err(DeliveryError::from)?;
             self.session_client()
                 .ok_or_else(|| {
-                    DeliveryError::Offline("client Session control is unavailable".into())
+                    DeliveryError::Unsupported("client Session control is unavailable".into())
                 })?
                 .steer(self.events.clone(), target, &payload)
                 .await
@@ -90,9 +90,7 @@ impl ClientAdapter {
             return ControlResult::Unsupported("client does not support interrupt".into());
         }
         let Some(client) = self.session_client() else {
-            return ControlResult::from_result(Err(pontia_core::Error::CapabilityUnavailable(
-                "client Session control is unavailable".into(),
-            )));
+            return ControlResult::Unsupported("client Session control is unavailable".into());
         };
         ControlResult::from_delivery(client.interrupt(self.events.clone(), target).await)
     }
@@ -126,11 +124,7 @@ impl ClientAdapter {
             return crate::control::ControlResult::from_result(Err(error));
         }
         let Some(client) = self.session_client() else {
-            return crate::control::ControlResult::from_result(Err(
-                pontia_core::Error::CapabilityUnavailable(
-                    "client Session control is unavailable".into(),
-                ),
-            ));
+            return ControlResult::Unsupported("client Session control is unavailable".into());
         };
         match client.replay(self.events.clone(), target, message).await {
             Ok(()) => crate::control::ControlResult::Sent(()),

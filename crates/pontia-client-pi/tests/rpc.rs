@@ -138,7 +138,7 @@ async fn a_lost_response_is_unknown_and_is_never_replayed() {
     ));
     assert!(matches!(
         peer.call("submit", json!({"input":"two"})).await,
-        Err(Error::CapabilityUnavailable(_))
+        Err(Error::Unavailable(_))
     ));
     server.await.unwrap();
 }

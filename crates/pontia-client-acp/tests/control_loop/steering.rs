@@ -298,10 +298,7 @@ async fn antigravity_replays_an_interrupted_prompt_before_the_next_input() {
     .unwrap();
     let turns = h.app.turn_commands();
     let dispatch = || turns.start_turn(&session, "end_turn".into(), json!({}));
-    assert!(matches!(
-        dispatch().await,
-        Err(Error::CapabilityUnavailable(_))
-    ));
+    assert!(matches!(dispatch().await, Err(Error::Unavailable(_))));
     assert_eq!(h.requests("session/prompt"), 2);
 
     std::fs::write(path, replay).unwrap();

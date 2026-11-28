@@ -252,7 +252,7 @@ impl ClientAuthService {
 
     async fn managed_auth(&self, client: &str, key: &str) -> Result<Arc<dyn ClientAuth>> {
         self.auth(client, key).await?.ok_or_else(|| {
-            Error::CapabilityUnavailable(format!(
+            Error::Unsupported(format!(
                 "Pontia does not manage authentication for {client}/{key}"
             ))
         })
@@ -416,11 +416,7 @@ impl ClientAuthService {
             auth.start_login(key, method_id, params, &context, AuthEventSink::new(sender)),
         )
         .await
-        .unwrap_or_else(|_| {
-            Err(Error::CapabilityUnavailable(
-                "Login did not start in time".into(),
-            ))
-        });
+        .unwrap_or_else(|_| Err(Error::Unavailable("Login did not start in time".into())));
         let handle = match started {
             Ok(handle) => handle,
             Err(error) => {
@@ -797,7 +793,7 @@ impl ClientAuthService {
         let context = self.context();
         let result = tokio::time::timeout(LOGOUT_TIMEOUT, auth.logout(key, scope, &context))
             .await
-            .unwrap_or_else(|_| Err(Error::CapabilityUnavailable("Logout timed out".into())));
+            .unwrap_or_else(|_| Err(Error::Unavailable("Logout timed out".into())));
         self.table().logouts.remove(&identity);
         result?;
         self.clear_model_catalog(client, key).await;

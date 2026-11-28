@@ -299,11 +299,8 @@ impl TurnTimelineService {
 }
 
 pub(super) fn classify_adapter_error(error: Error) -> TurnTimelineServiceError {
-    let message = error.to_string();
-    if message.contains("source_unavailable:") {
-        return TurnTimelineServiceError::SourceUnavailable;
-    }
     match error {
+        Error::Unavailable(_) => TurnTimelineServiceError::SourceUnavailable,
         Error::Conflict {
             code: "timeline_pending",
             ..
@@ -312,7 +309,7 @@ pub(super) fn classify_adapter_error(error: Error) -> TurnTimelineServiceError {
             code: "timeline_source_identity_mismatch",
             ..
         } => TurnTimelineServiceError::SourceIdentityMismatch,
-        Error::CapabilityUnavailable(_) => TurnTimelineServiceError::CapabilityUnavailable,
+        Error::Unsupported(_) => TurnTimelineServiceError::CapabilityUnavailable,
         error => TurnTimelineServiceError::Inner(error),
     }
 }

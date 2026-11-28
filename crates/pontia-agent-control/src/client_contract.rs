@@ -29,7 +29,7 @@ pub use delivery::{DeliveryError, DeliveryOperation, InputPayload};
 pub use service::{ClientService, ClientServicePhase, PreparedServiceShutdown};
 pub use session::{
     ClientExitMode, ClientExitOutcome, ClientOperation, ClientSession, ClientSessionDetails,
-    NativeSessionFork, SessionCreationOption,
+    NativeSessionFork, SessionCapabilityState, SessionCreationOption,
 };
 pub use setup::{
     ClientIntegration, ClientSetup, PreparedClientIntegration, PreparedClientUninstall,

@@ -12,7 +12,7 @@ impl ClientAdapter {
                         .compact(self.events.clone(), target, operation_id)
                         .await;
                 }
-                Err(Error::CapabilityUnavailable(
+                Err(Error::Unsupported(
                     "Manual compaction is unsupported".into(),
                 ))
             }

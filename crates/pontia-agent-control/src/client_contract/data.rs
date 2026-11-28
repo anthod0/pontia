@@ -54,12 +54,8 @@ pub trait ClientData: Send + Sync {
         let Some(path) = &binding.client_session_file else {
             return Ok(None);
         };
-        let meta = std::fs::metadata(path).map_err(|e| {
-            pontia_core::Error::CapabilityUnavailable(format!(
-                "source_unavailable: {}: {e}",
-                path.display()
-            ))
-        })?;
+        let meta = std::fs::metadata(path)
+            .map_err(|e| pontia_core::Error::Unavailable(format!("{}: {e}", path.display())))?;
         let modified = meta
             .modified()?
             .duration_since(std::time::UNIX_EPOCH)

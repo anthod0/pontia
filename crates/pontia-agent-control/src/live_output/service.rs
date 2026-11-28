@@ -90,7 +90,7 @@ impl LiveOutputService {
             .spec(&session.client_type)
             .filter(|spec| spec.capabilities.stream_output);
         let Some(spec) = spec else {
-            return Err(Error::CapabilityUnavailable(format!(
+            return Err(Error::Unsupported(format!(
                 "agent client {} does not support live output",
                 session.client_type
             )));

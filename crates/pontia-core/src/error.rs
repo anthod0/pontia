@@ -28,6 +28,12 @@ pub enum Error {
     #[error("{code}: {message}")]
     Conflict { code: &'static str, message: String },
 
+    #[error("unsupported: {0}")]
+    Unsupported(String),
+
+    #[error("unavailable: {0}")]
+    Unavailable(String),
+
     #[error("capability unavailable: {0}")]
     CapabilityUnavailable(String),
 

@@ -479,8 +479,8 @@ async fn restart_preserves_confirmed_requests_and_expires_unconfirmed_requests_a
         Some(json!({"option_key":"proceed-once"})),
     )
     .await;
-    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(body["error"]["code"], "capability_unavailable");
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(body["error"]["code"], "unavailable");
     assert_eq!(
         service
             .get(&f.session, &pending.interaction_id)

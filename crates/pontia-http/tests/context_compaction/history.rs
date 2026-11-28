@@ -54,7 +54,7 @@ impl ClientData for History {
         None
     }
     fn branch_target(&self, _: BranchTargetRequest) -> Result<String> {
-        Err(Error::CapabilityUnavailable("unsupported".into()))
+        Err(Error::Unsupported("unsupported".into()))
     }
 }
 struct Reader;
@@ -83,14 +83,14 @@ impl TimelineBoundaryCapturer for Reader {
         &self,
         _: TimelineBoundaryCaptureRequest,
     ) -> Result<CapturedTimelineBoundary> {
-        Err(Error::CapabilityUnavailable("unsupported".into()))
+        Err(Error::Unsupported("unsupported".into()))
     }
     fn capture_source_origin_head(
         &self,
         _: &str,
         _: Option<String>,
     ) -> Result<CapturedTimelineBoundary> {
-        Err(Error::CapabilityUnavailable("unsupported".into()))
+        Err(Error::Unsupported("unsupported".into()))
     }
 }
 fn item(id: &str, kind: &str, turn: Option<&str>) -> TurnTimelineItem {
@@ -177,7 +177,7 @@ impl NativeHistory for NativeReader {
         Box::pin(async { Ok(vec![]) })
     }
     fn branch_target(&self, _: TurnTimelineRange) -> HistoryRead<'_, Result<String>> {
-        Box::pin(async { Err(Error::CapabilityUnavailable("unsupported".into())) })
+        Box::pin(async { Err(Error::Unsupported("unsupported".into())) })
     }
 }
 async fn turns(fixture: &Fixture) {

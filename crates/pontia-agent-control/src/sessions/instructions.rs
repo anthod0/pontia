@@ -46,7 +46,7 @@ impl SessionInstructionsService {
             .and_then(|client| client.instructions.as_ref())
         else {
             if system_instructions.is_some() {
-                return Err(Error::CapabilityUnavailable(
+                return Err(Error::Unsupported(
                     "Client cannot inject system instructions".into(),
                 ));
             }

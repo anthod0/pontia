@@ -458,17 +458,18 @@ impl PiConnections {
         }
     }
 
-    pub(crate) async fn history_source(&self, session_id: &str) -> Result<HistoryConnection> {
-        let connection = self.connection(session_id).await?.ok_or_else(|| {
-            Error::CapabilityUnavailable(
-                "source_unavailable: no current native history connection".into(),
-            )
-        })?;
-        Ok(HistoryConnection {
-            connections: self.clone(),
-            session_id: session_id.into(),
-            connection,
-        })
+    pub(crate) async fn history_source(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<HistoryConnection>> {
+        Ok(self
+            .connection(session_id)
+            .await?
+            .map(|connection| HistoryConnection {
+                connections: self.clone(),
+                session_id: session_id.into(),
+                connection,
+            }))
     }
 }
 
@@ -489,8 +490,8 @@ impl HistoryConnection {
                 Arc::ptr_eq(&current, &self.connection) && !current.retired.load(Ordering::SeqCst)
             })
         {
-            return Err(Error::CapabilityUnavailable(
-                "source_unavailable: native history connection changed".into(),
+            return Err(Error::Unavailable(
+                "native history connection changed".into(),
             ));
         }
         Ok(())
@@ -507,7 +508,7 @@ impl HistoryConnection {
                 false,
                 |channel| async move {
                     if !Arc::ptr_eq(&channel, &expected) {
-                        return Err(Error::CapabilityUnavailable(
+                        return Err(Error::Unavailable(
                             "native history connection changed".into(),
                         ));
                     }
@@ -516,8 +517,9 @@ impl HistoryConnection {
             )
             .await;
         self.validate().await?;
-        result.map_err(|_| {
-            Error::CapabilityUnavailable("source_unavailable: native history request failed".into())
+        result.map_err(|error| match error {
+            Error::Unsupported(_) => error,
+            _ => Error::Unavailable("native history request failed".into()),
         })
     }
 }

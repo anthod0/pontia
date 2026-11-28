@@ -45,7 +45,7 @@ pub async fn current_path(home: &Path, thread: &str, stored: Option<&Path>) -> R
 }
 
 fn unavailable(message: impl std::fmt::Display) -> Error {
-    Error::CapabilityUnavailable(format!("source_unavailable: {message}"))
+    Error::Unavailable(message.to_string())
 }
 
 fn existing(path: &Path) -> Result<PathBuf> {

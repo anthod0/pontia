@@ -188,7 +188,7 @@ fn classify_reader_error(
         TurnTimelineReadError::InvalidRange { .. } => PiTurnUserEntryResolveError::InvalidRange {
             turn_id: turn_id.to_string(),
         },
-        TurnTimelineReadError::Inner(Error::CapabilityUnavailable(_)) => {
+        TurnTimelineReadError::Inner(Error::Unavailable(_)) => {
             PiTurnUserEntryResolveError::SourceUnavailable
         }
         TurnTimelineReadError::Inner(error) => PiTurnUserEntryResolveError::Inner(error),

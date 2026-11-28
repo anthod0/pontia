@@ -394,7 +394,7 @@ async fn unsupported_capabilities_degrade_independently_without_forged_facts() {
     )
     .await;
     assert_eq!(interrupt_status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(interrupt_body["error"]["code"], "capability_unavailable");
+    assert_eq!(interrupt_body["error"]["code"], "unsupported");
 
     let (events_status, events_body) = get_json(
         state.clone(),

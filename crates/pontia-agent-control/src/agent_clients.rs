@@ -99,7 +99,9 @@ pub enum ClientInstallStartError {
     #[error(transparent)]
     Control(#[from] Error),
     #[error("{0}")]
-    Unavailable(String),
+    Unsupported(String),
+    #[error("{0}")]
+    AlreadyInstalled(String),
     #[error("{0}")]
     PrerequisiteMissing(String),
     #[error("{0}")]
@@ -175,7 +177,7 @@ impl AgentClientService {
             .get(client)
             .and_then(|entry| entry.configuration.as_deref())
             .ok_or_else(|| {
-                Error::CapabilityUnavailable(format!("Client configuration unavailable: {client}"))
+                Error::Unsupported(format!("Client configuration unavailable: {client}"))
             })
     }
 
@@ -377,7 +379,7 @@ impl AgentClientService {
                 .configuration(client)?
                 .supports_startup_reasoning_effort()
         {
-            return Err(Error::CapabilityUnavailable(format!(
+            return Err(Error::Unsupported(format!(
                 "Client {client}/{key} cannot set reasoning effort"
             )));
         }
@@ -430,13 +432,13 @@ impl AgentClientService {
         };
         let details = self.get(client, key, &context).await?;
         let installer = self.clients.installer(client, key).ok_or_else(|| {
-            ClientInstallStartError::Unavailable(
+            ClientInstallStartError::Unsupported(
                 "Installation is unavailable for this client".into(),
             )
         })?;
         let spec = installer.inspect(&context);
         if spec.provenance != InstallProvenance::NotInstalled {
-            return Err(ClientInstallStartError::Unavailable(
+            return Err(ClientInstallStartError::AlreadyInstalled(
                 "Client is already installed".into(),
             ));
         }
@@ -445,7 +447,7 @@ impl AgentClientService {
             .iter()
             .find(|method| method_id.map_or(method.recommended, |id| method.id == id))
             .ok_or_else(|| {
-                ClientInstallStartError::Unavailable(format!(
+                ClientInstallStartError::Unsupported(format!(
                     "No matching installation method: {}",
                     method_id.unwrap_or("recommended")
                 ))
@@ -543,7 +545,7 @@ impl AgentClientService {
         let entry = self
             .clients
             .get(client)
-            .ok_or_else(|| Error::CapabilityUnavailable(format!("Unknown client: {client}")))?;
+            .ok_or_else(|| Error::Domain(format!("Unknown client: {client}")))?;
         let key = match &entry.configuration {
             Some(configuration) => configuration.key(metadata)?,
             None => "default".into(),
@@ -555,12 +557,20 @@ impl AgentClientService {
         let entry = self
             .clients
             .get(client)
-            .ok_or_else(|| Error::CapabilityUnavailable(format!("Unknown client: {client}")))?;
+            .ok_or_else(|| Error::Domain(format!("Unknown client: {client}")))?;
+        if let Some(configuration) = &entry.configuration
+            && !configuration.keys().iter().any(|defined| defined == key)
+        {
+            return Err(Error::Domain(format!(
+                "Unknown client configuration: {client}/{key}"
+            )));
+        }
         let record = self.repository.get(client, key).await?;
         if record.as_ref().is_none_or(|row| !row.enabled) {
-            return Err(Error::CapabilityUnavailable(format!(
-                "Client {client}/{key} is disabled"
-            )));
+            return Err(Error::Conflict {
+                code: "client_disabled",
+                message: format!("Client {client}/{key} is disabled"),
+            });
         }
         entry
             .configuration
@@ -622,9 +632,10 @@ impl AgentClientService {
             },
         )
         .await?;
-        let integration = self.clients.integration(client, key).ok_or_else(|| {
-            Error::CapabilityUnavailable("Setup is unavailable for this client".into())
-        })?;
+        let integration = self
+            .clients
+            .integration(client, key)
+            .ok_or_else(|| Error::Unsupported("Setup is unavailable for this client".into()))?;
         let client = integration.client_type().to_string();
         tokio::task::spawn_blocking(move || {
             let cli = std::env::current_exe()?.with_file_name("pontia");

@@ -194,5 +194,5 @@ async fn control_validates_input_and_session_capability() {
 
     let (status, body) = patch(state, "session", "high").await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(body["error"]["code"], "capability_unavailable");
+    assert_eq!(body["error"]["code"], "unsupported");
 }

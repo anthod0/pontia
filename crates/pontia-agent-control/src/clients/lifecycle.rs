@@ -12,9 +12,9 @@ impl ClientAdapter {
         request: RuntimeStartRequest,
         configuration: Option<serde_json::Value>,
     ) -> Result<Option<RuntimeStartResult>> {
-        let client = self.session_client().ok_or_else(|| {
-            Error::CapabilityUnavailable("Client Session control is unavailable".into())
-        })?;
+        let client = self
+            .session_client()
+            .ok_or_else(|| Error::Unsupported("Client Session control is unavailable".into()))?;
         match configuration {
             Some(configuration) => {
                 client
@@ -37,7 +37,7 @@ impl ClientAdapter {
             }
             match self.spec.adapter.terminate {
                 TerminateBehavior::Connected => {
-                    return Err(Error::CapabilityUnavailable(format!(
+                    return Err(Error::Unsupported(format!(
                         "Client {} has no Session control implementation",
                         self.spec.client_type
                     )));
@@ -50,7 +50,7 @@ impl ClientAdapter {
                             crate::client_contract::RuntimeBehavior::InProcess
                         )
                     {
-                        return Err(Error::CapabilityUnavailable(
+                        return Err(Error::Unsupported(
                             "Client cannot exit conditionally while idle".into(),
                         ));
                     }
@@ -101,7 +101,7 @@ impl ClientAdapter {
                 )
                 .await;
         }
-        Err(Error::CapabilityUnavailable(
+        Err(Error::Unsupported(
             "Client Session control is unavailable".into(),
         ))
     }
@@ -111,7 +111,7 @@ impl ClientAdapter {
         if let Some(client) = self.session_client() {
             return client.validate_resume(self.pool.clone(), target).await;
         }
-        Err(Error::CapabilityUnavailable(
+        Err(Error::Unsupported(
             "Client Session control is unavailable".into(),
         ))
     }
@@ -124,7 +124,7 @@ impl ClientAdapter {
         count: i64,
     ) -> Result<RuntimeStartResult> {
         if !self.supports_restart() {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unsupported(
                 "A Session cannot restart a shared runtime".into(),
             ));
         }
@@ -165,10 +165,10 @@ impl ClientAdapter {
                 )
                 .await?
                 .ok_or_else(|| {
-                    Error::CapabilityUnavailable("Client restart did not start a runtime".into())
+                    Error::Unavailable("Client restart did not start a runtime".into())
                 });
         }
-        Err(Error::CapabilityUnavailable(
+        Err(Error::Unsupported(
             "Client Session control is unavailable".into(),
         ))
     }
@@ -178,7 +178,7 @@ impl ClientAdapter {
         match self.spec.adapter.terminate {
             TerminateBehavior::Connected => {
                 if !self.input_available(&target.session_id).await? {
-                    return Err(Error::CapabilityUnavailable(
+                    return Err(Error::Unavailable(
                         "client control channel is unavailable".into(),
                     ));
                 }

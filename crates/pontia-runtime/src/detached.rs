@@ -121,7 +121,7 @@ impl GenericRuntimeManager {
         let Some(fingerprint) = ProcessFingerprint::capture(child.id()) else {
             let _ = child.kill();
             let _ = child.wait();
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unavailable(
                 "cannot identify detached process".into(),
             ));
         };

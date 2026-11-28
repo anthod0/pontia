@@ -41,13 +41,14 @@ impl AgentBindingResolver for CodexRollout {
     }
     fn resolve(&self, request: &AgentBindingResolveRequest) -> Result<ResolvedAgentBinding> {
         if request.client_type != "codex" {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unsupported(
                 "Unsupported Codex binding client type".into(),
             ));
         }
-        let path = request.client_session_file.clone().ok_or_else(|| {
-            Error::CapabilityUnavailable("source_unavailable: Codex rollout path is missing".into())
-        })?;
+        let path = request
+            .client_session_file
+            .clone()
+            .ok_or_else(|| Error::Unavailable("Codex rollout path is missing".into()))?;
         let thread = identity(&path)?;
         if thread != request.client_session_key {
             return Err(Error::Conflict {

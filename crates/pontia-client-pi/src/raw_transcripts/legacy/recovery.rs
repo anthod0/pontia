@@ -23,9 +23,7 @@ impl TurnHistoryRecoverer for PiTimelineAdapter {
     fn recover(&self, request: HistoryRecoveryRequest) -> Result<Vec<RecoveredTurnHistory>> {
         let source = &request.source;
         if source.client_type != "pi" || source.format != "pi-jsonl" {
-            return Err(Error::CapabilityUnavailable(
-                "unsupported Pi history source".into(),
-            ));
+            return Err(Error::Unsupported("unsupported Pi history source".into()));
         }
         let bytes = read_range_from_source(source, 0, source_len(source)?)?;
         // A live writer may be appending the next record. Only sealed, complete records

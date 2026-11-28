@@ -67,7 +67,10 @@ impl TurnTimelineService {
         } else {
             match data.timeline_cache_validator(&binding.into(), self.history_source) {
                 Ok(validator) => validator,
-                Err(error @ pontia_core::Error::CapabilityUnavailable(_)) => {
+                Err(
+                    error @ (pontia_core::Error::Unavailable(_)
+                    | pontia_core::Error::Unsupported(_)),
+                ) => {
                     return Err(error.into());
                 }
                 Err(_) => return native().await,

@@ -58,7 +58,7 @@ impl PiRpcPeer {
         let response = self.request(method, params).await?;
         if let Some(error) = response.get("error") {
             if method == "history.read" && error["code"] == -32601 {
-                return Err(Error::CapabilityUnavailable(
+                return Err(Error::Unsupported(
                     "Pi peer does not support native history".into(),
                 ));
             }

@@ -204,6 +204,6 @@ async fn shared_backend_validates_session_capability_turn_ownership_and_activity
     let unsupported = state(&TEST_SPEC).await;
     assert!(matches!(
         snapshot(&unsupported, producer(LiveOutputSource::SharedBackend)).await,
-        Err(Error::CapabilityUnavailable(_))
+        Err(Error::Unsupported(_))
     ));
 }

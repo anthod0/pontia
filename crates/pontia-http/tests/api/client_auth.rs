@@ -112,7 +112,7 @@ impl ClientAuth for MockAuth {
     ) -> ClientOperation<'a, AuthFlowHandle> {
         Box::pin(async move {
             if key == "antigravity" {
-                return Err(Error::CapabilityUnavailable(
+                return Err(Error::Unsupported(
                     "Antigravity login is not managed".into(),
                 ));
             }
@@ -148,7 +148,7 @@ impl ClientAuth for MockAuth {
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move {
             if key == "antigravity" {
-                return Err(Error::CapabilityUnavailable(
+                return Err(Error::Unsupported(
                     "Antigravity logout is not managed".into(),
                 ));
             }
@@ -389,7 +389,7 @@ async fn auth_routes_report_status_conflicts_and_errors() {
         )
         .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(body["error"]["code"], "capability_unavailable");
+    assert_eq!(body["error"]["code"], "unsupported");
     let (status, _) = harness
         .call("POST", &format!("{probe_only}/logout"), "")
         .await;

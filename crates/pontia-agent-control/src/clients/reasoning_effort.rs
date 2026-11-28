@@ -16,7 +16,7 @@ impl ClientAdapter {
                         .set_reasoning_effort(self.events.clone(), target, reasoning_effort)
                         .await;
                 }
-                Err(Error::CapabilityUnavailable(
+                Err(Error::Unsupported(
                     "Reasoning effort control is unsupported".into(),
                 ))
             }

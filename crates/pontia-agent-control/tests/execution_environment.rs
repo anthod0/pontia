@@ -261,7 +261,7 @@ async fn unsupported_mode_is_rejected_before_creating_a_session() {
         .unwrap();
         assert!(matches!(
             app.session_commands().create_session(request).await,
-            Err(pontia_core::Error::CapabilityUnavailable(_))
+            Err(pontia_core::Error::Unsupported(_))
         ));
     }
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")

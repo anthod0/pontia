@@ -156,9 +156,7 @@ impl RpcPeer {
         read_only: bool,
     ) -> Result<Value> {
         if self.is_closed() {
-            return Err(Error::CapabilityUnavailable(
-                "Control connection is closed".into(),
-            ));
+            return Err(Error::Unavailable("Control connection is closed".into()));
         }
         let id = format!("pontia:{}", self.sequence.fetch_add(1, Ordering::Relaxed));
         let (send, receive) = oneshot::channel();
@@ -215,7 +213,7 @@ impl RpcPeer {
         let encoded = encode(&value)?;
         let result = tokio::select! {
             biased;
-            _ = self.closed() => return Err(Error::CapabilityUnavailable("Control connection is closed".into())),
+            _ = self.closed() => return Err(Error::Unavailable("Control connection is closed".into())),
             result = tokio::time::timeout(REQUEST_TIMEOUT, async {
                 self.writer.lock().await.write_all(&encoded).await
             }) => result,
@@ -270,9 +268,7 @@ pub async fn read_frame<R: tokio::io::AsyncBufRead + Unpin>(stream: &mut R) -> R
     loop {
         let available = stream.fill_buf().await?;
         if available.is_empty() {
-            return Err(Error::CapabilityUnavailable(
-                "Control connection closed".into(),
-            ));
+            return Err(Error::Unavailable("Control connection closed".into()));
         }
         let newline = available.iter().position(|byte| *byte == b'\n');
         let size = newline.unwrap_or(available.len());

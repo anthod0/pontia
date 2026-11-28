@@ -116,8 +116,8 @@ async fn compaction_preserves_auth_not_found_capability_and_state_errors() {
     fixture.set_state("idle").await;
     fixture.channel.closed.store(true, Ordering::SeqCst);
     let (status, body) = fixture.request("POST", COMPACT, None, true).await;
-    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(body["error"]["code"], "capability_unavailable");
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(body["error"]["code"], "unavailable");
     assert!(fixture.channel.operations.lock().unwrap().is_empty());
     let unsupported = Fixture::new(&UNSUPPORTED, true).await;
     unsupported.seed().await;
@@ -147,9 +147,9 @@ async fn client_rejection_unknown_and_unsupported_keep_their_api_semantics() {
             "control_unknown",
         ),
         (
-            Error::CapabilityUnavailable("unsupported".into()),
+            Error::Unsupported("unsupported".into()),
             StatusCode::UNPROCESSABLE_ENTITY,
-            "capability_unavailable",
+            "unsupported",
         ),
     ] {
         *fixture.channel.error.lock().unwrap() = Some(error);

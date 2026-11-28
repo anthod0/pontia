@@ -201,11 +201,12 @@ pub async fn install_agent_client(
 fn install_error(error: ClientInstallStartError) -> ApiError {
     match error {
         ClientInstallStartError::Control(error) => error.into(),
-        ClientInstallStartError::Unavailable(message) => ApiError::custom(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "capability_unavailable",
-            message,
-        ),
+        ClientInstallStartError::AlreadyInstalled(message) => {
+            pontia_core::Error::StateConflict(message).into()
+        }
+        ClientInstallStartError::Unsupported(message) => {
+            pontia_core::Error::Unsupported(message).into()
+        }
         ClientInstallStartError::PrerequisiteMissing(message) => ApiError::custom(
             StatusCode::UNPROCESSABLE_ENTITY,
             "prerequisite_missing",

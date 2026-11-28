@@ -51,11 +51,12 @@ fn error_response(error: EventReportError) -> (StatusCode, Value) {
         EventReportError::Ingestion(Error::NotFound(message)) => {
             (StatusCode::NOT_FOUND, "not_found", message)
         }
-        EventReportError::Ingestion(Error::CapabilityUnavailable(message)) => (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "capability_unavailable",
-            message,
-        ),
+        EventReportError::Ingestion(Error::Unsupported(message)) => {
+            (StatusCode::UNPROCESSABLE_ENTITY, "unsupported", message)
+        }
+        EventReportError::Ingestion(Error::Unavailable(message)) => {
+            (StatusCode::SERVICE_UNAVAILABLE, "unavailable", message)
+        }
         other => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "internal_error",

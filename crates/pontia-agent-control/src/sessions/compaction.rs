@@ -15,7 +15,7 @@ impl SessionCommandService {
         let _guard = actor.lock().await;
         let session = self
             .queries
-            .get_session(session_id)
+            .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
         if !matches!(session.state.as_str(), "idle" | "interrupted") {
@@ -23,11 +23,7 @@ impl SessionCommandService {
                 "Compaction requires an idle or interrupted Session".into(),
             ));
         }
-        if !session.capabilities.manual_compaction {
-            return Err(Error::CapabilityUnavailable(
-                "Manual compaction is unavailable".into(),
-            ));
-        }
+        session.require_capability(|caps| caps.manual_compaction, "manual compaction")?;
         let target =
             ControlTarget::resolve(&self.pool, self.clients.registry(), session_id, None).await?;
         let operation_id = new_compaction_operation_id().to_string();

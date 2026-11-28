@@ -221,8 +221,7 @@ async fn successful_queued_send_deletes_its_row() {
 #[tokio::test]
 async fn offline_queued_send_remains_pending() {
     let (_root, state, channel) = connected_inbox().await;
-    *channel.next_error.lock().unwrap() =
-        Some(Error::CapabilityUnavailable("channel offline".into()));
+    *channel.next_error.lock().unwrap() = Some(Error::Unavailable("channel offline".into()));
 
     let crate::SendOutcome::Queued { message_id } = state
         .inbox_commands()

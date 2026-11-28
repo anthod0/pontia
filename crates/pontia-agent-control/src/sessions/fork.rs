@@ -51,24 +51,20 @@ impl SessionCommandService {
         let _guard = self.fork_gate.lock().await;
         let session = self
             .queries
-            .get_session(session_id)
+            .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
         let workspace_id = session.workspace_id.as_deref().ok_or_else(|| {
             Error::StateConflict("An active registered Workspace is required".into())
         })?;
         crate::workspaces::require_active_workspace_id(&self.pool, workspace_id).await?;
-        if !session.capabilities.fork_session {
-            return Err(Error::CapabilityUnavailable(
-                "Session fork is unavailable".into(),
-            ));
-        }
+        session.require_capability(|caps| caps.fork_session, "fork session")?;
         let client = self
             .clients
             .registry()
             .get(&session.client_type)
             .and_then(|entry| entry.session.clone())
-            .ok_or_else(|| Error::CapabilityUnavailable("Session fork is unavailable".into()))?;
+            .ok_or_else(|| Error::Unsupported("Session fork is unavailable".into()))?;
         let path = format!("$.history_forks.\"{}\"", request.operation_id);
         let stored: Option<String> =
             sqlx::query_scalar("SELECT json_extract(metadata, ?) FROM sessions WHERE session_id=?")

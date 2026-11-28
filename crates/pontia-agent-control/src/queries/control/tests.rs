@@ -183,7 +183,7 @@ async fn input_uses_client_capabilities_without_fetching_display_details() -> Re
         app.turn_commands()
             .start_turn("session", "blocked".into(), json!({}))
             .await,
-        Err(Error::CapabilityUnavailable(_))
+        Err(Error::Unavailable(_))
     ));
     assert_eq!(client.inputs.load(Ordering::SeqCst), 1);
     Ok(())

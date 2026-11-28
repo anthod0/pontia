@@ -147,10 +147,7 @@ async fn create_session_rejects_unsupported_client_type() {
 async fn create_session_rejects_empty_and_unsupported_startup_efforts() {
     let _scope = GenericClientTestScope::new().await;
     let (state, _workspace, _pontia_home) = test_state().await;
-    for (effort, expected) in [
-        ("  ", "invalid_request"),
-        ("high", "capability_unavailable"),
-    ] {
+    for (effort, expected) in [("  ", "invalid_request"), ("high", "unsupported")] {
         let (status, body) = post_json(
             state.clone(),
             "/api/v1/sessions",

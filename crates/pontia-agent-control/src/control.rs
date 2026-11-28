@@ -16,7 +16,7 @@ impl<T> ControlResult<T> {
             Ok(value) => Self::Accepted(value),
             Err(crate::DeliveryError::Unsupported(message)) => Self::Unsupported(message),
             Err(crate::DeliveryError::Offline(message)) => {
-                Self::Rejected(Error::CapabilityUnavailable(message))
+                Self::Rejected(Error::Unavailable(message))
             }
             Err(crate::DeliveryError::Rejected(message)) => Self::Rejected(Error::Domain(message)),
             Err(crate::DeliveryError::StateChanged(message)) => {
@@ -29,6 +29,7 @@ impl<T> ControlResult<T> {
     pub(crate) fn from_result(result: Result<T>) -> Self {
         match result {
             Ok(value) => Self::Accepted(value),
+            Err(Error::Unsupported(message)) => Self::Unsupported(message),
             Err(Error::ControlUnknown(message)) => Self::Unknown(message),
             Err(error) => Self::Rejected(error),
         }
@@ -41,7 +42,7 @@ impl<T> ControlResult<T> {
             Self::Accepted(value) | Self::Sent(value) => Ok(value),
             Self::Rejected(error) => Err(error),
             Self::Unknown(message) => Err(Error::ControlUnknown(message)),
-            Self::Unsupported(message) => Err(Error::CapabilityUnavailable(message)),
+            Self::Unsupported(message) => Err(Error::Unsupported(message)),
         }
     }
 

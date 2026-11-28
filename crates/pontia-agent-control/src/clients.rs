@@ -86,7 +86,7 @@ impl ClientAdapter {
     pub async fn input_available(&self, session: &str) -> Result<bool> {
         self.session_client()
             .ok_or_else(|| {
-                Error::CapabilityUnavailable(format!(
+                Error::Unsupported(format!(
                     "Client {} has no Session control implementation",
                     self.spec.client_type
                 ))

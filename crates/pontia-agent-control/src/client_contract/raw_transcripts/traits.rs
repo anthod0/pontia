@@ -36,10 +36,10 @@ pub trait TurnTimelineReader {
         &self,
         _request: super::SessionTimelineReadRequest,
     ) -> std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError> {
-        Err(pontia_core::Error::CapabilityUnavailable(
-            "Session compaction history is unsupported".into(),
+        Err(
+            pontia_core::Error::Unsupported("Session compaction history is unsupported".into())
+                .into(),
         )
-        .into())
     }
     fn read_turn_ranges(
         &self,
