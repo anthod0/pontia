@@ -18,19 +18,20 @@
 
   onMount(() => {
     const deferred: Array<() => void> = []
-    let deferredId = 0
+    let mobileToastId = 0
     const originalSuccess = toast.success
     const originalInfo = toast.info
     const hasPendingError = () => toast.getActiveToasts().some(item => item.type === 'error' && item.action)
-    const defer = (original: typeof toast.success, args: Parameters<typeof toast.success>): ReturnType<typeof toast.success> => {
-      if (!isMobileShell() || !hasPendingError()) return original(...args)
+    const dispatch = (original: typeof toast.success, args: Parameters<typeof toast.success>): ReturnType<typeof toast.success> => {
+      if (!isMobileShell()) return original(...args)
       const [message, options] = args
-      const id = options?.id ?? `mobile-deferred-toast-${++deferredId}`
-      deferred.push(() => original(message, { ...options, id }))
+      if (options?.action && !hasPendingError()) return original(...args)
+      const id = options?.id ?? `mobile-toast-${++mobileToastId}`
+      if (options?.action) deferred.push(() => original(message, { ...options, id }))
       return id
     }
-    toast.success = (...args) => defer(originalSuccess, args)
-    toast.info = (...args) => defer(originalInfo, args)
+    toast.success = (...args) => dispatch(originalSuccess, args)
+    toast.info = (...args) => dispatch(originalInfo, args)
 
     const updateRoles = () => {
       const toasts = [...root.querySelectorAll<HTMLElement>('[data-sonner-toast]:not([data-removed="true"])')]

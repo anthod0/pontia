@@ -64,6 +64,7 @@
   }
   function saved(profile: AgentProfileView) {
     selected = undefined
+    if (isMobileShell()) return
     toast.success($t('bots.profileHint.added', { profile: profile.name, name }), {
       duration: 6000,
       action: { label: $t('bots.profileHint.view'), onClick: () => void navigate(path, { profile: profile.profile_id }, { scope }) },
