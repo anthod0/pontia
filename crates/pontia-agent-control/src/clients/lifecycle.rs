@@ -109,7 +109,9 @@ impl ClientAdapter {
     pub async fn validate_resume(&self, target: &ControlTarget) -> Result<()> {
         target.validate(&self.pool).await?;
         if let Some(client) = self.session_client() {
-            return client.validate_resume(self.pool.clone(), target).await;
+            return client
+                .validate_resume(crate::ClientControlStore::new(self.pool.clone()), target)
+                .await;
         }
         Err(Error::Unsupported(
             "Client Session control is unavailable".into(),

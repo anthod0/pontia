@@ -209,12 +209,14 @@ async fn ephemeral_thread_responses_are_forwarded_without_observation() {
     task.await.unwrap().unwrap();
 }
 
-async fn test_state(root: &Path) -> pontia_agent_control::AgentControl {
+async fn test_state(root: &Path) -> pontia_agent_control::ClientServiceContext {
     let pool = pontia_storage_sqlite::connect_sqlite("sqlite::memory:")
         .await
         .unwrap();
     pontia_storage_sqlite::run_migrations(&pool).await.unwrap();
-    pontia_agent_control::AgentControl::builder(pool, root.into()).build()
+    pontia_agent_control::AgentControl::builder(pool, root.into())
+        .build()
+        .client_context()
 }
 
 #[tokio::test]

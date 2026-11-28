@@ -43,7 +43,7 @@ fn client(
     tokio::sync::mpsc::Receiver<pontia_agent_control::ipc::rpc::RpcRequest>,
 ) {
     let (server, client) = UnixStream::pair().unwrap();
-    tokio::spawn(serve_connection(state.clone(), server));
+    tokio::spawn(serve_connection(state.client_context(), server));
     PiRpcPeer::new(client)
 }
 

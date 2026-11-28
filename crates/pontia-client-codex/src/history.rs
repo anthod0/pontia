@@ -31,24 +31,27 @@ enum Snapshot {
 
 pub(crate) struct CodexHistory {
     binding: AgentBindingResolveRequest,
-    pool: Option<sqlx::SqlitePool>,
+    store: Option<pontia_agent_control::ClientControlStore>,
     snapshot: OnceCell<Snapshot>,
 }
 
 impl CodexHistory {
-    pub fn new(binding: AgentBindingResolveRequest, pool: Option<sqlx::SqlitePool>) -> Self {
+    pub fn new(
+        binding: AgentBindingResolveRequest,
+        store: Option<pontia_agent_control::ClientControlStore>,
+    ) -> Self {
         Self {
             binding,
-            pool,
+            store,
             snapshot: OnceCell::new(),
         }
     }
 
     async fn runtime(&self) -> Result<Option<Arc<CodexRuntime>>> {
-        let Some(pool) = &self.pool else {
+        let Some(store) = &self.store else {
             return Ok(None);
         };
-        CodexRuntime::for_session(pool, &self.binding.session_id).await
+        CodexRuntime::for_session(store, &self.binding.session_id).await
     }
 
     async fn snapshot(&self, source: Option<HistorySource>) -> Result<&Snapshot> {
@@ -167,7 +170,7 @@ impl CodexHistory {
         {
             return Ok(());
         }
-        let file_history = Self::new(self.binding.clone(), self.pool.clone());
+        let file_history = Self::new(self.binding.clone(), self.store.clone());
         let source = match file_history.snapshot(Some(HistorySource::File)).await {
             Ok(Snapshot::File(source)) => source,
             Ok(Snapshot::Native(..)) => unreachable!("file history was explicitly selected"),
@@ -327,7 +330,7 @@ impl NativeHistory for CodexHistory {
                 TopologyDiagnostic, TopologyResolution, TopologyResolveResult,
             };
             use pontia_core::domain::TurnState;
-            let Some(pool) = &self.pool else {
+            let Some(store) = &self.store else {
                 return Ok(Vec::new());
             };
             let mut recovered = Vec::new();
@@ -339,10 +342,10 @@ impl NativeHistory for CodexHistory {
                 if turn.head_cursor.is_some() && (!terminal || turn.tail_cursor.is_some()) {
                     continue;
                 }
-                let native: Option<String> =
-                    pontia_agent_control::ControlQueryService::new(pool.clone())
-                        .client_turn_id(&self.binding.session_id, &turn.turn_id)
-                        .await?;
+                let native: Option<String> = store
+                    .queries()
+                    .client_turn_id(&self.binding.session_id, &turn.turn_id)
+                    .await?;
                 let native = native.ok_or_else(|| {
                     Error::Domain(format!(
                         "Codex Turn {} has no native association",

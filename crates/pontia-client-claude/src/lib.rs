@@ -16,15 +16,14 @@ mod tool_use;
 mod transport;
 
 use peer::{Input, Peer};
+use pontia_agent_control::ClientControlStore;
 use pontia_agent_control::{
-    AgentControl, ControlQueryService, EventIngestService, client_contract::*,
-    clients::ClientRegistration, control::InputReceipt, interactions::InteractionResponse,
-    runtime::ControlTarget,
+    ClientServiceContext, EventIngestService, client_contract::*, clients::ClientRegistration,
+    control::InputReceipt, interactions::InteractionResponse, runtime::ControlTarget,
 };
 use pontia_core::{Error, Result};
 use pontia_runtime::RuntimeStartRequest;
 use serde_json::{Value, json};
-use sqlx::SqlitePool;
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -168,7 +167,7 @@ struct Adapter {
     peers: Arc<Mutex<HashMap<String, Arc<Peer>>>>,
     connection_identity: Arc<Mutex<()>>,
     stopped: Arc<AtomicBool>,
-    context: Arc<OnceLock<(SqlitePool, PathBuf)>>,
+    context: Arc<OnceLock<(ClientControlStore, PathBuf)>>,
 }
 fn unsupported() -> Error {
     Error::Unsupported("This Claude Code capability is not implemented".into())
@@ -225,7 +224,7 @@ impl Adapter {
         events: &EventIngestService,
         target: &ControlTarget,
     ) -> Result<Arc<Peer>> {
-        target.validate(&events.db()).await?;
+        events.store().validate_target(target).await?;
         let peer = self.peer(&target.session_id).await?;
         if Some(peer.runtime.as_str()) != target.runtime_id.as_deref()
             || self.stopped.load(Ordering::Acquire)
@@ -238,7 +237,7 @@ impl Adapter {
 impl ClientSession for Adapter {
     fn native_history(
         &self,
-        _pool: SqlitePool,
+        _store: ClientControlStore,
         binding: raw_transcripts::AgentBindingResolveRequest,
     ) -> Option<Arc<dyn native_history::NativeHistory>> {
         Some(history::native_history(self.clone(), binding))
@@ -436,7 +435,7 @@ impl ClientSession for Adapter {
     }
     fn manual_compaction_available<'a>(
         &'a self,
-        _: SqlitePool,
+        _: ClientControlStore,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
         Box::pin(async move {
@@ -453,7 +452,7 @@ impl ClientSession for Adapter {
     }
     fn reasoning_effort_control_available<'a>(
         &'a self,
-        _: SqlitePool,
+        _: ClientControlStore,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
         Box::pin(async move {
@@ -530,8 +529,8 @@ impl ClientSession for Adapter {
                 compaction_events: implementation.compaction_events,
                 ..Default::default()
             };
-            if let Some((pool, _)) = self.context.get() {
-                let queries = ControlQueryService::new(pool.clone());
+            if let Some((store, _)) = self.context.get() {
+                let queries = store.queries();
                 offline.accept_task = queries.session_state(session).await?
                     == Some(pontia_core::domain::SessionState::Exited)
                     && resume::exit_allows_resume(&queries, session, None).await?;
@@ -558,7 +557,11 @@ impl ClientSession for Adapter {
             })
         })
     }
-    fn available<'a>(&'a self, _: SqlitePool, session: &'a str) -> ClientOperation<'a, bool> {
+    fn available<'a>(
+        &'a self,
+        _: ClientControlStore,
+        session: &'a str,
+    ) -> ClientOperation<'a, bool> {
         Box::pin(async move {
             let Ok(peer) = self.peer(session).await else {
                 return Ok(false);
@@ -568,7 +571,7 @@ impl ClientSession for Adapter {
     }
     fn details<'a>(
         &'a self,
-        _: SqlitePool,
+        _: ClientControlStore,
         session: &'a str,
     ) -> ClientOperation<'a, ClientSessionDetails> {
         Box::pin(async move {
@@ -618,7 +621,7 @@ impl ClientService for Adapter {
     }
     fn connect(
         &self,
-        state: AgentControl,
+        state: ClientServiceContext,
         process_id: Option<u32>,
         rpc: Arc<pontia_agent_control::ipc::rpc::RpcPeer>,
         first: pontia_agent_control::ipc::rpc::RpcRequest,
@@ -632,12 +635,12 @@ impl ClientService for Adapter {
     }
     fn start<'a>(
         &'a self,
-        app: AgentControl,
+        app: ClientServiceContext,
     ) -> ClientOperation<'a, Option<tokio::task::JoinHandle<Result<()>>>> {
         let adapter = self.clone();
         Box::pin(async move {
             let _ = self.interactions.set(app.interactions());
-            let _ = self.context.set((app.db(), app.pontia_home().into()));
+            let _ = self.context.set((app.store(), app.pontia_home().into()));
             let mut shutdown = app.shutdown().subscribe();
             Ok(Some(tokio::spawn(async move {
                 let _ = shutdown.wait_for(|stop| *stop).await;

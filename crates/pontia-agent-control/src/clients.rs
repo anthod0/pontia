@@ -91,7 +91,7 @@ impl ClientAdapter {
                     self.spec.client_type
                 ))
             })?
-            .available(self.pool.clone(), session)
+            .available(crate::ClientControlStore::new(self.pool.clone()), session)
             .await
     }
 }

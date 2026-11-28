@@ -5,7 +5,9 @@ use serde_json::{Value, json};
 
 impl CodexService {
     pub(super) async fn apply_session_mode(&self, session: &str, params: &mut Value) -> Result<()> {
-        if pontia_agent_control::ControlQueryService::new(self.pool.clone())
+        if self
+            .store
+            .queries()
             .session_mode(session)
             .await?
             .bypasses_approvals()
@@ -17,7 +19,7 @@ impl CodexService {
     }
 
     pub(super) fn instructions(&self) -> CodexInstructions {
-        CodexInstructions::new(self.pool.clone())
+        CodexInstructions::new(self.store.clone())
     }
 
     pub(super) async fn resume_params(
@@ -39,7 +41,7 @@ impl CodexService {
 }
 
 pub(crate) async fn prepare_proxy_request(
-    state: &pontia_agent_control::AgentControl,
+    state: &pontia_agent_control::ClientServiceContext,
     operation: crate::proxy::ThreadOperation,
     params: &mut Value,
     config: &Value,
@@ -47,7 +49,9 @@ pub(crate) async fn prepare_proxy_request(
     use crate::proxy::ThreadOperation;
     let mut instructions = match operation {
         ThreadOperation::Start => {
-            let resolved = pontia_agent_control::SessionInstructionsService::new(state.db())
+            let resolved = state
+                .store()
+                .instructions()
                 .with_clients(state.clients())
                 .resolve("codex", None, true)?;
             resolved
@@ -60,7 +64,7 @@ pub(crate) async fn prepare_proxy_request(
         }
         ThreadOperation::Resume => match params["threadId"].as_str() {
             Some(thread) => {
-                CodexInstructions::new(state.db())
+                CodexInstructions::new(state.store())
                     .instructions_for_thread(thread)
                     .await?
             }

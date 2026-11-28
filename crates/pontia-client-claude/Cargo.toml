@@ -9,13 +9,13 @@ pontia-agent-control.workspace = true
 pontia-core.workspace = true
 pontia-runtime.workspace = true
 serde_json.workspace = true
-sqlx.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "process", "sync", "io-util", "net", "time"] }
 tracing = "0.1.44"
 tempfile = "3"
 
 [dev-dependencies]
+sqlx.workspace = true
 pontia-version.workspace = true
 pontia-storage-sqlite.workspace = true
 zstd = "0.14.3"

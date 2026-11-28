@@ -398,7 +398,7 @@ async fn running_sessions_apply_only_native_confirmed_reasoning_effort() {
             .capabilities
             .reasoning_effort_control
     );
-    let runtime = CodexRuntime::for_session(&fixture.app.db(), &fixture.session)
+    let runtime = CodexRuntime::for_session(&fixture.app.store(), &fixture.session)
         .await
         .unwrap()
         .unwrap();
@@ -1566,7 +1566,7 @@ async fn observers_and_proxy_only_manage_sessions_on_their_own_server() {
         .await
         .unwrap();
     assert!(
-        CodexRuntime::for_session(&fixture.app.db(), session)
+        CodexRuntime::for_session(&fixture.app.store(), session)
             .await
             .unwrap()
             .is_none()

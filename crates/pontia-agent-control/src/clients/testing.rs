@@ -8,7 +8,6 @@ use crate::{
     runtime::ControlTarget,
 };
 use pontia_runtime::{RuntimeStartRequest, RuntimeStartResult};
-use sqlx::SqlitePool;
 use std::path::Path;
 use std::sync::{
     Arc, OnceLock,
@@ -141,12 +140,16 @@ impl ClientSession for Channel {
             Ok(ClientExitOutcome::Requested)
         })
     }
-    fn available<'a>(&'a self, _pool: SqlitePool, _session: &'a str) -> ClientOperation<'a, bool> {
+    fn available<'a>(
+        &'a self,
+        _store: crate::ClientControlStore,
+        _session: &'a str,
+    ) -> ClientOperation<'a, bool> {
         Box::pin(async move { Ok(!self.closed.load(Ordering::SeqCst)) })
     }
     fn details<'a>(
         &'a self,
-        _pool: SqlitePool,
+        _store: crate::ClientControlStore,
         _session: &'a str,
     ) -> ClientOperation<'a, ClientSessionDetails> {
         Box::pin(async {

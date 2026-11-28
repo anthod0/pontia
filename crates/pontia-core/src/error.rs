@@ -40,3 +40,9 @@ pub enum Error {
     #[error("serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
 }
+
+impl Error {
+    pub fn missing_record() -> Self {
+        Self::Database(sqlx::Error::RowNotFound)
+    }
+}

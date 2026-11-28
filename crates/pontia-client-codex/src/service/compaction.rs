@@ -111,7 +111,7 @@ impl CodexService {
             .queries()
             .session_metadata(session)
             .await?
-            .ok_or(sqlx::Error::RowNotFound)?;
+            .ok_or_else(Error::missing_record)?;
         Ok(metadata
             .get("codex_compactions")
             .cloned()

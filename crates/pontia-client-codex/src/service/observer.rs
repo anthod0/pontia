@@ -1,6 +1,5 @@
 use super::{CodexService, live_output::CodexLiveOutput};
 use crate::runtime::{CodexRuntime, CodexServerTarget, SubscriptionState};
-use pontia_agent_control::AgentBindingService;
 use pontia_core::{
     Error, Result,
     domain::{DomainEvent, EventType},
@@ -28,12 +27,12 @@ pub struct CodexObserver {
 
 impl CodexObserver {
     #[cfg(test)]
-    pub fn new(state: &pontia_agent_control::AgentControl, root: PathBuf) -> Self {
+    pub fn new(state: &pontia_agent_control::ClientServiceContext, root: PathBuf) -> Self {
         Self::for_target(state, root, CodexServerTarget::User)
     }
 
     pub fn for_target(
-        state: &pontia_agent_control::AgentControl,
+        state: &pontia_agent_control::ClientServiceContext,
         root: PathBuf,
         target: CodexServerTarget,
     ) -> Self {
@@ -135,7 +134,7 @@ impl CodexObserver {
     }
 
     async fn owns_session(&self, session: &str) -> Result<bool> {
-        Ok(CodexServerTarget::for_session(&self.service.pool, session).await? == self.target)
+        Ok(CodexServerTarget::for_session(&self.service.store, session).await? == self.target)
     }
 
     async fn observes(&self, runtime: &CodexRuntime, session: &str) -> Result<bool> {
@@ -398,7 +397,7 @@ impl CodexObserver {
                     let Some(thread) = event.pointer("/params/threadId").and_then(Value::as_str) else { return Ok(()) };
                     let session = match observation.threads.get(thread) {
                         Some(session) => session.clone(),
-                        None => match AgentBindingService::new(self.service.pool.clone()).binding_for_client_session("codex", thread).await? {
+                        None => match self.service.store.bindings().binding_for_client_session("codex", thread).await? {
                             Some(binding) if self.owns_session(&binding.session_id).await? => binding.session_id,
                             _ => return Ok(()),
                         },

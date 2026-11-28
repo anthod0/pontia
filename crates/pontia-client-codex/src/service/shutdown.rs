@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use pontia_agent_control::ClientControlStore;
 use pontia_agent_control::{
     EventIngestService,
     client_contract::PreparedServiceShutdown,
@@ -7,7 +8,6 @@ use pontia_agent_control::{
 };
 use pontia_core::Result;
 use serde_json::json;
-use sqlx::SqlitePool;
 
 pub(super) async fn inspect(
     root: &Path,
@@ -15,7 +15,7 @@ pub(super) async fn inspect(
 ) -> Result<PreparedServiceShutdown> {
     let server = crate::runtime::background_server(root).await?;
     let sessions = match events {
-        Some(events) if !server.owned.is_empty() => background_sessions(&events.db()).await?,
+        Some(events) if !server.owned.is_empty() => background_sessions(&events.store()).await?,
         _ => Vec::new(),
     };
     let mut listing: Vec<_> = sessions.iter().map(ShutdownSession::label).collect();
@@ -48,8 +48,8 @@ pub(super) async fn inspect(
     Ok(PreparedServiceShutdown { listing, terminate })
 }
 
-async fn background_sessions(pool: &SqlitePool) -> Result<Vec<ShutdownSession>> {
-    let queries = pontia_agent_control::ControlQueryService::new(pool.clone());
+async fn background_sessions(store: &ClientControlStore) -> Result<Vec<ShutdownSession>> {
+    let queries = store.queries();
     let sessions = queries.list_active_shutdown_sessions("codex").await?;
     let mut background = Vec::new();
     for session in sessions {

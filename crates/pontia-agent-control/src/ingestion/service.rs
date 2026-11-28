@@ -59,7 +59,18 @@ impl EventIngestService {
         self.effects.scheduler.wake(session.into());
     }
 
-    pub fn db(&self) -> SqlitePool {
+    pub fn store(&self) -> crate::ClientControlStore {
+        crate::ClientControlStore::new(self.db())
+    }
+
+    pub fn native_sessions(&self) -> crate::sessions::NativeSessionService {
+        crate::sessions::NativeSessionService::new(self.db(), self.clone())
+    }
+    pub fn native_turns(&self) -> crate::turns::NativeTurnService {
+        crate::turns::NativeTurnService::new(self.db(), self.clone())
+    }
+
+    pub(crate) fn db(&self) -> SqlitePool {
         self.pool.clone()
     }
 

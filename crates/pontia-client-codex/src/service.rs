@@ -25,10 +25,10 @@ mod proxy_runtimes;
 #[cfg(test)]
 mod subscription_tests;
 use crate::runtime::{CodexRuntime, CodexServerTarget, SubscriptionState};
-use pontia_agent_control::{AgentBindingService, InputPayload, UpsertAgentBindingRequest};
+use pontia_agent_control::ClientControlStore;
+use pontia_agent_control::{InputPayload, UpsertAgentBindingRequest};
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
-use sqlx::SqlitePool;
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
@@ -51,31 +51,28 @@ pub use observer::CodexObserver;
 
 #[derive(Clone)]
 pub struct CodexService {
-    pub(super) pool: SqlitePool,
+    pub(super) store: ClientControlStore,
     pub(super) event_ingest: pontia_agent_control::EventIngestService,
 }
 
 impl CodexService {
     pub fn new(event_ingest: pontia_agent_control::EventIngestService) -> Self {
         Self {
-            pool: event_ingest.db(),
+            store: event_ingest.store(),
             event_ingest,
         }
     }
 
     pub(super) fn queries(&self) -> pontia_agent_control::ControlQueryService {
-        pontia_agent_control::ControlQueryService::new(self.pool.clone())
+        self.store.queries()
     }
 
     fn native_turns(&self) -> pontia_agent_control::turns::NativeTurnService {
-        pontia_agent_control::turns::NativeTurnService::new(
-            self.pool.clone(),
-            self.event_ingest.clone(),
-        )
+        self.event_ingest.native_turns()
     }
 
     fn metadata(&self) -> pontia_agent_control::SessionMetadataStore {
-        pontia_agent_control::SessionMetadataStore::new(self.pool.clone())
+        self.store.metadata()
     }
 
     pub async fn provision(
@@ -100,21 +97,21 @@ impl CodexService {
             .await?;
         let _ = observation_changes().send((
             root,
-            CodexServerTarget::for_session(&self.pool, session_id).await?,
+            CodexServerTarget::for_session(&self.store, session_id).await?,
             session_id.into(),
         ));
         Ok(())
     }
 
     pub(super) async fn root(&self, session_id: &str) -> Result<PathBuf> {
-        let root = CodexRuntime::control_root(&self.pool, session_id).await?;
+        let root = CodexRuntime::control_root(&self.store, session_id).await?;
         root.ok_or_else(|| Error::StateConflict("Codex control root is missing".into()))
     }
 
     pub(super) async fn runtime(&self, session_id: &str) -> Result<Arc<CodexRuntime>> {
         let runtime = CodexRuntime::ensure(
             &self.root(session_id).await?,
-            CodexServerTarget::for_session(&self.pool, session_id).await?,
+            CodexServerTarget::for_session(&self.store, session_id).await?,
         )
         .await?;
         runtime
@@ -132,7 +129,8 @@ impl CodexService {
         let _current = runtime.current_guard().await?;
         let id = string(thread, "id")?;
         let cwd = string(thread, "cwd")?;
-        AgentBindingService::new(self.pool.clone())
+        self.store
+            .bindings()
             .upsert_binding(UpsertAgentBindingRequest {
                 session_id: session_id.into(),
                 client_type: "codex".into(),
@@ -172,9 +170,11 @@ impl CodexService {
         let session_id = &target.session_id;
         let runtime = self.runtime(session_id).await?;
         let _operation = runtime.lock_session(session_id).await;
-        target.validate(&self.pool).await?;
+        self.store.validate_target(target).await?;
         let connection = runtime.connection().await?;
-        let binding = AgentBindingService::new(self.pool.clone())
+        let binding = self
+            .store
+            .bindings()
             .binding_for_session(session_id)
             .await?;
         let instructions = self.instructions().codex_binding(session_id).await?;
@@ -215,7 +215,7 @@ impl CodexService {
                     .queries()
                     .client_session_fields(session_id)
                     .await?
-                    .ok_or(sqlx::Error::RowNotFound)?;
+                    .ok_or_else(Error::missing_record)?;
                 let cwd = fields
                     .workspace_ref
                     .as_deref()
@@ -362,7 +362,7 @@ impl CodexService {
     ) -> Result<()> {
         let runtime = self.runtime(&target.session_id).await?;
         let _operation = runtime.lock_session(&target.session_id).await;
-        target.validate(&self.pool).await?;
+        self.store.validate_target(target).await?;
         let binding = self.binding(&target.session_id).await?;
         self.reconcile_proxy_archive(
             &runtime,
@@ -392,7 +392,7 @@ impl CodexService {
             .queries()
             .session_metadata(session)
             .await?
-            .ok_or(sqlx::Error::RowNotFound)?["codex_observation_unloaded"]
+            .ok_or_else(Error::missing_record)?["codex_observation_unloaded"]
             == true)
     }
 
@@ -523,7 +523,7 @@ impl CodexService {
         target: &pontia_agent_control::runtime::ControlTarget,
         runtime: &CodexRuntime,
     ) -> Result<()> {
-        target.validate(&self.pool).await?;
+        self.store.validate_target(target).await?;
         runtime.current_guard().await?;
         let binding = self.binding(&target.session_id).await?;
         if runtime.subscription(&target.session_id).await != Some(SubscriptionState::Available)
@@ -548,7 +548,7 @@ impl CodexService {
             self.queries()
                 .session_state(session)
                 .await?
-                .ok_or(sqlx::Error::RowNotFound)?,
+                .ok_or_else(Error::missing_record)?,
             SessionState::Idle | SessionState::Busy | SessionState::WaitingForInteraction
         ))
     }
@@ -557,7 +557,8 @@ impl CodexService {
         &self,
         session: &str,
     ) -> Result<pontia_agent_control::AgentBinding> {
-        AgentBindingService::new(self.pool.clone())
+        self.store
+            .bindings()
             .binding_for_session(session)
             .await?
             .ok_or_else(|| Error::StateConflict("Codex thread binding is missing".into()))

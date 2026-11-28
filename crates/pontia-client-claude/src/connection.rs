@@ -1,11 +1,11 @@
 use crate::{Adapter, Input, Peer, peer::field, transport::Connection};
 use pontia_agent_control::{
-    AgentBindingService, AgentControl, PontiaEventType,
+    ClientServiceContext, PontiaEventType,
     ipc::{
         identity::RuntimeAttachment,
         rpc::{Requests, RpcPeer, RpcRequest},
     },
-    runtime::{AttachmentBinding, AttachmentProcess, ControlTarget, RuntimeAttachmentService},
+    runtime::{AttachmentBinding, AttachmentProcess, ControlTarget},
 };
 use pontia_core::{Error, Result};
 use pontia_runtime::{ProcessFingerprint, ProcessObservation};
@@ -15,7 +15,7 @@ use std::{sync::Arc, time::Duration};
 impl Adapter {
     pub(crate) async fn serve_connection(
         &self,
-        app: AgentControl,
+        app: ClientServiceContext,
         process_id: Option<u32>,
         rpc: Arc<RpcPeer>,
         first: RpcRequest,
@@ -141,7 +141,7 @@ impl Adapter {
 
     async fn attach_connection(
         &self,
-        app: &AgentControl,
+        app: &ClientServiceContext,
         process_id: Option<u32>,
         rpc: &Arc<RpcPeer>,
         first: &RpcRequest,
@@ -182,7 +182,9 @@ impl Adapter {
                 ));
             }
             None => {
-                let binding = AgentBindingService::new(app.db())
+                let binding = app
+                    .store()
+                    .bindings()
                     .binding_for_session(&identity.session_id)
                     .await?;
                 let launch = &status["launch"];
@@ -261,7 +263,7 @@ impl Adapter {
 
     async fn validate_connection(
         &self,
-        app: &AgentControl,
+        app: &ClientServiceContext,
         peer: &Arc<Peer>,
         connection: &Arc<Connection>,
     ) -> Result<()> {
@@ -286,7 +288,7 @@ impl Adapter {
 
     async fn validate_attachment(
         &self,
-        app: &AgentControl,
+        app: &ClientServiceContext,
         identity: &RuntimeAttachment,
         status: &Value,
         connection: &Connection,
@@ -308,7 +310,8 @@ impl Adapter {
                 (binding, AttachmentProcess::Confirmed(&connection.process))
             }
         };
-        RuntimeAttachmentService::new(app.db())
+        app.store()
+            .runtime_attachments()
             .confirm_attachment(
                 &identity.session_id,
                 &identity.runtime_id,
@@ -334,12 +337,12 @@ fn pending_ready(status: &Value, host: &str, native: &str) -> bool {
         && status["native_session_id"] == native
 }
 
-async fn validate_runtime(app: &AgentControl, session: &str, runtime: &str) -> Result<()> {
-    ControlTarget {
-        session_id: session.into(),
-        runtime_id: Some(runtime.into()),
-        control_runtime_role: Some("claude_sdk_host"),
-    }
-    .validate(&app.db())
-    .await
+async fn validate_runtime(app: &ClientServiceContext, session: &str, runtime: &str) -> Result<()> {
+    app.store()
+        .validate_target(&ControlTarget {
+            session_id: session.into(),
+            runtime_id: Some(runtime.into()),
+            control_runtime_role: Some("claude_sdk_host"),
+        })
+        .await
 }

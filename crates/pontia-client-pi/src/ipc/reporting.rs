@@ -1,5 +1,5 @@
 use pontia_agent_control::ipc::identity::NativeAttachment;
-use pontia_agent_control::{AgentControl, EventReportError, ReportedFact};
+use pontia_agent_control::{ClientServiceContext, EventReportError, ReportedFact};
 use pontia_core::{Error, Result, domain::EventType};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -24,7 +24,7 @@ struct Event {
 }
 
 pub(super) async fn report_event(
-    state: &AgentControl,
+    state: &ClientServiceContext,
     identity: &NativeAttachment,
     params: Value,
 ) -> Result<Value> {

@@ -109,14 +109,15 @@ async fn register(
     else {
         return Ok(());
     };
-    let pool = ingest.db();
-    let Some(session) = pontia_agent_control::ControlQueryService::new(pool.clone())
+    let store = ingest.store();
+    let Some(session) = store
+        .queries()
         .non_exited_bound_session("codex", &thread)
         .await?
     else {
         return Ok(());
     };
-    if crate::runtime::CodexServerTarget::for_session(&pool, &session).await? != connection.target
+    if crate::runtime::CodexServerTarget::for_session(&store, &session).await? != connection.target
         || super::CodexService::has_confirmed_exit(&session).await
         || connection
             .unloaded_threads
@@ -133,11 +134,7 @@ async fn register(
         interaction.turn_id.clone()
     } else {
         match &native_turn {
-            Some(turn) => {
-                pontia_agent_control::turns::NativeTurnService::new(pool.clone(), ingest.clone())
-                    .turn_id(&session, turn)
-                    .await?
-            }
+            Some(turn) => ingest.native_turns().turn_id(&session, turn).await?,
             None => None,
         }
     };

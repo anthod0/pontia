@@ -1,12 +1,9 @@
 use crate::Adapter;
-use pontia_agent_control::{
-    AgentBindingService, ControlQueryService,
-    client_contract::{
-        history::{RecoveredTurnHistory, TurnHistoryCandidate},
-        native_history::{HistoryRead, HistorySelection, HistorySource, NativeHistory},
-        raw_transcripts::*,
-        *,
-    },
+use pontia_agent_control::client_contract::{
+    history::{RecoveredTurnHistory, TurnHistoryCandidate},
+    native_history::{HistoryRead, HistorySelection, HistorySource, NativeHistory},
+    raw_transcripts::*,
+    *,
 };
 use pontia_core::{
     Error, Result,
@@ -195,8 +192,9 @@ pub(crate) fn native_history(
 }
 impl History {
     async fn sdk_output(&self, mode: &str) -> Result<Vec<u8>> {
-        let (pool, root) = self.adapter.context.get().ok_or_else(source_unavailable)?;
-        let binding = AgentBindingService::new(pool.clone())
+        let (store, root) = self.adapter.context.get().ok_or_else(source_unavailable)?;
+        let binding = store
+            .bindings()
             .binding_for_session(&self.binding.session_id)
             .await?
             .ok_or_else(source_unavailable)?;
@@ -351,9 +349,9 @@ impl NativeHistory for History {
     ) -> HistoryRead<'_, Result<Vec<RecoveredTurnHistory>>> {
         Box::pin(async move {
             let messages = self.messages().await?;
-            let (pool, _) = self.adapter.context.get().ok_or_else(source_unavailable)?;
+            let (store, _) = self.adapter.context.get().ok_or_else(source_unavailable)?;
             let mut recovered = Vec::new();
-            let queries = ControlQueryService::new(pool.clone());
+            let queries = store.queries();
             let closes = queries
                 .list_events_by_type(&self.binding.session_id, EventType::RuntimeExited, None)
                 .await?;

@@ -4,8 +4,7 @@ use crate::{
     runtime::{CodexRuntime, SubscriptionState},
 };
 use pontia_agent_control::{
-    PontiaEvent, PontiaEventSource, PontiaEventType,
-    sessions::{NativeSessionIdentity, NativeSessionService},
+    PontiaEvent, PontiaEventSource, PontiaEventType, sessions::NativeSessionIdentity,
 };
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
@@ -34,7 +33,9 @@ impl CodexService {
                 "Codex proxy thread is not loaded".into(),
             ));
         }
-        let existing = pontia_agent_control::AgentBindingService::new(self.pool.clone())
+        let existing = self
+            .store
+            .bindings()
             .binding_for_client_session("codex", native)
             .await?;
         let parent = self.fork_parent_session(thread, params).await?;
@@ -44,7 +45,7 @@ impl CodexService {
             .into_iter()
             .chain(parent.as_ref())
         {
-            if crate::runtime::CodexServerTarget::for_session(&self.pool, session).await?
+            if crate::runtime::CodexServerTarget::for_session(&self.store, session).await?
                 != runtime.target
             {
                 return Err(Error::StateConflict(
@@ -64,7 +65,9 @@ impl CodexService {
         } else {
             None
         };
-        let session = NativeSessionService::new(self.pool.clone(), self.event_ingest.clone())
+        let session = self
+            .event_ingest
+            .native_sessions()
             .resolve_subscription_session(
                 "codex",
                 native,
@@ -105,7 +108,7 @@ impl CodexService {
             ));
         }
         if self.root(&session).await? != runtime.root
-            || crate::runtime::CodexServerTarget::for_session(&self.pool, &session).await?
+            || crate::runtime::CodexServerTarget::for_session(&self.store, &session).await?
                 != runtime.target
         {
             return Err(Error::StateConflict(
@@ -149,7 +152,7 @@ impl CodexService {
             .queries()
             .session_state(&session)
             .await?
-            .ok_or(sqlx::Error::RowNotFound)?;
+            .ok_or_else(Error::missing_record)?;
         if state == pontia_core::domain::SessionState::Exited {
             self.event_ingest
                 .ingest_pontia_event(PontiaEvent::new(

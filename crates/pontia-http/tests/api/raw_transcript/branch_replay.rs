@@ -24,7 +24,7 @@ async fn rpc_client(state: &AppState) -> (Arc<PiRpcPeer>, mpsc::Receiver<RpcRequ
     .await
     .unwrap();
     let (server, client) = UnixStream::pair().unwrap();
-    tokio::spawn(serve_connection(state.control().clone(), server));
+    tokio::spawn(serve_connection(state.control().client_context(), server));
     PiRpcPeer::new(client)
 }
 

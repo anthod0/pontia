@@ -82,7 +82,13 @@ pub async fn serve_connection(state: AgentControl, stream: UnixStream) {
     match service {
         Some(service) => {
             if let Err(error) = service
-                .connect(state, process_id, peer.clone(), first, requests)
+                .connect(
+                    state.client_context(),
+                    process_id,
+                    peer.clone(),
+                    first,
+                    requests,
+                )
                 .await
             {
                 tracing::warn!(%error, "Client control connection ended");

@@ -29,16 +29,16 @@ pub(crate) async fn launch(
     reasoning_effort: Option<&str>,
     events: &EventIngestService,
 ) -> Result<()> {
-    let mode = pontia_agent_control::ControlQueryService::new(events.db())
-        .session_mode(&peer.session)
-        .await?;
+    let mode = events.store().queries().session_mode(&peer.session).await?;
     let mut bootstrap = json!({
         "session_id": peer.session,
         "runtime_id": peer.runtime,
         "pontia_home": root,
         "launch": {"cwd": peer.cwd, "mode": mode},
     });
-    if let Some(binding) = pontia_agent_control::SessionInstructionsService::new(events.db())
+    if let Some(binding) = events
+        .store()
+        .instructions()
         .session_instructions(&peer.session)
         .await?
         && let Some(prompt) = binding.get("system_prompt").and_then(Value::as_str)

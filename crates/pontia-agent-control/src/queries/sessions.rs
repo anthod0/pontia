@@ -5,6 +5,10 @@ use pontia_core::Result;
 use pontia_storage_sqlite::repositories::sessions::SqliteSessionRepository;
 use sqlx::Row;
 impl ControlQueryService {
+    fn client_store(&self) -> crate::ClientControlStore {
+        crate::ClientControlStore::new(self.pool.clone())
+    }
+
     pub async fn get_session(&self, session_id: &str) -> Result<Option<SessionView>> {
         let repository = SqliteSessionRepository::new(self.pool.clone());
         let Some(row) = repository.get_session(session_id).await? else {
@@ -59,7 +63,7 @@ impl ControlQueryService {
             && let Some(client) = &entry.session
         {
             session.control_connected = client
-                .control_connected(self.pool.clone(), &session.session_id)
+                .control_connected(self.client_store(), &session.session_id)
                 .await?;
         }
         session.lineage = self.session_lineage(&session.session_id).await?;
@@ -69,7 +73,7 @@ impl ControlQueryService {
             .and_then(|entry| entry.session.as_ref())
         {
             let details = client
-                .details(self.pool.clone(), &session.session_id)
+                .details(self.client_store(), &session.session_id)
                 .await?;
             session
                 .client_details
@@ -122,7 +126,7 @@ impl ControlQueryService {
         if capabilities.manual_compaction {
             capabilities.manual_compaction = if let Some(client) = &entry.session {
                 client
-                    .manual_compaction_available(self.pool.clone(), session_id)
+                    .manual_compaction_available(self.client_store(), session_id)
                     .await?
             } else {
                 false
@@ -131,11 +135,11 @@ impl ControlQueryService {
         if capabilities.reasoning_effort_control {
             capabilities.reasoning_effort_control = if let Some(client) = &entry.session {
                 let available = client
-                    .reasoning_effort_control_available(self.pool.clone(), session_id)
+                    .reasoning_effort_control_available(self.client_store(), session_id)
                     .await?;
                 if !available
                     && client
-                        .control_connected(self.pool.clone(), session_id)
+                        .control_connected(self.client_store(), session_id)
                         .await?
                         == Some(true)
                 {

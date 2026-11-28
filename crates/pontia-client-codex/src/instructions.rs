@@ -1,15 +1,12 @@
-use pontia_agent_control::{
-    AgentBindingService,
-    client_contract::{ClientInstructions, InstructionsBindingInput},
-};
-use sqlx::SqlitePool;
+use pontia_agent_control::ClientControlStore;
+use pontia_agent_control::client_contract::{ClientInstructions, InstructionsBindingInput};
 
 pub struct CodexInstructions {
-    pool: SqlitePool,
+    store: ClientControlStore,
 }
 impl CodexInstructions {
-    pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+    pub fn new(store: ClientControlStore) -> Self {
+        Self { store }
     }
 }
 
@@ -45,9 +42,7 @@ impl CodexInstructions {
         if self.codex_binding(session).await?.is_none() {
             return Err(unverified());
         }
-        let binding = AgentBindingService::new(self.pool.clone())
-            .binding_for_session(session)
-            .await?;
+        let binding = self.store.bindings().binding_for_session(session).await?;
         match binding {
             Some(binding)
                 if binding.client_type == "codex" && binding.client_session_key == native_key =>
@@ -62,7 +57,9 @@ impl CodexInstructions {
         &self,
         native_key: &str,
     ) -> Result<Option<CodexInstructionsBinding>> {
-        let Some(binding) = AgentBindingService::new(self.pool.clone())
+        let Some(binding) = self
+            .store
+            .bindings()
             .binding_for_client_session("codex", native_key)
             .await?
         else {
@@ -73,10 +70,11 @@ impl CodexInstructions {
 
     /// Reads the creation-time snapshot, never the current mutable configuration.
     pub async fn codex_binding(&self, session: &str) -> Result<Option<CodexInstructionsBinding>> {
-        let Some(snapshot) =
-            pontia_agent_control::SessionInstructionsService::new(self.pool.clone())
-                .session_instructions(session)
-                .await?
+        let Some(snapshot) = self
+            .store
+            .instructions()
+            .session_instructions(session)
+            .await?
         else {
             return Ok(None);
         };
@@ -96,9 +94,7 @@ impl CodexInstructions {
         let Some(instructions) = instructions else {
             return Ok(None);
         };
-        let binding = AgentBindingService::new(self.pool.clone())
-            .binding_for_session(session)
-            .await?;
+        let binding = self.store.bindings().binding_for_session(session).await?;
         match binding {
             Some(binding) if binding.client_type == "codex" => Ok(Some(instructions)),
             _ => Err(unverified()),

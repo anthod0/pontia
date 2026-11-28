@@ -20,17 +20,15 @@ pub enum CodexServerTarget {
 }
 
 impl CodexServerTarget {
-    pub(crate) async fn for_session(pool: &sqlx::SqlitePool, session: &str) -> Result<Self> {
+    pub(crate) async fn for_session(
+        store: &pontia_agent_control::ClientControlStore,
+        session: &str,
+    ) -> Result<Self> {
         use pontia_core::LaunchMode;
-        Ok(
-            match pontia_agent_control::ControlQueryService::new(pool.clone())
-                .session_launch_mode(session)
-                .await?
-            {
-                LaunchMode::Foreground => Self::User,
-                LaunchMode::Background => Self::Background,
-            },
-        )
+        Ok(match store.queries().session_launch_mode(session).await? {
+            LaunchMode::Foreground => Self::User,
+            LaunchMode::Background => Self::Background,
+        })
     }
 
     pub(super) fn launch_mode(self) -> pontia_core::LaunchMode {
@@ -128,23 +126,24 @@ async fn connect_daemon(
 
 impl CodexRuntime {
     pub(crate) async fn control_root(
-        pool: &sqlx::SqlitePool,
+        store: &pontia_agent_control::ClientControlStore,
         session: &str,
     ) -> Result<Option<PathBuf>> {
-        Ok(pontia_agent_control::ControlQueryService::new(pool.clone())
+        Ok(store
+            .queries()
             .session_metadata(session)
             .await?
             .and_then(|metadata| metadata["codex_control_root"].as_str().map(PathBuf::from)))
     }
 
     pub(crate) async fn for_session(
-        pool: &sqlx::SqlitePool,
+        store: &pontia_agent_control::ClientControlStore,
         session: &str,
     ) -> Result<Option<Arc<Self>>> {
-        let root = Self::control_root(pool, session).await?;
+        let root = Self::control_root(store, session).await?;
         let Some(root) = root else { return Ok(None) };
         Ok(
-            Self::existing_target(&root, CodexServerTarget::for_session(pool, session).await?)
+            Self::existing_target(&root, CodexServerTarget::for_session(store, session).await?)
                 .await,
         )
     }

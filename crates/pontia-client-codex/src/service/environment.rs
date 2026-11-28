@@ -32,9 +32,7 @@ impl CodexService {
         connection: &Connection,
         cwd: &str,
     ) -> Result<Value> {
-        let mode = pontia_agent_control::ControlQueryService::new(self.pool.clone())
-            .session_mode(session)
-            .await?;
+        let mode = self.store.queries().session_mode(session).await?;
         let response = match connection
             .call(
                 "config/read",
@@ -49,9 +47,7 @@ impl CodexService {
             }
             result => result?,
         };
-        let environment = pontia_agent_control::ControlQueryService::new(self.pool.clone())
-            .runtime_environment(session)
-            .await?;
+        let environment = self.store.queries().runtime_environment(session).await?;
         let mut config = environment_config(session, &response["config"], environment)?;
         if mode == SessionMode::Restricted {
             disable_mcp_servers(&mut config, &response)?;

@@ -301,12 +301,3 @@ async fn wait_exited(tree: &[ProcessFingerprint], timeout: Duration) -> bool {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
 }
-
-/// Open only an existing control-plane database. A first-run home has no records.
-pub async fn existing_database(url: &str) -> Result<Option<SqlitePool>> {
-    let options: sqlx::sqlite::SqliteConnectOptions = url.parse()?;
-    if !options.get_filename().try_exists()? {
-        return Ok(None);
-    }
-    Ok(Some(SqlitePool::connect_with(options).await?))
-}

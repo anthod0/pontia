@@ -1,5 +1,5 @@
 use super::rpc::RpcRequest;
-use crate::{AgentControl, RuntimeBindingUpsertRequest};
+use crate::{ClientServiceContext, RuntimeBindingUpsertRequest};
 use pontia_core::{Error, Result};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -20,7 +20,7 @@ pub struct NativeAttachment {
 }
 
 pub async fn native_registration(
-    state: &AgentControl,
+    state: &ClientServiceContext,
     client: &str,
     process_id: Option<u32>,
     request: &RpcRequest,

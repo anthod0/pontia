@@ -2,9 +2,7 @@ use crate::{
     peer::{Peer, fact, runtime_event},
     relay::{Observation, Report},
 };
-use pontia_agent_control::{
-    AgentBindingService, ControlQueryService, PontiaEventType, UpsertAgentBindingRequest,
-};
+use pontia_agent_control::{PontiaEventType, UpsertAgentBindingRequest};
 use pontia_core::{Error, Result, domain::EventType};
 use serde_json::json;
 
@@ -94,7 +92,9 @@ impl Peer {
                 reason,
                 index,
             } => {
-                let turn = ControlQueryService::new(events.db())
+                let turn = events
+                    .store()
+                    .queries()
                     .find_by_report_key(
                         session,
                         EventType::TurnStarted,
@@ -102,7 +102,7 @@ impl Peer {
                     )
                     .await?
                     .and_then(|event| event.turn_id)
-                    .ok_or(sqlx::Error::RowNotFound)?;
+                    .ok_or_else(Error::missing_record)?;
                 self.state.lock().await.promoted = None;
                 self.finish_turn(turn, reason, json!({"prompt":index+1}))
                     .await?;
@@ -114,7 +114,9 @@ impl Peer {
                 reasoning_effort,
                 cwd,
             } => {
-                AgentBindingService::new(events.db())
+                events
+                    .store()
+                    .bindings()
                     .upsert_binding(UpsertAgentBindingRequest {
                         session_id: session.clone(),
                         client_type: "acp".into(),
@@ -139,10 +141,12 @@ impl Peer {
                     report.key.clone(),
                 )
                 .await?;
-                let record = ControlQueryService::new(events.db())
+                let record = events
+                    .store()
+                    .queries()
                     .session_runtime(runtime)
                     .await?
-                    .ok_or(sqlx::Error::RowNotFound)?;
+                    .ok_or_else(Error::missing_record)?;
                 if record.state != "running" {
                     runtime_event(
                         events,

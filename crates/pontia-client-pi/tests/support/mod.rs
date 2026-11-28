@@ -16,7 +16,7 @@ pub fn connection(
 ) -> (Arc<PiRpcPeer>, tokio::sync::mpsc::Receiver<RpcRequest>) {
     let (server, client) = UnixStream::pair().unwrap();
     tokio::spawn(pontia_client_pi::ipc::serve_connection(
-        state.clone(),
+        state.client_context(),
         server,
     ));
     PiRpcPeer::new(client)

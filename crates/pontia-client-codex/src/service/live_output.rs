@@ -1,7 +1,7 @@
 use super::{CodexService, string};
 use crate::runtime::{CodexRuntime, SubscriptionState, protocol::Notification};
 use pontia_agent_control::{
-    AgentBindingService, LiveOutputBatch, LiveOutputIdentity, LiveOutputItem, LiveOutputProducer,
+    LiveOutputBatch, LiveOutputIdentity, LiveOutputItem, LiveOutputProducer,
     LiveOutputPublishOutcome, LiveOutputService, LiveOutputSnapshotReplacement, LiveOutputSource,
     LiveOutputUpdate, LiveReasoningBound,
 };
@@ -677,7 +677,9 @@ impl CodexLiveOutput {
         ) {
             return Ok(false);
         }
-        Ok(AgentBindingService::new(service.pool.clone())
+        Ok(service
+            .store
+            .bindings()
             .binding_for_session(session)
             .await?
             .is_some_and(|binding| {

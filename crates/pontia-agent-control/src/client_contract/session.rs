@@ -1,11 +1,11 @@
 use super::{
     AgentClientCapabilities, ClientLaunchRequest, DeliveryError, DeliveryOperation, InputPayload,
 };
+use crate::ClientControlStore;
 use crate::{EventIngestService, control::InputReceipt, runtime::ControlTarget};
 use pontia_core::Result;
 use pontia_runtime::{RuntimeStartRequest, RuntimeStartResult};
 use serde_json::Value;
-use sqlx::SqlitePool;
 use std::{future::Future, path::Path, pin::Pin};
 
 pub type ClientOperation<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
@@ -146,7 +146,7 @@ pub trait ClientSession: Send + Sync {
     }
     fn validate_resume<'a>(
         &'a self,
-        _pool: SqlitePool,
+        _store: ClientControlStore,
         _target: &'a ControlTarget,
     ) -> ClientOperation<'a, ()> {
         Box::pin(async { Ok(()) })
@@ -222,36 +222,40 @@ pub trait ClientSession: Send + Sync {
     }
     fn native_history(
         &self,
-        _pool: SqlitePool,
+        _store: ClientControlStore,
         _binding: crate::client_contract::raw_transcripts::AgentBindingResolveRequest,
     ) -> Option<std::sync::Arc<dyn crate::client_contract::native_history::NativeHistory>> {
         None
     }
-    fn available<'a>(&'a self, pool: SqlitePool, session: &'a str) -> ClientOperation<'a, bool>;
+    fn available<'a>(
+        &'a self,
+        store: ClientControlStore,
+        session: &'a str,
+    ) -> ClientOperation<'a, bool>;
     fn manual_compaction_available<'a>(
         &'a self,
-        pool: SqlitePool,
+        store: ClientControlStore,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
-        self.available(pool, session)
+        self.available(store, session)
     }
     fn reasoning_effort_control_available<'a>(
         &'a self,
-        pool: SqlitePool,
+        store: ClientControlStore,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
-        self.available(pool, session)
+        self.available(store, session)
     }
     fn control_connected<'a>(
         &'a self,
-        _pool: SqlitePool,
+        _store: ClientControlStore,
         _session: &'a str,
     ) -> ClientOperation<'a, Option<bool>> {
         Box::pin(async { Ok(None) })
     }
     fn details<'a>(
         &'a self,
-        pool: SqlitePool,
+        store: ClientControlStore,
         session: &'a str,
     ) -> ClientOperation<'a, ClientSessionDetails>;
 }

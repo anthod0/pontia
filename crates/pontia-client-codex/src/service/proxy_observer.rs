@@ -3,12 +3,15 @@ use crate::{
     proxy::{Observation, ObservedEvent},
     runtime::{CodexRuntime, SubscriptionState},
 };
-use pontia_agent_control::{AgentBindingService, AgentControl};
+use pontia_agent_control::ClientServiceContext;
 use pontia_core::{Error, Result};
 
 use tokio::sync::mpsc;
 
-pub(super) async fn run(state: AgentControl, mut observations: mpsc::Receiver<Observation>) {
+pub(super) async fn run(
+    state: ClientServiceContext,
+    mut observations: mpsc::Receiver<Observation>,
+) {
     let service = CodexService::new(state.event_ingest_service());
     while let Some(observation) = observations.recv().await {
         if let Err(error) = observe(&service, state.pontia_home(), observation).await {
@@ -81,14 +84,16 @@ async fn observe(
                 .await?;
         }
         ObservedEvent::TurnStarted(native) => {
-            let Some(binding) = AgentBindingService::new(service.pool.clone())
+            let Some(binding) = service
+                .store
+                .bindings()
                 .binding_for_client_session("codex", &native)
                 .await?
             else {
                 return Ok(());
             };
             let session = &binding.session_id;
-            if crate::runtime::CodexServerTarget::for_session(&service.pool, session).await?
+            if crate::runtime::CodexServerTarget::for_session(&service.store, session).await?
                 != runtime.target
             {
                 return Ok(());
@@ -101,7 +106,7 @@ async fn observe(
                     .queries()
                     .session_state(session)
                     .await?
-                    .ok_or(sqlx::Error::RowNotFound)?,
+                    .ok_or_else(Error::missing_record)?,
                 SessionState::Idle
                     | SessionState::Busy
                     | SessionState::WaitingForInteraction

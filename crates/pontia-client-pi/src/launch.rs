@@ -5,8 +5,9 @@ use std::{
     sync::Arc,
 };
 
+use pontia_agent_control::ClientControlStore;
 use pontia_agent_control::{
-    AgentBindingService, ControlQueryService, EventIngestService, RuntimeReadinessService,
+    EventIngestService,
     client_contract::{
         ClientExitMode, ClientExitOutcome, ClientLaunchRequest, ClientOperation, ClientSession,
         ClientSessionDetails, DeliveryError, DeliveryOperation, InputPayload,
@@ -17,7 +18,6 @@ use pontia_agent_control::{
 use pontia_core::{Error, Result};
 use pontia_runtime::{RuntimeStartRequest, RuntimeStartResult};
 use serde_json::{Value, json};
-use sqlx::SqlitePool;
 
 pub(crate) struct PiSession {
     pub tui_command: Option<String>,
@@ -109,8 +109,12 @@ impl PiSession {
         Ok(result)
     }
 
-    async fn single_running_runtime(pool: &SqlitePool, session: &str) -> Result<Option<String>> {
-        let mut running = ControlQueryService::new(pool.clone())
+    async fn single_running_runtime(
+        store: &ClientControlStore,
+        session: &str,
+    ) -> Result<Option<String>> {
+        let mut running = store
+            .queries()
             .session_runtimes(session)
             .await?
             .into_iter()
@@ -127,7 +131,7 @@ impl PiSession {
 impl ClientSession for PiSession {
     fn native_history(
         &self,
-        _pool: SqlitePool,
+        _store: ClientControlStore,
         binding: pontia_agent_control::client_contract::raw_transcripts::AgentBindingResolveRequest,
     ) -> Option<Arc<dyn pontia_agent_control::client_contract::native_history::NativeHistory>> {
         Some(crate::history::PiHistory::new(
@@ -187,12 +191,15 @@ impl ClientSession for PiSession {
     ) -> DeliveryOperation<'a, InputReceipt> {
         Box::pin(async move {
             let runtime = target.instance().map_err(DeliveryError::from)?;
-            RuntimeReadinessService::new(events.db(), Some(crate::spec::CONTROL_RUNTIME_ROLE))
+            events
+                .store()
+                .runtime_readiness(Some(crate::spec::CONTROL_RUNTIME_ROLE))
                 .wait_until_ready(&target.session_id, "pi", runtime)
                 .await
                 .map_err(DeliveryError::from)?;
-            target
-                .validate(&events.db())
+            events
+                .store()
+                .validate_target(target)
                 .await
                 .map_err(DeliveryError::from)?;
             self.connections
@@ -213,8 +220,9 @@ impl ClientSession for PiSession {
         payload: &'a InputPayload,
     ) -> DeliveryOperation<'a, InputReceipt> {
         Box::pin(async move {
-            target
-                .validate(&events.db())
+            events
+                .store()
+                .validate_target(target)
                 .await
                 .map_err(DeliveryError::from)?;
             self.connections
@@ -238,8 +246,9 @@ impl ClientSession for PiSession {
         target: &'a ControlTarget,
     ) -> DeliveryOperation<'a> {
         Box::pin(async move {
-            target
-                .validate(&events.db())
+            events
+                .store()
+                .validate_target(target)
                 .await
                 .map_err(DeliveryError::from)?;
             self.connections
@@ -259,10 +268,12 @@ impl ClientSession for PiSession {
     ) -> DeliveryOperation<'a> {
         Box::pin(async move {
             let runtime = target.instance()?;
-            RuntimeReadinessService::new(events.db(), Some(crate::spec::CONTROL_RUNTIME_ROLE))
+            events
+                .store()
+                .runtime_readiness(Some(crate::spec::CONTROL_RUNTIME_ROLE))
                 .wait_until_ready(&target.session_id, "pi", runtime)
                 .await?;
-            target.validate(&events.db()).await?;
+            events.store().validate_target(target).await?;
             self.connections
                 .replay(&target.session_id, runtime, replay_id)
                 .await
@@ -303,7 +314,7 @@ impl ClientSession for PiSession {
         mode: ClientExitMode,
     ) -> ClientOperation<'a, ClientExitOutcome> {
         Box::pin(async move {
-            target.validate(&events.db()).await?;
+            events.store().validate_target(target).await?;
             let control = &self.connections;
             let runtime = target.instance()?;
             if mode == ClientExitMode::IfIdle {
@@ -320,11 +331,13 @@ impl ClientSession for PiSession {
                 Ok(()) => Ok(ClientExitOutcome::Requested),
                 Err(error @ Error::Unavailable(_)) => {
                     let _guard = control.lock_identity().await;
-                    target.validate(&events.db()).await?;
+                    events.store().validate_target(target).await?;
                     if control.connected_to(&target.session_id, runtime).await? {
                         return Err(error);
                     }
-                    let fingerprint = ControlQueryService::new(events.db())
+                    let fingerprint = events
+                        .store()
+                        .queries()
                         .session_runtime(runtime)
                         .await?
                         .filter(|runtime| runtime.state == "running")
@@ -352,11 +365,12 @@ impl ClientSession for PiSession {
 
     fn validate_resume<'a>(
         &'a self,
-        pool: SqlitePool,
+        store: ClientControlStore,
         target: &'a ControlTarget,
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move {
-            if let Some(binding) = AgentBindingService::new(pool)
+            if let Some(binding) = store
+                .bindings()
                 .binding_for_session(&target.session_id)
                 .await?
             {
@@ -369,9 +383,13 @@ impl ClientSession for PiSession {
         })
     }
 
-    fn available<'a>(&'a self, pool: SqlitePool, session: &'a str) -> ClientOperation<'a, bool> {
+    fn available<'a>(
+        &'a self,
+        store: ClientControlStore,
+        session: &'a str,
+    ) -> ClientOperation<'a, bool> {
         Box::pin(async move {
-            Ok(match Self::single_running_runtime(&pool, session).await? {
+            Ok(match Self::single_running_runtime(&store, session).await? {
                 Some(runtime) => self.connections.connected_to(session, &runtime).await?,
                 None => false,
             })
@@ -380,19 +398,19 @@ impl ClientSession for PiSession {
 
     fn manual_compaction_available<'a>(
         &'a self,
-        pool: SqlitePool,
+        store: ClientControlStore,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
-        self.available(pool, session)
+        self.available(store, session)
     }
 
     fn reasoning_effort_control_available<'a>(
         &'a self,
-        pool: SqlitePool,
+        store: ClientControlStore,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
         Box::pin(async move {
-            if Self::single_running_runtime(&pool, session)
+            if Self::single_running_runtime(&store, session)
                 .await?
                 .is_none()
             {
@@ -414,12 +432,12 @@ impl ClientSession for PiSession {
 
     fn control_connected<'a>(
         &'a self,
-        pool: SqlitePool,
+        store: ClientControlStore,
         session: &'a str,
     ) -> ClientOperation<'a, Option<bool>> {
         Box::pin(async move {
             Ok(Some(
-                match Self::single_running_runtime(&pool, session).await? {
+                match Self::single_running_runtime(&store, session).await? {
                     Some(runtime) => self.connections.connected_to(session, &runtime).await?,
                     None => false,
                 },
@@ -429,7 +447,7 @@ impl ClientSession for PiSession {
 
     fn details<'a>(
         &'a self,
-        _pool: SqlitePool,
+        _store: ClientControlStore,
         _session: &'a str,
     ) -> ClientOperation<'a, ClientSessionDetails> {
         Box::pin(async { Ok(ClientSessionDetails { data: json!({}) }) })

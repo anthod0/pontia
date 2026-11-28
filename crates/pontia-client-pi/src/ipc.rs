@@ -4,8 +4,8 @@ mod queries;
 mod reporting;
 
 use crate::rpc::PiRpcPeer;
+use pontia_agent_control::ClientServiceContext;
 use pontia_agent_control::ipc::{identity::NativeAttachment, protocol, rpc::RpcRequest};
-use pontia_agent_control::{AgentBindingService, AgentControl};
 use pontia_core::{Error, Result};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -25,7 +25,7 @@ impl Drop for ClosePeer {
     }
 }
 
-pub async fn serve_connection(state: AgentControl, stream: UnixStream) {
+pub async fn serve_connection(state: ClientServiceContext, stream: UnixStream) {
     let (process_id, peer, mut requests) = pontia_agent_control::ipc::connection(stream);
     let Ok(Some(first)) = tokio::time::timeout(Duration::from_secs(10), requests.recv()).await
     else {
@@ -47,7 +47,7 @@ pub async fn serve_connection(state: AgentControl, stream: UnixStream) {
 }
 
 pub(crate) async fn serve_peer(
-    state: AgentControl,
+    state: ClientServiceContext,
     connections: crate::connections::PiConnections,
     process_id: Option<u32>,
     peer: Arc<PiRpcPeer>,
@@ -193,7 +193,7 @@ struct ContextQuery {
 }
 
 async fn dispatch(
-    state: &AgentControl,
+    state: &ClientServiceContext,
     connections: &crate::connections::PiConnections,
     channel: &Arc<PiChannel>,
     request: &RpcRequest,
@@ -263,7 +263,7 @@ async fn dispatch(
         if query.client_session_key.trim().is_empty() {
             return Err(Error::Domain("client_session_key is required".into()));
         }
-        let bindings = AgentBindingService::new(state.db());
+        let bindings = state.store().bindings();
         let context = match bindings
             .session_context_for_client_session(
                 "pi",

@@ -126,7 +126,7 @@ impl Fixture {
             .session
             .as_ref()
             .unwrap()
-            .native_history(self.state.db(), self.binding.clone())
+            .native_history(self.state.store(), self.binding.clone())
             .unwrap()
     }
     async fn peer(&self) -> (Arc<PiRpcPeer>, mpsc::Receiver<RpcRequest>, Arc<PiRpcPeer>) {

@@ -1,10 +1,10 @@
+use pontia_agent_control::ClientControlStore;
 use pontia_agent_control::{
     DeliveryError, DeliveryOperation, InputPayload,
-    runtime::{AttachmentBinding, AttachmentProcess, RuntimeAttachmentService},
+    runtime::{AttachmentBinding, AttachmentProcess},
 };
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
-use sqlx::SqlitePool;
 use std::{
     collections::HashMap,
     future::Future,
@@ -49,7 +49,7 @@ struct Connection {
 #[derive(Default)]
 struct Connections {
     entries: HashMap<String, Arc<Connection>>,
-    pool: Option<SqlitePool>,
+    store: Option<ClientControlStore>,
     pontia_home: Option<PathBuf>,
     stopped: bool,
 }
@@ -61,22 +61,22 @@ pub(crate) struct PiConnections {
 }
 
 impl PiConnections {
-    pub(crate) async fn ensure_started(&self, pool: SqlitePool, pontia_home: PathBuf) {
+    pub(crate) async fn ensure_started(&self, store: ClientControlStore, pontia_home: PathBuf) {
         let mut connections = self.connections.lock().await;
-        if connections.pool.is_none() {
-            connections.pool = Some(pool);
+        if connections.store.is_none() {
+            connections.store = Some(store);
             connections.pontia_home = Some(pontia_home);
             connections.stopped = false;
         }
     }
 
-    pub(crate) async fn start(&self, pool: SqlitePool, pontia_home: PathBuf) {
+    pub(crate) async fn start(&self, store: ClientControlStore, pontia_home: PathBuf) {
         let mut connections = self.connections.lock().await;
         for (_, connection) in connections.entries.drain() {
             connection.retired.store(true, Ordering::SeqCst);
             connection.channel.invalidate();
         }
-        connections.pool = Some(pool);
+        connections.store = Some(store);
         connections.pontia_home = Some(pontia_home);
         connections.stopped = false;
     }
@@ -85,8 +85,12 @@ impl PiConnections {
         self.identity_gate.clone().lock_owned().await
     }
 
-    async fn current_runtime(pool: &SqlitePool, session_id: &str) -> Result<Option<String>> {
-        RuntimeAttachmentService::new(pool.clone())
+    async fn current_runtime(
+        store: &ClientControlStore,
+        session_id: &str,
+    ) -> Result<Option<String>> {
+        store
+            .runtime_attachments()
             .active_control_runtime_id(session_id, crate::spec::CONTROL_RUNTIME_ROLE)
             .await
     }
@@ -109,11 +113,11 @@ impl PiConnections {
                 "Client connection has been replaced".into(),
             ));
         }
-        let pool = connections
-            .pool
+        let store = connections
+            .store
             .as_ref()
             .ok_or_else(|| Error::Unavailable("Pi control service is unavailable".into()))?;
-        if Self::current_runtime(pool, session_id).await?.as_deref() != Some(runtime_id) {
+        if Self::current_runtime(store, session_id).await?.as_deref() != Some(runtime_id) {
             return Err(Error::StateConflict(
                 "report runtime is no longer current".into(),
             ));
@@ -133,8 +137,8 @@ impl PiConnections {
         if connections.stopped || !channel.available() {
             return Err(Error::Unavailable("Client connection is closed".into()));
         }
-        let pool = connections
-            .pool
+        let store = connections
+            .store
             .as_ref()
             .ok_or_else(|| Error::Unavailable("Pi control service is unavailable".into()))?;
         if let Some(existing) = connections.entries.get(session_id)
@@ -154,7 +158,8 @@ impl PiConnections {
                 })
             })
             .transpose()?;
-        RuntimeAttachmentService::new(pool.clone())
+        store
+            .runtime_attachments()
             .confirm_attachment(
                 session_id,
                 runtime_id,
@@ -196,11 +201,11 @@ impl PiConnections {
         let Some(connection) = connections.entries.get(session_id) else {
             return Ok(None);
         };
-        let pool = connections
-            .pool
+        let store = connections
+            .store
             .as_ref()
             .ok_or_else(|| Error::Unavailable("Pi control service is unavailable".into()))?;
-        let runtime = Self::current_runtime(pool, session_id).await?;
+        let runtime = Self::current_runtime(store, session_id).await?;
         if Some(connection.runtime_id.as_str()) != runtime.as_deref()
             || !connection.channel.available()
         {
@@ -358,12 +363,12 @@ impl PiConnections {
                 "Client connection was retired during request".into(),
             )));
         }
-        let pool = connections.pool.as_ref().ok_or_else(|| {
+        let store = connections.store.as_ref().ok_or_else(|| {
             E::from(Error::ControlUnknown(
                 "Pi control service is unavailable".into(),
             ))
         })?;
-        let current_runtime = Self::current_runtime(pool, session_id)
+        let current_runtime = Self::current_runtime(store, session_id)
             .await
             .map_err(|error| E::from(Error::ControlUnknown(error.to_string())))?;
         if current_runtime.as_deref() != Some(runtime_id)
@@ -378,7 +383,8 @@ impl PiConnections {
                     .entries
                     .get(session_id)
                     .is_none_or(|current| Arc::ptr_eq(current, &connection))
-                && RuntimeAttachmentService::new(pool.clone())
+                && store
+                    .runtime_attachments()
                     .session_exited_with_runtime(session_id, runtime_id)
                     .await
                     .map_err(|error| E::from(Error::ControlUnknown(error.to_string())))?

@@ -1,8 +1,8 @@
 use crate::{Adapter, Peer, peer::State, unavailable};
 use pontia_agent_control::{
-    AgentBindingService, ControlQueryService, EventIngestService, ReportedFact,
+    EventIngestService, ReportedFact,
     client_contract::NativeSessionFork,
-    sessions::{NativeSessionIdentity, NativeSessionService, NativeSubscription},
+    sessions::{NativeSessionIdentity, NativeSubscription},
 };
 use pontia_core::{
     Error, Result,
@@ -36,7 +36,9 @@ impl Adapter {
             .native
             .clone()
             .ok_or_else(unavailable)?;
-        let starts = ControlQueryService::new(events.db())
+        let starts = events
+            .store()
+            .queries()
             .list_events_by_type(session, EventType::TurnStarted, Some(turn))
             .await?;
         let target = starts
@@ -93,7 +95,9 @@ impl Adapter {
             .as_str()
             .filter(|value| !value.is_empty())
             .ok_or_else(|| Error::ControlUnknown("Claude fork receipt is incomplete".into()))?;
-        let existing = AgentBindingService::new(events.db())
+        let existing = events
+            .store()
+            .bindings()
             .binding_for_client_session("claude-agent", &fork.client_session_key)
             .await?;
         if existing
@@ -108,7 +112,9 @@ impl Adapter {
             .as_str()
             .filter(|value| !value.is_empty())
             .ok_or_else(|| Error::ControlUnknown("Claude fork receipt is incomplete".into()))?;
-        let source = AgentBindingService::new(events.db())
+        let source = events
+            .store()
+            .bindings()
             .binding_for_session(parent)
             .await?
             .ok_or_else(unavailable)?;
@@ -129,10 +135,12 @@ impl Adapter {
             .await?;
             return Ok(binding.session_id.clone());
         }
-        let instructions = pontia_agent_control::SessionInstructionsService::new(events.db())
+        let instructions = events
+            .store()
+            .instructions()
             .session_instructions(parent)
             .await?;
-        let queries = ControlQueryService::new(events.db());
+        let queries = events.store().queries();
         let settings = queries
             .session_launch_settings(parent)
             .await?
@@ -141,7 +149,8 @@ impl Adapter {
         let session = match existing {
             Some(binding) => binding.session_id,
             None => {
-                NativeSessionService::new(events.db(), events.clone())
+                events
+                    .native_sessions()
                     .resolve_subscription_session(
                         "claude-agent",
                         &fork.client_session_key,
@@ -162,7 +171,8 @@ impl Adapter {
                     .await?
             }
         };
-        NativeSessionService::new(events.db(), events.clone())
+        events
+            .native_sessions()
             .record_fork(
                 &session,
                 parent,
@@ -252,7 +262,9 @@ impl Adapter {
             let turn_id = started
                 .turn_id
                 .ok_or_else(|| Error::Domain("Forked Claude Turn identity is missing".into()))?;
-            let turn = ControlQueryService::new(events.db())
+            let turn = events
+                .store()
+                .queries()
                 .get_turn(child, &turn_id)
                 .await?
                 .ok_or_else(|| Error::NotFound(format!("Turn {turn_id} not found")))?;
@@ -319,7 +331,9 @@ async fn inherited_turns(
     session: &str,
     target: &str,
 ) -> Result<Vec<InheritedTurn>> {
-    ControlQueryService::new(events.db())
+    events
+        .store()
+        .queries()
         .completed_turns_before_with_boundaries(session, target)
         .await?
         .into_iter()

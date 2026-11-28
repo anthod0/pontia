@@ -1,7 +1,5 @@
 use crate::{Adapter, Peer, unavailable};
-use pontia_agent_control::{
-    AgentBindingService, ControlQueryService, EventIngestService, runtime::ControlTarget,
-};
+use pontia_agent_control::{ControlQueryService, EventIngestService, runtime::ControlTarget};
 use pontia_core::{Error, Result, domain::EventType};
 use std::sync::Arc;
 
@@ -38,7 +36,7 @@ impl Adapter {
         events: EventIngestService,
         target: &ControlTarget,
     ) -> Result<()> {
-        target.validate(&events.db()).await?;
+        events.store().validate_target(target).await?;
         let mut peers = self.peers.lock().await;
         if self.stopped.load(std::sync::atomic::Ordering::Acquire) {
             return Err(unavailable());
@@ -60,13 +58,15 @@ impl Adapter {
             ));
         }
         let runtime = target.instance()?;
-        let queries = ControlQueryService::new(events.db());
+        let queries = events.store().queries();
         if !exit_allows_resume(&queries, &target.session_id, Some(runtime)).await? {
             return Err(Error::StateConflict(
                 "Claude Code previous execution state is unknown".into(),
             ));
         }
-        let binding = AgentBindingService::new(events.db())
+        let binding = events
+            .store()
+            .bindings()
             .binding_for_session(&target.session_id)
             .await?
             .ok_or_else(unavailable)?;

@@ -3,7 +3,7 @@ use crate::{
     runtime::CodexRuntime,
     service::{CodexService, environment::environment_config, instructions},
 };
-use pontia_agent_control::{AgentBindingService, AgentControl};
+use pontia_agent_control::ClientServiceContext;
 use pontia_core::{Error, Result, SessionMode};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -17,7 +17,7 @@ pub(super) struct Prepared {
 }
 
 pub(super) async fn prepare(
-    state: &AgentControl,
+    state: &ClientServiceContext,
     operation: ThreadOperation,
     params: &mut Value,
 ) -> Result<Option<Prepared>> {
@@ -31,7 +31,9 @@ pub(super) async fn prepare(
         }
         if operation == ThreadOperation::Resume
             && let Some(thread) = params["threadId"].as_str()
-            && let Some(binding) = AgentBindingService::new(state.db())
+            && let Some(binding) = state
+                .store()
+                .bindings()
                 .binding_for_client_session("codex", thread)
                 .await?
             && state.queries().session_mode(&binding.session_id).await? == SessionMode::Restricted
@@ -53,7 +55,9 @@ pub(super) async fn prepare(
         None
     };
     let source = if operation != ThreadOperation::Start {
-        AgentBindingService::new(state.db())
+        state
+            .store()
+            .bindings()
             .binding_for_client_session("codex", params["threadId"].as_str().unwrap_or_default())
             .await?
     } else {
@@ -86,7 +90,8 @@ pub(super) async fn prepare(
         params.as_object_mut().unwrap().remove("path");
     }
     if let Some(binding) = &source
-        && crate::runtime::CodexServerTarget::for_session(&state.db(), &binding.session_id).await?
+        && crate::runtime::CodexServerTarget::for_session(&state.store(), &binding.session_id)
+            .await?
             != runtime.target
     {
         if mode == SessionMode::Restricted {
@@ -105,11 +110,10 @@ pub(super) async fn prepare(
     if let Some(binding) = &binding
         && mode == SessionMode::Restricted
     {
-        pontia_agent_control::workspaces::require_active_workspace(
-            &state.db(),
-            &binding.launch_cwd,
-        )
-        .await?;
+        state
+            .store()
+            .require_active_workspace(&binding.launch_cwd)
+            .await?;
         let config = CodexService::new(state.event_ingest_service())
             .session_config(&session, &connection, &binding.launch_cwd)
             .await?;
@@ -165,7 +169,7 @@ pub(super) async fn prepare(
             .and_then(|value| value["thread"]["cwd"].as_str())
     });
     let Some(cwd) = cwd else { return Ok(None) };
-    match pontia_agent_control::workspaces::require_active_workspace(&state.db(), cwd).await {
+    match state.store().require_active_workspace(cwd).await {
         Ok(_) => {}
         Err(Error::NotFound(_) | Error::StateConflict(_) | Error::Io(_)) => return Ok(None),
         Err(error) => return Err(error),

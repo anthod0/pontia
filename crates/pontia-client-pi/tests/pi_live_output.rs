@@ -127,7 +127,7 @@ impl Drop for Session {
 
 fn connect(state: &AgentControl) -> Arc<PiRpcPeer> {
     let (server, client) = UnixStream::pair().unwrap();
-    tokio::spawn(serve_connection(state.clone(), server));
+    tokio::spawn(serve_connection(state.client_context(), server));
     PiRpcPeer::new(client).0
 }
 

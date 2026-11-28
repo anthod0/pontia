@@ -42,7 +42,7 @@ pub(super) async fn attach(
         .unwrap();
     let (left, right) = UnixStream::pair().unwrap();
     tokio::spawn(pontia_client_pi::ipc::serve_connection(
-        state.control().clone(),
+        state.control().client_context(),
         left,
     ));
     let (peer, mut requests) = PiRpcPeer::new(right);

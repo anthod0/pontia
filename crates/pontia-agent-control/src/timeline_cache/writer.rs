@@ -196,7 +196,7 @@ impl TimelineCacheWriter {
                     registration
                         .session
                         .as_ref()?
-                        .native_history(db.clone(), request.clone())
+                        .native_history(crate::ClientControlStore::new(db.clone()), request.clone())
                 })
             else {
                 return Ok(());

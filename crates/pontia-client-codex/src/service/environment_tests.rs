@@ -152,7 +152,7 @@ set = {{ PROBE_NATIVE = "native", PONTIA_SESSION_ID = "wrong-native" }}
         let proxy = crate::proxy::Proxy::bind(root.path()).await.unwrap();
         let (shutdown, stop) = tokio::sync::watch::channel(false);
         let (observations, incoming) = tokio::sync::mpsc::channel(128);
-        let state = app.clone();
+        let state = app.client_context();
         let socket = root.path().join("app-server.sock");
         let proxy_task = tokio::spawn(async move {
             proxy
@@ -160,7 +160,7 @@ set = {{ PROBE_NATIVE = "native", PONTIA_SESSION_ID = "wrong-native" }}
                 .await
                 .unwrap()
         });
-        let observer = tokio::spawn(super::proxy_observer::run(app.clone(), incoming));
+        let observer = tokio::spawn(super::proxy_observer::run(app.client_context(), incoming));
         let mut cli = crate::runtime::protocol::open(&crate::proxy::socket_path(root.path()))
             .await
             .unwrap();

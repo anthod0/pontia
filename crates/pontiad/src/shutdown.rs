@@ -1,8 +1,6 @@
 use std::io::{BufRead, Write};
 
-use pontia_agent_control::runtime::shutdown::{
-    Shutdown, ShutdownRequest, ShutdownUpdate, existing_database,
-};
+use pontia_agent_control::runtime::shutdown::{Shutdown, ShutdownRequest, ShutdownUpdate};
 use tokio_stream::StreamExt;
 
 pub(crate) async fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -37,4 +35,13 @@ pub(crate) async fn run() -> Result<(), Box<dyn std::error::Error>> {
         out.flush()?;
     }
     Ok(())
+}
+
+/// Open only an existing control-plane database. A first-run home has no records.
+async fn existing_database(url: &str) -> pontia_core::Result<Option<sqlx::SqlitePool>> {
+    let options: sqlx::sqlite::SqliteConnectOptions = url.parse()?;
+    if !options.get_filename().try_exists()? {
+        return Ok(None);
+    }
+    Ok(Some(sqlx::SqlitePool::connect_with(options).await?))
 }

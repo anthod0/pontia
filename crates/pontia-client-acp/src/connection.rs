@@ -5,9 +5,9 @@ use crate::{
 };
 use agent_client_protocol::v1::schema::{SessionConfigOption, SessionId, SystemPrompt};
 use pontia_agent_control::{
-    AgentControl, ControlQueryService, EventIngestService,
+    ClientServiceContext, EventIngestService,
     ipc::rpc::{Requests, RpcPeer, RpcRequest},
-    runtime::{AttachmentBinding, AttachmentProcess, RuntimeAttachmentService},
+    runtime::{AttachmentBinding, AttachmentProcess},
 };
 use pontia_core::{Error, Result};
 use pontia_runtime::ProcessFingerprint;
@@ -56,12 +56,17 @@ struct RuntimeAttachment {
 }
 
 impl RuntimeAttachment {
-    async fn confirm(&self, app: &AgentControl, process: &ProcessFingerprint) -> Result<()> {
+    async fn confirm(
+        &self,
+        app: &ClientServiceContext,
+        process: &ProcessFingerprint,
+    ) -> Result<()> {
         let binding = self
             .client_session_key
             .as_deref()
             .map_or(AttachmentBinding::Launch, AttachmentBinding::Native);
-        RuntimeAttachmentService::new(app.db())
+        app.store()
+            .runtime_attachments()
             .confirm_attachment(
                 &self.session_id,
                 &self.runtime_id,
@@ -147,9 +152,7 @@ pub(crate) async fn restore(
     state.model_windows = context.model_windows;
     state.blocked = context.blocked;
     if let Some(mut prompt) = context.active
-        && let Some(turn) = ControlQueryService::new(events.db())
-            .active_turn(session)
-            .await?
+        && let Some(turn) = events.store().queries().active_turn(session).await?
         && turn.turn_id == prompt.turn
     {
         prompt.started = turn.state == "running";
@@ -170,7 +173,7 @@ pub(crate) async fn restore(
 impl AcpAdapter {
     pub(crate) async fn attach(
         &self,
-        app: AgentControl,
+        app: ClientServiceContext,
         process_id: Option<u32>,
         rpc: Arc<RpcPeer>,
         first: RpcRequest,
@@ -216,7 +219,7 @@ impl AcpAdapter {
                     .queries()
                     .session_metadata(&identity.session_id)
                     .await?
-                    .ok_or(sqlx::Error::RowNotFound)?["acp_agent_id"]
+                    .ok_or_else(Error::missing_record)?["acp_agent_id"]
                     .as_str()
                     .unwrap_or_default()
                     .to_owned(),

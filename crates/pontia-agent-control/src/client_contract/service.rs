@@ -1,4 +1,4 @@
-use crate::{AgentControl, client_contract::ClientOperation};
+use crate::{ClientServiceContext, client_contract::ClientOperation};
 use tokio::task::JoinHandle;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -32,7 +32,7 @@ pub trait ClientService: Send + Sync {
 
     fn connect(
         &self,
-        _state: AgentControl,
+        _state: ClientServiceContext,
         _process_id: Option<u32>,
         peer: std::sync::Arc<crate::ipc::rpc::RpcPeer>,
         _first: crate::ipc::rpc::RpcRequest,
@@ -50,6 +50,6 @@ pub trait ClientService: Send + Sync {
     /// Detached work still subscribes to the application's shutdown signal.
     fn start<'a>(
         &'a self,
-        state: AgentControl,
+        state: ClientServiceContext,
     ) -> ClientOperation<'a, Option<JoinHandle<pontia_core::Result<()>>>>;
 }

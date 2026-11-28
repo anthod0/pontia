@@ -28,12 +28,16 @@ impl ClientSession for UnavailableStatusClient {
     ) -> ClientOperation<'a, ClientExitOutcome> {
         unreachable!()
     }
-    fn available<'a>(&'a self, _: sqlx::SqlitePool, _: &'a str) -> ClientOperation<'a, bool> {
+    fn available<'a>(
+        &'a self,
+        _: pontia_agent_control::ClientControlStore,
+        _: &'a str,
+    ) -> ClientOperation<'a, bool> {
         unreachable!()
     }
     fn details<'a>(
         &'a self,
-        _: sqlx::SqlitePool,
+        _: pontia_agent_control::ClientControlStore,
         _: &'a str,
     ) -> ClientOperation<'a, ClientSessionDetails> {
         unreachable!()

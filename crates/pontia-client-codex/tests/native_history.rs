@@ -38,7 +38,7 @@ async fn history(path: &Path) -> Arc<dyn NativeHistory> {
         .session
         .unwrap()
         .native_history(
-            pool,
+            pontia_agent_control::ClientControlStore::new(pool),
             AgentBindingResolveRequest {
                 id: "binding".into(),
                 session_id: "session".into(),

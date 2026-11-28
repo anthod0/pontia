@@ -1,8 +1,5 @@
 use agent_client_protocol::v1::schema::Meta;
-use pontia_agent_control::{
-    SessionInstructionsService,
-    client_contract::{ClientInstructions, InstructionsBindingInput},
-};
+use pontia_agent_control::client_contract::{ClientInstructions, InstructionsBindingInput};
 use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -59,8 +56,12 @@ pub(crate) fn prompt_meta(key: &str, text: String) -> Meta {
     Meta::from_iter([entry])
 }
 
-pub(crate) async fn bound_prompt(db: &sqlx::SqlitePool, session: &str) -> Result<String> {
-    SessionInstructionsService::new(db.clone())
+pub(crate) async fn bound_prompt(
+    store: &pontia_agent_control::ClientControlStore,
+    session: &str,
+) -> Result<String> {
+    store
+        .instructions()
         .session_instructions(session)
         .await?
         .map(serde_json::from_value::<Instructions>)
@@ -72,13 +73,13 @@ pub(crate) async fn bound_prompt(db: &sqlx::SqlitePool, session: &str) -> Result
 pub(crate) async fn restore_load_meta(
     meta: &mut Meta,
     binding: &Value,
-    db: &sqlx::SqlitePool,
+    store: &pontia_agent_control::ClientControlStore,
     session: &str,
 ) -> Result<()> {
     if binding["new_session_instructions_meta_key"].as_str() == Some(ANTIGRAVITY_APPEND) {
         meta.extend(prompt_meta(
             ANTIGRAVITY_APPEND,
-            bound_prompt(db, session).await?,
+            bound_prompt(store, session).await?,
         ));
     }
     Ok(())

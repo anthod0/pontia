@@ -3,8 +3,7 @@ use crate::{
     proxy::unsubscribe_confirmed,
     runtime::{CodexRuntime, SubscriptionState},
 };
-use pontia_agent_control::runtime::RuntimeAttachmentService;
-use pontia_agent_control::{AgentBindingService, PontiaEvent, PontiaEventSource, PontiaEventType};
+use pontia_agent_control::{PontiaEvent, PontiaEventSource, PontiaEventType};
 use pontia_core::{Error, Result};
 use serde_json::json;
 
@@ -13,7 +12,9 @@ const ROLE: &str = "codex_proxy";
 impl CodexService {
     // A freshly bound proxy has no connections from the previous pontiad instance.
     pub(super) async fn retire_disconnected_proxy_runtimes(&self) -> Result<()> {
-        let records: Vec<(String, String)> = RuntimeAttachmentService::new(self.pool.clone())
+        let records: Vec<(String, String)> = self
+            .store
+            .runtime_attachments()
             .list_active_by_role(ROLE)
             .await?;
         for (session, runtime_id) in records {
@@ -55,7 +56,9 @@ impl CodexService {
         runtime_id: &str,
         daemon: &crate::runtime::daemon::DaemonIdentity,
     ) -> Result<()> {
-        let Some(binding) = AgentBindingService::new(self.pool.clone())
+        let Some(binding) = self
+            .store
+            .bindings()
             .binding_for_client_session("codex", thread)
             .await?
         else {
@@ -200,7 +203,9 @@ impl CodexService {
         session: &str,
         thread: &str,
     ) -> Result<()> {
-        let active: i64 = RuntimeAttachmentService::new(self.pool.clone())
+        let active: i64 = self
+            .store
+            .runtime_attachments()
             .count_running_by_role(session, ROLE)
             .await?;
         if active != 0
@@ -213,7 +218,7 @@ impl CodexService {
             .queries()
             .session_state(session)
             .await?
-            .ok_or(sqlx::Error::RowNotFound)?
+            .ok_or_else(Error::missing_record)?
             == pontia_core::domain::SessionState::Exited;
         if exited {
             return Ok(());

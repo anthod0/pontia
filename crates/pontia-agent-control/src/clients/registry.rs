@@ -125,7 +125,7 @@ impl ClientRegistry {
             else {
                 continue;
             };
-            match service.start(state.clone()).await {
+            match service.start(state.client_context()).await {
                 Ok(Some(task)) => tasks.tasks.push(task),
                 Ok(None) => {}
                 Err(error) => {

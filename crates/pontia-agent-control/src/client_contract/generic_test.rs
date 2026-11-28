@@ -228,14 +228,14 @@ impl crate::client_contract::ClientSession for GenericTestClient {
     }
     fn available<'a>(
         &'a self,
-        _pool: sqlx::SqlitePool,
+        _store: crate::ClientControlStore,
         _session: &'a str,
     ) -> crate::client_contract::ClientOperation<'a, bool> {
         Box::pin(async { Ok(true) })
     }
     fn details<'a>(
         &'a self,
-        _pool: sqlx::SqlitePool,
+        _store: crate::ClientControlStore,
         _session: &'a str,
     ) -> crate::client_contract::ClientOperation<'a, crate::client_contract::ClientSessionDetails>
     {

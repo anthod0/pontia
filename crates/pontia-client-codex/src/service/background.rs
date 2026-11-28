@@ -1,6 +1,6 @@
 use super::CodexObserver;
 use pontia_agent_control::{
-    AgentControl,
+    ClientServiceContext,
     client_contract::{ClientOperation, ClientService, ClientServicePhase},
 };
 use tokio::task::JoinHandle;
@@ -23,7 +23,7 @@ impl ClientService for CodexBackgroundService {
 
     fn start<'a>(
         &'a self,
-        state: AgentControl,
+        state: ClientServiceContext,
     ) -> ClientOperation<'a, Option<JoinHandle<pontia_core::Result<()>>>> {
         Box::pin(async move {
             use crate::runtime::CodexServerTarget;

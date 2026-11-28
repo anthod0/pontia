@@ -95,14 +95,14 @@ impl ClientSession for Channel {
     }
     fn available<'a>(
         &'a self,
-        _pool: sqlx::SqlitePool,
+        _store: pontia_agent_control::ClientControlStore,
         _session: &'a str,
     ) -> ClientOperation<'a, bool> {
         Box::pin(async move { Ok(!self.closed.load(Ordering::SeqCst)) })
     }
     fn details<'a>(
         &'a self,
-        _pool: sqlx::SqlitePool,
+        _store: pontia_agent_control::ClientControlStore,
         _session: &'a str,
     ) -> ClientOperation<'a, ClientSessionDetails> {
         Box::pin(async { Ok(ClientSessionDetails { data: json!({}) }) })

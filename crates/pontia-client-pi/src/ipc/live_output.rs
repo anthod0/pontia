@@ -1,5 +1,5 @@
 use pontia_agent_control::{
-    AgentControl, LiveOutputBatch, LiveOutputClose, LiveOutputIdentity, LiveOutputItem,
+    ClientServiceContext, LiveOutputBatch, LiveOutputClose, LiveOutputIdentity, LiveOutputItem,
     LiveOutputProducer, LiveOutputPublishOutcome, LiveOutputSnapshotReplacement, LiveOutputUpdate,
 };
 use serde::{Deserialize, Serialize};
@@ -45,7 +45,7 @@ struct LiveOutputResponse {
 }
 
 pub(super) async fn publish(
-    state: &AgentControl,
+    state: &ClientServiceContext,
     identity: &NativeAttachment,
     params: Value,
 ) -> Result<Value> {

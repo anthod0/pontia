@@ -88,7 +88,7 @@ async fn runtime_events_project_only_the_named_runtime() {
     let created_at: String = sqlx::query_scalar(
         "SELECT created_at FROM session_runtimes WHERE runtime_id = 'runtime_a'",
     )
-    .fetch_one(&service.db())
+    .fetch_one(&service.pool)
     .await
     .unwrap();
     service
@@ -127,7 +127,7 @@ async fn runtime_events_project_only_the_named_runtime() {
         "SELECT runtime_id, state FROM session_runtimes WHERE session_id = ? ORDER BY runtime_id",
     )
     .bind("sess_runtime")
-    .fetch_all(&service.db())
+    .fetch_all(&service.pool)
     .await
     .unwrap();
     assert_eq!(
@@ -160,7 +160,7 @@ async fn runtime_events_project_only_the_named_runtime() {
     let restarted: (String, String) = sqlx::query_as(
         "SELECT state, created_at FROM session_runtimes WHERE runtime_id = 'runtime_a'",
     )
-    .fetch_one(&service.db())
+    .fetch_one(&service.pool)
     .await
     .unwrap();
     assert_eq!(restarted, ("starting".to_string(), created_at));
@@ -300,7 +300,7 @@ async fn pi_session_and_runtime_events_roll_back_together() {
     sqlx::raw_sql(
         "CREATE TRIGGER reject_runtime_ready BEFORE INSERT ON events WHEN NEW.event_type = 'runtime.ready' BEGIN SELECT RAISE(ABORT, 'injected runtime event failure'); END",
     )
-    .execute(&service.db())
+    .execute(&fixture.pool)
     .await
     .unwrap();
 
@@ -319,7 +319,7 @@ async fn pi_session_and_runtime_events_roll_back_together() {
         "SELECT s.state, r.state FROM sessions s JOIN session_runtimes r USING(session_id) WHERE s.session_id = ?",
     )
     .bind("sess_pi_rollback")
-    .fetch_one(&service.db())
+    .fetch_one(&fixture.pool)
     .await
     .unwrap();
     assert_eq!(states, ("starting".to_string(), "starting".to_string()));
@@ -328,7 +328,7 @@ async fn pi_session_and_runtime_events_roll_back_together() {
             "SELECT COUNT(*) FROM events WHERE session_id = ? AND event_type IN ('session.ready', 'runtime.ready')",
         )
         .bind("sess_pi_rollback")
-        .fetch_one(&service.db())
+        .fetch_one(&fixture.pool)
         .await
         .unwrap(),
         0

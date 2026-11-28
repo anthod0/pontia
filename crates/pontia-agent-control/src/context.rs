@@ -4,4 +4,4 @@ mod state;
 
 pub use builder::AgentControlBuilder;
 pub use shutdown::ShutdownSignal;
-pub use state::AgentControl;
+pub use state::{AgentControl, ClientServiceContext};

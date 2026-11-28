@@ -3,10 +3,7 @@ use crate::runtime::{
     CodexRuntime, SubscriptionState,
     protocol::{CONTROL_TIMEOUT, Connection, Notification},
 };
-use pontia_agent_control::{
-    AgentBindingService,
-    client_contract::{ClientExitMode, ClientExitOutcome},
-};
+use pontia_agent_control::client_contract::{ClientExitMode, ClientExitOutcome};
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 use tokio::sync::broadcast;
@@ -20,10 +17,8 @@ impl CodexService {
         let session = &target.session_id;
         let runtime = self.runtime(session).await?;
         let _operation = runtime.lock_session(session).await;
-        target.validate(&self.pool).await?;
-        let binding = AgentBindingService::new(self.pool.clone())
-            .binding_for_session(session)
-            .await?;
+        self.store.validate_target(target).await?;
+        let binding = self.store.bindings().binding_for_session(session).await?;
         if let Some(binding) = binding {
             if !self
                 .close_thread(session, &runtime, &binding.client_session_key, mode)

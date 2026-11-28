@@ -5,10 +5,7 @@ use agent_client_protocol::{
     schema::ProtocolVersion,
     v1::{ConnectionTo, schema::*},
 };
-use pontia_agent_control::{
-    AgentBindingService, ControlQueryService,
-    client_contract::raw_transcripts::AgentBindingResolveRequest,
-};
+use pontia_agent_control::client_contract::raw_transcripts::AgentBindingResolveRequest;
 use pontia_core::{Error, Result, domain::SessionState};
 
 use super::{Replay, unavailable};
@@ -23,12 +20,12 @@ pub(super) async fn load(
     adapter: &AcpAdapter,
     source: &AgentBindingResolveRequest,
 ) -> Result<Replay> {
-    let db = adapter.pool.get().ok_or_else(unavailable)?;
-    let queries = ControlQueryService::new(db.clone());
+    let store = adapter.store.get().ok_or_else(unavailable)?;
+    let queries = store.queries();
     let state = queries
         .session_state(&source.session_id)
         .await?
-        .ok_or(sqlx::Error::RowNotFound)?;
+        .ok_or_else(Error::missing_record)?;
     if state != SessionState::Exited {
         return Err(if state == SessionState::Error {
             Error::Conflict {
@@ -39,7 +36,8 @@ pub(super) async fn load(
             super::pending("Waiting for ACP session connection")
         });
     }
-    let binding = AgentBindingService::new(db.clone())
+    let binding = store
+        .bindings()
         .binding_for_session(&source.session_id)
         .await?
         .filter(|binding| {
@@ -77,11 +75,12 @@ pub(super) async fn load(
     }
     let mut load = LoadSessionRequest::new(SessionId::new(native), cwd.to_owned());
     let mut prefix = None;
-    instructions::restore_load_meta(&mut meta, &binding.metadata, db, &source.session_id).await?;
+    instructions::restore_load_meta(&mut meta, &binding.metadata, store, &source.session_id)
+        .await?;
     if binding.metadata["system_prompt_injected"] == true
         && binding.metadata["new_session_instructions_meta_key"].is_null()
     {
-        let text = instructions::bound_prompt(db, &source.session_id).await?;
+        let text = instructions::bound_prompt(store, &source.session_id).await?;
         if binding.metadata["first_prompt_instructions"] == true {
             prefix = Some(crate::instructions::prompt_prefix(&text));
         } else {

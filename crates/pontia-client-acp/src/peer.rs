@@ -319,7 +319,7 @@ pub(crate) fn start_command(config: &AcpLaunch) -> String {
 
 impl Peer {
     pub async fn connect(
-        app: &pontia_agent_control::AgentControl,
+        app: &pontia_agent_control::ClientServiceContext,
         identity: PeerIdentity<'_>,
         cwd: &Path,
         relay: Arc<Relay>,
@@ -677,7 +677,10 @@ impl Peer {
             let supported = crate::kiro::steering_supported(self, &initialize).await?;
             self.state.lock().await.negotiated.kiro_steer = supported;
         }
-        let instructions = pontia_agent_control::SessionInstructionsService::new(self.events.db())
+        let instructions = self
+            .events
+            .store()
+            .instructions()
             .session_instructions(&self.session)
             .await?
             .map(serde_json::from_value::<crate::instructions::Instructions>)
@@ -839,8 +842,9 @@ impl Peer {
             let meta = match &state.load_meta {
                 Some(meta) => meta.clone(),
                 None => {
-                    let db = self.events.db();
-                    let binding = pontia_agent_control::AgentBindingService::new(db.clone())
+                    let store = self.events.store();
+                    let binding = store
+                        .bindings()
                         .binding_for_session(&self.session)
                         .await?
                         .ok_or_else(crate::history::unavailable)?;
@@ -848,7 +852,7 @@ impl Peer {
                     crate::instructions::restore_load_meta(
                         &mut meta,
                         &binding.metadata,
-                        &db,
+                        &store,
                         &self.session,
                     )
                     .await?;

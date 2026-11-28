@@ -56,7 +56,7 @@ pub(crate) async fn send(
     input: &str,
 ) -> Result<InputReceipt> {
     let mut state = peer.state.lock().await;
-    target.validate(&events.db()).await?;
+    events.store().validate_target(target).await?;
     if !state.current || state.closing || !state.ready {
         return Err(Error::Unavailable("ACP connection unavailable".into()));
     }

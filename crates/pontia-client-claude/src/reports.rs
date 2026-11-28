@@ -3,8 +3,7 @@ use crate::{
     peer::{Peer, State, field, invalid},
 };
 use pontia_agent_control::{
-    ControlQueryService, EventIngestService, EventReportError, ReportedFact,
-    client_contract::ClientEventInterpreter,
+    EventIngestService, EventReportError, ReportedFact, client_contract::ClientEventInterpreter,
 };
 use pontia_core::{
     Error, Result,
@@ -90,7 +89,7 @@ impl Peer {
         let HostReport { kind, key, event } = report;
         // The host identifies input and result messages. Pontia supplied the input
         // summary, inbox association and canonical Turn, which can outlive this Peer.
-        let queries = ControlQueryService::new(events.db());
+        let queries = events.store().queries();
         let existing = queries.find_by_report_key(&self.session, kind, key).await?;
         let mut replay = existing.is_some();
         let mut turn_id = None;

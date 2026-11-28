@@ -5,7 +5,7 @@ use super::*;
 use crate::service::confirmed_exits;
 use crate::{CodexObserver, proxy::Proxy};
 use futures_util::{SinkExt, StreamExt};
-use pontia_agent_control::clients::ClientRegistry;
+use pontia_agent_control::{AgentBindingService, AgentControl, clients::ClientRegistry};
 use serde_json::{Value, json};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{
@@ -222,14 +222,14 @@ impl Fixture {
         }
         let proxy = Proxy::bind(root.path()).await.unwrap();
         let (observations, incoming) = mpsc::channel(128);
-        let proxy_state = app.clone();
+        let proxy_state = app.client_context();
         tasks.spawn(async move {
             proxy
                 .run(stop, move || Ok(socket.clone()), observations, proxy_state)
                 .await
                 .unwrap();
         });
-        tasks.spawn(run(app.clone(), incoming));
+        tasks.spawn(run(app.client_context(), incoming));
         Self {
             app,
             root,
@@ -856,7 +856,7 @@ async fn native_start_pins_profile_and_resume_preserves_it_without_profile_queri
         f.threads.lock().await[native].developer_instructions,
         expected
     );
-    let binding = crate::instructions::CodexInstructions::new(f.app.db())
+    let binding = crate::instructions::CodexInstructions::new(f.app.store())
         .codex_binding(&session)
         .await
         .unwrap()

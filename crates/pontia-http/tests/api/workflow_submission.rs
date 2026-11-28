@@ -94,7 +94,7 @@ pub(super) async fn seed_running_workflow(
         .expect("bind native Pi session");
     let (server, client) = UnixStream::pair().unwrap();
     tokio::spawn(pontia_client_pi::ipc::serve_connection(
-        app.state.control().clone(),
+        app.state.control().client_context(),
         server,
     ));
     let (client, requests) = PiRpcPeer::new(client);

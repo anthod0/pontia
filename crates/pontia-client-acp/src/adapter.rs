@@ -14,8 +14,9 @@ use crate::{
 use agent_client_protocol::v1::schema::{
     CancelNotification, ContentBlock, PromptRequest, TextContent,
 };
+use pontia_agent_control::ClientControlStore;
 use pontia_agent_control::{
-    AgentBindingService, AgentControl, ControlQueryService, EventIngestService, PontiaEventType,
+    ClientServiceContext, EventIngestService, PontiaEventType,
     client_contract::{
         AgentClientCapabilities, ClientExitMode, ClientExitOutcome, ClientInteractions,
         ClientOperation, ClientService, ClientServicePhase, ClientSession, ClientSessionDetails,
@@ -33,7 +34,6 @@ use pontia_core::{
 };
 use pontia_runtime::RuntimeStartRequest;
 use serde_json::json;
-use sqlx::SqlitePool;
 use tokio::sync::Mutex;
 
 use crate::{
@@ -61,7 +61,7 @@ fn register(agents: AcpAgents, relay_executable: Option<std::path::PathBuf>) -> 
         recovery: Arc::new(Mutex::new(Some(recovery))),
         relay_executable,
         config: config.clone(),
-        pool: Arc::new(OnceLock::new()),
+        store: Arc::new(OnceLock::new()),
         root: Default::default(),
         connection_gate: Arc::default(),
         peers: Arc::new(Mutex::new(HashMap::new())),
@@ -87,7 +87,7 @@ pub(crate) struct AcpAdapter {
     pub(crate) reconnect: tokio::sync::mpsc::UnboundedSender<String>,
     recovery: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<String>>>>,
     pub(crate) config: Arc<crate::configuration::AcpConfiguration>,
-    pub(crate) pool: Arc<OnceLock<SqlitePool>>,
+    pub(crate) store: Arc<OnceLock<ClientControlStore>>,
     pub(crate) root: Arc<OnceLock<std::path::PathBuf>>,
     pub(crate) relay_executable: Option<std::path::PathBuf>,
     pub(crate) connection_gate: Arc<Mutex<()>>,
@@ -124,7 +124,7 @@ impl AcpAdapter {
 impl ClientSession for AcpAdapter {
     fn native_history(
         &self,
-        _pool: SqlitePool,
+        _store: ClientControlStore,
         binding: pontia_agent_control::client_contract::raw_transcripts::AgentBindingResolveRequest,
     ) -> Option<Arc<dyn pontia_agent_control::client_contract::native_history::NativeHistory>> {
         Some(crate::history::native_history(self.clone(), binding))
@@ -133,10 +133,8 @@ impl ClientSession for AcpAdapter {
     fn creation_options(&self) -> ClientOperation<'_, Option<Vec<SessionCreationOption>>> {
         Box::pin(async move {
             let mut options = Vec::new();
-            let records = if let Some(pool) = self.pool.get() {
-                ControlQueryService::new(pool.clone())
-                    .enabled_client_versions("acp")
-                    .await?
+            let records = if let Some(store) = self.store.get() {
+                store.queries().enabled_client_versions("acp").await?
             } else {
                 Vec::new()
             };
@@ -169,13 +167,13 @@ impl ClientSession for AcpAdapter {
             }
             let root = std::path::absolute(root)?;
             let _ = self.root.set(root.clone());
-            let pool = events.db();
-            let queries = ControlQueryService::new(pool.clone());
+            let store = events.store();
+            let queries = store.queries();
             let metadata = queries
                 .session_metadata(&request.session_id)
                 .await?
-                .ok_or(sqlx::Error::RowNotFound)?;
-            let bindings = AgentBindingService::new(pool.clone());
+                .ok_or_else(pontia_core::Error::missing_record)?;
+            let bindings = store.bindings();
             let binding = bindings.binding_for_session(&request.session_id).await?;
             let bound_identity = binding
                 .as_ref()
@@ -322,7 +320,7 @@ impl ClientSession for AcpAdapter {
                 if !state.current || self.stopped.load(Ordering::Acquire) {
                     return Err(unavailable());
                 }
-                let session_state = queries.session_state(&request.session_id).await?.ok_or(sqlx::Error::RowNotFound)?;
+                let session_state = queries.session_state(&request.session_id).await?.ok_or_else(pontia_core::Error::missing_record)?;
                 if session_state == SessionState::Exited { return Err(Error::StateConflict("ACP Session exited during recovery".into())); }
                 state.native = Some(native);
                 state.blocked = binding.is_some() && queries.session_has_active_turn(&request.session_id).await?;
@@ -430,8 +428,10 @@ impl ClientSession for AcpAdapter {
                         "ACP Session model changed during verification".into(),
                     ));
                 }
-                target.validate(&events.db()).await?;
-                let turn = ControlQueryService::new(events.db())
+                events.store().validate_target(target).await?;
+                let turn = events
+                    .store()
+                    .queries()
                     .active_turn(&target.session_id)
                     .await?
                     .ok_or_else(|| {
@@ -567,7 +567,7 @@ impl ClientSession for AcpAdapter {
             let result: Result<()> = async {
                 let peer = self.peer(&target.session_id).await?;
                 let mut state = peer.state.lock().await;
-                target.validate(&events.db()).await?;
+                events.store().validate_target(target).await?;
                 if !state.current || state.closing {
                     return Err(unavailable());
                 }
@@ -633,7 +633,7 @@ impl ClientSession for AcpAdapter {
             }
             let native = {
                 let mut state = peer.state.lock().await;
-                target.validate(&events.db()).await?;
+                events.store().validate_target(target).await?;
                 if !state.current || state.closing {
                     return Err(unavailable());
                 }
@@ -692,7 +692,7 @@ impl ClientSession for AcpAdapter {
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move {
             let peer = self.peer(&target.session_id).await?;
-            target.validate(&events.db()).await?;
+            events.store().validate_target(target).await?;
             if target.instance()? != peer.runtime {
                 return Err(unavailable());
             }
@@ -711,7 +711,7 @@ impl ClientSession for AcpAdapter {
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move {
             let peer = self.peer(&target.session_id).await?;
-            target.validate(&events.db()).await?;
+            events.store().validate_target(target).await?;
             if target.instance()? != peer.runtime {
                 return Err(unavailable());
             }
@@ -740,12 +740,8 @@ impl ClientSession for AcpAdapter {
         Box::pin(async move {
             // ACP has no capability flag for usage reports. The persisted observation
             // remains evidence of support even when the peer is disconnected.
-            let metadata = match self.pool.get() {
-                Some(pool) => {
-                    ControlQueryService::new(pool.clone())
-                        .session_metadata(session)
-                        .await?
-                }
+            let metadata = match self.store.get() {
+                Some(store) => store.queries().session_metadata(session).await?,
                 None => None,
             }
             .unwrap_or_default();
@@ -787,7 +783,11 @@ impl ClientSession for AcpAdapter {
         })
     }
 
-    fn available<'a>(&'a self, _pool: SqlitePool, session: &'a str) -> ClientOperation<'a, bool> {
+    fn available<'a>(
+        &'a self,
+        _store: ClientControlStore,
+        session: &'a str,
+    ) -> ClientOperation<'a, bool> {
         Box::pin(async move {
             let Ok(peer) = self.peer(session).await else {
                 return Ok(false);
@@ -802,14 +802,12 @@ impl ClientSession for AcpAdapter {
 
     fn details<'a>(
         &'a self,
-        pool: SqlitePool,
+        store: ClientControlStore,
         session: &'a str,
     ) -> ClientOperation<'a, ClientSessionDetails> {
         Box::pin(async move {
-            let queries = ControlQueryService::new(pool.clone());
-            let binding = AgentBindingService::new(pool)
-                .binding_for_session(session)
-                .await?;
+            let queries = store.queries();
+            let binding = store.bindings().binding_for_session(session).await?;
             let (agent_id, agent_info, system_prompt_injected) = match binding {
                 Some(binding) => (
                     Some(identity::decode(&binding.client_session_key)?[0].clone()),
@@ -820,7 +818,7 @@ impl ClientSession for AcpAdapter {
                     queries
                         .session_metadata(session)
                         .await?
-                        .ok_or(sqlx::Error::RowNotFound)?["acp_agent_id"]
+                        .ok_or_else(pontia_core::Error::missing_record)?["acp_agent_id"]
                         .as_str()
                         .map(str::to_owned),
                     serde_json::Value::Null,
@@ -836,7 +834,7 @@ impl ClientSession for AcpAdapter {
             let session_state = queries
                 .session_state(session)
                 .await?
-                .ok_or(sqlx::Error::RowNotFound)?;
+                .ok_or_else(pontia_core::Error::missing_record)?;
             let runtime_state = queries
                 .session_runtimes(session)
                 .await?
@@ -892,13 +890,13 @@ impl ClientSession for AcpAdapter {
         target: &'a ControlTarget,
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move {
-            let pool = events.db();
-            target.validate(&pool).await?;
-            let queries = ControlQueryService::new(pool);
+            let store = events.store();
+            store.validate_target(target).await?;
+            let queries = store.queries();
             let settings = queries
                 .session_launch_settings(&target.session_id)
                 .await?
-                .ok_or(sqlx::Error::RowNotFound)?;
+                .ok_or_else(pontia_core::Error::missing_record)?;
             self.provision(
                 events,
                 self.root.get().ok_or_else(unavailable)?,
@@ -945,7 +943,7 @@ impl ClientService for AcpAdapter {
     }
     fn connect(
         &self,
-        state: AgentControl,
+        state: ClientServiceContext,
         process_id: Option<u32>,
         rpc: Arc<pontia_agent_control::ipc::rpc::RpcPeer>,
         first: pontia_agent_control::ipc::rpc::RpcRequest,
@@ -958,7 +956,7 @@ impl ClientService for AcpAdapter {
     }
     fn start<'a>(
         &'a self,
-        state: AgentControl,
+        state: ClientServiceContext,
     ) -> ClientOperation<'a, Option<tokio::task::JoinHandle<Result<()>>>> {
         Box::pin(async move {
             let root = std::path::absolute(state.pontia_home())?;
@@ -966,7 +964,7 @@ impl ClientService for AcpAdapter {
                 .set(root)
                 .map_err(|_| Error::StateConflict("ACP service already started".into()))?;
             let _ = self.interactions.set(state.interactions());
-            let _ = self.pool.set(state.db());
+            let _ = self.store.set(state.store());
             let adapter = self.clone();
             let mut shutdown = state.shutdown().subscribe();
             let mut recovery = self.recovery.lock().await.take().ok_or_else(unavailable)?;
@@ -982,7 +980,7 @@ impl ClientService for AcpAdapter {
                             recoveries.spawn(async move {
                                 let result = async {
                                     let _launch = pontia_runtime::launch_lock::launch(state.pontia_home())?;
-                                    let target = ControlTarget::resolve(&state.db(), &state.clients(), &session, None).await?;
+                                    let target = state.resolve_target(&session, None).await?;
                                     adapter.resume(state.event_ingest_service(), &target).await
                                 }.await;
                                 if let Err(error) = result { tracing::warn!(%session, %error, "ACP process recovery failed"); }

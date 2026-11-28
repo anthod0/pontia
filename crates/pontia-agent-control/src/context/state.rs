@@ -9,7 +9,17 @@ use super::{AgentControlBuilder, ShutdownSignal};
 use crate::{AgentEventBroker, LiveOutputService, live_output::LiveOutputStore};
 
 #[derive(Clone)]
-pub struct AgentControl {
+pub struct AgentControl(ClientServiceContext);
+
+impl std::ops::Deref for AgentControl {
+    type Target = ClientServiceContext;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Clone)]
+pub struct ClientServiceContext {
     inner: Arc<AgentControlInner>,
 }
 
@@ -119,7 +129,7 @@ impl AgentControl {
             builder.pontia_home.clone(),
             builder.shutdown.clone(),
         );
-        Self {
+        Self(ClientServiceContext {
             inner: Arc::new(AgentControlInner {
                 commands: CommandServices {
                     branches,
@@ -151,13 +161,15 @@ impl AgentControl {
                     clients: builder.clients,
                 },
             }),
-        }
+        })
     }
 
-    pub fn clients(&self) -> crate::clients::ClientRegistry {
-        self.inner.integrations.clients.clone()
+    pub fn db(&self) -> SqlitePool {
+        self.0.db()
     }
-
+    pub fn client_context(&self) -> ClientServiceContext {
+        self.0.clone()
+    }
     pub fn client_auth(&self) -> crate::client_auth::ClientAuthService {
         self.inner.integrations.client_auth.clone()
     }
@@ -166,22 +178,6 @@ impl AgentControl {
         if let Some(cache) = self.event_ingest_service().cache {
             cache.run(self.shutdown().subscribe()).await;
         }
-    }
-
-    pub fn db(&self) -> SqlitePool {
-        self.inner.persistence.db.clone()
-    }
-
-    pub fn pontia_home(&self) -> &Path {
-        &self.inner.config.pontia_home
-    }
-
-    pub fn shutdown(&self) -> ShutdownSignal {
-        self.inner.lifecycle.shutdown.clone()
-    }
-
-    pub fn interactions(&self) -> crate::interactions::InteractionService {
-        self.inner.events.interactions.clone()
     }
 
     pub fn control_changes(&self) -> crate::ControlChanges {
@@ -197,6 +193,56 @@ impl AgentControl {
         )
     }
 
+    pub fn session_commands(&self) -> crate::SessionCommandService {
+        self.inner.commands.sessions.as_ref().clone()
+    }
+
+    pub fn turn_commands(&self) -> crate::TurnCommandService {
+        self.inner.commands.turns.clone()
+    }
+
+    pub fn runtime_observer(&self) -> crate::RuntimeObservationService {
+        crate::RuntimeObservationService::new(
+            self.db(),
+            self.clients(),
+            self.event_ingest_service(),
+        )
+    }
+}
+
+impl ClientServiceContext {
+    pub fn store(&self) -> crate::ClientControlStore {
+        crate::ClientControlStore::new(self.db())
+    }
+
+    pub async fn resolve_target(
+        &self,
+        session: &str,
+        expected: Option<&str>,
+    ) -> pontia_core::Result<crate::runtime::ControlTarget> {
+        crate::runtime::ControlTarget::resolve(&self.db(), &self.clients(), session, expected).await
+    }
+
+    pub fn clients(&self) -> crate::clients::ClientRegistry {
+        self.inner.integrations.clients.clone()
+    }
+
+    pub(crate) fn db(&self) -> SqlitePool {
+        self.inner.persistence.db.clone()
+    }
+
+    pub fn pontia_home(&self) -> &Path {
+        &self.inner.config.pontia_home
+    }
+
+    pub fn shutdown(&self) -> ShutdownSignal {
+        self.inner.lifecycle.shutdown.clone()
+    }
+
+    pub fn interactions(&self) -> crate::interactions::InteractionService {
+        self.inner.events.interactions.clone()
+    }
+
     pub fn agent_events(&self) -> AgentEventBroker {
         self.inner.events.agent_events.clone()
     }
@@ -210,12 +256,6 @@ impl AgentControl {
         self.inner.events.ingest.clone()
     }
 
-    pub fn session_commands(&self) -> crate::SessionCommandService {
-        self.inner.commands.sessions.as_ref().clone()
-    }
-    pub fn turn_commands(&self) -> crate::TurnCommandService {
-        self.inner.commands.turns.clone()
-    }
     pub fn inbox_commands(&self) -> Arc<crate::InboxCommandService> {
         self.inner.commands.inbox.clone()
     }
@@ -224,13 +264,6 @@ impl AgentControl {
     }
     pub fn queries(&self) -> crate::ControlQueryService {
         crate::ControlQueryService::new(self.db()).with_clients(self.clients())
-    }
-    pub fn runtime_observer(&self) -> crate::RuntimeObservationService {
-        crate::RuntimeObservationService::new(
-            self.db(),
-            self.clients(),
-            self.event_ingest_service(),
-        )
     }
     pub fn session_runtimes(&self) -> crate::RuntimeBindingUpsertService {
         crate::RuntimeBindingUpsertService::new(

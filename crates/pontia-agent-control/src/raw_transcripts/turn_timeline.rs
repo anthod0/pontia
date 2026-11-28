@@ -126,10 +126,10 @@ impl TurnTimelineService {
                 self.clients
                     .get(&binding.client_type)
                     .and_then(|registration| {
-                        registration
-                            .session
-                            .as_ref()?
-                            .native_history(self.pool.clone(), binding.into())
+                        registration.session.as_ref()?.native_history(
+                            crate::ClientControlStore::new(self.pool.clone()),
+                            binding.into(),
+                        )
                     })
             })
             .await

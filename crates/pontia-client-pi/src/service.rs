@@ -1,5 +1,5 @@
 use pontia_agent_control::{
-    AgentControl,
+    ClientServiceContext,
     client_contract::{ClientOperation, ClientService, ClientServicePhase},
     ipc::rpc::RpcPeer,
 };
@@ -26,7 +26,7 @@ impl ClientService for PiService {
     }
     fn connect(
         &self,
-        state: AgentControl,
+        state: ClientServiceContext,
         process_id: Option<u32>,
         peer: Arc<RpcPeer>,
         first: pontia_agent_control::ipc::rpc::RpcRequest,
@@ -35,7 +35,7 @@ impl ClientService for PiService {
         let connections = self.connections.clone();
         Box::pin(async move {
             connections
-                .ensure_started(state.db(), state.pontia_home().into())
+                .ensure_started(state.store(), state.pontia_home().into())
                 .await;
             crate::ipc::serve_peer(
                 state,
@@ -51,12 +51,12 @@ impl ClientService for PiService {
     }
     fn start<'a>(
         &'a self,
-        state: AgentControl,
+        state: ClientServiceContext,
     ) -> ClientOperation<'a, Option<JoinHandle<pontia_core::Result<()>>>> {
         let connections = self.connections.clone();
         Box::pin(async move {
             connections
-                .start(state.db(), state.pontia_home().into())
+                .start(state.store(), state.pontia_home().into())
                 .await;
             let mut shutdown = state.shutdown().subscribe();
             Ok(Some(tokio::spawn(async move {

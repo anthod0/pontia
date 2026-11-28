@@ -75,7 +75,11 @@ async fn creation_options_follow_enabled_settings_for_native_and_acp_clients() {
     )
     .external_api_token(Some("integration-token".into()))
     .build();
-    let task = service.start(app.control().clone()).await.unwrap().unwrap();
+    let task = service
+        .start(app.control().client_context())
+        .await
+        .unwrap()
+        .unwrap();
     let options_path = "/api/v1/session-creation-options";
     assert_eq!(get(&app, options_path).await["options"], json!([]));
 
@@ -574,7 +578,11 @@ async fn client_choices_carry_recorded_versions() {
     )
     .external_api_token(Some("integration-token".into()))
     .build();
-    let task = service.start(app.control().clone()).await.unwrap().unwrap();
+    let task = service
+        .start(app.control().client_context())
+        .await
+        .unwrap()
+        .unwrap();
 
     let options = get(&app, "/api/v1/session-creation-options").await;
     let versions: BTreeMap<_, _> = options["options"]

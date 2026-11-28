@@ -1,8 +1,6 @@
 use super::{CodexService, string};
 use crate::proxy::ThreadOperation;
-use pontia_agent_control::{
-    AgentBindingService, client_contract::NativeSessionFork, sessions::NativeSessionService,
-};
+use pontia_agent_control::client_contract::NativeSessionFork;
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 
@@ -18,7 +16,7 @@ impl CodexService {
             .native_turns()
             .client_turn_id(session, turn)
             .await?
-            .ok_or(sqlx::Error::RowNotFound)?;
+            .ok_or_else(Error::missing_record)?;
         let connection = runtime.connection().await?;
         let turns = self
             .turns(&connection, &binding.client_session_key)
@@ -98,7 +96,9 @@ impl CodexService {
         }) else {
             return Ok(None);
         };
-        Ok(AgentBindingService::new(self.pool.clone())
+        Ok(self
+            .store
+            .bindings()
             .binding_for_client_session("codex", parent)
             .await?
             .map(|binding| binding.session_id))
@@ -118,7 +118,7 @@ impl CodexService {
         } else {
             None
         };
-        NativeSessionService::new(self.pool.clone(), self.event_ingest.clone()).record_fork(
+        self.event_ingest.native_sessions().record_fork(
             child, parent, turn.as_deref(), boundary,
             json!({"boundary": if before.is_some() { Some("before") } else if last.is_some() { Some("after") } else { None }}),
         ).await

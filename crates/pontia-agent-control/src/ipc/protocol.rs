@@ -1,5 +1,5 @@
 use super::rpc::{PROTOCOL_VERSION, RpcRequest};
-use crate::AgentControl;
+use crate::ClientServiceContext;
 use pontia_core::Result;
 use serde_json::Value;
 use std::ops::RangeInclusive;
@@ -8,7 +8,7 @@ const SUPPORTED: RangeInclusive<u64> = 8..=PROTOCOL_VERSION as u64;
 pub const UNSUPPORTED_VERSION: i64 = -32012;
 
 pub async fn rejection(
-    state: &AgentControl,
+    state: &ClientServiceContext,
     process_id: Option<u32>,
     request: &RpcRequest,
 ) -> Option<String> {
@@ -30,7 +30,7 @@ pub async fn rejection(
                 .and_then(|registration| registration.session.as_ref())
             {
                 Some(client) => Ok(client
-                    .control_connected(state.db(), session)
+                    .control_connected(state.store(), session)
                     .await?
                     .unwrap_or(false)),
                 None => Ok(false),
@@ -70,7 +70,7 @@ pub fn rejection_message(request: &RpcRequest) -> Option<String> {
 }
 
 pub async fn record_rejection(
-    state: &AgentControl,
+    state: &ClientServiceContext,
     request: &RpcRequest,
     pid: Option<u32>,
     expected_client: Option<&str>,

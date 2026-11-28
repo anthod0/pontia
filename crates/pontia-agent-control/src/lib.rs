@@ -31,7 +31,7 @@ pub use branch_replay::{
     SubmitBranchReplayRequest,
 };
 pub use client_contract::{DeliveryError, DeliveryOperation, InputPayload};
-pub use context::AgentControl;
+pub use context::{AgentControl, ClientServiceContext};
 pub use control::ControlCommandOutcome;
 pub use inbox::{InboxCommandService, SendMode, SendOutcome};
 pub use ingestion::{
@@ -69,6 +69,8 @@ pub use views::{
 pub use workspaces::{WorkspaceRecord, get_workspace_record};
 
 pub mod client_contract;
+mod client_store;
+pub use client_store::ClientControlStore;
 
 pub use pontia_core::SessionMode;
 pub use views::WorkspaceView;

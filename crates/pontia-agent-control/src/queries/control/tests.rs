@@ -10,7 +10,6 @@ use crate::{
 use pontia_core::{Error, Result};
 use pontia_runtime::RuntimeStartRequest;
 use serde_json::json;
-use sqlx::SqlitePool;
 use std::{
     path::Path,
     sync::{
@@ -56,12 +55,16 @@ impl ClientSession for Client {
     }
     fn details<'a>(
         &'a self,
-        _: SqlitePool,
+        _: crate::ClientControlStore,
         _: &'a str,
     ) -> ClientOperation<'a, ClientSessionDetails> {
         Box::pin(async { Err(Error::Domain("display details unavailable".into())) })
     }
-    fn available<'a>(&'a self, _: SqlitePool, _: &'a str) -> ClientOperation<'a, bool> {
+    fn available<'a>(
+        &'a self,
+        _: crate::ClientControlStore,
+        _: &'a str,
+    ) -> ClientOperation<'a, bool> {
         Box::pin(async { Ok(true) })
     }
     fn provision<'a>(

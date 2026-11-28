@@ -29,7 +29,7 @@ impl ClientService for Service {
 
     fn start<'a>(
         &'a self,
-        state: AgentControl,
+        state: pontia_agent_control::ClientServiceContext,
     ) -> ClientOperation<'a, Option<JoinHandle<Result<()>>>> {
         Box::pin(async move {
             self.starts.fetch_add(1, Ordering::SeqCst);
@@ -61,7 +61,7 @@ impl ClientService for TaskService {
 
     fn start<'a>(
         &'a self,
-        _state: AgentControl,
+        _state: pontia_agent_control::ClientServiceContext,
     ) -> ClientOperation<'a, Option<JoinHandle<Result<()>>>> {
         Box::pin(async move { Ok(self.0.lock().unwrap().take()) })
     }

@@ -113,7 +113,7 @@ impl Proxy {
         mut shutdown: watch::Receiver<bool>,
         upstream: impl Fn() -> Result<PathBuf>,
         observations: mpsc::Sender<Observation>,
-        state: pontia_agent_control::AgentControl,
+        state: pontia_agent_control::ClientServiceContext,
     ) -> Result<()> {
         let mut connections = JoinSet::new();
         while !*shutdown.borrow() {
@@ -159,7 +159,7 @@ async fn relay(
     downstream: UnixStream,
     upstream: &Path,
     observations: mpsc::Sender<Observation>,
-    state: pontia_agent_control::AgentControl,
+    state: pontia_agent_control::ClientServiceContext,
 ) -> Result<()> {
     let peer = crate::runtime::daemon::peer_process(&downstream)?;
     let mut downstream = accept_async(downstream)

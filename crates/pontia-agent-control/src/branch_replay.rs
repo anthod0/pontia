@@ -202,7 +202,7 @@ impl BranchReplayService {
             .get(&session.client_type)
             .and_then(|registration| {
                 registration.session.as_ref()?.native_history(
-                    self.pool.clone(),
+                    crate::ClientControlStore::new(self.pool.clone()),
                     crate::client_contract::raw_transcripts::AgentBindingResolveRequest {
                         id: binding.id.clone(),
                         session_id: binding.session_id.clone(),
