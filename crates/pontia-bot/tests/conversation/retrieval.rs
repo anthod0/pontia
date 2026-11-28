@@ -150,8 +150,11 @@ async fn retrieval_delivers_its_reply_then_exits_and_notifies_the_bot_once() {
     let _exits = report_exits(&control);
     finish(&control, &reader, EventType::TurnCompleted).await;
     wait_for_exit(&control, &reader).await;
-    helpers.reconcile().await.unwrap();
-    helpers.reconcile().await.unwrap();
+    let events = helpers.register_events().await.unwrap();
+    let mut delivery = helpers.notification_delivery();
+    events.catch_up().await.unwrap();
+    events.catch_up().await.unwrap();
+    delivery.deliver_pending().await.unwrap();
     let notices: Vec<(String, String, bool)> = sqlx::query_as(
         "SELECT source_session_id, content, delivered FROM bot_notifications WHERE source_session_id = ?",
     )
@@ -219,7 +222,8 @@ async fn retrieval_delivers_its_reply_then_exits_and_notifies_the_bot_once() {
     );
 
     finish(&control, &second, EventType::TurnFailed).await;
-    helpers.reconcile().await.unwrap();
+    events.catch_up().await.unwrap();
+    delivery.deliver_pending().await.unwrap();
     let failure_notices: Vec<String> =
         sqlx::query_scalar("SELECT content FROM bot_notifications WHERE source_session_id = ?")
             .bind(&second)

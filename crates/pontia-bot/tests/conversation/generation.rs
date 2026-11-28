@@ -739,8 +739,9 @@ async fn failed_handoff_preserves_helper_failure_notice_and_never_replays_origin
     reconcile(&recovered).await;
     let new = current(&recovered, &id).await.unwrap();
     let helpers = HelperService::new(control, recovered.clone());
-    helpers.reconcile().await.unwrap();
-    helpers.reconcile().await.unwrap();
+    let mut delivery = helpers.notification_delivery();
+    delivery.deliver_pending().await.unwrap();
+    delivery.deliver_pending().await.unwrap();
     assert_eq!(
         recovered
             .chat(&id)
@@ -972,7 +973,8 @@ async fn helper_waiting_on_unknown_idle_exit_retains_uncertainty_and_is_not_repl
     let recovered = test_conversation(control.clone());
     reconcile(&recovered).await;
     HelperService::new(control, recovered)
-        .reconcile()
+        .notification_delivery()
+        .deliver_pending()
         .await
         .unwrap();
     assert_eq!(

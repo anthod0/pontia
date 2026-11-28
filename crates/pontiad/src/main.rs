@@ -80,7 +80,14 @@ async fn main() -> Result<()> {
     let shutdown = app_state.control().shutdown();
     tokio::spawn(bot.bots().clone().run_generations(shutdown.subscribe()));
     tokio::spawn(bot.system_notices().run(shutdown.subscribe()));
-    tokio::spawn(bot.helpers().clone().run(shutdown.subscribe()));
+    let helper_events = bot.helpers().register_events().await?;
+    let helper_shutdown = shutdown.subscribe();
+    tokio::spawn(async move { helper_events.run(helper_shutdown).await });
+    tokio::spawn(
+        bot.helpers()
+            .notification_delivery()
+            .run(shutdown.subscribe()),
+    );
     tokio::spawn(bot.dreaming().clone().run(shutdown.subscribe()));
     let cleanup_shutdown = shutdown.clone();
     let external_api = http::core_router(app_state.clone())

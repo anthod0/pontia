@@ -1,4 +1,6 @@
+mod events;
 mod notifications;
+pub use notifications::NotificationDelivery;
 
 use pontia_agent_control::{
     AgentControl, DeliveryError, InputPayload, SendMode, SendOutcome, SessionMessagesQuery,
@@ -8,8 +10,7 @@ use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
-use std::{path::Path, sync::Arc};
-use tokio::sync::Mutex;
+use std::path::Path;
 
 use crate::{
     conversation::ConversationService,
@@ -121,17 +122,15 @@ impl Delivery {
 pub struct HelperService {
     control: AgentControl,
     conversation: ConversationService,
-    reconciliation: Arc<Mutex<()>>,
-    delivery_backoff: Arc<std::sync::Mutex<notifications::Backoff>>,
+    notifications: notifications::NotificationQueue,
 }
 
 impl HelperService {
     pub fn new(control: AgentControl, conversation: ConversationService) -> Self {
         Self {
+            notifications: notifications::NotificationQueue::new(control.db()),
             control,
             conversation,
-            reconciliation: Arc::default(),
-            delivery_backoff: Arc::default(),
         }
     }
 
@@ -427,7 +426,7 @@ impl HelperService {
             .await;
         let delivery = Delivery::from_bot_result(result);
         if matches!(delivery, Delivery::Unknown { .. } | Delivery::Failed { .. }) {
-            self.enqueue(&format!("reply:{}", uuid::Uuid::now_v7()), &bot_id, Some(source),
+            self.notifications.enqueue(&format!("reply:{}", uuid::Uuid::now_v7()), &bot_id, source,
                 &format!("Helper reply delivery result: {}. This describes delivery, not helper execution. The original reply will not be resent.", serde_json::to_string(&delivery)?)).await?;
         }
         Ok(json!({"delivery": delivery}))

@@ -74,8 +74,7 @@ impl ConversationService {
         if !activity.pending_inputs.lock().unwrap().is_empty() {
             return Ok(true);
         }
-        let (Some(session), Some(mut position)) =
-            (&bot.current_session_id, bot.awaiting_reply_after)
+        let (Some(session), Some(position)) = (&bot.current_session_id, bot.awaiting_reply_after)
         else {
             return Ok(false);
         };
@@ -94,32 +93,20 @@ impl ConversationService {
         }
         // Native clients can acknowledge input before publishing the next Turn.
         // Only an ending fact after delivery settles an unanswered input.
-        loop {
-            let page = self
-                .control
-                .queries()
-                .domain_events()
-                .read_after(position, Some("bot"), 100)
-                .await?;
-            if page.events.iter().any(|event| {
-                event.session_id == *session
-                    && matches!(
-                        event.event_type.as_str(),
-                        "turn.completed"
-                            | "turn.failed"
-                            | "turn.interrupted"
-                            | "turn.dispatch_failed"
-                            | "session.exited"
-                            | "session.error"
-                    )
-            }) {
-                return Ok(false);
-            }
-            if page.next_position >= page.head_position {
-                return Ok(true);
-            }
-            position = page.next_position;
-        }
+        let endings = [
+            EventType::TurnCompleted,
+            EventType::TurnFailed,
+            EventType::TurnInterrupted,
+            EventType::TurnDispatchFailed,
+            EventType::SessionExited,
+            EventType::SessionError,
+        ]
+        .map(|kind| kind.to_string());
+        Ok(!self
+            .control
+            .events()
+            .has_session_event_after(session, position, &endings)
+            .await?)
     }
 
     pub async fn event_update(

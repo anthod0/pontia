@@ -40,6 +40,7 @@ const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
 #[derive(Default)]
 struct Client {
     inputs: Mutex<Vec<AgentInput>>,
+    notification_attempts: Mutex<Vec<tokio::time::Instant>>,
     steer: Mutex<Option<bool>>,
     reject_tasks: Mutex<bool>,
     blocked: Mutex<Option<String>>,
@@ -327,6 +328,12 @@ impl Client {
                 _ => Ok(()),
             }
         };
+        if input.input.starts_with("Source: System Notification\n") {
+            self.notification_attempts
+                .lock()
+                .unwrap()
+                .push(tokio::time::Instant::now());
+        }
         inputs.push(input);
         failure
     }
@@ -1311,7 +1318,11 @@ async fn helper_delivery_results_are_not_retried_and_failed_reports_survive_rest
         }
     }
     *client.blocked.lock().unwrap() = Some(session.clone());
-    helpers.reconcile().await.unwrap();
+    helpers
+        .notification_delivery()
+        .deliver_pending()
+        .await
+        .unwrap();
     let pending: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM bot_notifications WHERE delivered = 0")
             .fetch_one(&pool)
@@ -1340,7 +1351,8 @@ async fn helper_delivery_results_are_not_retried_and_failed_reports_survive_rest
         test_conversation(recovered_control),
     );
     *client.blocked.lock().unwrap() = None;
-    recovered.reconcile().await.unwrap();
+    let mut delivery = recovered.notification_delivery();
+    delivery.deliver_pending().await.unwrap();
     let pending: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM bot_notifications WHERE delivered = 0")
             .fetch_one(&pool)
@@ -1348,7 +1360,7 @@ async fn helper_delivery_results_are_not_retried_and_failed_reports_survive_rest
             .unwrap();
     assert_eq!(pending, 0);
     let delivered = client.inputs.lock().unwrap().len();
-    recovered.reconcile().await.unwrap();
+    delivery.deliver_pending().await.unwrap();
     assert_eq!(client.inputs.lock().unwrap().len(), delivered);
     {
         let inputs = client.inputs.lock().unwrap();
@@ -1370,13 +1382,67 @@ async fn helper_delivery_results_are_not_retried_and_failed_reports_survive_rest
     assert_eq!(conversation.chat(&bot_id).await.unwrap().messages.len(), 2);
 }
 
+async fn helper_cursor(pool: &sqlx::SqlitePool) -> i64 {
+    sqlx::query_scalar("SELECT cursor_position FROM event_subscriptions WHERE subscriber_id = 'bot.helper_notifications'")
+        .fetch_one(pool).await.unwrap()
+}
+
+#[tokio::test]
+async fn helper_subscription_filters_application_and_event_type() {
+    let (_root, pool, _, control, conversation) = fixture().await;
+    let helpers = HelperService::new(control.clone(), conversation.clone());
+    let (_, session) = bot(&conversation).await;
+    let foreign = helper(&helpers, &session).await;
+    let owned = helper(&helpers, &session).await;
+    sqlx::query("UPDATE sessions SET application_id = 'workflow' WHERE session_id = ?")
+        .bind(&foreign)
+        .execute(&pool)
+        .await
+        .unwrap();
+    finish(&control, &foreign, EventType::TurnFailed).await;
+    finish(&control, &owned, EventType::TurnCompleted).await;
+    let snapshot = control
+        .queries()
+        .session_snapshot(&owned)
+        .await
+        .unwrap()
+        .unwrap();
+    control
+        .event_ingest_service()
+        .ingest_pontia_event(pontia_agent_control::PontiaEvent::new(
+            &owned,
+            None,
+            pontia_agent_control::PontiaEventSource::RuntimeManager,
+            "generic",
+            pontia_agent_control::PontiaEventType::SessionError,
+            json!({"reason":"test failure", "runtime_id":snapshot.runtimes[0].runtime_id}),
+        ))
+        .await
+        .unwrap();
+    let events = helpers.register_events().await.unwrap();
+    events.catch_up().await.unwrap();
+    let notices: Vec<(String, String)> =
+        sqlx::query_as("SELECT source_session_id, content FROM bot_notifications")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(notices.len(), 1);
+    assert_eq!(notices[0].0, owned);
+    assert!(notices[0].1.contains("session.error"));
+    assert_eq!(
+        helper_cursor(&pool).await,
+        control.events().current_head_position().await.unwrap()
+    );
+}
+
 #[tokio::test]
 async fn reliable_helper_failures_are_durable_and_event_replay_does_not_duplicate_notices() {
     let (_root, pool, client, control, conversation) = fixture().await;
     let helpers = HelperService::new(control.clone(), conversation.clone());
     let (_, session) = bot(&conversation).await;
     let helper = helper(&helpers, &session).await;
-    helpers.reconcile().await.unwrap();
+    let events = helpers.register_events().await.unwrap();
+    events.catch_up().await.unwrap();
     let before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM bot_notifications")
         .fetch_one(&pool)
         .await
@@ -1399,20 +1465,25 @@ async fn reliable_helper_failures_are_durable_and_event_replay_does_not_duplicat
         EventType::TurnFailed,
     )
     .await;
-    helpers.reconcile().await.unwrap();
+    events.catch_up().await.unwrap();
+    assert_eq!(
+        helper_cursor(&pool).await,
+        control.events().current_head_position().await.unwrap()
+    );
     let count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM bot_notifications WHERE delivered = 0")
             .fetch_one(&pool)
             .await
             .unwrap();
     assert_eq!(count, 1);
-    sqlx::query("UPDATE bot_event_cursor SET position = 0")
+    sqlx::query("UPDATE event_subscriptions SET cursor_position = 0 WHERE subscriber_id = 'bot.helper_notifications'")
         .execute(&pool)
         .await
         .unwrap();
-    let recovered = HelperService::new(control.clone(), test_conversation(control.clone()));
+    let mut delivery = helpers.notification_delivery();
     *client.blocked.lock().unwrap() = None;
-    recovered.reconcile().await.unwrap();
+    events.catch_up().await.unwrap();
+    delivery.deliver_pending().await.unwrap();
     let contents: Vec<String> = sqlx::query_scalar("SELECT content FROM bot_notifications")
         .fetch_all(&pool)
         .await
@@ -1438,7 +1509,8 @@ async fn reliable_helper_failures_are_durable_and_event_replay_does_not_duplicat
             )
             .await
             .unwrap();
-        recovered.reconcile().await.unwrap();
+        events.catch_up().await.unwrap();
+        delivery.deliver_pending().await.unwrap();
     }
     let notices: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM bot_notifications WHERE source_session_id=? AND delivered=1",
@@ -1473,40 +1545,58 @@ async fn failed_notification_delivery_waits_for_backoff_instead_of_retrying_imme
         EventType::TurnFailed,
     )
     .await;
-    let attempts = || {
-        client
-            .inputs
-            .lock()
-            .unwrap()
-            .iter()
-            .filter(|input| {
-                input.session_id == session
-                    && input.input.starts_with("Source: System Notification\n")
-            })
-            .count()
+    let events = helpers.register_events().await.unwrap();
+    let (stop, shutdown) = tokio::sync::watch::channel(false);
+    let delivery = tokio::spawn(helpers.notification_delivery().run(shutdown.clone()));
+    let subscription = tokio::spawn(async move { events.run(shutdown).await });
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while client.notification_attempts.lock().unwrap().is_empty() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    control
+        .event_ingest_service()
+        .report_client_fact(
+            &helper,
+            Some(&snapshot.runtimes[0].runtime_id),
+            EventType::SessionExited,
+            json!({"reason":"quit"}),
+        )
+        .await
+        .unwrap();
+    let head = control.events().current_head_position().await.unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        while helper_cursor(&pool).await < head {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    let pending = || {
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM bot_notifications WHERE delivered = 0")
+            .fetch_one(&pool)
     };
-    helpers.reconcile().await.unwrap();
-    assert_eq!(attempts(), 1);
+    assert_eq!(pending().await.unwrap(), 2);
     *client.blocked.lock().unwrap() = None;
-    for _ in 0..3 {
-        helpers.reconcile().await.unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        while pending().await.unwrap() != 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    // Each failed attempt held both queued notifications until the retry deadline.
+    // The last two attempts successfully delivered the two notifications in one pass.
+    let attempts = client.notification_attempts.lock().unwrap().clone();
+    assert!(attempts.len() >= 3);
+    for pair in attempts[..attempts.len() - 1].windows(2) {
+        assert!(pair[1] - pair[0] >= std::time::Duration::from_secs(2));
     }
-    assert_eq!(attempts(), 1);
-    let pending: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM bot_notifications WHERE delivered = 0")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(pending, 1);
-    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-    helpers.reconcile().await.unwrap();
-    assert_eq!(attempts(), 2);
-    let pending: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM bot_notifications WHERE delivered = 0")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(pending, 0);
+    stop.send(true).unwrap();
+    subscription.await.unwrap().unwrap();
+    delivery.await.unwrap();
 }
 
 #[path = "conversation/system_notices.rs"]
