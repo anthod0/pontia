@@ -1,10 +1,11 @@
 use crate::{Adapter, Input, Peer, peer::field, transport::Connection};
 use pontia_agent_control::{
-    AgentBindingService, AgentControl, ClientControlChannel, PontiaEventType,
+    AgentBindingService, AgentControl, PontiaEventType,
     ipc::{
-        identity::RuntimeAttachment,
+        identity::{BindingConfirmation, RuntimeAttachment},
         rpc::{Requests, RpcPeer, RpcRequest},
     },
+    runtime::ControlTarget,
 };
 use pontia_core::{Error, Result};
 use pontia_runtime::{ProcessFingerprint, ProcessObservation};
@@ -35,15 +36,12 @@ impl Adapter {
                 return Err(error);
             }
         };
-        let channel: Arc<dyn ClientControlChannel> = connection.clone();
         let mut sequence = 0;
         let serving = async {
             while let Some(request) = requests.recv().await {
                 let result = async {
-                    let _guard = app.client_control().lock_identity().await;
-                    app.client_control()
-                        .validate_connection(&peer.session, &peer.runtime, &channel)
-                        .await?;
+                    let _identity = self.connection_identity.lock().await;
+                    self.validate_connection(&app, &peer, &connection).await?;
                     if request.method != "host.event" {
                         return Err(Error::Domain("Unknown Claude host method".into()));
                     }
@@ -160,10 +158,22 @@ impl Adapter {
                 .and_then(ProcessFingerprint::capture)
                 .ok_or_else(crate::unavailable)?,
         });
-        attach_host(app, &identity, &status, connection.clone()).await?;
+        let _identity = self.connection_identity.lock().await;
+        self.validate_attachment(app, &identity, &status, &connection)
+            .await?;
         let mut peers = self.peers.lock().await;
         let peer = match peers.get(&identity.session_id) {
-            Some(peer) if peer.runtime == identity.runtime_id => peer.clone(),
+            Some(peer) if peer.runtime == identity.runtime_id => {
+                if peer
+                    .connection()
+                    .is_ok_and(|current| !current.rpc.is_closed())
+                {
+                    return Err(Error::StateConflict(
+                        "Claude runtime already has an active connection".into(),
+                    ));
+                }
+                peer.clone()
+            }
             Some(_) => {
                 return Err(Error::StateConflict(
                     "Claude runtime identity changed".into(),
@@ -245,61 +255,174 @@ impl Adapter {
         app.inbox_commands().notify_available(&peer.session);
         Ok((peer, connection))
     }
+
+    async fn validate_connection(
+        &self,
+        app: &AgentControl,
+        peer: &Arc<Peer>,
+        connection: &Arc<Connection>,
+    ) -> Result<()> {
+        if self.stopped.load(std::sync::atomic::Ordering::Acquire)
+            || !self
+                .peers
+                .lock()
+                .await
+                .get(&peer.session)
+                .is_some_and(|current| Arc::ptr_eq(current, peer))
+            || !peer
+                .connection()
+                .is_ok_and(|current| Arc::ptr_eq(&current, connection))
+            || connection.rpc.is_closed()
+        {
+            return Err(Error::StateConflict(
+                "Claude host connection has been replaced".into(),
+            ));
+        }
+        validate_runtime(app, &peer.session, &peer.runtime).await
+    }
+
+    async fn validate_attachment(
+        &self,
+        app: &AgentControl,
+        identity: &RuntimeAttachment,
+        status: &Value,
+        connection: &Connection,
+    ) -> Result<()> {
+        if self.stopped.load(std::sync::atomic::Ordering::Acquire) {
+            return Err(crate::unavailable());
+        }
+        let binding = attachment_binding(app, identity, status, connection).await?;
+        validate_binding(app, identity, binding).await?;
+        if identity.client_session_key.is_none() {
+            sqlx::query("UPDATE session_runtimes SET process_fingerprint=? WHERE runtime_id=? AND session_id=? AND state='starting' AND process_fingerprint IS NULL AND EXISTS(SELECT 1 FROM sessions WHERE session_id=? AND client_type='claude-agent' AND state!='exited')")
+                .bind(serde_json::to_string(&connection.process)?)
+                .bind(&identity.runtime_id)
+                .bind(&identity.session_id)
+                .bind(&identity.session_id)
+                .execute(&app.db())
+                .await?;
+        }
+        let confirmed: Option<String> = sqlx::query_scalar(
+            "SELECT process_fingerprint FROM session_runtimes WHERE runtime_id=? AND session_id=?",
+        )
+        .bind(&identity.runtime_id)
+        .bind(&identity.session_id)
+        .fetch_optional(&app.db())
+        .await?;
+        let confirmed = confirmed
+            .as_deref()
+            .map(serde_json::from_str::<ProcessFingerprint>)
+            .transpose()?;
+        if confirmed.as_ref() != Some(&connection.process) {
+            return Err(Error::StateConflict(
+                "Claude host connection does not belong to the confirmed process".into(),
+            ));
+        }
+        let active: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM session_runtimes r JOIN sessions s USING(session_id) WHERE s.session_id=? AND r.runtime_id=? AND (s.state IN ('created','starting','idle','busy','waiting_for_interaction','interrupted') OR (s.state='error' AND r.state='starting')) AND r.state IN ('starting','running'))")
+            .bind(&identity.session_id)
+            .bind(&identity.runtime_id)
+            .fetch_one(&app.db())
+            .await?;
+        if !active {
+            return Err(Error::StateConflict(
+                "Claude host connection does not match an active runtime".into(),
+            ));
+        }
+        sqlx::query(
+            "UPDATE sessions SET metadata=json_remove(metadata,'$.incompatible_control_runtime')
+             WHERE session_id=? AND json_type(metadata,'$.incompatible_control_runtime') IS NOT NULL",
+        )
+        .bind(&identity.session_id)
+        .execute(&app.db())
+        .await?;
+        Ok(())
+    }
 }
 
-async fn attach_host(
+async fn attachment_binding<'a>(
     app: &AgentControl,
-    identity: &RuntimeAttachment,
+    identity: &'a RuntimeAttachment,
     status: &Value,
-    connection: Arc<Connection>,
-) -> Result<()> {
-    use pontia_agent_control::ipc::identity::BindingConfirmation;
+    connection: &Connection,
+) -> Result<BindingConfirmation<'a>> {
     let Some(native) = identity.client_session_key.as_deref() else {
-        return identity.attach(app, "claude-agent", connection).await;
+        return Ok(BindingConfirmation::Launch);
     };
-    let control = app.client_control();
-    let guard = control.lock_identity().await;
     let pending = &status["pending_ready"];
-    let key = pending["report_key"].as_str().unwrap_or_default();
-    let sequence = key
+    let sequence = pending["report_key"]
+        .as_str()
+        .unwrap_or_default()
         .strip_prefix(&format!("claude:{}:", connection.host_id))
         .and_then(|suffix| suffix.parse::<u64>().ok())
-        .filter(|seq| *seq > 0);
-    let recovery = if sequence.is_some()
+        .filter(|sequence| *sequence > 0);
+    if sequence.is_some()
         && pending["native_session_id"] == native
         && status["native_session_id"] == native
     {
-        // Only a previously attached process can have generated an unconfirmed ready.
         let fingerprint: Option<String> = sqlx::query_scalar(
             "SELECT r.process_fingerprint FROM session_runtimes r JOIN sessions s USING(session_id)
              WHERE s.session_id=? AND s.client_type='claude-agent' AND s.state IN ('created','starting')
              AND r.runtime_id=? AND r.state='starting' AND r.process_fingerprint IS NOT NULL
              AND NOT EXISTS (SELECT 1 FROM agent_bindings b WHERE b.client_type='claude-agent'
-                             AND (b.session_id=s.session_id OR b.client_session_key=?))")
-            .bind(&identity.session_id).bind(&identity.runtime_id).bind(native)
-            .fetch_optional(&app.db()).await?;
-        fingerprint
+                             AND (b.session_id=s.session_id OR b.client_session_key=?))",
+        )
+        .bind(&identity.session_id)
+        .bind(&identity.runtime_id)
+        .bind(native)
+        .fetch_optional(&app.db())
+        .await?;
+        if fingerprint
             .as_deref()
             .map(serde_json::from_str::<ProcessFingerprint>)
             .transpose()?
             .as_ref()
             == Some(&connection.process)
-    } else {
-        false
-    };
-    let binding = if recovery {
-        BindingConfirmation::Launch
-    } else {
-        BindingConfirmation::Native(native)
-    };
-    control
-        .attach_binding_locked(
-            &guard,
-            "claude-agent",
-            &identity.session_id,
-            &identity.runtime_id,
-            binding,
-            connection,
-        )
-        .await
+        {
+            return Ok(BindingConfirmation::Launch);
+        }
+    }
+    Ok(BindingConfirmation::Native(native))
+}
+
+async fn validate_binding(
+    app: &AgentControl,
+    identity: &RuntimeAttachment,
+    binding: BindingConfirmation<'_>,
+) -> Result<()> {
+    match binding {
+        BindingConfirmation::Native(native) => {
+            let binding = AgentBindingService::new(app.db())
+                .binding_for_client_session("claude-agent", native)
+                .await?
+                .ok_or_else(|| Error::NotFound("Claude native binding not found".into()))?;
+            if binding.session_id != identity.session_id {
+                return Err(Error::StateConflict(
+                    "Claude native Session does not match runtime identity".into(),
+                ));
+            }
+        }
+        BindingConfirmation::Launch => {
+            let launching: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sessions s WHERE s.session_id=? AND s.client_type='claude-agent' AND EXISTS(SELECT 1 FROM session_runtimes r WHERE r.session_id=s.session_id AND r.runtime_id=? AND r.state='starting'))")
+                .bind(&identity.session_id)
+                .bind(&identity.runtime_id)
+                .fetch_one(&app.db())
+                .await?;
+            if !launching {
+                return Err(Error::StateConflict(
+                    "Claude runtime must confirm its native binding".into(),
+                ));
+            }
+        }
+    }
+    validate_runtime(app, &identity.session_id, &identity.runtime_id).await
+}
+
+async fn validate_runtime(app: &AgentControl, session: &str, runtime: &str) -> Result<()> {
+    ControlTarget {
+        session_id: session.into(),
+        runtime_id: Some(runtime.into()),
+        control_runtime_role: Some("claude_sdk_host"),
+    }
+    .validate(&app.db())
+    .await
 }

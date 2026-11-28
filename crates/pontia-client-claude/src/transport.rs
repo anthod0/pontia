@@ -1,6 +1,6 @@
 use crate::peer::Peer;
 use pontia_agent_control::{
-    ClientControlChannel, ClientControlOperation, DeliveryError, EventIngestService,
+    DeliveryError, EventIngestService,
     ipc::rpc::{MAX_FRAME_BYTES, RpcPeer},
 };
 use pontia_core::{Error, Result};
@@ -160,52 +160,11 @@ impl Connection {
     pub fn stop(&self) {
         self.rpc.close();
     }
-}
 
-impl ClientControlChannel for Connection {
-    fn start_turn<'a>(
-        &'a self,
-        _: &'a pontia_agent_control::InputPayload,
-    ) -> pontia_agent_control::DeliveryOperation<'a> {
-        Box::pin(async {
-            Err(pontia_agent_control::DeliveryError::Unsupported(
-                "Claude Code input requires a native Session".into(),
-            ))
-        })
-    }
-    fn process_id(&self) -> Option<u32> {
-        Some(self.process.pid)
-    }
-    fn available(&self) -> bool {
-        !self.rpc.is_closed()
-    }
-    fn invalidate(&self) {
-        self.stop();
-    }
-    fn ping(&self) -> ClientControlOperation<'_> {
-        Box::pin(async { Self::status(&self.rpc).await.map(|_| ()) })
-    }
-    fn interrupt(&self) -> pontia_agent_control::DeliveryOperation<'_> {
-        Box::pin(async {
-            self.deliver(json!({"method":"interrupt"}))
-                .await
-                .map(|_| ())
-        })
-    }
-    fn set_reasoning_effort<'a>(&'a self, reasoning_effort: &'a str) -> ClientControlOperation<'a> {
-        Box::pin(async move {
-            self.request(
-                json!({"method":"set_reasoning_effort", "reasoning_effort":reasoning_effort}),
-            )
+    pub async fn set_reasoning_effort(&self, reasoning_effort: &str) -> Result<()> {
+        self.request(json!({"method":"set_reasoning_effort", "reasoning_effort":reasoning_effort}))
             .await
             .map(|_| ())
-        })
-    }
-    fn shutdown(&self) -> ClientControlOperation<'_> {
-        Box::pin(async { self.request(json!({"method":"close"})).await.map(|_| ()) })
-    }
-    fn replay<'a>(&'a self, _: &'a str) -> ClientControlOperation<'a> {
-        Box::pin(async { Err(crate::unsupported()) })
     }
 }
 

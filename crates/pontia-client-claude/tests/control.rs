@@ -2516,7 +2516,15 @@ async fn running_host_reattaches_its_turn_then_accepts_input_approvals_interrupt
     let h = h.restart().await;
     assert_eq!(process.observe(), pontia_runtime::ProcessObservation::Alive);
     tokio::time::timeout(Duration::from_secs(5), async {
-        while !h.app.client_control().available(&session).await.unwrap()
+        while !h
+            .app
+            .queries()
+            .get_session(&session)
+            .await
+            .unwrap()
+            .unwrap()
+            .capabilities
+            .interrupt
             || h.wire(&session)
                 .iter()
                 .filter(|frame| frame["method"] == "attached")
@@ -2528,6 +2536,7 @@ async fn running_host_reattaches_its_turn_then_accepts_input_approvals_interrupt
     })
     .await
     .unwrap();
+    assert!(!h.app.client_control().available(&session).await.unwrap());
     h.gate(&session, 1, "finish");
     let completed = h.wait_states(&session, &["completed"]).await;
     assert_eq!(completed[0].0, turn);

@@ -43,6 +43,7 @@ pub fn registration_with_host(host: Option<PathBuf>) -> ClientRegistration {
         host,
         interactions: Arc::new(OnceLock::new()),
         peers: Default::default(),
+        connection_identity: Default::default(),
         stopped: Arc::new(AtomicBool::new(false)),
         context: Arc::new(OnceLock::new()),
     });
@@ -166,6 +167,7 @@ struct Adapter {
     host: Option<PathBuf>,
     interactions: Arc<OnceLock<pontia_agent_control::interactions::InteractionService>>,
     peers: Arc<Mutex<HashMap<String, Arc<Peer>>>>,
+    connection_identity: Arc<Mutex<()>>,
     stopped: Arc<AtomicBool>,
     context: Arc<OnceLock<(SqlitePool, PathBuf)>>,
 }
@@ -422,7 +424,7 @@ impl ClientSession for Adapter {
         Box::pin(async move {
             let peer = self.target(&events, target).await?;
             let connection = peer.connection()?;
-            ClientControlChannel::set_reasoning_effort(connection.as_ref(), reasoning_effort).await
+            connection.set_reasoning_effort(reasoning_effort).await
         })
     }
     fn manual_compaction_available<'a>(
@@ -625,6 +627,7 @@ impl ClientService for Adapter {
             let mut shutdown = app.shutdown().subscribe();
             Ok(Some(tokio::spawn(async move {
                 let _ = shutdown.wait_for(|stop| *stop).await;
+                let _identity = adapter.connection_identity.lock().await;
                 adapter.stopped.store(true, Ordering::Release);
                 let peers: Vec<_> = adapter
                     .peers
