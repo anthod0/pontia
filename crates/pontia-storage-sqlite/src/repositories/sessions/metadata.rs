@@ -33,7 +33,9 @@ impl SqliteSessionRepository {
         if patches.is_empty() {
             return Ok(());
         }
-        let mut update = QueryBuilder::new("UPDATE sessions SET metadata=json_set(metadata");
+        let mut update = QueryBuilder::new(
+            "UPDATE sessions SET metadata=json_set(CASE WHEN json_type(metadata)='object' THEN metadata ELSE '{}' END",
+        );
         for (key, value) in patches {
             update
                 .push(",")
@@ -66,6 +68,15 @@ impl SqliteSessionRepository {
         key: &str,
         update: impl FnOnce(Option<Value>) -> Result<Value>,
     ) -> Result<()> {
+        Self::modify_metadata_key_in_tx(tx, session, key, |old| Ok((Some(update(old)?), ()))).await
+    }
+
+    pub async fn modify_metadata_key_in_tx<T>(
+        tx: &mut Transaction<'_, Sqlite>,
+        session: &str,
+        key: &str,
+        update: impl FnOnce(Option<Value>) -> Result<(Option<Value>, T)>,
+    ) -> Result<T> {
         let previous = sqlx::query_scalar::<_, Option<Value>>(
             "SELECT metadata -> ? FROM sessions WHERE session_id=?",
         )
@@ -74,7 +85,11 @@ impl SqliteSessionRepository {
         .fetch_optional(&mut **tx)
         .await?
         .ok_or_else(|| Error::NotFound(format!("Session {session}")))?;
-        Self::patch_metadata_keys_in_tx(tx, session, &[(key, update(previous)?)]).await
+        let (next, result) = update(previous)?;
+        if let Some(value) = next {
+            Self::patch_metadata_keys_in_tx(tx, session, &[(key, value)]).await?;
+        }
+        Ok(result)
     }
 }
 

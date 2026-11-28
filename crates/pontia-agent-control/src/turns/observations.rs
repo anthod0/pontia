@@ -74,7 +74,7 @@ impl NativeTurnService {
 
 impl NativeTurnService {
     pub async fn client_turn_id(&self, session_id: &str, turn_id: &str) -> Result<Option<String>> {
-        SqliteNativeTurnBindingRepository::new(self.pool.clone())
+        crate::ControlQueryService::new(self.pool.clone())
             .client_turn_id(session_id, turn_id)
             .await
     }

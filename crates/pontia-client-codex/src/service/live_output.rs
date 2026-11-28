@@ -669,14 +669,11 @@ impl CodexLiveOutput {
         {
             return Ok(false);
         }
-        let state: Option<String> =
-            sqlx::query_scalar("SELECT state FROM sessions WHERE session_id=?")
-                .bind(session)
-                .fetch_optional(&service.pool)
-                .await?;
+        use pontia_core::domain::SessionState;
+        let state = service.queries().session_state(session).await?;
         if !matches!(
-            state.as_deref(),
-            Some("idle" | "busy" | "waiting_for_interaction")
+            state,
+            Some(SessionState::Idle | SessionState::Busy | SessionState::WaitingForInteraction)
         ) {
             return Ok(false);
         }
@@ -694,8 +691,10 @@ impl CodexLiveOutput {
         session: &str,
         native: &str,
     ) -> Result<Option<LiveOutputProducer>> {
-        let turn: Option<String> = sqlx::query_scalar("SELECT t.turn_id FROM native_turn_bindings b JOIN turns t ON t.turn_id=b.turn_id WHERE b.session_id=? AND b.client_turn_id=? AND t.session_id=? AND t.state='running'")
-            .bind(session).bind(native).bind(session).fetch_optional(&service.pool).await?;
+        let turn: Option<String> = service
+            .native_turns()
+            .running_turn_id(session, native)
+            .await?;
         Ok(turn.map(|turn_id| LiveOutputProducer {
             identity: LiveOutputIdentity {
                 session_id: session.into(),

@@ -2,13 +2,58 @@ use super::ControlQueryService;
 use crate::runtime::shutdown::ShutdownSession;
 use pontia_core::{Result, domain::SessionState};
 use pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository;
+use pontia_storage_sqlite::repositories::native_turn_bindings::SqliteNativeTurnBindingRepository;
 pub use pontia_storage_sqlite::repositories::session_runtimes::SessionRuntimeRecord;
 use pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository;
 pub use pontia_storage_sqlite::repositories::sessions::SessionLaunchFields;
 use pontia_storage_sqlite::repositories::sessions::SqliteSessionRepository;
 use serde_json::Value;
 
+#[derive(sqlx::FromRow)]
+pub struct ClientSessionFields {
+    pub client_type: String,
+    pub state: SessionState,
+    pub workspace_ref: Option<String>,
+    pub metadata: Value,
+    pub client_session_key: Option<String>,
+}
+
 impl ControlQueryService {
+    pub async fn client_session_fields(
+        &self,
+        session: &str,
+    ) -> Result<Option<ClientSessionFields>> {
+        Ok(sqlx::query_as(
+            "SELECT s.client_type, s.state, s.workspace_ref, s.metadata, b.client_session_key
+             FROM sessions s LEFT JOIN agent_bindings b USING(session_id)
+             WHERE s.session_id=?",
+        )
+        .bind(session)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    pub async fn non_exited_bound_session(
+        &self,
+        client: &str,
+        native_session: &str,
+    ) -> Result<Option<String>> {
+        Ok(sqlx::query_scalar(
+            "SELECT b.session_id FROM agent_bindings b JOIN sessions s USING(session_id)
+             WHERE b.client_type=? AND b.client_session_key=? AND s.state<>'exited'",
+        )
+        .bind(client)
+        .bind(native_session)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    pub async fn client_turn_id(&self, session: &str, turn: &str) -> Result<Option<String>> {
+        SqliteNativeTurnBindingRepository::new(self.pool.clone())
+            .client_turn_id(session, turn)
+            .await
+    }
+
     pub async fn enabled_client_versions(
         &self,
         client_type: &str,

@@ -761,7 +761,7 @@ async fn start_and_resume_preserve_environment_filters_and_override_session_iden
 }
 
 #[tokio::test]
-async fn first_input_restores_launch_data_and_binds_a_thread_without_a_runtime() {
+async fn observer_leaves_historical_launch_data_unset() {
     let fixture = Fixture::new().await;
     sqlx::query("UPDATE sessions SET metadata=json_remove(metadata,'$.codex_control_root','$.codex_launch_cwd') WHERE session_id=?")
         .bind(&fixture.session)
@@ -772,23 +772,20 @@ async fn first_input_restores_launch_data_and_binds_a_thread_without_a_runtime()
         .prepare()
         .await
         .unwrap();
-    let (control_root, launch_cwd): (String, String) = sqlx::query_as(
+    let (control_root, launch_cwd): (Option<String>, Option<String>) = sqlx::query_as(
         "SELECT json_extract(metadata,'$.codex_control_root'),json_extract(metadata,'$.codex_launch_cwd') FROM sessions WHERE session_id=?",
     )
     .bind(&fixture.session)
     .fetch_one(&fixture.app.db())
     .await
     .unwrap();
-    let root = fixture
-        .root
-        .path()
-        .canonicalize()
-        .unwrap()
-        .display()
-        .to_string();
-    assert_eq!(control_root, root);
-    assert_eq!(launch_cwd, root);
+    assert_eq!((control_root, launch_cwd), (None, None));
+    fixture.shutdown().await;
+}
 
+#[tokio::test]
+async fn first_input_binds_a_thread_without_a_runtime() {
+    let fixture = Fixture::new().await;
     fixture.dispatch_first_input().await;
 
     let runtime_count: i64 =

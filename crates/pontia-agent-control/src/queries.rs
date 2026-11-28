@@ -45,6 +45,6 @@ impl ControlQueryService {
 }
 
 mod client_sessions;
-pub use client_sessions::{SessionLaunchFields, SessionRuntimeRecord};
+pub use client_sessions::{ClientSessionFields, SessionLaunchFields, SessionRuntimeRecord};
 mod facts;
 pub use facts::{CompletedTurnWithBoundaries, ReportEvent};

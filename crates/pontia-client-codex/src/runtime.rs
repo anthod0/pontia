@@ -127,23 +127,26 @@ async fn connect_daemon(
 }
 
 impl CodexRuntime {
+    pub(crate) async fn control_root(
+        pool: &sqlx::SqlitePool,
+        session: &str,
+    ) -> Result<Option<PathBuf>> {
+        Ok(pontia_agent_control::ControlQueryService::new(pool.clone())
+            .session_metadata(session)
+            .await?
+            .and_then(|metadata| metadata["codex_control_root"].as_str().map(PathBuf::from)))
+    }
+
     pub(crate) async fn for_session(
         pool: &sqlx::SqlitePool,
         session: &str,
     ) -> Result<Option<Arc<Self>>> {
-        let root: Option<String> = sqlx::query_scalar(
-            "SELECT json_extract(metadata,'$.codex_control_root') FROM sessions WHERE session_id=?",
-        )
-        .bind(session)
-        .fetch_optional(pool)
-        .await?
-        .flatten();
+        let root = Self::control_root(pool, session).await?;
         let Some(root) = root else { return Ok(None) };
-        Ok(Self::existing_target(
-            Path::new(&root),
-            CodexServerTarget::for_session(pool, session).await?,
+        Ok(
+            Self::existing_target(&root, CodexServerTarget::for_session(pool, session).await?)
+                .await,
         )
-        .await)
     }
 
     pub(crate) async fn existing(root: &Path) -> Option<Arc<Self>> {

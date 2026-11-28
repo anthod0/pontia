@@ -49,14 +49,7 @@ impl CodexObserver {
     }
 
     pub async fn prepare(&self) -> Result<()> {
-        let root = self.root.canonicalize()?;
-        sqlx::query("UPDATE sessions SET metadata=json_set(CASE WHEN json_type(metadata)='object' THEN metadata ELSE '{}' END,'$.codex_control_root',?) WHERE client_type='codex' AND json_extract(metadata,'$.codex_control_root') IS NULL")
-            .bind(root.display().to_string())
-            .execute(&self.service.pool)
-            .await?;
-        sqlx::query("UPDATE sessions SET metadata=json_set(metadata,'$.codex_launch_cwd',COALESCE(workspace_ref,(SELECT launch_cwd FROM agent_bindings WHERE agent_bindings.session_id=sessions.session_id),(SELECT json_extract(payload,'$.workspace') FROM events WHERE events.session_id=sessions.session_id AND event_type='session.created' LIMIT 1))) WHERE client_type='codex' AND json_extract(metadata,'$.codex_launch_cwd') IS NULL AND COALESCE(workspace_ref,(SELECT launch_cwd FROM agent_bindings WHERE agent_bindings.session_id=sessions.session_id),(SELECT json_extract(payload,'$.workspace') FROM events WHERE events.session_id=sessions.session_id AND event_type='session.created' LIMIT 1)) IS NOT NULL")
-            .execute(&self.service.pool)
-            .await?;
+        self.root.canonicalize()?;
         Ok(())
     }
 
@@ -112,8 +105,27 @@ impl CodexObserver {
     }
 
     pub(super) async fn has_active_sessions(&self) -> Result<bool> {
-        let sessions: Vec<String> = sqlx::query_scalar("SELECT session_id FROM sessions WHERE client_type='codex' AND state<>'exited' AND (state<>'error' OR ?) AND json_extract(metadata,'$.codex_control_root')=?")
-            .bind(self.target == CodexServerTarget::User).bind(self.root.to_string_lossy().as_ref()).fetch_all(&self.service.pool).await?;
+        use pontia_core::domain::SessionState;
+        let mut states = vec![
+            SessionState::Created,
+            SessionState::Starting,
+            SessionState::Idle,
+            SessionState::Busy,
+            SessionState::WaitingForInteraction,
+            SessionState::Interrupted,
+        ];
+        if self.target == CodexServerTarget::User {
+            states.push(SessionState::Error);
+        }
+        let sessions: Vec<String> = self
+            .service
+            .queries()
+            .list_sessions_by_client(
+                "codex",
+                &states,
+                Some(("codex_control_root", self.root.to_string_lossy().as_ref())),
+            )
+            .await?;
         for session in sessions {
             if self.owns_session(&session).await? {
                 return Ok(true);
@@ -136,12 +148,12 @@ impl CodexObserver {
                         | SubscriptionState::Reconciling
                 )
             )
-            && sqlx::query_scalar::<_, bool>(
-                "SELECT EXISTS(SELECT 1 FROM sessions WHERE session_id=? AND state<>'exited')",
-            )
-            .bind(session)
-            .fetch_one(&self.service.pool)
-            .await?)
+            && self
+                .service
+                .queries()
+                .session_state(session)
+                .await?
+                .is_some_and(|state| state != pontia_core::domain::SessionState::Exited))
     }
 
     async fn reconcile_all(
@@ -150,8 +162,18 @@ impl CodexObserver {
         connection: &Arc<crate::runtime::protocol::Connection>,
         observation: &mut Observation,
     ) -> Result<()> {
-        let sessions: Vec<String> = sqlx::query_scalar("SELECT session_id FROM sessions WHERE client_type='codex' AND json_extract(metadata,'$.codex_control_root')=?")
-            .bind(runtime.root.display().to_string()).fetch_all(&self.service.pool).await?;
+        let sessions: Vec<String> = self
+            .service
+            .queries()
+            .list_sessions_by_client(
+                "codex",
+                &[],
+                Some((
+                    "codex_control_root",
+                    runtime.root.to_string_lossy().as_ref(),
+                )),
+            )
+            .await?;
         for session in sessions {
             self.reconcile_session(runtime, connection, &session, true, observation)
                 .await?;
@@ -168,12 +190,21 @@ impl CodexObserver {
         observation: &mut Observation,
     ) -> Result<()> {
         let _operation = runtime.lock_session(session).await;
-        let row: Option<(String, Option<String>)> = sqlx::query_as("SELECT s.state,a.client_session_key FROM sessions s LEFT JOIN agent_bindings a USING(session_id) WHERE s.session_id=? AND s.client_type='codex' AND json_extract(s.metadata,'$.codex_control_root')=?")
-            .bind(session).bind(runtime.root.display().to_string()).fetch_optional(&self.service.pool).await?;
-        let Some((state, thread)) = row else {
+        let Some(fields) = self
+            .service
+            .queries()
+            .client_session_fields(session)
+            .await?
+        else {
             return Ok(());
         };
-        if !self.owns_session(session).await? {
+        let state = fields.state;
+        let thread = fields.client_session_key;
+        if fields.client_type != "codex"
+            || fields.metadata["codex_control_root"].as_str()
+                != Some(runtime.root.to_string_lossy().as_ref())
+            || !self.owns_session(session).await?
+        {
             return Ok(());
         }
         if let Some(thread) = &thread {
@@ -187,7 +218,7 @@ impl CodexObserver {
         if unloaded {
             self.service.suspend_reload(session).await?;
         }
-        if state == "exited"
+        if state == pontia_core::domain::SessionState::Exited
             || CodexService::has_confirmed_exit(session).await
             || runtime.subscription(session).await == Some(SubscriptionState::ExitPending)
             || unloaded
@@ -202,7 +233,7 @@ impl CodexObserver {
             observation.restored.remove(session);
             runtime.clear_subscription(session).await;
             if recover
-                && state != "exited"
+                && state != pontia_core::domain::SessionState::Exited
                 && let Some(thread) = thread
             {
                 // Unloading prevents reload, but persisted history can still confirm a
@@ -393,8 +424,7 @@ impl CodexObserver {
                             return Ok(());
                         }
                         unloaded.remove(thread);
-                        sqlx::query("UPDATE sessions SET metadata=json_remove(metadata,'$.codex_observation_unloaded') WHERE session_id=?")
-                            .bind(&session).execute(&self.service.pool).await?;
+                        self.service.clear_reload_suspended(&session).await?;
                         runtime.set_subscription(&session, SubscriptionState::Available).await;
                         drop(unloaded);
                         self.service.event_ingest.control_available(&session);
@@ -457,9 +487,8 @@ impl CodexObserver {
                         }
                         Some("item/started" | "item/completed") => {
                             let native = super::string(&event["params"], "turnId")?;
-                            let bound: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM native_turn_bindings WHERE session_id=? AND client_turn_id=?")
-                                .bind(&session).bind(native).fetch_one(&self.service.pool).await?;
-                            if bound == 0 {
+                            let bound = self.service.native_turns().is_bound(&session, native).await?;
+                            if !bound {
                                 // An empty native start was deferred until its operation
                                 // became identifiable. Keep the real native Turn timestamps.
                                 let mut turn = self.service.turns(connection, thread).await?

@@ -142,12 +142,11 @@ impl pontia_agent_control::client_contract::ClientInteractions for CodexClient {
                 .await?
                 .ok_or_else(|| Error::Unavailable("Codex connection expired".into()))?;
             let _operation = runtime.lock_session(session).await;
-            let live: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM sessions WHERE session_id=? AND state<>'exited')",
-            )
-            .bind(session)
-            .fetch_one(&service.pool)
-            .await?;
+            let live: bool = service
+                .queries()
+                .session_state(session)
+                .await?
+                .is_some_and(|state| state != pontia_core::domain::SessionState::Exited);
             if !live
                 || runtime.subscription(session).await == Some(SubscriptionState::ExitPending)
                 || CodexService::has_confirmed_exit(session).await

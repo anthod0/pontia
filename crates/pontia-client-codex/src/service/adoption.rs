@@ -145,11 +145,12 @@ impl CodexService {
         let boundary = self.confirm_loaded_thread(runtime, native).await?;
         self.reconcile_proxy_archive(runtime, &session, native, Some(boundary))
             .await?;
-        let state: String = sqlx::query_scalar("SELECT state FROM sessions WHERE session_id=?")
-            .bind(&session)
-            .fetch_one(&self.pool)
-            .await?;
-        if state == "exited" {
+        let state = self
+            .queries()
+            .session_state(&session)
+            .await?
+            .ok_or(sqlx::Error::RowNotFound)?;
+        if state == pontia_core::domain::SessionState::Exited {
             self.event_ingest
                 .ingest_pontia_event(PontiaEvent::new(
                     &session,
@@ -162,8 +163,7 @@ impl CodexService {
                 .await?;
         }
         confirmed_exits().lock().await.remove(&session);
-        sqlx::query("UPDATE sessions SET metadata=json_remove(metadata,'$.codex_observation_unloaded') WHERE session_id=?")
-                .bind(&session).execute(&self.pool).await?;
+        self.clear_reload_suspended(&session).await?;
         self.subscribe_opened_thread(runtime, &session, native)
             .await?;
         Ok((session, operation_guard))

@@ -9,7 +9,6 @@ pontia-agent-control.workspace = true
 pontia-config.workspace = true
 pontia-core.workspace = true
 pontia-runtime.workspace = true
-pontia-storage-sqlite.workspace = true
 pontia-version.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
@@ -25,6 +24,7 @@ tempfile = "3"
 zstd = "0.14.3"
 
 [dev-dependencies]
+pontia-storage-sqlite.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]

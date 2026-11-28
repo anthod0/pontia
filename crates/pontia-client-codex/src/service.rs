@@ -63,6 +63,21 @@ impl CodexService {
         }
     }
 
+    pub(super) fn queries(&self) -> pontia_agent_control::ControlQueryService {
+        pontia_agent_control::ControlQueryService::new(self.pool.clone())
+    }
+
+    fn native_turns(&self) -> pontia_agent_control::turns::NativeTurnService {
+        pontia_agent_control::turns::NativeTurnService::new(
+            self.pool.clone(),
+            self.event_ingest.clone(),
+        )
+    }
+
+    fn metadata(&self) -> pontia_agent_control::SessionMetadataStore {
+        pontia_agent_control::SessionMetadataStore::new(self.pool.clone())
+    }
+
     pub async fn provision(
         &self,
         session_id: &str,
@@ -72,13 +87,17 @@ impl CodexService {
         reasoning_effort: Option<&str>,
     ) -> Result<()> {
         let root = root.canonicalize()?;
-        sqlx::query("UPDATE sessions SET metadata=json_set(CASE WHEN json_type(metadata)='object' THEN metadata ELSE '{}' END,'$.codex_control_root',?,'$.codex_launch_cwd',?,'$.codex_launch_model',?,'$.codex_launch_reasoning_effort',?) WHERE session_id=?")
-            .bind(root.display().to_string())
-            .bind(cwd.display().to_string())
-            .bind(model)
-            .bind(reasoning_effort)
-            .bind(session_id)
-            .execute(&self.pool).await?;
+        self.metadata()
+            .patch_keys(
+                session_id,
+                &[
+                    ("codex_control_root", json!(root.display().to_string())),
+                    ("codex_launch_cwd", json!(cwd.display().to_string())),
+                    ("codex_launch_model", json!(model)),
+                    ("codex_launch_reasoning_effort", json!(reasoning_effort)),
+                ],
+            )
+            .await?;
         let _ = observation_changes().send((
             root,
             CodexServerTarget::for_session(&self.pool, session_id).await?,
@@ -88,15 +107,8 @@ impl CodexService {
     }
 
     pub(super) async fn root(&self, session_id: &str) -> Result<PathBuf> {
-        let root: Option<String> = sqlx::query_scalar(
-            "SELECT json_extract(metadata,'$.codex_control_root') FROM sessions WHERE session_id=?",
-        )
-        .bind(session_id)
-        .fetch_optional(&self.pool)
-        .await?
-        .flatten();
-        root.map(Into::into)
-            .ok_or_else(|| Error::StateConflict("Codex control root is missing".into()))
+        let root = CodexRuntime::control_root(&self.pool, session_id).await?;
+        root.ok_or_else(|| Error::StateConflict("Codex control root is missing".into()))
     }
 
     pub(super) async fn runtime(&self, session_id: &str) -> Result<Arc<CodexRuntime>> {
@@ -199,19 +211,19 @@ impl CodexService {
                 (snapshot["thread"].clone(), turns)
             }
             None => {
-                let (cwd, model, effort): (Option<String>, Option<String>, Option<String>) =
-                    sqlx::query_as(
-                        "SELECT COALESCE(workspace_ref,json_extract(metadata,'$.codex_launch_cwd')),
-                                json_extract(metadata,'$.codex_launch_model'),
-                                json_extract(metadata,'$.codex_launch_reasoning_effort')
-                         FROM sessions WHERE session_id=?",
-                    )
-                    .bind(session_id)
-                    .fetch_one(&self.pool)
-                    .await?;
-                let cwd =
-                    cwd.ok_or_else(|| Error::StateConflict("Codex launch cwd is missing".into()))?;
-                let mut config = self.session_config(session_id, &connection, &cwd).await?;
+                let fields = self
+                    .queries()
+                    .client_session_fields(session_id)
+                    .await?
+                    .ok_or(sqlx::Error::RowNotFound)?;
+                let cwd = fields
+                    .workspace_ref
+                    .as_deref()
+                    .or_else(|| fields.metadata["codex_launch_cwd"].as_str())
+                    .ok_or_else(|| Error::StateConflict("Codex launch cwd is missing".into()))?;
+                let model = fields.metadata["codex_launch_model"].as_str();
+                let effort = fields.metadata["codex_launch_reasoning_effort"].as_str();
+                let mut config = self.session_config(session_id, &connection, cwd).await?;
                 if let Some(effort) = effort {
                     config["model_reasoning_effort"] = effort.into();
                 }
@@ -367,8 +379,7 @@ impl CodexService {
             true,
         )
         .await?;
-        sqlx::query("UPDATE sessions SET metadata=json_remove(metadata,'$.codex_observation_unloaded') WHERE session_id=?")
-            .bind(&target.session_id).execute(&self.pool).await?;
+        self.clear_reload_suspended(&target.session_id).await?;
         Ok(())
     }
 
@@ -377,14 +388,24 @@ impl CodexService {
     }
 
     async fn reload_suspended(&self, session: &str) -> Result<bool> {
-        Ok(sqlx::query_scalar::<_, bool>("SELECT COALESCE(json_extract(metadata,'$.codex_observation_unloaded'),false) FROM sessions WHERE session_id=?")
-            .bind(session).fetch_one(&self.pool).await?)
+        Ok(self
+            .queries()
+            .session_metadata(session)
+            .await?
+            .ok_or(sqlx::Error::RowNotFound)?["codex_observation_unloaded"]
+            == true)
+    }
+
+    async fn clear_reload_suspended(&self, session: &str) -> Result<()> {
+        self.metadata()
+            .remove_keys(session, &["codex_observation_unloaded"])
+            .await
     }
 
     async fn suspend_reload(&self, session: &str) -> Result<()> {
-        sqlx::query("UPDATE sessions SET metadata=json_set(metadata,'$.codex_observation_unloaded',json('true')) WHERE session_id=?")
-            .bind(session).execute(&self.pool).await?;
-        Ok(())
+        self.metadata()
+            .patch_keys(session, &[("codex_observation_unloaded", json!(true))])
+            .await
     }
 
     pub(super) async fn subscribe(
@@ -522,13 +543,13 @@ impl CodexService {
     }
 
     async fn session_accepts_control(&self, session: &str) -> Result<bool> {
-        let state: String = sqlx::query_scalar("SELECT state FROM sessions WHERE session_id=?")
-            .bind(session)
-            .fetch_one(&self.pool)
-            .await?;
+        use pontia_core::domain::SessionState;
         Ok(matches!(
-            state.as_str(),
-            "idle" | "busy" | "waiting_for_interaction"
+            self.queries()
+                .session_state(session)
+                .await?
+                .ok_or(sqlx::Error::RowNotFound)?,
+            SessionState::Idle | SessionState::Busy | SessionState::WaitingForInteraction
         ))
     }
 

@@ -339,8 +339,10 @@ impl NativeHistory for CodexHistory {
                 if turn.head_cursor.is_some() && (!terminal || turn.tail_cursor.is_some()) {
                     continue;
                 }
-                let native: Option<String> = sqlx::query_scalar("SELECT client_turn_id FROM native_turn_bindings WHERE session_id=? AND turn_id=?")
-                    .bind(&self.binding.session_id).bind(&turn.turn_id).fetch_optional(pool).await?;
+                let native: Option<String> =
+                    pontia_agent_control::ControlQueryService::new(pool.clone())
+                        .client_turn_id(&self.binding.session_id, &turn.turn_id)
+                        .await?;
                 let native = native.ok_or_else(|| {
                     Error::Domain(format!(
                         "Codex Turn {} has no native association",

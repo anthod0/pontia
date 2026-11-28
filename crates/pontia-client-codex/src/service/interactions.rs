@@ -110,8 +110,10 @@ async fn register(
         return Ok(());
     };
     let pool = ingest.db();
-    let session: Option<String> = sqlx::query_scalar("SELECT a.session_id FROM agent_bindings a JOIN sessions s USING(session_id) WHERE a.client_type='codex' AND a.client_session_key=? AND s.state<>'exited'").bind(&thread).fetch_optional(&pool).await?;
-    let Some(session) = session else {
+    let Some(session) = pontia_agent_control::ControlQueryService::new(pool.clone())
+        .non_exited_bound_session("codex", &thread)
+        .await?
+    else {
         return Ok(());
     };
     if crate::runtime::CodexServerTarget::for_session(&pool, &session).await? != connection.target
@@ -131,13 +133,11 @@ async fn register(
         interaction.turn_id.clone()
     } else {
         match &native_turn {
-            Some(turn) => sqlx::query_scalar::<_, String>(
-                "SELECT turn_id FROM native_turn_bindings WHERE session_id=? AND client_turn_id=?",
-            )
-            .bind(&session)
-            .bind(turn)
-            .fetch_optional(&pool)
-            .await?,
+            Some(turn) => {
+                pontia_agent_control::turns::NativeTurnService::new(pool.clone(), ingest.clone())
+                    .turn_id(&session, turn)
+                    .await?
+            }
             None => None,
         }
     };

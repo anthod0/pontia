@@ -3,9 +3,9 @@ use crate::{
     proxy::unsubscribe_confirmed,
     runtime::{CodexRuntime, SubscriptionState},
 };
+use pontia_agent_control::runtime::RuntimeAttachmentService;
 use pontia_agent_control::{AgentBindingService, PontiaEvent, PontiaEventSource, PontiaEventType};
 use pontia_core::{Error, Result};
-use pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository;
 use serde_json::json;
 
 const ROLE: &str = "codex_proxy";
@@ -13,9 +13,9 @@ const ROLE: &str = "codex_proxy";
 impl CodexService {
     // A freshly bound proxy has no connections from the previous pontiad instance.
     pub(super) async fn retire_disconnected_proxy_runtimes(&self) -> Result<()> {
-        let records: Vec<(String, String)> = sqlx::query_as(
-            "SELECT session_id,runtime_id FROM session_runtimes WHERE role=? AND state IN ('starting','running')",
-        ).bind(ROLE).fetch_all(&self.pool).await?;
+        let records: Vec<(String, String)> = RuntimeAttachmentService::new(self.pool.clone())
+            .list_active_by_role(ROLE)
+            .await?;
         for (session, runtime_id) in records {
             self.proxy_runtime_fact(&session, &runtime_id, PontiaEventType::RuntimeExited, None)
                 .await?;
@@ -30,8 +30,9 @@ impl CodexService {
         runtime_id: &str,
         peer: &pontia_runtime::ProcessFingerprint,
     ) -> Result<()> {
-        if SqliteSessionRuntimeRepository::new(self.pool.clone())
-            .get(runtime_id)
+        if self
+            .queries()
+            .session_runtime(runtime_id)
             .await?
             .is_some_and(|record| record.state == "running")
         {
@@ -62,10 +63,7 @@ impl CodexService {
         };
         let session = &binding.session_id;
         let _operation = runtime.lock_session(session).await;
-        let Some(record) = SqliteSessionRuntimeRepository::new(self.pool.clone())
-            .get(runtime_id)
-            .await?
-        else {
+        let Some(record) = self.queries().session_runtime(runtime_id).await? else {
             return Ok(());
         };
         if record.state != "running" {
@@ -89,9 +87,7 @@ impl CodexService {
         runtime: &CodexRuntime,
         session: &str,
     ) -> Result<()> {
-        let records = SqliteSessionRuntimeRepository::new(self.pool.clone())
-            .list(session)
-            .await?;
+        let records = self.queries().session_runtimes(session).await?;
         let peers = runtime.proxy_peers.attached(session);
         for peer in &peers {
             // A native open can already be confirmed while its observation is waiting for this lock.
@@ -152,9 +148,7 @@ impl CodexService {
                 return Ok(());
             }
         }
-        let records = SqliteSessionRuntimeRepository::new(self.pool.clone())
-            .list(session)
-            .await?;
+        let records = self.queries().session_runtimes(session).await?;
         let mut ended = false;
         for record in records
             .into_iter()
@@ -206,19 +200,21 @@ impl CodexService {
         session: &str,
         thread: &str,
     ) -> Result<()> {
-        let active: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM session_runtimes WHERE session_id=? AND role=? AND state='running'")
-            .bind(session).bind(ROLE).fetch_one(&self.pool).await?;
+        let active: i64 = RuntimeAttachmentService::new(self.pool.clone())
+            .count_running_by_role(session, ROLE)
+            .await?;
         if active != 0
             || runtime.subscription(session).await == Some(SubscriptionState::ExitPending)
             || Self::has_confirmed_exit(session).await
         {
             return Ok(());
         }
-        let exited: bool =
-            sqlx::query_scalar("SELECT state='exited' FROM sessions WHERE session_id=?")
-                .bind(session)
-                .fetch_one(&self.pool)
-                .await?;
+        let exited: bool = self
+            .queries()
+            .session_state(session)
+            .await?
+            .ok_or(sqlx::Error::RowNotFound)?
+            == pontia_core::domain::SessionState::Exited;
         if exited {
             return Ok(());
         }

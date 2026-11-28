@@ -313,6 +313,33 @@ impl Fixture {
 }
 
 #[tokio::test]
+async fn concurrent_compaction_snapshots_preserve_both_turns() {
+    let fixture = Fixture::new().await;
+    let service = super::CodexService::new(fixture.app.event_ingest_service());
+    let session = &fixture.sessions[0];
+    let items = json!([{"type":"contextCompaction","id":"checkpoint"}]);
+    let first = native_turn("first", "completed", items.clone());
+    let second = native_turn("second", "completed", items);
+    tokio::try_join!(
+        service.reconcile_compaction_turn(session, &first),
+        service.reconcile_compaction_turn(session, &second),
+    )
+    .unwrap();
+    let metadata = fixture
+        .app
+        .queries()
+        .session_metadata(session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        metadata["codex_compactions"]["history_counts"],
+        json!({"first":1, "second":1})
+    );
+    fixture.close().await;
+}
+
+#[tokio::test]
 async fn manual_compaction_routes_sessions_correlates_and_survives_reconnect_without_turns() {
     let fixture = Fixture::new().await;
     let first = fixture

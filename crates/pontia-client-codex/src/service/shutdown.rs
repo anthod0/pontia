@@ -49,13 +49,8 @@ pub(super) async fn inspect(
 }
 
 async fn background_sessions(pool: &SqlitePool) -> Result<Vec<ShutdownSession>> {
-    let sessions: Vec<ShutdownSession> = sqlx::query_as(
-            "SELECT s.session_id, s.title, s.client_type, COALESCE(w.display_path, s.workspace_ref) AS workspace
-             FROM sessions s LEFT JOIN workspaces w USING(workspace_id)
-             WHERE s.client_type='codex' AND s.state NOT IN ('exited','error')
-             ORDER BY s.session_id",
-        ).fetch_all(pool).await?;
     let queries = pontia_agent_control::ControlQueryService::new(pool.clone());
+    let sessions = queries.list_active_shutdown_sessions("codex").await?;
     let mut background = Vec::new();
     for session in sessions {
         if queries.session_launch_mode(&session.session_id).await?

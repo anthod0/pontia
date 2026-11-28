@@ -95,8 +95,18 @@ async fn observe(
             }
             let _operation = runtime.lock_session(session).await;
             let subscription = runtime.subscription(session).await;
-            let accepts_turn: bool = sqlx::query_scalar("SELECT state IN ('idle','busy','waiting_for_interaction','interrupted') FROM sessions WHERE session_id=?")
-                .bind(session).fetch_one(&service.pool).await?;
+            use pontia_core::domain::SessionState;
+            let accepts_turn = matches!(
+                service
+                    .queries()
+                    .session_state(session)
+                    .await?
+                    .ok_or(sqlx::Error::RowNotFound)?,
+                SessionState::Idle
+                    | SessionState::Busy
+                    | SessionState::WaitingForInteraction
+                    | SessionState::Interrupted
+            );
             if subscription == Some(SubscriptionState::ExitPending)
                 || CodexService::has_confirmed_exit(session).await
                 || !accepts_turn
@@ -118,8 +128,7 @@ async fn observe(
                 if CodexService::has_confirmed_exit(session).await {
                     return Ok(());
                 }
-                sqlx::query("UPDATE sessions SET metadata=json_remove(metadata,'$.codex_observation_unloaded') WHERE session_id=?")
-                    .bind(session).execute(&service.pool).await?;
+                service.clear_reload_suspended(session).await?;
             }
             if suspended || subscription != Some(SubscriptionState::Available) {
                 service

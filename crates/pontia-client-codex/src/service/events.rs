@@ -1,6 +1,6 @@
 use super::{CodexService, string};
 use crate::runtime::CodexRuntime;
-use pontia_agent_control::turns::{NativeTurnObservation, NativeTurnService};
+use pontia_agent_control::turns::NativeTurnObservation;
 use pontia_core::{Error, Result, domain::EventType};
 use serde_json::{Value, json};
 use std::collections::HashSet;
@@ -144,17 +144,8 @@ impl CodexService {
             return Ok(());
         }
         let items = turn["items"].as_array().cloned().unwrap_or_default();
-        if items.is_empty() {
-            let bound: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM native_turn_bindings WHERE session_id=? AND client_turn_id=?",
-            )
-            .bind(session)
-            .bind(native_id)
-            .fetch_one(&self.pool)
-            .await?;
-            if bound == 0 {
-                return Ok(());
-            }
+        if items.is_empty() && !self.native_turns().is_bound(session, native_id).await? {
+            return Ok(());
         }
         let user_message = items.iter().find(|item| item["type"] == "userMessage");
         let input = user_message
@@ -183,7 +174,7 @@ impl CodexService {
                     .rev()
                     .find(|item| item["type"] == "agentMessage" && item["phase"].is_null())
             });
-        NativeTurnService::new(self.pool.clone(), self.event_ingest.clone())
+        self.native_turns()
             .observe_turn(
                 session,
                 None,

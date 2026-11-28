@@ -14,13 +14,11 @@ impl CodexService {
     ) -> Result<NativeSessionFork> {
         let runtime = self.runtime(session).await?;
         let binding = self.binding(session).await?;
-        let native: String = sqlx::query_scalar(
-            "SELECT client_turn_id FROM native_turn_bindings WHERE session_id=? AND turn_id=?",
-        )
-        .bind(session)
-        .bind(turn)
-        .fetch_one(&self.pool)
-        .await?;
+        let native: String = self
+            .native_turns()
+            .client_turn_id(session, turn)
+            .await?
+            .ok_or(sqlx::Error::RowNotFound)?;
         let connection = runtime.connection().await?;
         let turns = self
             .turns(&connection, &binding.client_session_key)
@@ -116,13 +114,7 @@ impl CodexService {
         let last = params["lastTurnId"].as_str();
         let boundary = before.or(last);
         let turn: Option<String> = if let Some(boundary) = boundary {
-            sqlx::query_scalar(
-                "SELECT turn_id FROM native_turn_bindings WHERE session_id=? AND client_turn_id=?",
-            )
-            .bind(parent)
-            .bind(boundary)
-            .fetch_optional(&self.pool)
-            .await?
+            self.native_turns().turn_id(parent, boundary).await?
         } else {
             None
         };

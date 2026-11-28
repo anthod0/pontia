@@ -33,9 +33,22 @@ impl SessionMetadataStore {
         key: &str,
         update: impl FnOnce(Option<Value>) -> Result<Value>,
     ) -> Result<()> {
+        self.modify_key(session, key, |old| Ok((Some(update(old)?), ())))
+            .await
+    }
+
+    /// Return None for the replacement value to leave the key and revision untouched.
+    pub async fn modify_key<T>(
+        &self,
+        session: &str,
+        key: &str,
+        update: impl FnOnce(Option<Value>) -> Result<(Option<Value>, T)>,
+    ) -> Result<T> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        SqliteSessionRepository::update_metadata_key_in_tx(&mut tx, session, key, update).await?;
+        let result =
+            SqliteSessionRepository::modify_metadata_key_in_tx(&mut tx, session, key, update)
+                .await?;
         tx.commit().await?;
-        Ok(())
+        Ok(result)
     }
 }
