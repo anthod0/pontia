@@ -1,7 +1,7 @@
-use super::{DeliveryError, DeliveryOperation, InputPayload};
+use super::{ClientLaunchRequest, DeliveryError, DeliveryOperation, InputPayload};
 use crate::{EventIngestService, control::InputReceipt, runtime::ControlTarget};
 use pontia_core::Result;
-use pontia_runtime::RuntimeStartRequest;
+use pontia_runtime::{RuntimeStartRequest, RuntimeStartResult};
 use serde_json::Value;
 use sqlx::SqlitePool;
 use std::{future::Future, path::Path, pin::Pin};
@@ -37,8 +37,11 @@ pub struct NativeSessionFork {
     pub receipt: Value,
 }
 
-/// Session operations for clients whose execution lifetime is independent of a local pane.
+/// Session-level lifecycle and control operations implemented by an Agent Client integration.
 pub trait ClientSession: Send + Sync {
+    fn provisions_runtime_binding(&self) -> bool {
+        false
+    }
     fn creation_options(&self) -> ClientOperation<'_, Option<Vec<SessionCreationOption>>> {
         Box::pin(async { Ok(None) })
     }
@@ -47,14 +50,14 @@ pub trait ClientSession: Send + Sync {
         events: EventIngestService,
         root: &'a Path,
         request: RuntimeStartRequest,
-    ) -> ClientOperation<'a, ()>;
+    ) -> ClientOperation<'a, Option<RuntimeStartResult>>;
     fn provision_configured<'a>(
         &'a self,
         events: EventIngestService,
         root: &'a Path,
         request: RuntimeStartRequest,
         _configuration: Value,
-    ) -> ClientOperation<'a, ()> {
+    ) -> ClientOperation<'a, Option<RuntimeStartResult>> {
         self.provision(events, root, request)
     }
     fn start_turn<'a>(
@@ -87,6 +90,18 @@ pub trait ClientSession: Send + Sync {
             ))
         })
     }
+    fn replay<'a>(
+        &'a self,
+        _events: EventIngestService,
+        _target: &'a ControlTarget,
+        _replay_id: &'a str,
+    ) -> DeliveryOperation<'a> {
+        Box::pin(async {
+            Err(DeliveryError::Unsupported(
+                "This client does not support branch replay".into(),
+            ))
+        })
+    }
     fn exit<'a>(
         &'a self,
         events: EventIngestService,
@@ -95,9 +110,33 @@ pub trait ClientSession: Send + Sync {
     ) -> ClientOperation<'a, ClientExitOutcome>;
     fn resume<'a>(
         &'a self,
+        _events: EventIngestService,
+        _target: &'a ControlTarget,
+    ) -> ClientOperation<'a, ()> {
+        Box::pin(async {
+            Err(pontia_core::Error::CapabilityUnavailable(
+                "Session resume is unavailable".into(),
+            ))
+        })
+    }
+    fn resume_with_runtime<'a>(
+        &'a self,
         events: EventIngestService,
         target: &'a ControlTarget,
-    ) -> ClientOperation<'a, ()>;
+        _request: ClientLaunchRequest<'a>,
+    ) -> ClientOperation<'a, Option<RuntimeStartResult>> {
+        Box::pin(async move {
+            self.resume(events, target).await?;
+            Ok(None)
+        })
+    }
+    fn validate_resume<'a>(
+        &'a self,
+        _pool: SqlitePool,
+        _target: &'a ControlTarget,
+    ) -> ClientOperation<'a, ()> {
+        Box::pin(async { Ok(()) })
+    }
     fn fork_session<'a>(
         &'a self,
         _events: EventIngestService,
@@ -153,20 +192,35 @@ pub trait ClientSession: Send + Sync {
     ) -> ClientOperation<'a, crate::client_contract::AgentClientCapabilities> {
         Box::pin(async move { Ok(implementation.clone()) })
     }
-    fn available<'a>(&'a self, pool: SqlitePool, session: &'a str) -> ClientOperation<'a, bool>;
+    fn available<'a>(
+        &'a self,
+        pool: SqlitePool,
+        control: Option<crate::clients::ClientControlService>,
+        session: &'a str,
+    ) -> ClientOperation<'a, bool>;
     fn manual_compaction_available<'a>(
         &'a self,
         pool: SqlitePool,
+        control: Option<crate::clients::ClientControlService>,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
-        self.available(pool, session)
+        self.available(pool, control, session)
     }
     fn reasoning_effort_control_available<'a>(
         &'a self,
         pool: SqlitePool,
+        control: Option<crate::clients::ClientControlService>,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
-        self.available(pool, session)
+        self.available(pool, control, session)
+    }
+    fn control_connected<'a>(
+        &'a self,
+        _pool: SqlitePool,
+        _control: Option<crate::clients::ClientControlService>,
+        _session: &'a str,
+    ) -> ClientOperation<'a, Option<bool>> {
+        Box::pin(async { Ok(None) })
     }
     fn details<'a>(
         &'a self,

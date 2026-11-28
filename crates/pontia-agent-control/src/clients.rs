@@ -78,6 +78,11 @@ impl ClientAdapter {
             .and_then(|entry| entry.session.clone())
     }
 
+    pub(crate) fn provisions_runtime_binding(&self) -> bool {
+        self.session_client()
+            .is_some_and(|client| client.provisions_runtime_binding())
+    }
+
     pub fn prepares_on_input(&self) -> bool {
         self.registry
             .get(self.spec.client_type)
@@ -92,7 +97,9 @@ impl ClientAdapter {
 
     pub async fn input_available(&self, session: &str) -> Result<bool> {
         if let Some(client) = self.session_client() {
-            return client.available(self.pool.clone(), session).await;
+            return client
+                .available(self.pool.clone(), Some(self.control.clone()), session)
+                .await;
         }
         if self.spec.adapter.dispatch == DispatchMode::Connected {
             return self.control.available(session).await;

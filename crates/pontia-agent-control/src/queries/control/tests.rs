@@ -61,7 +61,12 @@ impl ClientSession for Client {
     ) -> ClientOperation<'a, ClientSessionDetails> {
         Box::pin(async { Err(Error::Domain("display details unavailable".into())) })
     }
-    fn available<'a>(&'a self, _: SqlitePool, _: &'a str) -> ClientOperation<'a, bool> {
+    fn available<'a>(
+        &'a self,
+        _: SqlitePool,
+        _: Option<crate::ClientControlService>,
+        _: &'a str,
+    ) -> ClientOperation<'a, bool> {
         Box::pin(async { Ok(true) })
     }
     fn provision<'a>(
@@ -69,7 +74,7 @@ impl ClientSession for Client {
         _: EventIngestService,
         _: &'a Path,
         _: RuntimeStartRequest,
-    ) -> ClientOperation<'a, ()> {
+    ) -> ClientOperation<'a, Option<pontia_runtime::RuntimeStartResult>> {
         panic!("unexpected provisioning")
     }
     fn interrupt<'a>(

@@ -53,20 +53,24 @@ impl ControlQueryService {
         {
             session.control_connected = Some(false);
             session.control_disconnected_reason = Some("unsupported_protocol_version");
-        } else if let Some(entry) = self.clients.get(&session.client_type)
-            && entry.session.is_none()
-            && entry.spec.adapter.dispatch == crate::client_contract::DispatchMode::Connected
-            && let Some(control) = &self.control
-            && let Some(runtime) = session.runtimes.iter().find(|runtime| {
-                Some(runtime.role.as_str()) == entry.spec.adapter.control_runtime_role
-                    && runtime.state == "running"
-            })
-        {
-            session.control_connected = Some(
-                control
-                    .connected_to(&session.session_id, &runtime.runtime_id)
-                    .await,
-            );
+        } else if let Some(entry) = self.clients.get(&session.client_type) {
+            if let Some(client) = &entry.session {
+                session.control_connected = client
+                    .control_connected(self.pool.clone(), self.control.clone(), &session.session_id)
+                    .await?;
+            } else if entry.spec.adapter.dispatch == crate::client_contract::DispatchMode::Connected
+                && let Some(control) = &self.control
+                && let Some(runtime) = session.runtimes.iter().find(|runtime| {
+                    Some(runtime.role.as_str()) == entry.spec.adapter.control_runtime_role
+                        && runtime.state == "running"
+                })
+            {
+                session.control_connected = Some(
+                    control
+                        .connected_to(&session.session_id, &runtime.runtime_id)
+                        .await,
+                );
+            }
         }
         session.lineage = self.session_lineage(&session.session_id).await?;
         if let Some(client) = self
@@ -126,7 +130,11 @@ impl ControlQueryService {
         if capabilities.manual_compaction {
             capabilities.manual_compaction = if let Some(client) = &entry.session {
                 client
-                    .manual_compaction_available(self.pool.clone(), session_id)
+                    .manual_compaction_available(
+                        self.pool.clone(),
+                        self.control.clone(),
+                        session_id,
+                    )
                     .await?
             } else if entry.spec.adapter.dispatch == crate::client_contract::DispatchMode::Connected
             {
@@ -138,7 +146,11 @@ impl ControlQueryService {
         if capabilities.reasoning_effort_control {
             capabilities.reasoning_effort_control = if let Some(client) = &entry.session {
                 client
-                    .reasoning_effort_control_available(self.pool.clone(), session_id)
+                    .reasoning_effort_control_available(
+                        self.pool.clone(),
+                        self.control.clone(),
+                        session_id,
+                    )
                     .await?
             } else if entry.spec.adapter.dispatch == crate::client_contract::DispatchMode::Connected
             {

@@ -196,8 +196,8 @@ impl SessionCommandService {
                 .await?;
         }
 
-        // Session clients complete their launch through an incoming attachment.
-        if adapter.session_client().is_some() {
+        // Backend-managed Session clients complete launch through their own attachment.
+        if adapter.session_client().is_some() && !adapter.provisions_runtime_binding() {
             drop(launch_guard.take());
         }
         let runtime = adapter

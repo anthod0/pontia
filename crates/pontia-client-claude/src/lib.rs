@@ -258,7 +258,7 @@ impl ClientSession for Adapter {
         events: EventIngestService,
         root: &'a Path,
         request: RuntimeStartRequest,
-    ) -> ClientOperation<'a, ()> {
+    ) -> ClientOperation<'a, Option<pontia_runtime::RuntimeStartResult>> {
         Box::pin(async move {
             let mut peers = self.peers.lock().await;
             if self.stopped.load(Ordering::Acquire) || peers.contains_key(&request.session_id) {
@@ -302,7 +302,7 @@ impl ClientSession for Adapter {
                 request.reasoning_effort.as_deref(),
             )
             .await?;
-            Ok(())
+            Ok(None)
         })
     }
     fn start_turn<'a>(
@@ -428,6 +428,7 @@ impl ClientSession for Adapter {
     fn manual_compaction_available<'a>(
         &'a self,
         _: SqlitePool,
+        _: Option<pontia_agent_control::ClientControlService>,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
         Box::pin(async move {
@@ -445,6 +446,7 @@ impl ClientSession for Adapter {
     fn reasoning_effort_control_available<'a>(
         &'a self,
         _: SqlitePool,
+        _: Option<pontia_agent_control::ClientControlService>,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
         Box::pin(async move {
@@ -535,7 +537,12 @@ impl ClientSession for Adapter {
             Ok(implementation.clone())
         })
     }
-    fn available<'a>(&'a self, _: SqlitePool, session: &'a str) -> ClientOperation<'a, bool> {
+    fn available<'a>(
+        &'a self,
+        _: SqlitePool,
+        _: Option<pontia_agent_control::ClientControlService>,
+        session: &'a str,
+    ) -> ClientOperation<'a, bool> {
         Box::pin(async move {
             let Ok(peer) = self.peer(session).await else {
                 return Ok(false);

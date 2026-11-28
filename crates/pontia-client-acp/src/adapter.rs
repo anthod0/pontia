@@ -153,7 +153,7 @@ impl ClientSession for AcpAdapter {
         events: EventIngestService,
         root: &'a Path,
         request: RuntimeStartRequest,
-    ) -> ClientOperation<'a, ()> {
+    ) -> ClientOperation<'a, Option<pontia_runtime::RuntimeStartResult>> {
         Box::pin(async move {
             if self.stopped.load(Ordering::Acquire) {
                 return Err(unavailable());
@@ -372,7 +372,7 @@ impl ClientSession for AcpAdapter {
                 }
             }
             peer.state.lock().await.refresh_capabilities();
-            Ok(())
+            Ok(None)
         })
     }
 
@@ -757,7 +757,12 @@ impl ClientSession for AcpAdapter {
         })
     }
 
-    fn available<'a>(&'a self, _pool: SqlitePool, session: &'a str) -> ClientOperation<'a, bool> {
+    fn available<'a>(
+        &'a self,
+        _pool: SqlitePool,
+        _: Option<pontia_agent_control::ClientControlService>,
+        session: &'a str,
+    ) -> ClientOperation<'a, bool> {
         Box::pin(async move {
             let Ok(peer) = self.peer(session).await else {
                 return Ok(false);
@@ -904,7 +909,8 @@ impl ClientSession for AcpAdapter {
                         .await?,
                 },
             )
-            .await
+            .await?;
+            Ok(())
         })
     }
 }

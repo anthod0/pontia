@@ -1,4 +1,4 @@
-use crate::launch::PiLauncher;
+use crate::launch::PiSession;
 use crate::raw_transcripts::{PiAgentBindingResolver, PiTimelineAdapter};
 use pontia_agent_control::client_contract::{
     TimelineBoundaryBackend, TimelineCachePolicy, TurnTimelineBackend, TurnTopologyBackend,
@@ -30,11 +30,11 @@ pub fn registration(tui_command: Option<String>) -> ClientRegistration {
         instructions: Some(Arc::new(crate::instructions::InstructionsPolicy)),
         events: Some(Arc::new(crate::lifecycle::PiEventInterpreter)),
         in_process: None,
-        session: None,
+        session: Some(Arc::new(PiSession { tui_command })),
         prepare_on_input: false,
         spec: &crate::SPEC,
         data: Some(Arc::new(PiData)),
-        launcher: Some(Arc::new(PiLauncher { tui_command })),
+        launcher: None,
     }
 }
 

@@ -28,14 +28,14 @@ impl ClientAdapter {
         configuration: Option<serde_json::Value>,
     ) -> Result<Option<RuntimeStartResult>> {
         if let Some(client) = self.session_client() {
-            if let Some(configuration) = configuration {
+            let runtime = if let Some(configuration) = configuration {
                 client
                     .provision_configured(self.events.clone(), root, request, configuration)
-                    .await?;
+                    .await?
             } else {
-                client.provision(self.events.clone(), root, request).await?;
-            }
-            return Ok(None);
+                client.provision(self.events.clone(), root, request).await?
+            };
+            return Ok(runtime);
         }
         if let Some(launcher) = self
             .registry
@@ -132,15 +132,34 @@ impl ClientAdapter {
         count: i64,
     ) -> Result<Option<RuntimeStartResult>> {
         target.validate(&self.pool.clone()).await?;
-        if let Some(client) = self.session_client() {
-            client.resume(self.events.clone(), target).await?;
-            return Ok(None);
-        }
         let binding = crate::AgentBindingService::new(self.pool.clone())
             .binding_for_session(&target.session_id)
             .await?;
         let pane = target.tmux_pane(&self.pool.clone()).await.ok();
         target.validate(&self.pool.clone()).await?;
+        if let Some(client) = self.session_client() {
+            return client
+                .resume_with_runtime(
+                    self.events.clone(),
+                    target,
+                    super::ClientLaunchRequest {
+                        root,
+                        runtime: request,
+                        restart_count: count,
+                        reuse_pane: pane
+                            .as_ref()
+                            .map(|(socket, pane)| (socket.as_str(), pane.as_str())),
+                        native_session_key: binding
+                            .as_ref()
+                            .map(|binding| binding.client_session_key.as_str()),
+                        native_session_file: binding
+                            .as_ref()
+                            .and_then(|binding| binding.client_session_file.as_deref())
+                            .map(Path::new),
+                    },
+                )
+                .await;
+        }
         if let Some(launcher) = self
             .registry
             .get(self.spec.client_type)
@@ -172,6 +191,9 @@ impl ClientAdapter {
         let binding = crate::AgentBindingService::new(self.pool.clone())
             .binding_for_session(&target.session_id)
             .await?;
+        if let Some(client) = self.session_client() {
+            return client.validate_resume(self.pool.clone(), target).await;
+        }
         self.validate_bound_session(binding.as_ref())
     }
 

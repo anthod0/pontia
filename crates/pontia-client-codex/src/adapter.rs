@@ -213,7 +213,7 @@ impl ClientSession for CodexClient {
         events: EventIngestService,
         root: &'a Path,
         request: RuntimeStartRequest,
-    ) -> ClientOperation<'a, ()> {
+    ) -> ClientOperation<'a, Option<pontia_runtime::RuntimeStartResult>> {
         Box::pin(async move {
             let cwd = request
                 .workspace
@@ -228,7 +228,8 @@ impl ClientSession for CodexClient {
                     request.model.as_deref(),
                     request.reasoning_effort.as_deref(),
                 )
-                .await
+                .await?;
+            Ok(None)
         })
     }
     fn start_turn<'a>(
@@ -309,7 +310,12 @@ impl ClientSession for CodexClient {
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move { CodexService::new(events).resume(target).await })
     }
-    fn available<'a>(&'a self, pool: SqlitePool, session: &'a str) -> ClientOperation<'a, bool> {
+    fn available<'a>(
+        &'a self,
+        pool: SqlitePool,
+        _: Option<pontia_agent_control::ClientControlService>,
+        session: &'a str,
+    ) -> ClientOperation<'a, bool> {
         Box::pin(async move {
             let Some(runtime) = CodexRuntime::for_session(&pool, session).await? else {
                 return Ok(false);
@@ -331,6 +337,7 @@ impl ClientSession for CodexClient {
     fn manual_compaction_available<'a>(
         &'a self,
         pool: SqlitePool,
+        _: Option<pontia_agent_control::ClientControlService>,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
         Box::pin(async move {
@@ -348,6 +355,7 @@ impl ClientSession for CodexClient {
     fn reasoning_effort_control_available<'a>(
         &'a self,
         pool: SqlitePool,
+        _: Option<pontia_agent_control::ClientControlService>,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
         Box::pin(async move {

@@ -68,9 +68,6 @@ fn session_mode_is_applied_on_initial_launch_and_resume_without_accumulating_fla
     let log = root.path().join("tmux.log");
     write_fake_tmux(&root.path().join("tmux"));
     let original_path = install_fake_tmux(root.path(), &log);
-    let launcher = pontia_client_pi::registration(Some("test-pi".into()))
-        .launcher
-        .unwrap();
     let native = root.path().join("session.jsonl");
     let capture = root.path().join("capture.sh");
     let args_file = root.path().join("args");
@@ -94,16 +91,18 @@ fn session_mode_is_applied_on_initial_launch_and_resume_without_accumulating_fla
         );
         runtime.mode = mode;
         for resume in [false, true] {
-            let result = launcher
-                .launch(pontia_agent_control::clients::ClientLaunchRequest {
+            let result = launch_session(
+                Some("test-pi".into()),
+                pontia_agent_control::clients::ClientLaunchRequest {
                     root: root.path(),
                     runtime: runtime.clone(),
                     restart_count: i64::from(resume),
                     reuse_pane: None,
                     native_session_key: resume.then_some("native-policy"),
                     native_session_file: resume.then_some(native.as_path()),
-                })
-                .unwrap();
+                },
+            )
+            .unwrap();
             let text = std::fs::read_to_string(&log).unwrap();
             assert!(
                 std::process::Command::new("sh")
@@ -306,22 +305,21 @@ fn repeated_resume_preserves_command_and_passes_exact_quoted_session_file() {
         capture.display(),
         native_dir.display()
     );
-    let launcher = pontia_client_pi::registration(Some("unused-pi --different-config".into()))
-        .launcher
-        .unwrap();
     let mut persisted = command.clone();
     for restart_count in 1..=2 {
         std::fs::write(&tmux_log, "").unwrap();
-        let launched = launcher
-            .launch(pontia_agent_control::clients::ClientLaunchRequest {
+        let launched = launch_session(
+            Some("unused-pi --different-config".into()),
+            pontia_agent_control::clients::ClientLaunchRequest {
                 root: root.path(),
                 runtime: launch_request(root.path(), Some(persisted)),
                 restart_count,
                 reuse_pane: None,
                 native_session_key: Some("native-id"),
                 native_session_file: Some(&native_file),
-            })
-            .expect("resume");
+            },
+        )
+        .expect("resume");
         let log = std::fs::read_to_string(&tmux_log).unwrap();
         let status = std::process::Command::new("sh")
             .arg(launch_script_path_from_tmux_log(&log))
@@ -353,8 +351,20 @@ fn repeated_resume_preserves_command_and_passes_exact_quoted_session_file() {
 fn resume_rejects_missing_invalid_or_different_native_session_before_launch() {
     let root = tempfile::tempdir().unwrap();
     let file = root.path().join("session.jsonl");
-    let launcher = pontia_client_pi::registration(None).launcher.unwrap();
-    assert!(launcher.validate_resume("native-id", None).is_err());
+    assert!(
+        launch_session(
+            None,
+            pontia_agent_control::clients::ClientLaunchRequest {
+                root: root.path(),
+                runtime: launch_request(root.path(), Some("must-not-run".into())),
+                restart_count: 1,
+                reuse_pane: None,
+                native_session_key: Some("native-id"),
+                native_session_file: None,
+            },
+        )
+        .is_err()
+    );
     for contents in [
         None,
         Some(""),
@@ -364,14 +374,17 @@ fn resume_rejects_missing_invalid_or_different_native_session_before_launch() {
         if let Some(contents) = contents {
             std::fs::write(&file, contents).unwrap();
         }
-        let result = launcher.launch(pontia_agent_control::clients::ClientLaunchRequest {
-            root: root.path(),
-            runtime: launch_request(root.path(), Some("must-not-run".into())),
-            restart_count: 1,
-            reuse_pane: None,
-            native_session_key: Some("native-id"),
-            native_session_file: Some(&file),
-        });
+        let result = launch_session(
+            None,
+            pontia_agent_control::clients::ClientLaunchRequest {
+                root: root.path(),
+                runtime: launch_request(root.path(), Some("must-not-run".into())),
+                restart_count: 1,
+                reuse_pane: None,
+                native_session_key: Some("native-id"),
+                native_session_file: Some(&file),
+            },
+        );
         assert!(
             matches!(
                 result,
@@ -541,17 +554,49 @@ fn start_session(
     root: &Path,
     runtime: RuntimeStartRequest,
 ) -> pontia_core::Result<pontia_runtime::RuntimeStartResult> {
-    pontia_client_pi::registration(config.tui_command_for_client_config_key("pi"))
-        .launcher
-        .unwrap()
-        .launch(pontia_agent_control::clients::ClientLaunchRequest {
+    launch_session(
+        config.tui_command_for_client_config_key("pi"),
+        pontia_agent_control::clients::ClientLaunchRequest {
             root,
             runtime,
             restart_count: 0,
             reuse_pane: None,
             native_session_key: None,
             native_session_file: None,
-        })
+        },
+    )
+}
+
+fn launch_session(
+    tui_command: Option<String>,
+    request: pontia_agent_control::clients::ClientLaunchRequest<'_>,
+) -> pontia_core::Result<pontia_runtime::RuntimeStartResult> {
+    let runtime = tokio::runtime::Runtime::new()?;
+    runtime.block_on(async move {
+        let pool = pontia_storage_sqlite::connect_sqlite("sqlite::memory:").await?;
+        pontia_storage_sqlite::run_migrations(&pool).await?;
+        let events = pontia_agent_control::EventIngestService::for_projection_tests(pool);
+        let session = pontia_client_pi::registration(tui_command)
+            .session
+            .expect("Pi ClientSession");
+        let result = if request.restart_count == 0 {
+            session
+                .provision(events, request.root, request.runtime)
+                .await?
+        } else {
+            let target = pontia_agent_control::runtime::ControlTarget {
+                session_id: request.runtime.session_id.clone(),
+                runtime_id: request.runtime.runtime_id.clone(),
+                control_runtime_role: Some(
+                    pontia_client_pi::SPEC.adapter.control_runtime_role.unwrap(),
+                ),
+            };
+            session
+                .resume_with_runtime(events, &target, request)
+                .await?
+        };
+        result.ok_or_else(|| pontia_core::Error::Domain("Pi launch returned no runtime".into()))
+    })
 }
 
 #[test]
