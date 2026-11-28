@@ -266,11 +266,11 @@ impl ClientRegistry {
     }
 
     pub fn timeline(&self, client: &str) -> Option<TurnTimelineBackend> {
-        self.data(client).map(|data| data.timeline())
+        self.data(client).and_then(|data| data.timeline())
     }
 
     pub fn boundaries(&self, client: &str) -> Option<TimelineBoundaryBackend> {
-        self.data(client).map(|data| data.boundaries())
+        self.data(client).and_then(|data| data.boundaries())
     }
 }
 

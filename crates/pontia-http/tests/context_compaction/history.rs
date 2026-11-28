@@ -38,17 +38,17 @@ impl ClientData for History {
     fn take_evidence(&self, _: &mut DomainEvent) -> NativeEventEvidence {
         NativeEventEvidence::default()
     }
-    fn timeline(&self) -> TurnTimelineBackend {
-        TurnTimelineBackend {
+    fn timeline(&self) -> Option<TurnTimelineBackend> {
+        Some(TurnTimelineBackend {
             resolver: Box::new(Reader),
             reader: Box::new(Reader),
-        }
+        })
     }
-    fn boundaries(&self) -> TimelineBoundaryBackend {
-        TimelineBoundaryBackend {
+    fn boundaries(&self) -> Option<TimelineBoundaryBackend> {
+        Some(TimelineBoundaryBackend {
             resolver: Box::new(Reader),
             capturer: Box::new(Reader),
-        }
+        })
     }
     fn topology(&self) -> Option<TurnTopologyBackend> {
         None

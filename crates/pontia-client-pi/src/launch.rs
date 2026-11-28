@@ -9,8 +9,9 @@ use pontia_agent_control::ClientControlStore;
 use pontia_agent_control::{
     EventIngestService,
     client_contract::{
-        ClientExitMode, ClientExitOutcome, ClientLaunchRequest, ClientOperation, ClientSession,
-        ClientSessionDetails, DeliveryError, DeliveryOperation, InputPayload,
+        AgentClientCapabilities, ClientExitMode, ClientExitOutcome, ClientLaunchRequest,
+        ClientOperation, ClientSession, ClientSessionDetails, DeliveryError, DeliveryOperation,
+        InputPayload, SessionCapabilityState,
     },
     control::InputReceipt,
     runtime::ControlTarget,
@@ -356,40 +357,28 @@ impl ClientSession for PiSession {
         })
     }
 
-    fn manual_compaction_available<'a>(
+    fn capability_state<'a>(
         &'a self,
         store: ClientControlStore,
         session: &'a str,
-    ) -> ClientOperation<'a, bool> {
-        self.available(store, session)
-    }
-
-    fn reasoning_effort_control_available<'a>(
-        &'a self,
-        store: ClientControlStore,
-        session: &'a str,
-    ) -> ClientOperation<'a, bool> {
+        implementation: &'a AgentClientCapabilities,
+    ) -> ClientOperation<'a, SessionCapabilityState> {
         Box::pin(async move {
-            if Self::single_running_runtime(&store, session)
-                .await?
-                .is_none()
-            {
-                return Ok(false);
-            }
-            match self
-                .connections
-                .reasoning_effort_control_available(session)
-                .await
-            {
-                Ok(available) => Ok(available),
-                Err(Error::StateConflict(_) | Error::Unavailable(_) | Error::Unsupported(_)) => {
-                    Ok(false)
+            let mut state = SessionCapabilityState::from(implementation.clone());
+            let controls = match Self::single_running_runtime(&store, session).await? {
+                Some(runtime) => {
+                    self.connections
+                        .reasoning_effort_support(session, &runtime)
+                        .await?
                 }
-                Err(error) => Err(error),
-            }
+                None => None,
+            };
+            state.available.manual_compaction &= controls.is_some();
+            state.available.reasoning_effort_control &= controls == Some(true);
+            state.supported.reasoning_effort_control &= controls != Some(false);
+            Ok(state)
         })
     }
-
     fn control_connected<'a>(
         &'a self,
         store: ClientControlStore,

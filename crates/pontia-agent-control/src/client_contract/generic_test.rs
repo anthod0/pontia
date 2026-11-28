@@ -215,12 +215,14 @@ impl crate::client_contract::ClientSession for GenericTestClient {
             Ok(crate::client_contract::ClientExitOutcome::Requested)
         })
     }
-    fn capabilities<'a>(
+    fn capability_state<'a>(
         &'a self,
+        _: crate::ClientControlStore,
         _session: &'a str,
         _implementation: &'a AgentClientCapabilities,
-    ) -> crate::client_contract::ClientOperation<'a, AgentClientCapabilities> {
-        Box::pin(async move { Ok(self.capabilities()) })
+    ) -> crate::client_contract::ClientOperation<'a, crate::client_contract::SessionCapabilityState>
+    {
+        Box::pin(async move { Ok(self.capabilities().into()) })
     }
     fn ready(&self, session: &str, instance: &str) -> Option<ReportedEvent> {
         Some(Self::ready_event(session, instance))

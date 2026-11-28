@@ -24,12 +24,20 @@ struct Client {
     capabilities: Option<crate::client_contract::AgentClientCapabilities>,
 }
 impl ClientSession for Client {
-    fn capabilities<'a>(
+    fn capability_state<'a>(
         &'a self,
+        _: crate::ClientControlStore,
         _: &'a str,
         implementation: &'a crate::client_contract::AgentClientCapabilities,
-    ) -> ClientOperation<'a, crate::client_contract::AgentClientCapabilities> {
-        Box::pin(async move { Ok(self.capabilities.as_ref().unwrap_or(implementation).clone()) })
+    ) -> ClientOperation<'a, crate::client_contract::SessionCapabilityState> {
+        Box::pin(async move {
+            Ok(self
+                .capabilities
+                .as_ref()
+                .unwrap_or(implementation)
+                .clone()
+                .into())
+        })
     }
     fn start_turn<'a>(
         &'a self,

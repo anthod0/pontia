@@ -27,8 +27,9 @@ impl ControlQueryService {
     }
 
     async fn enrich_session_view(&self, session: &mut SessionView) -> Result<()> {
+        session.runtimes = self.session_runtimes(&session.session_id).await?;
         session.capabilities = self
-            .session_capabilities(&session.session_id, &session.client_type)
+            .session_capabilities(&session.session_id, &session.client_type, &session.runtimes)
             .await?
             .available;
 
@@ -50,7 +51,6 @@ impl ControlQueryService {
             session.capabilities.timeline = result.is_ok();
             session.timeline_unavailable_reason = result.err().map(timeline_unavailable_reason);
         }
-        session.runtimes = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone()).list(&session.session_id).await?;
         if session
             .metadata
             .get("incompatible_control_runtime")
@@ -87,21 +87,23 @@ impl ControlQueryService {
         &self,
         session_id: &str,
         client_type: &str,
+        runtimes: &[super::SessionRuntimeRecord],
     ) -> Result<SessionCapabilityState> {
         let Some(entry) = self.clients.get(client_type) else {
             return Ok(Default::default());
         };
-        let repository = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone());
-        let runtimes = repository.list(session_id).await?;
         let mut state = if let Some(client) = &entry.session {
             let mut state = client
-                .capability_state(session_id, &entry.spec.capabilities)
+                .capability_state(self.client_store(), session_id, &entry.spec.capabilities)
                 .await?;
             state.supported = state.supported.intersection(&entry.spec.capabilities);
             state.available = state.available.intersection(&entry.spec.capabilities);
             state
         } else {
-            entry.spec.capabilities.clone().into()
+            let mut state = SessionCapabilityState::from(entry.spec.capabilities.clone());
+            state.available.manual_compaction = false;
+            state.available.reasoning_effort_control = false;
+            state
         };
         let capabilities = &mut state.available;
         if runtimes.is_empty()
@@ -122,33 +124,6 @@ impl ControlQueryService {
                 ..SessionCapabilities::default()
             };
             return Ok(state);
-        }
-        if capabilities.manual_compaction {
-            capabilities.manual_compaction = if let Some(client) = &entry.session {
-                client
-                    .manual_compaction_available(self.client_store(), session_id)
-                    .await?
-            } else {
-                false
-            };
-        }
-        if capabilities.reasoning_effort_control {
-            capabilities.reasoning_effort_control = if let Some(client) = &entry.session {
-                let available = client
-                    .reasoning_effort_control_available(self.client_store(), session_id)
-                    .await?;
-                if !available
-                    && client
-                        .control_connected(self.client_store(), session_id)
-                        .await?
-                        == Some(true)
-                {
-                    state.supported.reasoning_effort_control = false;
-                }
-                available
-            } else {
-                false
-            };
         }
         if entry.spec.owns_interactive_turn() {
             crate::runtime::bindings::writable_capabilities(

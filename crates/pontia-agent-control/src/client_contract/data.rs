@@ -96,8 +96,12 @@ pub trait ClientData: Send + Sync {
     ) -> Option<Result<super::raw_transcripts::CapturedTimelineBoundary>> {
         None
     }
-    fn timeline(&self) -> TurnTimelineBackend;
-    fn boundaries(&self) -> TimelineBoundaryBackend;
+    fn timeline(&self) -> Option<TurnTimelineBackend> {
+        None
+    }
+    fn boundaries(&self) -> Option<TimelineBoundaryBackend> {
+        None
+    }
     fn topology(&self) -> Option<TurnTopologyBackend>;
     fn history_recovery(
         &self,

@@ -144,17 +144,17 @@ impl ClientData for PiData {
             })
         })())
     }
-    fn timeline(&self) -> TurnTimelineBackend {
-        TurnTimelineBackend {
+    fn timeline(&self) -> Option<TurnTimelineBackend> {
+        Some(TurnTimelineBackend {
             resolver: Box::new(PiAgentBindingResolver::new()),
             reader: Box::new(PiTimelineAdapter::new()),
-        }
+        })
     }
-    fn boundaries(&self) -> TimelineBoundaryBackend {
-        TimelineBoundaryBackend {
+    fn boundaries(&self) -> Option<TimelineBoundaryBackend> {
+        Some(TimelineBoundaryBackend {
             resolver: Box::new(PiAgentBindingResolver::new()),
             capturer: Box::new(PiTimelineAdapter::new()),
-        }
+        })
     }
     fn topology(&self) -> Option<TurnTopologyBackend> {
         Some(TurnTopologyBackend {

@@ -42,11 +42,12 @@ impl ClientSession for UnavailableStatusClient {
     ) -> ClientOperation<'a, ClientSessionDetails> {
         unreachable!()
     }
-    fn capabilities<'a>(
+    fn capability_state<'a>(
         &'a self,
+        _: pontia_agent_control::ClientControlStore,
         _: &'a str,
         _: &'a AgentClientCapabilities,
-    ) -> ClientOperation<'a, AgentClientCapabilities> {
+    ) -> ClientOperation<'a, pontia_agent_control::client_contract::SessionCapabilityState> {
         panic!("Work status must not probe a client")
     }
 }

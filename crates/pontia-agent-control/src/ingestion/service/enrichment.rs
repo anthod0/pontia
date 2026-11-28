@@ -90,7 +90,7 @@ pub(super) async fn enrich_timeline_boundary(
     if event.source != EventSource::AgentAdapter {
         return;
     }
-    let Some(backend) = clients.boundaries(&event.client_type) else {
+    let Some(data) = clients.data(&event.client_type) else {
         return;
     };
 
@@ -160,15 +160,13 @@ pub(super) async fn enrich_timeline_boundary(
     } else {
         None
     };
-    if let Some(result) = clients.data(&event.client_type).and_then(|data| {
-        data.capture_native_boundary(
-            &binding_request,
-            kind,
-            native_entry_anchor.clone(),
-            is_first_session_turn,
-            existing_head.as_deref(),
-        )
-    }) {
+    if let Some(result) = data.capture_native_boundary(
+        &binding_request,
+        kind,
+        native_entry_anchor.clone(),
+        is_first_session_turn,
+        existing_head.as_deref(),
+    ) {
         match result {
             Ok(boundary) => {
                 event.timeline_boundary = Some(match kind {
@@ -185,6 +183,9 @@ pub(super) async fn enrich_timeline_boundary(
         }
         return;
     }
+    let Some(backend) = data.boundaries() else {
+        return;
+    };
     let source = match backend.resolver.resolve(&binding_request) {
         Ok(source) => source,
         Err(error) => {

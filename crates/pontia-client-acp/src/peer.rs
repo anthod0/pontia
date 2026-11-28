@@ -194,6 +194,10 @@ impl SessionState {
             })
     }
 
+    pub fn available(&self) -> bool {
+        self.current && !self.closing && !self.promotion_pending() && self.capabilities.is_some()
+    }
+
     pub fn promotion_pending(&self) -> bool {
         self.promoted.is_some() && self.active.as_ref().is_none_or(|p| !p.request_id.is_null())
     }

@@ -5,8 +5,9 @@ use crate::{
 };
 use pontia_agent_control::ClientControlStore;
 use pontia_agent_control::client_contract::{
-    DeliveryError, DeliveryOperation, InputPayload, TimelineBoundaryBackend, TimelineCachePolicy,
-    TurnTimelineBackend, TurnTopologyBackend,
+    AgentClientCapabilities, DeliveryError, DeliveryOperation, InputPayload,
+    SessionCapabilityState, TimelineBoundaryBackend, TimelineCachePolicy, TurnTimelineBackend,
+    TurnTopologyBackend,
 };
 use pontia_agent_control::{
     EventIngestService,
@@ -105,17 +106,17 @@ impl ClientData for CodexData {
     ) -> Option<Result<()>> {
         Some(Ok(()))
     }
-    fn timeline(&self) -> TurnTimelineBackend {
-        TurnTimelineBackend {
+    fn timeline(&self) -> Option<TurnTimelineBackend> {
+        Some(TurnTimelineBackend {
             resolver: Box::new(CodexRollout),
             reader: Box::new(CodexRollout),
-        }
+        })
     }
-    fn boundaries(&self) -> TimelineBoundaryBackend {
-        TimelineBoundaryBackend {
+    fn boundaries(&self) -> Option<TimelineBoundaryBackend> {
+        Some(TimelineBoundaryBackend {
             resolver: Box::new(CodexRollout),
             capturer: Box::new(CodexRollout),
-        }
+        })
     }
     fn topology(&self) -> Option<TurnTopologyBackend> {
         None
@@ -330,47 +331,30 @@ impl ClientSession for CodexClient {
             })
         })
     }
-    fn manual_compaction_available<'a>(
+    fn capability_state<'a>(
         &'a self,
         store: ClientControlStore,
         session: &'a str,
-    ) -> ClientOperation<'a, bool> {
+        implementation: &'a AgentClientCapabilities,
+    ) -> ClientOperation<'a, SessionCapabilityState> {
         Box::pin(async move {
-            let Some(runtime) = CodexRuntime::for_session(&store, session).await? else {
-                return Ok(false);
-            };
-            Ok(runtime.connection().await.is_ok()
+            let mut state = SessionCapabilityState::from(implementation.clone());
+            state.available.manual_compaction = false;
+            state.available.reasoning_effort_control = false;
+            if let Some(runtime) = CodexRuntime::for_session(&store, session).await?
+                && let Ok(connection) = runtime.connection().await
                 && runtime.subscription(session).await == Some(SubscriptionState::Available)
-                && store
-                    .bindings()
-                    .binding_for_session(session)
-                    .await?
-                    .is_some())
-        })
-    }
-    fn reasoning_effort_control_available<'a>(
-        &'a self,
-        store: ClientControlStore,
-        session: &'a str,
-    ) -> ClientOperation<'a, bool> {
-        Box::pin(async move {
-            let Some(runtime) = CodexRuntime::for_session(&store, session).await? else {
-                return Ok(false);
-            };
-            let Ok(connection) = runtime.connection().await else {
-                return Ok(false);
-            };
-            let Some(binding) = store.bindings().binding_for_session(session).await? else {
-                return Ok(false);
-            };
-            Ok(
-                runtime.subscription(session).await == Some(SubscriptionState::Available)
+                && let Some(binding) = store.bindings().binding_for_session(session).await?
+            {
+                state.available.manual_compaction = implementation.manual_compaction;
+                state.available.reasoning_effort_control = implementation.reasoning_effort_control
                     && !connection
                         .unloaded_threads
                         .lock()
                         .await
-                        .contains_key(&binding.client_session_key),
-            )
+                        .contains_key(&binding.client_session_key);
+            }
+            Ok(state)
         })
     }
     fn details<'a>(

@@ -433,40 +433,6 @@ impl ClientSession for Adapter {
             connection.set_reasoning_effort(reasoning_effort).await
         })
     }
-    fn manual_compaction_available<'a>(
-        &'a self,
-        _: ClientControlStore,
-        session: &'a str,
-    ) -> ClientOperation<'a, bool> {
-        Box::pin(async move {
-            let Ok(peer) = self.peer(session).await else {
-                return Ok(false);
-            };
-            let state = peer.state.lock().await;
-            Ok(state.native.is_some()
-                && state.unavailable.is_none()
-                && !state.closed
-                && !state.closing
-                && !self.stopped.load(Ordering::Acquire))
-        })
-    }
-    fn reasoning_effort_control_available<'a>(
-        &'a self,
-        _: ClientControlStore,
-        session: &'a str,
-    ) -> ClientOperation<'a, bool> {
-        Box::pin(async move {
-            let Ok(peer) = self.peer(session).await else {
-                return Ok(false);
-            };
-            let state = peer.state.lock().await;
-            Ok(state.native.is_some()
-                && state.unavailable.is_none()
-                && !state.closed
-                && !state.closing
-                && !self.stopped.load(Ordering::Acquire))
-        })
-    }
     fn interrupt<'a>(
         &'a self,
         events: EventIngestService,
@@ -518,42 +484,36 @@ impl ClientSession for Adapter {
             })
         })
     }
-    fn capabilities<'a>(
+    fn capability_state<'a>(
         &'a self,
+        _: ClientControlStore,
         session: &'a str,
         implementation: &'a AgentClientCapabilities,
-    ) -> ClientOperation<'a, AgentClientCapabilities> {
+    ) -> ClientOperation<'a, SessionCapabilityState> {
         Box::pin(async move {
-            let mut offline = AgentClientCapabilities {
-                timeline: true,
+            let mut available = AgentClientCapabilities {
+                timeline: implementation.timeline,
                 compaction_events: implementation.compaction_events,
                 ..Default::default()
             };
             if let Some((store, _)) = self.context.get() {
                 let queries = store.queries();
-                offline.accept_task = queries.session_state(session).await?
+                available.accept_task = queries.session_state(session).await?
                     == Some(pontia_core::domain::SessionState::Exited)
                     && resume::exit_allows_resume(&queries, session, None).await?;
             }
-            let Ok(peer) = self.peer(session).await else {
-                return Ok(offline);
-            };
-            let state = peer.state.lock().await;
-            if state.unavailable.is_some() || state.closed || state.closing {
-                return Ok(offline);
+            if let Ok(peer) = self.peer(session).await {
+                let state = peer.state.lock().await;
+                if state.unavailable.is_none() && !state.closed && !state.closing {
+                    available = implementation.clone();
+                    let ready = state.native.is_some() && !self.stopped.load(Ordering::Acquire);
+                    available.manual_compaction &= ready;
+                    available.reasoning_effort_control &= ready;
+                }
             }
-            Ok(implementation.clone())
-        })
-    }
-    fn capability_state<'a>(
-        &'a self,
-        session: &'a str,
-        implementation: &'a AgentClientCapabilities,
-    ) -> ClientOperation<'a, SessionCapabilityState> {
-        Box::pin(async move {
             Ok(SessionCapabilityState {
                 supported: implementation.clone(),
-                available: self.capabilities(session, implementation).await?,
+                available,
             })
         })
     }

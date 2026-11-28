@@ -228,14 +228,16 @@ impl PiConnections {
             .is_some_and(|connection| connection.runtime_id == runtime_id))
     }
 
-    pub(crate) async fn reasoning_effort_control_available(
+    pub(crate) async fn reasoning_effort_support(
         &self,
         session_id: &str,
-    ) -> Result<bool> {
+        runtime_id: &str,
+    ) -> Result<Option<bool>> {
         Ok(self
             .connection(session_id)
             .await?
-            .is_some_and(|connection| connection.channel.reasoning_effort_control_available()))
+            .filter(|connection| connection.runtime_id == runtime_id)
+            .map(|connection| connection.channel.reasoning_effort_control_available()))
     }
 
     pub(crate) async fn interrupt(

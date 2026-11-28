@@ -67,16 +67,16 @@ impl TurnTimelineService {
         let recovered_turns = if let Some(history) = history {
             history.recover(turns.clone()).await?
         } else {
-            let source = data
-                .timeline()
-                .resolver
-                .resolve(&AgentBindingResolveRequest {
-                    id: binding.id.clone(),
-                    session_id: binding.session_id.clone(),
-                    client_type: binding.client_type.clone(),
-                    client_session_key: binding.client_session_key.clone(),
-                    client_session_file: binding.client_session_file.clone().map(Into::into),
-                })?;
+            let Some(backend) = data.timeline() else {
+                return Ok(());
+            };
+            let source = backend.resolver.resolve(&AgentBindingResolveRequest {
+                id: binding.id.clone(),
+                session_id: binding.session_id.clone(),
+                client_type: binding.client_type.clone(),
+                client_session_key: binding.client_session_key.clone(),
+                client_session_file: binding.client_session_file.clone().map(Into::into),
+            })?;
             recoverer
                 .expect("history recoverer")
                 .recover(HistoryRecoveryRequest {

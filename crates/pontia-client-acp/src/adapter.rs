@@ -718,21 +718,9 @@ impl ClientSession for AcpAdapter {
         })
     }
 
-    fn capabilities<'a>(
-        &'a self,
-        session: &'a str,
-        implementation: &'a AgentClientCapabilities,
-    ) -> ClientOperation<'a, AgentClientCapabilities> {
-        Box::pin(async move {
-            Ok(self
-                .capability_state(session, implementation)
-                .await?
-                .available)
-        })
-    }
-
     fn capability_state<'a>(
         &'a self,
+        _: ClientControlStore,
         session: &'a str,
         implementation: &'a AgentClientCapabilities,
     ) -> ClientOperation<'a, SessionCapabilityState> {
@@ -775,6 +763,9 @@ impl ClientSession for AcpAdapter {
                 caps.timeline = supported.timeline;
                 caps.compaction_history = supported.compaction_history;
             }
+            let ready = state.as_ref().is_some_and(|state| state.available());
+            caps.manual_compaction &= ready;
+            caps.reasoning_effort_control &= ready;
             Ok(SessionCapabilityState {
                 supported: bounds.unwrap_or_else(|| implementation.clone()),
                 available: caps,
@@ -792,10 +783,7 @@ impl ClientSession for AcpAdapter {
                 return Ok(false);
             };
             let state = peer.state.lock().await;
-            Ok(state.current
-                && !state.closing
-                && !state.promotion_pending()
-                && state.capabilities.is_some())
+            Ok(state.available())
         })
     }
 

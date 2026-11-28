@@ -49,8 +49,9 @@ impl ControlQueryService {
         else {
             return Ok(None);
         };
+        let runtimes = self.session_runtimes(session_id).await?;
         let capabilities = self
-            .session_capabilities(session_id, &row.client_type)
+            .session_capabilities(session_id, &row.client_type, &runtimes)
             .await?;
         Ok(Some(SessionControlState {
             session_id: row.session_id,

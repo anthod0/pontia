@@ -235,12 +235,13 @@ impl ClientSession for Client {
     ) -> ClientOperation<'a, bool> {
         Box::pin(async { Ok(true) })
     }
-    fn capabilities<'a>(
+    fn capability_state<'a>(
         &'a self,
+        _: pontia_agent_control::ClientControlStore,
         _session: &'a str,
         _implementation: &'a AgentClientCapabilities,
-    ) -> ClientOperation<'a, AgentClientCapabilities> {
-        Box::pin(async move { Ok(self.capabilities()) })
+    ) -> ClientOperation<'a, pontia_agent_control::client_contract::SessionCapabilityState> {
+        Box::pin(async move { Ok(self.capabilities().into()) })
     }
     fn ready(&self, session: &str, instance: &str) -> Option<ReportedEvent> {
         Some(GenericTestClient::ready_event(session, instance))

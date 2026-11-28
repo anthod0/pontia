@@ -150,18 +150,6 @@ impl ClientData for Adapter {
             })
         })())
     }
-    fn timeline(&self) -> TurnTimelineBackend {
-        TurnTimelineBackend {
-            resolver: Box::new(SdkOnly),
-            reader: Box::new(SdkOnly),
-        }
-    }
-    fn boundaries(&self) -> TimelineBoundaryBackend {
-        TimelineBoundaryBackend {
-            resolver: Box::new(SdkOnly),
-            capturer: Box::new(SdkOnly),
-        }
-    }
     fn topology(&self) -> Option<TurnTopologyBackend> {
         None
     }
@@ -572,46 +560,6 @@ fn render(
                 managed_tool_use,
             },
         });
-    }
-}
-
-// All reads go through the SDK helper, including while the execution host is offline.
-struct SdkOnly;
-impl AgentBindingResolver for SdkOnly {
-    fn client_type(&self) -> &'static str {
-        "claude-agent"
-    }
-    fn resolve(&self, _: &AgentBindingResolveRequest) -> Result<ResolvedAgentBinding> {
-        Err(source_unavailable())
-    }
-}
-impl TimelineBoundaryCapturer for SdkOnly {
-    fn client_type(&self) -> &'static str {
-        "claude-agent"
-    }
-    fn capture_boundary(
-        &self,
-        _: TimelineBoundaryCaptureRequest,
-    ) -> Result<CapturedTimelineBoundary> {
-        Err(source_unavailable())
-    }
-    fn capture_source_origin_head(
-        &self,
-        _: &str,
-        _: Option<String>,
-    ) -> Result<CapturedTimelineBoundary> {
-        Err(source_unavailable())
-    }
-}
-impl TurnTimelineReader for SdkOnly {
-    fn client_type(&self) -> &'static str {
-        "claude-agent"
-    }
-    fn read_turn_ranges(
-        &self,
-        _: TurnTimelineReadRequest,
-    ) -> std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError> {
-        Err(source_unavailable().into())
     }
 }
 

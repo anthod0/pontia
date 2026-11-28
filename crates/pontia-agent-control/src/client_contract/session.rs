@@ -191,22 +191,21 @@ pub trait ClientSession: Send + Sync {
             ))
         })
     }
-    fn capabilities<'a>(
-        &'a self,
-        _session: &'a str,
-        implementation: &'a crate::client_contract::AgentClientCapabilities,
-    ) -> ClientOperation<'a, crate::client_contract::AgentClientCapabilities> {
-        Box::pin(async move { Ok(implementation.clone()) })
-    }
     fn capability_state<'a>(
         &'a self,
+        store: ClientControlStore,
         session: &'a str,
         implementation: &'a AgentClientCapabilities,
     ) -> ClientOperation<'a, SessionCapabilityState> {
         Box::pin(async move {
-            self.capabilities(session, implementation)
-                .await
-                .map(Into::into)
+            let mut state = SessionCapabilityState::from(implementation.clone());
+            if (implementation.manual_compaction || implementation.reasoning_effort_control)
+                && !self.available(store, session).await?
+            {
+                state.available.manual_compaction = false;
+                state.available.reasoning_effort_control = false;
+            }
+            Ok(state)
         })
     }
     fn ready(&self, _session: &str, _instance: &str) -> Option<pontia_core::domain::ReportedEvent> {
@@ -224,20 +223,6 @@ pub trait ClientSession: Send + Sync {
         store: ClientControlStore,
         session: &'a str,
     ) -> ClientOperation<'a, bool>;
-    fn manual_compaction_available<'a>(
-        &'a self,
-        store: ClientControlStore,
-        session: &'a str,
-    ) -> ClientOperation<'a, bool> {
-        self.available(store, session)
-    }
-    fn reasoning_effort_control_available<'a>(
-        &'a self,
-        store: ClientControlStore,
-        session: &'a str,
-    ) -> ClientOperation<'a, bool> {
-        self.available(store, session)
-    }
     fn control_connected<'a>(
         &'a self,
         _store: ClientControlStore,

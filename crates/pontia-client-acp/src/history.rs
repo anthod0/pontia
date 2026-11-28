@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use pontia_agent_control::{
     client_contract::{
-        ClientData, NativeEventEvidence, ResidentTimeline, TimelineBoundaryBackend,
-        TimelineCachePolicy, TurnTimelineBackend, TurnTopologyBackend,
+        ClientData, NativeEventEvidence, ResidentTimeline, TimelineCachePolicy,
+        TurnTopologyBackend,
         history::{RecoveredTurnHistory, TurnHistoryCandidate},
         native_history::{HistoryRead, NativeHistory},
         raw_transcripts::*,
@@ -486,18 +486,6 @@ impl ClientData for AcpAdapter {
             })
         })())
     }
-    fn timeline(&self) -> TurnTimelineBackend {
-        TurnTimelineBackend {
-            resolver: Box::new(ProtocolOnly),
-            reader: Box::new(ProtocolOnly),
-        }
-    }
-    fn boundaries(&self) -> TimelineBoundaryBackend {
-        TimelineBoundaryBackend {
-            resolver: Box::new(ProtocolOnly),
-            capturer: Box::new(ProtocolOnly),
-        }
-    }
     fn topology(&self) -> Option<TurnTopologyBackend> {
         None
     }
@@ -814,47 +802,6 @@ fn render(
         });
     }
     Ok(items)
-}
-
-// ACP has no file source. The application uses the asynchronous NativeHistory
-// and identity-based boundary hooks above; file-only entry points must fail.
-struct ProtocolOnly;
-impl AgentBindingResolver for ProtocolOnly {
-    fn client_type(&self) -> &'static str {
-        "acp"
-    }
-    fn resolve(&self, _request: &AgentBindingResolveRequest) -> Result<ResolvedAgentBinding> {
-        Err(unavailable())
-    }
-}
-impl TimelineBoundaryCapturer for ProtocolOnly {
-    fn client_type(&self) -> &'static str {
-        "acp"
-    }
-    fn capture_boundary(
-        &self,
-        _request: TimelineBoundaryCaptureRequest,
-    ) -> Result<CapturedTimelineBoundary> {
-        Err(unavailable())
-    }
-    fn capture_source_origin_head(
-        &self,
-        _id: &str,
-        _anchor: Option<String>,
-    ) -> Result<CapturedTimelineBoundary> {
-        Err(unavailable())
-    }
-}
-impl TurnTimelineReader for ProtocolOnly {
-    fn client_type(&self) -> &'static str {
-        "acp"
-    }
-    fn read_turn_ranges(
-        &self,
-        _request: TurnTimelineReadRequest,
-    ) -> std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError> {
-        Err(unavailable().into())
-    }
 }
 
 #[cfg(test)]
