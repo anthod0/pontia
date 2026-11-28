@@ -15,12 +15,12 @@ use pontia_core::error::{Error, Result};
 use pontia_storage_sqlite::repositories::workspaces::SqliteWorkspaceRepository;
 
 use super::{
-    FilePickerFileView, FilePickerResultView, RegisterWorkspaceRequest, RenameWorkspaceRequest,
+    FilePickerFileView, FilePickerResultView, RegisterWorkspaceRequest,
     WorkspaceDirectoryEntryView, WorkspaceDirectoryListingView, WorkspaceRootView,
     path_policy::{canonical_root, resolve_relative_path, should_skip_directory},
 };
+use pontia_agent_control::WorkspaceView;
 use pontia_agent_control::workspaces::availability::path_to_api_relative;
-use pontia_agent_control::{ControlQueryService, WorkspaceView};
 
 #[derive(Clone)]
 pub struct WorkspaceBrowserService {
@@ -303,47 +303,6 @@ impl WorkspaceBrowserService {
         WorkspaceService::new(self.pool.clone(), self.config.clone(), self.changes.clone())
             .register(request, None)
             .await
-    }
-
-    pub async fn rename_workspace(
-        &self,
-        workspace_id: &str,
-        request: RenameWorkspaceRequest,
-    ) -> Result<WorkspaceView> {
-        let name = request
-            .name
-            .as_deref()
-            .map(str::trim)
-            .filter(|name| !name.is_empty());
-        let rows_affected = SqliteWorkspaceRepository::new(self.pool.clone())
-            .rename_workspace(workspace_id, name)
-            .await?;
-        if rows_affected == 0 {
-            return Err(Error::NotFound(format!(
-                "workspace {workspace_id} not found"
-            )));
-        }
-        ControlQueryService::new(self.pool.clone())
-            .with_workspace_browser(self.config.clone())
-            .get_workspace(workspace_id)
-            .await?
-            .ok_or_else(|| Error::NotFound(format!("workspace {workspace_id} not found")))
-    }
-
-    pub async fn delete_workspace(&self, workspace_id: &str) -> Result<WorkspaceView> {
-        let rows_affected = SqliteWorkspaceRepository::new(self.pool.clone())
-            .mark_deleted(workspace_id)
-            .await?;
-        if rows_affected == 0 {
-            return Err(Error::NotFound(format!(
-                "workspace {workspace_id} not found"
-            )));
-        }
-        ControlQueryService::new(self.pool.clone())
-            .with_workspace_browser(self.config.clone())
-            .get_workspace(workspace_id)
-            .await?
-            .ok_or_else(|| Error::NotFound(format!("workspace {workspace_id} not found")))
     }
 
     fn root(&self, root_id: &str) -> Result<&WorkspaceRootConfig> {

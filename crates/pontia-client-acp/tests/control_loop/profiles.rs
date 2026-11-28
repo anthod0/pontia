@@ -17,7 +17,7 @@ async fn create(h: &Harness, options: Value) -> Result<String> {
     )
     .await
     .unwrap()?;
-    Ok(result.session_id().unwrap().into())
+    Ok(result.session.session_id)
 }
 
 async fn injected(h: &Harness, session: &str) -> bool {

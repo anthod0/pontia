@@ -455,7 +455,7 @@ set = {{ PROBE_NATIVE = "native", PONTIA_SESSION_ID = "wrong-native" }}
                 .create_session(request)
                 .await
                 .unwrap();
-            let session = created.session_id().unwrap().to_owned();
+            let session = created.session.session_id;
             let runtime = CodexRuntime::existing(root.path()).await.unwrap();
             let mut events = runtime.connection().await.unwrap().events.subscribe();
             app.turn_commands()

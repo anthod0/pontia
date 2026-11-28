@@ -96,9 +96,8 @@ impl Fixture {
             )
             .await
             .unwrap()
-            .session_id()
-            .unwrap()
-            .to_owned();
+            .session
+            .session_id;
         Self {
             app,
             session,

@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct WorkspaceRootView {
@@ -47,8 +47,3 @@ pub struct FilePickerResultView {
 }
 
 pub use pontia_agent_control::workspaces::RegisterWorkspaceRequest;
-
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-pub struct RenameWorkspaceRequest {
-    pub name: Option<String>,
-}

@@ -85,15 +85,17 @@ pub struct InitialTaskRequest {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct CreateSessionOutcome {
-    pub data: Value,
-    pub duplicate: bool,
+pub struct CreatedSession {
+    pub session: crate::SessionView,
+    pub initial_turn: Option<crate::TurnView>,
+    pub status: SessionCreationStatus,
 }
 
-impl CreateSessionOutcome {
-    pub fn session_id(&self) -> Option<&str> {
-        self.data.get("session")?.get("session_id")?.as_str()
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionCreationStatus {
+    Existing,
+    AwaitingRuntime,
+    Started,
 }
 
 #[derive(Clone)]

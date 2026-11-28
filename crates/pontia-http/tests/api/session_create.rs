@@ -195,7 +195,10 @@ async fn create_session_emits_lifecycle_events_and_returns_idle_session_with_cap
     assert!(session["metadata"].get("profile_version").is_none());
     assert_eq!(session["capabilities"]["accept_task"], true);
     assert_eq!(session["capabilities"]["interrupt"], false);
-    assert_eq!(body["data"]["initial_turn"], Value::Null);
+    assert_eq!(
+        body["data"],
+        json!({"session": session, "initial_turn": null})
+    );
 
     let (events_status, events_body) = get(
         state.clone(),

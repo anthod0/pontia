@@ -837,9 +837,7 @@ impl ConversationService {
                 }),
             })
             .await?;
-        let session_id = outcome
-            .session_id()
-            .ok_or_else(|| Error::Domain("Bot Session creation returned no Session ID".into()))?;
+        let session_id = outcome.session.session_id.as_str();
         self.control
             .session_commands()
             .await_ready(session_id)

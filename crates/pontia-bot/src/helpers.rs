@@ -224,12 +224,12 @@ impl HelperService {
             }
             HelperCommand::Close { session_id } => {
                 self.require_helper(&bot.bot_id, &session_id).await?;
-                Ok(self
+                let session = self
                     .control
                     .session_commands()
                     .terminate_session(&session_id)
-                    .await?
-                    .data)
+                    .await?;
+                Ok(json!({"session": session}))
             }
             HelperCommand::Reply { .. } => unreachable!(),
         }
@@ -382,9 +382,7 @@ impl HelperService {
                 .await?;
         }
         let outcome = outcome?;
-        let session_id = outcome
-            .session_id()
-            .ok_or_else(|| Error::Domain("Helper creation returned no Session ID".into()))?;
+        let session_id = outcome.session.session_id.as_str();
         let message = format!("Source: Bot\n\n{message}");
         let delivery = send_input(
             &self.control,

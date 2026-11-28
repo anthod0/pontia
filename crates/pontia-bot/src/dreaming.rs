@@ -102,9 +102,7 @@ impl DreamingService {
             .session_commands()
             .create_session(request)
             .await?;
-        let session_id = outcome
-            .session_id()
-            .ok_or_else(|| Error::Domain("Dreaming creation returned no Session ID".into()))?;
+        let session_id = outcome.session.session_id.as_str();
         let recipients: Vec<_> = bots
             .iter()
             .map(|bot| {

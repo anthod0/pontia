@@ -226,7 +226,7 @@ impl Fixture {
             .create_session(request)
             .await
             .unwrap();
-        let session = created.session_id().unwrap().to_owned();
+        let session = created.session.session_id;
         Self {
             root,
             app,
@@ -1246,7 +1246,7 @@ async fn creating_a_session_wakes_an_observer_with_no_active_sessions() {
     let observer = tokio::spawn(super::CodexObserver::new(&fixture.app, alias).run(receiver));
     fixture.session = fixture.app.session_commands().create_session(
         serde_json::from_value(json!({"client_type":"codex","workspace":fixture.root.path(),"initial_task":{"input":"hello"}})).unwrap()
-    ).await.unwrap().session_id().unwrap().to_owned();
+    ).await.unwrap().session.session_id;
     let connection = CodexRuntime::existing(fixture.root.path())
         .await
         .unwrap()
@@ -1551,7 +1551,7 @@ async fn observers_and_proxy_only_manage_sessions_on_their_own_server() {
         .create_session(request)
         .await
         .unwrap();
-    let session = outcome.session_id().unwrap();
+    let session = outcome.session.session_id.as_str();
     let service = super::CodexService::new(fixture.app.event_ingest_service());
     let thread = json!({"thread":{"id":"background-thread","cwd":fixture.root.path(),"canAcceptDirectInput":true,"status":{"type":"idle"}}});
     pontia_agent_control::AgentBindingService::new(fixture.app.db())

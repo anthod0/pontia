@@ -207,6 +207,9 @@ impl SystemNoticeService {
                 ),
                 source_session_id,
             ),
+            ControlChange::WorkspaceRenamed { .. } | ControlChange::WorkspaceDeleted { .. } => {
+                return;
+            }
             ControlChange::AgentProfileCreated {
                 profile_id,
                 source_session_id,

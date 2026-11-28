@@ -208,9 +208,8 @@ impl Fixture {
             )
             .await
             .unwrap()
-            .session_id()
-            .unwrap()
-            .to_owned();
+            .session
+            .session_id;
         AgentBindingService::new(app.db())
             .upsert_binding(UpsertAgentBindingRequest {
                 session_id: session.clone(),

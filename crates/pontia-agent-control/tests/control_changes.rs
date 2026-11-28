@@ -2,9 +2,7 @@ use pontia_agent_control::{
     AgentControl, ControlChange, UpsertAgentProfileRequest,
     workspaces::{RegisterWorkspaceRequest, WorkspaceService},
 };
-use pontia_storage_sqlite::{
-    connect_sqlite, repositories::workspaces::SqliteWorkspaceRepository, run_migrations,
-};
+use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use tokio::sync::broadcast::error::TryRecvError;
 
 #[tokio::test]
@@ -58,12 +56,30 @@ async fn workspace_registration_publishes_committed_insertions_and_reactivations
         service.register(request.clone(), None).await.unwrap();
         assert_eq!(events.try_recv(), Err(TryRecvError::Empty));
         if first {
-            SqliteWorkspaceRepository::new(pool.clone())
-                .mark_deleted(&workspace.workspace_id)
+            let id = &workspace.workspace_id;
+            let renamed = service
+                .rename_workspace(id, Some("  Renamed  "))
                 .await
                 .unwrap();
+            assert_eq!(renamed.name.as_deref(), Some("Renamed"));
+            assert_eq!(
+                events.try_recv().unwrap(),
+                ControlChange::WorkspaceRenamed {
+                    workspace_id: id.clone(),
+                    name: Some("Renamed".into()),
+                }
+            );
+            assert_eq!(service.delete_workspace(id).await.unwrap().state, "deleted");
+            assert_eq!(
+                events.try_recv().unwrap(),
+                ControlChange::WorkspaceDeleted {
+                    workspace_id: id.clone()
+                }
+            );
         }
     }
+    assert!(service.rename_workspace("missing", None).await.is_err());
+    assert!(service.delete_workspace("missing").await.is_err());
     for invalid in [
         RegisterWorkspaceRequest {
             path: "missing".into(),

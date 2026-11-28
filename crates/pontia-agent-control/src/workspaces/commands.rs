@@ -106,6 +106,44 @@ impl WorkspaceService {
         self.get(workspace_id).await
     }
 
+    pub async fn rename_workspace(
+        &self,
+        workspace_id: &str,
+        name: Option<&str>,
+    ) -> Result<WorkspaceView> {
+        let name = name.map(str::trim).filter(|name| !name.is_empty());
+        let rows_affected = SqliteWorkspaceRepository::new(self.pool.clone())
+            .rename_workspace(workspace_id, name)
+            .await?;
+        if rows_affected == 0 {
+            return Err(Error::NotFound(format!(
+                "workspace {workspace_id} not found"
+            )));
+        }
+        self.changes
+            .publish(crate::ControlChange::WorkspaceRenamed {
+                workspace_id: workspace_id.to_owned(),
+                name: name.map(str::to_owned),
+            });
+        self.get(workspace_id).await
+    }
+
+    pub async fn delete_workspace(&self, workspace_id: &str) -> Result<WorkspaceView> {
+        let rows_affected = SqliteWorkspaceRepository::new(self.pool.clone())
+            .mark_deleted(workspace_id)
+            .await?;
+        if rows_affected == 0 {
+            return Err(Error::NotFound(format!(
+                "workspace {workspace_id} not found"
+            )));
+        }
+        self.changes
+            .publish(crate::ControlChange::WorkspaceDeleted {
+                workspace_id: workspace_id.to_owned(),
+            });
+        self.get(workspace_id).await
+    }
+
     async fn get(&self, workspace_id: &str) -> Result<WorkspaceView> {
         ControlQueryService::new(self.pool.clone())
             .with_workspace_browser(self.config.clone())

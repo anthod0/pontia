@@ -142,9 +142,8 @@ impl Fixture {
                 )
                 .await
                 .unwrap()
-                .session_id()
-                .unwrap()
-                .to_owned();
+                .session
+                .session_id;
             let thread = format!("thread-{index}");
             shared.turns.lock().await.insert(thread.clone(), vec![native_turn("user-turn","completed",json!([{"type":"userMessage","id":"user","content":[{"type":"text","text":"hello"}]}]))]);
             AgentBindingService::new(app.db())

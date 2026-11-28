@@ -281,7 +281,7 @@ async fn restore_applies_the_observed_effort_after_model_selection() {
         .create_session(request)
         .await
         .unwrap();
-    let session = created.session_id().unwrap();
+    let session = created.session.session_id.as_str();
     let view = h.app.queries().get_session(session).await.unwrap().unwrap();
     assert_eq!(view.reasoning_effort.as_deref(), Some("low"));
     h.app
@@ -459,7 +459,7 @@ async fn create_with_model(h: &Harness, model: &str) -> Result<String> {
     }))
     .unwrap();
     let outcome = h.app.session_commands().create_session(request).await?;
-    Ok(outcome.session_id().unwrap().to_owned())
+    Ok(outcome.session.session_id)
 }
 
 #[tokio::test]
@@ -623,7 +623,7 @@ async fn restricted_request(h: &Harness, model: &str) -> Result<String> {
     }))
     .unwrap();
     let outcome = h.app.session_commands().create_session(request).await?;
-    Ok(outcome.session_id().unwrap().to_owned())
+    Ok(outcome.session.session_id)
 }
 
 #[tokio::test]

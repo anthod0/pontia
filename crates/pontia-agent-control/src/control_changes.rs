@@ -9,6 +9,13 @@ pub enum ControlChange {
         description: Option<String>,
         source_session_id: Option<String>,
     },
+    WorkspaceRenamed {
+        workspace_id: String,
+        name: Option<String>,
+    },
+    WorkspaceDeleted {
+        workspace_id: String,
+    },
     AgentProfileCreated {
         source_session_id: Option<String>,
         profile_id: String,

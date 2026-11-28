@@ -4,11 +4,11 @@ use pontia_core::{
 };
 use pontia_runtime::RuntimeStartRequest;
 use pontia_storage_sqlite::repositories::sessions::SqliteSessionRepository;
-use serde_json::{Value, json};
+use serde_json::json;
 
 use super::{
-    CreateSessionOutcome, CreateSessionRequest, SessionCommandService, UpdateSessionRequest,
-    validation::validate_handle,
+    CreateSessionRequest, CreatedSession, SessionCommandService, SessionCreationStatus,
+    UpdateSessionRequest, validation::validate_handle,
 };
 use crate::{
     PontiaEvent, PontiaEventSource, PontiaEventType, workspaces::require_active_workspace_id,
@@ -22,10 +22,7 @@ enum SessionManagementAction {
 }
 
 impl SessionCommandService {
-    pub async fn create_session(
-        &self,
-        request: CreateSessionRequest,
-    ) -> Result<CreateSessionOutcome> {
+    pub async fn create_session(&self, request: CreateSessionRequest) -> Result<CreatedSession> {
         if request.client_type.trim().is_empty() {
             return Err(Error::Domain("client_type must be non-empty".into()));
         }
@@ -41,9 +38,10 @@ impl SessionCommandService {
                 ));
             }
             if let Some(session_id) = self.queries.find_session_by_ownership(ownership).await? {
-                return Ok(CreateSessionOutcome {
-                    data: json!({"session":self.queries.get_session(&session_id).await?}),
-                    duplicate: true,
+                return Ok(CreatedSession {
+                    session: self.command_session(&session_id).await?,
+                    initial_turn: None,
+                    status: SessionCreationStatus::Existing,
                 });
             }
         }
@@ -222,98 +220,83 @@ impl SessionCommandService {
                 return Err(error);
             }
         };
-        let Some(runtime) = runtime else {
-            if let Some(task) = request.initial_task {
-                let initial_turn = self
-                    .turns
-                    .prepare_initial(&session_id, &task.input, &task.metadata)
-                    .await?;
-                self.inbox
-                    .send(
-                        &session_id,
-                        crate::InputPayload::new(task.input)
-                            .with_metadata(task.metadata)
-                            .with_prepared_turn(initial_turn.map(|turn| turn.turn_id))
-                            .force_queue(),
-                        crate::SendMode::Queue,
-                    )
-                    .await
-                    .map_err(Error::from)?;
-            }
-            return Ok(CreateSessionOutcome {
-                data: json!({"session":self.queries.get_session(&session_id).await?}),
-                duplicate: false,
-            });
+        let status = if let Some(runtime) = runtime {
+            self.upsert_runtime_binding(
+                &session_id,
+                &runtime,
+                adapter.spec.adapter.control_runtime_role,
+            )
+            .await?;
+
+            ingest
+                .ingest_pontia_event(PontiaEvent::new(
+                    session_id.clone(),
+                    None,
+                    PontiaEventSource::RuntimeManager,
+                    request.client_type.clone(),
+                    PontiaEventType::SessionStarted,
+                    json!({}),
+                ))
+                .await?;
+            ingest
+                .ingest_in_process_ready_event(
+                    &request.client_type,
+                    &session_id,
+                    runtime.runtime_id(),
+                )
+                .await?;
+            SessionCreationStatus::Started
+        } else {
+            SessionCreationStatus::AwaitingRuntime
         };
-        self.upsert_runtime_binding(
-            &session_id,
-            &runtime,
-            adapter.spec.adapter.control_runtime_role,
-        )
-        .await?;
 
-        ingest
-            .ingest_pontia_event(PontiaEvent::new(
-                session_id.clone(),
-                None,
-                PontiaEventSource::RuntimeManager,
-                request.client_type.clone(),
-                PontiaEventType::SessionStarted,
-                json!({}),
-            ))
-            .await?;
-        ingest
-            .ingest_in_process_ready_event(&request.client_type, &session_id, runtime.runtime_id())
-            .await?;
-
-        let (initial_turn, initial_delivery) = if let Some(task) = request.initial_task {
-            let initial_turn = self
+        let initial_turn = if let Some(task) = request.initial_task {
+            let turn = self
                 .turns
                 .prepare_initial(&session_id, &task.input, &task.metadata)
                 .await?;
             let input = crate::InputPayload::new(task.input)
                 .with_metadata(task.metadata)
-                .with_prepared_turn(initial_turn.as_ref().map(|turn| turn.turn_id.clone()))
+                .with_prepared_turn(turn.as_ref().map(|turn| turn.turn_id.clone()))
                 .force_queue();
-            (initial_turn, Some(input))
-        } else {
-            (None, None)
-        };
-        if let Some(input) = initial_delivery {
             self.inbox
                 .send(&session_id, input, crate::SendMode::Queue)
                 .await
                 .map_err(Error::from)?;
-        }
-        let query = &self.queries;
-        let session = query
-            .get_session(&session_id)
-            .await?
-            .ok_or_else(|| Error::Domain("created session missing".into()))?;
-        let data = json!({ "session": session, "initial_turn": initial_turn });
-
-        Ok(CreateSessionOutcome {
-            data,
-            duplicate: false,
+            turn
+        } else {
+            None
+        };
+        Ok(CreatedSession {
+            session: self.command_session(&session_id).await?,
+            initial_turn,
+            status,
         })
     }
 
-    pub async fn pin_session(&self, session_id: &str) -> Result<Value> {
+    pub(super) async fn command_session(&self, session_id: &str) -> Result<crate::SessionView> {
+        self.queries
+            .get_session(session_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))
+    }
+
+    pub async fn pin_session(&self, session_id: &str) -> Result<crate::SessionView> {
         self.update_session_management_state(session_id, SessionManagementAction::Pin)
             .await
     }
 
-    pub async fn unpin_session(&self, session_id: &str) -> Result<Value> {
+    pub async fn unpin_session(&self, session_id: &str) -> Result<crate::SessionView> {
         self.update_session_management_state(session_id, SessionManagementAction::Unpin)
             .await
     }
 
-    pub async fn archive_session(&self, session_id: &str) -> Result<Value> {
+    pub async fn archive_session(&self, session_id: &str) -> Result<crate::SessionView> {
         self.update_session_management_state(session_id, SessionManagementAction::Archive)
             .await
     }
 
-    pub async fn unarchive_session(&self, session_id: &str) -> Result<Value> {
+    pub async fn unarchive_session(&self, session_id: &str) -> Result<crate::SessionView> {
         self.update_session_management_state(session_id, SessionManagementAction::Unarchive)
             .await
     }
@@ -322,7 +305,7 @@ impl SessionCommandService {
         &self,
         session_id: &str,
         action: SessionManagementAction,
-    ) -> Result<Value> {
+    ) -> Result<crate::SessionView> {
         let repository = SqliteSessionRepository::new(self.pool.clone());
         let rows_affected = match action {
             SessionManagementAction::Pin => repository.pin_session(session_id).await?,
@@ -339,19 +322,14 @@ impl SessionCommandService {
                 .touch(session_id, time::OffsetDateTime::now_utc().unix_timestamp())
                 .await;
         }
-        let query = &self.queries;
-        let session = query
-            .get_session(session_id)
-            .await?
-            .ok_or_else(|| Error::Domain("updated session missing".to_string()))?;
-        Ok(json!({ "session": session }))
+        self.command_session(session_id).await
     }
 
     pub async fn update_session(
         &self,
         session_id: &str,
         request: UpdateSessionRequest,
-    ) -> Result<Value> {
+    ) -> Result<crate::SessionView> {
         let query = &self.queries;
         let existing = query
             .get_session(session_id)
@@ -376,10 +354,6 @@ impl SessionCommandService {
             ))
             .await?;
 
-        let session = query
-            .get_session(session_id)
-            .await?
-            .ok_or_else(|| Error::Domain("updated session missing".to_string()))?;
-        Ok(json!({ "session": session }))
+        self.command_session(session_id).await
     }
 }

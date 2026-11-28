@@ -320,7 +320,7 @@ async fn commands_keep_their_session_environment_after_resume() {
             .create_session(request)
             .await
             .unwrap();
-        sessions.push((created.session_id().unwrap().to_owned(), context));
+        sessions.push((created.session.session_id, context));
     }
     for number in 1..=2 {
         for (session, context) in &sessions {
@@ -370,7 +370,7 @@ async fn commands_use_their_own_session_environment_before_and_after_resume() {
             .create_session(request)
             .await
             .unwrap();
-        sessions.push(created.session_id().unwrap().to_owned());
+        sessions.push(created.session.session_id);
     }
     for number in 1..=2 {
         for session in &sessions {
@@ -502,9 +502,8 @@ impl Harness {
             .create_session(request)
             .await
             .unwrap()
-            .session_id()
-            .unwrap()
-            .into()
+            .session
+            .session_id
     }
     async fn submit(&self, session: &str, text: &str) {
         self.app
@@ -734,7 +733,7 @@ async fn resume_uses_the_effort_reported_by_the_host() {
             .create_session(request)
             .await
             .unwrap();
-        let session = created.session_id().unwrap();
+        let session = created.session.session_id.as_str();
         h.gate(session, 1, "start");
         h.gate(session, 1, "finish");
         h.wait_states(session, &["completed"]).await;
@@ -1999,7 +1998,7 @@ async fn standalone_session_instructions_are_fixed_before_input_and_survive_resu
         .create_session(request)
         .await
         .unwrap();
-    let session = created.session_id().unwrap();
+    let session = created.session.session_id.as_str();
     sqlx::query("DROP TABLE agent_profiles")
         .execute(&h.app.db())
         .await
@@ -2061,7 +2060,7 @@ async fn session_instructions_are_validated_fixed_and_preserved_across_resume() 
         .create_session(request)
         .await
         .unwrap();
-    let session = created.session_id().unwrap();
+    let session = created.session.session_id.as_str();
     sqlx::query("DROP TABLE agent_profiles")
         .execute(&h.app.db())
         .await
@@ -2164,7 +2163,7 @@ async fn yolo_mode_reaches_the_sdk_host() {
         .create_session(request)
         .await
         .unwrap();
-    let session = created.session_id().unwrap();
+    let session = created.session.session_id.as_str();
     h.submit(session, "yolo task").await;
     h.gate(session, 1, "start");
     h.gate(session, 1, "finish");

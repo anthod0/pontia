@@ -349,7 +349,7 @@ fn creation_requires_an_enabled_pi_client() {
                 )
                 .await
                 .unwrap();
-            let session = result.session_id().unwrap().to_owned();
+            let session = result.session.session_id;
             let command: String =
                 sqlx::query_scalar("SELECT start_command FROM session_runtimes WHERE session_id=?")
                     .bind(&session)

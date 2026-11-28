@@ -6,7 +6,7 @@ use pontia_storage_sqlite::repositories::turns::SqliteTurnRepository;
 use serde_json::json;
 
 use super::SessionCommandService;
-use crate::ControlCommandOutcome;
+use crate::SessionView;
 use crate::{
     PontiaEvent, PontiaEventSource, PontiaEventType,
     client_contract::{ClientExitMode, ClientExitOutcome},
@@ -152,7 +152,7 @@ impl SessionCommandService {
             .await
     }
 
-    pub async fn terminate_session(&self, session_id: &str) -> Result<ControlCommandOutcome> {
+    pub async fn terminate_session(&self, session_id: &str) -> Result<SessionView> {
         self.request_exit(session_id, None).await
     }
 
@@ -160,7 +160,7 @@ impl SessionCommandService {
         &self,
         session_id: &str,
         expected_runtime: Option<&str>,
-    ) -> Result<ControlCommandOutcome> {
+    ) -> Result<SessionView> {
         let query = &self.queries;
         let session = query
             .get_session_control(session_id)
@@ -201,10 +201,7 @@ impl SessionCommandService {
                         json!({"reason":"management_exit", "runtime_id":target.runtime_id}),
                     ))
                     .await?;
-                return Ok(ControlCommandOutcome {
-                    data: json!({"session":query.get_session(session_id).await?}),
-                    duplicate: false,
-                });
+                return self.command_session(session_id).await;
             }
         }
         let target = crate::runtime::ControlTarget::resolve(
@@ -218,10 +215,7 @@ impl SessionCommandService {
             self.exit_target(&session.client_type, &target, ClientExitMode::Unconditional)
                 .await?;
         }
-        Ok(ControlCommandOutcome {
-            data: json!({"session":query.get_session(session_id).await?}),
-            duplicate: false,
-        })
+        self.command_session(session_id).await
     }
 
     async fn exit_target(
@@ -273,11 +267,30 @@ impl SessionCommandService {
             .await
     }
 
+    async fn require_launch_directory(
+        &self,
+        session: &crate::queries::SessionControlState,
+    ) -> Result<()> {
+        if let Some(workspace_id) = session.workspace_id.as_deref() {
+            crate::workspaces::require_active_workspace_id(&self.pool, workspace_id).await?;
+        } else if self
+            .queries
+            .application_launch_directory(&session.session_id)
+            .await?
+            .is_none()
+        {
+            return Err(Error::StateConflict(
+                "An active registered Workspace is required".into(),
+            ));
+        }
+        Ok(())
+    }
+
     pub async fn resume_session(
         &self,
         session_id: &str,
         pontia_home: &Path,
-    ) -> Result<ControlCommandOutcome> {
+    ) -> Result<SessionView> {
         let _launch = pontia_runtime::launch_lock::launch(pontia_home)?;
         let query = &self.queries;
         let session = query
@@ -290,18 +303,7 @@ impl SessionCommandService {
                 session.state
             )));
         }
-        if let Some(workspace_id) = session.workspace_id.as_deref() {
-            crate::workspaces::require_active_workspace_id(&self.pool, workspace_id).await?;
-        } else if self
-            .queries
-            .application_launch_directory(session_id)
-            .await?
-            .is_none()
-        {
-            return Err(Error::StateConflict(
-                "An active registered Workspace is required".into(),
-            ));
-        }
+        self.require_launch_directory(&session).await?;
         let adapter = self.clients.for_client(&session.client_type)?;
         let target = crate::runtime::ControlTarget::resolve(
             &self.pool,
@@ -363,10 +365,7 @@ impl SessionCommandService {
             }
         };
         let Some(runtime) = runtime else {
-            return Ok(ControlCommandOutcome {
-                data: json!({"session":query.get_session(session_id).await?}),
-                duplicate: false,
-            });
+            return self.command_session(session_id).await;
         };
         self.upsert_resumed_runtime_binding(session_id, &runtime, target.control_runtime_role)
             .await?;
@@ -384,22 +383,14 @@ impl SessionCommandService {
             .ingest_in_process_ready_event(&session.client_type, session_id, runtime.runtime_id())
             .await?;
 
-        let session = query
-            .get_session(session_id)
-            .await?
-            .ok_or_else(|| Error::Domain("resumed session missing".to_string()))?;
-        let data = json!({ "session": session });
-        Ok(ControlCommandOutcome {
-            data,
-            duplicate: false,
-        })
+        self.command_session(session_id).await
     }
 
     pub async fn restart_session(
         &self,
         session_id: &str,
         pontia_home: &Path,
-    ) -> Result<ControlCommandOutcome> {
+    ) -> Result<SessionView> {
         let query = &self.queries;
         let session = query
             .get_session_control(session_id)
@@ -410,10 +401,7 @@ impl SessionCommandService {
                 "terminal session {session_id} cannot be restarted"
             )));
         }
-        let workspace_id = session.workspace_id.as_deref().ok_or_else(|| {
-            Error::StateConflict("An active registered Workspace is required".into())
-        })?;
-        crate::workspaces::require_active_workspace_id(&self.pool, workspace_id).await?;
+        self.require_launch_directory(&session).await?;
         if self
             .clients
             .for_client(&session.client_type)?
@@ -559,14 +547,6 @@ impl SessionCommandService {
             .ingest_in_process_ready_event(&session.client_type, session_id, runtime.runtime_id())
             .await?;
 
-        let session = query
-            .get_session(session_id)
-            .await?
-            .ok_or_else(|| Error::Domain("restarted session missing".to_string()))?;
-        let data = json!({ "session": session });
-        Ok(ControlCommandOutcome {
-            data,
-            duplicate: false,
-        })
+        self.command_session(session_id).await
     }
 }

@@ -182,7 +182,6 @@ fn map_command_error(error: pontia_workflow::Error) -> ApiError {
         }
         WorkflowError::RootNodeNotFound(_)
         | WorkflowError::InvalidObservation(_)
-        | WorkflowError::MissingCreatedSessionId
         | WorkflowError::Io(_)
         | WorkflowError::Json(_) => ApiError::custom(
             StatusCode::INTERNAL_SERVER_ERROR,

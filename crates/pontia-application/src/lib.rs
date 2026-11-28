@@ -15,7 +15,6 @@ pub use queries::{ExternalQueryService, SessionOverviewRequest, SessionOverviewV
 pub use views::{EventStreamItem, WorkspaceGitStatusView};
 pub use workspaces::{
     FilePickerConfig, FilePickerFileView, FilePickerResultView, RegisterWorkspaceRequest,
-    RenameWorkspaceRequest, WorkspaceBrowserConfig, WorkspaceBrowserService,
-    WorkspaceDirectoryEntryView, WorkspaceDirectoryListingView, WorkspaceRootConfig,
-    WorkspaceRootView,
+    WorkspaceBrowserConfig, WorkspaceBrowserService, WorkspaceDirectoryEntryView,
+    WorkspaceDirectoryListingView, WorkspaceRootConfig, WorkspaceRootView,
 };

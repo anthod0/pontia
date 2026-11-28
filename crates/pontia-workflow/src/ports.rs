@@ -53,10 +53,7 @@ impl SessionCreator for AgentControl {
 
     async fn create_session(&self, request: CreateSessionRequest) -> Result<String> {
         let outcome = self.session_commands().create_session(request).await?;
-        outcome
-            .session_id()
-            .map(str::to_string)
-            .ok_or(Error::MissingCreatedSessionId)
+        Ok(outcome.session.session_id)
     }
 }
 

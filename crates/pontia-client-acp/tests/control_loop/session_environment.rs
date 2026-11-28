@@ -33,7 +33,7 @@ async fn commands_keep_the_session_environment_after_resume() {
         .create_session(request)
         .await
         .unwrap();
-    let session = result.session_id().unwrap().to_owned();
+    let session = result.session.session_id;
     read_environment(&h, &session).await;
     h.app
         .session_commands()

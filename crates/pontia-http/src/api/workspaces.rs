@@ -7,9 +7,8 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use pontia_application::{
-    AppState, RegisterWorkspaceRequest, RenameWorkspaceRequest, WorkspaceBrowserService,
-};
+use pontia_agent_control::workspaces::WorkspaceService;
+use pontia_application::{AppState, RegisterWorkspaceRequest, WorkspaceBrowserService};
 
 use super::response::{ApiError, ApiResponse, ok};
 
@@ -52,17 +51,24 @@ pub async fn get_workspace(
     Ok(ok(json!({ "workspace": workspace })))
 }
 
+#[derive(Deserialize)]
+pub struct RenameWorkspaceRequest {
+    name: Option<String>,
+}
+
 pub async fn rename_workspace(
     State(state): State<AppState>,
     Path(workspace_id): Path<String>,
     Json(request): Json<RenameWorkspaceRequest>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = WorkspaceBrowserService::new(
+    let service = WorkspaceService::new(
         state.db(),
         state.workspace_browser(),
         state.control().control_changes(),
     );
-    let workspace = service.rename_workspace(&workspace_id, request).await?;
+    let workspace = service
+        .rename_workspace(&workspace_id, request.name.as_deref())
+        .await?;
     Ok(ok(json!({ "workspace": workspace })))
 }
 
@@ -70,7 +76,7 @@ pub async fn delete_workspace(
     State(state): State<AppState>,
     Path(workspace_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = WorkspaceBrowserService::new(
+    let service = WorkspaceService::new(
         state.db(),
         state.workspace_browser(),
         state.control().control_changes(),

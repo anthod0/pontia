@@ -41,6 +41,7 @@ async fn codex_sessions_are_created_without_a_runtime() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["data"], json!({"session": body["data"]["session"]}));
     assert!(body["data"]["session"]["session_id"].is_string());
     assert_eq!(body["data"]["session"]["client_type"], "codex");
     assert_eq!(body["data"]["session"]["capabilities"]["accept_task"], true);

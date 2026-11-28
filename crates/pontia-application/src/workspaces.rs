@@ -6,7 +6,7 @@ pub use pontia_config::{FilePickerConfig, WorkspaceBrowserConfig, WorkspaceRootC
 
 pub use browser::WorkspaceBrowserService;
 pub use types::{
-    FilePickerFileView, FilePickerResultView, RegisterWorkspaceRequest, RenameWorkspaceRequest,
+    FilePickerFileView, FilePickerResultView, RegisterWorkspaceRequest,
     WorkspaceDirectoryEntryView, WorkspaceDirectoryListingView, WorkspaceRootView,
 };
 

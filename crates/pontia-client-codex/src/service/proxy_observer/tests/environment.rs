@@ -171,7 +171,7 @@ async fn proxy_resume_keeps_the_bound_restricted_session_configuration() {
         )
         .await
         .unwrap();
-    let session = created.session_id().unwrap();
+    let session = created.session.session_id.as_str();
     f.app
         .turn_commands()
         .start_turn(session, "hello".into(), json!({}))

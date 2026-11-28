@@ -142,9 +142,8 @@ async fn npm_install_reports_authentication_retries_without_fabricating_turns() 
         .create_session(request)
         .await
         .unwrap()
-        .session_id()
-        .unwrap()
-        .to_owned();
+        .session
+        .session_id;
     let diagnostic = tokio::time::timeout(Duration::from_secs(30), async {
         loop {
             let view =

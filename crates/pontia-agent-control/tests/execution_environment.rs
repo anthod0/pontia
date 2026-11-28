@@ -113,16 +113,27 @@ impl ClientSession for Launcher {
 }
 #[tokio::test]
 async fn creation_restart_and_recovered_resume_keep_launch_context_out_of_events() {
+    check_launch_context(false).await;
+}
+
+#[tokio::test]
+async fn owned_private_directory_supports_restart_and_resume_but_rejects_fork() {
+    check_launch_context(true).await;
+}
+
+async fn check_launch_context(private: bool) {
     let root = tempfile::tempdir().unwrap();
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
-    pontia_agent_control::workspaces::upsert_canonical_workspace(
-        &pool,
-        root.path().canonicalize().unwrap().to_str().unwrap(),
-        None,
-    )
-    .await
-    .unwrap();
+    if !private {
+        pontia_agent_control::workspaces::upsert_canonical_workspace(
+            &pool,
+            root.path().canonicalize().unwrap().to_str().unwrap(),
+            None,
+        )
+        .await
+        .unwrap();
+    }
     pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
         pool.clone(),
     )
@@ -144,9 +155,13 @@ async fn creation_restart_and_recovered_resume_keep_launch_context_out_of_events
         ),
     ]);
     let build = || {
-        AgentControl::builder(pool.clone(), root.path().into())
-            .clients(clients.clone())
-            .build()
+        let builder = AgentControl::builder(pool.clone(), root.path().into());
+        let builder = if private {
+            builder.managed_private_root(root.path().into())
+        } else {
+            builder
+        };
+        builder.clients(clients.clone()).build()
     };
     let control = build();
     let mut notices = control.agent_events().subscribe();
@@ -158,13 +173,37 @@ async fn creation_restart_and_recovered_resume_keep_launch_context_out_of_events
     assert_eq!(request.launch_mode, pontia_core::LaunchMode::Foreground);
     request.launch_mode = pontia_core::LaunchMode::Background;
     request.runtime_environment = environment.clone();
+    if private {
+        request.ownership = Some(pontia_agent_control::SessionOwnership {
+            application_id: "example".into(),
+            reference: "task:one".into(),
+        });
+    }
     let mode = request.mode;
     let outcome = control
         .session_commands()
         .create_session(request)
         .await
         .unwrap();
-    let session = outcome.session_id().unwrap();
+    let session = outcome.session.session_id.as_str();
+    assert_eq!(
+        outcome.status,
+        pontia_agent_control::SessionCreationStatus::Started
+    );
+    assert_eq!(outcome.session.workspace_id.is_none(), private);
+    if private {
+        let fork = control
+            .session_commands()
+            .fork_session(
+                session,
+                pontia_agent_control::sessions::ForkSessionRequest {
+                    operation_id: "op".into(),
+                    turn_id: "turn".into(),
+                },
+            )
+            .await;
+        assert!(matches!(fork, Err(pontia_core::Error::StateConflict(_))));
+    }
     let created = notices.try_recv().unwrap();
     assert_eq!(created.event_type, PontiaEventType::SessionCreated.into());
     assert_eq!(created.payload["launch_mode"], "background");
@@ -377,8 +416,8 @@ async fn owned_creation_is_idempotent_and_keeps_the_original_environment() {
     );
     let first = first.unwrap();
     let second = second.unwrap();
-    assert_eq!(first.session_id(), second.session_id());
-    assert_ne!(first.duplicate, second.duplicate);
+    assert_eq!(first.session.session_id, second.session.session_id);
+    assert_ne!(first.status, second.status);
     assert_eq!(launcher.0.lock().unwrap().len(), 1);
     assert_eq!(
         app.queries()
@@ -386,10 +425,10 @@ async fn owned_creation_is_idempotent_and_keeps_the_original_environment() {
             .await
             .unwrap()
             .as_deref(),
-        first.session_id()
+        Some(first.session.session_id.as_str())
     );
     assert_eq!(
         app.queries().list_owned_sessions("example").await.unwrap(),
-        vec![first.session_id().unwrap()]
+        vec![first.session.session_id.as_str()]
     );
 }

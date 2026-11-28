@@ -57,8 +57,8 @@ pub use sessions::{
     AgentBinding, AgentBindingService, AgentBindingSessionContext, UpsertAgentBindingRequest,
 };
 pub use sessions::{
-    CreateSessionOutcome, CreateSessionRequest, InitialTaskRequest, SessionCommandService,
-    SetSessionReasoningEffortRequest, UpdateSessionRequest,
+    CreateSessionRequest, CreatedSession, InitialTaskRequest, SessionCommandService,
+    SessionCreationStatus, SetSessionReasoningEffortRequest, UpdateSessionRequest,
 };
 pub use turns::TurnCommandService;
 pub use views::{

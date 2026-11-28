@@ -175,7 +175,7 @@ impl Harness {
         )
         .await
         .expect("Session creation must not hang")?;
-        Ok(result.session_id().unwrap().into())
+        Ok(result.session.session_id)
     }
 
     fn release(&self, marker: &str) {

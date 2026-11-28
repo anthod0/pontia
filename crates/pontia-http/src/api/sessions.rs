@@ -7,7 +7,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use pontia_agent_control::{CreateSessionRequest, UpdateSessionRequest};
+use pontia_agent_control::{CreateSessionRequest, SessionCreationStatus, UpdateSessionRequest};
 use pontia_application::{AppState, SessionOverviewRequest, SessionOverviewView};
 
 use super::{
@@ -30,7 +30,15 @@ pub async fn create_session(
 ) -> Result<Response, ApiError> {
     let service = state.control().session_commands();
     let outcome = idempotent(&state, &headers, "create_session", || async move {
-        Ok(service.create_session(request).await?.data)
+        let created = service.create_session(request).await?;
+        Ok(match created.status {
+            SessionCreationStatus::Started => {
+                json!({"session": created.session, "initial_turn": created.initial_turn})
+            }
+            SessionCreationStatus::Existing | SessionCreationStatus::AwaitingRuntime => {
+                json!({"session": created.session})
+            }
+        })
     })
     .await?;
     let status = if outcome.duplicate {
@@ -71,8 +79,8 @@ pub async fn update_session(
     Json(request): Json<UpdateSessionRequest>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let service = state.control().session_commands();
-    let data = service.update_session(&session_id, request).await?;
-    Ok(ok(data))
+    let session = service.update_session(&session_id, request).await?;
+    Ok(ok(json!({"session": session})))
 }
 
 pub async fn pin_session(
@@ -80,8 +88,8 @@ pub async fn pin_session(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let service = state.control().session_commands();
-    let data = service.pin_session(&session_id).await?;
-    Ok(ok(data))
+    let session = service.pin_session(&session_id).await?;
+    Ok(ok(json!({"session": session})))
 }
 
 pub async fn unpin_session(
@@ -89,8 +97,8 @@ pub async fn unpin_session(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let service = state.control().session_commands();
-    let data = service.unpin_session(&session_id).await?;
-    Ok(ok(data))
+    let session = service.unpin_session(&session_id).await?;
+    Ok(ok(json!({"session": session})))
 }
 
 pub async fn archive_session(
@@ -98,8 +106,8 @@ pub async fn archive_session(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let service = state.control().session_commands();
-    let data = service.archive_session(&session_id).await?;
-    Ok(ok(data))
+    let session = service.archive_session(&session_id).await?;
+    Ok(ok(json!({"session": session})))
 }
 
 pub async fn unarchive_session(
@@ -107,8 +115,8 @@ pub async fn unarchive_session(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let service = state.control().session_commands();
-    let data = service.unarchive_session(&session_id).await?;
-    Ok(ok(data))
+    let session = service.unarchive_session(&session_id).await?;
+    Ok(ok(json!({"session": session})))
 }
 
 pub async fn get_session(
@@ -191,7 +199,7 @@ pub async fn exit_session(
     let service = state.control().session_commands();
     let operation = format!("exit_session:{session_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
-        Ok(service.terminate_session(&session_id).await?.data)
+        Ok(json!({"session": service.terminate_session(&session_id).await?}))
     })
     .await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
@@ -206,10 +214,7 @@ pub async fn restart_session(
     let pontia_home = state.pontia_home().to_path_buf();
     let operation = format!("restart_session:{session_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
-        Ok(service
-            .restart_session(&session_id, &pontia_home)
-            .await?
-            .data)
+        Ok(json!({"session": service.restart_session(&session_id, &pontia_home).await?}))
     })
     .await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
@@ -224,10 +229,7 @@ pub async fn resume_session(
     let pontia_home = state.pontia_home().to_path_buf();
     let operation = format!("resume_session:{session_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
-        Ok(service
-            .resume_session(&session_id, &pontia_home)
-            .await?
-            .data)
+        Ok(json!({"session": service.resume_session(&session_id, &pontia_home).await?}))
     })
     .await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())

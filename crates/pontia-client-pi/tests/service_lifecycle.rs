@@ -95,7 +95,7 @@ async fn background_rpc_process_reconnects_and_confirms_idle_exit() {
         .create_session(request)
         .await
         .unwrap();
-    let session = outcome.session_id().unwrap();
+    let session = outcome.session.session_id.as_str();
     let (_runtime, fingerprint, pane, socket): (String, String, Option<String>, Option<String>) = sqlx::query_as(
         "SELECT runtime_id,process_fingerprint,tmux_pane_id,tmux_socket_path FROM session_runtimes WHERE session_id=?"
     ).bind(session).fetch_one(&pool).await.unwrap();
