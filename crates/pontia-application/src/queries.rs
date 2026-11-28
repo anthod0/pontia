@@ -1,4 +1,3 @@
-mod events;
 mod git_status;
 mod sessions;
 pub use sessions::{SessionOverviewRequest, SessionOverviewView};

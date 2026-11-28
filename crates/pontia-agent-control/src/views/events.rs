@@ -16,15 +16,20 @@ pub struct EventView {
     pub payload: Value,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EventStreamScope<'a> {
-    Session {
-        session_id: &'a str,
-    },
-    Turn {
-        session_id: &'a str,
-        turn_id: &'a str,
-    },
+impl TryFrom<crate::PositionedEvent> for EventView {
+    type Error = pontia_core::Error;
+
+    fn try_from(event: crate::PositionedEvent) -> Result<Self> {
+        Self::try_from(EventRow {
+            event_id: event.event_id,
+            session_id: event.session_id,
+            turn_id: event.turn_id,
+            source: event.source,
+            event_type: event.event_type,
+            occurred_at: event.occurred_at,
+            payload: event.payload,
+        })
+    }
 }
 
 impl TryFrom<EventRow> for EventView {

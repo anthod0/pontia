@@ -83,7 +83,13 @@ async fn tail_wakes_after_commit_and_rollbacks_and_duplicates_leave_head_unchang
     f.create("s").await.unwrap();
     assert!(!watermark.has_changed().unwrap());
     let mut once = f.restart().tail(EventScope::Session("s".into()), 1, true);
-    assert_eq!(once.next().await.unwrap().unwrap().event_id, "s");
+    let replay = once.next().await.unwrap().unwrap();
+    assert_eq!(replay.event_id, "s");
+    let session_events = f.app.queries().list_session_events("s").await.unwrap();
+    assert_eq!(
+        crate::EventView::try_from(replay).unwrap(),
+        session_events[0]
+    );
     assert!(once.next().await.unwrap().is_none());
 }
 

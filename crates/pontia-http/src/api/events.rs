@@ -1,4 +1,4 @@
-use std::{convert::Infallible, time::Duration};
+use std::convert::Infallible;
 
 use axum::{
     extract::{Path, Query, State},
@@ -6,10 +6,9 @@ use axum::{
     response::sse::{Event, KeepAlive, Sse},
 };
 pub(super) use serde::Deserialize;
-use tokio::sync::mpsc;
-use tokio_stream::{Stream, wrappers::ReceiverStream};
+use tokio_stream::Stream;
 
-use pontia_agent_control::EventStreamScope;
+use pontia_agent_control::{EventScope, EventView};
 use pontia_application::AppState;
 
 use super::{response::ApiError, session_guard::ensure_session_exists};
@@ -25,29 +24,14 @@ pub async fn stream_session_events(
     Path(session_id): Path<String>,
     Query(query): Query<EventStreamQuery>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
-    let service = state.control().queries();
     ensure_session_exists(&state.control().queries(), &session_id).await?;
-    let after_rowid = match query.after.as_deref() {
-        Some(after) => {
-            service
-                .resolve_event_cursor(
-                    EventStreamScope::Session {
-                        session_id: &session_id,
-                    },
-                    after,
-                )
-                .await?
-        }
-        None => 0,
-    };
-    let stream_once = is_test_stream_once(&headers);
-
-    Ok(event_sse_stream(
+    event_sse_stream(
         state,
-        EventStreamTarget::Session { session_id },
-        after_rowid,
-        stream_once,
-    ))
+        EventScope::Session(session_id),
+        query,
+        is_test_stream_once(&headers),
+    )
+    .await
 }
 
 pub async fn stream_turn_events(
@@ -56,7 +40,6 @@ pub async fn stream_turn_events(
     Path((session_id, turn_id)): Path<(String, String)>,
     Query(query): Query<EventStreamQuery>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
-    let service = state.control().queries();
     ensure_session_exists(&state.control().queries(), &session_id).await?;
     state
         .control()
@@ -64,122 +47,51 @@ pub async fn stream_turn_events(
         .get_turn(&session_id, &turn_id)
         .await?
         .ok_or_else(|| ApiError::not_found(format!("turn {turn_id} not found")))?;
-    let after_rowid = match query.after.as_deref() {
-        Some(after) => {
-            service
-                .resolve_event_cursor(
-                    EventStreamScope::Turn {
-                        session_id: &session_id,
-                        turn_id: &turn_id,
-                    },
-                    after,
-                )
-                .await?
-        }
-        None => 0,
-    };
-    let stream_once = is_test_stream_once(&headers);
-
-    Ok(event_sse_stream(
+    event_sse_stream(
         state,
-        EventStreamTarget::Turn {
+        EventScope::Turn {
             session_id,
             turn_id,
         },
-        after_rowid,
-        stream_once,
-    ))
+        query,
+        is_test_stream_once(&headers),
+    )
+    .await
 }
 
-#[derive(Debug, Clone)]
-enum EventStreamTarget {
-    Session { session_id: String },
-    Turn { session_id: String, turn_id: String },
-}
-
-fn event_sse_stream(
+async fn event_sse_stream(
     state: AppState,
-    target: EventStreamTarget,
-    after_rowid: i64,
+    scope: EventScope,
+    query: EventStreamQuery,
     stream_once: bool,
-) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    let (sender, receiver) = mpsc::channel(32);
-
-    tokio::spawn(async move {
-        let mut shutdown = state.control().shutdown().subscribe();
-        let service = state.queries();
-        let mut cursor = after_rowid;
-
-        loop {
-            if *shutdown.borrow() {
-                break;
-            }
-
-            let result = match &target {
-                EventStreamTarget::Session { session_id } => {
-                    service
-                        .list_event_stream_items_after(
-                            EventStreamScope::Session { session_id },
-                            cursor,
-                            100,
-                        )
-                        .await
-                }
-                EventStreamTarget::Turn {
-                    session_id,
-                    turn_id,
-                } => {
-                    service
-                        .list_event_stream_items_after(
-                            EventStreamScope::Turn {
-                                session_id,
-                                turn_id,
-                            },
-                            cursor,
-                            100,
-                        )
-                        .await
-                }
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    let events = state.control().events();
+    let after = match query.after {
+        Some(id) => events
+            .resolve_event_position(&scope, &id)
+            .await?
+            .ok_or_else(|| {
+                ApiError::invalid_request(format!(
+                    "event cursor {id} is not valid for requested stream"
+                ))
+            })?,
+        None => 0,
+    };
+    let mut shutdown = state.control().shutdown().subscribe();
+    let stream = async_stream::stream! {
+        let mut tail = state.control().events().tail(scope, after, stream_once);
+        while !*shutdown.borrow() {
+            let item = tokio::select! {
+                item = tail.next() => item,
+                _ = shutdown.changed() => break,
             };
-
-            let Ok(items) = result else {
-                break;
-            };
-
-            if items.is_empty() {
-                if stream_once {
-                    break;
-                }
-                tokio::select! {
-                    _ = tokio::time::sleep(Duration::from_millis(200)) => {}
-                    _ = shutdown.changed() => break,
-                }
-                continue;
-            }
-
-            for item in items {
-                cursor = item.rowid;
-                let event_id = item.event.event_id.clone();
-                let event = Event::default()
-                    .id(event_id)
-                    .event("domain_event")
-                    .json_data(item.event);
-                let Ok(event) = event else {
-                    break;
-                };
-                tokio::select! {
-                    result = sender.send(Ok(event)) => {
-                        if result.is_err() {
-                            return;
-                        }
-                    }
-                    _ = shutdown.changed() => return,
-                }
-            }
+            let Ok(Some(item)) = item else { break };
+            let Ok(view) = EventView::try_from(item) else { break };
+            let Ok(event) = Event::default().id(&view.event_id).event("domain_event").json_data(&view) else { break };
+            yield Ok(event);
         }
-    });
-
-    Sse::new(ReceiverStream::new(receiver)).keep_alive(KeepAlive::default())
+    };
+    Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
 }
 
 pub(super) fn is_test_stream_once(headers: &HeaderMap) -> bool {

@@ -12,7 +12,7 @@ pub use git_status::{GitRefreshCoordinator, WorkspaceGitStatusService};
 pub use idempotency::{IdempotencyCoordinator, IdempotencyOutcome};
 pub use pontia_agent_control::EventView;
 pub use queries::{ExternalQueryService, SessionOverviewRequest, SessionOverviewView};
-pub use views::{EventStreamItem, WorkspaceGitStatusView};
+pub use views::WorkspaceGitStatusView;
 pub use workspaces::{
     FilePickerConfig, FilePickerFileView, FilePickerResultView, RegisterWorkspaceRequest,
     WorkspaceBrowserConfig, WorkspaceBrowserService, WorkspaceDirectoryEntryView,

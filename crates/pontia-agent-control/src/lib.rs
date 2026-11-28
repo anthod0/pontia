@@ -67,8 +67,8 @@ pub use sessions::{
 };
 pub use turns::TurnCommandService;
 pub use views::{
-    ContextUsageCapability, ContextUsageView, EventStreamScope, EventView, QueuedMessageView,
-    SessionCapabilities, SessionLineageView, SessionView, TurnInputView, TurnOutputView, TurnView,
+    ContextUsageCapability, ContextUsageView, EventView, QueuedMessageView, SessionCapabilities,
+    SessionLineageView, SessionView, TurnInputView, TurnOutputView, TurnView,
 };
 
 pub use workspaces::{WorkspaceRecord, get_workspace_record};

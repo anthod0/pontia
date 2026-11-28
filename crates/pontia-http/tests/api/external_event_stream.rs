@@ -381,6 +381,11 @@ async fn dashboard_event_stream_replays_batches_and_resumes_in_persistence_order
             time::OffsetDateTime::UNIX_EPOCH + time::Duration::seconds(1 - index % 2);
         ingest(&state, reported).await;
     }
+    // Physical row order can differ from the committed sequence.
+    sqlx::query("UPDATE events SET rowid = -rowid")
+        .execute(&state.db())
+        .await
+        .unwrap();
     let (status, _, body) = stream_get(
         state.clone(),
         "/api/v1/dashboard/events/stream?after=session:0",
@@ -477,6 +482,10 @@ async fn session_event_stream_after_cursor_resumes_with_later_events_only() {
     let (state, _pontia_home) = test_state("after_cursor").await;
     seed_session_events(&state).await;
 
+    sqlx::query("UPDATE events SET rowid = -rowid")
+        .execute(&state.db())
+        .await
+        .unwrap();
     let (status, _, body) = stream_get(
         state,
         "/api/v1/sessions/sess_stream_1/events/stream?after=evt_stream_1",
@@ -538,6 +547,58 @@ async fn turn_event_stream_only_emits_events_for_requested_turn() {
     assert!(body.contains("id: evt_turn_1"));
     assert!(!body.contains("id: evt_turn_2"));
     assert!(!body.contains("id: evt_stream_1"));
+}
+
+#[tokio::test]
+async fn session_stream_follows_new_commits_after_replay() {
+    let (state, _home) = test_state("follow").await;
+    seed_session_events(&state).await;
+    let response = crate::common::http::router(state.clone())
+        .oneshot(
+            Request::get("/api/v1/sessions/sess_stream_1/events/stream?after=evt_stream_1")
+                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let mut body = response.into_body();
+    async fn expect_frame(body: &mut Body, id: &str) {
+        let frame = tokio::time::timeout(Duration::from_secs(2), body.frame())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap()
+            .into_data()
+            .unwrap();
+        let id_line = format!("id: {id}");
+        assert!(
+            std::str::from_utf8(&frame)
+                .unwrap()
+                .lines()
+                .any(|line| line == id_line)
+        );
+    }
+    expect_frame(&mut body, "evt_stream_2").await;
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), body.frame())
+            .await
+            .is_err()
+    );
+    state
+        .control()
+        .event_ingest_service()
+        .ingest_reported_event(event(
+            "new-turn",
+            EventType::TurnStarted,
+            "sess_stream_1",
+            Some("turn_live"),
+            json!({"input":{"summary":"live"}}),
+        ))
+        .await
+        .unwrap();
+    expect_frame(&mut body, "new-turn").await;
 }
 
 #[tokio::test]
