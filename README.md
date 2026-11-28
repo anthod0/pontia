@@ -5,7 +5,7 @@
 
 Pontia gives you a Lead Bot that coordinates coding agents on your own machines from a desktop or mobile browser.
 
-🚀 [Quick start](#quick-start) · 🌐 [Website](https://pontia.dev) · 🖥️ [Dashboard](https://app.pontia.dev) · 🌍 [简体中文](README.zh-CN.md)
+🌐 [Website](https://pontia.dev) · 🖥️ [Dashboard](https://app.pontia.dev) · 🌍 [简体中文](README.zh-CN.md)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://files.pontia.dev/cloud/hero-window-dark-676bf36f6898.png">

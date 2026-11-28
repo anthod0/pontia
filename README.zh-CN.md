@@ -5,7 +5,7 @@
 
 Pontia 让你从电脑或手机浏览器给 Lead Bot 派任务，由它协调开发机上的编程助手一起完成。
 
-🚀 [快速开始](#快速开始) · 🌐 [主页](https://pontia.dev) · 🖥️ [Dashboard](https://app.pontia.dev) · 🌍 [English](README.md)
+🌐 [主页](https://pontia.dev) · 🖥️ [Dashboard](https://app.pontia.dev) · 🌍 [English](README.md)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://files.pontia.dev/cloud/hero-window-dark-676bf36f6898.png">
