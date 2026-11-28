@@ -1,8 +1,5 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
-use pontia_agent_control::{
-    ClientControlChannel, ClientControlOperation,
-    ipc::rpc::{MAX_FRAME_BYTES, Requests, RpcPeer},
-};
+use pontia_agent_control::ipc::rpc::{MAX_FRAME_BYTES, Requests, RpcPeer};
 use pontia_core::{Error, Result};
 use pontia_runtime::{ProcessFingerprint, ProcessObservation};
 use serde_json::{Value, json};
@@ -143,41 +140,6 @@ impl Relay {
         .map_err(|_| Error::ControlUnknown("ACP relay exit unconfirmed".into()))
     }
 }
-impl ClientControlChannel for Relay {
-    fn start_turn<'a>(
-        &'a self,
-        _: &'a pontia_agent_control::InputPayload,
-    ) -> pontia_agent_control::DeliveryOperation<'a> {
-        Box::pin(async {
-            Err(pontia_agent_control::DeliveryError::Unsupported(
-                "ACP input requires a native Session".into(),
-            ))
-        })
-    }
-    fn process_id(&self) -> Option<u32> {
-        Some(self.process.pid)
-    }
-    fn available(&self) -> bool {
-        !self.rpc.is_closed()
-    }
-    fn invalidate(&self) {
-        self.rpc.close();
-    }
-    fn ping(&self) -> ClientControlOperation<'_> {
-        Box::pin(async { self.call("relay.status", json!({})).await.map(|_| ()) })
-    }
-    fn shutdown(&self) -> ClientControlOperation<'_> {
-        Box::pin(self.terminate())
-    }
-    fn replay<'a>(&'a self, _: &'a str) -> ClientControlOperation<'a> {
-        Box::pin(async {
-            Err(Error::CapabilityUnavailable(
-                "ACP input replay is unavailable".into(),
-            ))
-        })
-    }
-}
-
 pub(crate) const FRAME_KEY: &str = "pontia.dev/relay-frame";
 
 pub(crate) fn frame_key(meta: Option<&agent_client_protocol::v1::schema::Meta>) -> Result<String> {

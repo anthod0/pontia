@@ -1,15 +1,13 @@
 use crate::{
     adapter::AcpAdapter,
-    peer::{Peer, Prompt, SessionState},
+    peer::{Peer, PeerIdentity, Prompt, SessionState},
     transport::Relay,
 };
 use agent_client_protocol::v1::schema::{SessionConfigOption, SessionId, SystemPrompt};
 use pontia_agent_control::{
-    AgentControl, EventIngestService,
-    ipc::{
-        identity::RuntimeAttachment,
-        rpc::{Requests, RpcPeer, RpcRequest},
-    },
+    AgentBindingService, AgentControl, EventIngestService,
+    ipc::rpc::{Requests, RpcPeer, RpcRequest},
+    runtime::ControlTarget,
 };
 use pontia_core::{Error, Result};
 use pontia_runtime::ProcessFingerprint;
@@ -45,6 +43,16 @@ struct Context {
     promoted: Option<String>,
     #[serde(default)]
     interjections: std::collections::HashMap<String, crate::steering::Interjection>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RuntimeAttachment {
+    #[serde(rename = "version")]
+    _version: u32,
+    session_id: String,
+    runtime_id: String,
+    client_session_key: Option<String>,
 }
 
 pub(crate) fn context(state: &SessionState) -> Value {
@@ -140,6 +148,85 @@ pub(crate) async fn restore(
 }
 
 impl AcpAdapter {
+    async fn validate_attachment(
+        &self,
+        app: &AgentControl,
+        identity: &RuntimeAttachment,
+        process: &ProcessFingerprint,
+    ) -> Result<()> {
+        match identity.client_session_key.as_deref() {
+            Some(key) => {
+                let binding = AgentBindingService::new(app.db())
+                    .binding_for_client_session("acp", key)
+                    .await?
+                    .ok_or_else(|| Error::NotFound("native binding not found".into()))?;
+                if binding.session_id != identity.session_id {
+                    return Err(Error::StateConflict(
+                        "native session does not match runtime identity".into(),
+                    ));
+                }
+            }
+            None => {
+                let launching: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM sessions s WHERE s.session_id=? AND s.client_type='acp' AND EXISTS(SELECT 1 FROM session_runtimes r WHERE r.session_id=s.session_id AND r.runtime_id=? AND r.state='starting'))",
+                )
+                .bind(&identity.session_id)
+                .bind(&identity.runtime_id)
+                .fetch_one(&app.db())
+                .await?;
+                if !launching {
+                    return Err(Error::StateConflict(
+                        "Runtime must confirm its native binding".into(),
+                    ));
+                }
+            }
+        }
+
+        let target = ControlTarget::resolve(
+            &app.db(),
+            &app.clients(),
+            &identity.session_id,
+            Some(&identity.runtime_id),
+        )
+        .await?;
+        target.validate(&app.db()).await?;
+
+        sqlx::query(
+            "UPDATE session_runtimes SET process_fingerprint=? WHERE runtime_id=? AND session_id=? AND state='starting' AND process_fingerprint IS NULL AND EXISTS(SELECT 1 FROM sessions WHERE session_id=? AND client_type='acp' AND state!='exited')",
+        )
+        .bind(serde_json::to_string(process)?)
+        .bind(&identity.runtime_id)
+        .bind(&identity.session_id)
+        .bind(&identity.session_id)
+        .execute(&app.db())
+        .await?;
+
+        let confirmed: Option<String> = sqlx::query_scalar(
+            "SELECT process_fingerprint FROM session_runtimes r JOIN sessions s USING(session_id) WHERE r.runtime_id=? AND r.session_id=? AND r.role='acp' AND r.state IN ('starting','running') AND (s.state IN ('created','starting','idle','busy','waiting_for_interaction','interrupted') OR (s.state='error' AND r.state='starting'))",
+        )
+        .bind(&identity.runtime_id)
+        .bind(&identity.session_id)
+        .fetch_optional(&app.db())
+        .await?
+        .flatten();
+        let confirmed = confirmed
+            .map(|value| serde_json::from_str::<ProcessFingerprint>(&value))
+            .transpose()?;
+        if confirmed.as_ref() != Some(process) {
+            return Err(Error::StateConflict(
+                "ACP relay does not belong to the confirmed process".into(),
+            ));
+        }
+
+        sqlx::query(
+            "UPDATE sessions SET metadata=json_remove(metadata,'$.incompatible_control_runtime') WHERE session_id=? AND json_type(metadata,'$.incompatible_control_runtime') IS NOT NULL",
+        )
+        .bind(&identity.session_id)
+        .execute(&app.db())
+        .await?;
+        Ok(())
+    }
+
     pub(crate) async fn attach(
         &self,
         app: AgentControl,
@@ -149,24 +236,30 @@ impl AcpAdapter {
         requests: Requests,
     ) -> Result<()> {
         let setup = async {
+            let _connection = self.connection_gate.lock().await;
             if first.method != "runtime.attach" {
                 return Err(Error::Domain(
                     "ACP relay requires runtime attachment".into(),
                 ));
             }
             let identity: RuntimeAttachment = serde_json::from_value(first.params.clone())?;
+            let process = process_id
+                .and_then(ProcessFingerprint::capture)
+                .ok_or_else(|| Error::ControlUnknown("ACP relay process is unavailable".into()))?;
             let relay = Arc::new(Relay {
                 rpc: rpc.clone(),
-                process: process_id
-                    .and_then(ProcessFingerprint::capture)
-                    .ok_or_else(|| {
-                        Error::ControlUnknown("ACP relay process is unavailable".into())
-                    })?,
+                process,
             });
+            self.validate_attachment(&app, &identity, &relay.process)
+                .await?;
             let status = relay.call("relay.status", json!({})).await?;
-            identity.attach(&app, "acp", relay.clone()).await?;
             let previous = self.peers.lock().await.get(&identity.session_id).cloned();
             if let Some(previous) = previous {
+                if previous.runtime == identity.runtime_id && !previous.relay.rpc.is_closed() {
+                    return Err(Error::StateConflict(
+                        "ACP runtime already has an active relay".into(),
+                    ));
+                }
                 previous.stop().await;
             }
             let cwd = status["cwd"]
@@ -188,7 +281,10 @@ impl AcpAdapter {
             let policy = crate::restrictions::SessionPolicy::resolve(definition.and_then(|agent| agent.restricted_execution), mode)?;
             let peer = Peer::connect(
                 &app,
-                &identity,
+                PeerIdentity {
+                    session: &identity.session_id,
+                    runtime: &identity.runtime_id,
+                },
                 Path::new(cwd),
                 relay,
                 requests,
@@ -220,6 +316,8 @@ impl AcpAdapter {
             attached.wait_for(|ready| *ready).await.map_err(|_| {
                 Error::ControlUnknown("ACP relay did not confirm attachment".into())
             })?;
+            self.validate_attachment(&app, &identity, &peer.relay.process)
+                .await?;
             self.peers
                 .lock()
                 .await

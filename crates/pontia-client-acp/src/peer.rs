@@ -87,6 +87,11 @@ pub(crate) struct PeerOwner {
     pub peers: Weak<Mutex<HashMap<String, Arc<Peer>>>>,
 }
 
+pub(crate) struct PeerIdentity<'a> {
+    pub session: &'a str,
+    pub runtime: &'a str,
+}
+
 impl SessionState {
     pub fn needs_history_load(&self) -> bool {
         self.history_dirty
@@ -315,17 +320,16 @@ pub(crate) fn start_command(config: &AcpLaunch) -> String {
 impl Peer {
     pub async fn connect(
         app: &pontia_agent_control::AgentControl,
-        identity: &pontia_agent_control::ipc::identity::RuntimeAttachment,
+        identity: PeerIdentity<'_>,
         cwd: &Path,
         relay: Arc<Relay>,
         requests: pontia_agent_control::ipc::rpc::Requests,
         context: Value,
         owner: PeerOwner,
     ) -> Result<Arc<Self>> {
+        let PeerIdentity { session, runtime } = identity;
         let events = app.event_ingest_service();
         let interactions = app.interactions();
-        let session = identity.session_id.as_str();
-        let runtime = identity.runtime_id.as_str();
         let receipts = Receipts::new();
         let (native, forwarded) = tokio::io::duplex(64 * 1024);
         let (reader, writer) = tokio::io::split(native);

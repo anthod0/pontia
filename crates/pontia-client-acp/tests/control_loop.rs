@@ -907,6 +907,7 @@ fn composite_identity_is_reversible_and_namespaces_native_ids() {
 async fn creation_immediately_initializes_peer_and_persists_one_identity_and_runtime() {
     let h = Harness::new(&[]).await;
     let session = h.create("first").await.unwrap();
+    assert!(!h.app.client_control().available(&session).await.unwrap());
     let view = h
         .app
         .queries()
@@ -967,6 +968,46 @@ async fn creation_immediately_initializes_peer_and_persists_one_identity_and_run
         "exited"
     );
     assert_eq!(h.events(&session, "turn.completed").await, 0);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn rejects_relay_attachment_with_an_unbound_native_identity() {
+    use pontia_agent_control::ipc::{
+        control_socket_path,
+        rpc::{MAX_FRAME_BYTES, PROTOCOL_VERSION, RpcPeer},
+    };
+    use tokio::net::UnixStream;
+
+    let h = Harness::new(&[]).await;
+    let session = h.create("first").await.unwrap();
+    let runtime: String =
+        sqlx::query_scalar("SELECT runtime_id FROM session_runtimes WHERE session_id=?")
+            .bind(&session)
+            .fetch_one(&h.app.db())
+            .await
+            .unwrap();
+    let stream = UnixStream::connect(control_socket_path(h.root.path()).unwrap())
+        .await
+        .unwrap();
+    let (peer, _requests) = RpcPeer::new(stream);
+
+    let response = peer
+        .request(
+            "runtime.attach",
+            json!({
+                "version": PROTOCOL_VERSION,
+                "session_id": session,
+                "runtime_id": runtime,
+                "client_session_key": identity::encode("first", "other-native").unwrap(),
+            }),
+            MAX_FRAME_BYTES,
+            false,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response["error"]["code"], -32009);
     h.stop().await;
 }
 

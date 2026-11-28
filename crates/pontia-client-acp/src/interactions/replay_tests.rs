@@ -4,10 +4,7 @@ use pontia_agent_control::{
     AgentControl,
     clients::ClientRegistry,
     interactions::InteractionError,
-    ipc::{
-        identity::RuntimeAttachment,
-        rpc::{MAX_FRAME_BYTES, RpcPeer},
-    },
+    ipc::rpc::{MAX_FRAME_BYTES, RpcPeer},
 };
 use tokio::net::UnixStream;
 use tokio::sync::mpsc;
@@ -50,11 +47,9 @@ async fn permission_replay_keeps_one_responder_and_conflict_cancels_it_once() {
     });
     let peer = Peer::connect(
         &app,
-        &RuntimeAttachment {
-            session_id: "s".into(),
-            runtime_id: "r".into(),
-            client_session_key: None,
-            version: 1,
+        crate::peer::PeerIdentity {
+            session: "s",
+            runtime: "r",
         },
         root.path(),
         relay,
