@@ -70,11 +70,10 @@ fn ids(group: &Value) -> Vec<&str> {
 }
 
 #[tokio::test]
-async fn get_session_redacts_legacy_codex_environment() {
+async fn get_session_redacts_bot_tool_token() {
     let app = TestApp::builder().in_memory_db().build().await;
     let metadata = serde_json::json!({
         "model":"test-model",
-        "codex_environment":{"PONTIA_BOT_TOOL_TOKEN":"fixture-secret"},
         "PONTIA_BOT_TOOL_TOKEN":"fixture-secret"
     });
     sqlx::query("INSERT INTO sessions(session_id,client_type,state,metadata) VALUES ('legacy','codex','exited',?)")

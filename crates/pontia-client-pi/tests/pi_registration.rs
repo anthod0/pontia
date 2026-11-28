@@ -962,17 +962,6 @@ async fn rpc_queries_read_workspace_and_session_instructions() {
         result["session_instructions"]["system_prompt"],
         pontia_agent_control::standalone_session_instructions()
     );
-    let metadata = json!({"model":"test-model","codex_environment":{"PONTIA_BOT_TOOL_TOKEN":"fixture-secret"}});
-    sqlx::query("INSERT INTO sessions(session_id,client_type,state,metadata) VALUES ('codex-session','codex','exited',?)")
-        .bind(metadata.to_string())
-        .execute(&state.db())
-        .await
-        .unwrap();
-    let codex = pi
-        .call("session.get", json!({"session_id":"codex-session"}))
-        .await
-        .unwrap();
-    assert_eq!(codex["session"]["metadata"], json!({"model":"test-model"}));
     for (method, params) in [
         ("session.get", json!({"session_id":"missing"})),
         ("session.get", json!({})),

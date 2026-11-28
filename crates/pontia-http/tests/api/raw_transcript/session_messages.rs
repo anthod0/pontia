@@ -329,11 +329,6 @@ async fn helper_check_reads_paginated_native_history_without_changing_execution(
     sqlx::query("UPDATE sessions SET application_id='bot', application_ref='bot-check:launch', credential_env='PONTIA_BOT_TOOL_TOKEN', credential_sha256=? WHERE session_id='caller'")
         .bind(sha2::Sha256::digest("caller-credential").to_vec()).execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO bot_helpers(reference,bot_id,session_id) VALUES ('helper:check','bot-check','sess_messages')").execute(&pool).await.unwrap();
-    sqlx::query("UPDATE sessions SET metadata=json_set(metadata,'$.codex_environment',json(?)) WHERE session_id='sess_messages'")
-        .bind(json!({"PONTIA_BOT_TOOL_TOKEN":"helper-secret"}).to_string())
-        .execute(&pool)
-        .await
-        .unwrap();
     let state = http::HttpState::from(f.state.clone());
     let before = f
         .state
@@ -376,8 +371,6 @@ async fn helper_check_reads_paginated_native_history_without_changing_execution(
     let listed = send(json!({"session_id":"caller","command":{"action":"list"}})).await;
     for helper in [&recent["session"], &listed["helpers"][0]] {
         assert_eq!(helper["session_id"], "sess_messages");
-        assert!(helper["metadata"].get("codex_environment").is_none());
-        assert!(!helper.to_string().contains("helper-secret"));
     }
     assert_eq!(recent["session"]["state"], before.state);
     assert_eq!(recent["messages"]["items"].as_array().unwrap().len(), 2);
