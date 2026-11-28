@@ -7,7 +7,7 @@
   let { path, scope, hasOpenTodos, scrollTop }: { path: string; scope?: string; hasOpenTodos: boolean; scrollTop: () => void } = $props()
 </script>
 
-<nav use:chromeMetrics={'--mobile-footer-h'} class="mobile-tabs mobile-glass" aria-label={$t('mobile.navigation')}>
+<nav data-mobile-toast-anchor use:chromeMetrics={'--mobile-footer-h'} class="mobile-tabs mobile-glass" aria-label={$t('mobile.navigation')}>
   {#each tabs as tab (tab.path)}
     {@const dot = tab.path === '/todos' && hasOpenTodos}
     <button type="button" aria-current={tab.path === path ? 'page' : undefined}

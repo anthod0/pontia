@@ -12,6 +12,7 @@
   import type { Snippet, ComponentProps } from 'svelte'
   let bottomSentinel = $state<HTMLElement | null>(null)
   let scrollDownButton = $state<ScrollToBottomButton>()
+  let pinnedToBottom = $state(true)
   $effect(() => {
     const button = scrollDownButton
     chat.setHideScrollButton(() => button?.hide())
@@ -40,7 +41,7 @@
 
 <section
   class="flex flex-col gap-4 pb-[var(--chat-bottom-padding)]"
-  style={`--chat-top-offset: 4rem; --chat-bottom-padding: ${composerHeight + 16}px; --chat-composer-height: ${composerHeight}px`}
+  style={`--chat-top-offset: 4rem; --chat-bottom-padding: calc(${composerHeight + 16}px + ${pinnedToBottom ? 'var(--mobile-toast-inset, 0px)' : '0px'}); --chat-composer-height: ${composerHeight}px`}
 >
   {#if selectedSession?.control_connected === false}
     <p class="text-sm text-destructive" role="status">
@@ -276,6 +277,7 @@
         <ScrollToBottomButton
           bind:this={scrollDownButton}
           sentinel={bottomSentinel}
+          onpinnedchange={(pinned) => (pinnedToBottom = pinned)}
           onclick={chat.scrollChatToBottom}
           class="chat-scroll-button fixed bottom-[calc(var(--chat-composer-height)+0.5rem)] left-0 right-0 lg:right-[var(--file-preview-width,0px)] z-40 px-4 transition-[left] duration-200 ease-linear md:left-[var(--sidebar-width)] md:px-8 group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)]"
         />

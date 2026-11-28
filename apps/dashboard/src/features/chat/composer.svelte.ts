@@ -6,6 +6,7 @@ import type { UploadDraftState } from "$lib/uploads/draft";
 import { findChatCommand, type ChatCommand } from "$lib/chatCommands";
 import type { MessageMode } from "../../api/types";
 import { useDeviceRuntime } from "../../device/context";
+import { isMobileShell } from "$lib/hooks/shellMode.svelte";
 
 export function createComposer(options: {
   value: string;
@@ -39,6 +40,9 @@ export function createComposer(options: {
   });
   let sentAwaitingCleanup = $state(false);
   let sending = $state(false);
+  let submissionError = $state<string | null>(null);
+  let failedValue = "";
+  let failedMode: MessageMode = "immediate";
   const submissionToastId = "composer-submit-error";
   onDestroy(() => toast.dismiss(submissionToastId));
   const uploadBlocked = $derived(
@@ -63,6 +67,9 @@ export function createComposer(options: {
     options.disabled || options.busy || sending || !attachments.ready,
   );
   const command = $derived(findChatCommand(options.value, options.commands));
+  $effect(() => {
+    if (submissionError && options.value !== failedValue) submissionError = null;
+  });
   const commandArgument = $derived(
     command ? options.value.trim().slice(command.name.length).trim() : "",
   );
@@ -88,6 +95,7 @@ export function createComposer(options: {
   async function submitMessage(mode: MessageMode): Promise<void> {
     const draft = uploads;
     sending = true;
+    submissionError = null;
     toast.dismiss(submissionToastId);
     try {
       if (!sentAwaitingCleanup)
@@ -102,18 +110,24 @@ export function createComposer(options: {
       }
     } catch (error) {
       // Sent messages keep their attachments until cleanup succeeds, so the error stays until the user retries.
-      toast.error(error instanceof Error ? error.message : String(error), {
-        id: submissionToastId,
-        duration: Number.POSITIVE_INFINITY,
-        closeButton: true,
-        important: true,
-        action: {
-          label: translate("common.retry"),
-          onClick: (event) => {
-            if (!submit(mode)) event.preventDefault();
+      const message = error instanceof Error ? error.message : String(error);
+      if (isMobileShell()) {
+        submissionError = message;
+        failedValue = options.value;
+        failedMode = mode;
+      } else
+        toast.error(message, {
+          id: submissionToastId,
+          duration: Number.POSITIVE_INFINITY,
+          closeButton: true,
+          important: true,
+          action: {
+            label: translate("common.retry"),
+            onClick: (event) => {
+              if (!submit(mode)) event.preventDefault();
+            },
           },
-        },
-      });
+        });
     } finally {
       sending = false;
     }
@@ -153,6 +167,15 @@ export function createComposer(options: {
     },
     get command() {
       return command;
+    },
+    get submissionError() {
+      return submissionError;
+    },
+    dismissSubmissionError() {
+      submissionError = null;
+    },
+    retrySubmission() {
+      return submit(failedMode);
     },
     submit,
     executeCommand,

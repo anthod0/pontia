@@ -21,10 +21,11 @@
 <svelte:window onlanguagechange={updateBrowserLanguage} />
 
 <Toaster
-  position="top-center"
+  position={isMobileShell() ? 'bottom-center' : 'top-center'}
+  visibleToasts={isMobileShell() ? 1 : 3}
   gap={8}
   pauseWhenPageIsHidden
-  swipeDirections={['top']}
+  swipeDirections={isMobileShell() ? ['bottom', 'left', 'right'] : ['top']}
   offset={{ top: '56px' }}
-  mobileOffset={{ top: 'var(--mobile-toast-top)' }} />
+  mobileOffset={{ bottom: 'var(--mobile-toast-bottom, calc(var(--visual-viewport-bottom, 0px) + max(12px, env(safe-area-inset-bottom))))' }} />
 {@render children()}

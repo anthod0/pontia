@@ -88,6 +88,7 @@
   "bots.reloadBusy": "Bot 会话正忙，请等会话空闲后再重新加载。",
   "bots.queuedAfterTurn": "消息已排队，将在当前轮结束后投递",
   "bots.sendFailed": "消息发送失败",
+  "bots.sendFailedDetail": "发送失败：{reason}，内容已保留",
   "bots.executionFailed": "Bot 执行失败",
   "bots.sessionExited": "Bot Session 已退出",
   "bots.processing": "正在处理消息",

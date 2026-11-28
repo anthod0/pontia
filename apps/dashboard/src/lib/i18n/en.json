@@ -88,6 +88,7 @@
   "bots.reloadBusy": "The Bot session is busy. Wait for it to become idle, then retry.",
   "bots.queuedAfterTurn": "Message queued for the next turn",
   "bots.sendFailed": "Message failed to send",
+  "bots.sendFailedDetail": "Sending failed: {reason}. Your content is preserved",
   "bots.executionFailed": "Bot execution failed",
   "bots.sessionExited": "Bot Session exited",
   "bots.processing": "Working on your message",

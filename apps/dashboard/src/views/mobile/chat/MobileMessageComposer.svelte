@@ -11,6 +11,8 @@
   import ComposerAddMenu from '../../../components/chat/ComposerAddMenu.svelte'
   import PaperPlaneTiltIcon from 'phosphor-svelte/lib/PaperPlaneTiltIcon'
   import ArrowsOutIcon from 'phosphor-svelte/lib/ArrowsOutIcon'
+  import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
+  import XIcon from 'phosphor-svelte/lib/XIcon'
   let {
     value = $bindable(''),
     prefix,
@@ -122,6 +124,14 @@
     draft={controller.uploads}
     disabled={busy || controller.sending}
   />{/if}
+{#if controller.submissionError}
+  <div role="alert" class="mx-4 mb-1 flex items-center gap-2 rounded-item border border-destructive/30 bg-destructive/10 px-3 py-2 text-13 text-destructive">
+    <WarningCircleIcon class="size-4 shrink-0" weight="fill" />
+    <span class="min-w-0 flex-1 break-words">{controller.submissionError}</span>
+    <button class="min-h-11 shrink-0 px-2 font-medium" onclick={() => controller.retrySubmission()}>{$t('common.retry')}</button>
+    <button class="grid size-11 shrink-0 place-items-center" aria-label={$t('common.close')} onclick={() => controller.dismissSubmissionError()}><XIcon class="size-4" /></button>
+  </div>
+{/if}
 <div class="mobile-glass flex flex-col rounded-composer p-1">
   {#if prefix}<div class="ml-12 mr-2 mt-2">{@render prefix()}</div>{/if}
   <div class="flex items-end">

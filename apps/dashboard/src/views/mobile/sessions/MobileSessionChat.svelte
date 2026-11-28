@@ -62,6 +62,7 @@
 </SessionFeed>
 {#if session}
   <div
+    data-mobile-toast-anchor
     class="absolute inset-x-0 bottom-0 z-10 px-3 pb-[max(.5rem,env(safe-area-inset-bottom))]"
     bind:clientHeight={height}
     use:chromeMetrics={'--mobile-footer-h'}

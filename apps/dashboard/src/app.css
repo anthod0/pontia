@@ -305,9 +305,6 @@ body {
   background: var(--surface);
   overflow: hidden;
 }
-:root:has(.mobile-shell) {
-  --mobile-toast-top: calc(var(--visual-viewport-top, 0px) + var(--mobile-header-h, 64px) + 4px);
-}
 .mobile-glass {
   background: var(--card);
   border: 1px solid var(--glass-line);
@@ -359,40 +356,97 @@ body {
 }
 
 :root:has(.mobile-shell) [data-sonner-toaster] {
-  --width: min(480px, calc(100vw - 24px)) !important;
-  top: var(--mobile-offset-top) !important;
+  --width: min(340px, calc(100vw - 48px)) !important;
+  bottom: var(--mobile-offset-bottom) !important;
+  top: auto !important;
   left: 50% !important;
   right: auto !important;
   width: var(--width) !important;
   transform: translateX(-50%) !important;
 }
 :root:has(.mobile-shell) [data-sonner-toast] {
-  width: 100% !important;
-  gap: 12px;
+  width: max-content !important;
+  max-width: min(340px, calc(100vw - 48px)) !important;
+  left: 50% !important;
+  translate: -50% 0;
+  min-height: 32px;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 6px 10px;
+  border-radius: var(--radius-full);
   background: var(--card);
   border-color: var(--glass-line);
+  box-shadow:
+    0 1px 1px rgb(0 0 0 / 4%),
+    0 4px 12px rgb(0 0 0 / 8%);
 }
 :root:has(.mobile-shell) [data-sonner-toast] [data-icon] {
-  width: 20px;
-  height: 20px;
+  width: 14px;
+  height: 14px;
   margin-top: 0;
+  align-self: flex-start;
+  margin-block: 2px;
 }
 :root:has(.mobile-shell) [data-sonner-toast] [data-icon] > svg,
 :root:has(.mobile-shell) [data-sonner-toast] [data-icon] > .sonner-loader {
-  width: 20px;
-  height: 20px;
+  width: 14px;
+  height: 14px;
+}
+:root:has(.mobile-shell) [data-sonner-toast] [data-content] {
+  min-width: 0;
+  overflow: hidden;
+  line-height: 18px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
 }
 :root:has(.mobile-shell) [data-sonner-toast] [data-title] {
-  font-size: var(--text-15);
-  line-height: 20px;
+  display: inline;
+  font-size: var(--text-13);
+  line-height: 18px;
+  font-weight: 500;
 }
 :root:has(.mobile-shell) [data-sonner-toast] [data-description] {
+  display: inline;
   font-size: var(--text-13);
   line-height: 18px;
 }
+:root:has(.mobile-shell) [data-sonner-toast] [data-description]::before {
+  content: "：";
+}
 :root:has(.mobile-shell) [data-sonner-toast] [data-button] {
-  height: 32px;
-  padding-inline: 14px;
+  height: 28px;
+  min-height: 28px;
+  padding-inline: 10px;
+  color: var(--primary);
+  font-size: var(--text-13);
+  font-weight: 600;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+:root:has(.mobile-shell) [data-sonner-toast]:has([data-button]) {
+  min-height: 36px;
+  padding-block: 3px;
+  padding-right: 3px;
+}
+:root:has(.mobile-shell) [data-sonner-toast] [data-button]::before {
+  content: "";
+  position: absolute;
+  left: -7px;
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+}
+:root:has(.mobile-shell) [data-sonner-toast] [data-button]::after {
+  content: "";
+  position: absolute;
+  inset: -8px -4px;
+}
+:root:has(.mobile-shell) [data-sonner-toast][data-mobile-multiline] {
+  min-height: 50px;
+  border-radius: var(--radius-panel);
 }
 :root:has(.mobile-shell) [data-sonner-toast] [data-close-button] {
   width: 32px;
@@ -402,7 +456,7 @@ body {
   width: 16px;
   height: 16px;
 }
-:root:has(.mobile-shell) [data-sonner-toast] :is([data-button], [data-close-button])::before {
+:root:has(.mobile-shell) [data-sonner-toast] [data-close-button]::before {
   content: "";
   position: absolute;
   inset: -6px;
@@ -571,6 +625,16 @@ body {
 
 body:has([data-mobile-bot-sheet]) [data-sonner-toast] button {
   pointer-events: auto;
+}
+
+:root[data-mobile-toast-visible] {
+  --mobile-toast-inset: calc(var(--mobile-toast-height) + 8px);
+}
+[data-mobile-toast-avoid] {
+  transition: transform 200ms cubic-bezier(0.2, 0, 0, 1);
+}
+[data-mobile-toast-avoid][data-mobile-toast-overlap] {
+  transform: translateY(calc(-1 * var(--mobile-toast-height) - 8px));
 }
 
 .mobile-shell .chat-scroll-button {

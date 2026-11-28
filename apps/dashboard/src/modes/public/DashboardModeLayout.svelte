@@ -4,6 +4,7 @@
   import { writable } from 'svelte/store';
   import { dashboardRelativePath, navigate } from '$lib/navigation';
   import { toast } from 'svelte-sonner'
+  import { isMobileShell } from '$lib/hooks/shellMode.svelte'
   import { tabs } from '../../shell/mobile/tabs'
   import { returnToLastPage } from '$lib/lastPage';
   import { PersistedState, textSerializer } from '$lib/storage';
@@ -119,7 +120,9 @@
   function selectDevice(target: string, options?: { keepMobileTab?: boolean }): void {
     const path = dashboardRelativePath();
     if (options?.keepMobileTab && tabs.some(tab => tab.path === path)) {
-      void navigate(path, undefined, { scope: `/${target}` }).then(() => toast.success($t('mobile.switched', {name: hostDevices.find(device => device.handle === target)?.name ?? target})))
+      void navigate(path, undefined, { scope: `/${target}` }).then(() => {
+        if (!isMobileShell()) toast.success($t('mobile.switched', {name: hostDevices.find(device => device.handle === target)?.name ?? target}))
+      })
       return
     }
     if (handle && path.startsWith('/settings/')) {

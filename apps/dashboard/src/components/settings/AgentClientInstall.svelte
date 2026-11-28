@@ -1,7 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte'
   import { t } from '$lib/i18n'
-  import { toast } from 'svelte-sonner'
   import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon'
@@ -17,7 +16,7 @@
   import * as RadioGroup from '$lib/components/ui/radio-group/index.js'
   import ResponsiveDialog from '$lib/components/ui/overlay/ResponsiveDialog.svelte'
   import SheetHandle from '$lib/components/ui/overlay/SheetHandle.svelte'
-  import { copyText } from '$lib/copyText'
+  import { createCopyFeedback } from '$lib/copyFeedback.svelte'
   import { cn } from '$lib/utils'
   import type { AgentClientInstallMethod, AgentClientView } from '../../api/types'
   import type { createAgentClients } from '../../features/settings/agentClients.svelte'
@@ -42,6 +41,7 @@
   let submitError = $state('')
   let outputNode = $state<HTMLElement | null>(null)
   let following = $state(true)
+  const copyFeedback = createCopyFeedback()
 
   const operation = $derived(settings.installOperationFor(client))
   const methods = $derived(client.install?.methods ?? [])
@@ -102,7 +102,7 @@
   }
 
   async function copyOutput() {
-    if (operation?.output && (await copyText(operation.output))) toast.success($t('common.copied'))
+    await copyFeedback.copy(operation?.output)
   }
 
   function updateFollowing() {
@@ -294,7 +294,7 @@
     <Dialog.Header>
       <div class="flex items-start justify-between gap-4 pr-7">
         <div><Dialog.Title>{$t('clients.install.output')} · {client.name}</Dialog.Title><Dialog.Description>{#if operation?.status === 'running'}<span class="inline-flex items-center gap-1.5"><span class="size-2 animate-pulse rounded-full bg-success"></span>{$t('clients.install.live')} · {$t(`clients.install.phase.${operation.phase}`)}</span>{:else if operation}{$t(`clients.install.outputStatus.${operation.status}`)}{/if}</Dialog.Description></div>
-        <Button variant="ghost" size="icon-sm" aria-label={$t('clients.install.copyOutput')} title={$t('clients.install.copyOutput')} onclick={copyOutput}><CopyIcon /></Button>
+        <Button variant="ghost" size="icon-sm" aria-label={$t(copyFeedback.confirmed ? 'common.copied' : 'clients.install.copyOutput')} title={$t(copyFeedback.confirmed ? 'common.copied' : 'clients.install.copyOutput')} onclick={copyOutput}>{#if copyFeedback.confirmed}<CheckIcon />{:else}<CopyIcon />{/if}</Button>
       </div>
     </Dialog.Header>
     <div class="relative min-h-0">

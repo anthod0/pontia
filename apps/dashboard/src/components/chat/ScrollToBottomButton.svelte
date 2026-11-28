@@ -6,12 +6,13 @@
 
   const ANIMATION_MS = 200
 
-  let { sentinel, root = null, onclick, class: className }: {
+  let { sentinel, root = null, onclick, onpinnedchange, class: className }: {
     /** Shown while this element is outside the scroll viewport. */
     sentinel: HTMLElement | null | undefined
     /** The scroll container, or null for the document viewport. */
     root?: Element | null
     onclick: () => void
+    onpinnedchange?: (pinned: boolean) => void
     class?: string
   } = $props()
 
@@ -22,6 +23,7 @@
   function setVisible(next: boolean) {
     clearTimeout(hideTimer)
     visible = next
+    onpinnedchange?.(!next)
     if (next) {
       rendered = true
       return
@@ -51,6 +53,7 @@
   <div class={cn('pointer-events-none', visible ? 'scroll-down-enter' : 'scroll-down-exit', className)}>
     <div class="mx-auto flex w-full max-w-[760px] justify-end">
       <Button
+        data-mobile-toast-avoid
         type="button"
         variant="outline"
         size="icon"

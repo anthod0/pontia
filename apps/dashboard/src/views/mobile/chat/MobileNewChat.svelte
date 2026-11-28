@@ -70,6 +70,12 @@
       ></button
     >
   </div>
+  {#if chat.error}
+    <div role="alert" class="mb-2 rounded-item border border-destructive/30 bg-destructive/10 px-3 py-2 text-13 text-destructive">
+      <p class="break-words">{chat.error}</p>
+      {#if !chat.creating}<button class="mt-1 min-h-11 font-medium" onclick={chat.retryError}>{$t('common.retry')}</button>{/if}
+    </div>
+  {/if}
   <MobileMessageComposer
     autofocus={!!chat.workspaceId}
     bind:value={$prompt}

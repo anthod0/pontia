@@ -2,6 +2,7 @@ import { translate, type MessageKey } from "$lib/i18n";
 import { useDeviceRuntime } from "../../device/context";
 import { onMount } from "svelte";
 import { toast } from "svelte-sonner";
+import { isMobileShell } from "$lib/hooks/shellMode.svelte";
 import { ApiError } from "../../api/errors";
 import { isTransientNetworkError } from "../../api/client";
 import type {
@@ -373,9 +374,13 @@ export function createAgentClients() {
     return perform(client, async () => {
       const saved = await patchAgentClient(client, { enabled: !client.enabled });
       clients = clients.map((entry) => (entry.id === saved.id ? saved : entry));
-      toast.success(saved.enabled ? translate("clients.enabled") : translate("clients.disabled"), {
-        description: translate("clients.sessionsUnchanged"),
-      });
+      if (!isMobileShell())
+        toast.success(
+          saved.enabled ? translate("clients.enabled") : translate("clients.disabled"),
+          {
+            description: translate("clients.sessionsUnchanged"),
+          },
+        );
     });
   }
 

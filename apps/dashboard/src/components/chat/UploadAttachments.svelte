@@ -8,6 +8,7 @@
   import SecretChip from './SecretChip.svelte'
   import { fileKind, fileKindOf } from './fileKind'
   import { toast } from 'svelte-sonner'
+  import { isMobileShell } from '$lib/hooks/shellMode.svelte'
   import { Button } from '$lib/components/ui/button/index.js'
   import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
   import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon'
@@ -23,9 +24,11 @@
   export function choose(item?: UploadItem) { resumeItem = item; picker.multiple = !item; picker.click() }
   $effect(() => {
     const { warning, items } = $draft
-    notify('upload-warning', warning, () => toast.warning(warning!, { id: 'upload-warning', duration: 6000 }))
-    for (const item of items)
-      notify(`upload-error-${item.id}`, item.error, () => toast.error($t('files.uploadFailedNamed', { name: displayName(item) }), { id: `upload-error-${item.id}`, description: item.error, duration: 6000 }))
+    if (!isMobileShell()) {
+      notify('upload-warning', warning, () => toast.warning(warning!, { id: 'upload-warning', duration: 6000 }))
+      for (const item of items)
+        notify(`upload-error-${item.id}`, item.error, () => toast.error($t('files.uploadFailedNamed', { name: displayName(item) }), { id: `upload-error-${item.id}`, description: item.error, duration: 6000 }))
+    }
   })
   function displayName(item: UploadItem) {
     return item.secret?.label ?? item.secret?.masked ?? item.name
@@ -77,6 +80,7 @@
 
 <svelte:window ononline={() => draft.reconnect()} />
 <input bind:this={picker} type="file" class="hidden" aria-label={$t('files.selectUpload')} onchange={() => void selected()} />
+{#if isMobileShell() && $draft.warning}<p role="status" class="px-3 pb-1 text-13 text-muted-foreground">{$draft.warning}</p>{/if}
 {#if $draft.items.length > 0}
   <ul class="flex gap-3 px-3 pb-1 pt-3 max-sm:overflow-x-auto max-sm:[scrollbar-width:none] sm:flex-wrap">
     {#each $draft.items as item (item.id)}

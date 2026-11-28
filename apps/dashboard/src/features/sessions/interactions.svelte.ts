@@ -2,6 +2,7 @@ import { translate } from "$lib/i18n";
 import { onMount, untrack } from "svelte";
 import { fromStore } from "svelte/store";
 import { toast } from "svelte-sonner";
+import { isMobileShell } from "$lib/hooks/shellMode.svelte";
 import { useDeviceRuntime } from "../../device/context";
 import { ApiError } from "../../api/errors";
 import type { Interaction } from "../../api/types";
@@ -104,7 +105,7 @@ export function createInteractions(sessionId: () => string) {
   }
 
   $effect(() => {
-    if (error && error !== lastToastedError) {
+    if (!isMobileShell() && error && error !== lastToastedError) {
       toast.error(translate("interaction.failed"), { description: error, duration: 6000 });
       lastToastedError = error;
     }
@@ -157,6 +158,9 @@ export function createInteractions(sessionId: () => string) {
     },
     get submitting() {
       return submitting;
+    },
+    get error() {
+      return error;
     },
     respond,
   };

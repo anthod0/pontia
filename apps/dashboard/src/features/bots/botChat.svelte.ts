@@ -9,6 +9,7 @@ import { quotedMessage, type BotQuote } from "$lib/botQuote";
 import { isImagePath } from "$lib/downloads/localFilePath";
 import { createQuoteDraft } from "$lib/botQuoteDraft";
 import { translate } from "$lib/i18n";
+import { isMobileShell } from "$lib/hooks/shellMode.svelte";
 export function createBotChat(botId: string) {
   const device = useDeviceRuntime();
 
@@ -25,6 +26,9 @@ export function createBotChat(botId: string) {
   let highlightedPath = $state<string | null>(null);
   let jumping = $state<string | null>(null);
   let missingQuotes = $state<string[]>([]);
+  let actionError = $state<{ message: string; retry: () => void } | null>(null);
+  let retryErrors = $state<Record<string, string>>({});
+  let queuedMessageId = $state<string | null>(null);
   let highlightTimer: ReturnType<typeof setTimeout> | undefined;
   const actionToastId = "bot-action-error";
   onDestroy(() => {
@@ -33,7 +37,15 @@ export function createBotChat(botId: string) {
   });
 
   function showActionError(failure: unknown, retry: (event: MouseEvent) => void) {
-    toast.error(failure instanceof Error ? failure.message : String(failure), {
+    const message = failure instanceof Error ? failure.message : String(failure);
+    if (isMobileShell()) {
+      actionError = {
+        message: translate("bots.sendFailedDetail", { reason: message }),
+        retry: () => retry(new MouseEvent("click")),
+      };
+      return;
+    }
+    toast.error(message, {
       id: actionToastId,
       duration: 6000,
       important: true,
@@ -57,7 +69,7 @@ export function createBotChat(botId: string) {
     try {
       if (!(await timeline.reveal(id))) {
         missingQuotes = [...missingQuotes, id];
-        toast.error(translate("bots.quoteMissing"), { duration: 6000 });
+        if (!isMobileShell()) toast.error(translate("bots.quoteMissing"), { duration: 6000 });
         return;
       }
       await tick();
@@ -81,6 +93,8 @@ export function createBotChat(botId: string) {
       botId,
       (update) => {
         typing = update.type === "typing";
+        if (update.type === "message" && update.message.id === queuedMessageId)
+          queuedMessageId = null;
         if (update.type !== "typing") {
           void device.queryClient.invalidateQueries({ queryKey: ["bot-message-context", botId] });
           void device.queryClient.invalidateQueries({ queryKey: ["bot-todos", botId] });
@@ -108,11 +122,15 @@ export function createBotChat(botId: string) {
   });
   function showDelivery(message: Awaited<ReturnType<typeof device.api.sendBotMessage>>) {
     timeline.message(message);
-    if (message.delivery === "queued") toast.info(translate("bots.queuedAfterTurn"));
+    if (message.delivery === "queued") {
+      if (isMobileShell()) queuedMessageId = message.id;
+      else toast.info(translate("bots.queuedAfterTurn"));
+    }
   }
   // The composer and a todo's reply box both send through here, so a reply matches quoting first and sending from the composer.
   async function post(content: string, sentQuote: BotQuote | null) {
     toast.dismiss(actionToastId);
+    actionError = null;
     feed?.followSend();
     const message = await device.api.sendBotMessage(
       botId,
@@ -201,13 +219,20 @@ export function createBotChat(botId: string) {
 
   async function retry(id: string) {
     retrying = [...retrying, id];
+    retryErrors = Object.fromEntries(Object.entries(retryErrors).filter(([key]) => key !== id));
     toast.dismiss(actionToastId);
     try {
       showDelivery(await device.api.retryBotMessage(botId, id));
     } catch (failure) {
-      showActionError(failure, () => {
-        if (!retrying.includes(id)) void retry(id);
-      });
+      if (isMobileShell())
+        retryErrors = {
+          ...retryErrors,
+          [id]: failure instanceof Error ? failure.message : String(failure),
+        };
+      else
+        showActionError(failure, () => {
+          if (!retrying.includes(id)) void retry(id);
+        });
       timeline.refresh();
     } finally {
       retrying = retrying.filter((messageId) => messageId !== id);
@@ -243,7 +268,20 @@ export function createBotChat(botId: string) {
     get reloading() {
       return reloading;
     },
+    get actionError() {
+      return actionError;
+    },
+    get retryErrors() {
+      return retryErrors;
+    },
+    get queued() {
+      return queuedMessageId !== null;
+    },
+    dismissActionError() {
+      actionError = null;
+    },
     set draft(value: string) {
+      if (actionError && value !== draft) actionError = null;
       draft = value;
     },
     get feed() {

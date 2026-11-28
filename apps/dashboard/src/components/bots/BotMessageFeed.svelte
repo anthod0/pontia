@@ -7,6 +7,7 @@
   import { t } from '$lib/i18n'
   import { compareBotEntries, type BotTimeline } from '$lib/botTimeline.svelte'
   import type { BotEntry } from '../../api/types'
+  import { mobileToastLayout } from '$lib/components/ui/sonner/mobileToastLayout.svelte'
 
   let { timeline, typing, bottomInset=0, highlighted = null, root = $bindable(), row }: {
     timeline: BotTimeline
@@ -55,7 +56,7 @@
     const element = feed
     const rows = entries
     const paddingStart = 20 + (timeline.before ? headerHeight + 12 : 0)
-    const paddingEnd = 20 + bottomInset
+    const paddingEnd = 20 + bottomInset + (pinned && mobileToastLayout.visible ? mobileToastLayout.height + 8 : 0)
     const length = count
     if (!element) return
     const previousFirst = firstId

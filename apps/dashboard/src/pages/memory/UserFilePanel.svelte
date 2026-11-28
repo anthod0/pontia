@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t, currentLocale } from '$lib/i18n'
   import { toast } from 'svelte-sonner'
-  import { copyText } from '$lib/copyText'
+  import { createCopyFeedback } from '$lib/copyFeedback.svelte'
   import { ApiError } from '../../api/errors'
   import { useDeviceRuntime } from '../../device/context'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -13,11 +13,12 @@
   import MessageResponse from '$lib/components/ai-elements/message/message-response.svelte'
   import UserCircleIcon from 'phosphor-svelte/lib/UserCircleIcon'
   import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
+  import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import { formatRelativeTime } from '$lib/format'
 
-  import type {Snippet} from 'svelte'
+  import type { Snippet } from 'svelte'
   let { openEditor, closeEditor }: { openEditor?: (editor: Snippet) => void; closeEditor?: () => void } = $props()
   const device = useDeviceRuntime()
   const user = device.memoryQueries.createUserFileQuery()
@@ -26,12 +27,13 @@
   // While editing, `base` is the text the draft started from.
   let editing = $state<{ base: string; draft: string } | null>(null)
   let saveError = $state<{ message: string; conflict: boolean } | null>(null)
+  const copyFeedback = createCopyFeedback()
   const length = $derived(user.data ? [...user.data.text].length : 0)
   const draftLength = $derived(editing ? [...editing.draft].length : 0)
   const overLimit = $derived(!!user.data && draftLength > user.data.character_limit)
 
   async function copy(): Promise<void> {
-    if (user.data && (await copyText(user.data.text))) toast.success($t('common.copied'))
+    await copyFeedback.copy(user.data?.text)
   }
 
   function edit(text: string): void {
@@ -132,7 +134,7 @@
         <ToggleGroup.Item value="rendered" class="px-2.5">{$t('memory.userRendered')}</ToggleGroup.Item>
         <ToggleGroup.Item value="source" class="px-2.5">{$t('memory.userSource')}</ToggleGroup.Item>
       </ToggleGroup.Root>
-      <Button size="icon-sm" variant="ghost" aria-label={$t('common.copy')} title={$t('common.copy')} onclick={() => void copy()}><CopyIcon class="size-4" /></Button>
+      <Button size="icon-sm" variant="ghost" aria-label={$t(copyFeedback.confirmed ? 'common.copied' : 'common.copy')} title={$t(copyFeedback.confirmed ? 'common.copied' : 'common.copy')} onclick={() => void copy()}>{#if copyFeedback.confirmed}<CheckIcon class="size-4" />{:else}<CopyIcon class="size-4" />{/if}</Button>
       <Button size="sm" variant="outline" onclick={() => beginEdit(user.data.text)}><PencilSimpleIcon data-icon="inline-start" />{$t('common.edit')}</Button>
     </div>
     <div class="max-h-[34rem] overflow-auto px-5 py-4">

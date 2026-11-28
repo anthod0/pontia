@@ -50,3 +50,20 @@ test("keeps per-client picks within the sheet and submits only the confirmed sel
     catalog.mockRestore();
   }
 });
+
+test("keeps a rejected prompt in place and retries from the inline error", async () => {
+  const user = userEvent.setup();
+  mocks.createSession.mockRejectedValueOnce(new Error("Device is offline"));
+  render(NewChatPage);
+
+  const editor = await screen.findByPlaceholderText("Describe a task…");
+  await user.type(editor, "Review changes");
+  await user.click(screen.getByRole("button", { name: "Send" }));
+
+  const alert = await screen.findByRole("alert");
+  expect(alert).toBeVisible();
+  expect(editor).toHaveTextContent("Review changes");
+
+  await user.click(within(alert).getByRole("button", { name: "Retry" }));
+  await waitFor(() => expect(mocks.createSession).toHaveBeenCalledTimes(2));
+});

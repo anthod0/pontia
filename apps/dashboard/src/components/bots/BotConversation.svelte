@@ -116,6 +116,9 @@
             {/if}
             {#if !mobile && entry.kind === 'bot_reply'}{@render menuButton(entry.id)}{/if}
           </div>
+          {#if mobile && chat.retryErrors[entry.id]}
+            <p role="alert" class="mt-1 text-13 text-destructive">{chat.retryErrors[entry.id]}</p>
+          {/if}
         {:else}
           <p class="flex items-center justify-center gap-2 text-center text-xs text-muted-foreground">
             <WarningCircleIcon class="size-4 shrink-0" />

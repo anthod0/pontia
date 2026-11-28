@@ -30,6 +30,9 @@
   import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon'
   import DotsThreeIcon from 'phosphor-svelte/lib/DotsThreeIcon'
   import SpinnerGapIcon from 'phosphor-svelte/lib/SpinnerGapIcon'
+  import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
+  import ClockIcon from 'phosphor-svelte/lib/ClockIcon'
+  import XIcon from 'phosphor-svelte/lib/XIcon'
   let { chat }: { chat: BotChatController } = $props()
   const timeline = $derived(chat.timeline)
   const device = useDeviceRuntime()
@@ -157,6 +160,7 @@
   {#if timeline.bot}
     <BotConversation mobile {chat} bottomInset={dockHeight} oncontext={viewContext} ontodos={() => (todos = true)} />
     <div
+      data-mobile-toast-anchor
       bind:clientHeight={dockHeight}
       use:chromeMetrics={'--mobile-footer-h'}
       class="bot-chat-dock pointer-events-none absolute inset-x-0 bottom-0 z-10 [&>div]:pointer-events-auto"
@@ -166,6 +170,11 @@
           <SpinnerGapIcon class="size-4 shrink-0 animate-spin" aria-hidden="true" />
           <span class="truncate">{$t('bots.connectingReadOnly', { name: host.activeDevice?.name ?? '' })}</span>
         </p>
+      {:else if chat.queued}
+        <p class="flex min-w-0 items-center gap-2 px-3 py-1 text-13 leading-5 text-muted-foreground" role="status">
+          <ClockIcon class="size-4 shrink-0" aria-hidden="true" />
+          <span class="truncate">{$t('bots.queuedAfterTurn')}</span>
+        </p>
       {:else if timeline.status.kind !== 'idle'}
         <p class="flex min-w-0 items-center gap-2 px-3 py-1 text-sm leading-5 text-muted-foreground" role="status">
           <BotAvatar class="size-5 shrink-0" shape={timeline.bot.avatar_shape} color={timeline.bot.avatar_color} working />
@@ -173,6 +182,14 @@
         </p>
       {/if}
       <ProfileHint {chat} name={timeline.bot.name} />
+      {#if chat.actionError}
+        <div role="alert" class="mx-4 mb-1 flex items-center gap-2 rounded-item border border-destructive/30 bg-destructive/10 px-3 py-2 text-13 text-destructive">
+          <WarningCircleIcon class="size-4 shrink-0" weight="fill" />
+          <span class="min-w-0 flex-1 break-words">{chat.actionError.message}</span>
+          <button class="min-h-11 shrink-0 px-2 font-medium" onclick={chat.actionError.retry}>{$t('common.retry')}</button>
+          <button class="grid size-11 shrink-0 place-items-center" aria-label={$t('common.close')} onclick={chat.dismissActionError}><XIcon class="size-4" /></button>
+        </div>
+      {/if}
       <MobileMessageComposer
         bind:this={chat.composer}
         bind:value={chat.draft}

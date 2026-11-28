@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { t } from '$lib/i18n'
-  import { Toaster as Sonner, type ToasterProps } from 'svelte-sonner'
+  import { Toaster as Sonner, toast, type ToasterProps } from 'svelte-sonner'
   import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon'
   import InfoIcon from 'phosphor-svelte/lib/InfoIcon'
   import WarningIcon from 'phosphor-svelte/lib/WarningIcon'
@@ -9,58 +9,60 @@
   import SpinnerGapIcon from 'phosphor-svelte/lib/SpinnerGapIcon'
   import XIcon from 'phosphor-svelte/lib/XIcon'
   import { buttonVariants } from '$lib/components/ui/button/button.svelte'
+  import { syncMobileToastLayout } from './mobileToastLayout.svelte'
   import { isMobileShell } from '$lib/hooks/shellMode.svelte'
   import { resolvedTheme } from '$lib/theme'
 
   let { ...restProps }: ToasterProps = $props()
   let root: HTMLDivElement
 
-  function setExpanded(toaster: HTMLOListElement, expanded: boolean, event: PointerEvent): void {
-    toaster.dispatchEvent(new MouseEvent(expanded ? 'mouseenter' : 'mouseleave', {
-      clientX: event.clientX,
-      clientY: event.clientY,
-    }))
-  }
-
   onMount(() => {
-    let pointer: { x: number; y: number; toaster: HTMLOListElement } | undefined
+    const deferred: Array<() => void> = []
+    let deferredId = 0
+    const originalSuccess = toast.success
+    const originalInfo = toast.info
+    const hasPendingError = () => toast.getActiveToasts().some(item => item.type === 'error' && item.action)
+    const defer = (original: typeof toast.success, args: Parameters<typeof toast.success>): ReturnType<typeof toast.success> => {
+      if (!isMobileShell() || !hasPendingError()) return original(...args)
+      const [message, options] = args
+      const id = options?.id ?? `mobile-deferred-toast-${++deferredId}`
+      deferred.push(() => original(message, { ...options, id }))
+      return id
+    }
+    toast.success = (...args) => defer(originalSuccess, args)
+    toast.info = (...args) => defer(originalInfo, args)
 
     const updateRoles = () => {
-      for (const toast of root.querySelectorAll<HTMLElement>('[data-sonner-toast]')) {
+      const toasts = [...root.querySelectorAll<HTMLElement>('[data-sonner-toast]:not([data-removed="true"])')]
+      for (const toast of toasts) {
         toast.setAttribute('role', toast.dataset.type === 'error' ? 'alert' : 'status')
+      }
+      if (isMobileShell()) {
+        const pendingError = toasts.find(toast => toast.dataset.type === 'error' && toast.querySelector('[data-button]'))
+        const ordered = pendingError ? [pendingError, ...toasts.filter(toast => toast !== pendingError)] : toasts
+        ordered.forEach((toast, index) => {
+          toast.dataset.front = String(index === 0)
+          toast.dataset.visible = String(index === 0)
+          toast.dataset.index = String(index)
+          toast.style.setProperty('--index', String(index))
+          toast.style.setProperty('--toasts-before', String(index))
+          toast.style.setProperty('--z-index', String(ordered.length - index))
+        })
+      }
+      if (!hasPendingError() && deferred.length) {
+        const pending = deferred.splice(0)
+        queueMicrotask(() => pending.forEach(show => show()))
       }
     }
     const observer = new MutationObserver(updateRoles)
-    observer.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-type'] })
+    observer.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-type', 'data-removed'] })
     updateRoles()
-
-    const pointerDown = (event: PointerEvent) => {
-      if (!isMobileShell() || !(event.target instanceof Element) || event.target.closest('button')) return
-      const toaster = event.target.closest<HTMLOListElement>('[data-sonner-toaster]')
-      if (toaster) pointer = { x: event.clientX, y: event.clientY, toaster }
-    }
-    const pointerUp = (event: PointerEvent) => {
-      if (!pointer) return
-      const { x, y, toaster } = pointer
-      pointer = undefined
-      if (Math.hypot(event.clientX - x, event.clientY - y) >= 5) return
-      const expanded = toaster.querySelector('[data-sonner-toast][data-expanded="true"]') !== null
-      queueMicrotask(() => setExpanded(toaster, !expanded, event))
-    }
-    const outsidePointerDown = (event: PointerEvent) => {
-      if (!isMobileShell() || root.contains(event.target as Node)) return
-      const toaster = root.querySelector<HTMLOListElement>('[data-sonner-toaster]')
-      if (toaster) setExpanded(toaster, false, event)
-    }
-
-    root.addEventListener('pointerdown', pointerDown)
-    root.addEventListener('pointerup', pointerUp)
-    document.addEventListener('pointerdown', outsidePointerDown)
+    const stopLayout = syncMobileToastLayout(root)
     return () => {
       observer.disconnect()
-      root.removeEventListener('pointerdown', pointerDown)
-      root.removeEventListener('pointerup', pointerUp)
-      document.removeEventListener('pointerdown', outsidePointerDown)
+      stopLayout()
+      toast.success = originalSuccess
+      toast.info = originalInfo
     }
   })
 </script>

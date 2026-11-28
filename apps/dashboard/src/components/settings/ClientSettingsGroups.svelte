@@ -1,9 +1,9 @@
 <script lang="ts">
   import { t, currentLocale } from '$lib/i18n'
-  import { toast } from 'svelte-sonner'
   import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
   import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon'
   import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
+  import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import WrenchIcon from 'phosphor-svelte/lib/WrenchIcon'
   import { Button } from '$lib/components/ui/button/index.js'
   import { Switch } from '$lib/components/ui/switch/index.js'
@@ -13,7 +13,7 @@
   import * as Sheet from '$lib/components/ui/sheet'
   import BottomSheet from '$lib/components/ui/overlay/BottomSheet.svelte'
   import SheetHandle from '$lib/components/ui/overlay/SheetHandle.svelte'
-  import { copyText } from '$lib/copyText'
+  import { createCopyFeedback } from '$lib/copyFeedback.svelte'
   import { formatRelativeTime } from '$lib/format'
   import { dashboardPath, navigate } from '$lib/navigation'
   import { cn } from '$lib/utils'
@@ -29,6 +29,7 @@
   }: { settings: ReturnType<typeof createAgentClients>; client: AgentClientView; mobile?: boolean } = $props()
   let resetOpen = $state(false)
   let outputOpen = $state(false)
+  const copyFeedback = createCopyFeedback()
 
   const profilesPath = '/settings/agent-profiles'
   const detected = $derived(client.detection.status !== 'not_detected')
@@ -51,7 +52,7 @@
   const lastGhost = $derived(mobile ? '-mr-3' : '-mr-2.5')
 
   async function copyLocation() {
-    if (client.detection.detail && (await copyText(client.detection.detail))) toast.success($t('common.copied'))
+    await copyFeedback.copy(client.detection.detail)
   }
 </script>
 
@@ -65,7 +66,7 @@
       <Item.Root class={row}>
         <Item.Content class="min-w-0 gap-0.5">
           <Item.Title class={title}>{$t('clients.enable')}</Item.Title>
-          <Item.Description class={cn(description, wrap)}>{$t('clients.enableDescription')}</Item.Description>
+          <Item.Description class={cn(description, wrap)}>{$t('clients.enableDescription')}{#if mobile} {$t('clients.sessionsUnchanged')}{/if}</Item.Description>
         </Item.Content>
         <Item.Actions>
           <Switch
@@ -141,7 +142,7 @@
               class={cn(mobile && 'size-9 -mr-2.5')}
               aria-label={$t('clients.copyLocation')}
               title={$t('clients.copyLocation')}
-              onclick={copyLocation}><CopyIcon /></Button
+              onclick={copyLocation}>{#if copyFeedback.confirmed}<CheckIcon />{:else}<CopyIcon />{/if}</Button
             >
           </Item.Actions>
         {/if}

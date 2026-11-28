@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { toast } from 'svelte-sonner'
   import { t } from '$lib/i18n'
   import { useMobileStack } from '$lib/mobile/overlayStack.svelte'
   import type { DeviceRuntime } from '../../../device/runtime'
@@ -12,12 +11,14 @@
   const stack = useMobileStack()!
   let changeFiles = $state<import('../../../api/types').GitChangedFile[]>([])
   let commitFiles = $state<import('../../../api/types').GitCommitFile[]>([])
+  let statusError = $state<Error>()
+  let panel = $state<GitPanel>()
 </script>
 
 {#snippet diff()}{#if git.diff}<MobileGitDiffScreen {device} {workspaceId} target={{ file: git.diff }} files={changeFiles} />{/if}{/snippet}
 {#snippet commitDiff()}{#if git.commit && git.commitFile}<MobileGitDiffScreen {device} {workspaceId} target={{ sha: git.commit, file: git.commitFile }} files={commitFiles} />{/if}{/snippet}
-<GitPanel {device} {workspaceId} {git}
-  onstatuserror={(error) => toast.error(error.message, { duration: 6000 })}
+<GitPanel bind:this={panel} {device} {workspaceId} {git}
+  onstatuserror={(error) => (statusError = error)}
   onopen={(file, files) => {
     git.diff = file
     changeFiles = groupChanges(files).flatMap(group => group.files)
@@ -37,3 +38,7 @@
     })
   }}
 />
+{#if statusError}<div role="alert" class="absolute inset-x-3 top-14 z-10 flex items-center gap-2 rounded-item border border-destructive/30 bg-background px-3 py-2 text-13 text-destructive">
+    <span class="min-w-0 flex-1 break-words">{statusError.message}</span>
+    <button class="min-h-11 shrink-0 font-medium" onclick={() => { statusError = undefined; void panel?.refresh() }}>{$t('common.retry')}</button>
+  </div>{/if}

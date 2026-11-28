@@ -37,6 +37,7 @@
   let trigger: HTMLButtonElement
   let formContainer: HTMLDivElement
   let asking = $state(false)
+  let askError = $state('')
   function dismiss(key: string) {
     writeStored(key, '1')
     hidden = true
@@ -49,11 +50,14 @@
   async function ask() {
     if (asking) return
     asking = true
+    askError = ''
     try {
       await chat.post($t('bots.profileHint.askMessage'), null)
       dismiss(botKey)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error), { duration: 6000 })
+      const message = error instanceof Error ? error.message : String(error)
+      if (isMobileShell()) askError = message
+      else toast.error(message, { duration: 6000 })
     } finally {
       asking = false
     }
@@ -96,6 +100,7 @@
       <button class="inline-flex h-8 shrink-0 items-center gap-1 rounded-chip border border-dashed px-3 text-xs hover:bg-muted max-md:min-h-11" onclick={() => navigate(path)}>{$t('bots.profileHint.allTemplates')}<ArrowRightIcon class="size-3"/></button>
     </div>
     <button class="col-start-4 row-start-2 justify-self-end whitespace-nowrap rounded-item px-1.5 py-1 text-xs text-muted-foreground hover:bg-muted max-md:col-start-2 max-md:col-end-4 max-md:row-start-3 max-md:min-h-11" onclick={() => dismiss(deviceKey)}>{$t('bots.profileHint.dontShowAgain')}</button>
+    {#if askError}<p role="alert" class="col-span-full text-13 text-destructive">{askError}</p>{/if}
   </section>
 {/if}
 

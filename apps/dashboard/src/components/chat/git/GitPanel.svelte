@@ -93,7 +93,7 @@
     if (wide && changes?.files.length && !git.diff && !git.commit) selectChange(orderedFiles[0]!)
   })
 
-  async function refresh() {
+  export async function refresh() {
     if (refreshing) return
     refreshing = true
     const controller = new AbortController()

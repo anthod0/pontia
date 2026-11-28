@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { t } from '$lib/i18n'
-  import { toast } from 'svelte-sonner'
   import ArrowSquareOutIcon from 'phosphor-svelte/lib/ArrowSquareOutIcon'
   import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon'
   import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
+  import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Item from '$lib/components/ui/item/index.js'
-  import { copyText } from '$lib/copyText'
+  import { createCopyFeedback } from '$lib/copyFeedback.svelte'
   import { useDeviceRuntime } from '../../device/context'
   import { cn } from '$lib/utils'
   import type { AgentClientAuthStatus, AgentClientView } from '../../api/types'
@@ -17,6 +17,7 @@
   let auth = $state<AgentClientAuthStatus | null>(null)
   let loading = $state(false)
   let error = $state('')
+  const copyFeedback = createCopyFeedback()
 
   const guidance = $derived(client.install?.auth)
   const command = $derived(guidance?.headless_login_command ?? guidance?.login_command)
@@ -38,7 +39,7 @@
   })
 
   async function copyCommand() {
-    if (command && (await copyText(command))) toast.success($t('common.copied'))
+    await copyFeedback.copy(command)
   }
 </script>
 
@@ -65,7 +66,7 @@
     {#if (!client.auth_supported || auth?.methods.length === 0) && guidance?.status !== 'configured' && command}
       <div class="mt-1 flex min-w-0 items-center gap-1 rounded-item bg-muted px-2 py-1">
         <code class="min-w-0 flex-1 truncate font-mono text-xs text-foreground" title={command}>{command}</code>
-        <Button variant="ghost" size="icon-sm" class="-my-1 -mr-1" aria-label={$t('clients.account.copyCommand')} onclick={copyCommand}><CopyIcon /></Button>
+        <Button variant="ghost" size="icon-sm" class="-my-1 -mr-1" aria-label={$t(copyFeedback.confirmed ? 'common.copied' : 'clients.account.copyCommand')} onclick={copyCommand}>{#if copyFeedback.confirmed}<CheckIcon />{:else}<CopyIcon />{/if}</Button>
       </div>
       {#if guidance?.env_vars.length}<p class="mt-1">{$t('clients.account.env', { vars: guidance.env_vars.join('、') })}</p>{/if}
     {/if}

@@ -28,6 +28,7 @@
                 >
               {/each}
             </div>
+            {#if model.error}<p role="alert" class="mt-2 text-13 text-destructive">{model.error}</p>{/if}
           {:else}
             <p role="status">{$t('interaction.sending')}</p>
           {/if}

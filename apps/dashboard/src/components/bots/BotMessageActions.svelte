@@ -206,7 +206,7 @@
   async function copy(next: Target) {
     menuOpen = sheetOpen = false
     const text = next.excerpt ?? ('content' in next.entry ? messageText(next.entry) : '')
-    if (await copyText(text)) toast.success($t('common.copied'))
+    if (await copyText(text)) toast.success($t('common.copied'), { duration: 1500 })
     else toast.error($t('files.copyFailed'), { duration: 6000 })
   }
 
@@ -300,6 +300,7 @@
 {#if selection && !menuOpen && !sheetOpen}
   {@const current = selection.target}
   <div bind:clientWidth={toolbarWidth} bind:clientHeight={toolbarHeight} role="toolbar" tabindex="-1" aria-label={$t('bots.messageActions')}
+    data-mobile-toast-avoid={stack ? '' : undefined}
     class={['fixed z-(--layer-toolbar) flex -translate-x-1/2 gap-0.5 rounded-item bg-popover p-0.5 text-sm text-popover-foreground shadow-md border border-border', !stack && !selection.touch && '-translate-y-full']}
     style={selectionStyle}
     onpointerdown={event => event.preventDefault()}>

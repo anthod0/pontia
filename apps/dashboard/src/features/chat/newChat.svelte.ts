@@ -9,6 +9,7 @@ import { readStored, scopedKey, writeStored } from "$lib/storage";
 import { defaultClientType } from "../../clients";
 import { isTransientNetworkError } from "../../api/client";
 import type { DeviceRuntime } from "../../device/runtime";
+import { isMobileShell } from "$lib/hooks/shellMode.svelte";
 
 export function createNewChat(device: DeviceRuntime, scope: () => string | undefined) {
   const { createSession, loadSessionDetail } = device.sessions;
@@ -30,6 +31,7 @@ export function createNewChat(device: DeviceRuntime, scope: () => string | undef
     mounted = false;
   });
   let actionError = $state<string | null>(null);
+  let failedStart: { prompt: string; replaceEntry: boolean } | null = null;
   let onboarding = $state(false);
   let deciding = $state(true);
   let autofocus = $state(false);
@@ -90,7 +92,7 @@ export function createNewChat(device: DeviceRuntime, scope: () => string | undef
   );
   let toasted: string | null = null;
   $effect(() => {
-    if (error && error !== toasted)
+    if (!isMobileShell() && error && error !== toasted)
       toast.error(
         translate(
           actionError
@@ -144,6 +146,7 @@ export function createNewChat(device: DeviceRuntime, scope: () => string | undef
       if (!mounted) return true;
       writeStored(workspaceKey, workspaceId);
       clearChatDraft();
+      failedStart = null;
       resetTimelineState(result.session.session_id);
       if (scope() === undefined && !replaceEntry)
         void navigate(`/chat/${result.session.session_id}`);
@@ -164,6 +167,7 @@ export function createNewChat(device: DeviceRuntime, scope: () => string | undef
       return true;
     } catch (error) {
       actionError = error instanceof Error ? error.message : String(error);
+      failedStart = { prompt: initialPrompt, replaceEntry };
       return false;
     } finally {
       creating = false;
@@ -203,6 +207,18 @@ export function createNewChat(device: DeviceRuntime, scope: () => string | undef
     },
     get canCreate() {
       return canCreate;
+    },
+    get error() {
+      return error;
+    },
+    retryError() {
+      if (failedStart) {
+        void startChat(failedStart.prompt, failedStart.replaceEntry);
+        return;
+      }
+      deciding = true;
+      if (optionsQuery.current.isError) void optionsQuery.current.refetch();
+      else void workspaceQuery.current.refetch();
     },
     get autofocus() {
       return autofocus;
