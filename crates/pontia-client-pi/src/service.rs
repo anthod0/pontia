@@ -6,7 +6,9 @@ use pontia_agent_control::{
 use std::sync::Arc;
 use tokio::task::JoinHandle;
 
-pub(crate) struct PiService;
+pub(crate) struct PiService {
+    pub(crate) connections: crate::connections::PiConnections,
+}
 
 impl ClientService for PiService {
     fn uses_control_socket(&self) -> bool {
@@ -30,9 +32,14 @@ impl ClientService for PiService {
         first: pontia_agent_control::ipc::rpc::RpcRequest,
         requests: pontia_agent_control::ipc::rpc::Requests,
     ) -> ClientOperation<'_, ()> {
+        let connections = self.connections.clone();
         Box::pin(async move {
+            connections
+                .ensure_started(state.db(), state.pontia_home().into())
+                .await;
             crate::ipc::serve_peer(
                 state,
+                connections,
                 process_id,
                 crate::rpc::PiRpcPeer::from_rpc(peer),
                 Some(first),
@@ -44,8 +51,19 @@ impl ClientService for PiService {
     }
     fn start<'a>(
         &'a self,
-        _state: AgentControl,
+        state: AgentControl,
     ) -> ClientOperation<'a, Option<JoinHandle<pontia_core::Result<()>>>> {
-        Box::pin(async { Ok(None) })
+        let connections = self.connections.clone();
+        Box::pin(async move {
+            connections
+                .start(state.db(), state.pontia_home().into())
+                .await;
+            let mut shutdown = state.shutdown().subscribe();
+            Ok(Some(tokio::spawn(async move {
+                let _ = shutdown.wait_for(|stop| *stop).await;
+                connections.close().await;
+                Ok(())
+            })))
+        })
     }
 }

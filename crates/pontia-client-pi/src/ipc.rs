@@ -10,6 +10,7 @@ use pontia_core::{Error, Result};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{
+    ops::RangeInclusive,
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -26,12 +27,29 @@ impl Drop for ClosePeer {
 }
 
 pub async fn serve_connection(state: AgentControl, stream: UnixStream) {
-    let (process_id, peer, requests) = pontia_agent_control::ipc::connection(stream);
-    serve_peer(state, process_id, PiRpcPeer::from_rpc(peer), None, requests).await;
+    let (process_id, peer, mut requests) = pontia_agent_control::ipc::connection(stream);
+    let Ok(Some(first)) = tokio::time::timeout(Duration::from_secs(10), requests.recv()).await
+    else {
+        peer.close();
+        return;
+    };
+    let service = state
+        .clients()
+        .get("pi")
+        .and_then(|registration| registration.service.clone());
+    match service {
+        Some(service) => {
+            let _ = service
+                .connect(state, process_id, peer, first, requests)
+                .await;
+        }
+        None => peer.close(),
+    }
 }
 
 pub(crate) async fn serve_peer(
     state: AgentControl,
+    connections: crate::connections::PiConnections,
     process_id: Option<u32>,
     peer: Arc<PiRpcPeer>,
     mut first: Option<RpcRequest>,
@@ -49,7 +67,6 @@ pub(crate) async fn serve_peer(
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
     let mut reads = JoinSet::new();
     loop {
-        let routed = first.is_some();
         let request = if let Some(first) = first.take() {
             Some(first)
         } else {
@@ -62,9 +79,7 @@ pub(crate) async fn serve_peer(
             }
         };
         let Some(request) = request else { break };
-        if !routed
-            && let Some(message) =
-                pontia_agent_control::ipc::protocol::rejection(&state, process_id, &request).await
+        if let Some(message) = protocol_rejection(&state, &connections, process_id, &request).await
         {
             let _ = peer
                 .reply_error(
@@ -110,12 +125,14 @@ pub(crate) async fn serve_peer(
                 continue;
             }
             let state = state.clone();
+            let connections = connections.clone();
             let channel = channel.clone();
             let mut identity = registered.clone();
             channel.handling.fetch_add(1, Ordering::SeqCst);
             reads.spawn(async move {
                 let _guard = ReplyGuard(&channel);
-                let result = dispatch(&state, &channel, &request, &mut identity).await;
+                let result =
+                    dispatch(&state, &connections, &channel, &request, &mut identity).await;
                 if reply_result(&channel.peer, request.id, result)
                     .await
                     .is_err()
@@ -127,13 +144,124 @@ pub(crate) async fn serve_peer(
         }
         channel.handling.fetch_add(1, Ordering::SeqCst);
         let reply_guard = ReplyGuard(&channel);
-        let result = dispatch(&state, &channel, &request, &mut registered).await;
+        let result = dispatch(&state, &connections, &channel, &request, &mut registered).await;
         let response = reply_result(&peer, request.id, result).await;
         drop(reply_guard);
         if response.is_err() {
             break;
         }
     }
+}
+
+async fn protocol_rejection(
+    state: &AgentControl,
+    connections: &crate::connections::PiConnections,
+    process_id: Option<u32>,
+    request: &RpcRequest,
+) -> Option<String> {
+    const SUPPORTED: RangeInclusive<u64> =
+        8..=pontia_agent_control::ipc::rpc::PROTOCOL_VERSION as u64;
+    if !matches!(
+        request.method.as_str(),
+        "runtime.attach" | "runtime.register"
+    ) {
+        return None;
+    }
+    let version = request.params.get("version");
+    if version
+        .and_then(Value::as_u64)
+        .is_some_and(|version| SUPPORTED.contains(&version))
+    {
+        return None;
+    }
+    if let Err(error) = record_protocol_rejection(state, connections, process_id, request).await {
+        tracing::warn!(%error, "Could not record Pi control protocol rejection");
+    }
+    let received = version.and_then(Value::as_u64).map_or_else(
+        || "missing or invalid".to_owned(),
+        |version| version.to_string(),
+    );
+    Some(format!(
+        "Incompatible control protocol version ({received}). pontiad supports {} through {}. Restart this Session.",
+        SUPPORTED.start(),
+        SUPPORTED.end()
+    ))
+}
+
+async fn record_protocol_rejection(
+    state: &AgentControl,
+    connections: &crate::connections::PiConnections,
+    process_id: Option<u32>,
+    request: &RpcRequest,
+) -> Result<()> {
+    let Some(process) = process_id.and_then(pontia_runtime::ProcessFingerprint::capture) else {
+        return Ok(());
+    };
+    let _guard = connections.lock_identity().await;
+    let params = &request.params;
+    let bound_session;
+    let (session, expected_runtime) = if request.method == "runtime.attach" {
+        let (Some(session), Some(runtime)) =
+            (params["session_id"].as_str(), params["runtime_id"].as_str())
+        else {
+            return Ok(());
+        };
+        (session, Some(runtime))
+    } else {
+        let binding = &params["binding"];
+        let (Some(client), Some(key)) = (
+            binding["client_type"].as_str(),
+            binding["client_session_key"].as_str(),
+        ) else {
+            return Ok(());
+        };
+        if client != "pi" {
+            return Ok(());
+        }
+        bound_session = AgentBindingService::new(state.db())
+            .binding_for_client_session(client, key)
+            .await?;
+        let session = bound_session
+            .as_ref()
+            .map_or(key, |binding| binding.session_id.as_str());
+        if binding["session_id"]
+            .as_str()
+            .is_some_and(|id| id != session)
+        {
+            return Ok(());
+        }
+        (session, binding["runtime_id"].as_str())
+    };
+    let target = pontia_agent_control::runtime::ControlTarget::resolve(
+        &state.db(),
+        &state.clients(),
+        session,
+        None,
+    )
+    .await?;
+    let Some(runtime) = target.runtime_id else {
+        return Ok(());
+    };
+    if expected_runtime.is_some_and(|id| id != runtime)
+        || connections.connected_to(session, &runtime).await?
+    {
+        return Ok(());
+    }
+    sqlx::query(
+        "UPDATE sessions SET metadata=json_set(metadata,'$.incompatible_control_runtime',?)
+         WHERE session_id=? AND client_type='pi' AND EXISTS (
+             SELECT 1 FROM session_runtimes r WHERE r.session_id=sessions.session_id AND r.runtime_id=?
+             AND r.state IN ('starting','running')
+             AND (r.process_fingerprint=? OR (r.process_fingerprint IS NULL AND r.state='starting'))
+         )",
+    )
+    .bind(&runtime)
+    .bind(session)
+    .bind(&runtime)
+    .bind(serde_json::to_string(&process)?)
+    .execute(&state.db())
+    .await?;
+    Ok(())
 }
 
 async fn reply_result(peer: &PiRpcPeer, id: Option<Value>, result: Result<Value>) -> Result<()> {
@@ -167,11 +295,12 @@ struct ContextQuery {
 
 async fn dispatch(
     state: &AgentControl,
+    connections: &crate::connections::PiConnections,
     channel: &Arc<PiChannel>,
     request: &RpcRequest,
     registered: &mut Option<NativeAttachment>,
 ) -> Result<Value> {
-    let _identity_guard = state.client_control().lock_identity().await;
+    let identity_guard = connections.lock_identity().await;
     let ready_report = request.method == "event.report"
         && request
             .params
@@ -180,8 +309,7 @@ async fn dispatch(
             == Some("session.ready");
     if let Some(identity) = registered.as_ref() {
         let current: Arc<dyn pontia_agent_control::ClientControlChannel> = channel.clone();
-        state
-            .client_control()
+        connections
             .validate_connection(&identity.session_id, &identity.runtime_id, &current)
             .await?;
     }
@@ -209,12 +337,11 @@ async fn dispatch(
             ));
         }
         // Reverse history calls must not hold the fact/connection identity gate.
-        drop(_identity_guard);
+        drop(identity_guard);
         let replay = state.branch_replays().resolve_command(query).await?;
-        let _guard = state.client_control().lock_identity().await;
+        let _guard = connections.lock_identity().await;
         let current: Arc<dyn pontia_agent_control::ClientControlChannel> = channel.clone();
-        state
-            .client_control()
+        connections
             .validate_connection(&identity.session_id, &identity.runtime_id, &current)
             .await?;
         return Ok(json!({"branch_replay": replay}));
@@ -229,6 +356,7 @@ async fn dispatch(
                 .reasoning_effort_controllable
                 .store(true, Ordering::SeqCst);
         }
+        connections.refresh_session(&identity.session_id).await;
         return Ok(result);
     }
     if request.method == "session.context" {
@@ -271,11 +399,9 @@ async fn dispatch(
         request,
     )
     .await?;
-    state
-        .client_control()
+    connections
         .attach_locked(
-            &_identity_guard,
-            "pi",
+            &identity_guard,
             &identity.session_id,
             &identity.runtime_id,
             &identity.client_session_key,

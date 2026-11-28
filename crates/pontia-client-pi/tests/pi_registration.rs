@@ -78,7 +78,7 @@ async fn registration_establishes_identity_and_reconnect_never_resumes_or_replac
         snapshot["session_instructions"]["system_prompt"],
         pontia_agent_control::standalone_session_instructions()
     );
-    assert!(state.client_control().available(session).await.unwrap());
+    assert!(support::connected(&state, session).await);
     assert_eq!(registered["session"]["state"], "starting");
     let count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE event_type='session.ready'")
@@ -86,22 +86,24 @@ async fn registration_establishes_identity_and_reconnect_never_resumes_or_replac
             .await
             .unwrap();
     assert_eq!(count, 0);
-    let ping = {
-        let control = state.client_control();
-        let session = session.to_owned();
-        let runtime = runtime.to_owned();
-        tokio::spawn(async move { control.ping(&session, &runtime).await })
+    let control = {
+        let client = support::session(&state);
+        let events = state.event_ingest_service();
+        let target = support::target(&state, session).await;
+        tokio::spawn(async move { client.set_reasoning_effort(events, &target, "high").await })
     };
-    // Query in the reverse direction while the daemon's ping is awaiting a reply.
+    // Query in the reverse direction while daemon control is awaiting a reply.
     let context = pi
         .call("session.context", json!({"client_session_key":"native"}))
         .await
         .unwrap();
     assert_eq!(context["session_context"]["session_id"], session);
     let request = requests.recv().await.unwrap();
-    assert_eq!(request.method, "ping");
-    pi.reply(request.id, json!({"pong":true})).await.unwrap();
-    ping.await.unwrap().unwrap();
+    assert_eq!(request.method, "set_reasoning_effort");
+    pi.reply(request.id, json!({"accepted":true}))
+        .await
+        .unwrap();
+    control.await.unwrap().unwrap();
     assert!(pi.call("runtime.register", registration).await.is_err());
     let attach = json!({"version":PROTOCOL_VERSION,"session_id":session,"runtime_id":runtime,"client_session_key":"native"});
     let (other, _requests) = client(&state);
@@ -111,7 +113,7 @@ async fn registration_establishes_identity_and_reconnect_never_resumes_or_replac
     );
     pi.close();
     tokio::time::timeout(Duration::from_secs(1), async {
-        while state.client_control().available(session).await.unwrap() {
+        while support::connected(&state, session).await {
             tokio::task::yield_now().await;
         }
     })
@@ -132,7 +134,6 @@ async fn registration_establishes_identity_and_reconnect_never_resumes_or_replac
     let current:(String,String)=sqlx::query_as("SELECT s.state,r.runtime_id FROM sessions s JOIN session_runtimes r ON r.session_id=s.session_id WHERE s.session_id=?").bind(session).fetch_one(&state.db()).await.unwrap();
     assert_eq!(current, ("exited".into(), runtime.into()));
     stale.close();
-    state.client_control().close().await;
 }
 
 #[tokio::test]
@@ -167,7 +168,7 @@ async fn disabling_pi_blocks_new_native_registration_but_preserves_existing_regi
     .unwrap();
     pi.close();
     tokio::time::timeout(Duration::from_secs(1), async {
-        while state.client_control().available(&session).await.unwrap() {
+        while support::connected(&state, &session).await {
             tokio::task::yield_now().await;
         }
     })
@@ -179,10 +180,9 @@ async fn disabling_pi_blocks_new_native_registration_but_preserves_existing_regi
     }})).await.unwrap();
     assert_eq!(rebound["runtime"]["runtime_id"], runtime);
     assert_eq!(rebound["session"]["session_id"], session);
-    assert!(state.client_control().available(&session).await.unwrap());
+    assert!(support::connected(&state, &session).await);
     replacement.close();
     new_pi.close();
-    state.client_control().close().await;
 }
 
 #[tokio::test]
@@ -225,7 +225,7 @@ async fn incompatible_handshake_marks_the_runtime_until_a_supported_attachment()
     let (session, runtime) = register(&pi, root.path()).await;
     pi.close();
     tokio::time::timeout(Duration::from_secs(1), async {
-        while state.client_control().available(&session).await.unwrap() {
+        while support::connected(&state, &session).await {
             tokio::task::yield_now().await;
         }
     })
@@ -289,7 +289,7 @@ async fn incompatible_handshake_marks_the_runtime_until_a_supported_attachment()
         );
         valid.close();
         tokio::time::timeout(Duration::from_secs(1), async {
-            while state.client_control().available(&session).await.unwrap() {
+            while support::connected(&state, &session).await {
                 tokio::task::yield_now().await;
             }
         })
@@ -518,10 +518,14 @@ async fn compaction_control_and_facts_share_identity_without_changing_session_st
             && capabilities.compaction_events
             && capabilities.compaction_history
     );
+    let stale = pontia_agent_control::runtime::ControlTarget {
+        session_id: session.clone(),
+        runtime_id: Some("stale-runtime".into()),
+        control_runtime_role: Some("pi_tui"),
+    };
     assert!(
-        state
-            .client_control()
-            .compact(&session, "stale-runtime", "rejected")
+        support::session(&state)
+            .compact(state.event_ingest_service(), &stale, "rejected")
             .await
             .is_err()
     );
@@ -573,8 +577,10 @@ async fn branch_replay_lost_acknowledgement_is_unknown_and_not_replayed_after_at
     let (state, root) = state().await;
     let (pi, mut requests) = client(&state);
     let (session, runtime) = register(&pi, root.path()).await;
-    let control = state.client_control();
-    let replay = control.replay(&session, &runtime, "replay_test");
+    let session_client = support::session(&state);
+    let events = state.event_ingest_service();
+    let target = support::target(&state, &session).await;
+    let replay = session_client.replay(events, &target, "replay_test");
     let disconnect = async {
         let request = requests.recv().await.unwrap();
         assert_eq!(request.method, "branch.replay");
@@ -582,7 +588,10 @@ async fn branch_replay_lost_acknowledgement_is_unknown_and_not_replayed_after_at
         pi.close();
     };
     let (result, ()) = tokio::join!(replay, disconnect);
-    assert!(matches!(result, Err(pontia_core::Error::ControlUnknown(_))));
+    assert!(matches!(
+        result,
+        Err(pontia_agent_control::DeliveryError::Uncertain(_))
+    ));
     let (replacement, mut requests) = client(&state);
     replacement
         .call(
@@ -594,16 +603,19 @@ async fn branch_replay_lost_acknowledgement_is_unknown_and_not_replayed_after_at
         )
         .await
         .unwrap();
-    let ping = control.ping(&session, &runtime);
+    let client = support::session(&state);
+    let events = state.event_ingest_service();
+    let target = support::target(&state, &session).await;
+    let control = client.set_reasoning_effort(events, &target, "high");
     let respond = async {
         let request = requests.recv().await.unwrap();
-        assert_eq!(request.method, "ping");
+        assert_eq!(request.method, "set_reasoning_effort");
         replacement
-            .reply(request.id, json!({"pong": true}))
+            .reply(request.id, json!({"accepted": true}))
             .await
             .unwrap();
     };
-    let (result, ()) = tokio::join!(ping, respond);
+    let (result, ()) = tokio::join!(control, respond);
     result.unwrap();
     assert!(requests.try_recv().is_err());
     replacement.close();
@@ -630,13 +642,14 @@ async fn reports_use_shared_fact_processing_and_acknowledge_exit_before_closing(
         .unwrap();
     assert_eq!(ready["accepted"], true);
     // A control request can be outstanding while the client reports a fact.
-    let ping = {
-        let control = state.client_control();
-        let session = session.clone();
-        let runtime = runtime.clone();
-        tokio::spawn(async move { control.ping(&session, &runtime).await })
+    let control = {
+        let client = support::session(&state);
+        let events = state.event_ingest_service();
+        let target = support::target(&state, &session).await;
+        tokio::spawn(async move { client.set_reasoning_effort(events, &target, "high").await })
     };
     let request = requests.recv().await.unwrap();
+    assert_eq!(request.method, "set_reasoning_effort");
     let started = pi
         .call(
             "event.report",
@@ -651,8 +664,10 @@ async fn reports_use_shared_fact_processing_and_acknowledge_exit_before_closing(
         )
         .await
         .unwrap();
-    pi.reply(request.id, json!({"pong":true})).await.unwrap();
-    ping.await.unwrap().unwrap();
+    pi.reply(request.id, json!({"accepted":true}))
+        .await
+        .unwrap();
+    control.await.unwrap().unwrap();
     let turn = started["turn_id"].as_str().unwrap();
     let summary: String = sqlx::query_scalar("SELECT json_extract(payload, '$.input.summary') FROM events WHERE event_type='turn.started' AND session_id=?")
         .bind(&session).fetch_one(&state.db()).await.unwrap();
@@ -935,11 +950,12 @@ async fn restarting_a_stable_runtime_rejects_old_connection_facts_and_receipts()
             .await
             .unwrap();
     let pending = {
-        let control = state.client_control();
-        let (session, runtime) = (session.clone(), runtime.clone());
+        let client = support::session(&state);
+        let events = state.event_ingest_service();
+        let target = support::target(&state, &session).await;
         tokio::spawn(async move {
             let payload = pontia_agent_control::InputPayload::from("one input");
-            control.start_turn(&session, &runtime, &payload).await
+            client.start_turn(events, &target, &payload, None).await
         })
     };
     let receipt = requests.recv().await.unwrap();
@@ -1052,7 +1068,6 @@ async fn a_different_process_instance_cannot_attach_or_replace_the_registered_ru
         .bind(&runtime).fetch_one(&state.db()).await.unwrap();
     assert_eq!(saved, ("idle".into(), previous));
     other.close();
-    state.client_control().close().await;
 }
 
 #[tokio::test]
@@ -1161,5 +1176,4 @@ async fn precreated_session_binds_only_in_its_dedicated_directory_without_a_work
     assert!(session.workspace_id.is_none());
     assert_eq!(state.queries().list_workspaces().await.unwrap().len(), 1);
     pi.close();
-    state.client_control().close().await;
 }

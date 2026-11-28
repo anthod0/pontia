@@ -20,7 +20,7 @@ use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
-use tokio::{net::UnixStream, sync::mpsc};
+use tokio::sync::mpsc;
 
 struct Fixture {
     state: AgentControl,
@@ -123,22 +123,13 @@ impl Fixture {
             .clients()
             .data("pi")
             .unwrap()
-            .native_history(
-                self.binding.clone(),
-                Some(self.state.client_control().clone()),
-            )
+            .native_history(self.binding.clone(), None)
             .unwrap()
     }
     async fn peer(&self) -> (Arc<PiRpcPeer>, mpsc::Receiver<RpcRequest>, Arc<PiRpcPeer>) {
-        let (left, right) = UnixStream::pair().unwrap();
-        let (daemon, _) = PiRpcPeer::new(left);
-        let (runtime, incoming) = PiRpcPeer::new(right);
-        self.state
-            .client_control()
-            .attach("pi", "session", "runtime", "native", daemon.clone())
-            .await
-            .unwrap();
-        (runtime, incoming, daemon)
+        let (runtime, incoming) =
+            support::attach(&self.state, "session", "runtime", "native").await;
+        (runtime.clone(), incoming, runtime)
     }
     async fn serve(
         &self,
@@ -636,11 +627,7 @@ async fn unsupported_history_keeps_existing_control_available() {
             .await
             .is_err()
     );
-    f.state
-        .client_control()
-        .ping("session", "runtime")
-        .await
-        .unwrap();
+    assert!(support::connected(&f.state, "session").await);
     assert!(!daemon.is_closed());
     daemon.close();
 }

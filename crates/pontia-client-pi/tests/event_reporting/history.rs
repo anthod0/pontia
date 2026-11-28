@@ -22,15 +22,8 @@ impl Fixture {
     }
 
     async fn attach_history(&self, path: std::path::PathBuf) {
-        use pontia_client_pi::rpc::PiRpcPeer;
-        let (left, right) = tokio::net::UnixStream::pair().unwrap();
-        let (daemon, _) = PiRpcPeer::new(left);
-        let (peer, mut requests) = PiRpcPeer::new(right);
-        self.state
-            .client_control()
-            .attach("pi", "session", "runtime", "native", daemon)
-            .await
-            .unwrap();
+        let (peer, mut requests) =
+            crate::support::attach(&self.state, "session", "runtime", "native").await;
         tokio::spawn(async move {
             while let Some(request) = requests.recv().await {
                 let entries = std::fs::read_to_string(&path)

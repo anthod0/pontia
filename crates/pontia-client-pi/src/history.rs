@@ -5,17 +5,14 @@ mod recovery;
 pub(crate) mod timeline;
 
 use crate::raw_transcripts::{PiAgentBindingResolver, PiJsonlV2Cursor, PiTimelineAdapter};
-use pontia_agent_control::{
-    client_contract::{
-        history::{RecoveredTurnHistory, TurnHistoryCandidate},
-        native_history::{HistoryRead, NativeHistory},
-        raw_transcripts::{
-            AgentBindingResolveRequest, AgentBindingResolver, SessionTimelineReadRequest,
-            SessionTimelineSelection, TurnTimelineItem, TurnTimelineRange, TurnTimelineReadError,
-            TurnTimelineReadRequest, TurnTimelineReader,
-        },
+use pontia_agent_control::client_contract::{
+    history::{RecoveredTurnHistory, TurnHistoryCandidate},
+    native_history::{HistoryRead, NativeHistory},
+    raw_transcripts::{
+        AgentBindingResolveRequest, AgentBindingResolver, SessionTimelineReadRequest,
+        SessionTimelineSelection, TurnTimelineItem, TurnTimelineRange, TurnTimelineReadError,
+        TurnTimelineReadRequest, TurnTimelineReader,
     },
-    clients::ClientControlService,
 };
 use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -90,16 +87,13 @@ struct Page {
     continuation: Option<String>,
 }
 struct RuntimeSnapshot {
-    connection: pontia_agent_control::clients::NativeHistoryConnection,
+    connection: crate::connections::HistoryConnection,
     entries: Vec<Value>,
     by_id: HashMap<String, usize>,
     leaf: Option<String>,
 }
 impl RuntimeSnapshot {
-    async fn load(
-        connection: pontia_agent_control::clients::NativeHistoryConnection,
-        native: &str,
-    ) -> Result<Self> {
+    async fn load(connection: crate::connections::HistoryConnection, native: &str) -> Result<Self> {
         let mut params = json!({"page_size":128});
         let mut snapshot = None;
         let mut entry_count = None;
@@ -242,26 +236,27 @@ impl RuntimeSnapshot {
 
 pub(crate) struct PiHistory {
     binding: AgentBindingResolveRequest,
-    control: Option<ClientControlService>,
+    connections: crate::connections::PiConnections,
     snapshot: OnceCell<std::result::Result<RuntimeSnapshot, String>>,
 }
 impl PiHistory {
     pub(crate) fn new(
         binding: AgentBindingResolveRequest,
-        control: Option<ClientControlService>,
+        connections: crate::connections::PiConnections,
     ) -> Arc<Self> {
         Arc::new(Self {
             binding,
-            control,
+            connections,
             snapshot: OnceCell::new(),
         })
     }
     async fn runtime_snapshot(&self) -> Result<Option<&RuntimeSnapshot>> {
         if self.snapshot.get().is_none() {
-            let Some(control) = &self.control else {
-                return Ok(None);
-            };
-            let connection = match control.history_source(&self.binding.session_id).await {
+            let connection = match self
+                .connections
+                .history_source(&self.binding.session_id)
+                .await
+            {
                 Ok(connection) => connection,
                 Err(Error::CapabilityUnavailable(message))
                     if message == "source_unavailable: no current native history connection" =>

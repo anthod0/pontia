@@ -1,6 +1,7 @@
 mod adapter;
 mod auth;
 pub mod config;
+mod connections;
 mod facts;
 pub mod history;
 mod install;

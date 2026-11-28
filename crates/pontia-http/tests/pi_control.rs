@@ -63,24 +63,56 @@ async fn attach(
     std::sync::Arc<PiRpcPeer>,
     tokio::sync::mpsc::Receiver<pontia_agent_control::ipc::rpc::RpcRequest>,
 ) {
+    let fingerprint = pontia_runtime::ProcessFingerprint::capture(std::process::id()).unwrap();
+    sqlx::query("UPDATE session_runtimes SET process_fingerprint=? WHERE runtime_id=?")
+        .bind(serde_json::to_string(&fingerprint).unwrap())
+        .bind(runtime)
+        .execute(&state.db())
+        .await
+        .unwrap();
     let (server, client) = UnixStream::pair().unwrap();
-    let (peer, requests) = PiRpcPeer::new(server);
-    state
-        .control()
-        .client_control()
-        .attach(
-            "pi",
-            session,
-            runtime,
-            &format!("native_{session}"),
-            peer.clone(),
+    tokio::spawn(pontia_client_pi::ipc::serve_connection(
+        state.control().clone(),
+        server,
+    ));
+    let (client, requests) = PiRpcPeer::new(client);
+    client
+        .call(
+            "runtime.attach",
+            json!({
+                "version": pontia_agent_control::ipc::rpc::PROTOCOL_VERSION,
+                "session_id": session,
+                "runtime_id": runtime,
+                "client_session_key": format!("native_{session}"),
+            }),
         )
         .await
         .unwrap();
-    // Keep the peer's inbound receiver alive while the test handles daemon requests.
-    drop(requests);
-    let (client, requests) = PiRpcPeer::new(client);
     (client, requests)
+}
+
+fn session_client(
+    state: &AppState,
+) -> std::sync::Arc<dyn pontia_agent_control::client_contract::ClientSession> {
+    state
+        .control()
+        .clients()
+        .get("pi")
+        .unwrap()
+        .session
+        .clone()
+        .unwrap()
+}
+
+async fn target(state: &AppState, session: &str) -> pontia_agent_control::runtime::ControlTarget {
+    pontia_agent_control::runtime::ControlTarget::resolve(
+        &state.db(),
+        &state.control().clients(),
+        session,
+        None,
+    )
+    .await
+    .unwrap()
 }
 
 #[tokio::test]
@@ -88,18 +120,24 @@ async fn replacement_and_exit_fence_connections_without_synthesizing_facts() {
     let (state, _root) = state().await;
     bind(&state, "sess_pi", "rt_old").await;
     let (old, mut requests) = attach(&state, "sess_pi", "rt_old").await;
-    let ping = {
-        let control = state.control().client_control();
-        tokio::spawn(async move { control.ping("sess_pi", "rt_old").await })
+    let control = {
+        let client = session_client(&state);
+        let events = state.control().event_ingest_service();
+        let target = target(&state, "sess_pi").await;
+        tokio::spawn(async move { client.set_reasoning_effort(events, &target, "high").await })
     };
     let request = requests.recv().await.unwrap();
-    old.reply(request.id, json!({"pong":true})).await.unwrap();
-    ping.await.unwrap().unwrap();
+    old.reply(request.id, json!({"accepted":true}))
+        .await
+        .unwrap();
+    control.await.unwrap().unwrap();
     let blocked = {
-        let control = state.control().client_control();
+        let client = session_client(&state);
+        let events = state.control().event_ingest_service();
+        let target = target(&state, "sess_pi").await;
         tokio::spawn(async move {
             let payload = pontia_agent_control::InputPayload::from("uncertain");
-            control.start_turn("sess_pi", "rt_old", &payload).await
+            client.start_turn(events, &target, &payload, None).await
         })
     };
     requests.recv().await.unwrap();
@@ -109,38 +147,56 @@ async fn replacement_and_exit_fence_connections_without_synthesizing_facts() {
         blocked.await.unwrap(),
         Err(pontia_agent_control::DeliveryError::Uncertain(_))
     ));
+    let stale = pontia_agent_control::runtime::ControlTarget {
+        session_id: "sess_pi".into(),
+        runtime_id: Some("unrelated".into()),
+        control_runtime_role: Some("pi_tui"),
+    };
     assert!(
-        state
-            .control()
-            .client_control()
-            .ping("sess_pi", "unrelated")
+        session_client(&state)
+            .set_reasoning_effort(state.control().event_ingest_service(), &stale, "high",)
             .await
             .is_err()
     );
-    state
-        .control()
-        .event_ingest_service()
-        .ingest_reported_event(pontia_core::domain::ReportedEvent::new(
-            "evt_exit".into(),
-            "sess_pi".into(),
-            None,
-            pontia_core::domain::EventSource::AgentClient,
-            "pi".into(),
-            pontia_core::domain::EventType::SessionExited,
-            json!({"runtime_id":"rt_old"}),
-        ))
-        .await
-        .unwrap();
+    new.call(
+        "event.report",
+        json!({
+            "runtime_id":"rt_old",
+            "event":{
+                "session_id":"sess_pi",
+                "turn_id":null,
+                "report_key":"evt_exit",
+                "type":"session.exited",
+                "data":{"reason":"test"}
+            }
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        state
+            .control()
+            .queries()
+            .get_session("sess_pi")
+            .await
+            .unwrap()
+            .unwrap()
+            .control_connected,
+        Some(false)
+    );
     tokio::time::timeout(Duration::from_secs(1), new.closed())
         .await
         .unwrap();
-    assert!(
-        !state
+    assert_eq!(
+        state
             .control()
-            .client_control()
-            .available("sess_pi")
+            .queries()
+            .get_session("sess_pi")
             .await
             .unwrap()
+            .unwrap()
+            .control_connected,
+        Some(false)
     );
     let event_types: Vec<String> =
         sqlx::query_scalar("SELECT event_type FROM events ORDER BY rowid")
@@ -183,27 +239,19 @@ async fn real_pi_client_reconnects_after_daemon_restart_and_delivers_external_in
     .unwrap()
     .unwrap();
     assert_eq!(line.trim(), "connected");
-    state
-        .control()
-        .client_control()
-        .ping("sess_input", "rt_input")
-        .await
-        .unwrap();
-    let history = state
-        .control()
-        .client_control()
-        .history_source("sess_input")
-        .await
-        .unwrap();
-    let first = history.read(json!({"page_size":1})).await.unwrap();
-    assert_eq!(first["session_id"], "native_sess_input");
-    assert_eq!(first["entries"][0]["id"], "user");
-    let second = history.read(json!({"page_size":1,"snapshot":first["snapshot"],"continuation":first["continuation"]})).await.unwrap();
-    assert_eq!(second["entries"][0]["id"], "answer");
-    assert!(second["continuation"].is_null());
+    assert_eq!(
+        state
+            .control()
+            .queries()
+            .get_session("sess_input")
+            .await
+            .unwrap()
+            .unwrap()
+            .control_connected,
+        Some(true)
+    );
     state.control().shutdown().notify();
     task.await.unwrap().unwrap();
-    state.control().client_control().close().await;
     let restarted = AppState::builder(
         pontia_agent_control::AgentControl::builder(state.db(), root.path().into())
             .clients(crate::common::clients::clients())
@@ -268,19 +316,16 @@ async fn real_pi_client_reconnects_after_daemon_restart_and_delivers_external_in
     })
     .await
     .unwrap();
-    assert!(history.validate().await.is_err());
-    let restored = restarted
-        .control()
-        .client_control()
-        .history_source("sess_input")
-        .await
-        .unwrap();
     assert_eq!(
-        restored.read(json!({})).await.unwrap()["entries"]
-            .as_array()
+        restarted
+            .control()
+            .queries()
+            .get_session("sess_input")
+            .await
             .unwrap()
-            .len(),
-        2
+            .unwrap()
+            .control_connected,
+        Some(true)
     );
     let delivered: Value =
         serde_json::from_str(&std::fs::read_to_string(root.path().join("messages.jsonl")).unwrap())
@@ -305,7 +350,6 @@ async fn real_pi_client_reconnects_after_daemon_restart_and_delivers_external_in
     assert!(child.wait().await.unwrap().success());
     restarted.control().shutdown().notify();
     task.await.unwrap().unwrap();
-    restarted.control().client_control().close().await;
 }
 
 async fn control_request(
@@ -392,24 +436,53 @@ async fn pi_interrupt_and_shutdown_use_rpc_and_wait_for_client_lifecycle_facts()
     .await
     .unwrap();
     assert_eq!(facts, 0);
+    let stale = pontia_agent_control::runtime::ControlTarget {
+        session_id: "sess_models".into(),
+        runtime_id: Some("rt_old".into()),
+        control_runtime_role: Some("pi_tui"),
+    };
     assert!(
-        state
-            .control()
-            .client_control()
-            .interrupt("sess_models", "rt_old")
+        session_client(&state)
+            .interrupt(state.control().event_ingest_service(), &stale)
             .await
             .is_err()
     );
     assert!(
-        state
-            .control()
-            .client_control()
-            .shutdown("sess_models", "rt_old")
+        session_client(&state)
+            .exit(
+                state.control().event_ingest_service(),
+                &stale,
+                pontia_agent_control::client_contract::ClientExitMode::Unconditional,
+            )
             .await
             .is_err()
     );
     assert!(requests.try_recv().is_err());
-    state.control().client_control().close().await;
+    client.close();
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            let connected = state
+                .control()
+                .queries()
+                .get_session("sess_models")
+                .await
+                .unwrap()
+                .unwrap()
+                .control_connected;
+            if connected == Some(false) {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE session_runtimes SET process_fingerprint=NULL WHERE runtime_id='rt_models'",
+    )
+    .execute(&state.db())
+    .await
+    .unwrap();
     for (method, resource) in [("POST", "interrupt"), ("POST", "exit")] {
         let (status, body) = control_request(&state, method, resource, Value::Null).await;
         assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
@@ -425,15 +498,24 @@ async fn pi_lifecycle_controls_preserve_rejection_and_unknown_delivery() {
         let (client, mut requests) = attach(&state, "sess_control", "rt_control").await;
         for outcome in ["rejected", "malformed", "disconnected"] {
             let task = {
-                let control = state.control().client_control();
+                let client_session = session_client(&state);
+                let events = state.control().event_ingest_service();
+                let target = target(&state, "sess_control").await;
                 tokio::spawn(async move {
                     if method == "interrupt" {
-                        control
-                            .interrupt("sess_control", "rt_control")
+                        client_session
+                            .interrupt(events, &target)
                             .await
                             .map_err(pontia_core::Error::from)
                     } else {
-                        control.shutdown("sess_control", "rt_control").await
+                        client_session
+                            .exit(
+                                events,
+                                &target,
+                                pontia_agent_control::client_contract::ClientExitMode::Unconditional,
+                            )
+                            .await
+                            .map(|_| ())
                     }
                 })
             };
@@ -468,42 +550,48 @@ async fn pi_lifecycle_controls_preserve_rejection_and_unknown_delivery() {
 }
 
 #[tokio::test]
-async fn shutdown_accepts_its_own_exit_but_not_a_replacement_instances_exit() {
-    for runtime in ["rt_control", "rt_replacement"] {
+async fn shutdown_accepts_an_acknowledgement_but_not_one_from_a_replaced_connection() {
+    for replaced in [false, true] {
         let (state, _root) = state().await;
         bind(&state, "sess_control", "rt_control").await;
         let (client, mut requests) = attach(&state, "sess_control", "rt_control").await;
         let task = {
-            let control = state.control().client_control();
-            tokio::spawn(async move { control.shutdown("sess_control", "rt_control").await })
+            let client_session = session_client(&state);
+            let events = state.control().event_ingest_service();
+            let target = target(&state, "sess_control").await;
+            tokio::spawn(async move {
+                client_session
+                    .exit(
+                        events,
+                        &target,
+                        pontia_agent_control::client_contract::ClientExitMode::Unconditional,
+                    )
+                    .await
+            })
         };
         let request = requests.recv().await.unwrap();
-        // Commit the exit before the shutdown caller can perform its post-reply check.
-        // Keep the socket open here to deliver the native acknowledgement separately.
-        bind(&state, "sess_control", runtime).await;
-        EventIngestService::for_projection_tests(state.db())
-            .with_clients(crate::common::clients::clients())
-            .ingest_reported_event(pontia_core::domain::ReportedEvent::new(
-                "evt_shutdown".into(),
-                "sess_control".into(),
-                None,
-                pontia_core::domain::EventSource::AgentClient,
-                "pi".into(),
-                pontia_core::domain::EventType::SessionExited,
-                json!({"runtime_id":runtime}),
-            ))
-            .await
-            .unwrap();
-        client
-            .reply(request.id, json!({"accepted":true}))
-            .await
-            .unwrap();
-        let result = task.await.unwrap();
-        if runtime == "rt_control" {
-            result.unwrap();
+        let replacement = if replaced {
+            client.close();
+            Some(attach(&state, "sess_control", "rt_control").await.0)
         } else {
+            client
+                .reply(request.id, json!({"accepted":true}))
+                .await
+                .unwrap();
+            None
+        };
+        let result = task.await.unwrap();
+        if replaced {
             assert!(matches!(result, Err(pontia_core::Error::ControlUnknown(_))));
+        } else {
+            assert_eq!(
+                result.unwrap(),
+                pontia_agent_control::client_contract::ClientExitOutcome::Requested
+            );
         }
-        state.control().client_control().close().await;
+        client.close();
+        if let Some(replacement) = replacement {
+            replacement.close();
+        }
     }
 }

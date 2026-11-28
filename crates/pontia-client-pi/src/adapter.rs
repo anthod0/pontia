@@ -14,6 +14,7 @@ use serde_json::Value;
 use std::sync::Arc;
 
 pub fn registration(tui_command: Option<String>) -> ClientRegistration {
+    let connections = crate::connections::PiConnections::default();
     let file = tui_command
         .as_ref()
         .map(|command| serde_json::json!({"tui_command":command}))
@@ -26,19 +27,26 @@ pub fn registration(tui_command: Option<String>) -> ClientRegistration {
         auth: Some(Arc::new(crate::auth::PiAuth::new(configuration.clone()))),
         configuration: Some(configuration),
         interactions: None,
-        service: Some(Arc::new(crate::service::PiService)),
+        service: Some(Arc::new(crate::service::PiService {
+            connections: connections.clone(),
+        })),
         instructions: Some(Arc::new(crate::instructions::InstructionsPolicy)),
         events: Some(Arc::new(crate::lifecycle::PiEventInterpreter)),
         in_process: None,
-        session: Some(Arc::new(PiSession { tui_command })),
+        session: Some(Arc::new(PiSession {
+            tui_command,
+            connections: connections.clone(),
+        })),
         prepare_on_input: false,
         spec: &crate::SPEC,
-        data: Some(Arc::new(PiData)),
+        data: Some(Arc::new(PiData { connections })),
         launcher: None,
     }
 }
 
-struct PiData;
+struct PiData {
+    connections: crate::connections::PiConnections,
+}
 impl ClientData for PiData {
     fn timeline_cache_policy(&self) -> Option<TimelineCachePolicy> {
         Some(TimelineCachePolicy {
@@ -92,9 +100,12 @@ impl ClientData for PiData {
     fn native_history(
         &self,
         binding: pontia_agent_control::client_contract::raw_transcripts::AgentBindingResolveRequest,
-        control: Option<pontia_agent_control::clients::ClientControlService>,
+        _control: Option<pontia_agent_control::clients::ClientControlService>,
     ) -> Option<Arc<dyn pontia_agent_control::client_contract::native_history::NativeHistory>> {
-        Some(crate::history::PiHistory::new(binding, control))
+        Some(crate::history::PiHistory::new(
+            binding,
+            self.connections.clone(),
+        ))
     }
     fn capture_native_boundary(
         &self,

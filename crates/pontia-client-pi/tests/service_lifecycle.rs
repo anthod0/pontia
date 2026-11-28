@@ -1,3 +1,4 @@
+mod support;
 use pontia_agent_control::{
     AgentControl, client_contract::ClientServicePhase, clients::ClientRegistry,
 };
@@ -95,7 +96,7 @@ async fn background_rpc_process_reconnects_and_confirms_idle_exit() {
         .await
         .unwrap();
     let session = outcome.session_id().unwrap();
-    let (runtime, fingerprint, pane, socket): (String, String, Option<String>, Option<String>) = sqlx::query_as(
+    let (_runtime, fingerprint, pane, socket): (String, String, Option<String>, Option<String>) = sqlx::query_as(
         "SELECT runtime_id,process_fingerprint,tmux_pane_id,tmux_socket_path FROM session_runtimes WHERE session_id=?"
     ).bind(session).fetch_one(&pool).await.unwrap();
     assert_eq!((pane, socket), (None, None));
@@ -139,18 +140,24 @@ async fn background_rpc_process_reconnects_and_confirms_idle_exit() {
         .await
         .unwrap();
     tokio::time::timeout(Duration::from_secs(15), async {
-        while !recovered.client_control().available(session).await.unwrap() {
+        while !support::connected(&recovered, session).await {
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
     })
     .await
     .unwrap();
-    assert!(
-        recovered
-            .client_control()
-            .shutdown_if_idle(session, &runtime)
+    let client = support::session(&recovered);
+    let target = support::target(&recovered, session).await;
+    assert_eq!(
+        client
+            .exit(
+                recovered.event_ingest_service(),
+                &target,
+                pontia_agent_control::client_contract::ClientExitMode::IfIdle,
+            )
             .await
-            .unwrap()
+            .unwrap(),
+        pontia_agent_control::client_contract::ClientExitOutcome::Requested
     );
     wait_state(&recovered, session, "exited").await;
     recovered.shutdown().notify();

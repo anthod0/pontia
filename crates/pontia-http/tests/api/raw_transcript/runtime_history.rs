@@ -33,16 +33,32 @@ pub(super) async fn attach(
     entries: impl Fn() -> Vec<Value> + Send + 'static,
 ) -> Arc<PiRpcPeer> {
     let runtime: String = sqlx::query_scalar("SELECT runtime_id FROM session_runtimes WHERE session_id=? ORDER BY created_at DESC LIMIT 1").bind(session).fetch_one(&state.db()).await.unwrap();
-    let (left, right) = UnixStream::pair().unwrap();
-    let (daemon, _) = PiRpcPeer::new(left);
-    let (peer, mut requests) = PiRpcPeer::new(right);
-    state
-        .control()
-        .client_control()
-        .attach("pi", session, &runtime, native, daemon.clone())
+    let fingerprint = pontia_runtime::ProcessFingerprint::capture(std::process::id()).unwrap();
+    sqlx::query("UPDATE session_runtimes SET process_fingerprint=? WHERE runtime_id=?")
+        .bind(serde_json::to_string(&fingerprint).unwrap())
+        .bind(&runtime)
+        .execute(&state.db())
         .await
         .unwrap();
+    let (left, right) = UnixStream::pair().unwrap();
+    tokio::spawn(pontia_client_pi::ipc::serve_connection(
+        state.control().clone(),
+        left,
+    ));
+    let (peer, mut requests) = PiRpcPeer::new(right);
+    peer.call(
+        "runtime.attach",
+        json!({
+            "version": pontia_agent_control::ipc::rpc::PROTOCOL_VERSION,
+            "session_id":session,
+            "runtime_id":runtime,
+            "client_session_key":native,
+        }),
+    )
+    .await
+    .unwrap();
     let native = native.to_owned();
+    let responder = peer.clone();
     tokio::spawn(async move {
         while let Some(request) = requests.recv().await {
             if request.method == "history.read" {
@@ -52,17 +68,21 @@ pub(super) async fn attach(
                     .map_or(0, |s| s.parse::<usize>().unwrap());
                 let end = (start + 128).min(entries.len());
                 let upper = entries.last().map(|e| e["id"].clone());
-                peer.reply(request.id,json!({"session_id":native,"snapshot":"fixture","entry_count":entries.len(),"upper_entry_id":upper,"leaf_id":upper,"entries":entries[start..end],"continuation":if end<entries.len(){Some(end.to_string())}else{None}})).await.unwrap();
+                responder.reply(request.id,json!({"session_id":native,"snapshot":"fixture","entry_count":entries.len(),"upper_entry_id":upper,"leaf_id":upper,"entries":entries[start..end],"continuation":if end<entries.len(){Some(end.to_string())}else{None}})).await.unwrap();
             } else if request.method == "ping" {
-                peer.reply(request.id, json!({"pong":true})).await.unwrap();
+                responder
+                    .reply(request.id, json!({"pong":true}))
+                    .await
+                    .unwrap();
             } else {
-                peer.reply_error(request.id, -32601, "unsupported")
+                responder
+                    .reply_error(request.id, -32601, "unsupported")
                     .await
                     .unwrap();
             }
         }
     });
-    daemon
+    peer
 }
 
 #[tokio::test]

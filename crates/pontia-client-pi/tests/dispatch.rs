@@ -3,12 +3,8 @@ use std::time::Duration;
 
 use pontia_core::domain::{EventSource, EventType, ReportedEvent};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
-use serde_json::{Value, json};
+use serde_json::json;
 use sqlx::SqlitePool;
-use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-    net::UnixStream,
-};
 
 use pontia_agent_control::{AgentControl, EventIngestService};
 
@@ -58,24 +54,12 @@ async fn ready(pool: &SqlitePool) {
 #[tokio::test]
 async fn pi_input_waits_for_ready_uses_socket_and_leaves_lifecycle_to_client() {
     let (pool, _root, state) = setup().await;
-    let control = state.client_control();
-    let (daemon_socket, socket) = UnixStream::pair().unwrap();
-    let (peer, _requests) = pontia_client_pi::rpc::PiRpcPeer::new(daemon_socket);
-    control
-        .attach("pi", "sess_pi", "rtinst_pi", "native_pi", peer)
-        .await
-        .unwrap();
+    let (peer, mut requests) = support::attach(&state, "sess_pi", "rtinst_pi", "native_pi").await;
     let server = tokio::spawn(async move {
-        let mut stream = BufReader::new(socket);
-        let mut line = String::new();
-        stream.read_line(&mut line).await.unwrap();
-        let request: Value = serde_json::from_str(&line).unwrap();
-        assert_eq!(request["method"], "submit");
-        assert_eq!(request["params"]["input"], "hello after ready");
-        let reply = json!({"jsonrpc":"2.0","id":request["id"],"result":{"accepted":true}});
-        stream
-            .get_mut()
-            .write_all(format!("{reply}\n").as_bytes())
+        let request = requests.recv().await.unwrap();
+        assert_eq!(request.method, "submit");
+        assert_eq!(request.params["input"], "hello after ready");
+        peer.reply(request.id, json!({"accepted":true}))
             .await
             .unwrap();
     });
@@ -107,7 +91,6 @@ async fn pi_input_waits_for_ready_uses_socket_and_leaves_lifecycle_to_client() {
 #[tokio::test]
 async fn missing_pi_connection_rejects_delivery_without_creating_a_turn() {
     let (pool, _root, state) = setup().await;
-    let _control = state.client_control();
     ready(&pool).await;
     let error = state
         .turn_commands()
@@ -154,31 +137,14 @@ async fn conditional_exit_refuses_unsettled_control_state_before_contacting_the_
 async fn conditional_exit_uses_the_native_idle_decision_and_waits_for_exit_confirmation() {
     let (pool, _root, state) = setup().await;
     ready(&pool).await;
-    let (daemon, socket) = UnixStream::pair().unwrap();
-    let (peer, _requests) = pontia_client_pi::rpc::PiRpcPeer::new(daemon);
-    state
-        .client_control()
-        .attach("pi", "sess_pi", "rtinst_pi", "native_pi", peer)
-        .await
-        .unwrap();
+    let (peer, mut requests) = support::attach(&state, "sess_pi", "rtinst_pi", "native_pi").await;
     let events = state.event_ingest_service();
     let server = tokio::spawn(async move {
-        let mut stream = BufReader::new(socket);
         for accepted in [false, true] {
-            let mut line = String::new();
-            stream.read_line(&mut line).await.unwrap();
-            let request: Value = serde_json::from_str(&line).unwrap();
+            let request = requests.recv().await.unwrap();
             // Native execution can resume after the daemon's idle snapshot.
-            assert_eq!(request["method"], "shutdown_if_idle");
-            stream
-                .get_mut()
-                .write_all(
-                    format!(
-                        "{}\n",
-                        json!({"jsonrpc":"2.0","id":request["id"],"result":{"accepted":accepted}})
-                    )
-                    .as_bytes(),
-                )
+            assert_eq!(request.method, "shutdown_if_idle");
+            peer.reply(request.id, json!({"accepted":accepted}))
                 .await
                 .unwrap();
             if accepted {
@@ -281,14 +247,9 @@ async fn running_runtime_exposes_its_current_connection_independently_of_session
         session.control_connected
     };
     assert_eq!(view().await, Some(false));
-    let (daemon_socket, socket) = UnixStream::pair().unwrap();
-    let (peer, _requests) = pontia_client_pi::rpc::PiRpcPeer::new(daemon_socket);
-    app.client_control()
-        .attach("pi", "sess_pi", "rtinst_pi", "native_pi", peer.clone())
-        .await
-        .unwrap();
+    let (peer, _requests) = support::attach(&app, "sess_pi", "rtinst_pi", "native_pi").await;
     assert_eq!(view().await, Some(true));
-    drop(socket);
+    peer.close();
     tokio::time::timeout(Duration::from_secs(5), peer.closed())
         .await
         .unwrap();

@@ -20,6 +20,7 @@ use sqlx::SqlitePool;
 
 pub(crate) struct PiSession {
     pub tui_command: Option<String>,
+    pub connections: crate::connections::PiConnections,
 }
 impl PiSession {
     fn launch_configured(
@@ -107,12 +108,6 @@ impl PiSession {
         Ok(result)
     }
 
-    fn control(events: &EventIngestService) -> Result<ClientControlService> {
-        events
-            .history_control()
-            .ok_or_else(|| Error::CapabilityUnavailable("Pi control service is unavailable".into()))
-    }
-
     async fn single_running_runtime(pool: &SqlitePool, session: &str) -> Result<Option<String>> {
         let runtimes: Vec<String> = sqlx::query_scalar(
             "SELECT runtime_id FROM session_runtimes WHERE session_id=? AND role=? AND state='running'",
@@ -192,8 +187,7 @@ impl ClientSession for PiSession {
                 .validate(&events.db())
                 .await
                 .map_err(DeliveryError::from)?;
-            Self::control(&events)
-                .map_err(DeliveryError::from)?
+            self.connections
                 .start_turn(&target.session_id, runtime, payload)
                 .await?;
             Ok(InputReceipt {
@@ -215,8 +209,7 @@ impl ClientSession for PiSession {
                 .validate(&events.db())
                 .await
                 .map_err(DeliveryError::from)?;
-            Self::control(&events)
-                .map_err(DeliveryError::from)?
+            self.connections
                 .steer(
                     &target.session_id,
                     target.instance().map_err(DeliveryError::from)?,
@@ -241,8 +234,7 @@ impl ClientSession for PiSession {
                 .validate(&events.db())
                 .await
                 .map_err(DeliveryError::from)?;
-            Self::control(&events)
-                .map_err(DeliveryError::from)?
+            self.connections
                 .interrupt(
                     &target.session_id,
                     target.instance().map_err(DeliveryError::from)?,
@@ -263,7 +255,7 @@ impl ClientSession for PiSession {
                 .wait_until_ready(&target.session_id, "pi", runtime)
                 .await?;
             target.validate(&events.db()).await?;
-            Self::control(&events)?
+            self.connections
                 .replay(&target.session_id, runtime, replay_id)
                 .await
                 .map_err(DeliveryError::from)
@@ -272,12 +264,12 @@ impl ClientSession for PiSession {
 
     fn compact<'a>(
         &'a self,
-        events: EventIngestService,
+        _events: EventIngestService,
         target: &'a ControlTarget,
         operation_id: &'a str,
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move {
-            Self::control(&events)?
+            self.connections
                 .compact(&target.session_id, target.instance()?, operation_id)
                 .await
         })
@@ -285,12 +277,12 @@ impl ClientSession for PiSession {
 
     fn set_reasoning_effort<'a>(
         &'a self,
-        events: EventIngestService,
+        _events: EventIngestService,
         target: &'a ControlTarget,
         reasoning_effort: &'a str,
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move {
-            Self::control(&events)?
+            self.connections
                 .set_reasoning_effort(&target.session_id, target.instance()?, reasoning_effort)
                 .await
         })
@@ -304,7 +296,7 @@ impl ClientSession for PiSession {
     ) -> ClientOperation<'a, ClientExitOutcome> {
         Box::pin(async move {
             target.validate(&events.db()).await?;
-            let control = Self::control(&events)?;
+            let control = &self.connections;
             let runtime = target.instance()?;
             if mode == ClientExitMode::IfIdle {
                 return if control
@@ -321,7 +313,7 @@ impl ClientSession for PiSession {
                 Err(error @ Error::CapabilityUnavailable(_)) => {
                     let _guard = control.lock_identity().await;
                     target.validate(&events.db()).await?;
-                    if control.connected_to(&target.session_id, runtime).await {
+                    if control.connected_to(&target.session_id, runtime).await? {
                         return Err(error);
                     }
                     let fingerprint: Option<String> = sqlx::query_scalar(
@@ -374,15 +366,12 @@ impl ClientSession for PiSession {
     fn available<'a>(
         &'a self,
         pool: SqlitePool,
-        control: Option<ClientControlService>,
+        _control: Option<ClientControlService>,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
         Box::pin(async move {
-            let Some(control) = control else {
-                return Ok(false);
-            };
             Ok(match Self::single_running_runtime(&pool, session).await? {
-                Some(runtime) => control.connected_to(session, &runtime).await,
+                Some(runtime) => self.connections.connected_to(session, &runtime).await?,
                 None => false,
             })
         })
@@ -391,29 +380,30 @@ impl ClientSession for PiSession {
     fn manual_compaction_available<'a>(
         &'a self,
         pool: SqlitePool,
-        control: Option<ClientControlService>,
+        _control: Option<ClientControlService>,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
-        self.available(pool, control, session)
+        self.available(pool, None, session)
     }
 
     fn reasoning_effort_control_available<'a>(
         &'a self,
         pool: SqlitePool,
-        control: Option<ClientControlService>,
+        _control: Option<ClientControlService>,
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
         Box::pin(async move {
-            let Some(control) = control else {
-                return Ok(false);
-            };
             if Self::single_running_runtime(&pool, session)
                 .await?
                 .is_none()
             {
                 return Ok(false);
             }
-            match control.reasoning_effort_control_available(session).await {
+            match self
+                .connections
+                .reasoning_effort_control_available(session)
+                .await
+            {
                 Ok(available) => Ok(available),
                 Err(Error::StateConflict(_) | Error::CapabilityUnavailable(_)) => Ok(false),
                 Err(error) => Err(error),
@@ -424,16 +414,13 @@ impl ClientSession for PiSession {
     fn control_connected<'a>(
         &'a self,
         pool: SqlitePool,
-        control: Option<ClientControlService>,
+        _control: Option<ClientControlService>,
         session: &'a str,
     ) -> ClientOperation<'a, Option<bool>> {
         Box::pin(async move {
-            let Some(control) = control else {
-                return Ok(Some(false));
-            };
             Ok(Some(
                 match Self::single_running_runtime(&pool, session).await? {
-                    Some(runtime) => control.connected_to(session, &runtime).await,
+                    Some(runtime) => self.connections.connected_to(session, &runtime).await?,
                     None => false,
                 },
             ))
