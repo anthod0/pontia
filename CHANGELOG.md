@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.9] - 2026-11-29
+
+### Changed
+
+- Session creation requests and Workflow profiles now require an explicit Agent Client.
+- Pi Sessions use the `pi` executable. The `runtime.pi.tui_command` setting and `PONTIA_PI_TUI_COMMAND` environment override have been removed.
+- The desktop Bot side panel opens to the todo list by default.
+- Cloud settings ask for confirmation before revoking a session or removing a device.
+
+### Fixed
+
+- Session views redact the credential configured for each Session from its metadata.
+
 ## [0.9.8] - 2026-11-28
 
 ### Added
@@ -1388,7 +1401,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.9.8...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.9.9...HEAD
+[0.9.9]: https://github.com/anthod0/pontia/compare/v0.9.8...v0.9.9
 [0.9.8]: https://github.com/anthod0/pontia/compare/v0.9.7...v0.9.8
 [0.9.7]: https://github.com/anthod0/pontia/compare/v0.9.6...v0.9.7
 [0.9.6]: https://github.com/anthod0/pontia/compare/v0.9.5...v0.9.6
