@@ -89,13 +89,13 @@
 	.hero-actions .button:not(.button-secondary):hover :global(svg) { transform: translateX(3px); }
 
 	.install { width: min(100%, 760px); margin-top: 28px; }
-	.install-command { display: flex; align-items: center; padding: 6px 6px 6px 16px; background: #282828; border: 1px solid #45433e; border-radius: 8px; color: #ebdbb2; text-align: left; box-shadow: 0 10px 30px -18px rgb(40 40 40 / 60%); }
+	.install-command { display: flex; align-items: center; padding: 6px 6px 6px 16px; background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 6px; color: var(--code-fg); text-align: left; }
 	.install-command code { min-width: 0; padding: 6px 12px 6px 0; overflow-wrap: anywhere; font-size: 12.5px; line-height: 1.6; }
-	.install-command .prompt { margin-right: 10px; color: #928374; user-select: none; }
-	.install-command .cmd { color: #8ec07c; }
-	.install-command button { display: flex; flex: 0 0 32px; align-items: center; justify-content: center; width: 32px; height: 32px; margin-left: auto; border: 1px solid #5d584e; border-radius: 5px; background: transparent; color: #bdae93; transition: background 0.15s, color 0.15s; }
-	.install-command button:hover { color: #ebdbb2; background: #3c3836; }
-	.install-command button:focus-visible { outline-color: #8ec07c; }
+	.install-command .prompt { margin-right: 10px; color: var(--code-muted); user-select: none; }
+	.install-command .cmd { color: var(--code-aqua); }
+	.install-command button { display: flex; flex: 0 0 32px; align-items: center; justify-content: center; width: 32px; height: 32px; margin-left: auto; border: 1px solid var(--code-button-border); border-radius: 4px; background: var(--code-bg); color: var(--code-muted); transition: background 0.15s, color 0.15s; }
+	.install-command button:hover { color: var(--code-fg); background: var(--code-surface); }
+	.install-command button:focus-visible { outline-color: var(--code-aqua); }
 	.install-meta { display: flex; justify-content: space-between; gap: 16px; margin-top: 10px; padding-inline: 2px; font-size: 12px; color: var(--muted-foreground); }
 	.install-meta a { display: inline-flex; align-items: center; gap: 4px; color: var(--foreground); font-weight: 500; }
 	.install-meta a:hover { color: var(--primary); }

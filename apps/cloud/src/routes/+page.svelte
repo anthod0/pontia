@@ -72,7 +72,7 @@
 </div>
 
 <style>
-	#homepage :global(:is(button, [role="button"], a.button, a.cta, .skip-link)) {
+	#homepage :global(:is(button, [role="button"], a.button, a.cta, .skip-link):not(:where(.install-command button))) {
 		border-radius: var(--radius-action);
 	}
 </style>
