@@ -34,7 +34,7 @@
       <span class="line-clamp-2 min-h-8 text-xs leading-4 text-muted-foreground">{text.description}</span>
       <span class="flex min-w-0 items-center gap-1.5 text-xs {status === 'available' ? 'text-foreground' : 'text-muted-foreground'}"
         title={status === 'available' ? undefined : $t(status === 'missing' ? 'profiles.templateClientMissingTitle' : 'profiles.templateClientDisabledTitle', { client: clientName })}>
-        <ClientIcon clientType={template.client_type} acpAgentId={template.client_key} class="size-3.5 shrink-0 {status === 'available' ? 'text-foreground' : 'opacity-50 grayscale'}" />
+        <ClientIcon clientType={template.client_type} clientKey={template.client_key} class="size-3.5 shrink-0 {status === 'available' ? 'text-foreground' : 'opacity-50 grayscale'}" />
         <span class="shrink-0">{clientName}</span>
         {#if status === 'available'}
           <span class="min-w-0 truncate text-muted-foreground">· <span class="font-mono">{template.model}</span></span>

@@ -106,6 +106,8 @@ beforeEach(async () => {
             id: handle,
             name: `${handle} agent`,
             client_type: handle === "office-mac" ? "pi" : "codex",
+            client_key: "default",
+            version: null,
             metadata: { device_option: handle },
           },
         ],

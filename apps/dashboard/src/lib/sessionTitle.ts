@@ -1,11 +1,11 @@
 import { translate as defaultTranslate, type Translator } from "$lib/i18n";
-import { clientDisplayName } from "./clientName";
+import { clientDisplayName, dashboardClient } from "../clients";
 
 export function untitledSessionLabel(
   clientType: string | null | undefined,
   translate: Translator = defaultTranslate,
 ): string {
   const normalized = clientType?.trim();
-  const name = normalized === "claude-agent" ? "Claude Code" : clientDisplayName(normalized ?? "");
+  const name = dashboardClient(normalized)?.titleLabel ?? clientDisplayName(normalized ?? "");
   return `Untitled ${name || translate("chat.agent")} session`;
 }

@@ -1,11 +1,11 @@
 <script lang="ts">
+  import { sessionClientKey, clientDisplayName } from '../../../clients'
   import { statusLabel } from '$lib/i18n/status';
   import { t, currentLocale } from '$lib/i18n';
   import { useDeviceRuntime } from '../../../device/context';
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import { navigate } from '$lib/navigation'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
-  import { clientDisplayName } from '$lib/clientName'
   import { sessionStateDotClass } from '$lib/sessionState'
   import ClientIcon from '../../../components/chat/ClientIcon.svelte'
   import * as Alert from '$lib/components/ui/alert/index.js'
@@ -40,10 +40,10 @@
 {#snippet sessionList(items: SessionView[], testId: string)}
   <div class="divide-y" data-testid={testId}>
     {#each items as session (session.session_id)}
-      {@const acpAgentId = (session.acp as { agent_id?: string } | undefined)?.agent_id}
+      {@const clientKey = sessionClientKey(session)}
       <button type="button" class="w-full rounded-item px-1 py-3 text-left transition hover:bg-muted/50 sm:px-2" onclick={() => openSession(session.session_id)}>
         <div class="flex min-w-0 items-start gap-3">
-          <ClientIcon clientType={session.client_type} {acpAgentId} class="mt-0.5 size-8" />
+          <ClientIcon clientType={session.client_type} {clientKey} class="mt-0.5 size-8" />
           <div class="flex min-w-0 flex-1 items-start justify-between gap-3">
             <div class="min-w-0 space-y-1">
               <div class="truncate font-medium">{sessionChatTitle(session, $t)}</div>

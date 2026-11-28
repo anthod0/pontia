@@ -63,7 +63,7 @@
       onclick={() => (sheet = 'client')}
       ><ClientIcon
         clientType={chat.selectedCreationOption?.client_type}
-        acpAgentId={chat.selectedCreationOption?.metadata.acp_agent_id}
+        clientKey={chat.selectedCreationOption?.client_key}
       /><span class="truncate"
         >{chat.selectedCreationOption?.name ?? $t('clients.choose')}{#if modelName}
           · {modelName}{/if}</span

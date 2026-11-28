@@ -19,8 +19,22 @@ test.each(["desktop", "phone"])(
     const user = userEvent.setup();
     const metadata = { acp_agent_id: "company:代理", custom: { preserved: true } };
     mocks.listSessionCreationOptions.mockResolvedValue([
-      { id: "pi", name: "Pi", client_type: "pi", metadata: {} },
-      { id: "opaque-choice", name: "Company Agent", client_type: "acp", metadata },
+      {
+        id: "pi",
+        name: "Pi",
+        client_type: "pi",
+        client_key: "default",
+        version: null,
+        metadata: {},
+      },
+      {
+        id: "opaque-choice",
+        name: "Company Agent",
+        client_type: "acp",
+        client_key: "company:代理",
+        version: null,
+        metadata,
+      },
     ]);
     mocks.createSession.mockResolvedValue({ session: session(), initial_turn: turn() });
     render(NewChatPage);
@@ -63,8 +77,22 @@ test("prevents creation while discovery is unavailable and recovers after an exp
 
 test("Alt+C and Alt+W switch the agent client and workspace, with Shift going back", async () => {
   mocks.listSessionCreationOptions.mockResolvedValue([
-    { id: "pi", name: "Pi", client_type: "pi", metadata: {}, version: "0.70.2" },
-    { id: "company", name: "Company Agent", client_type: "acp", metadata: {}, version: "1.2.3" },
+    {
+      id: "pi",
+      name: "Pi",
+      client_type: "pi",
+      client_key: "default",
+      metadata: {},
+      version: "0.70.2",
+    },
+    {
+      id: "company",
+      name: "Company Agent",
+      client_type: "acp",
+      client_key: "company",
+      metadata: {},
+      version: "1.2.3",
+    },
   ]);
   mocks.workspaces.set([
     workspace({ workspace_id: "ws-1", name: "first" }),
@@ -109,6 +137,7 @@ test.each([false, true])(
         id: "company",
         name: "Company Agent",
         client_type: "acp",
+        client_key: "company-id",
         model_catalog_key: "company-id",
         version: null,
         metadata: { acp_agent_id: "company-id" },

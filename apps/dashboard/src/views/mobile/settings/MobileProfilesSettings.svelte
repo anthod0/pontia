@@ -75,7 +75,7 @@
         >
           <ClientIcon
             clientType={profile.client_type ?? undefined}
-            acpAgentId={profile.client_key}
+            clientKey={profile.client_key}
             class="mt-0.5 size-4 shrink-0 text-foreground"
           />
           <span class="min-w-0 flex-1">

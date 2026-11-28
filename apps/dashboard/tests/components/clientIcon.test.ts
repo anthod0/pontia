@@ -3,8 +3,8 @@ import { expect, test } from "vitest";
 import ClientIcon from "../../src/components/chat/ClientIcon.svelte";
 
 test("each Antigravity icon references only its own SVG definitions", () => {
-  const first = render(ClientIcon, { clientType: "acp", acpAgentId: "antigravity" }).container;
-  const second = render(ClientIcon, { clientType: "acp", acpAgentId: "antigravity" }).container;
+  const first = render(ClientIcon, { clientType: "acp", clientKey: "antigravity" }).container;
+  const second = render(ClientIcon, { clientType: "acp", clientKey: "antigravity" }).container;
 
   const ids = [first, second].map((container) => {
     const svg = container.querySelector("svg")!;

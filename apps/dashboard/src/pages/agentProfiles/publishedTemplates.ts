@@ -1,9 +1,9 @@
+import { dashboardClient } from "../../clients";
 import { readable } from "svelte/store";
 import { readStoredWith, writeStored } from "../../lib/storage";
 import { profileIdPattern } from "./form";
 import {
   builtInProfileTemplates,
-  templateClientNames,
   type ProfileTemplate,
   type ProfileTemplateText,
 } from "./templates";
@@ -39,7 +39,7 @@ function parseTemplate(value: unknown): ProfileTemplate | undefined {
     typeof icon === "string" &&
     typeof client_type === "string" &&
     (client_key === undefined
-      ? client_type !== "acp"
+      ? !dashboardClient(client_type)?.requiresClientKey
       : typeof client_key === "string" && client_key.trim() !== "") &&
     typeof model === "string" &&
     model !== "" &&
@@ -70,9 +70,7 @@ export function parseTemplatesDocument(document: unknown): ProfileTemplate[] | u
   const parsed = templates.map(parseTemplate);
   if (!parsed.every((template) => template !== undefined)) return undefined;
   if (new Set(parsed.map((template) => template.id)).size !== parsed.length) return undefined;
-  const known = parsed.filter((template) =>
-    Object.hasOwn(templateClientNames, template.client_type),
-  );
+  const known = parsed.filter((template) => dashboardClient(template.client_type));
   return known.length > 0 ? known : undefined;
 }
 

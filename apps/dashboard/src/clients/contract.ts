@@ -18,6 +18,13 @@ export interface ClientControlDetails {
 
 export interface DashboardClient {
   clientType: string;
+  displayName(key?: string, installedName?: string): string;
+  iconKey(key?: string): string | undefined;
+  typeLabel?: string;
+  titleLabel?: string;
+  requiresClientKey?: boolean;
+  sessionKey?(session: SessionView): string | undefined;
+  instructionsInjected?(session: SessionView): boolean | undefined;
   defaultForCreation: boolean;
   resumeWaitsForIdle?: boolean;
   controlDetails(session: SessionView): ClientControlDetails | null;

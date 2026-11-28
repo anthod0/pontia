@@ -1,3 +1,4 @@
+import { dashboardClient } from "../../clients";
 import type { Component } from "svelte";
 import BugIcon from "phosphor-svelte/lib/BugIcon";
 import CodeIcon from "phosphor-svelte/lib/CodeIcon";
@@ -33,29 +34,13 @@ export interface ProfileTemplate {
   text: { en: ProfileTemplateText };
 }
 
-/** Names shown for a template's client even when that client is not installed. */
-export const templateClientNames: Record<string, string> = {
-  acp: "ACP",
-  pi: "Pi",
-  codex: "Codex",
-  "claude-agent": "Claude Code",
-};
-
-const acpNames = new Map([
-  ["grok", "Grok Build"],
-  ["antigravity", "Antigravity"],
-  ["kiro", "Kiro"],
-]);
-
 export function templateClientName(template: ProfileTemplate, clients: AgentClientView[]) {
-  if (template.client_type === "acp" && template.client_key) {
-    return (
-      matchingClient(template, clients)?.name ??
-      acpNames.get(template.client_key) ??
-      template.client_key
-    );
-  }
-  return templateClientNames[template.client_type];
+  return (
+    dashboardClient(template.client_type)?.displayName(
+      template.client_key,
+      matchingClient(template, clients)?.name,
+    ) ?? template.client_type
+  );
 }
 
 const templateIcons: Record<string, Component> = {

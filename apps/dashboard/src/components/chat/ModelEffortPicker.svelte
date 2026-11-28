@@ -313,7 +313,7 @@
 {#snippet mobileSheet()}
   <div class="shrink-0">
     <div class="flex items-center gap-2 pr-2 pb-2 pl-4">
-      <ClientIcon clientType={client.client_type} acpAgentId={client.client_key} class="size-4 text-foreground" />
+      <ClientIcon clientType={client.client_type} clientKey={client.client_key} class="size-4 text-foreground" />
       <Sheet.Title class="min-w-0 flex-1 truncate text-base font-semibold text-heading">{$t('model.pickerTitle')}</Sheet.Title>
       <Sheet.Description class="sr-only">{client.name}</Sheet.Description>
       <Sheet.Close>

@@ -79,7 +79,7 @@
                 >
                   <ClientIcon
                     clientType={client.client_type}
-                    acpAgentId={client.client_key}
+                    clientKey={client.client_key}
                     class="size-5 shrink-0 {detection === 'not_detected' ? 'opacity-50' : ''}"
                   />
                   <span class="min-w-0 flex-1 space-y-0.5">
@@ -100,7 +100,7 @@
           <div class="mb-1 flex min-h-9 items-center gap-3">
             <ClientIcon
               clientType={settings.selected.client_type}
-              acpAgentId={settings.selected.client_key}
+              clientKey={settings.selected.client_key}
               class="size-7 shrink-0"
             />
             <h3 class="truncate text-lg font-semibold text-heading">{settings.selected.name}</h3>

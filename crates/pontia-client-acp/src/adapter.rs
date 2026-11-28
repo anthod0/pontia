@@ -148,6 +148,7 @@ impl ClientSession for AcpAdapter {
                     name: agent.name.clone(),
                     client_type: "acp".into(),
                     metadata: json!({"acp_agent_id": id}),
+                    client_key: id,
                     version,
                 });
             }

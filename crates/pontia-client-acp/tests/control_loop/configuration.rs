@@ -132,7 +132,10 @@ async fn obsolete_saved_entries_do_not_hide_valid_creation_options() {
     let options = h.app.clients().creation_options(&h.app.db()).await.unwrap();
     let keys: Vec<_> = options
         .iter()
-        .map(|entry| entry.metadata["acp_agent_id"].as_str().unwrap())
+        .map(|entry| {
+            assert_eq!(entry.metadata["acp_agent_id"], entry.client_key);
+            entry.client_key.as_str()
+        })
         .collect();
     assert_eq!(keys, ["first", "second"]);
     assert!(h.create("removed").await.is_err());

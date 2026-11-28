@@ -95,7 +95,7 @@
         {@const client = templateClient(template, settings.enabledClients)!}
         <button class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-chip border bg-background px-2.5 text-13 font-medium hover:border-primary max-md:min-h-11" onclick={(event) => { trigger = event.currentTarget; selected = template }}>
           <span class="grid size-5 place-items-center rounded-full bg-muted"><Icon class="size-3.5"/></span>{template.text.en.name}
-          <span class="flex items-center gap-1 text-xs font-normal text-muted-foreground max-md:hidden"><ClientIcon clientType={client.client_type} acpAgentId={client.client_key} class="size-3.5"/>{client.name}</span>
+          <span class="flex items-center gap-1 text-xs font-normal text-muted-foreground max-md:hidden"><ClientIcon clientType={client.client_type} clientKey={client.client_key} class="size-3.5"/>{client.name}</span>
         </button>
       {/each}
       <button class="inline-flex h-8 shrink-0 items-center gap-1 rounded-chip border border-dashed px-3 text-xs hover:bg-muted max-md:min-h-11" onclick={() => navigate(path)}>{$t('bots.profileHint.allTemplates')}<ArrowRightIcon class="size-3"/></button>

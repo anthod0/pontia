@@ -29,6 +29,7 @@ pub struct SessionCreationOption {
     pub id: String,
     pub name: String,
     pub client_type: String,
+    pub client_key: String,
     pub metadata: Value,
     pub version: Option<String>,
 }

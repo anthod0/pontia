@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { sessionClientKey } from '../../clients'
   import ResponsiveMenu from '$lib/components/ui/overlay/ResponsiveMenu.svelte'
   import { statusLabel } from '$lib/i18n/status';
   import { t } from '$lib/i18n';
@@ -174,13 +175,13 @@
 {/snippet}
 
 {#snippet sessionMenuItem(session: SessionView, actionKey: string)}
-  {@const acpAgentId = (session.acp as { agent_id?: string } | undefined)?.agent_id}
+  {@const clientKey = sessionClientKey(session)}
   <Sidebar.MenuItem>
     <ContextMenu.Root>
       <ContextMenu.Trigger>
         {#snippet child({ props })}
           <Sidebar.MenuButton {...props} class="touch-target:group-has-data-[sidebar=menu-action]/menu-item:pr-16 touch-target:h-11" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session, $t)} · ${statusLabel(session.state, $t)}`} onclick={() => openSession(session.session_id)}>
-            <ClientIcon clientType={session.client_type} {acpAgentId} />
+            <ClientIcon clientType={session.client_type} {clientKey} />
             {#if session.pinned_at}
               <PushPinIcon class="size-3.5 shrink-0" aria-label={$t('sessions.pinnedSession')} />
             {/if}

@@ -62,11 +62,11 @@
       label={$t('clients.client')} triggerClass="h-7 max-w-44 border-0 bg-transparent px-1.5 font-medium text-foreground hover:bg-muted" side="top" align="start"
       options={creationOptions} keyOf={option => option.id} labelOf={option => option.name}>
       {#snippet trigger()}
-        <ClientIcon clientType={selectedOption?.client_type} acpAgentId={selectedOption?.metadata.acp_agent_id} class="size-4 text-foreground" />
+        <ClientIcon clientType={selectedOption?.client_type} clientKey={selectedOption?.client_key} class="size-4 text-foreground" />
         <span class="min-w-0 truncate">{selectedOption?.name ?? $t('clients.choose')}</span>
       {/snippet}
       {#snippet option(option)}
-        <ClientIcon clientType={option.client_type} acpAgentId={option.metadata.acp_agent_id} class="size-3.5 text-foreground" />
+        <ClientIcon clientType={option.client_type} clientKey={option.client_key} class="size-3.5 text-foreground" />
         {option.name}
       {/snippet}
     </ResponsiveSelect>
@@ -78,11 +78,11 @@
       label={$t('clients.agentClient')} triggerClass={targetSegmentClass} side="top" align="start"
       options={creationOptions} keyOf={option => option.id} labelOf={option => option.name}>
       {#snippet trigger()}
-        <ClientIcon clientType={selectedOption?.client_type} acpAgentId={selectedOption?.metadata.acp_agent_id} class="size-3.5 text-foreground" />
+        <ClientIcon clientType={selectedOption?.client_type} clientKey={selectedOption?.client_key} class="size-3.5 text-foreground" />
         <span class={targetLabelClass}>{onboarding?.probing ? $t('onboarding.clients.probing') : selectedOption?.name ?? $t('clients.agentClient')}</span>
       {/snippet}
       {#snippet option(option)}
-        <ClientIcon clientType={option.client_type} acpAgentId={option.metadata.acp_agent_id} class="size-3.5 text-foreground" />
+        <ClientIcon clientType={option.client_type} clientKey={option.client_key} class="size-3.5 text-foreground" />
         {option.name}
       {/snippet}
     </ResponsiveSelect>

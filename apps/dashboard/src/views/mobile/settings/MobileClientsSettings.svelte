@@ -68,7 +68,7 @@
                   <Item.Media>
                     <ClientIcon
                       clientType={client.client_type}
-                      acpAgentId={client.client_key}
+                      clientKey={client.client_key}
                       class="size-5 {detection === 'not_detected' ? 'opacity-50' : ''}"
                     />
                   </Item.Media>

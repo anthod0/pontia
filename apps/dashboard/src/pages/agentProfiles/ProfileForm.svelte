@@ -258,11 +258,11 @@
         options={clients} keyOf={client => client.id} labelOf={client => client.name}>
         {#snippet trigger()}
           <span class="flex min-w-0 items-center gap-2">
-            {#if selectedClient}<ClientIcon clientType={selectedClient.client_type} acpAgentId={selectedClient.client_key} class="size-4 text-foreground" />{/if}
+            {#if selectedClient}<ClientIcon clientType={selectedClient.client_type} clientKey={selectedClient.client_key} class="size-4 text-foreground" />{/if}
             <span class="truncate">{selectedClient?.name ?? (draft.client_type ? `${draft.client_type} / ${draft.client_key}` : $t('clients.choose'))}</span>
           </span>
         {/snippet}
-        {#snippet option(client)}<ClientIcon clientType={client.client_type} acpAgentId={client.client_key} class="size-4 text-foreground" />{client.name}{/snippet}
+        {#snippet option(client)}<ClientIcon clientType={client.client_type} clientKey={client.client_key} class="size-4 text-foreground" />{client.name}{/snippet}
       </ResponsiveSelect>
       {#if !clients.length}<p role="status" class="text-sm text-muted-foreground">{$t('profiles.noClients')} <a class="underline underline-offset-4" href={dashboardPath('/settings/clients')}>{$t('settings.agentClients')}</a></p>{/if}
     </div>

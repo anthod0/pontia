@@ -428,8 +428,23 @@ beforeEach(() => {
   mocks.loadSessionDetail.mockReset().mockResolvedValue(null);
   mocks.listWorkspaces.mockReset().mockImplementation(async () => mocks.workspaces.get());
   mocks.listSessionCreationOptions.mockReset().mockResolvedValue([
-    { id: "pi", name: "Pi", client_type: "pi", model_catalog_key: "default", metadata: {} },
-    { id: "codex", name: "codex", client_type: "codex", metadata: {} },
+    {
+      id: "pi",
+      name: "Pi",
+      client_type: "pi",
+      client_key: "default",
+      model_catalog_key: "default",
+      version: null,
+      metadata: {},
+    },
+    {
+      id: "codex",
+      name: "codex",
+      client_type: "codex",
+      client_key: "default",
+      version: null,
+      metadata: {},
+    },
   ]);
   mocks.loadSessionTimeline.mockReset();
   mocks.refreshSessionTimeline.mockReset().mockResolvedValue(true);

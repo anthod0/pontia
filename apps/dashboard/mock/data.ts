@@ -92,12 +92,27 @@ const clientModels: Record<string, SessionModel[]> = {
 };
 
 const creationOptions: Omit<SessionCreationOption, "version">[] = [
-  { id: "pi", name: "Pi", client_type: "pi", model_catalog_key: "default", metadata: {} },
-  { id: "codex", name: "Codex", client_type: "codex", model_catalog_key: "default", metadata: {} },
+  {
+    id: "pi",
+    name: "Pi",
+    client_type: "pi",
+    client_key: "default",
+    model_catalog_key: "default",
+    metadata: {},
+  },
+  {
+    id: "codex",
+    name: "Codex",
+    client_type: "codex",
+    client_key: "default",
+    model_catalog_key: "default",
+    metadata: {},
+  },
   {
     id: "claude-agent",
     name: "Claude Code",
     client_type: "claude-agent",
+    client_key: "default",
     model_catalog_key: "default",
     metadata: {},
   },
@@ -105,12 +120,14 @@ const creationOptions: Omit<SessionCreationOption, "version">[] = [
     id: '["acp","antigravity"]',
     name: "Antigravity",
     client_type: "acp",
+    client_key: "antigravity",
     metadata: { acp_agent_id: "antigravity" },
   },
   {
     id: '["acp","grok"]',
     name: "Grok Build",
     client_type: "acp",
+    client_key: "grok",
     metadata: { acp_agent_id: "grok" },
   },
 ];

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { sessionClientKey } from '../../../clients'
   import { t } from '$lib/i18n'
   import * as Sheet from '$lib/components/ui/sheet'
   import BottomSheet from '$lib/components/ui/overlay/BottomSheet.svelte'
@@ -21,7 +22,7 @@
   const client = $derived(items.find(item => item.key === 'client')?.value)
   const hasContext = $derived(items.some(item => item.key === 'context'))
   const model = $derived(session.model?.split('/').at(-1))
-  const acpAgentId = $derived((session.acp as { agent_id?: string } | undefined)?.agent_id)
+  const clientKey = $derived(sessionClientKey(session))
   const ratio = $derived(session.context_usage ? contextUsageRatio(session.context_usage) : null)
   const percent = $derived(ratio === null ? null : Math.round(ratio * 100))
 </script>
@@ -53,7 +54,7 @@
     {/if}
     {@render separator()}
     <span class="flex min-w-0 items-center gap-1">
-      <ClientIcon clientType={session.client_type} {acpAgentId} class="size-[13px]" />
+      <ClientIcon clientType={session.client_type} {clientKey} class="size-[13px]" />
       <span class="truncate">{model || client}</span>
       {#if model && session.reasoning_effort}<span class="shrink-0">· {session.reasoning_effort}</span>{/if}
     </span>

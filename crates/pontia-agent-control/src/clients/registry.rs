@@ -175,11 +175,7 @@ impl ClientRegistry {
                 && let Some(client_options) = session.creation_options().await?
             {
                 for option in client_options {
-                    let key = match &registration.configuration {
-                        Some(configuration) => configuration.key(&option.metadata)?,
-                        None => "default".into(),
-                    };
-                    if enabled.contains_key(&(client.into(), key)) {
+                    if enabled.contains_key(&(client.into(), option.client_key.clone())) {
                         options.push(option);
                     }
                 }
@@ -202,6 +198,7 @@ impl ClientRegistry {
                 })
                 .unwrap_or_else(|| client.into());
             options.push(crate::client_contract::SessionCreationOption {
+                client_key: key.clone(),
                 model_catalog_key: registration
                     .configuration
                     .as_ref()
@@ -235,7 +232,7 @@ impl ClientRegistry {
             )));
         }
         for option in self.creation_options(pool).await? {
-            if option.client_type == client && configuration.key(&option.metadata)? == key {
+            if option.client_type == client && option.client_key == key {
                 return Ok(option.metadata);
             }
         }

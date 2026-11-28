@@ -2,6 +2,9 @@ import type { DashboardClient } from "../../apps/dashboard/src/clients/contract"
 
 export const dashboardClient: DashboardClient = {
   clientType: "claude-agent",
+  displayName: () => "Claude Code",
+  iconKey: () => "claude",
+  titleLabel: "Claude Code",
   defaultForCreation: false,
   resumeWaitsForIdle: false,
   controlDetails: (session) => {

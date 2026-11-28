@@ -109,12 +109,12 @@
       options={clients.data ?? []} keyOf={client => client.id} labelOf={client => client.name}>
       {#snippet trigger()}
         <span class="flex min-w-0 items-center gap-2">
-          {#if selected}<ClientIcon clientType={selected.client_type} acpAgentId={selected.client_key} class="size-4 text-foreground" />{/if}
+          {#if selected}<ClientIcon clientType={selected.client_type} clientKey={selected.client_key} class="size-4 text-foreground" />{/if}
           <span class="truncate">{clientOnboarding?.probing ? $t('onboarding.clients.probingMobile') : selected?.name ?? $t(clients.isPending ? 'common.loading' : 'clients.choose')}</span>
         </span>
       {/snippet}
       {#snippet option(client)}
-        <ClientIcon clientType={client.client_type} acpAgentId={client.client_key} class="size-4 text-foreground" />
+        <ClientIcon clientType={client.client_type} clientKey={client.client_key} class="size-4 text-foreground" />
         {client.name}
       {/snippet}
     </ResponsiveSelect>

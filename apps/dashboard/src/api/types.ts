@@ -460,6 +460,7 @@ export interface SessionLineageView {
 }
 
 export interface SessionCreationOption {
+  client_key: string;
   model_catalog_key?: string | null;
   id: string;
   name: string;

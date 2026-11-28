@@ -731,7 +731,7 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
           (entry) =>
             entry.enabled &&
             entry.client_type === option.client_type &&
-            (entry.client_type !== "acp" || entry.client_key === option.metadata.acp_agent_id),
+            entry.client_key === option.client_key,
         );
         return client ? [{ ...option, version: client.version }] : [];
       }),

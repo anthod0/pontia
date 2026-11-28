@@ -52,7 +52,7 @@
           class="grid min-w-24 min-h-16 shrink-0 justify-items-center gap-1 rounded-item border px-3 py-2 aria-checked:border-primary aria-checked:bg-selected"
           onclick={() => switchClient(o.id)}
         >
-          <ClientIcon clientType={o.client_type} acpAgentId={o.metadata.acp_agent_id} class="size-6" />{o.name}
+          <ClientIcon clientType={o.client_type} clientKey={o.client_key} class="size-6" />{o.name}
         </button>
       {/each}
     </div>

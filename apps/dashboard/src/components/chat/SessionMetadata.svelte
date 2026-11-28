@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { sessionClientKey, dashboardClient } from '../../clients'
   import { t } from '$lib/i18n';
   import AtIcon from 'phosphor-svelte/lib/AtIcon'
   import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
@@ -21,8 +22,8 @@
   }
 
   let { session, gitStatus, metadataItems, metadataSummary, onRefreshGitStatus }: Props = $props()
-  const acpAgentId = $derived((session.acp as { agent_id?: string } | undefined)?.agent_id)
-  const systemPromptInjected = $derived((session.acp as { system_prompt_injected?: boolean } | undefined)?.system_prompt_injected)
+  const clientKey = $derived(sessionClientKey(session))
+  const systemPromptInjected = $derived(dashboardClient(session.client_type)?.instructionsInjected?.(session))
   let sessionDetailsOpen = $state(false)
   const fields = [
     { key: 'client', icon: null },
@@ -47,7 +48,7 @@
           {#if index > 0}<span class="mx-1.5 inline-block h-2.5 border-l align-middle" aria-hidden="true"></span>{/if}
           <span class="inline-flex max-w-full items-center gap-1 align-middle text-muted-foreground" title={field.item.title}>
             {#if field.key === 'client'}
-              <ClientIcon clientType={session.client_type} {acpAgentId} class="size-[13px]" />
+              <ClientIcon clientType={session.client_type} {clientKey} class="size-[13px]" />
             {:else if field.icon && field.key !== 'context'}
               <field.icon class="size-[13px] shrink-0" aria-hidden="true" />
             {/if}
@@ -68,7 +69,7 @@
       <div class="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-2">
         <dt class="flex items-start justify-center text-muted-foreground">
           {#if field.key === 'client'}
-            <ClientIcon clientType={session.client_type} {acpAgentId} class="size-4" />
+            <ClientIcon clientType={session.client_type} {clientKey} class="size-4" />
             <span class="sr-only">{field.item.label}</span>
           {:else if field.icon}
             <field.icon class="size-4" aria-label={field.item.label} />
