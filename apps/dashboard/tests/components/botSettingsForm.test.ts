@@ -121,6 +121,7 @@ test("switching clients clears the selection and loads that client catalog", asy
   await fireEvent.keyDown(client, { key: "End" });
   await fireEvent.keyDown(client, { key: "Enter" });
   await waitFor(() => expect(submit).toBeDisabled());
+  expect(save).not.toHaveBeenCalled();
   await fireEvent.click(screen.getByLabelText("Model"));
   await fireEvent.click(await screen.findByLabelText("Other model"));
   await waitFor(() => expect(submit).toBeEnabled());
@@ -140,6 +141,32 @@ test("switching clients clears the selection and loads that client catalog", asy
       "bot-one",
     ),
   );
+});
+
+test("opens the client picker without submitting the Bot form on mobile", async () => {
+  const matchMedia = window.matchMedia;
+  window.matchMedia = ((query: string) => ({
+    ...matchMedia(query),
+    matches: query.includes("max-width"),
+  })) as typeof matchMedia;
+  const save = vi.spyOn(testDevice.api, "saveBot").mockResolvedValue(bot);
+  const onsaved = vi.fn();
+
+  try {
+    render(BotSettingsForm, { bot, onsaved });
+    const trigger = await screen.findByLabelText("Agent client");
+    expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
+    await fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(await screen.findByRole("group", { name: "Agent client" })).toBeVisible();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.getByRole("group", { name: "Agent client" })).toBeVisible();
+    expect(save).not.toHaveBeenCalled();
+    expect(onsaved).not.toHaveBeenCalled();
+  } finally {
+    window.matchMedia = matchMedia;
+  }
 });
 
 test("retries a failed catalog request and requires an available model before saving", async () => {

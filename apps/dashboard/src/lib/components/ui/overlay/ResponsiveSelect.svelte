@@ -49,7 +49,7 @@
 
 {#if mobileStack || mobile.current}
   <Sheet.Root bind:open onOpenChange={() => search = ''}>
-    <Sheet.Trigger {id} {disabled} {title} aria-label={label} data-size="default" class={cn(Select.selectTriggerClass, triggerClass, 'min-h-11')}>
+    <Sheet.Trigger {id} type="button" {disabled} {title} aria-label={label} data-size="default" class={cn(Select.selectTriggerClass, triggerClass, 'min-h-11')}>
       {@render trigger()}<CaretDownIcon class="size-4 text-muted-foreground" />
     </Sheet.Trigger>
     <BottomSheet dismiss={() => open = false}>
