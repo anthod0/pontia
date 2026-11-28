@@ -206,7 +206,7 @@
   "security_model": "Security model",
   "open_source_title": "Every part of Pontia is open source.",
   "open_source_text": "The daemon, Dashboard, encryption, relay, and Cloud live in one public repository. See exactly what runs on your device.",
-  "view_on_github": "View on GitHub",
+  "star_on_github": "Star on GitHub",
   "open_source_repository_label": "Pontia source code",
   "open_source_role_daemon": "Device daemon",
   "open_source_role_encryption": "Encryption protocol",

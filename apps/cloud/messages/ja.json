@@ -206,7 +206,7 @@
   "security_model": "セキュリティモデル",
   "open_source_title": "Pontia はすべてオープンソースです。",
   "open_source_text": "デーモン、Dashboard、暗号化、リレー、Cloud はひとつの公開リポジトリにあります。デバイスで何が動いているかを正確に確認できます。",
-  "view_on_github": "GitHub で見る",
+  "star_on_github": "GitHub でスターを付ける",
   "open_source_repository_label": "Pontia のソースコード",
   "open_source_role_daemon": "デバイスデーモン",
   "open_source_role_encryption": "暗号化プロトコル",

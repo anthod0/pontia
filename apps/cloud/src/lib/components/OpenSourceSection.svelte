@@ -1,6 +1,7 @@
 <script lang="ts">
 	import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon';
 	import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon';
+	import StarIcon from 'phosphor-svelte/lib/StarIcon';
 	import { reveal } from '$lib/reveal';
 	import { m } from '$lib/paraglide/messages';
 	import { localizeHref } from '$lib/paraglide/runtime';
@@ -22,7 +23,7 @@
 			<h2 id="open-source-title">{m.open_source_title()}</h2>
 			<p class="lede">{m.open_source_text()}</p>
 			<div class="actions">
-				<a class="button" href={repository} target="_blank" rel="noreferrer">{m.view_on_github()}<ArrowUpRightIcon size={16} /></a>
+				<a class="button" href={repository} target="_blank" rel="noreferrer"><StarIcon size={16} aria-hidden="true" />{m.star_on_github()}<ArrowUpRightIcon size={16} /></a>
 				<a class="text-link" href={localizeHref('/docs/security')}>{m.security_model()}<ArrowRightIcon size={12} /></a>
 			</div>
 		</div>
