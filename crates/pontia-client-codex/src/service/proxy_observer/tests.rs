@@ -1,3 +1,4 @@
+use pontia_agent_control::client_contract::conformance;
 mod environment;
 mod lifecycle;
 
@@ -372,6 +373,8 @@ async fn cli_start_and_first_input_join_existing_turn_observation() {
     .unwrap();
     f.complete(native).await;
     assert_eq!(f.session(native, "idle").await, session);
+    conformance::assert_first_ready(&f.app, &session).await;
+    conformance::assert_completed_turn_boundaries(&f.app, &session, &turn_id).await;
     let turns: Vec<(String, String)> =
         sqlx::query_as("SELECT state,input_summary FROM turns WHERE session_id=?")
             .bind(&session)

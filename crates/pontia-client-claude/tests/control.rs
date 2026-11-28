@@ -1,3 +1,4 @@
+use pontia_agent_control::client_contract::conformance::{self, CapabilityDenial};
 use pontia_agent_control::{
     AgentControl, CreateSessionRequest, SendMode, SendOutcome,
     client_contract::ClientServicePhase,
@@ -2608,15 +2609,12 @@ async fn first_ready_reconnects_before_commit_and_after_a_lost_receipt() {
         let session = h.create(input).await;
         h.wait_inputs(&session, 1).await;
         if input == "hold first ready" {
-            let capabilities = h
-                .app
-                .queries()
-                .get_session(&session)
-                .await
-                .unwrap()
-                .unwrap()
-                .capabilities;
-            assert!(!capabilities.reasoning_effort_control);
+            conformance::assert_reasoning_effort_denied(
+                &h.app,
+                &session,
+                CapabilityDenial::Unavailable,
+            )
+            .await;
         }
         if starting {
             sqlx::query("UPDATE sessions SET state='starting' WHERE session_id=?")
@@ -2643,15 +2641,9 @@ async fn first_ready_reconnects_before_commit_and_after_a_lost_receipt() {
         h.wait_session(&session, "idle").await;
         h.gate(&session, 1, "start");
         h.gate(&session, 1, "finish");
-        h.wait_states(&session, &["completed"]).await;
-        let ready: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM events WHERE session_id=? AND event_type='session.ready'",
-        )
-        .bind(&session)
-        .fetch_one(&h.app.db())
-        .await
-        .unwrap();
-        assert_eq!(ready, 1);
+        let turns = h.wait_states(&session, &["completed"]).await;
+        conformance::assert_first_ready(&h.app, &session).await;
+        conformance::assert_completed_turn_boundaries(&h.app, &session, &turns[0].0).await;
         h.stop().await;
     }
 }

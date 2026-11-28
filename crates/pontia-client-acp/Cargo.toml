@@ -21,6 +21,7 @@ tracing = "0.1.44"
 time = { workspace = true, features = ["parsing"] }
 
 [dev-dependencies]
+pontia-agent-control = { workspace = true, features = ["conformance"] }
 sqlx.workspace = true
 pontia-storage-sqlite.workspace = true
 tempfile = "3.27.0"

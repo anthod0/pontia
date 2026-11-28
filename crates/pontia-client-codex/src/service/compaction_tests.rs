@@ -1,5 +1,6 @@
 use crate::{CodexObserver, runtime::CodexRuntime};
 use futures_util::{SinkExt, StreamExt};
+use pontia_agent_control::client_contract::conformance::{self, CapabilityDenial};
 use pontia_agent_control::{
     AgentBindingService, AgentControl, CreateSessionRequest, UpsertAgentBindingRequest,
     clients::ClientRegistry,
@@ -459,6 +460,12 @@ async fn rejected_compaction_can_retry_and_unavailable_control_preserves_observa
     fixture.shutdown.send(true).unwrap();
     fixture.observer.await.unwrap();
     CodexRuntime::shutdown(fixture.root.path()).await;
+    conformance::assert_reasoning_effort_denied(
+        &fixture.app,
+        &fixture.sessions[0],
+        CapabilityDenial::Unavailable,
+    )
+    .await;
     let session = fixture
         .app
         .queries()

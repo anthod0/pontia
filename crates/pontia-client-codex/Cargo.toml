@@ -24,6 +24,7 @@ tempfile = "3"
 zstd = "0.14.3"
 
 [dev-dependencies]
+pontia-agent-control = { workspace = true, features = ["conformance"] }
 pontia-storage-sqlite.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread"] }
 

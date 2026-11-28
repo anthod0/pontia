@@ -1,5 +1,6 @@
 use super::*;
 use pontia_agent_control::TurnTimelineService;
+use pontia_agent_control::client_contract::conformance;
 use pontia_core::domain::{ProjectionState, TurnState};
 use std::io::Write;
 
@@ -137,6 +138,7 @@ async fn crash_recovery_preserves_facts_and_supports_updates_refresh_pagination_
     append(&path, "user1", None, "user");
     append(&path, "answer1", Some("user1"), "assistant");
     fixture.history_complete(&first, "answer1").await;
+    conformance::assert_completed_turn_boundaries(&fixture.state, "session", &first).await;
     fixture.attach_history(path.clone()).await;
     let crashed = fixture.history_start(Some("answer1")).await;
     append(&path, "crash-user", Some("answer1"), "user");

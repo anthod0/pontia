@@ -1,3 +1,4 @@
+use pontia_agent_control::client_contract::conformance::{self, CapabilityDenial};
 use std::{collections::BTreeMap, time::Duration};
 
 use pontia_agent_control::{
@@ -1252,9 +1253,8 @@ async fn final_response_without_updates_confirms_started_before_terminal() {
     h.release("update-1");
     h.release("release-1");
     h.wait_turn(&session, &turn.turn_id, "completed").await;
-    let events: Vec<String> = sqlx::query_scalar("SELECT event_type FROM events WHERE turn_id=? AND event_type IN ('turn.started','turn.completed') ORDER BY rowid")
-        .bind(&turn.turn_id).fetch_all(&h.app.db()).await.unwrap();
-    assert_eq!(events, ["turn.started", "turn.completed"]);
+    conformance::assert_first_ready(&h.app, &session).await;
+    conformance::assert_completed_turn_boundaries(&h.app, &session, &turn.turn_id).await;
     h.stop().await;
 }
 

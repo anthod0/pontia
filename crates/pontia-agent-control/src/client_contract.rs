@@ -1,4 +1,6 @@
 pub mod auth;
+#[cfg(feature = "conformance")]
+pub mod conformance;
 mod detection;
 pub mod install;
 pub use detection::{ClientDetection, DetectionContext, DetectionStatus};

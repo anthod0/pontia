@@ -1,5 +1,6 @@
 mod support;
 use pontia_agent_control::AgentControl;
+use pontia_agent_control::client_contract::conformance::{self, CapabilityDenial};
 use pontia_agent_control::ipc::ControlListener;
 use pontia_agent_control::ipc::rpc::PROTOCOL_VERSION;
 use pontia_client_pi::ipc::serve_connection;
@@ -441,26 +442,8 @@ async fn reasoning_effort_control_projects_only_the_pi_confirmed_value() {
     let (state, root) = state().await;
     let (pi, mut requests) = client(&state);
     let (session, runtime) = register(&pi, root.path()).await;
-    let view = state
-        .queries()
-        .get_session(&session)
-        .await
-        .unwrap()
-        .unwrap();
-    assert!(!view.capabilities.reasoning_effort_control);
-    let commands = state.session_commands();
-    let set_effort = || {
-        commands.set_reasoning_effort(
-            &session,
-            pontia_agent_control::SetSessionReasoningEffortRequest {
-                reasoning_effort: "max".into(),
-            },
-        )
-    };
-    assert!(matches!(
-        set_effort().await,
-        Err(pontia_core::Error::Unsupported(_))
-    ));
+    conformance::assert_reasoning_effort_denied(&state, &session, CapabilityDenial::Unsupported)
+        .await;
     pi.call(
         "event.report",
         fact(
@@ -472,6 +455,7 @@ async fn reasoning_effort_control_projects_only_the_pi_confirmed_value() {
     )
     .await
     .unwrap();
+    conformance::assert_first_ready(&state, &session).await;
     pi.call(
         "event.report",
         fact(
@@ -491,7 +475,13 @@ async fn reasoning_effort_control_projects_only_the_pi_confirmed_value() {
         .unwrap();
     assert!(view.capabilities.reasoning_effort_control);
 
-    let control = set_effort();
+    let commands = state.session_commands();
+    let control = commands.set_reasoning_effort(
+        &session,
+        pontia_agent_control::SetSessionReasoningEffortRequest {
+            reasoning_effort: "max".into(),
+        },
+    );
     let native = async {
         let request = requests.recv().await.unwrap();
         assert_eq!(request.method, "set_reasoning_effort");
@@ -553,10 +543,8 @@ async fn reasoning_effort_control_projects_only_the_pi_confirmed_value() {
     })
     .await
     .unwrap();
-    assert!(matches!(
-        set_effort().await,
-        Err(pontia_core::Error::Unavailable(_))
-    ));
+    conformance::assert_reasoning_effort_denied(&state, &session, CapabilityDenial::Unavailable)
+        .await;
 }
 
 #[tokio::test]

@@ -380,26 +380,8 @@ async fn connected_sessions_expose_and_apply_confirmed_reasoning_effort() {
 async fn sessions_without_a_thought_level_selector_cannot_change_reasoning_effort() {
     let h = Harness::new(&[("ACP_MODELS", "flat")]).await;
     let session = h.create("first").await.unwrap();
-    let view = h
-        .app
-        .queries()
-        .get_session(&session)
-        .await
-        .unwrap()
-        .unwrap();
-    assert!(!view.capabilities.reasoning_effort_control);
-    assert!(matches!(
-        h.app
-            .session_commands()
-            .set_reasoning_effort(
-                &session,
-                pontia_agent_control::SetSessionReasoningEffortRequest {
-                    reasoning_effort: "high".into(),
-                },
-            )
-            .await,
-        Err(Error::Unsupported(_))
-    ));
+    conformance::assert_reasoning_effort_denied(&h.app, &session, CapabilityDenial::Unsupported)
+        .await;
     assert_eq!(h.requests("session/set_config_option"), 0);
     h.stop().await;
 }

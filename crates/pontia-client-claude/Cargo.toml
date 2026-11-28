@@ -15,6 +15,7 @@ tracing = "0.1.44"
 tempfile = "3"
 
 [dev-dependencies]
+pontia-agent-control = { workspace = true, features = ["conformance"] }
 sqlx.workspace = true
 pontia-version.workspace = true
 pontia-storage-sqlite.workspace = true
