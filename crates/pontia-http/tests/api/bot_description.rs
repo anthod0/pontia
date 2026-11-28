@@ -24,6 +24,10 @@ async fn creating_a_bot_opens_an_idle_chat_in_the_requested_language() {
             Some("en"),
             "Hi, I'm Atlas. What would you like me to help with?",
         ),
+        (
+            Some("ja"),
+            "こんにちは、Atlasです。何をお手伝いしましょうか？",
+        ),
         (Some("zh-CN"), "你好，我是 Atlas。你想让我帮你做什么？"),
     ] {
         let mut config = configuration();

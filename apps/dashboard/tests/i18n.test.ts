@@ -1,6 +1,7 @@
 import { get } from "svelte/store";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import en from "../src/lib/i18n/en.json";
+import ja from "../src/lib/i18n/ja.json";
 import zhCN from "../src/lib/i18n/zh-CN.json";
 
 beforeEach(() => {
@@ -18,6 +19,8 @@ test.each([
   [["zh-Hans-SG", "en"], "zh-CN"],
   [["en-GB", "zh-CN"], "en"],
   [["fr-FR", "zh-CN"], "zh-CN"],
+  [["ja"], "ja"],
+  [["fr-FR", "ja-JP", "en"], "ja"],
   [["fr-FR"], "en"],
 ])("resolves browser preferences %j to %s", async (languages, expected) => {
   vi.spyOn(navigator, "languages", "get").mockReturnValue(languages as string[]);
@@ -26,16 +29,19 @@ test.each([
   expect(get(currentLocale)).toBe(expected);
 });
 
-test("saved choice overrides the browser and survives initialization", async () => {
-  vi.spyOn(navigator, "languages", "get").mockReturnValue(["en-US"]);
-  localStorage.setItem("pontia.locale", "zh-CN");
-  const { currentLocale, languagePreference } = await import("../src/lib/i18n");
-  expect(get(currentLocale)).toBe("zh-CN");
-  expect(get(languagePreference)).toBe("zh-CN");
-  languagePreference.set("en");
-  expect(localStorage.getItem("pontia.locale")).toBe("en");
-  expect(get(currentLocale)).toBe("en");
-});
+test.each(["zh-CN", "ja"])(
+  "saved choice %s overrides the browser and survives initialization",
+  async (saved) => {
+    vi.spyOn(navigator, "languages", "get").mockReturnValue(["en-US"]);
+    localStorage.setItem("pontia.locale", saved);
+    const { currentLocale, languagePreference } = await import("../src/lib/i18n");
+    expect(get(currentLocale)).toBe(saved);
+    expect(get(languagePreference)).toBe(saved);
+    languagePreference.set("en");
+    expect(localStorage.getItem("pontia.locale")).toBe("en");
+    expect(get(currentLocale)).toBe("en");
+  },
+);
 
 test("following the browser removes the override and responds to browser language changes", async () => {
   const languages = vi.spyOn(navigator, "languages", "get").mockReturnValue(["zh-CN"]);
@@ -60,8 +66,11 @@ test("unrecognized stored preference uses browser detection", async () => {
   expect(get(currentLocale)).toBe("zh-CN");
 });
 
-test("both catalogs contain the same keys and interpolation parameters", () => {
-  expect(Object.keys(zhCN).sort()).toEqual(Object.keys(en).sort());
+test.each([
+  ["zh-CN", zhCN],
+  ["ja", ja],
+] as const)("%s matches English keys and interpolation parameters", (_locale, catalog) => {
+  expect(Object.keys(catalog).sort()).toEqual(Object.keys(en).sort());
   const parameters = (message: string) =>
     [
       ...new Set(
@@ -71,6 +80,6 @@ test("both catalogs contain the same keys and interpolation parameters", () => {
       ),
     ].sort();
   for (const key of Object.keys(en) as (keyof typeof en)[]) {
-    expect(parameters(zhCN[key]), key).toEqual(parameters(en[key]));
+    expect(parameters(catalog[key]), key).toEqual(parameters(en[key]));
   }
 });

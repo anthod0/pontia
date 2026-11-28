@@ -1,6 +1,6 @@
 <script lang="ts">
   import CommonSettings from '$dashboard-mode/SettingsCommonPage.svelte'
-  import { t, languagePreference, type LanguagePreference } from '$lib/i18n'
+  import { t, languages, languagePreference, type LanguagePreference } from '$lib/i18n'
   import { themePreference, type ThemePreference } from '$lib/theme'
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
 </script>
@@ -29,20 +29,16 @@
         <ToggleGroup.Root
           type="single"
           variant="outline"
+          class="flex-wrap"
           value={$languagePreference}
           aria-label={$t('settings.language')}
           onValueChange={(value) => {
             if (value) languagePreference.set(value as LanguagePreference)
           }}
         >
-          {#each ['system', 'zh-CN', 'en'] as language (language)}
-            <ToggleGroup.Item value={language} class="flex-1"
-              >{language === 'system'
-                ? $t('settings.browserLanguage')
-                : language === 'en'
-                  ? 'English'
-                  : '简体中文'}</ToggleGroup.Item
-            >
+          <ToggleGroup.Item value="system" class="flex-1">{$t('settings.browserLanguage')}</ToggleGroup.Item>
+          {#each languages as language (language.value)}
+            <ToggleGroup.Item value={language.value} class="flex-1">{language.label}</ToggleGroup.Item>
           {/each}
         </ToggleGroup.Root>
         <p class="text-xs text-muted-foreground">{$t('settings.languageHint')}</p>

@@ -25,6 +25,11 @@ test("changing language preserves the editor and draft while updating the docume
   expect(editor.textContent).toBe("Keep this unsent draft");
 
   screen.getByRole("combobox", { name: "语言" }).focus();
+  await user.keyboard("{Enter}{Home}{ArrowDown}{ArrowDown}{Enter}");
+  await waitFor(() => expect(document.documentElement.lang).toBe("ja"));
+  expect(localStorage.getItem("pontia.locale")).toBe("ja");
+
+  screen.getByRole("combobox", { name: "言語" }).focus();
   await user.keyboard("{Enter}{End}{Enter}");
   await waitFor(() => expect(document.documentElement.lang).toBe("en"));
   expect(editor.textContent).toBe("Keep this unsent draft");

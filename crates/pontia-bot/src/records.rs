@@ -22,12 +22,15 @@ pub enum Locale {
     En,
     #[serde(rename = "zh-CN")]
     ZhCn,
+    #[serde(rename = "ja")]
+    Ja,
 }
 
 impl Locale {
     fn greeting(self, name: &str) -> String {
         match self {
             Self::En => format!("Hi, I'm {name}. What would you like me to help with?"),
+            Self::Ja => format!("こんにちは、{name}です。何をお手伝いしましょうか？"),
             Self::ZhCn => format!("你好，我是 {name}。你想让我帮你做什么？"),
         }
     }

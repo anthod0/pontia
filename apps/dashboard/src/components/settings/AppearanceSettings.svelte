@@ -1,6 +1,6 @@
 <script lang="ts">
   import ResponsiveSelect from '$lib/components/ui/overlay/ResponsiveSelect.svelte'
-  import { t, languagePreference, type LanguagePreference } from '$lib/i18n';
+  import { t, languages, languagePreference, type LanguagePreference } from '$lib/i18n';
   import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon'
   import MoonIcon from 'phosphor-svelte/lib/MoonIcon'
   import SunIcon from 'phosphor-svelte/lib/SunIcon'
@@ -13,10 +13,9 @@
     { value: 'dark', label: $t('settings.dark'), icon: MoonIcon },
   ]
 
-  $: languages = [
+  $: languageOptions = [
     { value: 'system', label: $t('settings.browserLanguage') },
-    { value: 'zh-CN', label: '简体中文' },
-    { value: 'en', label: 'English' },
+    ...languages,
   ]
 
   function select(value: string): void {
@@ -48,9 +47,9 @@
     </div>
     <ResponsiveSelect value={$languagePreference} onValueChange={(value) => languagePreference.set(value as LanguagePreference)}
       label={$t('settings.language')} triggerClass="w-40"
-      options={languages} keyOf={language => language.value} labelOf={language => language.label}>
+      options={languageOptions} keyOf={language => language.value} labelOf={language => language.label}>
       {#snippet trigger()}
-        {languages.find((language) => language.value === $languagePreference)?.label}
+        {languageOptions.find((language) => language.value === $languagePreference)?.label}
       {/snippet}
       {#snippet option(language)}{language.label}{/snippet}
     </ResponsiveSelect>

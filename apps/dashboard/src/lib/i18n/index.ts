@@ -1,10 +1,16 @@
 import { derived, get, writable } from "svelte/store";
 import { addMessages, init, locale, format } from "svelte-i18n";
 import en from "./en.json";
+import ja from "./ja.json";
 import zhCN from "./zh-CN.json";
 import { readStoredWith, writeStored } from "../storage";
 
-export type Locale = "en" | "zh-CN";
+export const languages = [
+  { value: "zh-CN", label: "简体中文" },
+  { value: "ja", label: "日本語" },
+  { value: "en", label: "English" },
+] as const;
+export type Locale = (typeof languages)[number]["value"];
 export type LanguagePreference = "system" | Locale;
 export type MessageKey = keyof typeof en;
 export type Translator = (
@@ -15,20 +21,21 @@ export type Translator = (
 const storageKey = "pontia.locale";
 
 const preference = writable<LanguagePreference>(
-  readStoredWith(storageKey, (saved) =>
-    saved === "en" || saved === "zh-CN" ? saved : undefined,
-  ) ?? "system",
+  readStoredWith(storageKey, (saved) => languages.find(({ value }) => value === saved)?.value) ??
+    "system",
 );
 
 function browserLocale(): Locale {
   for (const language of typeof navigator === "undefined" ? [] : navigator.languages) {
     if (/^zh(?:-|$)/i.test(language)) return "zh-CN";
+    if (/^ja(?:-|$)/i.test(language)) return "ja";
     if (/^en(?:-|$)/i.test(language)) return "en";
   }
   return "en";
 }
 
 addMessages("en", en);
+addMessages("ja", ja);
 addMessages("zh-CN", zhCN);
 init({ fallbackLocale: "en", initialLocale: resolveLocale(get(preference)) });
 
