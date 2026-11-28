@@ -65,8 +65,10 @@ pub struct SessionView {
 
 pub(crate) fn row_to_view(row: SessionRow) -> Result<SessionView> {
     let mut metadata: Value = serde_json::from_str(&row.metadata)?;
-    if let Some(object) = metadata.as_object_mut() {
-        object.remove("PONTIA_BOT_TOOL_TOKEN");
+    if let Some(object) = metadata.as_object_mut()
+        && let Some(key) = &row.credential_env
+    {
+        object.remove(key);
     }
     let context_usage = metadata
         .get("context_usage")
@@ -108,4 +110,35 @@ pub(crate) fn row_to_view(row: SessionRow) -> Result<SessionView> {
         updated_at: row.updated_at,
         metadata,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ControlQueryService;
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn session_view_redacts_only_its_configured_credential_key() {
+        let pool = pontia_storage_sqlite::connect_sqlite("sqlite::memory:")
+            .await
+            .unwrap();
+        pontia_storage_sqlite::run_migrations(&pool).await.unwrap();
+        let queries = ControlQueryService::new(pool.clone());
+        let metadata = json!({"FIRST_KEY": "first", "SECOND_KEY": "second"});
+        for (session, key, expected) in [
+            ("first", Some("FIRST_KEY"), json!({"SECOND_KEY": "second"})),
+            ("second", Some("SECOND_KEY"), json!({"FIRST_KEY": "first"})),
+            ("unconfigured", None, metadata.clone()),
+        ] {
+            sqlx::query("INSERT INTO sessions(session_id, client_type, state, credential_env, metadata) VALUES (?, 'generic', 'idle', ?, ?)")
+                .bind(session)
+                .bind(key)
+                .bind(&metadata)
+                .execute(&pool)
+                .await
+                .unwrap();
+            let view = queries.get_session(session).await.unwrap().unwrap();
+            assert_eq!(view.metadata, expected);
+        }
+    }
 }

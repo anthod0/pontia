@@ -170,7 +170,7 @@ impl SqliteSessionRepository {
                     r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
                               s.state, s.current_turn_id, s.workspace_id,
                               COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
-                              s.pinned_at, s.archived_at, s.metadata, s.created_at, s.updated_at
+                              s.pinned_at, s.archived_at, s.credential_env, s.metadata, s.created_at, s.updated_at
                        FROM sessions s
                        LEFT JOIN workspaces w ON w.workspace_id = s.workspace_id
                        WHERE (s.application_id IS NULL OR s.workspace_id IS NOT NULL OR s.workspace_ref IS NULL)
@@ -190,7 +190,7 @@ impl SqliteSessionRepository {
                     r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
                               s.state, s.current_turn_id, s.workspace_id,
                               COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
-                              s.pinned_at, s.archived_at, s.metadata, s.created_at, s.updated_at
+                              s.pinned_at, s.archived_at, s.credential_env, s.metadata, s.created_at, s.updated_at
                        FROM sessions s
                        LEFT JOIN workspaces w ON w.workspace_id = s.workspace_id
                        WHERE (s.application_id IS NULL OR s.workspace_id IS NOT NULL OR s.workspace_ref IS NULL)
@@ -210,7 +210,7 @@ impl SqliteSessionRepository {
                     r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
                               s.state, s.current_turn_id, s.workspace_id,
                               COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
-                              s.pinned_at, s.archived_at, s.metadata, s.created_at, s.updated_at
+                              s.pinned_at, s.archived_at, s.credential_env, s.metadata, s.created_at, s.updated_at
                        FROM sessions s INDEXED BY idx_sessions_active_updated
                        LEFT JOIN workspaces w ON w.workspace_id = s.workspace_id
                        WHERE (s.application_id IS NULL OR s.workspace_id IS NOT NULL OR s.workspace_ref IS NULL)
@@ -231,7 +231,7 @@ impl SqliteSessionRepository {
                     r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
                                   s.state, s.current_turn_id, s.workspace_id,
                                   COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
-                                  s.pinned_at, s.archived_at, s.metadata, s.created_at, s.updated_at
+                                  s.pinned_at, s.archived_at, s.credential_env, s.metadata, s.created_at, s.updated_at
                            FROM sessions s INDEXED BY idx_sessions_unarchived_updated
                            LEFT JOIN workspaces w ON w.workspace_id = s.workspace_id
                            WHERE (s.application_id IS NULL OR s.workspace_id IS NOT NULL OR s.workspace_ref IS NULL)
@@ -246,7 +246,7 @@ impl SqliteSessionRepository {
                     r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
                                   s.state, s.current_turn_id, s.workspace_id,
                                   COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
-                                  s.pinned_at, s.archived_at, s.metadata, s.created_at, s.updated_at
+                                  s.pinned_at, s.archived_at, s.credential_env, s.metadata, s.created_at, s.updated_at
                            FROM sessions s INDEXED BY idx_sessions_unarchived_updated
                            LEFT JOIN workspaces w ON w.workspace_id = s.workspace_id
                            WHERE (s.application_id IS NULL OR s.workspace_id IS NOT NULL OR s.workspace_ref IS NULL)
@@ -265,7 +265,7 @@ impl SqliteSessionRepository {
                     r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
                                   s.state, s.current_turn_id, s.workspace_id,
                                   COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
-                                  s.pinned_at, s.archived_at, s.metadata, s.created_at, s.updated_at
+                                  s.pinned_at, s.archived_at, s.credential_env, s.metadata, s.created_at, s.updated_at
                            FROM sessions s INDEXED BY idx_sessions_workspace_unarchived_updated
                            LEFT JOIN workspaces w ON w.workspace_id = s.workspace_id
                            WHERE s.workspace_id = ? AND s.archived_at IS NULL
@@ -280,7 +280,7 @@ impl SqliteSessionRepository {
                     r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
                                   s.state, s.current_turn_id, s.workspace_id,
                                   COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
-                                  s.pinned_at, s.archived_at, s.metadata, s.created_at, s.updated_at
+                                  s.pinned_at, s.archived_at, s.credential_env, s.metadata, s.created_at, s.updated_at
                            FROM sessions s INDEXED BY idx_sessions_workspace_unarchived_updated
                            LEFT JOIN workspaces w ON w.workspace_id = s.workspace_id
                            WHERE s.workspace_id = ? AND s.archived_at IS NULL
@@ -336,7 +336,7 @@ impl SqliteSessionRepository {
                       s.state, s.current_turn_id, s.workspace_id,
                       COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
                       s.pinned_at, s.archived_at,
-                      s.metadata, s.created_at, s.updated_at
+                      s.credential_env, s.metadata, s.created_at, s.updated_at
                FROM sessions s
                LEFT JOIN workspaces w ON w.workspace_id = s.workspace_id
                WHERE s.session_id = ?"#,

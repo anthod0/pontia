@@ -76,7 +76,7 @@ async fn get_session_redacts_bot_tool_token() {
         "model":"test-model",
         "PONTIA_BOT_TOOL_TOKEN":"fixture-secret"
     });
-    sqlx::query("INSERT INTO sessions(session_id,client_type,state,metadata) VALUES ('legacy','codex','exited',?)")
+    sqlx::query("INSERT INTO sessions(session_id,client_type,state,credential_env,metadata) VALUES ('legacy','codex','exited','PONTIA_BOT_TOOL_TOKEN',?)")
         .bind(metadata.to_string())
         .execute(&app.db)
         .await
