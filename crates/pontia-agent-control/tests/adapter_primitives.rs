@@ -425,8 +425,9 @@ async fn failure_search_resets_on_ready_and_skips_events_without_a_message() {
 #[tokio::test]
 async fn shared_protocol_gate_accepts_current_version_and_rejects_an_old_peer() {
     use pontia_agent_control::ipc::{
-        protocol::rejection,
-        rpc::{PROTOCOL_VERSION, RpcRequest},
+        protocol::UNSUPPORTED_VERSION,
+        rpc::{MAX_FRAME_BYTES, PROTOCOL_VERSION, RpcPeer},
+        serve_connection,
     };
     let (root, pool) = database().await;
     sqlx::raw_sql(
@@ -442,15 +443,32 @@ async fn shared_protocol_gate_accepts_current_version_and_rejects_an_old_peer() 
     let app = AgentControl::builder(pool, root.path().into())
         .clients(clients)
         .build();
-    let mut request = RpcRequest {
-        id: None,
-        method: "runtime.attach".into(),
-        params: json!({"version":PROTOCOL_VERSION,"session_id":"s","runtime_id":"r"}),
-    };
-    let pid = Some(std::process::id());
-    assert!(rejection(&app, pid, &request).await.is_none());
-    request.params["version"] = json!(1);
-    assert!(rejection(&app, pid, &request).await.is_some());
+    for (method, params, code) in [
+        (
+            "runtime.attach",
+            json!({"version": PROTOCOL_VERSION, "session_id":"s", "runtime_id":"r"}),
+            -32601,
+        ),
+        (
+            "runtime.register",
+            json!({"binding": {"client_type":"generic", "client_session_key":"s"}}),
+            UNSUPPORTED_VERSION,
+        ),
+        (
+            "runtime.attach",
+            json!({"version":1, "session_id":"s", "runtime_id":"r"}),
+            UNSUPPORTED_VERSION,
+        ),
+    ] {
+        let (server, socket) = tokio::net::UnixStream::pair().unwrap();
+        tokio::spawn(serve_connection(app.clone(), server));
+        let (peer, _) = RpcPeer::new(socket);
+        let response = peer
+            .request(method, params, MAX_FRAME_BYTES, false)
+            .await
+            .unwrap();
+        assert_eq!(response["error"]["code"], code);
+    }
     assert_eq!(
         app.queries().session_metadata("s").await.unwrap().unwrap()["incompatible_control_runtime"],
         "r"

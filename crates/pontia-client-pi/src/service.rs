@@ -24,6 +24,24 @@ impl ClientService for PiService {
             "session.get" | "workspaces.list" | "session.context"
         )
     }
+    fn record_protocol_rejection<'a>(
+        &'a self,
+        state: &'a ClientServiceContext,
+        process_id: Option<u32>,
+        request: &'a pontia_agent_control::ipc::rpc::RpcRequest,
+    ) -> ClientOperation<'a, ()> {
+        Box::pin(async move {
+            let _guard = self.connections.lock_identity().await;
+            pontia_agent_control::ipc::protocol::record_rejection(
+                state,
+                request,
+                process_id,
+                Some(crate::SPEC.client_type),
+                async |session, runtime| self.connections.connected_to(session, runtime).await,
+            )
+            .await
+        })
+    }
     fn connect(
         &self,
         state: ClientServiceContext,
@@ -32,20 +50,11 @@ impl ClientService for PiService {
         first: pontia_agent_control::ipc::rpc::RpcRequest,
         requests: pontia_agent_control::ipc::rpc::Requests,
     ) -> ClientOperation<'_, ()> {
-        let connections = self.connections.clone();
         Box::pin(async move {
-            connections
+            self.connections
                 .ensure_started(state.store(), state.pontia_home().into())
                 .await;
-            crate::ipc::serve_peer(
-                state,
-                connections,
-                process_id,
-                crate::rpc::PiRpcPeer::from_rpc(peer),
-                Some(first),
-                requests,
-            )
-            .await;
+            crate::ipc::serve_peer(state, self, process_id, peer, Some(first), requests).await;
             Ok(())
         })
     }

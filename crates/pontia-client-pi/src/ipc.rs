@@ -36,24 +36,31 @@ pub async fn serve_connection(state: ClientServiceContext, stream: UnixStream) {
         .clients()
         .get("pi")
         .and_then(|registration| registration.service.clone());
-    match service {
-        Some(service) => {
-            let _ = service
-                .connect(state, process_id, peer, first, requests)
-                .await;
-        }
-        None => peer.close(),
-    }
+    let Some(service) = service else {
+        peer.close();
+        return;
+    };
+    let Some(first) =
+        protocol::accept_request(&state, Some(service.as_ref()), process_id, &peer, first).await
+    else {
+        peer.close();
+        return;
+    };
+    let _ = service
+        .connect(state, process_id, peer, first, requests)
+        .await;
 }
 
 pub(crate) async fn serve_peer(
     state: ClientServiceContext,
-    connections: crate::connections::PiConnections,
+    service: &crate::service::PiService,
     process_id: Option<u32>,
-    peer: Arc<PiRpcPeer>,
+    rpc: Arc<pontia_agent_control::ipc::rpc::RpcPeer>,
     mut first: Option<RpcRequest>,
     mut requests: pontia_agent_control::ipc::rpc::Requests,
 ) {
+    let connections = &service.connections;
+    let peer = PiRpcPeer::from_rpc(rpc.clone());
     let _close = ClosePeer(peer.clone());
     let channel = Arc::new(PiChannel {
         process_id,
@@ -67,37 +74,23 @@ pub(crate) async fn serve_peer(
     let mut reads = JoinSet::new();
     loop {
         let request = if let Some(first) = first.take() {
-            Some(first)
+            first
         } else {
-            tokio::select! {
+            let request = tokio::select! {
                 biased;
                 _ = peer.closed() => break,
                 _ = tokio::time::sleep_until(deadline), if registered.is_none() => break,
                 Some(_) = reads.join_next(), if !reads.is_empty() => continue,
                 request = requests.recv() => request,
-            }
+            };
+            let Some(request) = request else { break };
+            let Some(request) =
+                protocol::accept_request(&state, Some(service), process_id, &rpc, request).await
+            else {
+                break;
+            };
+            request
         };
-        let Some(request) = request else { break };
-        if let Some(message) = protocol::rejection_message(&request) {
-            {
-                let _guard = connections.lock_identity().await;
-                if let Err(error) = protocol::record_rejection(
-                    &state,
-                    &request,
-                    process_id,
-                    Some("pi"),
-                    async |session, runtime| connections.connected_to(session, runtime).await,
-                )
-                .await
-                {
-                    tracing::warn!(%error, "Could not record Pi control protocol rejection");
-                }
-            }
-            let _ = peer
-                .reply_error(request.id, protocol::UNSUPPORTED_VERSION, &message)
-                .await;
-            break;
-        }
         if request.id.is_none() {
             continue;
         } // All Pi reports and registration require an acknowledged response.
@@ -152,7 +145,7 @@ pub(crate) async fn serve_peer(
         }
         channel.handling.fetch_add(1, Ordering::SeqCst);
         let reply_guard = ReplyGuard(&channel);
-        let result = dispatch(&state, &connections, &channel, &request, &mut registered).await;
+        let result = dispatch(&state, connections, &channel, &request, &mut registered).await;
         let response = reply_result(&peer, request.id, result).await;
         drop(reply_guard);
         if response.is_err() {

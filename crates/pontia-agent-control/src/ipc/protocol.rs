@@ -1,5 +1,5 @@
-use super::rpc::{PROTOCOL_VERSION, RpcRequest};
-use crate::ClientServiceContext;
+use super::rpc::{PROTOCOL_VERSION, RpcPeer, RpcRequest};
+use crate::{ClientServiceContext, client_contract::ClientService};
 use pontia_core::Result;
 use serde_json::Value;
 use std::ops::RangeInclusive;
@@ -7,13 +7,39 @@ use std::ops::RangeInclusive;
 const SUPPORTED: RangeInclusive<u64> = 8..=PROTOCOL_VERSION as u64;
 pub const UNSUPPORTED_VERSION: i64 = -32012;
 
-pub async fn rejection(
+pub async fn accept_request(
+    state: &ClientServiceContext,
+    service: Option<&dyn ClientService>,
+    process_id: Option<u32>,
+    peer: &RpcPeer,
+    request: RpcRequest,
+) -> Option<RpcRequest> {
+    let Some(message) = rejection_message(&request) else {
+        return Some(request);
+    };
+    let result = match service {
+        Some(service) => {
+            service
+                .record_protocol_rejection(state, process_id, &request)
+                .await
+        }
+        None => record_default_rejection(state, process_id, &request).await,
+    };
+    if let Err(error) = result {
+        tracing::warn!(%error, "Could not record control protocol rejection");
+    }
+    let _ = peer
+        .reply_error(request.id, UNSUPPORTED_VERSION, &message)
+        .await;
+    None
+}
+
+pub(crate) async fn record_default_rejection(
     state: &ClientServiceContext,
     process_id: Option<u32>,
     request: &RpcRequest,
-) -> Option<String> {
-    let message = rejection_message(request)?;
-    let result = record_rejection(
+) -> Result<()> {
+    record_rejection(
         state,
         request,
         process_id,
@@ -37,14 +63,10 @@ pub async fn rejection(
             }
         },
     )
-    .await;
-    if let Err(error) = result {
-        tracing::warn!(%error, "Could not record control protocol rejection");
-    }
-    Some(message)
+    .await
 }
 
-pub fn rejection_message(request: &RpcRequest) -> Option<String> {
+fn rejection_message(request: &RpcRequest) -> Option<String> {
     if !matches!(
         request.method.as_str(),
         "runtime.attach" | "runtime.register"
@@ -102,7 +124,7 @@ pub async fn record_rejection(
         bound_session = crate::AgentBindingService::new(state.db())
             .binding_for_client_session(client, key)
             .await?;
-        // Before first registration, a launched Pi uses the Session ID as its native key.
+        // Before first registration, a launched client can use the Session ID as its native key.
         let session = bound_session
             .as_ref()
             .map_or(key, |b| b.session_id.as_str());

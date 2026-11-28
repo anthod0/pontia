@@ -67,18 +67,15 @@ pub async fn serve_connection(state: AgentControl, stream: UnixStream) {
             })
             .map(|registration| registration.spec.client_type.to_owned()),
     };
-    if client.as_deref() != Some("pi")
-        && let Some(message) = protocol::rejection(&state, process_id, &first).await
-    {
-        let _ = peer
-            .reply_error(first.id, protocol::UNSUPPORTED_VERSION, &message)
-            .await;
-        return;
-    }
     let service = client
         .as_deref()
         .and_then(|client| clients.get(client))
         .and_then(|registration| registration.service.clone());
+    let Some(first) =
+        protocol::accept_request(&state, service.as_deref(), process_id, &peer, first).await
+    else {
+        return;
+    };
     match service {
         Some(service) => {
             if let Err(error) = service

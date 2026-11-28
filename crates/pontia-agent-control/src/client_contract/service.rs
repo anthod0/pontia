@@ -30,6 +30,18 @@ pub trait ClientService: Send + Sync {
         false
     }
 
+    /// Record an incompatible handshake while respecting live connection ownership.
+    fn record_protocol_rejection<'a>(
+        &'a self,
+        state: &'a ClientServiceContext,
+        process_id: Option<u32>,
+        request: &'a crate::ipc::rpc::RpcRequest,
+    ) -> ClientOperation<'a, ()> {
+        Box::pin(crate::ipc::protocol::record_default_rejection(
+            state, process_id, request,
+        ))
+    }
+
     fn connect(
         &self,
         _state: ClientServiceContext,

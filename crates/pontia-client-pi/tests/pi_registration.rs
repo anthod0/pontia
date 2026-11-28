@@ -232,12 +232,19 @@ async fn incompatible_handshake_marks_the_runtime_until_a_supported_attachment()
     .await
     .unwrap();
 
-    for (method, params) in [
+    for (query_first, method, params) in [
         (
+            false,
             "runtime.attach",
             json!({"session_id":session,"runtime_id":runtime,"client_session_key":"native","version":9}),
         ),
         (
+            false,
+            "runtime.register",
+            json!({"version":"8","binding":{"client_type":"pi","client_session_key":"native"}}),
+        ),
+        (
+            true,
             "runtime.register",
             json!({"binding":{"client_type":"pi","client_session_key":"native"}}),
         ),
@@ -248,15 +255,17 @@ async fn incompatible_handshake_marks_the_runtime_until_a_supported_attachment()
             server,
         ));
         let (peer, _) = RpcPeer::new(client);
-        if method == "runtime.register" {
-            peer.request(
-                "session.context",
-                json!({"client_session_key":"native"}),
-                MAX_FRAME_BYTES,
-                false,
-            )
-            .await
-            .unwrap();
+        if query_first {
+            let context = peer
+                .request(
+                    "session.context",
+                    json!({"client_session_key":"native"}),
+                    MAX_FRAME_BYTES,
+                    false,
+                )
+                .await
+                .unwrap();
+            assert_eq!(context["result"]["session_context"]["session_id"], session);
         }
         let response = peer
             .request(method, params, MAX_FRAME_BYTES, false)
