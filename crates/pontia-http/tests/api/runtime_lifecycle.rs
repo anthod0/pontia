@@ -114,7 +114,7 @@ async fn submit_turn(state: AppState, session_id: &str) -> String {
 }
 
 #[tokio::test]
-async fn interrupt_current_turn_returns_capability_unavailable_for_generic_runtime() {
+async fn interrupt_current_turn_returns_unsupported_for_generic_runtime() {
     let _scope = GenericClientTestScope::new().await;
     let (state, _workspace, _pontia_home) = test_state().await;
     let session_id = create_session(state.clone()).await;
@@ -153,7 +153,7 @@ async fn interrupt_current_turn_returns_capability_unavailable_for_generic_runti
 }
 
 #[tokio::test]
-async fn interrupt_specified_turn_returns_capability_unavailable_for_generic_runtime() {
+async fn interrupt_specified_turn_returns_unsupported_for_generic_runtime() {
     let _scope = GenericClientTestScope::new().await;
     let (state, _workspace, _pontia_home) = test_state().await;
     let session_id = create_session(state.clone()).await;

@@ -81,8 +81,10 @@ impl Adapter {
                         let code = match error {
                             Error::Domain(_) => -32602,
                             Error::StateConflict(_)
-                            | Error::CapabilityUnavailable(_)
+                            | Error::Conflict { .. }
+                            | Error::Unsupported(_)
                             | Error::NotFound(_) => -32009,
+                            Error::Unavailable(_) => -32603,
                             _ if permission
                                 && !pontia_agent_control::interactions::transient_storage_error(
                                     &error,

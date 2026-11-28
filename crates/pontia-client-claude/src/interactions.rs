@@ -169,5 +169,5 @@ pub(crate) async fn expire_all(peer: &Peer, state: &mut State) {
 }
 
 fn expired() -> Error {
-    Error::CapabilityUnavailable("Claude Code approval expired".into())
+    Error::StateConflict("Claude Code approval expired".into())
 }

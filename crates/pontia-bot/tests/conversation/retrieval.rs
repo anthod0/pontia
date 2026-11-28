@@ -436,7 +436,7 @@ async fn retrieval_rejects_clients_that_cannot_run_restricted_but_ordinary_helpe
     assert!(matches!(
         result,
         Err(pontia_bot::helpers::HelperError::Control(
-            Error::CapabilityUnavailable(_)
+            Error::Unsupported(_)
         ))
     ));
     assert_eq!(client.session_modes.lock().unwrap().len(), 1);

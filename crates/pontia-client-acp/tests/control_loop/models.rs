@@ -407,10 +407,7 @@ async fn sessions_without_a_thought_level_selector_cannot_change_reasoning_effor
 #[tokio::test]
 async fn kiro_model_discovery_avoids_creating_a_session_it_cannot_delete() {
     let h = Harness::new(&[("ACP_MODELS", "deferred")]).await;
-    assert!(matches!(
-        list(&h).await,
-        Err(Error::CapabilityUnavailable(_))
-    ));
+    assert!(matches!(list(&h).await, Err(Error::Unsupported(_))));
     assert_eq!(h.requests("session/new"), 0);
     h.stop().await;
 }
@@ -449,7 +446,7 @@ async fn probe_timeout_reaps_the_process_without_falling_back() {
     tokio::time::advance(Duration::from_secs(31)).await;
     let result = task.await.unwrap();
     tokio::time::resume();
-    assert!(matches!(result, Err(Error::CapabilityUnavailable(_))));
+    assert!(matches!(result, Err(Error::Unavailable(_))));
     assert_eq!(h.requests("session/new"), 0);
     assert_probe_exited(&h);
     h.stop().await;
@@ -692,7 +689,7 @@ async fn catalog_models_with_incompatible_agent_types_fail_before_native_session
     std::fs::write(h.root.path().join("model-kind"), "grok-build-orchestrator").unwrap();
     assert!(matches!(
         restricted_request(&h, "fast").await,
-        Err(Error::CapabilityUnavailable(_))
+        Err(Error::Unsupported(_))
     ));
     assert_eq!(h.requests("session/new"), 0);
     assert_eq!(h.requests("session/prompt"), 0);

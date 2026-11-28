@@ -39,7 +39,7 @@ impl PiSession {
 
     fn validate_native_session(&self, key: &str, file: Option<&Path>) -> Result<()> {
         let path = file.ok_or_else(|| {
-            Error::CapabilityUnavailable(format!(
+            Error::Unavailable(format!(
                 "cannot resume Pi session {key}: binding has no native session file"
             ))
         })?;
@@ -318,7 +318,7 @@ impl ClientSession for PiSession {
             }
             match control.shutdown(&target.session_id, runtime).await {
                 Ok(()) => Ok(ClientExitOutcome::Requested),
-                Err(error @ Error::CapabilityUnavailable(_)) => {
+                Err(error @ Error::Unavailable(_)) => {
                     let _guard = control.lock_identity().await;
                     target.validate(&events.db()).await?;
                     if control.connected_to(&target.session_id, runtime).await? {
@@ -406,7 +406,9 @@ impl ClientSession for PiSession {
                 .await
             {
                 Ok(available) => Ok(available),
-                Err(Error::StateConflict(_) | Error::CapabilityUnavailable(_)) => Ok(false),
+                Err(Error::StateConflict(_) | Error::Unavailable(_) | Error::Unsupported(_)) => {
+                    Ok(false)
+                }
                 Err(error) => Err(error),
             }
         })
@@ -443,7 +445,7 @@ fn verify_session_file(path: &Path, key: &str) -> Result<()> {
         Ok(serde_json::from_str(&line)?)
     };
     let header = read_header().map_err(|error| {
-        Error::CapabilityUnavailable(format!(
+        Error::Unavailable(format!(
             "cannot resume Pi session from {}: {error}",
             path.display()
         ))

@@ -53,10 +53,10 @@ impl AgentProfile {
             .await?;
         let catalog = result
             .pointer(self.catalog_path)
-            .ok_or_else(|| Error::CapabilityUnavailable("ACP model catalog unavailable".into()))?;
+            .ok_or_else(|| Error::Unavailable("ACP model catalog unavailable".into()))?;
         let id = requested
             .or_else(|| catalog["currentModelId"].as_str())
-            .ok_or_else(|| Error::CapabilityUnavailable("ACP default model unavailable".into()))?;
+            .ok_or_else(|| Error::Unavailable("ACP default model unavailable".into()))?;
         let incompatible = catalog["availableModels"]
             .as_array()
             .and_then(|models| {
@@ -67,7 +67,7 @@ impl AgentProfile {
             .and_then(|model| model.pointer(self.agent_type_path)?.as_str())
             .is_some_and(|kind| !self.allowed_types.contains(&kind));
         if incompatible {
-            return Err(Error::CapabilityUnavailable(format!(
+            return Err(Error::Unsupported(format!(
                 "ACP model {id} has an incompatible type for restricted Sessions"
             )));
         }
@@ -82,7 +82,7 @@ impl AgentProfile {
             )
             .await?;
         if result.pointer(self.profile_path).and_then(Value::as_str) != Some(self.profile_name.1) {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unavailable(
                 "ACP Session did not confirm its restricted profile".into(),
             ));
         }
@@ -90,9 +90,7 @@ impl AgentProfile {
             .pointer(self.model_path)
             .and_then(Value::as_str)
             .ok_or_else(|| {
-                Error::CapabilityUnavailable(
-                    "ACP Session did not report its effective model".into(),
-                )
+                Error::Unavailable("ACP Session did not report its effective model".into())
             })?;
         let verified = self.check_model(peer, Some(model)).await?;
         peer.state.lock().await.verified_model = Some(verified);
@@ -148,7 +146,7 @@ impl SessionPolicy {
             )
             | (_, SessionMode::Default) => {}
             _ => {
-                return Err(Error::CapabilityUnavailable(format!(
+                return Err(Error::Unsupported(format!(
                     "ACP Agent cannot start in {mode:?} mode"
                 )));
             }

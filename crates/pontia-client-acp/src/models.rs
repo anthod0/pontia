@@ -120,7 +120,7 @@ pub(crate) async fn select(
         let _ = tokio::time::timeout(MODEL_OPTIONS_WAIT, available.wait_for(|complete| *complete))
             .await;
         if model.is_some() && current(&peer.state.lock().await.config_options).is_none() {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unavailable(
                 "ACP model options did not arrive".into(),
             ));
         }
@@ -156,7 +156,7 @@ async fn set(
         if resuming {
             return Ok(());
         }
-        return Err(Error::CapabilityUnavailable(format!(
+        return Err(Error::Unsupported(format!(
             "ACP Agent did not provide a {category:?} selector"
         )));
     };

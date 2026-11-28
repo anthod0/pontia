@@ -135,11 +135,7 @@ impl ClientAuth for PiAuth {
         _context: &'a AuthContext,
         _sink: AuthEventSink,
     ) -> ClientOperation<'a, AuthFlowHandle> {
-        Box::pin(async {
-            Err(Error::CapabilityUnavailable(
-                "Pontia does not manage Pi login".into(),
-            ))
-        })
+        Box::pin(async { Err(Error::Unsupported("Pontia does not manage Pi login".into())) })
     }
 
     fn logout<'a>(
@@ -149,7 +145,7 @@ impl ClientAuth for PiAuth {
         _context: &'a AuthContext,
     ) -> ClientOperation<'a, ()> {
         Box::pin(async {
-            Err(Error::CapabilityUnavailable(
+            Err(Error::Unsupported(
                 "Pontia does not manage Pi logout".into(),
             ))
         })
@@ -192,7 +188,7 @@ async fn available_providers(
             continue;
         }
         if response["success"] != true {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unavailable(
                 response["error"]
                     .as_str()
                     .unwrap_or("Pi model listing failed")
@@ -203,9 +199,7 @@ async fn available_providers(
     };
     drop(stdin);
     if !child.wait().await?.success() {
-        return Err(Error::CapabilityUnavailable(
-            "Pi model listing process failed".into(),
-        ));
+        return Err(Error::Unavailable("Pi model listing process failed".into()));
     }
     let mut seen = HashSet::new();
     Ok(models
@@ -289,7 +283,7 @@ fn parse_auth_check(output: &Output, expected_provider: &str) -> Result<AuthChec
         CheckState::Invalid => 2,
     };
     if check.provider != expected_provider || output.status.code() != Some(expected_code) {
-        return Err(Error::CapabilityUnavailable(
+        return Err(Error::Unavailable(
             "Pi authentication check returned an inconsistent result".into(),
         ));
     }

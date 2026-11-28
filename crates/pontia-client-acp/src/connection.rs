@@ -393,19 +393,13 @@ impl AcpAdapter {
                     return Ok(peer);
                 }
                 if child.try_wait()?.is_some() {
-                    return Err(Error::CapabilityUnavailable(
-                        "ACP relay startup failed".into(),
-                    ));
+                    return Err(Error::Unavailable("ACP relay startup failed".into()));
                 }
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
         })
         .await
-        .unwrap_or_else(|_| {
-            Err(Error::CapabilityUnavailable(
-                "ACP relay startup timed out".into(),
-            ))
-        });
+        .unwrap_or_else(|_| Err(Error::Unavailable("ACP relay startup timed out".into())));
         if started.is_err()
             && let Some(process) = ProcessFingerprint::capture(child.id())
         {

@@ -388,8 +388,7 @@ fn resume_rejects_missing_invalid_or_different_native_session_before_launch() {
         assert!(
             matches!(
                 result,
-                Err(pontia_core::Error::CapabilityUnavailable(_))
-                    | Err(pontia_core::Error::StateConflict(_))
+                Err(pontia_core::Error::Unavailable(_)) | Err(pontia_core::Error::StateConflict(_))
             ),
             "{result:?}"
         );

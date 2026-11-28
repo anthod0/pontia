@@ -30,9 +30,9 @@ pub(crate) async fn model_windows(launch: &AcpLaunch, cwd: &Path) -> Result<BTre
         .kill_on_drop(true);
     let output = tokio::time::timeout(Duration::from_secs(10), command.output())
         .await
-        .map_err(|_| Error::CapabilityUnavailable("Kiro model catalog timed out".into()))??;
+        .map_err(|_| Error::Unavailable("Kiro model catalog timed out".into()))??;
     if !output.status.success() {
-        return Err(Error::CapabilityUnavailable(format!(
+        return Err(Error::Unavailable(format!(
             "Kiro model catalog exited with {}",
             output.status
         )));

@@ -206,7 +206,7 @@ async fn unsupported_agent_rejects_explicit_instructions_before_native_creation(
         let h = Harness::new(&[]).await;
         assert!(matches!(
             create(&h, options).await,
-            Err(Error::CapabilityUnavailable(_))
+            Err(Error::Unsupported(_))
         ));
         assert_eq!(h.requests("session/new"), 0);
         assert_eq!(h.requests("session/load"), 0);

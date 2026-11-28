@@ -82,7 +82,7 @@ pub(crate) async fn launch(
                 return Ok(());
             }
             if child.try_wait()?.is_some() {
-                return Err(Error::CapabilityUnavailable(
+                return Err(Error::Unavailable(
                     "Claude Code host did not start (HOST_START_FAILED)".into(),
                 ));
             }
@@ -91,7 +91,7 @@ pub(crate) async fn launch(
     })
     .await
     .unwrap_or_else(|_| {
-        Err(Error::CapabilityUnavailable(
+        Err(Error::Unavailable(
             "Claude Code host startup timed out".into(),
         ))
     });
@@ -130,7 +130,7 @@ impl Connection {
             Some("rejected") => Err(Error::StateConflict(
                 "Claude Code rejected control request".into(),
             )),
-            Some("unsupported") => Err(Error::CapabilityUnavailable(
+            Some("unsupported") => Err(Error::Unsupported(
                 "Claude Code operation unsupported".into(),
             )),
             _ => Err(Error::ControlUnknown(

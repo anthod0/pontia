@@ -460,7 +460,7 @@ async fn dashboard_exit_terminates_attached_tuis_and_revokes_their_inherited_con
     let service = CodexService::new(f.app.event_ingest_service());
     assert!(matches!(
         observe(&service, f.root.path(), observation).await,
-        Err(Error::CapabilityUnavailable(_))
+        Err(Error::StateConflict(_))
     ));
     assert_eq!(f.session(native, "exited").await, session);
     let mut fresh = f.client().await;

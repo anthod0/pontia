@@ -27,7 +27,7 @@ impl Adapter {
             && previous.connection()?.process.observe()
                 != pontia_runtime::ProcessObservation::Exited
         {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::StateConflict(
                 "Claude Code previous execution has not exited".into(),
             ));
         }
@@ -45,7 +45,7 @@ impl Adapter {
         if payload["runtime_id"].as_str() != target.runtime_id.as_deref()
             || (payload["reason"] != "claude_sdk_closed" && !runtime_exited)
         {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::StateConflict(
                 "Claude Code previous execution state is unknown".into(),
             ));
         }

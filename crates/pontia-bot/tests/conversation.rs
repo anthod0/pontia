@@ -41,6 +41,7 @@ const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
 struct Client {
     inputs: Mutex<Vec<AgentInput>>,
     steer: Mutex<Option<bool>>,
+    reject_tasks: Mutex<bool>,
     blocked: Mutex<Option<String>>,
     unavailable: Mutex<std::collections::HashSet<String>>,
     all_unavailable: Mutex<bool>,
@@ -139,9 +140,7 @@ impl Client {
             request.runtime.workspace.clone().unwrap(),
         );
         if std::mem::take(&mut *self.fail_next_launch.lock().unwrap()) {
-            return Err(Error::CapabilityUnavailable(
-                "injected launch failure".into(),
-            ));
+            return Err(Error::Unavailable("injected launch failure".into()));
         }
         let gate = self.launch_gate.lock().unwrap().take();
         if let Some((entered, release)) = gate {
@@ -149,7 +148,7 @@ impl Client {
             release.recv().unwrap();
         }
         if request.runtime.model.as_deref() != Some(MODEL) {
-            return Err(Error::CapabilityUnavailable("model unavailable".into()));
+            return Err(Error::Unavailable("model unavailable".into()));
         }
         self.tokens.lock().unwrap().insert(
             request.runtime.session_id.clone(),
@@ -304,6 +303,7 @@ impl ClientInteractions for Client {
 impl Client {
     fn capabilities(&self) -> AgentClientCapabilities {
         AgentClientCapabilities {
+            accept_task: !*self.reject_tasks.lock().unwrap(),
             steer: self.steer.lock().unwrap().unwrap_or(CAPABILITIES.steer),
             ..CAPABILITIES
         }
@@ -316,9 +316,7 @@ impl Client {
         } else if *self.all_unavailable.lock().unwrap()
             || self.unavailable.lock().unwrap().contains(&input.session_id)
         {
-            Err(Error::CapabilityUnavailable(
-                "session history is corrupted".into(),
-            ))
+            Err(Error::Unavailable("session history is corrupted".into()))
         } else {
             match input.input.lines().last() {
                 Some("reject once") if first => Err(Error::Domain("rejected".into())),
@@ -650,6 +648,27 @@ async fn unavailable_replacement_session_fails_the_input_without_another_rebuild
     let failed = service.send(&id, "still broken").await.unwrap().message;
     assert_eq!(failed.status, MessageStatus::Failed);
     assert_eq!(client.launch_modes.lock().unwrap().len(), launches + 1);
+}
+
+#[tokio::test]
+async fn unsupported_input_keeps_the_current_bot_session() {
+    let (_root, _pool, client, control, service) = fixture().await;
+    let (id, session) = bot(&service).await;
+    finish(&control, &session, EventType::TurnCompleted).await;
+    *client.reject_tasks.lock().unwrap() = true;
+    let launches = client.launch_modes.lock().unwrap().len();
+
+    let failed = service
+        .send(&id, "unsupported input")
+        .await
+        .unwrap()
+        .message;
+    assert_eq!(failed.status, MessageStatus::Failed);
+    assert_eq!(client.launch_modes.lock().unwrap().len(), launches);
+    assert_eq!(
+        service.records().get(&id).await.unwrap().current_session_id,
+        Some(session)
+    );
 }
 
 #[tokio::test]
@@ -1609,9 +1628,7 @@ async fn general_helper_launches_with_the_current_bot_client_key() {
         .unwrap();
     assert!(matches!(
         create_helper(&helpers, &session, None).await,
-        Err(pontia_bot::helpers::HelperError::Control(
-            Error::CapabilityUnavailable(_)
-        ))
+        Err(pontia_bot::helpers::HelperError::Control(Error::Domain(_)))
     ));
     conversation
         .records()
@@ -1930,7 +1947,7 @@ async fn bot_handoff_lists_only_profiles_that_can_start_a_helper_at_each_launch(
     assert!(matches!(
         create_helper(&helpers, &session, Some("no-steer")).await,
         Err(pontia_bot::helpers::HelperError::Control(
-            Error::CapabilityUnavailable(_)
+            Error::Unsupported(_)
         ))
     ));
     assert!(matches!(
@@ -2021,9 +2038,10 @@ async fn profile_selected_from_a_handoff_launches_with_its_current_configuration
     ));
     assert!(matches!(
         create_helper(&helpers, &session, Some("disabled")).await,
-        Err(pontia_bot::helpers::HelperError::Control(
-            Error::CapabilityUnavailable(_)
-        ))
+        Err(pontia_bot::helpers::HelperError::Control(Error::Conflict {
+            code: "client_disabled",
+            ..
+        }))
     ));
     let after: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions")
         .fetch_one(&pool)

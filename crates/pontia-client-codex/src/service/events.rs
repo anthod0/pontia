@@ -59,7 +59,7 @@ impl CodexService {
                 Some("idle" | "active" | "systemError")
             )
         {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unavailable(
                 "Codex thread is not ready to accept input".into(),
             ));
         }

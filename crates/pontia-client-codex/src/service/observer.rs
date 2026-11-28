@@ -359,9 +359,9 @@ impl CodexObserver {
                             self.reconcile_all(&runtime, connection, &mut observation).await?;
                             continue;
                         }
-                        Err(_) => return Err(Error::CapabilityUnavailable("Codex event stream closed".into())),
+                        Err(_) => return Err(Error::Unavailable("Codex event stream closed".into())),
                     };
-                    if event["method"] == "pontia/disconnected" { return Err(Error::CapabilityUnavailable("Codex disconnected".into())); }
+                    if event["method"] == "pontia/disconnected" { return Err(Error::Unavailable("Codex disconnected".into())); }
                     let result: Result<()> = async {
                     super::interactions::reconcile(&self.interactions, &self.service.event_ingest, connection).await?;
                     let Some(thread) = event.pointer("/params/threadId").and_then(Value::as_str) else { return Ok(()) };

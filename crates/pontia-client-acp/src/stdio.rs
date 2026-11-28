@@ -39,6 +39,6 @@ where
         Err(_) => child.kill().await?,
     }
     result
-        .map_err(|_| Error::CapabilityUnavailable(timeout_message.into()))?
+        .map_err(|_| Error::Unavailable(timeout_message.into()))?
         .map_err(protocol_error)?
 }

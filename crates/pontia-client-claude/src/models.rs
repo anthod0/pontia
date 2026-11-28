@@ -15,7 +15,7 @@ pub(crate) async fn list(script: &Path, directory: &Path) -> Result<AgentClientM
             .output()
             .await?;
         if !output.status.success() {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unavailable(
                 "Claude Code model listing failed".into(),
             ));
         }
@@ -26,5 +26,5 @@ pub(crate) async fn list(script: &Path, directory: &Path) -> Result<AgentClientM
     };
     tokio::time::timeout(Duration::from_secs(30), operation)
         .await
-        .map_err(|_| Error::CapabilityUnavailable("Claude Code model listing timed out".into()))?
+        .map_err(|_| Error::Unavailable("Claude Code model listing timed out".into()))?
 }

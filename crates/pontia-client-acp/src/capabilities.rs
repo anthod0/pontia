@@ -74,7 +74,7 @@ impl Negotiated {
             missing.push("sessionCapabilities.close");
         }
         if !missing.is_empty() {
-            return Err(Error::CapabilityUnavailable(format!(
+            return Err(Error::Unsupported(format!(
                 "ACP peer missing required capabilities: {}",
                 missing.join(", ")
             )));
@@ -360,7 +360,7 @@ mod tests {
                 serde_json::from_value(json!({"protocolVersion":1, "agentCapabilities":caps}))
                     .unwrap();
             assert!(matches!(Negotiated::from_initialize(&response, &plain),
-                Err(Error::CapabilityUnavailable(message)) if message == format!("ACP peer missing required capabilities: {missing}")));
+                Err(Error::Unsupported(message)) if message == format!("ACP peer missing required capabilities: {missing}")));
         }
         for supported in [None, Some(false), Some(true)] {
             let mut value = json!({"protocolVersion":1,"agentCapabilities":{"loadSession":true,"sessionCapabilities":{"close":{}}}});

@@ -270,7 +270,7 @@ async fn reply_result(peer: &PiRpcPeer, id: Option<Value>, result: Result<Value>
         Err(error) => {
             let code = match &error {
                 Error::NotFound(_) => -32004,
-                Error::StateConflict(_) | Error::CapabilityUnavailable(_) => -32009,
+                Error::StateConflict(_) | Error::Conflict { .. } | Error::Unsupported(_) => -32009,
                 Error::Domain(_) => -32009,
                 Error::Serialization(_) => -32602,
                 _ => -32603,
@@ -279,7 +279,9 @@ async fn reply_result(peer: &PiRpcPeer, id: Option<Value>, result: Result<Value>
                 Error::Domain(message)
                 | Error::StateConflict(message)
                 | Error::NotFound(message)
-                | Error::CapabilityUnavailable(message) => message.clone(),
+                | Error::Conflict { message, .. }
+                | Error::Unsupported(message)
+                | Error::Unavailable(message) => message.clone(),
                 _ => error.to_string(),
             };
             peer.reply_error(id, code, &message).await

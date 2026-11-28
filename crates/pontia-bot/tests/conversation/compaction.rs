@@ -69,7 +69,7 @@ async fn compaction_preserves_busy_exited_and_unsupported_errors() {
     finish(&control, &target, EventType::TurnCompleted).await;
     assert!(matches!(
         helpers.execute(compact(&owner, &target)).await,
-        Err(HelperError::Control(Error::CapabilityUnavailable(_)))
+        Err(HelperError::Control(Error::Unsupported(_)))
     ));
     control
         .event_ingest_service()

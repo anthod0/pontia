@@ -175,7 +175,7 @@ impl CodexService {
                     .contains_key(&binding.client_session_key)
                     || self.reload_suspended(session_id).await?
                 {
-                    return Err(Error::CapabilityUnavailable(
+                    return Err(Error::StateConflict(
                         "Codex observation is suspended after unload or an exit attempt; complete Session exit before resuming".into(),
                     ));
                 }
@@ -474,7 +474,7 @@ impl CodexService {
             .contains_key(thread_id)
         {
             runtime.clear_subscription(session).await;
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unavailable(
                 "Codex thread was unloaded during recovery".into(),
             ));
         }
@@ -486,7 +486,7 @@ impl CodexService {
         let unloaded = connection.unloaded_threads.lock().await;
         if unloaded.contains_key(thread_id) {
             runtime.clear_subscription(session).await;
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unavailable(
                 "Codex thread was unloaded during recovery".into(),
             ));
         }
@@ -514,7 +514,7 @@ impl CodexService {
                 .await
                 .contains_key(&binding.client_session_key)
         {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unavailable(
                 "Codex control awaits thread subscription and snapshot reconciliation".into(),
             ));
         }
@@ -545,7 +545,7 @@ impl CodexService {
 
 fn start_rejection(error: Error) -> Error {
     match error {
-        Error::StateConflict(message) => Error::CapabilityUnavailable(message),
+        Error::StateConflict(message) => Error::Unavailable(message),
         error => error,
     }
 }

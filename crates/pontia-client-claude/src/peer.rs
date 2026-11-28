@@ -115,7 +115,7 @@ impl Peer {
             .read()
             .unwrap()
             .clone()
-            .ok_or_else(|| Error::CapabilityUnavailable("Claude Code host is unavailable".into()))
+            .ok_or_else(|| Error::Unavailable("Claude Code host is unavailable".into()))
     }
     pub async fn runtime_event(
         &self,

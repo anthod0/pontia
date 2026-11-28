@@ -41,9 +41,7 @@ impl CodexService {
         let turns = self
             .turns(&connection, &binding.client_session_key)
             .await?
-            .ok_or_else(|| {
-                Error::CapabilityUnavailable("Codex thread has no persisted history".into())
-            })?;
+            .ok_or_else(|| Error::StateConflict("Codex thread has no persisted history".into()))?;
         if turns.iter().any(|turn| turn["status"] == "inProgress") {
             return Err(Error::StateConflict(
                 "Codex has an active native operation".into(),

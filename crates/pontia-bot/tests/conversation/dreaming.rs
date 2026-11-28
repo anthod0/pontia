@@ -391,10 +391,7 @@ async fn dreaming_rejects_clients_without_approval_free_restricted_mode_before_c
 
     *client.reject_restricted.lock().unwrap() = true;
     assert!(!conversation.supports_bot_client("generic", "default"));
-    assert!(matches!(
-        dreaming.start().await,
-        Err(Error::CapabilityUnavailable(_))
-    ));
+    assert!(matches!(dreaming.start().await, Err(Error::Unsupported(_))));
     assert!(latest_dreaming_session_id(&control).await.is_none());
     assert!(!root.path().join("bot").join("readonly").exists());
 }

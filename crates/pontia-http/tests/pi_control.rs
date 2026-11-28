@@ -493,8 +493,8 @@ async fn pi_interrupt_and_shutdown_use_rpc_and_wait_for_client_lifecycle_facts()
         (
             "POST",
             "exit",
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "capability_unavailable",
+            StatusCode::SERVICE_UNAVAILABLE,
+            "unavailable",
         ),
     ] {
         let (status, body) = control_request(&state, method, resource, Value::Null).await;

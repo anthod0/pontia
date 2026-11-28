@@ -30,7 +30,7 @@ impl CodexService {
                 Some("idle" | "active" | "systemError")
             )
         {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unavailable(
                 "Codex proxy thread is not loaded".into(),
             ));
         }
@@ -100,7 +100,7 @@ impl CodexService {
             None => runtime.lock_session(&session).await,
         };
         if closed.is_some_and(|closed| *closed.borrow()) {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::StateConflict(
                 "Codex TUI connection was closed by Session exit".into(),
             ));
         }
@@ -127,7 +127,7 @@ impl CodexService {
                     .await
                     .contains_key(native)
             {
-                return Err(Error::CapabilityUnavailable(
+                return Err(Error::Unavailable(
                     "Codex thread was unloaded before attachment".into(),
                 ));
             }
@@ -189,7 +189,7 @@ impl CodexService {
                 Some("idle" | "active" | "systemError")
             )
         {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unavailable(
                 "Codex thread was unloaded before attachment".into(),
             ));
         }
@@ -200,7 +200,7 @@ impl CodexService {
                 .get(native)
                 .is_some_and(|sequence| *sequence > boundary)
             {
-                return Err(Error::CapabilityUnavailable(
+                return Err(Error::Unavailable(
                     "Codex thread was unloaded before attachment".into(),
                 ));
             }

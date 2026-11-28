@@ -499,7 +499,7 @@ async fn explicit_retry_after_rejected_initialization_reuses_the_only_runtime() 
             },
         )
         .await;
-    assert!(matches!(retry, Err(Error::CapabilityUnavailable(_))));
+    assert!(matches!(retry, Err(Error::Unsupported(_))));
     let runtimes: Vec<String> =
         sqlx::query_scalar("SELECT runtime_id FROM session_runtimes WHERE session_id=?")
             .bind(&session)
@@ -1016,7 +1016,7 @@ async fn missing_minimum_capabilities_rejects_before_new_and_cleans_peer() {
         let h = Harness::new(&[(flag, "1")]).await;
         assert!(matches!(
             h.create("first").await,
-            Err(Error::CapabilityUnavailable(_))
+            Err(Error::Unsupported(_))
         ));
         assert_eq!(h.requests("session/new"), 0);
         let session: String = sqlx::query_scalar("SELECT session_id FROM sessions")

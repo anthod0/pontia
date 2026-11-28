@@ -374,7 +374,7 @@ pub(crate) async fn resolve(
     let native = associations
         .get(id)
         .filter(|i| i.session == session && i.deliverable)
-        .ok_or_else(|| Error::CapabilityUnavailable("Native interaction expired".into()))?;
+        .ok_or_else(|| Error::StateConflict("Native interaction expired".into()))?;
     let result = approval_response(&native.method, option, &native.permissions)?;
     let request_id = native.request_id.clone();
     // Hold the association lock through the write acknowledgment: our own resolved

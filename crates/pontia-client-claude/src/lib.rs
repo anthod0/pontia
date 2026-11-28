@@ -170,10 +170,10 @@ struct Adapter {
     context: Arc<OnceLock<(SqlitePool, PathBuf)>>,
 }
 fn unsupported() -> Error {
-    Error::CapabilityUnavailable("This Claude Code capability is not implemented".into())
+    Error::Unsupported("This Claude Code capability is not implemented".into())
 }
 fn unavailable() -> Error {
-    Error::CapabilityUnavailable("Claude Code host is unavailable".into())
+    Error::Unavailable("Claude Code host is unavailable".into())
 }
 fn delivery_available(state: &peer::State) -> std::result::Result<(), DeliveryError> {
     if let Some(reason) = &state.unavailable {
@@ -204,7 +204,7 @@ impl Adapter {
         let script =
             std::path::absolute(self.host.clone().unwrap_or_else(|| setup::host_path(root)))?;
         if !script.is_file() {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unavailable(
                 "Claude Code client is not installed; run pontia init and select claude-agent"
                     .into(),
             ));

@@ -81,7 +81,7 @@ pub(super) async fn websocket(stream: UnixStream) -> Result<Socket> {
 }
 
 pub fn protocol_error(error: impl std::fmt::Display) -> Error {
-    Error::CapabilityUnavailable(format!("Codex control connection: {error}"))
+    Error::Unavailable(format!("Codex control connection: {error}"))
 }
 
 enum Outgoing {
@@ -248,7 +248,7 @@ impl Connection {
                                         unloaded.remove(thread);
                                     } else if unloaded.contains_key(thread) {
                                         if let Some(reply) = pending.lock().await.remove(&id) {
-                                            let _ = reply.send(Err(Error::CapabilityUnavailable("Codex thread was unloaded".into())));
+                                            let _ = reply.send(Err(Error::Unavailable("Codex thread was unloaded".into())));
                                         }
                                         continue;
                                     }

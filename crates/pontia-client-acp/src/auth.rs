@@ -42,10 +42,8 @@ impl AcpAuth {
             pontia_home: &context.pontia_home,
         }
         .executable_with_path(&launch.command, launch.env.get("PATH").map(String::as_str))
-        .map_err(Error::CapabilityUnavailable)?
-        .ok_or_else(|| {
-            Error::CapabilityUnavailable(format!("{} executable not found", launch.command))
-        })?;
+        .map_err(Error::Unavailable)?
+        .ok_or_else(|| Error::Unavailable(format!("{} executable not found", launch.command)))?;
         Ok(Cli { program, vars })
     }
 }
@@ -67,7 +65,7 @@ impl Cli {
             .output();
         tokio::time::timeout(limit, command)
             .await
-            .map_err(|_| Error::CapabilityUnavailable(format!("{} timed out", args.join(" "))))?
+            .map_err(|_| Error::Unavailable(format!("{} timed out", args.join(" "))))?
             .map_err(Error::from)
     }
 
@@ -109,14 +107,16 @@ fn combined_output(output: &Output) -> String {
 
 fn unknown(methods: Vec<AuthMethodDescriptor>, error: &Error) -> ClientAuthStatus {
     let detail = match error {
-        Error::CapabilityUnavailable(message) | Error::Domain(message) => message.clone(),
+        Error::Unsupported(message) | Error::Unavailable(message) | Error::Domain(message) => {
+            message.clone()
+        }
         other => other.to_string(),
     };
     ClientAuthStatus::new(AuthState::Unknown, methods, true).with_detail(sanitize_output(&detail))
 }
 
 fn unsupported(key: &str) -> Error {
-    Error::CapabilityUnavailable(format!(
+    Error::Unsupported(format!(
         "Pontia does not manage authentication for ACP Agent {key}"
     ))
 }

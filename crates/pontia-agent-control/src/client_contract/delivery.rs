@@ -66,9 +66,7 @@ impl From<Error> for DeliveryError {
     fn from(error: Error) -> Self {
         match error {
             Error::Unsupported(message) => Self::Unsupported(message),
-            Error::Unavailable(message) | Error::CapabilityUnavailable(message) => {
-                Self::Offline(message)
-            }
+            Error::Unavailable(message) => Self::Offline(message),
             Error::Domain(message) => Self::Rejected(message),
             Error::ControlUnknown(message) => Self::Uncertain(message),
             Error::StateConflict(message) | Error::Conflict { message, .. } => {

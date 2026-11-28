@@ -523,5 +523,5 @@ pub(crate) fn plan_tool_use(update: &Value) -> ManagedToolUse {
 }
 
 fn invalidated() -> Error {
-    Error::CapabilityUnavailable("ACP live output stream was invalidated".into())
+    Error::Unavailable("ACP live output stream was invalidated".into())
 }

@@ -65,14 +65,6 @@ impl ApiError {
         }
     }
 
-    fn capability_unavailable(message: impl Into<String>) -> Self {
-        Self {
-            status: StatusCode::UNPROCESSABLE_ENTITY,
-            code: "capability_unavailable",
-            message: message.into(),
-        }
-    }
-
     pub(super) fn custom(
         status: StatusCode,
         code: &'static str,
@@ -101,7 +93,6 @@ impl From<Error> for ApiError {
             Error::Unavailable(message) => {
                 Self::custom(StatusCode::SERVICE_UNAVAILABLE, "unavailable", message)
             }
-            Error::CapabilityUnavailable(message) => Self::capability_unavailable(message),
             Error::ControlUnknown(message) => Self {
                 status: StatusCode::SERVICE_UNAVAILABLE,
                 code: "control_unknown",

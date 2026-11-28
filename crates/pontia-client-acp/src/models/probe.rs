@@ -67,7 +67,7 @@ async fn discover(
         .map_err(protocol_error)?;
     let initialize: InitializeResponse = serde_json::from_value(response.clone())?;
     if initialize.protocol_version != ProtocolVersion::V1 {
-        return Err(Error::CapabilityUnavailable(
+        return Err(Error::Unsupported(
             "ACP peer did not negotiate protocol v1".into(),
         ));
     }
@@ -103,13 +103,13 @@ async fn discover(
         return Ok(models);
     }
     if capabilities.close.is_none() {
-        return Err(Error::CapabilityUnavailable(
+        return Err(Error::Unsupported(
             "ACP model discovery requires sessionCapabilities.close".into(),
         ));
     }
     // Kiro lists even empty, closed Sessions. Only create one we can remove.
     if deferred && capabilities.delete.is_none() {
-        return Err(Error::CapabilityUnavailable(
+        return Err(Error::Unsupported(
             "Kiro model discovery requires sessionCapabilities.delete".into(),
         ));
     }
@@ -168,7 +168,7 @@ async fn discover(
             .map_err(protocol_error)?;
     }
     if deferred && models.default_model.is_none() {
-        return Err(Error::CapabilityUnavailable(
+        return Err(Error::Unavailable(
             "ACP model options did not arrive".into(),
         ));
     }

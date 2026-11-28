@@ -137,9 +137,10 @@ impl PiConnections {
                 "Client connection has been replaced".into(),
             ));
         }
-        let pool = connections.pool.as_ref().ok_or_else(|| {
-            Error::CapabilityUnavailable("Pi control service is unavailable".into())
-        })?;
+        let pool = connections
+            .pool
+            .as_ref()
+            .ok_or_else(|| Error::Unavailable("Pi control service is unavailable".into()))?;
         if Self::current_runtime(pool, session_id).await?.as_deref() != Some(runtime_id) {
             return Err(Error::StateConflict(
                 "report runtime is no longer current".into(),
@@ -158,13 +159,12 @@ impl PiConnections {
     ) -> Result<()> {
         let mut connections = self.connections.lock().await;
         if connections.stopped || !channel.available() {
-            return Err(Error::CapabilityUnavailable(
-                "Client connection is closed".into(),
-            ));
+            return Err(Error::Unavailable("Client connection is closed".into()));
         }
-        let pool = connections.pool.as_ref().ok_or_else(|| {
-            Error::CapabilityUnavailable("Pi control service is unavailable".into())
-        })?;
+        let pool = connections
+            .pool
+            .as_ref()
+            .ok_or_else(|| Error::Unavailable("Pi control service is unavailable".into()))?;
         Self::validate_identity(pool, client_session_key, session_id, runtime_id).await?;
         if let Some(pid) = channel.process_id() {
             let confirmed: Option<String> = sqlx::query_scalar(
@@ -230,9 +230,10 @@ impl PiConnections {
         let Some(connection) = connections.entries.get(session_id) else {
             return Ok(None);
         };
-        let pool = connections.pool.as_ref().ok_or_else(|| {
-            Error::CapabilityUnavailable("Pi control service is unavailable".into())
-        })?;
+        let pool = connections
+            .pool
+            .as_ref()
+            .ok_or_else(|| Error::Unavailable("Pi control service is unavailable".into()))?;
         let runtime = Self::current_runtime(pool, session_id).await?;
         if Some(connection.runtime_id.as_str()) != runtime.as_deref()
             || !connection.channel.available()
@@ -371,7 +372,7 @@ impl PiConnections {
             .await
             .map_err(E::from)?
             .ok_or_else(|| {
-                Error::CapabilityUnavailable(format!(
+                Error::Unavailable(format!(
                     "session {session_id} has no current Client connection"
                 ))
             })

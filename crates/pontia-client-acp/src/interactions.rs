@@ -348,7 +348,7 @@ pub(crate) async fn resolve(peer: &Peer, id: &str, option: &str) -> Result<()> {
         .permissions
         .get(id)
         .filter(|permission| state.current && !permission.responder.cancellation().is_cancelled())
-        .ok_or_else(|| Error::CapabilityUnavailable("ACP permission expired".into()))?;
+        .ok_or_else(|| Error::StateConflict("ACP permission expired".into()))?;
     let option_id = permission
         .options
         .get(option)

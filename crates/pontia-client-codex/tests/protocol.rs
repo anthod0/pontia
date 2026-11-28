@@ -279,7 +279,7 @@ async fn invalid_daemon_metadata_never_receives_control_requests() {
         });
         assert!(matches!(
             Connection::connect(&path).await,
-            Err(pontia_core::Error::CapabilityUnavailable(_))
+            Err(pontia_core::Error::Unavailable(_))
         ));
         server.await.unwrap();
     }

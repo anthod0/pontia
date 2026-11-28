@@ -58,9 +58,7 @@ pub(crate) async fn send(
     let mut state = peer.state.lock().await;
     target.validate(&events.db()).await?;
     if !state.current || state.closing || !state.ready {
-        return Err(Error::CapabilityUnavailable(
-            "ACP connection unavailable".into(),
-        ));
+        return Err(Error::Unavailable("ACP connection unavailable".into()));
     }
     if !state.capabilities.as_ref().is_some_and(|caps| caps.steer)
         || state.active.as_ref().map(|prompt| prompt.turn.as_str()) != Some(turn)

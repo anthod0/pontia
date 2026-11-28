@@ -34,9 +34,6 @@ pub enum Error {
     #[error("unavailable: {0}")]
     Unavailable(String),
 
-    #[error("capability unavailable: {0}")]
-    CapabilityUnavailable(String),
-
     #[error("not found: {0}")]
     NotFound(String),
 

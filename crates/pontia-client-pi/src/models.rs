@@ -93,9 +93,7 @@ pub(crate) async fn list(command: &str, directory: &Path) -> Result<AgentClientM
             .collect::<Result<Vec<_>>>()?;
         drop(stdin);
         if !child.wait().await?.success() {
-            return Err(Error::CapabilityUnavailable(
-                "Pi model listing process failed".into(),
-            ));
+            return Err(Error::Unavailable("Pi model listing process failed".into()));
         }
         Ok(AgentClientModels {
             models,
@@ -104,7 +102,7 @@ pub(crate) async fn list(command: &str, directory: &Path) -> Result<AgentClientM
     };
     tokio::time::timeout(Duration::from_secs(30), operation)
         .await
-        .map_err(|_| Error::CapabilityUnavailable("Pi model listing timed out".into()))?
+        .map_err(|_| Error::Unavailable("Pi model listing timed out".into()))?
 }
 
 async fn request(
@@ -121,7 +119,7 @@ async fn request(
             continue;
         }
         if response["success"] != true {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unavailable(
                 response["error"]
                     .as_str()
                     .unwrap_or("Pi model listing failed")

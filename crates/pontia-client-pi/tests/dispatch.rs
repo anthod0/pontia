@@ -204,7 +204,7 @@ async fn disconnected_runtime_can_be_explicitly_closed() {
     let commands = app.session_commands();
     assert!(matches!(
         commands.terminate_session("sess_pi").await,
-        Err(pontia_core::Error::CapabilityUnavailable(_))
+        Err(pontia_core::Error::Unavailable(_))
     ));
     let mut agent = tokio::process::Command::new("sleep")
         .arg("60")
@@ -220,7 +220,7 @@ async fn disconnected_runtime_can_be_explicitly_closed() {
 
     assert!(matches!(
         commands.exit_if_idle("sess_pi").await,
-        Err(pontia_core::Error::CapabilityUnavailable(_))
+        Err(pontia_core::Error::Unavailable(_))
     ));
     commands.terminate_session("sess_pi").await.unwrap();
     tokio::time::timeout(Duration::from_secs(5), agent.wait())

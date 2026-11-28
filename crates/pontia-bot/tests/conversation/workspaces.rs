@@ -366,7 +366,7 @@ async fn failed_launcher_keeps_project_and_bot_ownership_in_list_and_next_handof
         .await
         .unwrap_err();
     assert!(
-        matches!(failure, pontia_bot::helpers::HelperError::Control(Error::CapabilityUnavailable(message)) if message == "injected launch failure")
+        matches!(failure, pontia_bot::helpers::HelperError::Control(Error::Unavailable(message)) if message == "injected launch failure")
     );
     let sessions = helpers.list(&id).await.unwrap();
     assert_eq!(sessions.len(), 1);

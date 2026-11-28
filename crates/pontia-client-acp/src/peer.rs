@@ -237,7 +237,7 @@ pub(crate) fn protocol_error(error: agent_client_protocol::Error) -> Error {
 }
 
 pub(crate) fn submission_error(error: agent_client_protocol::Error) -> Error {
-    Error::CapabilityUnavailable(format!("ACP operation could not be submitted: {error}"))
+    Error::Unavailable(format!("ACP operation could not be submitted: {error}"))
 }
 
 pub(crate) async fn runtime_event(
@@ -664,7 +664,7 @@ impl Peer {
         let initialize_request = self.state.lock().await.agent.initialize_request();
         let initialize = self.call(initialize_request).await?;
         if initialize.protocol_version != ProtocolVersion::V1 {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unsupported(
                 "ACP peer did not negotiate protocol v1".into(),
             ));
         }
@@ -724,7 +724,7 @@ impl Peer {
                     None,
                 ),
                 None if first_prompt => (None, None),
-                None => return Err(Error::CapabilityUnavailable(
+                None => return Err(Error::Unsupported(
                     "ACP Agent lacks sessionCapabilities.systemPrompt; create a Session without system_instructions".into(),
                 )),
             }

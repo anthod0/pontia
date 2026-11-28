@@ -104,9 +104,7 @@ fn required(response: &Value, field: &str) -> Result<String> {
         .as_str()
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
-        .ok_or_else(|| {
-            Error::CapabilityUnavailable(format!("Codex login response is missing {field}"))
-        })
+        .ok_or_else(|| Error::Unavailable(format!("Codex login response is missing {field}")))
 }
 
 impl ClientAuth for CodexAuth {

@@ -19,7 +19,7 @@ pub(crate) async fn request(peer: &Peer, operation: String) -> Result<()> {
         .as_ref()
         .is_some_and(|caps| caps.manual_compaction)
     {
-        return Err(Error::CapabilityUnavailable(
+        return Err(Error::Unsupported(
             "Manual compaction is unavailable".into(),
         ));
     }

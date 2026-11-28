@@ -72,7 +72,7 @@ impl DreamingService {
                 spec.capabilities.report_turn_started && spec.capabilities.report_turn_finished
             })
         {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unsupported(
                 "Client cannot run a Dreaming Session".into(),
             ));
         }

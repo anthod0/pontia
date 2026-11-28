@@ -121,7 +121,7 @@ impl ClientData for CodexData {
         None
     }
     fn branch_target(&self, _: BranchTargetRequest) -> Result<String> {
-        Err(Error::CapabilityUnavailable(
+        Err(Error::Unsupported(
             "Codex branch control is unsupported".into(),
         ))
     }
@@ -140,7 +140,7 @@ impl pontia_agent_control::client_contract::ClientInteractions for CodexClient {
             let service = CodexService::new(events);
             let runtime = CodexRuntime::for_session(&service.pool, session)
                 .await?
-                .ok_or_else(|| Error::CapabilityUnavailable("Codex connection expired".into()))?;
+                .ok_or_else(|| Error::Unavailable("Codex connection expired".into()))?;
             let _operation = runtime.lock_session(session).await;
             let live: bool = sqlx::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM sessions WHERE session_id=? AND state<>'exited')",
@@ -152,7 +152,7 @@ impl pontia_agent_control::client_contract::ClientInteractions for CodexClient {
                 || runtime.subscription(session).await == Some(SubscriptionState::ExitPending)
                 || CodexService::has_confirmed_exit(session).await
             {
-                return Err(Error::CapabilityUnavailable("Codex Session exited".into()));
+                return Err(Error::StateConflict("Codex Session exited".into()));
             }
             let _current = runtime.current_guard().await?;
             let connection = runtime.connection().await?;
@@ -163,9 +163,7 @@ impl pontia_agent_control::client_contract::ClientInteractions for CodexClient {
                 .await
                 .contains_key(&binding.client_session_key)
             {
-                return Err(Error::CapabilityUnavailable(
-                    "Codex thread was unloaded".into(),
-                ));
+                return Err(Error::Unavailable("Codex thread was unloaded".into()));
             }
             crate::service::interactions::resolve(
                 &connection,

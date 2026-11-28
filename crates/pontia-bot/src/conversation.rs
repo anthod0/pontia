@@ -259,7 +259,7 @@ impl ConversationService {
                 entry.spec.capabilities.accept_task && entry.instructions.is_some()
             })
         {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unsupported(
                 "Client cannot run tasks with injected instructions".into(),
             ));
         }
@@ -282,7 +282,7 @@ impl ConversationService {
             .spec(client_type)
             .is_some_and(|spec| spec.capabilities.steer)
         {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unsupported(
                 "Client cannot run a helper Session".into(),
             ));
         }
@@ -307,7 +307,7 @@ impl ConversationService {
                 .and_then(|entry| entry.configuration.as_ref())
                 .is_some_and(|config| config.supports_mode(client_key, mode))
         {
-            return Err(Error::CapabilityUnavailable(
+            return Err(Error::Unsupported(
                 "Client cannot start restricted Sessions".into(),
             ));
         }
@@ -666,7 +666,7 @@ impl ConversationService {
             return Ok(None);
         };
         let result = self.submit_to_session(bot_id, &session_id, input).await;
-        let Err(Error::CapabilityUnavailable(reason)) = &result else {
+        let Err(Error::Unavailable(reason)) = &result else {
             return result.map(Some);
         };
         let bot = self.records.get(bot_id).await?;
@@ -776,9 +776,7 @@ impl ConversationService {
     async fn start_session(&self, bot: &Bot, activity: &Activity) -> Result<String> {
         let ownership_prefix = format!("{}:", bot.bot_id);
         if !self.supports_bot_client(&bot.client_type, &bot.client_key) {
-            return Err(Error::CapabilityUnavailable(
-                "Client cannot run a Bot Session".into(),
-            ));
+            return Err(Error::Unsupported("Client cannot run a Bot Session".into()));
         }
         self.records.initialize(&bot.bot_id).await?;
         let directory = self.records.directory(&bot.bot_id).await?;

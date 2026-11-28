@@ -252,7 +252,9 @@ async fn requires_authentication_and_an_enabled_client_before_starting_a_process
         .execute(&db)
         .await
         .unwrap();
-    assert!(!request(&app, "pi/default", true).await.0.is_success());
+    let (status, response) = request(&app, "pi/default", true).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(response["error"]["code"], "client_disabled");
     assert!(!root.path().join("pid").exists());
 }
 
@@ -280,16 +282,16 @@ async fn default_model_lookup_failure_is_not_reported_as_no_default() {
     )
     .await;
     let (status, response) = request(&app, "pi/default", true).await;
-    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(response["error"]["code"], "capability_unavailable");
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(response["error"]["code"], "unavailable");
 }
 
 #[tokio::test]
 async fn times_out_a_stalled_catalog_and_stops_its_process() {
     let (app, _, root) = fixture(json!({"hang": true})).await;
     let (status, response) = request(&app, "pi/default", true).await;
-    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(response["error"]["code"], "capability_unavailable");
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(response["error"]["code"], "unavailable");
     let pid = std::fs::read_to_string(root.path().join("pid")).unwrap();
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
         loop {

@@ -116,7 +116,7 @@ impl ClientAuth for ClaudeAuth {
         _sink: AuthEventSink,
     ) -> ClientOperation<'a, AuthFlowHandle> {
         Box::pin(async {
-            Err(Error::CapabilityUnavailable(
+            Err(Error::Unsupported(
                 "Pontia does not manage Claude Code login".into(),
             ))
         })
@@ -129,7 +129,7 @@ impl ClientAuth for ClaudeAuth {
         _context: &'a AuthContext,
     ) -> ClientOperation<'a, ()> {
         Box::pin(async {
-            Err(Error::CapabilityUnavailable(
+            Err(Error::Unsupported(
                 "Pontia does not manage Claude Code logout".into(),
             ))
         })

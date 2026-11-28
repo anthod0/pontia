@@ -144,7 +144,7 @@ impl CodexService {
             if let Some(sequence) = pending.get(thread)
                 && boundary.is_some_and(|boundary| *sequence > boundary)
             {
-                return Err(Error::CapabilityUnavailable(
+                return Err(Error::Unavailable(
                     "Codex thread was archived before attachment".into(),
                 ));
             }

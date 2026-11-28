@@ -95,7 +95,7 @@ pub(crate) struct AcpAdapter {
 }
 
 fn unavailable() -> Error {
-    Error::CapabilityUnavailable("ACP control connection is unavailable".into())
+    Error::Unavailable("ACP control connection is unavailable".into())
 }
 
 fn delivery_error(error: Error) -> DeliveryError {
@@ -410,7 +410,7 @@ impl ClientSession for AcpAdapter {
                                 | "timeline_source_identity_mismatch"
                                 | "timeline_source_retryable",
                             message,
-                        } => Error::CapabilityUnavailable(message),
+                        } => Error::Unavailable(message),
                         error => error,
                     })?;
                 }
@@ -433,7 +433,7 @@ impl ClientSession for AcpAdapter {
                 {
                     drop(state);
                     peer.terminate().await?;
-                    return Err(Error::CapabilityUnavailable(
+                    return Err(Error::StateConflict(
                         "ACP Session model changed during verification".into(),
                     ));
                 }

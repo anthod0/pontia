@@ -180,7 +180,7 @@ impl ClientData for PiData {
         Some(Box::new(PiTimelineAdapter::new()))
     }
     fn branch_target(&self, _request: BranchTargetRequest) -> Result<String> {
-        Err(Error::CapabilityUnavailable(
+        Err(Error::Unsupported(
             "Pi branch target requires an asynchronous history source".into(),
         ))
     }
