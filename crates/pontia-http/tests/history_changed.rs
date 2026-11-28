@@ -19,7 +19,7 @@ async fn history_changes_use_the_dashboard_stream_without_persisting_execution_f
     )
     .external_api_token(Some("test".into()))
     .build();
-    let response = pontia_http::router(app.clone())
+    let response = pontia_http::core_router(app.clone())
         .oneshot(
             Request::builder()
                 .uri("/api/v1/dashboard/events/stream")

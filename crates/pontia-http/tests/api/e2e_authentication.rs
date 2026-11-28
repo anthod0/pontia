@@ -9,10 +9,7 @@ use pontia_e2e::{
     BrowserIdentity, Capability, DeviceIdentity, DeviceSessions,
     bhttp::{Decoder, Encoder, Event, Head, Kind},
 };
-use pontia_http::{
-    HttpEntrypoints,
-    e2e::{CONTENT_TYPE, REQUESTS_PATH, SESSIONS_PATH},
-};
+use pontia_http::e2e::{CONTENT_TYPE, REQUESTS_PATH, SESSIONS_PATH};
 use tower::ServiceExt;
 
 #[tokio::test]
@@ -21,7 +18,7 @@ async fn verified_e2e_and_local_token_access_the_same_business_router() {
         .external_api_token(Some("local-secret".into()))
         .build_state()
         .await;
-    let endpoints = HttpEntrypoints::new(state);
+    let endpoints = crate::common::http::entrypoints(state);
     let identity = DeviceIdentity::from_private_bytes([7; 16], 1, &[11; 32]).unwrap();
     let public = identity.public_key();
     let signer = SigningKey::from_bytes(&[9; 32]);

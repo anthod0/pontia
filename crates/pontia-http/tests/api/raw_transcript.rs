@@ -17,7 +17,6 @@ use pontia_client_pi::raw_transcripts::{PiJsonlV2Cursor, TimelineBoundaryRelatio
 use pontia_core::domain::{
     EventSource, EventType, ProjectionState, ReportedEvent, TimelineBoundary,
 };
-use pontia_http as http;
 use serde_json::{Value, json};
 use tempfile::tempdir;
 use tower::ServiceExt;
@@ -71,7 +70,7 @@ async fn test_state() -> (AppState, tempfile::TempDir) {
 }
 
 async fn get_json(state: AppState, uri: &str) -> (StatusCode, Value) {
-    let response = http::router(state)
+    let response = crate::common::http::router(state)
         .oneshot(
             Request::builder()
                 .method("GET")

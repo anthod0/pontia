@@ -129,7 +129,7 @@ async fn writes_require_authentication_valid_workspace_and_valid_requests() {
     let (state, id, _home) = workspace_for(root.path(), "app").await;
     let base = format!("/api/v1/workspaces/{id}/git");
     for op in ["stage", "unstage", "discard", "commit", "pull", "push"] {
-        let response = http::router(state.clone())
+        let response = crate::common::http::router(state.clone())
             .oneshot(
                 Request::post(format!("{base}/{op}"))
                     .body(Body::empty())

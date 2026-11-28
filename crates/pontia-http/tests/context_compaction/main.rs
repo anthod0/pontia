@@ -1,3 +1,5 @@
+#[path = "../common/mod.rs"]
+mod common;
 mod control;
 mod events;
 mod fixture;

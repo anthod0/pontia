@@ -21,13 +21,13 @@ use tokio::sync::broadcast::error::RecvError;
 use tokio_stream::Stream;
 
 use super::response::{ApiError, ApiResponse, ok};
-use crate::HttpState;
+use crate::BotState;
 
-pub async fn list(State(state): State<HttpState>) -> Result<Json<ApiResponse<Value>>, ApiError> {
+pub async fn list(State(state): State<BotState>) -> Result<Json<ApiResponse<Value>>, ApiError> {
     Ok(ok(json!({"bots": state.bots().records().list().await?})))
 }
 
-pub async fn clients(State(state): State<HttpState>) -> Result<Json<ApiResponse<Value>>, ApiError> {
+pub async fn clients(State(state): State<BotState>) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let app = state.app();
     let service = AgentClientService::new(app.db(), app.control().clients());
     let vars = std::env::vars().collect();
@@ -49,7 +49,7 @@ pub struct CreateBot {
 }
 
 pub async fn create(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     request: Result<Json<CreateBot>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let Json(request) = request.map_err(|error| ApiError::invalid_request(error.body_text()))?;
@@ -71,7 +71,7 @@ pub async fn create(
 }
 
 pub async fn update(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     Path(bot_id): Path<String>,
     request: Result<Json<BotConfiguration>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
@@ -83,14 +83,14 @@ pub async fn update(
 }
 
 pub async fn deletion_blockers(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     Path(bot_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     Ok(ok(json!(state.bots().deletion_blockers(&bot_id).await?)))
 }
 
 pub async fn delete(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     Path(bot_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let service = state.bots().clone();
@@ -102,7 +102,7 @@ pub async fn delete(
     Ok(ok(json!({"bot_id": bot_id})))
 }
 
-fn validate_client(state: &HttpState, request: &BotConfiguration) -> Result<(), ApiError> {
+fn validate_client(state: &BotState, request: &BotConfiguration) -> Result<(), ApiError> {
     if !state
         .bots()
         .supports_bot_client(&request.client_type, &request.client_key)
@@ -115,7 +115,7 @@ fn validate_client(state: &HttpState, request: &BotConfiguration) -> Result<(), 
 }
 
 pub async fn reload(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     Path(bot_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     state.bots().reload(&bot_id).await?;
@@ -123,7 +123,7 @@ pub async fn reload(
 }
 
 pub async fn chat(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     Path(bot_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     Ok(ok(json!(state.bots().chat(&bot_id).await?)))
@@ -138,7 +138,7 @@ pub struct TimelineQuery {
 }
 
 pub async fn timeline(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     Path(bot_id): Path<String>,
     query: Result<Query<TimelineQuery>, QueryRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
@@ -167,7 +167,7 @@ pub struct SearchQuery {
 }
 
 pub async fn search(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     Path(bot_id): Path<String>,
     query: Result<Query<SearchQuery>, QueryRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
@@ -192,7 +192,7 @@ pub struct SendInput {
 }
 
 pub async fn send(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     Path(bot_id): Path<String>,
     request: Result<Json<SendInput>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
@@ -203,14 +203,14 @@ pub async fn send(
 }
 
 pub async fn todos(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     Path(bot_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     Ok(ok(json!(state.bots().todos(&bot_id).await?)))
 }
 
 pub async fn resolve_todo(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     Path((bot_id, message_id)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     Ok(ok(
@@ -219,7 +219,7 @@ pub async fn resolve_todo(
 }
 
 pub async fn mark_todo(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     Path((bot_id, message_id)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     Ok(ok(
@@ -243,7 +243,7 @@ struct TodoTarget {
 }
 
 pub async fn session_todo(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     headers: HeaderMap,
     request: Result<Json<SessionTodo>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
@@ -264,7 +264,7 @@ pub async fn session_todo(
 }
 
 pub async fn message_context(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     Path((bot_id, message_id)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     Ok(ok(json!(
@@ -273,7 +273,7 @@ pub async fn message_context(
 }
 
 pub async fn retry(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     Path((bot_id, message_id)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     Ok(ok(
@@ -295,7 +295,7 @@ pub struct SetDescription {
 }
 
 pub async fn set_description(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     headers: HeaderMap,
     request: Result<Json<BotToolRequest<SetDescription>>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
@@ -310,7 +310,7 @@ pub async fn set_description(
 }
 
 pub async fn chat_history(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     headers: HeaderMap,
     request: Result<
         Json<BotToolRequest<pontia_bot::conversation::chat_history::ChatQuery>>,
@@ -328,7 +328,7 @@ pub async fn chat_history(
 }
 
 pub async fn link_message(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     headers: HeaderMap,
     request: Result<Json<BotToolRequest<pontia_bot::messages::MessageLinks>>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
@@ -353,7 +353,7 @@ pub(super) fn bot_tool_error(error: pontia_core::Error) -> ApiError {
 }
 
 pub async fn reply(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     headers: HeaderMap,
     request: Result<Json<ReplyRequest>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
@@ -377,7 +377,7 @@ pub struct StreamOptions {
 
 pub async fn stream(
     Query(options): Query<StreamOptions>,
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     Path(bot_id): Path<String>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
     state.bots().records().get(&bot_id).await?;
@@ -431,7 +431,7 @@ fn update_event(update: ConversationUpdate, timeline: bool) -> Event {
 }
 
 /// Run one maintenance round without changing the hourly timer.
-pub async fn dream(State(state): State<HttpState>) -> Result<Json<ApiResponse<Value>>, ApiError> {
+pub async fn dream(State(state): State<BotState>) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let service = state.dreaming().clone();
     let session_id = tokio::spawn(async move { service.start().await })
         .await

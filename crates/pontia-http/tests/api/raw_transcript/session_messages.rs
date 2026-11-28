@@ -1,5 +1,6 @@
 use super::*;
 use pontia_bot::identity::{BotAccess, BotIdentity, BotRole, IdentityError};
+use pontia_http as http;
 use sha2::Digest;
 use std::{future::Future, pin::Pin};
 
@@ -78,7 +79,11 @@ async fn fixture() -> Fixture {
     }
 }
 
-async fn post(state: impl Into<http::HttpState>, path: &str, input: Value) -> (StatusCode, Value) {
+async fn post(state: AppState, path: &str, input: Value) -> (StatusCode, Value) {
+    post_router(crate::common::http::router(state), path, input).await
+}
+
+async fn post_router(router: axum::Router, path: &str, input: Value) -> (StatusCode, Value) {
     let auth = if path.starts_with("/api/v1/bot/") {
         (
             pontia_bot::identity::TOOL_TOKEN_HEADER,
@@ -87,7 +92,7 @@ async fn post(state: impl Into<http::HttpState>, path: &str, input: Value) -> (S
     } else {
         ("authorization", format!("Bearer {TOKEN}"))
     };
-    let response = http::router(state)
+    let response = router
         .oneshot(
             Request::builder()
                 .method("POST")
@@ -268,9 +273,13 @@ async fn bot_readers_share_defaults_and_require_authorized_identity() {
         BotRole::Dreaming,
         BotRole::Helper,
     ] {
-        let state =
-            http::HttpState::from(f.state.clone()).with_bot_identity(Arc::new(Identity(role)));
-        let (status, body) = post(state, "/api/v1/bot/session-messages", input.clone()).await;
+        let router = http::bot_router(http::BotState::with_identity(
+            f.state.clone(),
+            crate::common::http::conversations(&f.state),
+            Arc::new(Identity(role)),
+        ));
+        let (status, body) =
+            post_router(router, "/api/v1/bot/session-messages", input.clone()).await;
         if role == BotRole::Helper {
             assert_eq!(status, StatusCode::FORBIDDEN);
         } else {
@@ -329,7 +338,7 @@ async fn helper_check_reads_paginated_native_history_without_changing_execution(
     sqlx::query("UPDATE sessions SET application_id='bot', application_ref='bot-check:launch', credential_env='PONTIA_BOT_TOOL_TOKEN', credential_sha256=? WHERE session_id='caller'")
         .bind(sha2::Sha256::digest("caller-credential").to_vec()).execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO bot_helpers(reference,bot_id,session_id) VALUES ('helper:check','bot-check','sess_messages')").execute(&pool).await.unwrap();
-    let state = http::HttpState::from(f.state.clone());
+    let state = f.state.clone();
     let before = f
         .state
         .control()
@@ -346,7 +355,7 @@ async fn helper_check_reads_paginated_native_history_without_changing_execution(
     let send = |input: Value| {
         let state = state.clone();
         async move {
-            let response = http::router(state)
+            let response = crate::common::http::router(state)
                 .oneshot(
                     Request::builder()
                         .method("POST")
@@ -407,16 +416,19 @@ async fn startup_failure_can_be_checked_without_history_and_closed_without_a_con
         "failed-helper", None, PontiaEventSource::RuntimeManager, "pi", PontiaEventType::SessionError,
         json!({"runtime_id":"runtime_failed-helper", "reason":"startup_failed", "failure":{"message":"launch failed"}})
     )).await.unwrap();
-    let http_state =
-        http::HttpState::from(state.clone()).with_bot_identity(Arc::new(Identity(BotRole::Bot)));
-    let (status, body) = post(http_state.clone(), "/api/v1/bot/helper", json!({"session_id":"caller", "command":{"action":"check","input":{"session_id":"failed-helper"}}})).await;
+    let router = http::bot_router(http::BotState::with_identity(
+        state.clone(),
+        crate::common::http::conversations(&state),
+        Arc::new(Identity(BotRole::Bot)),
+    ));
+    let (status, body) = post_router(router.clone(), "/api/v1/bot/helper", json!({"session_id":"caller", "command":{"action":"check","input":{"session_id":"failed-helper"}}})).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["data"]["session"]["state"], "error");
     assert!(body["data"]["messages"].is_null());
     assert!(body["data"]["messages_unavailable"].is_string());
-    let (status, body) = post(http_state.clone(), "/api/v1/bot/helper", json!({"session_id":"caller", "command":{"action":"check","input":{"session_id":"failed-helper", "limit":0}}})).await;
+    let (status, body) = post_router(router.clone(), "/api/v1/bot/helper", json!({"session_id":"caller", "command":{"action":"check","input":{"session_id":"failed-helper", "limit":0}}})).await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-    let (status, body) = post(http_state, "/api/v1/bot/helper", json!({"session_id":"caller", "command":{"action":"close","input":{"session_id":"failed-helper"}}})).await;
+    let (status, body) = post_router(router, "/api/v1/bot/helper", json!({"session_id":"caller", "command":{"action":"close","input":{"session_id":"failed-helper"}}})).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["data"]["session"]["state"], "exited");
     let events = state
@@ -445,7 +457,7 @@ async fn retrieval_helper_reads_arbitrary_sessions_without_memory_associations()
     let request =
         json!({"session_id":"retrieval-caller", "input":{"session_id":"sess_messages", "limit":1}});
     let expected = read(&f.state, request["input"].clone()).await;
-    let response = http::router(http::HttpState::from(f.state.clone()))
+    let response = crate::common::http::router(f.state.clone())
         .oneshot(
             Request::builder()
                 .method("POST")

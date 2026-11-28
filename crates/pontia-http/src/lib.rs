@@ -14,7 +14,13 @@ use tracing::warn;
 
 use pontia_core::error::Result;
 
+use pontia_application::AppState;
+
+mod bot;
+pub use bot::{BotState, bot_router};
 pub use state::HttpState;
+mod workflow;
+pub use workflow::workflow_router;
 
 pub mod api;
 pub mod dashboard;
@@ -68,13 +74,13 @@ pub struct HttpEntrypoints {
 }
 
 impl HttpEntrypoints {
-    pub fn new(state: impl Into<HttpState>) -> Self {
-        let state = state.into();
-        let external_api = external_api_router(state.clone());
+    pub fn new(state: HttpState, external_api: Router) -> Self {
+        let external_api =
+            external_api.layer(DefaultBodyLimit::max(EXTERNAL_API_REQUEST_BODY_LIMIT));
         let shutdown_api = Router::new()
             .route("/api/v1/shutdown", post(api::shutdown_agents))
             .route_layer(middleware::from_fn_with_state(
-                state.clone(),
+                state.app().clone(),
                 api::authenticate,
             ))
             .with_state(state.clone());
@@ -104,11 +110,7 @@ impl HttpEntrypoints {
     }
 }
 
-pub fn router(state: impl Into<HttpState>) -> Router {
-    HttpEntrypoints::new(state).local_http()
-}
-
-fn client_auth_router() -> Router<HttpState> {
+fn client_auth_router() -> Router<AppState> {
     const CLIENT: &str = "/api/v1/agent-clients/{client_type}/{client_key}/auth";
     const SESSION: &str =
         "/api/v1/agent-clients/{client_type}/{client_key}/auth/sessions/{session_id}";
@@ -139,48 +141,12 @@ fn client_auth_router() -> Router<HttpState> {
         .route_layer(middleware::map_response(api::no_store))
 }
 
-fn external_api_router(state: HttpState) -> Router {
+pub fn core_router(state: AppState) -> Router {
     Router::new()
         .route(
             "/api/v1/sessions/messages/read",
             post(api::read_session_messages),
         )
-        .route("/api/v1/bots/dreaming", post(api::bots::dream))
-        .route("/api/v1/bots", get(api::bots::list).post(api::bots::create))
-        .route("/api/v1/bots/clients", get(api::bots::clients))
-        .route(
-            "/api/v1/bots/{bot_id}",
-            get(api::bots::chat)
-                .put(api::bots::update)
-                .delete(api::bots::delete),
-        )
-        .route(
-            "/api/v1/bots/{bot_id}/deletion-blockers",
-            get(api::bots::deletion_blockers),
-        )
-        .route(
-            "/api/v1/bots/{bot_id}/messages",
-            get(api::bots::timeline).post(api::bots::send),
-        )
-        .route(
-            "/api/v1/bots/{bot_id}/messages/search",
-            get(api::bots::search),
-        )
-        .route(
-            "/api/v1/bots/{bot_id}/messages/{message_id}/context",
-            get(api::bots::message_context),
-        )
-        .route(
-            "/api/v1/bots/{bot_id}/messages/{message_id}/retry",
-            post(api::bots::retry),
-        )
-        .route("/api/v1/bots/{bot_id}/reload", post(api::bots::reload))
-        .route("/api/v1/bots/{bot_id}/todos", get(api::bots::todos))
-        .route(
-            "/api/v1/bots/{bot_id}/messages/{message_id}/todo",
-            put(api::bots::mark_todo).delete(api::bots::resolve_todo),
-        )
-        .route("/api/v1/bots/{bot_id}/stream", get(api::bots::stream))
         .route("/api/v1/uploads", post(api::create_upload))
         .route(
             "/api/v1/uploads/{upload_id}",
@@ -189,14 +155,6 @@ fn external_api_router(state: HttpState) -> Router {
         .route(
             "/api/v1/uploads/{upload_id}/complete",
             post(api::complete_upload),
-        )
-        .route(
-            "/api/v1/workflow/submissions",
-            post(api::submit_workflow_output),
-        )
-        .route(
-            "/api/v1/workflow/terminate",
-            post(api::terminate_workflow_node),
         )
         .route(
             "/api/v1/agent-client-setup",
@@ -238,11 +196,6 @@ fn external_api_router(state: HttpState) -> Router {
                 .delete(api::delete_agent_client),
         )
         .route("/api/v1/auth/validate", get(api::validate_auth))
-        .route("/api/v1/memories", get(api::list_memories))
-        .route(
-            "/api/v1/memory/user",
-            get(api::get_user_file).put(api::replace_user_file),
-        )
         .route("/api/v1/sessions", post(api::create_session))
         .route(
             "/api/v1/agent-profiles",
@@ -253,31 +206,6 @@ fn external_api_router(state: HttpState) -> Router {
             get(api::get_agent_profile)
                 .put(api::update_agent_profile)
                 .delete(api::delete_agent_profile),
-        )
-        .route(
-            "/api/v1/workflows",
-            get(api::list_workflows).post(api::run_workflow),
-        )
-        .route("/api/v1/workflows/{workflow_id}", get(api::get_workflow))
-        .route(
-            "/api/v1/workflows/{workflow_id}/context",
-            get(api::get_workflow_context),
-        )
-        .route(
-            "/api/v1/workflows/{workflow_id}/timeline",
-            get(api::get_workflow_timeline),
-        )
-        .route(
-            "/api/v1/workflows/{workflow_id}/pause",
-            post(api::pause_workflow),
-        )
-        .route(
-            "/api/v1/workflows/{workflow_id}/resume",
-            post(api::resume_workflow),
-        )
-        .route(
-            "/api/v1/workflows/{workflow_id}/retry",
-            post(api::retry_workflow),
         )
         .route(
             "/api/v1/workspaces",
@@ -485,18 +413,5 @@ fn external_api_router(state: HttpState) -> Router {
             state.clone(),
             api::authenticate,
         ))
-        .route("/api/v1/bot/session-messages", post(api::session_messages))
-        .route("/api/v1/bot/chat-history", post(api::bots::chat_history))
-        .route("/api/v1/bot/memory", post(api::memory_command))
-        .route("/api/v1/bot/user", post(api::update_user))
-        .route("/api/v1/bot/profile", post(api::profile_command))
-        .route("/api/v1/bot/workspace", post(api::workspace_command))
-        .route("/api/v1/bot/description", post(api::bots::set_description))
-        .route("/api/v1/bot/link-message", post(api::bots::link_message))
-        .route("/api/v1/bot/todo", post(api::bots::session_todo))
-        .route("/api/v1/bot/send-to-user", post(api::bots::reply))
-        .route("/api/v1/bot/dreaming", post(api::dreaming_command))
-        .route("/api/v1/bot/helper", post(api::helper_command))
-        .layer(DefaultBodyLimit::max(EXTERNAL_API_REQUEST_BODY_LIMIT))
         .with_state(state)
 }

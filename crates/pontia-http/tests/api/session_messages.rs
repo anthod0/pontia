@@ -1,3 +1,4 @@
+use crate::common::http;
 use crate::common::{generic_client::GenericClientTestScope, test_app::TestApp};
 use axum::{
     body::Body,
@@ -5,7 +6,6 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use pontia_application::AppState;
-use pontia_http as http;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 

@@ -62,19 +62,32 @@ async fn main() -> Result<()> {
         app_state.db(),
         app_state.control().clients(),
     );
-    let state = http::HttpState::new(app_state, dashboard)
-        .with_bot_config(config.bot, local_addr(bound_addr))?;
+    let bots = pontia_bot::conversation::ConversationService::new(
+        app_state.control().clone(),
+        std::env::home_dir(),
+        app_state.workspace_browser().roots,
+    )
+    .with_tool_address(local_addr(bound_addr))
+    .with_generation_limits(pontia_bot::conversation::GenerationLimits::new(
+        config.bot.context_token_limit.get(),
+        config.bot.context_window_percent,
+    )?);
+    let bot = http::BotState::new(app_state.clone(), bots);
 
     info!(addr = %bound_addr, "starting pontia control plane");
     info!(url = %dashboard_url(bound_addr), "dashboard available");
 
-    let shutdown = state.app().control().shutdown();
-    tokio::spawn(state.bots().clone().run_generations(shutdown.subscribe()));
-    tokio::spawn(state.system_notices().run(shutdown.subscribe()));
-    tokio::spawn(state.helpers().clone().run(shutdown.subscribe()));
-    tokio::spawn(state.dreaming().clone().run(shutdown.subscribe()));
+    let shutdown = app_state.control().shutdown();
+    tokio::spawn(bot.bots().clone().run_generations(shutdown.subscribe()));
+    tokio::spawn(bot.system_notices().run(shutdown.subscribe()));
+    tokio::spawn(bot.helpers().clone().run(shutdown.subscribe()));
+    tokio::spawn(bot.dreaming().clone().run(shutdown.subscribe()));
     let cleanup_shutdown = shutdown.clone();
-    let http_entrypoints = http::HttpEntrypoints::new(state);
+    let external_api = http::core_router(app_state.clone())
+        .merge(http::bot_router(bot))
+        .merge(http::workflow_router(app_state.clone()));
+    let http_entrypoints =
+        http::HttpEntrypoints::new(http::HttpState::new(app_state, dashboard), external_api);
     let remote = config
         .remote
         .as_ref()

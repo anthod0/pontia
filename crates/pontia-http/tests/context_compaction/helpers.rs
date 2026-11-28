@@ -23,7 +23,7 @@ async fn seed_bot(fixture: &Fixture) {
 }
 
 async fn compact(fixture: &Fixture, token: &str) -> (StatusCode, Value) {
-    let response = pontia_http::router(fixture.state.clone())
+    let response = crate::common::http::router(fixture.state.clone())
         .oneshot(
             Request::builder()
                 .method("POST")

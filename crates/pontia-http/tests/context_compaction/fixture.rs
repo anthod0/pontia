@@ -259,7 +259,7 @@ pub async fn request(
     if authenticated {
         request = request.header("Authorization", "Bearer test-token");
     }
-    let response = pontia_http::router(state)
+    let response = crate::common::http::router(state)
         .oneshot(request.body(Body::empty()).unwrap())
         .await
         .unwrap();

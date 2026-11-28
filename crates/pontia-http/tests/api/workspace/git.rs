@@ -219,7 +219,7 @@ async fn git_diff_rejects_paths_outside_the_repository() {
         assert_eq!(status, StatusCode::BAD_REQUEST, "{query}: {body}");
     }
 
-    let response = http::router(state.clone())
+    let response = crate::common::http::router(state.clone())
         .oneshot(
             Request::builder()
                 .uri(format!(

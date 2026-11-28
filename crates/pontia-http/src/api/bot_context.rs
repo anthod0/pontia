@@ -1,5 +1,5 @@
 use super::response::{ApiError, ApiResponse, ok};
-use crate::HttpState;
+use crate::BotState;
 use axum::{
     Json,
     extract::{State, rejection::JsonRejection},
@@ -13,7 +13,7 @@ use pontia_bot::{
 use serde_json::{Value, json};
 
 pub async fn update_user(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     headers: HeaderMap,
     request: Result<Json<UserRequest>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
@@ -42,7 +42,7 @@ pub async fn update_user(
 }
 
 pub async fn profile_command(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     headers: HeaderMap,
     request: Result<Json<pontia_bot::conversation::profiles::ProfileRequest>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
@@ -57,7 +57,7 @@ pub async fn profile_command(
 }
 
 pub async fn workspace_command(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     headers: HeaderMap,
     request: Result<Json<WorkspaceRequest>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
@@ -78,7 +78,7 @@ pub async fn workspace_command(
 }
 
 pub async fn session_messages(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     headers: HeaderMap,
     request: Result<Json<pontia_bot::session_messages::SessionMessagesRequest>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
@@ -102,7 +102,7 @@ pub async fn session_messages(
 }
 
 pub(super) async fn authorize_tool(
-    state: &HttpState,
+    state: &BotState,
     headers: &HeaderMap,
     session_id: &str,
 ) -> Result<(), ApiError> {
@@ -117,7 +117,7 @@ pub(super) async fn authorize_tool(
 }
 
 pub async fn helper_command(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     headers: HeaderMap,
     request: Result<Json<pontia_bot::helpers::HelperRequest>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
@@ -141,7 +141,7 @@ pub async fn helper_command(
 }
 
 pub async fn dreaming_command(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     headers: HeaderMap,
     request: Result<Json<pontia_bot::dreaming::DreamingRequest>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {

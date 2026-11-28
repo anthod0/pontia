@@ -23,7 +23,7 @@ async fn request(
         .body(Body::from(body))
         .unwrap();
     json_response(
-        pontia_http::router(app.state.clone())
+        crate::common::http::router(app.state.clone())
             .oneshot(request)
             .await
             .unwrap(),

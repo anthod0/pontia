@@ -252,7 +252,10 @@ async fn request(
                 .unwrap_or_else(Body::empty),
         )
         .unwrap();
-    let response = pontia_http::router(app).oneshot(request).await.unwrap();
+    let response = pontia_http::core_router(app)
+        .oneshot(request)
+        .await
+        .unwrap();
     let status = response.status();
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     (status, serde_json::from_slice(&bytes).unwrap())
@@ -336,7 +339,7 @@ async fn transient_notifications_are_delivered_before_a_durable_backlog_is_drain
         .header("authorization", "Bearer interaction-test")
         .body(Body::empty())
         .unwrap();
-    let response = pontia_http::router(f.app.clone())
+    let response = pontia_http::core_router(f.app.clone())
         .oneshot(request)
         .await
         .unwrap();
@@ -601,7 +604,7 @@ async fn transient_interaction_sse_does_not_replace_the_durable_cursor() {
         .header("authorization", "Bearer interaction-test")
         .body(Body::empty())
         .unwrap();
-    let response = pontia_http::router(f.app.clone())
+    let response = pontia_http::core_router(f.app.clone())
         .oneshot(request)
         .await
         .unwrap();

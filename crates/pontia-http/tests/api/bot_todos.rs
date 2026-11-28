@@ -19,7 +19,7 @@ async fn dashboard_todos_are_scoped_idempotent_and_only_accept_normal_messages()
     )
     .await;
     let bot = body["data"]["bot"]["bot_id"].as_str().unwrap();
-    let router = pontia_http::router(app.state.clone());
+    let router = crate::common::http::router(app.state.clone());
     sqlx::query("INSERT INTO bot_messages(id,bot_id,kind,status,content) VALUES ('user',?,'user_input','normal','Review'),('failed',?,'user_input','failed','Retry')")
         .bind(bot).bind(bot).execute(&app.db).await.unwrap();
     let change = |bot: &str, id: &str, method| {

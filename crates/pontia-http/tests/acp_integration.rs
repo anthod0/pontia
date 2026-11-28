@@ -30,7 +30,7 @@ async fn call(app: &AppState, method: &str, path: &str, body: Value) -> (StatusC
             Body::from(body.to_string())
         })
         .unwrap();
-    let response = pontia_http::router(app.clone())
+    let response = crate::common::http::router(app.clone())
         .oneshot(request)
         .await
         .unwrap();
@@ -144,7 +144,7 @@ async fn wait_turn(app: &AppState, session: &str, turn: &str, expected: &str) {
 }
 
 async fn live_stream(app: &AppState, session: &str) -> Body {
-    let response = pontia_http::router(app.clone())
+    let response = crate::common::http::router(app.clone())
         .oneshot(
             Request::builder()
                 .uri(format!("/api/v1/sessions/{session}/live-output/stream"))

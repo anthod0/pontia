@@ -5,7 +5,7 @@ use axum::{
     response::Response,
 };
 
-use crate::HttpState;
+use pontia_application::AppState;
 
 use super::response::ApiError;
 
@@ -16,7 +16,7 @@ enum ExternalApiPrincipal {
 }
 
 pub(crate) async fn authenticate(
-    State(state): State<HttpState>,
+    State(state): State<AppState>,
     mut request: Request,
     next: Next,
 ) -> Result<Response, ApiError> {
@@ -35,7 +35,7 @@ pub(crate) async fn authenticate(
     {
         ExternalApiPrincipal::E2e
     } else {
-        authenticate_local_token(state.app().external_api_token(), request.headers())?
+        authenticate_local_token(state.external_api_token(), request.headers())?
     };
 
     request.extensions_mut().insert(principal);

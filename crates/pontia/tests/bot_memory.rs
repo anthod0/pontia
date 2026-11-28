@@ -9,7 +9,7 @@ use std::{
 
 use pontia_application::AppState;
 
-use pontia_http::{HttpState, router};
+use pontia_http::{BotState, bot_router};
 use serde_json::{Value, json};
 
 struct BoundSessions;
@@ -63,14 +63,20 @@ impl Fixture {
         let app = AppState::builder(control)
             .external_api_token(Some("test-token".into()))
             .build();
-        let mut state = HttpState::from(app);
-        if bound {
-            state = state.with_bot_identity(Arc::new(BoundSessions));
-        }
+        let bots = pontia_bot::conversation::ConversationService::new(
+            app.control().clone(),
+            Some(root.path().to_owned()),
+            app.workspace_browser().roots,
+        );
+        let state = if bound {
+            BotState::with_identity(app, bots, Arc::new(BoundSessions))
+        } else {
+            BotState::new(app, bots)
+        };
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
-            axum::serve(listener, router(state)).await.unwrap();
+            axum::serve(listener, bot_router(state)).await.unwrap();
         });
         Self { root, addr, server }
     }

@@ -1,3 +1,4 @@
+use crate::common::http;
 use crate::common::test_app::TestApp;
 use axum::{
     body::Body,
@@ -13,7 +14,6 @@ use pontia_core::{
     domain::{EventSource, EventType, ReportedEvent},
     ids::new_event_id,
 };
-use pontia_http as http;
 use pontia_storage_sqlite::repositories::session_runtimes::{
     SessionRuntimeRecord, SqliteSessionRuntimeRepository,
 };

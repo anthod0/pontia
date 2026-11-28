@@ -10,7 +10,7 @@ use serde_json::Value;
 use tower::ServiceExt;
 
 async fn delete(app: &TestApp, bot: &str) -> (StatusCode, Value) {
-    let response = pontia_http::router(app.state.clone())
+    let response = crate::common::http::router(app.state.clone())
         .oneshot(
             Request::builder()
                 .method("DELETE")

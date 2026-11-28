@@ -11,7 +11,7 @@ use tower::ServiceExt;
 use common::test_app::TestApp;
 
 async fn request(app: &TestApp, request: Request<Body>) -> (StatusCode, Value) {
-    let response = pontia_http::router(app.state.clone())
+    let response = crate::common::http::router(app.state.clone())
         .oneshot(request)
         .await
         .unwrap();

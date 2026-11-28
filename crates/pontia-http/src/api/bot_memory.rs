@@ -10,10 +10,10 @@ use pontia_bot::{
 use serde_json::{Value, json};
 
 use super::response::{ApiError, ApiResponse, ok};
-use crate::HttpState;
+use crate::BotState;
 
 pub async fn memory_command(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     headers: HeaderMap,
     request: Result<Json<MemoryRequest>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
@@ -39,7 +39,7 @@ pub async fn memory_command(
 }
 
 pub async fn list_memories(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     Query(query): Query<ListMemories>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let page = state
@@ -58,7 +58,7 @@ pub async fn list_memories(
 }
 
 pub async fn get_user_file(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let user = state.user_service().read().await.map_err(|error| {
         ApiError::custom(
@@ -71,7 +71,7 @@ pub async fn get_user_file(
 }
 
 pub async fn replace_user_file(
-    State(state): State<HttpState>,
+    State(state): State<BotState>,
     request: Result<Json<ReplaceUser>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;

@@ -105,7 +105,7 @@ async fn app_with_acp_and_prerequisite(
     )
     .external_api_token(Some("test-token".into()))
     .build();
-    (pontia_http::router(state), root)
+    (pontia_http::core_router(state), root)
 }
 
 async fn request(
@@ -605,7 +605,7 @@ async fn listing_returns_saved_details_while_the_version_check_runs() {
         pontia_client_acp::AcpAgents::new([("grok".into(), agent)]),
         acp_relay::executable(),
     ));
-    let app = pontia_http::router(
+    let app = pontia_http::core_router(
         AppState::builder(
             pontia_agent_control::AgentControl::builder(db, root.path().into())
                 .clients(registry)

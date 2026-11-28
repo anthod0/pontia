@@ -272,7 +272,7 @@ async fn real_pi_client_reconnects_after_daemon_restart_and_delivers_external_in
         ))
         .await
         .unwrap();
-    let response = pontia_http::router(restarted.clone())
+    let response = crate::common::http::router(restarted.clone())
         .oneshot(
             Request::builder()
                 .method("POST")
@@ -358,7 +358,7 @@ async fn control_request(
     resource: &str,
     body: Value,
 ) -> (StatusCode, Value) {
-    let response = pontia_http::router(state.clone())
+    let response = crate::common::http::router(state.clone())
         .oneshot(
             Request::builder()
                 .method(method)

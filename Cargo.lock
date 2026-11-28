@@ -3080,6 +3080,7 @@ dependencies = [
  "hyper-util",
  "pontia-agent-control",
  "pontia-application",
+ "pontia-bot",
  "pontia-clients",
  "pontia-config",
  "pontia-core",

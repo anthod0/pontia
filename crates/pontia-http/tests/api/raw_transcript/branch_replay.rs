@@ -1,6 +1,6 @@
 use super::{
     AgentBindingService, AppState, Body, BodyExt, PiJsonlV2Cursor, Request, ServiceExt, StatusCode,
-    TOKEN, TimelineBoundaryRelation, UpsertAgentBindingRequest, Value, fs, header, http, json,
+    TOKEN, TimelineBoundaryRelation, UpsertAgentBindingRequest, Value, fs, header, json,
     seed_session, tempdir, test_state,
 };
 
@@ -41,7 +41,7 @@ async fn attach(pi: &PiRpcPeer, session: &str, runtime: &str, native: &str) {
 }
 
 async fn post_external_json(state: AppState, uri: &str, body: Value) -> (StatusCode, Value) {
-    let response = http::router(state)
+    let response = crate::common::http::router(state)
         .oneshot(
             Request::builder()
                 .method("POST")

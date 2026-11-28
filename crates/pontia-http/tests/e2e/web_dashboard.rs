@@ -31,7 +31,7 @@ async fn dashboard_and_preview_shell_have_distinct_embedding_policies() {
     let (_dir, root) = build_local_dashboard("dashboard", "custom.js");
     std::fs::write(root.join("file-preview.htm"), "<iframe sandbox></iframe>").unwrap();
     let (state, _home) = test_state_with_dashboard(ResolvedDashboard::available(root)).await;
-    let app = http::router(state);
+    let app = crate::common::http::router(state);
     for (path, frame_options, ancestors) in [
         ("/dashboard", "DENY", "'none'"),
         ("/dashboard/devices", "DENY", "'none'"),
@@ -69,7 +69,7 @@ async fn dashboard_serves_configured_local_entrypoint() {
 
     let (state, _pontia_home) =
         test_state_with_dashboard(ResolvedDashboard::available(root.clone())).await;
-    let response = http::router(state)
+    let response = crate::common::http::router(state)
         .oneshot(
             Request::builder()
                 .uri("/dashboard")
@@ -94,7 +94,7 @@ async fn dashboard_serves_configured_local_entrypoint() {
     assert!(html.contains("custom dashboard"));
 
     let (state, _pontia_home) = test_state_with_dashboard(ResolvedDashboard::available(root)).await;
-    let response = http::router(state)
+    let response = crate::common::http::router(state)
         .oneshot(
             Request::builder()
                 .uri("/dashboard/assets/custom.js")
@@ -115,7 +115,7 @@ async fn dashboard_serves_files_from_configured_dist_root() {
     std::fs::write(logo_dir.join("mark.png"), b"png-bytes").expect("logo file");
 
     let (state, _pontia_home) = test_state_with_dashboard(ResolvedDashboard::available(root)).await;
-    let response = http::router(state)
+    let response = crate::common::http::router(state)
         .oneshot(
             Request::builder()
                 .uri("/dashboard/logo/mark.png")
@@ -153,7 +153,7 @@ async fn dashboard_serves_pwa_files_with_required_headers() {
     ] {
         let (state, _pontia_home) =
             test_state_with_dashboard(ResolvedDashboard::available(root.clone())).await;
-        let response = http::router(state)
+        let response = crate::common::http::router(state)
             .oneshot(
                 Request::builder()
                     .uri(format!("/dashboard/{path}"))
@@ -188,7 +188,7 @@ async fn dashboard_spa_fallback_serves_entrypoint_for_nested_routes() {
     ] {
         let (state, _pontia_home) =
             test_state_with_dashboard(ResolvedDashboard::available(root.clone())).await;
-        let response = http::router(state)
+        let response = crate::common::http::router(state)
             .oneshot(
                 Request::builder()
                     .uri(path)
@@ -324,7 +324,7 @@ async fn remote_dashboard_serves_targz_with_root_directory_entry() {
     .await;
     server.abort();
     let (state, _pontia_home) = test_state_with_dashboard(dashboard).await;
-    let app = http::router(state);
+    let app = crate::common::http::router(state);
     for (url, file) in [
         ("/dashboard", "index.html"),
         ("/dashboard/assets/release.js", "assets/release.js"),
@@ -400,7 +400,7 @@ async fn request_dashboard_html(dashboard: ResolvedDashboard) -> String {
 
 async fn request_dashboard(dashboard: ResolvedDashboard) -> (StatusCode, String) {
     let (state, _pontia_home) = test_state_with_dashboard(dashboard).await;
-    let response = http::router(state)
+    let response = crate::common::http::router(state)
         .oneshot(
             Request::builder()
                 .uri("/dashboard")

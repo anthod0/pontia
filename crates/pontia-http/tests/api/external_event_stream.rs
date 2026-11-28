@@ -93,7 +93,7 @@ async fn stream_get(
         builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
     }
 
-    let response = http::router(state)
+    let response = crate::common::http::router(state)
         .oneshot(builder.body(Body::empty()).expect("request"))
         .await
         .expect("response");
@@ -580,7 +580,7 @@ async fn graceful_shutdown_closes_event_stream_without_waiting_for_timeout() {
 
     let server = tokio::spawn(http::serve_with_shutdown_timeout(
         listener,
-        http::router(state),
+        crate::common::http::router(state),
         async move {
             let _ = shutdown_rx.await;
             shutdown.notify();

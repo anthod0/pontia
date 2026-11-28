@@ -10,7 +10,7 @@ use tower::ServiceExt;
 #[tokio::test]
 async fn shutdown_requires_local_bearer_and_preserves_unverified_processes() {
     let app = TestApp::new().await;
-    let router = pontia_http::router(app.state.clone());
+    let router = crate::common::http::router(app.state.clone());
     let dir = app.pontia_home().path().join("state/codex");
     std::fs::create_dir_all(&dir).unwrap();
     let socket = dir.join("background-app-server.sock");

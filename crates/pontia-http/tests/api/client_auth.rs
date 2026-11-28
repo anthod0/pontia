@@ -189,7 +189,7 @@ async fn harness() -> Harness {
     )
     .external_api_token(Some("test-token".into()))
     .build();
-    let endpoints = HttpEntrypoints::new(state);
+    let endpoints = crate::common::http::entrypoints(state);
     Harness {
         router: endpoints.local_http(),
         endpoints,

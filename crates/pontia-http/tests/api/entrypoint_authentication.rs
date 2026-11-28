@@ -3,7 +3,6 @@ use axum::{
     body::Body,
     http::{Request, StatusCode, header},
 };
-use pontia_http::HttpEntrypoints;
 use tower::ServiceExt;
 
 const TOKEN: &str = "test-token";
@@ -22,7 +21,7 @@ async fn local_http_entrypoint_requires_the_configured_bearer_token() {
         .external_api_token(Some(TOKEN.to_string()))
         .build_state()
         .await;
-    let entrypoints = HttpEntrypoints::new(state);
+    let entrypoints = crate::common::http::entrypoints(state);
 
     let valid = entrypoints
         .local_http()
@@ -51,7 +50,7 @@ async fn local_http_headers_cannot_claim_trusted_tunnel_access() {
         .external_api_token(Some(TOKEN.to_string()))
         .build_state()
         .await;
-    let entrypoints = HttpEntrypoints::new(state);
+    let entrypoints = crate::common::http::entrypoints(state);
     let request = Request::builder()
         .uri("/api/v1/auth/validate")
         .header("x-pontia-ingress", "trusted-device-tunnel")

@@ -307,7 +307,7 @@ async fn next_update(stream: &mut Body) -> Value {
 #[tokio::test]
 async fn another_clients_retry_updates_the_original_row_off_the_tail_and_reset_recovers_it() {
     let app = fixture().await;
-    let router = pontia_http::router(app.state.clone());
+    let router = crate::common::http::router(app.state.clone());
     for path in [
         "/api/v1/bots/a/messages",
         "/api/v1/bots/a/stream?timeline=true",
@@ -374,8 +374,11 @@ async fn streaming_resets_for_current_session_notices_and_missed_updates() {
     use pontia_core::domain::{EventSource, EventType, ReportedEvent};
 
     let app = fixture().await;
-    let state = pontia_http::HttpState::from(app.state.clone());
-    let router = pontia_http::router(state.clone());
+    let conversations = crate::common::http::conversations(&app.state);
+    let router = pontia_http::bot_router(pontia_http::BotState::new(
+        app.state.clone(),
+        conversations.clone(),
+    ));
     let events = app.state.control().event_ingest_service();
     for session in ["s", "t"] {
         events
@@ -418,7 +421,7 @@ async fn streaming_resets_for_current_session_notices_and_missed_updates() {
         .unwrap();
     message(&app, "a", "older", "2026-01-01T00:00:00Z", "failed").await;
     for _ in 0..40 {
-        state.bots().retry("a", "older").await.unwrap();
+        conversations.retry("a", "older").await.unwrap();
     }
     assert_eq!(next_update(&mut live).await, json!({"type":"reset"}));
 }
@@ -443,7 +446,7 @@ async fn helper_busy_idle_and_exit_events_refresh_only_the_owning_bot() {
         .unwrap();
     sqlx::query("INSERT INTO bot_helpers(reference,bot_id,session_id) VALUES ('helper:a:test','a','worker')")
         .execute(&app.db).await.unwrap();
-    let router = pontia_http::router(app.state.clone());
+    let router = crate::common::http::router(app.state.clone());
     let mut live = get_body(&router, "/api/v1/bots/a/stream?timeline=true").await;
     let mut other = get_body(&router, "/api/v1/bots/b/stream?timeline=true").await;
     next_update(&mut live).await;
@@ -596,7 +599,7 @@ async fn linking_a_message_requires_the_current_bot_session_and_its_credential()
             .bind(session).bind(format!("a:{session}")).bind(sha2::Sha256::digest(session).to_vec())
             .execute(&app.db).await.unwrap();
     }
-    let router = pontia_http::router(app.state.clone());
+    let router = crate::common::http::router(app.state.clone());
     let before = page(&app, &[]).await;
     let mut live = get_body(&router, "/api/v1/bots/a/stream?timeline=true").await;
     assert_eq!(next_update(&mut live).await, json!({"type":"reset"}));

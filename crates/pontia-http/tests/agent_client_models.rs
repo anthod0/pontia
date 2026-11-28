@@ -84,7 +84,7 @@ Path('closed').touch()
     )
     .external_api_token(Some("test-token".into()))
     .build();
-    (pontia_http::router(state), db, root, env)
+    (crate::common::http::router(state), db, root, env)
 }
 
 async fn fixture(response: Value) -> (Router, sqlx::SqlitePool, tempfile::TempDir, EnvGuard) {

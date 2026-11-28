@@ -23,7 +23,7 @@ async fn post(state: AppState, path: &str, authorization: Option<&str>) -> (Stat
     if let Some(authorization) = authorization {
         request = request.header(header::AUTHORIZATION, authorization);
     }
-    let response = pontia_http::router(state)
+    let response = crate::common::http::router(state)
         .oneshot(request.body(Body::from("{}")).unwrap())
         .await
         .unwrap();

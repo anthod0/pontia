@@ -219,7 +219,7 @@ async fn chat_tool(
     };
     use tower::ServiceExt;
 
-    let response = pontia_http::router(app.state.clone())
+    let response = crate::common::http::router(app.state.clone())
         .oneshot(
             Request::post(format!("/api/v1/bot/{tool}"))
                 .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))

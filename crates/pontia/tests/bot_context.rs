@@ -2,7 +2,7 @@ use pontia_agent_control::ControlQueryService;
 use pontia_application::AppState;
 use pontia_bot::identity::{BotAccess, BotIdentity, BotRole, IdentityError};
 use pontia_config::{WorkspaceBrowserConfig, WorkspaceRootConfig};
-use pontia_http::{HttpState, router};
+use pontia_http::{BotState, bot_router, core_router};
 use serde_json::{Value, json};
 use sha2::Digest;
 use std::{
@@ -72,14 +72,21 @@ impl Fixture {
                 }],
             })
             .build();
-        let mut state = HttpState::from(app.clone());
-        if bound {
-            state = state.with_bot_identity(Arc::new(Sessions));
-        }
+        let bots = pontia_bot::conversation::ConversationService::new(
+            app.control().clone(),
+            Some(root.path().to_owned()),
+            app.workspace_browser().roots,
+        );
+        let state = if bound {
+            BotState::with_identity(app.clone(), bots, Arc::new(Sessions))
+        } else {
+            BotState::new(app.clone(), bots)
+        };
+        let router = core_router(app.clone()).merge(bot_router(state));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
-            axum::serve(listener, router(state)).await.unwrap();
+            axum::serve(listener, router).await.unwrap();
         });
         Self {
             root,

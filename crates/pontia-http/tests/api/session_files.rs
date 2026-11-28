@@ -29,7 +29,7 @@ async fn path_content(
     if authenticated {
         request = request.header("Authorization", "Bearer test-token");
     }
-    pontia_http::router(app.state.clone())
+    crate::common::http::router(app.state.clone())
         .oneshot(request.body(Body::empty()).unwrap())
         .await
         .unwrap()
@@ -176,7 +176,7 @@ async fn path_head_reports_size_and_type_without_a_body() {
             reqwest::Url::parse("http://localhost/api/v1/sessions/s/files/content").unwrap();
         url.query_pairs_mut()
             .append_pair("path", path.to_str().unwrap());
-        pontia_http::router(app.state.clone()).oneshot(
+        crate::common::http::router(app.state.clone()).oneshot(
             Request::builder()
                 .method("HEAD")
                 .uri(&url.as_str()["http://localhost".len()..])

@@ -1,10 +1,10 @@
+use crate::common::http;
 use crate::common::test_app::TestApp;
 use axum::{
     body::Body,
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use pontia_http as http;
 use serde_json::Value;
 use tower::ServiceExt;
 

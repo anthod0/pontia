@@ -11,7 +11,7 @@ use std::time::Duration;
 use tower::ServiceExt;
 
 async fn call(app: &AppState, method: &str, path: &str, body: Value) -> (StatusCode, Value) {
-    let response = pontia_http::router(app.clone())
+    let response = pontia_http::core_router(app.clone())
         .oneshot(
             Request::builder()
                 .method(method)
@@ -416,7 +416,7 @@ async fn claude_http_creation_inbox_live_output_interrupt_and_exit_share_applica
     )
     .await;
     assert_eq!(queued["data"]["delivery"]["status"], "queued");
-    let response = pontia_http::router(app.clone())
+    let response = pontia_http::core_router(app.clone())
         .oneshot(
             Request::builder()
                 .uri(format!("/api/v1/sessions/{session}/live-output/stream"))

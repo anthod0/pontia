@@ -97,7 +97,7 @@ async fn set_description(
 #[tokio::test]
 async fn only_the_current_bot_can_fill_its_empty_description() {
     let app = TestApp::new().await;
-    let router = pontia_http::router(app.state.clone());
+    let router = crate::common::http::router(app.state.clone());
     let long = "文".repeat(2001);
     let mut config = configuration();
     config["description"] = json!(&long);
