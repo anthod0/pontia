@@ -54,17 +54,25 @@
 
 <LocaleLinks />
 
-<a class="skip-link" href="#main">{m.skip_to_content()}</a>
+<div id="homepage">
+	<a class="skip-link" href="#main">{m.skip_to_content()}</a>
 
-<SiteHeader />
+	<SiteHeader />
 
-<main id="main">
-	<HeroSection />
+	<main id="main">
+		<HeroSection />
 
-	<BotStorySection />
-	<RemoteSection />
-	<OpenSourceSection />
-	<WhereverSection />
-</main>
+		<BotStorySection />
+		<RemoteSection />
+		<OpenSourceSection />
+		<WhereverSection />
+	</main>
 
-<SiteFooter />
+	<SiteFooter />
+</div>
+
+<style>
+	#homepage :global(:is(button, [role="button"], a.button, a.cta, .skip-link)) {
+		border-radius: var(--radius-action);
+	}
+</style>
