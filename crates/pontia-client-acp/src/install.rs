@@ -315,10 +315,7 @@ fn prerequisite(
 mod tests {
     use super::*;
     use pontia_runtime::client_operations::{Status, run};
-    use std::{
-        fs,
-        os::unix::fs::{PermissionsExt, symlink},
-    };
+    use std::{fs, os::unix::fs::symlink};
 
     #[test]
     fn installs_and_verifies_each_vendor_binary_including_grok_outside_path() {
@@ -342,11 +339,10 @@ mod tests {
                 installer.install_with("official_script", op, &vars, |_, _| {
                     let binary = root.path().join(target);
                     fs::create_dir_all(binary.parent().unwrap())?;
-                    fs::write(
+                    crate::test_executable::write_script(
                         &binary,
-                        format!("#!/bin/sh\n[ \"$1\" = --version ] && echo '{output}'"),
-                    )?;
-                    fs::set_permissions(binary, fs::Permissions::from_mode(0o755))
+                        &format!("[ \"$1\" = --version ] && echo '{output}'"),
+                    )
                 })
             })
             .unwrap();

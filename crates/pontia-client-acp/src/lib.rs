@@ -29,3 +29,7 @@ mod transport;
 
 pub use adapter::{registration, registration_with_relay};
 pub use spec::{ACP_MAX_CAPABILITIES, SPEC};
+
+#[cfg(test)]
+#[path = "../test-support/executable.rs"]
+mod test_executable;

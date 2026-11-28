@@ -143,7 +143,17 @@ async fn approvals_resolved_immediately_still_persist_both_ordered_facts() {
         f.send(resolved("thread", json!(id)));
     }
     let expired = f.wait(32, InteractionState::Expired).await;
-    let facts = f.facts().await;
+    let facts = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let facts = f.facts().await;
+            if facts.len() >= 64 {
+                break facts;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("32 approvals must persist their blocked and unblocked facts");
     assert_eq!(facts.len(), 64);
     for interaction in expired {
         let matching: Vec<&str> = facts

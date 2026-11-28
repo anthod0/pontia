@@ -20,9 +20,7 @@ impl Fixture {
     fn new(script: &str) -> Self {
         let directory = tempfile::tempdir().unwrap();
         let program = directory.path().join("client");
-        std::fs::write(&program, format!("#!/bin/sh\n{script}\n")).unwrap();
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+        crate::test_executable::write_script(&program, script).unwrap();
         let builtin = AcpAgents::builtin();
         let agents = AcpAgents::new(builtin.ids().map(|id| {
             let mut agent = builtin.get(id).unwrap().clone();

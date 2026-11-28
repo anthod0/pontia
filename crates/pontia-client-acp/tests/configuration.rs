@@ -1,3 +1,6 @@
+#[path = "../test-support/executable.rs"]
+mod test_executable;
+
 use pontia_agent_control::client_contract::ClientConfiguration;
 use pontia_client_acp::{AcpAgents, configuration::AcpConfiguration};
 use serde_json::json;
@@ -50,17 +53,16 @@ fn acp_validates_the_selected_definition() {
 #[tokio::test]
 async fn directory_trust_runs_grok_only_for_the_selected_root() {
     use pontia_agent_control::{agent_clients::AgentClientService, clients::ClientRegistry};
-    use std::{fs, os::unix::fs::PermissionsExt, sync::Arc};
+    use std::{fs, sync::Arc};
 
     let root = tempfile::tempdir().unwrap();
     let selected = root.path().join("project with spaces");
     let child = selected.join("child");
     fs::create_dir_all(&child).unwrap();
     let executable = root.path().join("grok");
-    fs::write(
+    test_executable::write_script(
         &executable,
-        r#"#!/bin/sh
-case "$*" in
+        r#"case "$*" in
     'inspect --json') cat inspection.json ;;
     '--trust inspect --json') echo granted > decision ;;
     *) exit 1 ;;
@@ -68,7 +70,6 @@ esac
 "#,
     )
     .unwrap();
-    fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
 
     let builtin = AcpAgents::builtin();
     let agents = AcpAgents::new(builtin.ids().map(|key| {

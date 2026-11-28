@@ -2619,7 +2619,22 @@ async fn reconnected_permission_delivers_the_original_response_once() {
         .unwrap();
     h.start_transport().await;
     let id = &original[0].interaction_id;
-    tokio::time::timeout(Duration::from_secs(5), async {
+    tokio::time::timeout(Duration::from_secs(15), async {
+        // Permission replay can confirm the Interaction before the reattached
+        // peer is available to deliver a response.
+        loop {
+            let view = h
+                .app
+                .queries()
+                .get_session(&session)
+                .await
+                .unwrap()
+                .unwrap();
+            if view.client_details["acp"]["connection"] == "connected" {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
         loop {
             match h
                 .app
@@ -2641,33 +2656,26 @@ async fn reconnected_permission_delivers_the_original_response_once() {
     .await
     .unwrap();
     assert_eq!(h.events(&session, "interaction.blocked").await, 3);
-    assert_eq!(
-        h.wire()
-            .iter()
-            .filter(|f| f.pointer("/result/outcome/optionId").is_some())
-            .count(),
-        1
-    );
-    tokio::time::timeout(Duration::from_secs(5), async {
+    let outcomes = tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            let cancellations = h
-                .wire()
-                .into_iter()
-                .filter(|frame| {
-                    frame
-                        .pointer("/result/outcome/outcome")
-                        .and_then(Value::as_str)
-                        == Some("cancelled")
-                })
+            let wire = h.wire();
+            let selected = wire
+                .iter()
+                .filter(|frame| frame.pointer("/result/outcome/optionId").is_some())
                 .count();
-            if cancellations == 1 {
-                break;
+            let cancelled = wire
+                .iter()
+                .filter(|frame| frame["result"]["outcome"]["outcome"] == "cancelled")
+                .count();
+            if selected > 0 && cancelled > 0 {
+                break (selected, cancelled);
             }
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
     })
     .await
-    .unwrap();
+    .expect("native agent must observe both permission outcomes");
+    assert_eq!(outcomes, (1, 1));
     assert_eq!(h.events(&session, "interaction.unblocked").await, 1);
     h.stop().await;
 }
