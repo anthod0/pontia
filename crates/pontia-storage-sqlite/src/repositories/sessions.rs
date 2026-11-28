@@ -452,3 +452,7 @@ impl SqliteSessionRepository {
         Ok(result.rows_affected())
     }
 }
+
+mod client_access;
+pub use client_access::{SessionLaunchFields, ShutdownSessionRow};
+mod metadata;

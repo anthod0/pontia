@@ -1,5 +1,6 @@
 use crate::EventIngestService;
 use pontia_core::{Error, Result, domain::EventType};
+use pontia_storage_sqlite::repositories::native_turn_bindings::SqliteNativeTurnBindingRepository;
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
 
@@ -68,5 +69,35 @@ impl NativeTurnService {
             self.events.report_client_fact(session, runtime_id, kind, json!({"native_turn_id":native,"native_completed_at":turn.completed_at,"observation":turn.origin,"failure":{"message":turn.failure}})).await?;
         }
         Ok(())
+    }
+}
+
+impl NativeTurnService {
+    pub async fn client_turn_id(&self, session_id: &str, turn_id: &str) -> Result<Option<String>> {
+        SqliteNativeTurnBindingRepository::new(self.pool.clone())
+            .client_turn_id(session_id, turn_id)
+            .await
+    }
+
+    pub async fn turn_id(&self, session_id: &str, client_turn_id: &str) -> Result<Option<String>> {
+        SqliteNativeTurnBindingRepository::new(self.pool.clone())
+            .turn_id(session_id, client_turn_id)
+            .await
+    }
+
+    pub async fn is_bound(&self, session_id: &str, client_turn_id: &str) -> Result<bool> {
+        SqliteNativeTurnBindingRepository::new(self.pool.clone())
+            .exists(session_id, client_turn_id)
+            .await
+    }
+
+    pub async fn running_turn_id(
+        &self,
+        session_id: &str,
+        client_turn_id: &str,
+    ) -> Result<Option<String>> {
+        SqliteNativeTurnBindingRepository::new(self.pool.clone())
+            .running_turn_id(session_id, client_turn_id)
+            .await
     }
 }

@@ -312,3 +312,6 @@ mod tests {
         assert_eq!(count, 2);
     }
 }
+
+mod facts;
+pub use facts::{CompletedTurnWithBoundaries, ReportEvent};

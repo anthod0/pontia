@@ -43,3 +43,8 @@ impl ControlQueryService {
         self
     }
 }
+
+mod client_sessions;
+pub use client_sessions::{SessionLaunchFields, SessionRuntimeRecord};
+mod facts;
+pub use facts::{CompletedTurnWithBoundaries, ReportEvent};

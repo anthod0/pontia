@@ -4,6 +4,7 @@ pub mod agent_profiles;
 pub mod events;
 pub mod git_status;
 pub mod inbox;
+pub mod native_turn_bindings;
 pub mod session_runtimes;
 pub mod sessions;
 pub mod turns;

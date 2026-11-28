@@ -139,3 +139,6 @@ impl SessionCommandService {
 
 #[cfg(test)]
 mod auto_exit_tests;
+
+mod metadata;
+pub use metadata::SessionMetadataStore;

@@ -77,3 +77,5 @@ pub use sessions::instructions::{SessionInstructionsService, standalone_session_
 
 mod timeline_cache;
 pub use timeline_cache::TimelineCacheWriter;
+
+pub use sessions::SessionMetadataStore;
