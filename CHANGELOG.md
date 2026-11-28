@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.8] - 2026-11-28
+
+### Added
+
+- Stage, unstage, discard, and commit changes, and pull or push the current branch from the Dashboard Git panel on desktop and mobile.
+- Bots can search their own chat history.
+- Use the Dashboard in Japanese.
+
+### Changed
+
+- The Session API replaces the inbox with separate endpoints for submitting messages and managing the queue. Queued messages appear above the composer and can be canceled before delivery.
+- On mobile, the Session summary sits above the composer and routine updates no longer show toast notifications.
+
+### Fixed
+
+- The mobile Agent Client picker stays open while making a selection.
+- The Git sidebar refreshes more efficiently.
+
 ## [0.9.7] - 2026-11-27
 
 ### Added
@@ -1370,7 +1388,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.9.7...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.9.8...HEAD
+[0.9.8]: https://github.com/anthod0/pontia/compare/v0.9.7...v0.9.8
 [0.9.7]: https://github.com/anthod0/pontia/compare/v0.9.6...v0.9.7
 [0.9.6]: https://github.com/anthod0/pontia/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/anthod0/pontia/compare/v0.9.4...v0.9.5
