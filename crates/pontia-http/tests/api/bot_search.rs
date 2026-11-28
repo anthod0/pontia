@@ -1,6 +1,7 @@
 use super::{common::test_app::TestApp, support::http::get_json};
 use axum::http::StatusCode;
 use serde_json::{Value, json};
+use sha2::Digest;
 
 async fn fixture() -> TestApp {
     let app = TestApp::new().await;
@@ -243,6 +244,27 @@ async fn retrieval_fixture() -> TestApp {
         INSERT INTO bot_helpers(reference,bot_id,session_id) VALUES
             ('helper:a:r','a','reader'), ('helper:b:r','b','other-reader'), ('helper:a:h','a','helper');"#)
         .execute(&app.db).await.unwrap();
+    for (session, bot, credential) in [
+        ("main-a", "a", "main-cred-a"),
+        ("main-b", "b", "main-cred-b"),
+    ] {
+        sqlx::query(
+            "INSERT INTO sessions(session_id,client_type,state,application_id,application_ref,credential_env,credential_sha256)
+             VALUES (?,'generic','idle','bot',?,'PONTIA_BOT_TOOL_TOKEN',?)",
+        )
+        .bind(session)
+        .bind(format!("{bot}:current"))
+        .bind(sha2::Sha256::digest(credential).to_vec())
+        .execute(&app.db)
+        .await
+        .unwrap();
+        sqlx::query("UPDATE bots SET current_session_id = ? WHERE bot_id = ?")
+            .bind(session)
+            .bind(bot)
+            .execute(&app.db)
+            .await
+            .unwrap();
+    }
     app
 }
 
@@ -253,13 +275,13 @@ async fn retrieval_search_and_chronological_context_stay_in_the_requesting_bot_c
         (
             "reader",
             "cred-a",
-            json!({"action":"search","keyword":"部署","limit":10}),
+            json!({"action":"search","query":"部署","limit":10}),
             vec!["m2", "m1"],
         ),
         (
             "other-reader",
             "cred-b",
-            json!({"action":"search","keyword":"部署","limit":10}),
+            json!({"action":"search","query":"部署","limit":10}),
             vec!["other"],
         ),
         (
@@ -291,11 +313,11 @@ async fn retrieval_search_and_chronological_context_stay_in_the_requesting_bot_c
             StatusCode::NOT_FOUND,
         ),
         (
-            json!({"action":"search","keyword":"部署","limit":1,"before":"other"}),
+            json!({"action":"search","query":"部署","limit":1,"before":"other"}),
             StatusCode::BAD_REQUEST,
         ),
         (
-            json!({"action":"search","keyword":"部署","limit":1,"bot_id":"b"}),
+            json!({"action":"search","query":"部署","limit":1,"bot_id":"b"}),
             StatusCode::BAD_REQUEST,
         ),
         (
@@ -315,7 +337,7 @@ async fn retrieval_search_and_chronological_context_stay_in_the_requesting_bot_c
 #[tokio::test]
 async fn chat_reads_require_a_live_retrieval_credential_and_grant_no_write_permission() {
     let app = retrieval_fixture().await;
-    let search = json!({"action":"search","keyword":"部署","limit":1});
+    let search = json!({"action":"search","query":"部署","limit":1});
     for (session, credential) in [("other-reader", "cred-a"), ("helper", "cred-h")] {
         assert_eq!(
             chat_tool(&app, "chat-history", session, credential, search.clone())
@@ -345,6 +367,90 @@ async fn chat_reads_require_a_live_retrieval_credential_and_grant_no_write_permi
         chat_tool(&app, "chat-history", "reader", "cred-a", search)
             .await
             .0,
+        StatusCode::FORBIDDEN
+    );
+}
+
+#[tokio::test]
+async fn current_bot_search_returns_message_identity_sender_time_and_content() {
+    let app = retrieval_fixture().await;
+    let search = json!({"action":"search","query":"部署","limit":10});
+    let (status, body) = chat_tool(&app, "chat-history", "main-a", "main-cred-a", search).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["data"]["messages"][0]["id"], "m2");
+    assert_eq!(body["data"]["messages"][0]["sender"], "bot");
+    assert_eq!(
+        body["data"]["messages"][0]["created_at"],
+        "2026-11-20T00:00:02Z"
+    );
+    assert_eq!(
+        body["data"]["messages"][0]["content"],
+        "部署日志显示磁盘已满"
+    );
+}
+
+#[tokio::test]
+async fn current_bot_search_pages_and_filters_attachments() {
+    let app = retrieval_fixture().await;
+    insert(
+        &app,
+        "file-a",
+        "bot_reply",
+        "2026-11-20T00:00:10Z",
+        "See [release notes](/reports/release.md)",
+    )
+    .await;
+
+    let first = json!({"action":"search","query":"部署","limit":1});
+    let (_, body) = chat_tool(&app, "chat-history", "main-a", "main-cred-a", first).await;
+    assert_eq!(body["data"]["messages"][0]["id"], "m2");
+    assert_eq!(body["data"]["next_before"], "m2");
+
+    let second = json!({"action":"search","query":"部署","before":"m2","limit":1});
+    let (_, body) = chat_tool(&app, "chat-history", "main-a", "main-cred-a", second).await;
+    assert_eq!(body["data"]["messages"][0]["id"], "m1");
+    assert!(body["data"]["next_before"].is_null());
+
+    let files = json!({"action":"search","query":"release","type":"file","limit":10});
+    let (_, body) = chat_tool(&app, "chat-history", "main-a", "main-cred-a", files).await;
+    assert_eq!(body["data"]["messages"].as_array().unwrap().len(), 1);
+    assert_eq!(body["data"]["messages"][0]["id"], "file-a");
+    assert_eq!(
+        body["data"]["messages"][0]["attachments"][0]["name"],
+        "release.md"
+    );
+}
+
+#[tokio::test]
+async fn chat_history_rejects_foreign_credentials_and_never_crosses_bot_chats() {
+    let app = retrieval_fixture().await;
+
+    let (_, body) = chat_tool(
+        &app,
+        "chat-history",
+        "main-b",
+        "main-cred-b",
+        json!({"action":"search","query":"部署","limit":10}),
+    )
+    .await;
+    let ids: Vec<_> = body["data"]["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|message| message["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, ["other"]);
+
+    assert_eq!(
+        chat_tool(
+            &app,
+            "chat-history",
+            "main-a",
+            "main-cred-b",
+            json!({"action":"search","query":"部署","limit":10}),
+        )
+        .await
+        .0,
         StatusCode::FORBIDDEN
     );
 }

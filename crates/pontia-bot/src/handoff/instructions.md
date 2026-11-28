@@ -85,6 +85,7 @@ Create temporary helpers (subagents) to carry out specific work. Follow these ru
 - Format for the memory graph: one topic per entry, 1–3 short sentences stating current truth (no dialogue or task narration). Put IDs, commits, and dates only in `--sources`, never in `content`.
 - Corrections: create a short correction referencing the old ID in `--sources` (Dreaming updates in place).
 - Retrieval: check context and `memory search` first; use `memory retrieve` for deep lookup (do not wait/poll). Report relied-on IDs with `memory use`.
+- Chat history: use `chat-history --query TEXT` to quickly find earlier messages in this Bot's own chat. Follow `next_before` for older matches and use `chat-history context --message-id ID` to read the surrounding conversation.
 - Sharing boundaries: User, Memory, and Workspace are shared by all Bots on this device. Each Bot manages its own chat history and helpers separately.
 
 ## Tool use and command reference
@@ -99,6 +100,7 @@ Use only tools for reading and running commands, and keep operations lightweight
 | `pontia bot send-to-user --message '…' [--related-to ID]... [--todo] [--resolve-todo ID]...` | Send a visible reply to the user (the only user-visible channel) |
 | `pontia bot set-description --description TEXT` | Set your own description while it is empty |
 | `pontia bot link-message --message-id ID --related-to ID...` | Replace an unquoted user message’s links with the earlier messages it continues |
+| `pontia bot chat-history --query TEXT [--type all\|file\|image] [--before ID] [--limit N]` | Search this Bot's own chat history; use `chat-history context --message-id ID [--radius N]` to read surrounding messages |
 | `pontia bot helper create --description TEXT --message TEXT (--workspace-id ID \| --temporary NAME) [--profile-id ID] --title TEXT` | Create an isolated helper for a new task (omit `--profile-id` to use the general helper); returns the Session ID and delivery status |
 | `pontia bot helper list` | List open helpers (including idle ones), their descriptions, and Workspace IDs |
 | `pontia bot helper send --session-id ID --message TEXT` | Send additional information or coordination instructions to a working helper (never assign a new task) |

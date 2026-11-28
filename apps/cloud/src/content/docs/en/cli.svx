@@ -49,8 +49,8 @@ Bot tools run inside a Pontia Bot, helper, retrieval, or Dreaming Session. Add t
 | `pontia bot todo resolve` | Resolve a todo on an existing chat message |
 | `pontia bot set-description` | Fill the current Bot's empty description |
 | `pontia bot update-user` | Replace text in the shared `USER.md`, or append with an empty `--old-text` |
-| `pontia bot chat-history search` | Search the requesting Bot's chat for literal text |
-| `pontia bot chat-history context` | Read a matched chat message with its chronological neighbors |
+| `pontia bot chat-history --query TEXT` | Search this Bot's chat for literal text, files, or images |
+| `pontia bot chat-history context --message-id ID` | Read a matched chat message with its chronological neighbors |
 | `pontia bot session-messages` | Read a target Session's paginated messages by Turn and category |
 | `pontia bot helper create` | Start a general or Profile-based helper in an active or temporary Workspace |
 | `pontia bot helper list` | List the current Bot's open helper Sessions |

@@ -48,7 +48,7 @@ Bot ツールは Pontia の Bot、helper、検索、Dreaming Session 内で実�
 | `pontia bot todo mark` / `todo resolve` | 既存メッセージの todo を開始または解決します |
 | `pontia bot set-description` | 現在の Bot の空の説明を記入します |
 | `pontia bot update-user` | 共有 `USER.md` の文字列を置換し、空の `--old-text` で追記します |
-| `pontia bot chat-history search` / `context` | Bot チャットを検索し、該当メッセージと前後を読みます |
+| `pontia bot chat-history --query TEXT` / `context` | Bot チャットを検索し、該当メッセージと前後を読みます |
 | `pontia bot session-messages` | 対象 Session のメッセージを Turn とカテゴリ別にページングして読みます |
 | `pontia bot helper create` / `list` / `send` / `reply` | helper の作成、一覧、連絡、Bot への結果報告を行います |
 | `pontia bot helper check` / `compact` / `close` | helper の確認、コンテキスト圧縮の依頼、Session の終了を行います |

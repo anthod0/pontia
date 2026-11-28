@@ -48,7 +48,7 @@ As ferramentas de Bot rodam dentro de uma Session de Bot, helper, recuperação 
 | `pontia bot todo mark` / `todo resolve` | Abrir ou resolver um todo em uma mensagem existente |
 | `pontia bot set-description` | Preencher a descrição vazia do Bot atual |
 | `pontia bot update-user` | Substituir texto no `USER.md` compartilhado ou anexar com `--old-text` vazio |
-| `pontia bot chat-history search` / `context` | Pesquisar o chat do Bot ou ler uma mensagem encontrada e suas vizinhas |
+| `pontia bot chat-history --query TEXT` / `context` | Pesquisar o chat do Bot ou ler uma mensagem encontrada e suas vizinhas |
 | `pontia bot session-messages` | Ler mensagens paginadas de uma Session por Turn e categoria |
 | `pontia bot helper create` / `list` / `send` / `reply` | Criar, listar e coordenar helpers e relatar resultados ao Bot |
 | `pontia bot helper check` / `compact` / `close` | Inspecionar um helper, pedir compactação ou encerrar sua Session |

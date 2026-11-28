@@ -81,6 +81,12 @@ pub(super) fn continuation(endpoint: &str, input: &Value, data: &Value) -> Optio
             format!("pontia bot memory {}", input["action"].as_str().unwrap()),
             next,
         )
+    } else if endpoint == "chat-history" && input["action"] == "search" {
+        let cursor = data.get("next_before").filter(|cursor| !cursor.is_null())?;
+        let mut next = input.clone();
+        next.as_object_mut().unwrap().remove("action");
+        next["before"] = cursor.clone();
+        ("pontia bot chat-history".to_owned(), next)
     } else {
         return None;
     };

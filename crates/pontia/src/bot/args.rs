@@ -18,8 +18,7 @@ pub(super) enum BotTool {
     /// Create, message, inspect, compact, or close helpers; helpers use reply to report to their Bot
     #[command(subcommand)]
     Helper(HelperCommand),
-    /// Read the requesting Bot's chat history (deep retrieval helper)
-    #[command(subcommand)]
+    /// Search or inspect this Bot's own chat history
     ChatHistory(ChatHistory),
     /// Read Session messages without changing execution state
     SessionMessages(SessionMessages),
@@ -53,9 +52,31 @@ pub(super) enum BotTool {
     Memory(MemoryArgs),
 }
 
-#[derive(Debug, Subcommand, Serialize)]
-#[serde(tag = "action", rename_all = "snake_case")]
-pub(super) enum ChatHistory {
+#[derive(Debug, Args)]
+#[command(
+    subcommand_negates_reqs = true,
+    args_conflicts_with_subcommands = true,
+    after_help = "Examples:\n  pontia bot chat-history --query 'deployment failed'\n  pontia bot chat-history context --message-id MESSAGE_ID --radius 3"
+)]
+pub(super) struct ChatHistory {
+    /// Literal text to search for, newest matches first
+    #[arg(long, required = true, allow_hyphen_values = true)]
+    query: Option<String>,
+    /// Match message text, files, or images (default: all)
+    #[arg(long = "type", value_parser = ["all", "file", "image"])]
+    kind: Option<String>,
+    /// Continue from next_before in the preceding search page
+    #[arg(long)]
+    before: Option<String>,
+    /// Maximum search results, from 1 to 100 (default: 10)
+    #[arg(long, value_parser = clap::value_parser!(u32).range(1..=100))]
+    limit: Option<u32>,
+    #[command(subcommand)]
+    command: Option<ChatHistoryCommand>,
+}
+
+#[derive(Debug, Subcommand)]
+pub(super) enum ChatHistoryCommand {
     /// Search for literal text, newest matches first
     Search {
         #[arg(long, allow_hyphen_values = true)]
@@ -74,6 +95,37 @@ pub(super) enum ChatHistory {
         #[arg(long, default_value_t = 3, value_parser = clap::value_parser!(u32).range(0..=50))]
         radius: u32,
     },
+}
+
+impl ChatHistory {
+    pub(super) fn into_query(self) -> pontia_bot::conversation::chat_history::ChatQuery {
+        match self.command {
+            Some(ChatHistoryCommand::Search {
+                keyword,
+                before,
+                limit,
+            }) => pontia_bot::conversation::chat_history::ChatQuery::Search {
+                query: keyword,
+                kind: pontia_bot::messages::SearchType::All,
+                before,
+                limit,
+            },
+            Some(ChatHistoryCommand::Context { message_id, radius }) => {
+                pontia_bot::conversation::chat_history::ChatQuery::Context { message_id, radius }
+            }
+            None => pontia_bot::conversation::chat_history::ChatQuery::Search {
+                query: self.query.expect("clap requires a chat history query"),
+                kind: match self.kind.as_deref() {
+                    None | Some("all") => pontia_bot::messages::SearchType::All,
+                    Some("file") => pontia_bot::messages::SearchType::File,
+                    Some("image") => pontia_bot::messages::SearchType::Image,
+                    Some(_) => unreachable!("clap validates chat history search types"),
+                },
+                before: self.before,
+                limit: self.limit.unwrap_or(10),
+            },
+        }
+    }
 }
 
 #[derive(Debug, Subcommand, Serialize)]
@@ -389,6 +441,7 @@ mod tests {
     #[test]
     fn chat_history_commands_parse_only_scoped_reads() {
         for args in [
+            vec!["--query", "部署", "--type", "file", "--limit", "2"],
             vec!["search", "--keyword", "部署"],
             vec!["context", "--message-id", "m1", "--radius", "0"],
         ] {
@@ -403,21 +456,23 @@ mod tests {
             else {
                 panic!("expected chat-history")
             };
-            serde_json::from_value::<pontia_bot::conversation::chat_history::ChatQuery>(
-                serde_json::to_value(input).unwrap(),
-            )
-            .unwrap();
+            let _ = input.into_query();
         }
         for args in [
-            vec!["search", "--keyword", "部署", "--bot-id", "other"],
+            vec!["--query", "部署", "--bot-id", "other"],
             vec!["context", "--message-id", "m1", "--radius", "51"],
+            vec!["--query", "部署", "context", "--message-id", "m1"],
+            vec!["--type", "file"],
             vec!["delete", "--message-id", "m1"],
         ] {
             assert!(
                 crate::Cli::try_parse_from(
-                    ["pontia", "bot", "chat-history"].into_iter().chain(args)
+                    ["pontia", "bot", "chat-history"]
+                        .into_iter()
+                        .chain(args.clone())
                 )
-                .is_err()
+                .is_err(),
+                "{args:?}"
             );
         }
     }

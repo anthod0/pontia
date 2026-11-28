@@ -11,7 +11,7 @@ const MAX_QUERY_CHARACTERS: usize = 200;
 const ATTACHMENT_BATCH: u32 = 200;
 
 /// What a search matches: message text, or the files or images messages refer to.
-#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SearchType {
     #[default]

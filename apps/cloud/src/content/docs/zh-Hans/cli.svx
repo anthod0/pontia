@@ -48,7 +48,7 @@ Bot 工具在 Pontia Bot、helper、检索或 Dreaming Session 中运行。添�
 | `pontia bot todo mark` / `todo resolve` | 将现有消息标为开放 todo，或解决其 todo |
 | `pontia bot set-description` | 填写当前 Bot 的空白描述 |
 | `pontia bot update-user` | 替换共享 `USER.md` 中的文字，空 `--old-text` 表示追加 |
-| `pontia bot chat-history search` / `context` | 搜索当前 Bot 对话，或读取匹配消息及相邻消息 |
+| `pontia bot chat-history --query TEXT` / `context` | 搜索当前 Bot 对话，或读取匹配消息及相邻消息 |
 | `pontia bot session-messages` | 按 Turn 和类别分页读取目标 Session 消息 |
 | `pontia bot helper create` / `list` / `send` / `reply` | 创建、列出和协调 helper，并向 Bot 汇报结果 |
 | `pontia bot helper check` / `compact` / `close` | 查看 helper、请求上下文压缩或结束 helper Session |

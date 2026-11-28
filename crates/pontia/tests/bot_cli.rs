@@ -190,6 +190,54 @@ async fn session_text_retains_message_content_and_citation_ids() {
 }
 
 #[tokio::test]
+async fn chat_history_search_sends_filters_and_continues_from_the_returned_cursor() {
+    let data = json!({
+        "messages": [{
+            "id": "message-2", "created_at": "2026-11-20T00:00:02Z",
+            "sender": "bot", "content": "deployment failed"
+        }],
+        "next_before": "message-2"
+    });
+    let mut f = Fixture::new("chat-history", data).await;
+    let first = f
+        .cli(&[
+            "chat-history",
+            "--query",
+            "deployment",
+            "--type",
+            "all",
+            "--limit",
+            "1",
+        ])
+        .await;
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    assert_eq!(
+        f.requests.try_recv().unwrap(),
+        json!({
+            "session_id":"caller-session",
+            "input":{
+                "action":"search", "query":"deployment", "type":"all",
+                "before":null, "limit":1
+            }
+        })
+    );
+
+    let second = f.continue_page(&first).await;
+    assert!(second.status.success());
+    assert_eq!(
+        f.requests.try_recv().unwrap()["input"],
+        json!({
+            "action":"search", "query":"deployment", "type":"all",
+            "before":"message-2", "limit":1
+        })
+    );
+}
+
+#[tokio::test]
 async fn neighbor_continuation_preserves_origin_workspace_and_page_size() {
     let mut f = Fixture::new(
         "memory",
