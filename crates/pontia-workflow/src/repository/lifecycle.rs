@@ -1,6 +1,6 @@
 use pontia_core::{Error, Result};
 
-use super::SqliteWorkflowRepository;
+use super::WorkflowState;
 
 struct RunningWorkflowTransition<'a> {
     workflow_id: &'a str,
@@ -13,7 +13,7 @@ struct RunningWorkflowTransition<'a> {
     runtime_id: Option<&'a str>,
 }
 
-impl SqliteWorkflowRepository {
+impl WorkflowState {
     pub async fn start_workflow(&self, workflow_id: &str, event_id: &str) -> Result<()> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let result = sqlx::query(
@@ -41,6 +41,7 @@ impl SqliteWorkflowRepository {
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;
+        self.changed.notify_one();
         Ok(())
     }
 
@@ -111,6 +112,7 @@ impl SqliteWorkflowRepository {
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;
+        self.changed.notify_one();
         Ok(())
     }
 
@@ -148,6 +150,7 @@ impl SqliteWorkflowRepository {
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;
+        self.changed.notify_one();
         Ok(())
     }
 
@@ -281,6 +284,7 @@ impl SqliteWorkflowRepository {
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;
+        self.changed.notify_one();
         Ok(())
     }
 }

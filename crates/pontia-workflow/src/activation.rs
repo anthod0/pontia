@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, path::Path};
 
 use crate::{
     models::{WorkflowNodeRow, WorkflowRow},
-    repository::SqliteWorkflowRepository,
+    repository::WorkflowState,
 };
 use pontia_agent_control::{CreateSessionRequest, InitialTaskRequest};
 use serde_json::json;
@@ -17,7 +17,7 @@ pub(crate) struct ActivationFailure {
 
 pub(crate) async fn activate_node<S: SessionCreator>(
     sessions: &S,
-    repository: &SqliteWorkflowRepository,
+    repository: &WorkflowState,
     workflow: &WorkflowRow,
     node: &WorkflowNodeRow,
     handoff_dir: &Path,
@@ -55,7 +55,7 @@ pub(crate) async fn activate_node<S: SessionCreator>(
 
 async fn activate_claimed_node<S: SessionCreator>(
     sessions: &S,
-    repository: &SqliteWorkflowRepository,
+    repository: &WorkflowState,
     workflow: &WorkflowRow,
     node: &WorkflowNodeRow,
     handoff_dir: &Path,

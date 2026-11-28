@@ -1,5 +1,5 @@
 use crate::{Result, validation::validate_handoff_file_name};
-use crate::{models::WorkflowRecoveryRow, repository::SqliteWorkflowRepository};
+use crate::{models::WorkflowRecoveryRow, repository::WorkflowState};
 use pontia_agent_control::{
     AgentControl, InboxCommandService, InputPayload, SendMode, SessionCommandService,
 };
@@ -7,22 +7,16 @@ use std::path::{Path, PathBuf};
 
 #[derive(Clone)]
 pub struct WorkflowRecoveryService {
-    repository: SqliteWorkflowRepository,
+    repository: WorkflowState,
     sessions: SessionCommandService,
     inbox: std::sync::Arc<InboxCommandService>,
     home: PathBuf,
 }
 
 impl WorkflowRecoveryService {
-    pub fn new(pool: sqlx::SqlitePool, app: &AgentControl) -> Self {
+    pub fn new(workflows: WorkflowState, app: &AgentControl) -> Self {
         Self {
-            repository: SqliteWorkflowRepository::new(pool.clone(), app.queries())
-                .with_recovery_client_types(
-                    app.clients()
-                        .registrations()
-                        .filter(|client| client.spec.adapter.lifecycle.confirmed_exit_recovery)
-                        .map(|client| client.spec.client_type),
-                ),
+            repository: workflows,
             sessions: app.session_commands(),
             inbox: app.inbox_commands(),
             home: app.pontia_home().to_path_buf(),

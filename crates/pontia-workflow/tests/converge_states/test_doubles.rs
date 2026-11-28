@@ -7,13 +7,10 @@ use std::{
 use pontia_agent_control::CreateSessionRequest;
 use pontia_core::{
     Error as PontiaError,
-    domain::{DomainEvent, EventSource, EventType},
+    domain::{EventSource, EventType},
 };
-use pontia_workflow::{
-    AgentEventSubscriber, GracefulExitRequester, SessionCreator, WorkflowCoordinator,
-};
+use pontia_workflow::{GracefulExitRequester, SessionCreator, WorkflowRuntime};
 use serde_json::json;
-use tokio::sync::broadcast;
 
 #[derive(Clone)]
 pub(super) struct SequencedSessionCreator {
@@ -134,17 +131,12 @@ impl GracefulExitRequester for RecordingExitRequester {
 #[derive(Clone)]
 pub(super) struct TestAgentEvents {
     pool: sqlx::SqlitePool,
-    sender: broadcast::Sender<DomainEvent>,
+    state: pontia_workflow::WorkflowState,
 }
 
 impl TestAgentEvents {
-    pub(super) fn new(pool: sqlx::SqlitePool) -> Self {
-        Self::with_capacity(pool, 16)
-    }
-
-    pub(super) fn with_capacity(pool: sqlx::SqlitePool, capacity: usize) -> Self {
-        let (sender, _) = broadcast::channel(capacity);
-        Self { pool, sender }
+    pub(super) fn new(pool: sqlx::SqlitePool, state: pontia_workflow::WorkflowState) -> Self {
+        Self { pool, state }
     }
 
     pub(super) async fn publish(&self, session_id: &str, event_type: EventType) {
@@ -174,18 +166,8 @@ impl TestAgentEvents {
         .bind(payload.to_string())
         .execute(&self.pool)
         .await
-        .expect("persist Agent fact before publishing wake-up hint");
-        self.sender
-            .send(DomainEvent::new(
-                event_id,
-                session_id.to_string(),
-                Some("turn_root".to_string()),
-                source,
-                "pi".to_string(),
-                event_type,
-                payload,
-            ))
-            .expect("workflow event subscriber");
+        .expect("persist Agent fact");
+        self.state.catch_up().await.unwrap();
     }
 }
 
@@ -203,25 +185,19 @@ where
     let (shutdown_tx, shutdown) = tokio::sync::watch::channel(false);
     tokio::spawn(async move {
         let _keepalive = shutdown_tx;
-        WorkflowCoordinator::with_services(
-            pool.clone(),
+        WorkflowRuntime::with_services(
+            events.state.clone(),
             &pontia_agent_control::AgentControl::builder(pool, pontia_home.clone())
                 .clients(crate::test_doubles::clients())
                 .build(),
             sessions,
             exits,
-            events,
             pontia_home,
         )
         .run(shutdown)
-        .await;
+        .await
+        .unwrap();
     })
-}
-
-impl AgentEventSubscriber for TestAgentEvents {
-    fn subscribe(&self) -> broadcast::Receiver<DomainEvent> {
-        self.sender.subscribe()
-    }
 }
 
 // This fixture uses the persisted client identifier without loading its native adapter.

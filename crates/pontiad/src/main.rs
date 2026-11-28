@@ -1,7 +1,9 @@
+mod background;
 mod e2e_identity;
 mod initialization;
 mod shutdown;
 mod uploads;
+use background::BackgroundTasks;
 use pontia_agent_control::client_contract::ClientServicePhase;
 use pontia_core::error::Result;
 use pontia_http as http;
@@ -29,33 +31,45 @@ async fn main() -> Result<()> {
     let config = pontia_config::AppConfig::from_env()?;
     init_tracing();
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
-    let bound_addr = listener.local_addr()?;
     let app_state = initialization::initialize(&config).await?;
-    let mut client_tasks = app_state
+    let shutdown = app_state.control().shutdown();
+    let inbox = app_state.control().inbox_commands();
+    let mut background = BackgroundTasks::default();
+    let server = serve(config, app_state, listener, &mut background).await;
+    shutdown.notify();
+    let tasks = background.join().await;
+    inbox.stop_scheduling().await;
+    server.and(tasks)
+}
+
+async fn serve(
+    config: pontia_config::AppConfig,
+    app_state: pontia_application::AppState,
+    listener: tokio::net::TcpListener,
+    background: &mut BackgroundTasks,
+) -> Result<()> {
+    let bound_addr = listener.local_addr()?;
+    let transports = app_state
         .control()
         .clients()
         .start_services(app_state.control().clone(), ClientServicePhase::Transport)
         .await?;
+    background.spawn_service(transports.join());
     let cache_control = app_state.control().clone();
-    tokio::spawn(async move { cache_control.run_timeline_cache_cleanup().await });
+    background.spawn(async move { cache_control.run_timeline_cache_cleanup().await });
     let inbox = app_state.control().inbox_commands();
     let runtime_observer = app_state.control().runtime_observer();
-    tokio::spawn(runtime_observer.run(app_state.control().shutdown().subscribe()));
-    client_tasks.extend(
-        app_state
-            .control()
-            .clients()
-            .start_services(app_state.control().clone(), ClientServicePhase::Observation)
-            .await?,
-    );
-    let workflow_coordinator = pontia_workflow::WorkflowCoordinator::new(
-        app_state.db(),
-        app_state.control(),
-        app_state.control().clone(),
-        app_state.control().agent_events(),
-        app_state.pontia_home().to_path_buf(),
-    );
-    tokio::spawn(workflow_coordinator.run(app_state.control().shutdown().subscribe()));
+    background.spawn(runtime_observer.run(app_state.control().shutdown().subscribe()));
+    let observers = app_state
+        .control()
+        .clients()
+        .start_services(app_state.control().clone(), ClientServicePhase::Observation)
+        .await?;
+    background.spawn_service(observers.join());
+    let workflows =
+        pontia_workflow::WorkflowState::new(app_state.db(), app_state.control()).await?;
+    let runtime = pontia_workflow::WorkflowRuntime::new(workflows.clone(), app_state.control());
+    background.spawn_service(runtime.run(app_state.control().shutdown().subscribe()));
     let dashboard =
         http::dashboard::resolve_dashboard(&config.dashboard, &config.pontia_home).await;
     let agent_clients = pontia_agent_control::agent_clients::AgentClientService::new(
@@ -78,21 +92,21 @@ async fn main() -> Result<()> {
     info!(url = %dashboard_url(bound_addr), "dashboard available");
 
     let shutdown = app_state.control().shutdown();
-    tokio::spawn(bot.bots().clone().run_generations(shutdown.subscribe()));
-    tokio::spawn(bot.system_notices().run(shutdown.subscribe()));
+    background.spawn(bot.bots().clone().run_generations(shutdown.subscribe()));
+    background.spawn(bot.system_notices().run(shutdown.subscribe()));
     let helper_events = bot.helpers().register_events().await?;
     let helper_shutdown = shutdown.subscribe();
-    tokio::spawn(async move { helper_events.run(helper_shutdown).await });
-    tokio::spawn(
+    background.spawn_service(async move { helper_events.run(helper_shutdown).await });
+    background.spawn(
         bot.helpers()
             .notification_delivery()
             .run(shutdown.subscribe()),
     );
-    tokio::spawn(bot.dreaming().clone().run(shutdown.subscribe()));
+    background.spawn(bot.dreaming().clone().run(shutdown.subscribe()));
     let cleanup_shutdown = shutdown.clone();
     let external_api = http::core_router(app_state.clone())
         .merge(http::bot_router(bot))
-        .merge(http::workflow_router(app_state.clone()));
+        .merge(http::workflow_router(app_state.clone(), workflows));
     let http_entrypoints =
         http::HttpEntrypoints::new(http::HttpState::new(app_state, dashboard), external_api);
     let remote = config
@@ -120,7 +134,7 @@ async fn main() -> Result<()> {
             let ingress = http_entrypoints.e2e_tunnel(sessions);
             let maintenance = ingress.clone();
             let mut maintenance_shutdown = cleanup_shutdown.subscribe();
-            tokio::spawn(async move {
+            background.spawn(async move {
                 loop {
                     tokio::select! {
                         _ = tokio::time::sleep(Duration::from_secs(60)) => maintenance.reap(),
@@ -156,21 +170,23 @@ async fn main() -> Result<()> {
             })
         })
         .transpose()?;
-    let remote_task = remote.map(|remote| tokio::spawn(remote.run(cleanup_shutdown.subscribe())));
+    if let Some(remote) = remote {
+        background.spawn(remote.run(cleanup_shutdown.subscribe()));
+    }
     inbox.resume_pending().await?;
-    let upload_cleanup = tokio::spawn(uploads::run(
+    background.spawn(uploads::run(
         config.pontia_home.clone(),
         config.uploads,
         cleanup_shutdown.subscribe(),
     ));
     let mut probe_shutdown = cleanup_shutdown.subscribe();
-    let client_probe = tokio::spawn(async move {
+    background.spawn(async move {
         tokio::select! {
             _ = probe_shutdown.wait_for(|stop| *stop) => {}
             _ = agent_clients.probe_enabled(config.pontia_home, true) => {}
         }
     });
-    let server_result = http::serve_with_shutdown_timeout(
+    http::serve_with_shutdown_timeout(
         listener,
         http_entrypoints.local_http(),
         async move {
@@ -179,22 +195,7 @@ async fn main() -> Result<()> {
         },
         Duration::from_secs(5),
     )
-    .await;
-
-    cleanup_shutdown.notify();
-    let _ = client_probe.await;
-    let _ = upload_cleanup.await;
-    let client_result = client_tasks.join().await;
-    inbox.stop_scheduling().await;
-    if let Some(task) = remote_task {
-        let _ = task.await;
-    }
-
-    client_result?;
-
-    server_result?;
-
-    Ok(())
+    .await
 }
 
 fn local_addr(addr: SocketAddr) -> SocketAddr {

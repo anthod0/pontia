@@ -1,6 +1,6 @@
 use pontia_core::domain::EventType;
 use pontia_workflow::WorkflowScheduler;
-use pontia_workflow::repository::SqliteWorkflowRepository;
+use pontia_workflow::repository::WorkflowState;
 
 use crate::{
     fixture::{seed_linear_workflow, test_pool, wait_for_state},
@@ -10,7 +10,7 @@ use crate::{
 };
 
 #[tokio::test]
-async fn lagged_notifications_reconcile_persisted_turn_terminal_facts() {
+async fn catch_up_reconciles_persisted_turn_terminal_facts() {
     for (event_type, expected_state) in [
         (EventType::TurnCompleted, "idle"),
         (EventType::TurnFailed, "failed"),
@@ -18,14 +18,16 @@ async fn lagged_notifications_reconcile_persisted_turn_terminal_facts() {
     ] {
         let temp = tempfile::tempdir().expect("tempdir");
         let pool = test_pool(&temp.path().join("lagged-terminal.db")).await;
-        let repository = SqliteWorkflowRepository::new(
+        let repository = WorkflowState::new(
             pool.clone(),
-            pontia_agent_control::ControlQueryService::new(pool.clone()),
-        );
+            &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().into()).build(),
+        )
+        .await
+        .unwrap();
         seed_linear_workflow(&repository, "wf_lagged_terminal", "[]", false).await;
         let sessions = SequencedSessionCreator::new([Some("session_root")]);
         let exits = RecordingExitRequester::default();
-        let events = TestAgentEvents::with_capacity(pool.clone(), 1);
+        let events = TestAgentEvents::new(pool.clone(), repository.clone());
         let pontia_home = temp.path().join("pontia-home");
         let _coordinator = spawn_coordinator(
             pool.clone(),
@@ -34,13 +36,8 @@ async fn lagged_notifications_reconcile_persisted_turn_terminal_facts() {
             events.clone(),
             pontia_home.clone(),
         );
-        let scheduler = WorkflowScheduler::with_services(
-            pool.clone(),
-            pontia_agent_control::ControlQueryService::new(pool.clone()),
-            sessions,
-            exits,
-            pontia_home,
-        );
+        let scheduler =
+            WorkflowScheduler::with_services(repository.clone(), sessions, exits, pontia_home);
         scheduler
             .start("wf_lagged_terminal")
             .await

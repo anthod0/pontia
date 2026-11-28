@@ -1,8 +1,6 @@
 mod credentials;
-mod domain_events;
 mod launch;
 mod snapshots;
-pub use domain_events::{DomainEventPage, DomainEventReader, DomainEventRecord};
 pub use snapshots::{
     BusySessionSummary, OwnedSession, RuntimeSnapshot, SessionOwnership, SessionSnapshot,
     TurnSnapshot,
@@ -23,10 +21,6 @@ pub struct ControlQueryService {
     workspace_browser: pontia_config::WorkspaceBrowserConfig,
 }
 impl ControlQueryService {
-    pub fn domain_events(&self) -> DomainEventReader {
-        DomainEventReader::new(self.pool.clone())
-    }
-
     pub fn with_workspace_browser(mut self, config: pontia_config::WorkspaceBrowserConfig) -> Self {
         self.workspace_browser = config;
         self

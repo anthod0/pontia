@@ -2,16 +2,12 @@ mod node_execution;
 
 use std::{path::PathBuf, time::Duration};
 
-use crate::repository::SqliteWorkflowRepository;
-use pontia_agent_control::{
-    AgentEventBroker, InboxCommandService, InputPayload, SendMode, SessionCommandService,
-};
+use crate::repository::WorkflowState;
+use pontia_agent_control::{InboxCommandService, InputPayload, SendMode, SessionCommandService};
 use pontia_core::domain::EventType;
 use tokio::sync::watch;
 
-use crate::{AgentEventSubscriber, GracefulExitRequester, Result, SessionCreator};
-
-const RECONCILIATION_INTERVAL: Duration = Duration::from_millis(250);
+use crate::{GracefulExitRequester, Result, SessionCreator};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AgentTerminal {
@@ -42,122 +38,103 @@ impl AgentTerminal {
     }
 }
 
-/// Reconciles active Workflows from persisted Agent facts.
-///
-/// Realtime events only wake the coordinator. SQLite is reloaded before every
-/// transition so startup recovery, missed notifications, and repeated passes
-/// all follow the same path.
-pub struct WorkflowCoordinator<S, X, B> {
-    repository: SqliteWorkflowRepository,
+pub struct WorkflowRuntime<S, X> {
+    repository: WorkflowState,
     sessions: S,
     exits: X,
-    agent_events: B,
     inbox: std::sync::Arc<InboxCommandService>,
     pontia_home: PathBuf,
     recovery: crate::WorkflowRecoveryService,
 }
 
-impl<S> WorkflowCoordinator<S, SessionCommandService, AgentEventBroker>
-where
-    S: SessionCreator + Send + Sync + 'static,
-{
-    pub fn new(
-        pool: sqlx::SqlitePool,
-        app: &pontia_agent_control::AgentControl,
-        sessions: S,
-        agent_events: AgentEventBroker,
-        pontia_home: PathBuf,
-    ) -> Self {
-        let exits = app.session_commands();
-        Self::with_services(pool, app, sessions, exits, agent_events, pontia_home)
+impl WorkflowRuntime<pontia_agent_control::AgentControl, SessionCommandService> {
+    pub fn new(repository: WorkflowState, app: &pontia_agent_control::AgentControl) -> Self {
+        Self::with_services(
+            repository,
+            app,
+            app.clone(),
+            app.session_commands(),
+            app.pontia_home().into(),
+        )
     }
 }
 
-impl<S, X, B> WorkflowCoordinator<S, X, B>
+impl<S, X> WorkflowRuntime<S, X>
 where
     S: SessionCreator + Send + Sync + 'static,
     X: GracefulExitRequester + Send + Sync + 'static,
-    B: AgentEventSubscriber + Send + Sync + 'static,
 {
     pub fn with_services(
-        pool: sqlx::SqlitePool,
+        repository: WorkflowState,
         app: &pontia_agent_control::AgentControl,
         sessions: S,
         exits: X,
-        agent_events: B,
         pontia_home: PathBuf,
     ) -> Self {
         Self {
-            repository: SqliteWorkflowRepository::new(pool.clone(), app.queries()),
+            repository: repository.clone(),
             inbox: app.inbox_commands(),
             sessions,
             exits,
-            agent_events,
             pontia_home,
-            recovery: crate::WorkflowRecoveryService::new(pool, app),
+            recovery: crate::WorkflowRecoveryService::new(repository, app),
         }
     }
 
-    pub async fn run(self, mut shutdown: watch::Receiver<bool>) {
+    pub async fn run(self, shutdown: watch::Receiver<bool>) -> pontia_core::Result<()> {
+        let projection = self.repository.projection.clone();
+        let (delivery, ()) = tokio::join!(
+            projection.run(shutdown.clone()),
+            self.run_reconciliation(shutdown)
+        );
+        delivery
+    }
+
+    async fn run_reconciliation(&self, mut shutdown: watch::Receiver<bool>) {
         if *shutdown.borrow() {
             return;
         }
-
-        let mut agent_events = Some(self.agent_events.subscribe());
-        let mut interval = tokio::time::interval(RECONCILIATION_INTERVAL);
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-        if let Err(error) = self.repository.recover_interrupted_preparations().await {
-            tracing::error!(%error, "failed to reconcile interrupted Workflow recoveries");
-        }
-        self.reconcile_all().await;
+        let mut recovering = true;
         loop {
+            let result = async {
+                if recovering {
+                    self.repository.recover_interrupted_preparations().await?;
+                    recovering = false;
+                }
+                self.reconcile_all().await
+            }
+            .await;
+            let failed = result.is_err();
+            if let Err(error) = result {
+                tracing::error!(%error, "Workflow reconciliation failed");
+            }
             tokio::select! {
-                changed = shutdown.changed() => {
-                    if changed.is_err() || *shutdown.borrow() {
-                        break;
-                    }
-                }
-                _ = interval.tick() => self.reconcile_all().await,
-                received = async {
-                    match agent_events.as_mut() {
-                        Some(receiver) => Some(receiver.recv().await),
-                        None => std::future::pending().await,
-                    }
-                } => {
-                    match received.expect("active Agent event receiver") {
-                        Ok(_) => self.reconcile_all().await,
-                        Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
-                            tracing::warn!(skipped, "Workflow Coordinator notification stream lagged; reconciling persisted facts");
-                            self.reconcile_all().await;
-                        }
-                        Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                            tracing::warn!("Workflow Coordinator notification stream closed; continuing persisted reconciliation");
-                            agent_events = None;
-                            self.reconcile_all().await;
-                        }
-                    }
-                }
+                biased;
+                _ = shutdown.wait_for(|stop| *stop) => break,
+                _ = self.repository.changed.notified() => {},
+                _ = tokio::time::sleep(Duration::from_secs(1)), if failed => {},
             }
         }
     }
 
-    async fn reconcile_all(&self) {
-        let workflows = match self.repository.list_workflows_requiring_convergence().await {
-            Ok(workflows) => workflows,
-            Err(error) => {
-                tracing::error!(%error, "failed to discover active Workflows for reconciliation");
-                return;
-            }
-        };
-        for workflow in workflows {
-            if let Err(error) = self.reconcile(&workflow.workflow_id).await {
-                tracing::error!(workflow_id = %workflow.workflow_id, %error, "failed to reconcile Workflow");
-            }
-            if let Err(error) = self.report_events(&workflow).await {
-                tracing::error!(workflow_id = %workflow.workflow_id, %error, "failed to queue Workflow report");
+    async fn reconcile_all(&self) -> Result<()> {
+        let mut failure = None;
+        for workflow in self
+            .repository
+            .list_workflows_requiring_convergence()
+            .await?
+        {
+            for result in [
+                self.reconcile(&workflow.workflow_id).await,
+                self.report_events(&workflow).await,
+            ] {
+                if let Err(error) = result {
+                    tracing::error!(workflow_id = %workflow.workflow_id, %error, "Workflow convergence failed");
+                    failure = Some(error);
+                }
             }
         }
+        failure.map_or(Ok(()), Err)
     }
 
     async fn report_events(&self, workflow: &crate::models::WorkflowRow) -> Result<()> {
@@ -206,7 +183,7 @@ where
     }
 
     pub async fn reconcile(&self, workflow_id: &str) -> Result<()> {
-        self.repository.synchronize().await?;
+        self.repository.projection.catch_up().await?;
         if self.recovery.reconcile(workflow_id).await? {
             return Ok(());
         }

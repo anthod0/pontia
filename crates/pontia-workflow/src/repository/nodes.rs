@@ -1,8 +1,8 @@
 use pontia_core::{Error, Result};
 
-use super::SqliteWorkflowRepository;
+use super::WorkflowState;
 
-impl SqliteWorkflowRepository {
+impl WorkflowState {
     pub async fn bind_node_session(&self, node_id: &str, session_id: &str) -> Result<()> {
         let result = sqlx::query(
             r#"UPDATE workflow_nodes
@@ -74,6 +74,7 @@ impl SqliteWorkflowRepository {
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;
+        self.changed.notify_one();
         Ok(())
     }
 
@@ -114,6 +115,7 @@ impl SqliteWorkflowRepository {
             )));
         }
         tx.commit().await?;
+        self.changed.notify_one();
         Ok(())
     }
 
@@ -149,7 +151,7 @@ impl SqliteWorkflowRepository {
         {
             self.refresh_session(&id).await?;
         }
-        self.synchronize().await?;
+        self.projection.catch_up().await?;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let context: Option<(String, Option<String>, Option<String>)> = sqlx::query_as(
             r#"SELECT n.workflow_id, n.session_id, s.current_turn_id
@@ -222,6 +224,7 @@ impl SqliteWorkflowRepository {
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;
+        self.changed.notify_one();
         Ok(())
     }
 

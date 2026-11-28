@@ -5,7 +5,7 @@ use axum::{
 };
 use pontia_application::AppState;
 
-pub fn workflow_router(state: AppState) -> Router {
+pub fn workflow_router(state: AppState, workflows: pontia_workflow::WorkflowState) -> Router {
     Router::new()
         .route(
             "/api/v1/workflow/submissions",
@@ -44,5 +44,5 @@ pub fn workflow_router(state: AppState) -> Router {
             state.clone(),
             api::authenticate,
         ))
-        .with_state(state)
+        .with_state((state, workflows))
 }

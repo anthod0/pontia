@@ -1,9 +1,6 @@
 use std::future::Future;
 
-use pontia_agent_control::{
-    AgentControl, AgentEventBroker, CreateSessionRequest, SessionCommandService,
-};
-use pontia_core::domain::DomainEvent;
+use pontia_agent_control::{AgentControl, CreateSessionRequest, SessionCommandService};
 
 use crate::{Error, Result};
 
@@ -148,15 +145,5 @@ impl GracefulExitRequester for SessionCommandService {
             .await
             .map(|_| ())
             .map_err(Into::into)
-    }
-}
-
-pub trait AgentEventSubscriber {
-    fn subscribe(&self) -> tokio::sync::broadcast::Receiver<DomainEvent>;
-}
-
-impl AgentEventSubscriber for AgentEventBroker {
-    fn subscribe(&self) -> tokio::sync::broadcast::Receiver<DomainEvent> {
-        AgentEventBroker::subscribe(self)
     }
 }

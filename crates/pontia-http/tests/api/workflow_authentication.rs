@@ -2,7 +2,6 @@ use axum::{
     body::Body,
     http::{Request, StatusCode, header},
 };
-use pontia_application::AppState;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
@@ -15,7 +14,7 @@ const COMMAND_PATHS: [&str; 3] = [
     "/api/v1/workflow/terminate",
 ];
 
-async fn post(state: AppState, path: &str, authorization: Option<&str>) -> (StatusCode, Value) {
+async fn post(app: &TestApp, path: &str, authorization: Option<&str>) -> (StatusCode, Value) {
     let mut request = Request::builder()
         .method("POST")
         .uri(path)
@@ -23,7 +22,8 @@ async fn post(state: AppState, path: &str, authorization: Option<&str>) -> (Stat
     if let Some(authorization) = authorization {
         request = request.header(header::AUTHORIZATION, authorization);
     }
-    let response = crate::common::http::router(state)
+    let response = app
+        .router()
         .oneshot(request.body(Body::from("{}")).unwrap())
         .await
         .unwrap();
@@ -33,16 +33,16 @@ async fn post(state: AppState, path: &str, authorization: Option<&str>) -> (Stat
 #[tokio::test]
 async fn workflow_commands_require_authentication_before_payload_validation() {
     for token in [Some("test-token".to_owned()), None] {
-        let (state, _pontia_home) = TestApp::builder()
+        let app = TestApp::builder()
             .external_api_token(token.clone())
-            .build_state()
+            .build()
             .await;
         for path in COMMAND_PATHS {
             for authorization in [None, Some("Bearer wrong-token"), Some("Bearer test-token")] {
                 if token.is_some() && authorization == Some("Bearer test-token") {
                     continue;
                 }
-                let (status, body) = post(state.clone(), path, authorization).await;
+                let (status, body) = post(&app, path, authorization).await;
                 assert_eq!(status, StatusCode::UNAUTHORIZED, "{path}: {body}");
                 assert_eq!(body["error"]["code"], "authentication_failed");
                 assert_eq!(body["data"], Value::Null);
@@ -54,9 +54,9 @@ async fn workflow_commands_require_authentication_before_payload_validation() {
 
 #[tokio::test]
 async fn workflow_commands_return_the_api_envelope_for_invalid_payloads() {
-    let (state, _pontia_home) = TestApp::builder().build_state().await;
+    let app = TestApp::builder().build().await;
     for path in COMMAND_PATHS {
-        let (status, body) = post(state.clone(), path, Some("Bearer test-token")).await;
+        let (status, body) = post(&app, path, Some("Bearer test-token")).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{path}: {body}");
         assert_eq!(body["error"]["code"], "invalid_request");
         assert_eq!(body["data"], Value::Null);

@@ -1,8 +1,8 @@
 use pontia_core::Result;
 
-use super::{CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository};
+use super::{CreateWorkflowNodeRecord, CreateWorkflowRecord, WorkflowState};
 
-impl SqliteWorkflowRepository {
+impl WorkflowState {
     pub async fn create_definition(
         &self,
         workflow: CreateWorkflowRecord,

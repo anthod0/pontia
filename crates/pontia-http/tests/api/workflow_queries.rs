@@ -1,12 +1,9 @@
-use crate::common::http;
 use axum::{
     body::Body,
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use pontia_workflow::repository::{
-    CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
-};
+use pontia_workflow::repository::{CreateWorkflowNodeRecord, CreateWorkflowRecord};
 use serde_json::Value;
 use tower::ServiceExt;
 
@@ -27,7 +24,8 @@ fn node(id: &str, parent: Option<&str>, phase: &str, title: &str) -> CreateWorkf
 }
 
 async fn get(app: &TestApp, uri: &str) -> (StatusCode, Value) {
-    let response = http::router(app.state.clone())
+    let response = app
+        .router()
         .oneshot(
             Request::builder()
                 .uri(uri)
@@ -51,27 +49,25 @@ async fn get(app: &TestApp, uri: &str) -> (StatusCode, Value) {
 }
 
 async fn create_observable_workflow(app: &TestApp) {
-    SqliteWorkflowRepository::new(
-        app.db.clone(),
-        pontia_agent_control::ControlQueryService::new(app.db.clone()),
-    )
-    .create_definition(
-        CreateWorkflowRecord {
-            initiator_session_id: "origin".into(),
-            workflow_id: "wf_observe".to_string(),
-            title: "Observe workflow".to_string(),
-            cwd: app.workspace().path().display().to_string(),
-            state: "pending".to_string(),
-        },
-        vec![
-            node("node_a", None, "Research", "Research one"),
-            node("node_b", Some("node_a"), "Research", "Research two"),
-            node("node_c", Some("node_b"), "Review", "Review"),
-            node("node_d", Some("node_c"), "Research", "Research again"),
-        ],
-    )
-    .await
-    .expect("create workflow");
+    app.workflows
+        .clone()
+        .create_definition(
+            CreateWorkflowRecord {
+                initiator_session_id: "origin".into(),
+                workflow_id: "wf_observe".to_string(),
+                title: "Observe workflow".to_string(),
+                cwd: app.workspace().path().display().to_string(),
+                state: "pending".to_string(),
+            },
+            vec![
+                node("node_a", None, "Research", "Research one"),
+                node("node_b", Some("node_a"), "Research", "Research two"),
+                node("node_c", Some("node_b"), "Review", "Review"),
+                node("node_d", Some("node_c"), "Research", "Research again"),
+            ],
+        )
+        .await
+        .expect("create workflow");
 }
 
 #[tokio::test]
@@ -112,22 +108,20 @@ async fn external_workflow_context_returns_current_node_instructions_and_handoff
     current.instructions = "Implement the requested change.".to_string();
     current.inputs = r#"["requirements.md"]"#.to_string();
     current.output = "result.md".to_string();
-    SqliteWorkflowRepository::new(
-        app.db.clone(),
-        pontia_agent_control::ControlQueryService::new(app.db.clone()),
-    )
-    .create_definition(
-        CreateWorkflowRecord {
-            initiator_session_id: "origin".into(),
-            workflow_id: "wf_observe".to_string(),
-            title: "Context workflow".to_string(),
-            cwd: app.workspace().path().display().to_string(),
-            state: "running".to_string(),
-        },
-        vec![current],
-    )
-    .await
-    .expect("create workflow");
+    app.workflows
+        .clone()
+        .create_definition(
+            CreateWorkflowRecord {
+                initiator_session_id: "origin".into(),
+                workflow_id: "wf_observe".to_string(),
+                title: "Context workflow".to_string(),
+                cwd: app.workspace().path().display().to_string(),
+                state: "running".to_string(),
+            },
+            vec![current],
+        )
+        .await
+        .expect("create workflow");
     let handoff_dir = app
         .pontia_home()
         .path()
@@ -169,22 +163,20 @@ async fn external_workflow_queries_reject_invalid_limits() {
 #[tokio::test]
 async fn invalid_legacy_phase_is_visible_in_list_but_detail_conflicts() {
     let app = TestApp::new().await;
-    SqliteWorkflowRepository::new(
-        app.db.clone(),
-        pontia_agent_control::ControlQueryService::new(app.db.clone()),
-    )
-    .create_definition(
-        CreateWorkflowRecord {
-            initiator_session_id: "origin".into(),
-            workflow_id: "wf_observe".to_string(),
-            title: "Legacy workflow".to_string(),
-            cwd: app.workspace().path().display().to_string(),
-            state: "pending".to_string(),
-        },
-        vec![node("node_a", None, "", "Legacy")],
-    )
-    .await
-    .expect("create legacy workflow");
+    app.workflows
+        .clone()
+        .create_definition(
+            CreateWorkflowRecord {
+                initiator_session_id: "origin".into(),
+                workflow_id: "wf_observe".to_string(),
+                title: "Legacy workflow".to_string(),
+                cwd: app.workspace().path().display().to_string(),
+                state: "pending".to_string(),
+            },
+            vec![node("node_a", None, "", "Legacy")],
+        )
+        .await
+        .expect("create legacy workflow");
 
     let (list_status, list) = get(&app, "/api/v1/workflows").await;
     assert_eq!(list_status, StatusCode::OK, "{list}");

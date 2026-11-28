@@ -1,6 +1,6 @@
-use pontia_agent_control::ControlQueryService;
+use pontia_agent_control::AgentControl;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
-use pontia_workflow::repository::SqliteWorkflowRepository;
+use pontia_workflow::repository::WorkflowState;
 
 #[tokio::test]
 async fn replay_and_restart_use_only_application_storage_with_a_separate_control_database() {
@@ -22,10 +22,12 @@ async fn replay_and_restart_use_only_application_storage_with_a_separate_control
     sqlx::raw_sql("INSERT INTO sessions(session_id,client_type,state,application_id,application_ref) VALUES ('s','generic','idle','workflow','node:n');
         INSERT INTO events(event_id,session_id,turn_id,source,client_type,event_type,occurred_at,payload) VALUES ('start','s','t','agent_client','generic','turn.started','2026-01-01','{\"runtime_id\":\"r\"}'),('end','s','t','agent_client','generic','turn.completed','2026-01-01','{}');")
         .execute(&control).await.unwrap();
-    let repository = SqliteWorkflowRepository::new(
+    let repository = WorkflowState::new(
         application.clone(),
-        ControlQueryService::new(control.clone()),
-    );
+        &AgentControl::builder(control.clone(), root.path().into()).build(),
+    )
+    .await
+    .unwrap();
     let terminal = repository
         .latest_workflow_terminal_event("s", Some("r"), Some("t"))
         .await
@@ -33,15 +35,23 @@ async fn replay_and_restart_use_only_application_storage_with_a_separate_control
         .unwrap();
     assert_eq!(terminal.event_id, "end");
     drop(repository);
-    let restarted =
-        SqliteWorkflowRepository::new(application.clone(), ControlQueryService::new(control));
-    restarted.synchronize().await.unwrap();
+    sqlx::raw_sql("CREATE TRIGGER reject_replay BEFORE INSERT ON workflow_agent_events WHEN NEW.event_id IN ('start','end') BEGIN SELECT RAISE(ABORT,'replayed confirmed event'); END;")
+        .execute(&application).await.unwrap();
+    sqlx::query("INSERT INTO events(event_id,session_id,source,client_type,event_type,occurred_at) VALUES ('next','s','agent_client','generic','session.ready','2026-01-02')")
+        .execute(&control).await.unwrap();
+    let restarted = WorkflowState::new(
+        application.clone(),
+        &AgentControl::builder(control.clone(), root.path().into()).build(),
+    )
+    .await
+    .unwrap();
+    restarted.catch_up().await.unwrap();
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM workflow_agent_events")
             .fetch_one(&application)
             .await
             .unwrap(),
-        2
+        3
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM sessions")
@@ -50,18 +60,22 @@ async fn replay_and_restart_use_only_application_storage_with_a_separate_control
             .unwrap(),
         0
     );
-    // Replaying a previously committed batch must not duplicate facts.
-    sqlx::query("UPDATE workflow_event_cursor SET position=0")
+    sqlx::query("DROP TRIGGER reject_replay")
         .execute(&application)
         .await
         .unwrap();
-    restarted.synchronize().await.unwrap();
+    // Simulate a projection commit followed by a crash before acknowledgement.
+    sqlx::query("UPDATE event_subscriptions SET cursor_position=0 WHERE subscriber_id='workflow.projection'")
+        .execute(&control)
+        .await
+        .unwrap();
+    restarted.catch_up().await.unwrap();
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM workflow_agent_events")
             .fetch_one(&application)
             .await
             .unwrap(),
-        2
+        3
     );
     assert_eq!(
         restarted

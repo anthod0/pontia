@@ -1,4 +1,4 @@
-use super::SqliteWorkflowRepository;
+use super::WorkflowState;
 use crate::models::WorkflowTerminalEventRow;
 use pontia_core::Result;
 
@@ -41,14 +41,14 @@ WITH workflow_terminal_events AS (
 )
 "#;
 
-impl SqliteWorkflowRepository {
+impl WorkflowState {
     pub async fn latest_workflow_terminal_event(
         &self,
         session_id: &str,
         runtime_id: Option<&str>,
         turn_id: Option<&str>,
     ) -> Result<Option<WorkflowTerminalEventRow>> {
-        self.synchronize().await?;
+        self.projection.catch_up().await?;
         Ok(sqlx::query_as::<_, WorkflowTerminalEventRow>(&format!(
             r#"{WORKFLOW_TERMINAL_EVENTS}
                SELECT event_id, turn_id, event_type, runtime_id

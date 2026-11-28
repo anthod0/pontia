@@ -19,6 +19,7 @@ fn env_lock() -> &'static Mutex<()> {
 
 pub(crate) struct TestApp {
     pub(crate) state: AppState,
+    pub(crate) workflows: pontia_workflow::WorkflowState,
     pub(crate) db: SqlitePool,
     pontia_home: tempfile::TempDir,
     workspace: tempfile::TempDir,
@@ -32,6 +33,11 @@ impl TestApp {
 
     pub(crate) async fn new() -> Self {
         Self::builder().build().await
+    }
+
+    pub(crate) fn router(&self) -> axum::Router {
+        let routes = pontia_http::workflow_router(self.state.clone(), self.workflows.clone());
+        super::http::entrypoints_with_routes(self.state.clone().into(), routes).local_http()
     }
 
     pub(crate) fn pontia_home(&self) -> &tempfile::TempDir {
@@ -108,6 +114,9 @@ impl TestAppBuilder {
             .await;
 
         TestApp {
+            workflows: pontia_workflow::WorkflowState::new(db.clone(), state.control())
+                .await
+                .unwrap(),
             state,
             db,
             pontia_home,

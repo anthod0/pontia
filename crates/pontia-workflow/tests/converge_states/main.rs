@@ -1,9 +1,9 @@
 mod activation_failure;
 mod atomic_transition;
+mod catch_up;
 mod failure_cleanup;
 mod failure_recovery;
 mod fixture;
 mod idle_convergence;
-mod lagged_event_reconciliation;
 mod restart_recovery;
 mod test_doubles;

@@ -1,7 +1,4 @@
-use crate::common::http;
-use pontia_workflow::repository::{
-    CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
-};
+use pontia_workflow::repository::{CreateWorkflowNodeRecord, CreateWorkflowRecord};
 use std::{fs, sync::Arc};
 
 use pontia_agent_control::ipc::rpc::{PROTOCOL_VERSION, RpcRequest};
@@ -24,10 +21,7 @@ use crate::common::test_app::TestApp;
 pub(super) async fn seed_running_workflow(
     app: &TestApp,
 ) -> (Arc<PiRpcPeer>, tokio::sync::mpsc::Receiver<RpcRequest>) {
-    let workflows = SqliteWorkflowRepository::new(
-        app.db.clone(),
-        pontia_agent_control::ControlQueryService::new(app.db.clone()),
-    );
+    let workflows = app.workflows.clone();
     workflows
         .create_workflow(CreateWorkflowRecord {
             initiator_session_id: "origin".into(),
@@ -119,7 +113,8 @@ async fn post_node_command(app: &TestApp, path: &str, body: Value) -> (StatusCod
         .uri(format!("/api/v1/workflow/{path}"))
         .header(header::CONTENT_TYPE, "application/json")
         .header(header::AUTHORIZATION, "Bearer test-token");
-    let response = http::router(app.state.clone())
+    let response = app
+        .router()
         .oneshot(request.body(Body::from(body.to_string())).expect("request"))
         .await
         .expect("response");
@@ -172,10 +167,7 @@ async fn workflow_submission_accepts_the_node_owned_output_file() {
         .expect("read handoff"),
         "Submitted through HTTP: 完成\n"
     );
-    let workflows = SqliteWorkflowRepository::new(
-        app.db.clone(),
-        pontia_agent_control::ControlQueryService::new(app.db.clone()),
-    );
+    let workflows = app.workflows.clone();
     let workflow = workflows
         .get_workflow("wf_http_submit")
         .await
@@ -259,13 +251,7 @@ async fn workflow_termination_reports_once_to_the_origin_and_preserves_running_s
         assert_eq!(status, StatusCode::OK, "{body}");
     }
     let control = app.state.control();
-    let coordinator = pontia_workflow::WorkflowCoordinator::new(
-        app.db.clone(),
-        control,
-        control.clone(),
-        control.agent_events(),
-        app.pontia_home().path().into(),
-    );
+    let coordinator = pontia_workflow::WorkflowRuntime::new(app.workflows.clone(), control);
     let (stop, shutdown) = tokio::sync::watch::channel(false);
     let worker = tokio::spawn(coordinator.run(shutdown));
     let messages = tokio::time::timeout(std::time::Duration::from_secs(5), async {
@@ -284,7 +270,7 @@ async fn workflow_termination_reports_once_to_the_origin_and_preserves_running_s
     .await
     .unwrap();
     stop.send(true).unwrap();
-    worker.await.unwrap();
+    worker.await.unwrap().unwrap();
     assert_eq!(messages.len(), 1);
     for text in [
         "wf_http_submit",
@@ -295,7 +281,7 @@ async fn workflow_termination_reports_once_to_the_origin_and_preserves_running_s
     ] {
         assert!(messages[0].input.contains(text));
     }
-    let snapshot = pontia_workflow::WorkflowQueryService::new(app.db.clone(), control.queries())
+    let snapshot = pontia_workflow::WorkflowQueryService::new(app.workflows.clone())
         .get_workflow("wf_http_submit")
         .await
         .unwrap()

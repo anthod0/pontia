@@ -1,19 +1,21 @@
-use pontia_workflow::WorkflowCoordinator;
-use pontia_workflow::repository::SqliteWorkflowRepository;
+use pontia_workflow::WorkflowRuntime;
+use pontia_workflow::repository::WorkflowState;
 
 use crate::{
     fixture::{seed_linear_workflow, test_pool, wait_for_state},
-    test_doubles::{RecordingExitRequester, SequencedSessionCreator, TestAgentEvents},
+    test_doubles::{RecordingExitRequester, SequencedSessionCreator},
 };
 
 #[tokio::test]
 async fn startup_recovers_a_running_workflow_from_persisted_session_exit() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("restart-recovery.db")).await;
-    let repository = SqliteWorkflowRepository::new(
+    let repository = WorkflowState::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-    );
+        &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().into()).build(),
+    )
+    .await
+    .unwrap();
     seed_linear_workflow(&repository, "wf_restart", "[]", false).await;
     repository
         .start_workflow("wf_restart", "evt_workflow_started")
@@ -43,21 +45,20 @@ async fn startup_recovers_a_running_workflow_from_persisted_session_exit() {
     .expect("persist confirmed Session exit");
 
     let (shutdown, shutdown_rx) = tokio::sync::watch::channel(false);
-    let coordinator = WorkflowCoordinator::with_services(
-        pool.clone(),
+    let coordinator = WorkflowRuntime::with_services(
+        repository.clone(),
         &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().join("pontia-home"))
             .clients(crate::test_doubles::clients())
             .build(),
         SequencedSessionCreator::new([]),
         RecordingExitRequester::default(),
-        TestAgentEvents::new(pool.clone()),
         temp.path().join("pontia-home"),
     );
     let task = tokio::spawn(coordinator.run(shutdown_rx));
 
     wait_for_state(&repository, "wf_restart", "completed").await;
     shutdown.send(true).expect("signal shutdown");
-    task.await.expect("coordinator task");
+    task.await.expect("coordinator task").unwrap();
 
     let events = repository
         .list_events("wf_restart")
@@ -80,10 +81,12 @@ async fn startup_recovers_a_running_workflow_from_persisted_session_exit() {
 async fn repeated_reconciliation_activates_a_downstream_node_once() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("idempotent-reconciliation.db")).await;
-    let repository = SqliteWorkflowRepository::new(
+    let repository = WorkflowState::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-    );
+        &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().into()).build(),
+    )
+    .await
+    .unwrap();
     seed_linear_workflow(&repository, "wf_repeat", "[]", true).await;
     repository
         .start_workflow("wf_repeat", "evt_workflow_started")
@@ -116,14 +119,13 @@ async fn repeated_reconciliation_activates_a_downstream_node_once() {
     std::fs::write(handoff_dir.join("root.md"), "root output").expect("write downstream input");
 
     let sessions = SequencedSessionCreator::new([Some("session_child")]);
-    let coordinator = WorkflowCoordinator::with_services(
-        pool.clone(),
+    let coordinator = WorkflowRuntime::with_services(
+        repository.clone(),
         &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().join("pontia-home"))
             .clients(crate::test_doubles::clients())
             .build(),
         sessions.clone(),
         RecordingExitRequester::default(),
-        TestAgentEvents::new(pool),
         pontia_home,
     );
 
@@ -160,10 +162,12 @@ async fn repeated_reconciliation_activates_a_downstream_node_once() {
 async fn restart_recovery_does_not_treat_a_pause_interruption_as_failure() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("paused-interruption.db")).await;
-    let repository = SqliteWorkflowRepository::new(
+    let repository = WorkflowState::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-    );
+        &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().into()).build(),
+    )
+    .await
+    .unwrap();
     seed_linear_workflow(&repository, "wf_paused_restart", "[]", false).await;
     repository
         .start_workflow("wf_paused_restart", "evt_workflow_started")
@@ -192,14 +196,13 @@ async fn restart_recovery_does_not_treat_a_pause_interruption_as_failure() {
         .await
         .expect("resume workflow");
 
-    let coordinator = WorkflowCoordinator::with_services(
-        pool.clone(),
+    let coordinator = WorkflowRuntime::with_services(
+        repository.clone(),
         &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().join("pontia-home"))
             .clients(crate::test_doubles::clients())
             .build(),
         SequencedSessionCreator::new([]),
         RecordingExitRequester::default(),
-        TestAgentEvents::new(pool),
         temp.path().join("pontia-home"),
     );
     coordinator
@@ -219,13 +222,13 @@ async fn restart_recovery_does_not_treat_a_pause_interruption_as_failure() {
 }
 
 #[tokio::test]
-async fn periodic_reconciliation_recovers_a_missed_realtime_notification() {
+async fn committed_session_exit_wakes_the_idle_workflow_runtime() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("missed-notification.db")).await;
-    let repository = SqliteWorkflowRepository::new(
-        pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-    );
+    let app = pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().into())
+        .clients(crate::test_doubles::clients())
+        .build();
+    let repository = WorkflowState::new(pool.clone(), &app).await.unwrap();
     seed_linear_workflow(&repository, "wf_missed", "[]", false).await;
     repository
         .start_workflow("wf_missed", "evt_workflow_started")
@@ -245,30 +248,57 @@ async fn periodic_reconciliation_recovers_a_missed_realtime_notification() {
         .expect("record existing submission");
 
     let (shutdown, shutdown_rx) = tokio::sync::watch::channel(false);
-    let coordinator = WorkflowCoordinator::with_services(
-        pool.clone(),
-        &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().join("pontia-home"))
-            .clients(crate::test_doubles::clients())
-            .build(),
+    let coordinator = WorkflowRuntime::with_services(
+        repository.clone(),
+        &app,
         SequencedSessionCreator::new([]),
         RecordingExitRequester::default(),
-        TestAgentEvents::new(pool.clone()),
         temp.path().join("pontia-home"),
     );
     let task = tokio::spawn(coordinator.run(shutdown_rx));
-    tokio::task::yield_now().await;
-
-    sqlx::query(
-        r#"INSERT INTO events
-           (event_id, session_id, source, client_type, event_type, occurred_at, payload)
-           VALUES ('evt_session_exited', 'session_root', 'agent_client', 'pi',
-                   'session.exited', '2026-07-31T00:00:00Z', '{}')"#,
-    )
-    .execute(&pool)
+    use pontia_core::domain::{EventSource, EventType, ReportedEvent};
+    let ingest = app.event_ingest_service();
+    ingest
+        .ingest_reported_event(ReportedEvent::new(
+            "created".into(),
+            "session_root".into(),
+            None,
+            EventSource::ExternalApi,
+            "pi".into(),
+            EventType::SessionCreated,
+            serde_json::json!({}),
+        ))
+        .await
+        .unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let projected: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM workflow_agent_events WHERE event_id='created')",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            if projected {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
     .await
-    .expect("persist exit without broadcasting it");
-
+    .unwrap();
+    ingest
+        .ingest_reported_event(ReportedEvent::new(
+            "exited".into(),
+            "session_root".into(),
+            None,
+            EventSource::AgentClient,
+            "pi".into(),
+            EventType::SessionExited,
+            serde_json::json!({"runtime_id":"runtime_session_root"}),
+        ))
+        .await
+        .unwrap();
     wait_for_state(&repository, "wf_missed", "completed").await;
     shutdown.send(true).expect("signal shutdown");
-    task.await.expect("coordinator task");
+    task.await.expect("coordinator task").unwrap();
 }

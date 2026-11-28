@@ -1,6 +1,7 @@
 //! Workflow orchestration over Agent Control.
 pub mod models;
 pub mod repository;
+pub use repository::WorkflowState;
 
 mod activation;
 mod control;
@@ -15,11 +16,9 @@ mod types;
 mod validation;
 
 pub use control::{WorkflowControlOutcome, WorkflowControlService};
-pub use coordinator::WorkflowCoordinator;
+pub use coordinator::WorkflowRuntime;
 pub use error::{Error, Result};
-pub use ports::{
-    AgentEventSubscriber, GracefulExitRequester, ProfileSessionConfig, SessionCreator,
-};
+pub use ports::{GracefulExitRequester, ProfileSessionConfig, SessionCreator};
 pub use query::{
     WorkflowAgentStatus, WorkflowContextView, WorkflowDetailView, WorkflowInputView,
     WorkflowListItemView, WorkflowNodeContextView, WorkflowNodeView, WorkflowQueryService,

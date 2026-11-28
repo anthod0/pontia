@@ -1,5 +1,9 @@
 use pontia_agent_control::ControlQueryService;
+use pontia_agent_control::{AgentControl, DurableSubscription, SubscriptionConfig};
+use projection::WorkflowProjectionHandler;
 use sqlx::SqlitePool;
+use std::sync::Arc;
+use tokio::sync::Notify;
 mod projection;
 mod terminal;
 
@@ -35,26 +39,49 @@ pub struct CreateWorkflowNodeRecord {
 }
 
 #[derive(Clone)]
-pub struct SqliteWorkflowRepository {
+pub struct WorkflowState {
     pool: SqlitePool,
-    queries: ControlQueryService,
+    pub(crate) queries: ControlQueryService,
+    pub(crate) projection: Arc<DurableSubscription>,
+    pub(crate) changed: Arc<Notify>,
     recovery_client_types: Vec<String>,
 }
 
-impl SqliteWorkflowRepository {
-    pub fn new(pool: SqlitePool, queries: ControlQueryService) -> Self {
-        Self {
+impl WorkflowState {
+    pub async fn new(pool: SqlitePool, control: &AgentControl) -> pontia_core::Result<Self> {
+        let queries = control.queries();
+        let changed = Arc::new(Notify::new());
+        let handler = Arc::new(WorkflowProjectionHandler {
+            pool: pool.clone(),
+            queries: queries.clone(),
+            changed: changed.clone(),
+        });
+        let projection = control
+            .events()
+            .register_durable(
+                SubscriptionConfig::new("workflow.projection"),
+                move |event| {
+                    let handler = handler.clone();
+                    async move { handler.apply(event).await }
+                },
+            )
+            .await?;
+        let recovery_client_types = control
+            .clients()
+            .registrations()
+            .filter(|client| client.spec.adapter.lifecycle.confirmed_exit_recovery)
+            .map(|client| client.spec.client_type.to_owned())
+            .collect();
+        Ok(Self {
             pool,
             queries,
-            recovery_client_types: Vec::new(),
-        }
+            changed,
+            projection: Arc::new(projection),
+            recovery_client_types,
+        })
     }
 
-    pub fn with_recovery_client_types(
-        mut self,
-        clients: impl IntoIterator<Item = impl Into<String>>,
-    ) -> Self {
-        self.recovery_client_types = clients.into_iter().map(Into::into).collect();
-        self
+    pub async fn catch_up(&self) -> pontia_core::Result<()> {
+        self.projection.catch_up().await
     }
 }

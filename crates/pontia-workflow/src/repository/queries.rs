@@ -2,9 +2,9 @@ use pontia_core::{Error, Result};
 
 use crate::models::{WorkflowNodeRow, WorkflowRow};
 
-use super::SqliteWorkflowRepository;
+use super::WorkflowState;
 
-impl SqliteWorkflowRepository {
+impl WorkflowState {
     pub async fn list_workflows(&self, limit: u32) -> Result<Vec<WorkflowRow>> {
         Ok(sqlx::query_as::<_, WorkflowRow>(
             r#"SELECT workflow_id, title, cwd, state, initiator_session_id, failure_message, created_at,

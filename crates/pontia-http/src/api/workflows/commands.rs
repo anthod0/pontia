@@ -3,6 +3,7 @@ use axum::{
     extract::{State, rejection::JsonRejection},
 };
 use pontia_application::AppState;
+use pontia_workflow::WorkflowState;
 use pontia_workflow::{
     InitialHandoff, RunWorkflowRequest, SubmitWorkflowNodeRequest, WorkflowNodeDefinition,
     WorkflowScheduler,
@@ -61,14 +62,13 @@ pub struct WorkflowTerminationRequest {
 }
 
 pub async fn run_workflow(
-    State(state): State<AppState>,
+    State((state, workflows)): State<(AppState, WorkflowState)>,
     request: Result<Json<WorkflowRunRequest>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
     let workflow_id = request.workflow_id.clone();
     let scheduler = WorkflowScheduler::new(
-        state.db(),
-        state.control().queries(),
+        workflows,
         state.control().clone(),
         state.pontia_home().to_path_buf(),
     );
@@ -111,13 +111,12 @@ pub async fn run_workflow(
 }
 
 pub async fn terminate_workflow_node(
-    State(state): State<AppState>,
+    State((state, workflows)): State<(AppState, WorkflowState)>,
     request: Result<Json<WorkflowTerminationRequest>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
     WorkflowScheduler::new(
-        state.db(),
-        state.control().queries(),
+        workflows,
         state.control().clone(),
         state.pontia_home().to_path_buf(),
     )
@@ -128,13 +127,12 @@ pub async fn terminate_workflow_node(
 }
 
 pub async fn submit_workflow_output(
-    State(state): State<AppState>,
+    State((state, workflows)): State<(AppState, WorkflowState)>,
     request: Result<Json<WorkflowSubmissionRequest>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
     let scheduler = WorkflowScheduler::new(
-        state.db(),
-        state.control().queries(),
+        workflows,
         state.control().clone(),
         state.pontia_home().to_path_buf(),
     );

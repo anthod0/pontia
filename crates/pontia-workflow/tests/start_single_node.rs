@@ -1,6 +1,4 @@
-use pontia_workflow::repository::{
-    CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
-};
+use pontia_workflow::repository::{CreateWorkflowNodeRecord, CreateWorkflowRecord, WorkflowState};
 use std::{
     path::Path,
     sync::{Arc, Mutex},
@@ -52,10 +50,12 @@ async fn test_pool(path: &Path) -> sqlx::SqlitePool {
 async fn start_launches_first_node_with_required_task_completion_instructions() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("workflow.db")).await;
-    let repository = SqliteWorkflowRepository::new(
+    let repository = WorkflowState::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-    );
+        &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().into()).build(),
+    )
+    .await
+    .unwrap();
     repository
         .create_workflow(CreateWorkflowRecord {
             initiator_session_id: "origin".into(),
@@ -93,13 +93,8 @@ async fn start_launches_first_node_with_required_task_completion_instructions() 
     let exits = pontia_agent_control::AgentControl::builder(pool.clone(), pontia_home.clone())
         .build()
         .session_commands();
-    let scheduler = WorkflowScheduler::with_services(
-        pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-        sessions.clone(),
-        exits,
-        pontia_home,
-    );
+    let scheduler =
+        WorkflowScheduler::with_services(repository.clone(), sessions.clone(), exits, pontia_home);
 
     let outcome = scheduler.start("wf_start").await.expect("start workflow");
 
@@ -170,10 +165,12 @@ async fn start_creates_the_workflow_handoff_directory() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pontia_home = temp.path().join("pontia-home");
     let pool = test_pool(&pontia_home.join("data/workflow-directory.db")).await;
-    let repository = SqliteWorkflowRepository::new(
+    let repository = WorkflowState::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-    );
+        &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().into()).build(),
+    )
+    .await
+    .unwrap();
     repository
         .create_workflow(CreateWorkflowRecord {
             initiator_session_id: "origin".into(),
@@ -202,8 +199,7 @@ async fn start_creates_the_workflow_handoff_directory() {
         .build()
         .session_commands();
     let scheduler = WorkflowScheduler::with_services(
-        pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        repository.clone(),
         RecordingSessionCreator::default(),
         exits,
         pontia_home.clone(),
@@ -221,10 +217,12 @@ async fn start_creates_the_workflow_handoff_directory() {
 async fn start_rejects_handoff_input_names_that_escape_the_handoff_directory() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("workflow-paths.db")).await;
-    let repository = SqliteWorkflowRepository::new(
+    let repository = WorkflowState::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-    );
+        &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().into()).build(),
+    )
+    .await
+    .unwrap();
     let pontia_home = temp.path().join("pontia-home");
     let secret = temp.path().join("outside.md");
     std::fs::write(&secret, "must not be read").expect("write outside file");
@@ -263,8 +261,7 @@ async fn start_rejects_handoff_input_names_that_escape_the_handoff_directory() {
             .build()
             .session_commands();
         let scheduler = WorkflowScheduler::with_services(
-            pool.clone(),
-            pontia_agent_control::ControlQueryService::new(pool.clone()),
+            repository.clone(),
             sessions.clone(),
             exits,
             pontia_home.clone(),

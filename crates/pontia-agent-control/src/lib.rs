@@ -50,7 +50,7 @@ pub use live_output::{
     LiveOutputUpdate, LiveReasoningBound, LiveToolOutcome, LiveToolOutput, LiveToolPhase,
     LiveToolResult, LiveToolStatus,
 };
-pub use queries::{ControlQueryService, DomainEventReader, SessionOwnership, SessionSnapshot};
+pub use queries::{ControlQueryService, SessionOwnership, SessionSnapshot};
 pub use raw_transcripts::{
     MessageCategory, SessionMessagesPage, SessionMessagesQuery, TurnTimelineDirection,
     TurnTimelineGroup, TurnTimelineItem, TurnTimelinePage, TurnTimelineService,

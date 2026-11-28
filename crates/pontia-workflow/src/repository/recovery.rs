@@ -1,4 +1,4 @@
-use super::SqliteWorkflowRepository;
+use super::WorkflowState;
 use crate::models::WorkflowRecoveryRow;
 use pontia_core::{Error, Result};
 use serde_json::json;
@@ -39,7 +39,7 @@ WHERE s.has_agent_binding=1 AND w.workflow_id=? AND s.client_type IN (SELECT val
     AND NOT s.has_unsettled_input
 "#;
 
-impl SqliteWorkflowRepository {
+impl WorkflowState {
     pub async fn recovery_runtime_available(&self, id: &str) -> Result<bool> {
         let session_id: String =
             sqlx::query_scalar("SELECT session_id FROM workflow_recoveries WHERE recovery_id=?")
@@ -47,7 +47,7 @@ impl SqliteWorkflowRepository {
                 .fetch_one(&self.pool)
                 .await?;
         self.refresh_session(&session_id).await?;
-        self.synchronize().await?;
+        self.projection.catch_up().await?;
         Ok(sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM workflow_recoveries a JOIN workflow_session_snapshots s ON s.session_id=a.session_id JOIN workflow_runtime_snapshots r ON r.session_id=s.session_id WHERE a.recovery_id=? AND s.state IN ('idle','busy','waiting_for_interaction','interrupted') AND r.state IN ('starting','running') AND r.is_control AND r.runtime_id=a.runtime_id)")
             .bind(id).fetch_one(&self.pool).await?)
     }
@@ -57,7 +57,7 @@ impl SqliteWorkflowRepository {
         workflow_id: &str,
     ) -> Result<Option<WorkflowRecoveryCandidate>> {
         self.refresh_workflow_sessions(workflow_id).await?;
-        self.synchronize().await?;
+        self.projection.catch_up().await?;
         Ok(sqlx::query_as(CANDIDATE)
             .bind(workflow_id)
             .bind(serde_json::to_string(&self.recovery_client_types)?)
@@ -81,7 +81,7 @@ impl SqliteWorkflowRepository {
         recovery_id: &str,
     ) -> Result<WorkflowRecoveryRow> {
         self.refresh_workflow_sessions(workflow_id).await?;
-        self.synchronize().await?;
+        self.projection.catch_up().await?;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         if let Some(existing) = sqlx::query_as::<_, WorkflowRecoveryRow>(
             "SELECT * FROM workflow_recoveries WHERE workflow_id=? AND failure_event_id=?",
@@ -113,6 +113,7 @@ impl SqliteWorkflowRepository {
                 .await?;
         recovery_event(&mut tx, &row, "workflow.recovery_requested", None).await?;
         tx.commit().await?;
+        self.changed.notify_one();
         Ok(row)
     }
 
@@ -128,7 +129,7 @@ impl SqliteWorkflowRepository {
                 .fetch_one(&self.pool)
                 .await?;
         self.refresh_session(&session_id).await?;
-        self.synchronize().await?;
+        self.projection.catch_up().await?;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let result=sqlx::query("UPDATE workflow_recoveries SET state='dispatching',runtime_id=(SELECT runtime_id FROM workflow_runtime_snapshots WHERE session_id=workflow_recoveries.session_id AND state = 'running' AND is_control),updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE recovery_id=? AND state='preparing' AND EXISTS (SELECT 1 FROM workflow_session_snapshots s JOIN workflow_runtime_snapshots r ON r.session_id=s.session_id WHERE s.session_id=workflow_recoveries.session_id AND s.state='idle' AND r.state IN ('starting','running') AND r.is_control AND r.runtime_id IS NOT NULL)")
             .bind(id).execute(&mut *tx).await?;
@@ -146,6 +147,7 @@ impl SqliteWorkflowRepository {
             .bind(&row.workflow_id).execute(&mut *tx).await?;
         recovery_event(&mut tx, &row, "workflow.recovery_ready", None).await?;
         tx.commit().await?;
+        self.changed.notify_one();
         Ok(())
     }
 
@@ -169,6 +171,7 @@ impl SqliteWorkflowRepository {
             recovery_event(&mut tx, &row, "workflow.recovery_delivered", None).await?;
         }
         tx.commit().await?;
+        self.changed.notify_one();
         Ok(())
     }
 

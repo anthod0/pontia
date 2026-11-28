@@ -3,8 +3,7 @@ mod graph;
 mod overview;
 mod timeline;
 
-use crate::repository::SqliteWorkflowRepository;
-use sqlx::SqlitePool;
+use crate::repository::WorkflowState;
 
 pub use context::{WorkflowContextView, WorkflowInputView, WorkflowNodeContextView};
 pub use overview::{
@@ -14,24 +13,15 @@ pub use timeline::{WorkflowTimelineEntryView, WorkflowTimelineView};
 
 #[derive(Clone)]
 pub struct WorkflowQueryService {
-    workflows: SqliteWorkflowRepository,
+    workflows: WorkflowState,
     queries: pontia_agent_control::ControlQueryService,
 }
 
 impl WorkflowQueryService {
-    pub fn with_clients(mut self, clients: pontia_agent_control::clients::ClientRegistry) -> Self {
-        self.workflows = self.workflows.with_recovery_client_types(
-            clients
-                .registrations()
-                .filter(|client| client.spec.adapter.lifecycle.confirmed_exit_recovery)
-                .map(|client| client.spec.client_type),
-        );
-        self
-    }
-    pub fn new(pool: SqlitePool, queries: pontia_agent_control::ControlQueryService) -> Self {
+    pub fn new(workflows: WorkflowState) -> Self {
         Self {
-            workflows: SqliteWorkflowRepository::new(pool, queries.clone()),
-            queries,
+            queries: workflows.queries.clone(),
+            workflows,
         }
     }
 }

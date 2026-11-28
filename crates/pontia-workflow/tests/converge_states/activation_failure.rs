@@ -1,5 +1,5 @@
 use pontia_core::domain::EventType;
-use pontia_workflow::repository::SqliteWorkflowRepository;
+use pontia_workflow::repository::WorkflowState;
 use pontia_workflow::{SubmitWorkflowNodeRequest, WorkflowScheduler};
 
 use crate::{
@@ -33,10 +33,12 @@ async fn activation_errors_fail_with_clear_messages() {
     ] {
         let temp = tempfile::tempdir().expect("tempdir");
         let pool = test_pool(&temp.path().join(format!("{workflow_id}.db"))).await;
-        let repository = SqliteWorkflowRepository::new(
+        let repository = WorkflowState::new(
             pool.clone(),
-            pontia_agent_control::ControlQueryService::new(pool.clone()),
-        );
+            &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().into()).build(),
+        )
+        .await
+        .unwrap();
         let inputs = if input_setup == "none" {
             "[]"
         } else {
@@ -54,8 +56,7 @@ async fn activation_errors_fail_with_clear_messages() {
                 .expect("write non-UTF-8 input");
         }
         let scheduler = WorkflowScheduler::with_services(
-            pool.clone(),
-            pontia_agent_control::ControlQueryService::new(pool.clone()),
+            repository.clone(),
             SequencedSessionCreator::new(outcomes),
             RecordingExitRequester::default(),
             temp.path().join("pontia-home"),
@@ -80,14 +81,16 @@ async fn activation_errors_fail_with_clear_messages() {
 async fn downstream_session_creation_failure_stops_the_workflow() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("downstream-failure.db")).await;
-    let repository = SqliteWorkflowRepository::new(
+    let repository = WorkflowState::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-    );
+        &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().into()).build(),
+    )
+    .await
+    .unwrap();
     seed_linear_workflow(&repository, "wf_downstream_failure", "[]", true).await;
     let sessions = SequencedSessionCreator::new([Some("session_root"), None]);
     let exits = RecordingExitRequester::default();
-    let events = TestAgentEvents::new(pool.clone());
+    let events = TestAgentEvents::new(pool.clone(), repository.clone());
     let pontia_home = temp.path().join("pontia-home");
     let _coordinator = spawn_coordinator(
         pool.clone(),
@@ -97,8 +100,7 @@ async fn downstream_session_creation_failure_stops_the_workflow() {
         pontia_home.clone(),
     );
     let scheduler = WorkflowScheduler::with_services(
-        pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        repository.clone(),
         sessions.clone(),
         exits.clone(),
         pontia_home.clone(),

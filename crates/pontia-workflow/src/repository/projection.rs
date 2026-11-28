@@ -1,67 +1,44 @@
-use super::SqliteWorkflowRepository;
+use super::WorkflowState;
+use pontia_agent_control::{ControlQueryService, PositionedEvent};
 use pontia_core::Result;
+use sqlx::SqlitePool;
+use std::sync::Arc;
+use tokio::sync::Notify;
 
-impl SqliteWorkflowRepository {
-    /// Refreshes application read models through public control contracts.
-    /// No scheduling side effects run while replay catches up.
-    pub async fn synchronize(&self) -> Result<()> {
-        let reader = self.queries.domain_events();
-        loop {
-            let after: i64 =
-                sqlx::query_scalar("SELECT position FROM workflow_event_cursor WHERE id=1")
-                    .fetch_one(&self.pool)
-                    .await?;
-            let page = reader.read_after(after, None, 256).await?;
-            let ids: Vec<String> = sqlx::query_scalar(
-                "SELECT session_id FROM workflow_nodes WHERE session_id IS NOT NULL",
+pub(super) struct WorkflowProjectionHandler {
+    pub(super) pool: SqlitePool,
+    pub(super) queries: ControlQueryService,
+    pub(super) changed: Arc<Notify>,
+}
+
+impl WorkflowProjectionHandler {
+    pub(super) async fn apply(&self, event: PositionedEvent) -> Result<()> {
+        if event.application_id.as_deref() != Some("workflow") {
+            let bound: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM workflow_nodes WHERE session_id=?)",
             )
-            .fetch_all(&self.pool)
+            .bind(&event.session_id)
+            .fetch_one(&self.pool)
             .await?;
-
-            let events: Vec<_> = page
-                .events
-                .into_iter()
-                .filter(|event| {
-                    event.application_id.as_deref() == Some("workflow")
-                        || ids.contains(&event.session_id)
-                })
-                .collect();
-            let affected: std::collections::BTreeSet<_> = events
-                .iter()
-                .map(|event| event.session_id.as_str())
-                .collect();
-            let mut snapshots = Vec::with_capacity(affected.len());
-            for id in affected {
-                if let Some(snapshot) = self.queries.session_snapshot(id).await? {
-                    snapshots.push(snapshot);
-                }
-            }
-            let target_position = snapshots
-                .iter()
-                .fold(page.head_position, |position, snapshot| {
-                    position.max(snapshot.event_position)
-                });
-            let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-            for snapshot in &snapshots {
-                Self::save_snapshot_in_tx(&mut tx, snapshot).await?;
-            }
-            for event in events {
-                sqlx::query("INSERT INTO workflow_agent_events(position,event_id,session_id,turn_id,source,event_type,occurred_at,payload,created_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(event_id) DO NOTHING")
-                    .bind(event.position).bind(event.event_id).bind(event.session_id).bind(event.turn_id)
-                    .bind(event.source).bind(event.event_type).bind(event.occurred_at).bind(event.payload).bind(event.created_at).execute(&mut *tx).await?;
-            }
-            sqlx::query("UPDATE workflow_event_cursor SET position=MAX(position,?) WHERE id=1")
-                .bind(page.next_position)
-                .execute(&mut *tx)
-                .await?;
-            tx.commit().await?;
-            if page.next_position >= target_position {
-                break;
+            if !bound {
+                return Ok(());
             }
         }
+        let snapshot = self.queries.session_snapshot(&event.session_id).await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        if let Some(snapshot) = snapshot {
+            WorkflowState::save_snapshot_in_tx(&mut tx, &snapshot).await?;
+        }
+        sqlx::query("INSERT INTO workflow_agent_events(position,event_id,session_id,turn_id,source,event_type,occurred_at,payload,created_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(event_id) DO NOTHING")
+            .bind(event.position).bind(event.event_id).bind(event.session_id).bind(event.turn_id)
+            .bind(event.source).bind(event.event_type).bind(event.occurred_at).bind(event.payload).bind(event.created_at).execute(&mut *tx).await?;
+        tx.commit().await?;
+        self.changed.notify_one();
         Ok(())
     }
+}
 
+impl WorkflowState {
     pub(super) async fn refresh_session(&self, session_id: &str) -> Result<()> {
         if let Some(snapshot) = self.queries.session_snapshot(session_id).await? {
             let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;

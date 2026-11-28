@@ -62,7 +62,7 @@ async fn legacy_session_list_method_is_removed() {
 
 #[tokio::test]
 async fn obsolete_http_endpoints_are_removed() {
-    let (state, _pontia_home) = test_state().await;
+    let app = TestApp::new().await;
     for (method, path) in [
         ("POST", "/internal/v1/events"),
         ("POST", "/internal/v1/workflows"),
@@ -86,7 +86,8 @@ async fn obsolete_http_endpoints_are_removed() {
             "/internal/v1/agent-bindings/current-turn?client_type=pi&client_session_key=native",
         ),
     ] {
-        let response = http::router(state.clone())
+        let response = app
+            .router()
             .oneshot(
                 Request::builder()
                     .method(method)

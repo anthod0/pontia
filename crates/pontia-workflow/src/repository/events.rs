@@ -2,15 +2,15 @@ use pontia_core::Result;
 
 use crate::models::{WorkflowAgentEventRow, WorkflowEventRow};
 
-use super::SqliteWorkflowRepository;
+use super::WorkflowState;
 
-impl SqliteWorkflowRepository {
+impl WorkflowState {
     pub async fn terminal_event_precedes_latest_resume(
         &self,
         workflow_id: &str,
         event_id: &str,
     ) -> Result<bool> {
-        self.synchronize().await?;
+        self.projection.catch_up().await?;
         Ok(sqlx::query_scalar::<_, i64>(
             r#"SELECT EXISTS (
                    SELECT 1
@@ -86,7 +86,7 @@ impl SqliteWorkflowRepository {
         &self,
         workflow_id: &str,
     ) -> Result<Vec<WorkflowAgentEventRow>> {
-        self.synchronize().await?;
+        self.projection.catch_up().await?;
         Ok(sqlx::query_as::<_, WorkflowAgentEventRow>(
             r#"SELECT e.position AS rowid, e.event_id, e.session_id, e.turn_id, e.source, e.event_type,
                       e.occurred_at, e.payload, e.created_at

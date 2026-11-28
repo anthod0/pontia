@@ -1,4 +1,4 @@
-use pontia_agent_control::{ControlQueryService, DomainEventReader};
+use pontia_agent_control::ControlQueryService;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 
 #[tokio::test]
@@ -29,47 +29,6 @@ async fn busy_session_summaries_select_only_requested_busy_sessions() {
     assert_eq!(summaries[1].session_id, "retrieval");
     assert_eq!(summaries[1].role.as_deref(), Some("retrieval"));
     assert!(query.busy_session_summaries(&[]).await.unwrap().is_empty());
-}
-
-#[tokio::test]
-async fn filtered_event_pages_advance_over_unrelated_facts_and_survive_reopening() {
-    let root = tempfile::tempdir().unwrap();
-    let url = format!("sqlite://{}", root.path().join("events.db").display());
-    let pool = connect_sqlite(&url).await.unwrap();
-    run_migrations(&pool).await.unwrap();
-    sqlx::raw_sql("INSERT INTO sessions(session_id,client_type,state,application_id,application_ref) VALUES ('a','generic','idle','app-a','one'),('b','generic','idle','app-b','one');
-        INSERT INTO events(event_id,session_id,source,client_type,event_type,occurred_at) VALUES ('a1','a','external_api','generic','session.created','2026-01-01'),('b1','b','external_api','generic','session.created','2026-01-01'),('a2','a','agent_client','generic','session.ready','2026-01-01');")
-        .execute(&pool).await.unwrap();
-    let reader = DomainEventReader::new(pool.clone());
-    let first = reader.read_after(0, Some("app-a"), 1).await.unwrap();
-    assert_eq!(
-        first
-            .events
-            .iter()
-            .map(|e| e.event_id.as_str())
-            .collect::<Vec<_>>(),
-        ["a1"]
-    );
-    let second = reader
-        .read_after(first.next_position, Some("app-a"), 1)
-        .await
-        .unwrap();
-    assert_eq!(second.events[0].event_id, "a2");
-    let empty = reader.read_after(0, Some("absent"), 1).await.unwrap();
-    assert!(empty.events.is_empty());
-    assert_eq!(empty.next_position, second.next_position);
-    let cursor = second.next_position;
-    drop(reader);
-    pool.close().await;
-    let reopened = connect_sqlite(&url).await.unwrap();
-    sqlx::query("INSERT INTO events(event_id,session_id,source,client_type,event_type,occurred_at) VALUES ('a3','a','agent_client','generic','session.exited','2026-01-02')").execute(&reopened).await.unwrap();
-    let page = DomainEventReader::new(reopened)
-        .read_after(cursor, None, 10)
-        .await
-        .unwrap();
-    assert_eq!(page.events.len(), 1);
-    assert_eq!(page.events[0].event_id, "a3");
-    assert!(page.next_position > cursor);
 }
 
 #[tokio::test]

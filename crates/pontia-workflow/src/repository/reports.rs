@@ -1,9 +1,9 @@
-use super::SqliteWorkflowRepository;
+use super::WorkflowState;
 use crate::models::WorkflowEventRow;
 use pontia_core::{Error, Result};
 use serde_json::json;
 
-impl SqliteWorkflowRepository {
+impl WorkflowState {
     pub(crate) async fn request_termination(
         &self,
         node_id: &str,
@@ -46,6 +46,7 @@ impl SqliteWorkflowRepository {
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;
+        self.changed.notify_one();
         Ok(())
     }
 

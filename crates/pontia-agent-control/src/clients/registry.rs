@@ -26,10 +26,6 @@ pub struct ClientServiceTasks {
 }
 
 impl ClientServiceTasks {
-    pub fn extend(&mut self, other: Self) {
-        self.tasks.extend(other.tasks);
-    }
-
     pub async fn join(self) -> pontia_core::Result<()> {
         let mut failure = None;
         for task in self.tasks {

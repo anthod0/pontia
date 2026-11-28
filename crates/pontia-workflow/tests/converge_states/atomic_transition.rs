@@ -1,4 +1,4 @@
-use pontia_workflow::repository::SqliteWorkflowRepository;
+use pontia_workflow::repository::WorkflowState;
 
 use crate::fixture::{seed_linear_workflow, test_pool};
 
@@ -6,10 +6,12 @@ use crate::fixture::{seed_linear_workflow, test_pool};
 async fn submission_and_terminal_transition_have_one_atomic_winner() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("atomic-race.db")).await;
-    let repository = SqliteWorkflowRepository::new(
+    let repository = WorkflowState::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-    );
+        &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().into()).build(),
+    )
+    .await
+    .unwrap();
 
     for index in 0..20 {
         let workflow_id = format!("wf_atomic_{index}");

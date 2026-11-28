@@ -561,11 +561,6 @@ CREATE TABLE workflow_agent_events (
 
 CREATE INDEX idx_workflow_agent_events_session ON workflow_agent_events(session_id,position);
 
-CREATE TABLE workflow_event_cursor (
-    id INTEGER PRIMARY KEY CHECK (id=1),
-    position INTEGER NOT NULL
-);
-
 CREATE TABLE workflow_session_snapshots (
     session_id TEXT PRIMARY KEY NOT NULL,
     client_type TEXT NOT NULL,
@@ -672,11 +667,5 @@ CREATE TABLE bot_notifications (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX idx_bot_notifications_pending ON bot_notifications(delivered, bot_id);
-
-CREATE TABLE bot_event_cursor (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    position INTEGER NOT NULL
-);
-INSERT INTO bot_event_cursor VALUES (1, 0);
 
 ```

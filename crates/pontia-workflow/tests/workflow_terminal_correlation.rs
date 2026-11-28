@@ -50,10 +50,12 @@ async fn fact(
 async fn turn_terminal_runtime_comes_from_its_first_confirmed_start_not_terminal_payload() {
     let root = tempfile::tempdir().unwrap();
     let pool = test_pool(root.path()).await;
-    let events = pontia_workflow::repository::SqliteWorkflowRepository::new(
+    let events = pontia_workflow::repository::WorkflowState::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-    );
+        &pontia_agent_control::AgentControl::builder(pool.clone(), root.path().into()).build(),
+    )
+    .await
+    .unwrap();
     for (id, session, turn, source, runtime) in [
         ("other_session", "other", "turn", "agent_adapter", "wrong"),
         (
@@ -123,10 +125,12 @@ async fn turn_terminal_runtime_comes_from_its_first_confirmed_start_not_terminal
 async fn unstarted_turn_and_later_start_do_not_supply_fenced_terminal_evidence() {
     let root = tempfile::tempdir().unwrap();
     let pool = test_pool(root.path()).await;
-    let events = pontia_workflow::repository::SqliteWorkflowRepository::new(
+    let events = pontia_workflow::repository::WorkflowState::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-    );
+        &pontia_agent_control::AgentControl::builder(pool.clone(), root.path().into()).build(),
+    )
+    .await
+    .unwrap();
     fact(
         &pool,
         "terminal",
@@ -173,10 +177,12 @@ async fn unstarted_turn_and_later_start_do_not_supply_fenced_terminal_evidence()
 async fn runtime_and_turn_fences_are_applied_before_selecting_terminal_evidence() {
     let root = tempfile::tempdir().unwrap();
     let pool = test_pool(root.path()).await;
-    let events = pontia_workflow::repository::SqliteWorkflowRepository::new(
+    let events = pontia_workflow::repository::WorkflowState::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-    );
+        &pontia_agent_control::AgentControl::builder(pool.clone(), root.path().into()).build(),
+    )
+    .await
+    .unwrap();
     fact(
         &pool,
         "old_exit",
@@ -251,10 +257,12 @@ async fn runtime_and_turn_fences_are_applied_before_selecting_terminal_evidence(
 async fn reused_runtime_does_not_correlate_historical_exit_or_previous_turn_to_new_start() {
     let root = tempfile::tempdir().unwrap();
     let pool = test_pool(root.path()).await;
-    let events = pontia_workflow::repository::SqliteWorkflowRepository::new(
+    let events = pontia_workflow::repository::WorkflowState::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-    );
+        &pontia_agent_control::AgentControl::builder(pool.clone(), root.path().into()).build(),
+    )
+    .await
+    .unwrap();
     fact(
         &pool,
         "start",

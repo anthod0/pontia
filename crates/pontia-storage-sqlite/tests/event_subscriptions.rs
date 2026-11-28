@@ -18,8 +18,9 @@ async fn migration_seeds_existing_cursors_and_registration_preserves_progress() 
     .execute(&pool)
     .await
     .unwrap();
-    let migration = migrations.iter().find(|m| m.version == 79).unwrap();
-    sqlx::raw_sql(&migration.sql).execute(&pool).await.unwrap();
+    for migration in migrations.iter().filter(|m| m.version >= 79) {
+        sqlx::raw_sql(&migration.sql).execute(&pool).await.unwrap();
+    }
     let store = EventSubscriptionRepository::new(pool.clone());
     for (id, pos) in [("workflow.projection", 9), ("bot.helper_notifications", 3)] {
         store.register(id).await.unwrap();
@@ -27,11 +28,11 @@ async fn migration_seeds_existing_cursors_and_registration_preserves_progress() 
         assert_eq!(store.cursor(id).await.unwrap(), pos);
     }
     assert_eq!(
-        sqlx::query_scalar::<_, i64>("SELECT position FROM workflow_event_cursor")
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM sqlite_schema WHERE name IN ('workflow_event_cursor','bot_event_cursor')")
             .fetch_one(&pool)
             .await
             .unwrap(),
-        9
+        0
     );
 }
 

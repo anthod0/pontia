@@ -1,5 +1,5 @@
 use pontia_core::domain::EventType;
-use pontia_workflow::repository::SqliteWorkflowRepository;
+use pontia_workflow::repository::WorkflowState;
 use pontia_workflow::{SubmitWorkflowNodeRequest, WorkflowScheduler};
 
 use crate::{
@@ -18,14 +18,16 @@ async fn unsubmitted_failure_facts_fail_once_cleanup_once_and_never_start_a_chil
     ] {
         let temp = tempfile::tempdir().expect("tempdir");
         let pool = test_pool(&temp.path().join("failure.db")).await;
-        let repository = SqliteWorkflowRepository::new(
+        let repository = WorkflowState::new(
             pool.clone(),
-            pontia_agent_control::ControlQueryService::new(pool.clone()),
-        );
+            &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().into()).build(),
+        )
+        .await
+        .unwrap();
         seed_linear_workflow(&repository, "wf_failure", "[]", true).await;
         let sessions = SequencedSessionCreator::new([Some("session_root"), Some("session_child")]);
         let exits = RecordingExitRequester::default();
-        let events = TestAgentEvents::new(pool.clone());
+        let events = TestAgentEvents::new(pool.clone(), repository.clone());
         let pontia_home = temp.path().join("pontia-home");
         let _coordinator = spawn_coordinator(
             pool.clone(),
@@ -35,8 +37,7 @@ async fn unsubmitted_failure_facts_fail_once_cleanup_once_and_never_start_a_chil
             pontia_home.clone(),
         );
         let scheduler = WorkflowScheduler::with_services(
-            pool.clone(),
-            pontia_agent_control::ControlQueryService::new(pool.clone()),
+            repository.clone(),
             sessions.clone(),
             exits.clone(),
             pontia_home,
@@ -77,16 +78,17 @@ async fn unsubmitted_failure_facts_fail_once_cleanup_once_and_never_start_a_chil
 async fn submission_binding_failure_fails_without_starting_a_child() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("missing-binding.db")).await;
-    let repository = SqliteWorkflowRepository::new(
+    let repository = WorkflowState::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-    );
+        &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().into()).build(),
+    )
+    .await
+    .unwrap();
     seed_linear_workflow(&repository, "wf_missing_binding", "[]", true).await;
     let sessions = SequencedSessionCreator::new([Some("session_root"), Some("session_child")]);
     let exits = RecordingExitRequester::missing_runtime_binding();
     let scheduler = WorkflowScheduler::with_services(
-        pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        repository.clone(),
         sessions.clone(),
         exits.clone(),
         temp.path().join("pontia-home"),
@@ -127,14 +129,16 @@ async fn submission_binding_failure_fails_without_starting_a_child() {
 async fn deferred_exit_failure_fails_without_starting_a_child() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("exit-failure.db")).await;
-    let repository = SqliteWorkflowRepository::new(
+    let repository = WorkflowState::new(
         pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
-    );
+        &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().into()).build(),
+    )
+    .await
+    .unwrap();
     seed_linear_workflow(&repository, "wf_exit_failure", "[]", true).await;
     let sessions = SequencedSessionCreator::new([Some("session_root"), Some("session_child")]);
     let exits = RecordingExitRequester::failing_request();
-    let events = TestAgentEvents::new(pool.clone());
+    let events = TestAgentEvents::new(pool.clone(), repository.clone());
     let pontia_home = temp.path().join("pontia-home");
     let _coordinator = spawn_coordinator(
         pool.clone(),
@@ -144,8 +148,7 @@ async fn deferred_exit_failure_fails_without_starting_a_child() {
         pontia_home.clone(),
     );
     let scheduler = WorkflowScheduler::with_services(
-        pool.clone(),
-        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        repository.clone(),
         sessions.clone(),
         exits.clone(),
         pontia_home.clone(),

@@ -1,16 +1,13 @@
 use crate::models::{WorkflowNodeRow, WorkflowRow};
 use uuid::Uuid;
 
-use super::{AgentTerminal, WorkflowCoordinator};
-use crate::{
-    AgentEventSubscriber, GracefulExitRequester, Result, SessionCreator, activation::activate_node,
-};
+use super::{AgentTerminal, WorkflowRuntime};
+use crate::{GracefulExitRequester, Result, SessionCreator, activation::activate_node};
 
-impl<S, X, B> WorkflowCoordinator<S, X, B>
+impl<S, X> WorkflowRuntime<S, X>
 where
     S: SessionCreator + Send + Sync + 'static,
     X: GracefulExitRequester + Send + Sync + 'static,
-    B: AgentEventSubscriber + Send + Sync + 'static,
 {
     async fn reconcile_unsubmitted(
         &self,

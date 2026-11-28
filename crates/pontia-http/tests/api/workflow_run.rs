@@ -1,4 +1,3 @@
-use crate::common::http;
 use std::fs;
 
 use axum::{
@@ -6,14 +5,14 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use pontia_workflow::repository::SqliteWorkflowRepository;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
 use crate::common::test_app::TestApp;
 
 async fn post_run(app: &TestApp, body: Value) -> (StatusCode, Value) {
-    let response = http::router(app.state.clone())
+    let response = app
+        .router()
         .oneshot(
             Request::builder()
                 .method("POST")
@@ -69,14 +68,12 @@ async fn workflow_run_rejects_unsupported_node_types_before_creation() {
             .is_some_and(|message| message.contains("unsupported Workflow Node type: control"))
     );
     assert!(
-        SqliteWorkflowRepository::new(
-            app.db.clone(),
-            pontia_agent_control::ControlQueryService::new(app.db.clone())
-        )
-        .get_workflow("wf_unsupported_type")
-        .await
-        .expect("load workflow")
-        .is_none()
+        app.workflows
+            .clone()
+            .get_workflow("wf_unsupported_type")
+            .await
+            .expect("load workflow")
+            .is_none()
     );
 }
 
@@ -188,10 +185,7 @@ async fn workflow_run_creates_and_starts_a_linear_agent_workflow() {
     assert!(body["data"]["node_id"].as_str().is_some());
     assert!(body["data"]["session_id"].as_str().is_some());
 
-    let repository = SqliteWorkflowRepository::new(
-        app.db.clone(),
-        pontia_agent_control::ControlQueryService::new(app.db.clone()),
-    );
+    let repository = app.workflows.clone();
     let workflow = repository
         .get_workflow("wf_http_run")
         .await
@@ -335,7 +329,7 @@ async fn workflow_resolves_profile_launch_settings_and_pins_instructions() {
             "inputs":[], "output":"review.md", "execution_profile_id":"reviewer"}]
     })).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    let repository = SqliteWorkflowRepository::new(app.db.clone(), app.state.control().queries());
+    let repository = app.workflows.clone();
     let nodes = repository.list_nodes("wf_profile").await.unwrap();
     let session = nodes[0].session_id.as_deref().unwrap();
     let snapshot = SessionInstructionsService::new(app.db.clone())
@@ -423,12 +417,11 @@ async fn workflow_missing_profile_fails_node_activation_with_configuration_error
             .contains("agent profile missing not found"),
         "{body}"
     );
-    let workflow =
-        pontia_workflow::WorkflowQueryService::new(app.db.clone(), app.state.control().queries())
-            .get_workflow("wf_missing_profile")
-            .await
-            .unwrap()
-            .unwrap();
+    let workflow = pontia_workflow::WorkflowQueryService::new(app.workflows.clone())
+        .get_workflow("wf_missing_profile")
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(workflow.state, "failed");
     assert_eq!(workflow.nodes.len(), 1);
     let node = &workflow.nodes[0];

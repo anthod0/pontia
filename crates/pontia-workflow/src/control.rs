@@ -1,4 +1,4 @@
-use crate::repository::SqliteWorkflowRepository;
+use crate::repository::WorkflowState;
 use pontia_agent_control::{
     ControlQueryService, InboxCommandService, InputPayload, SendMode, TurnCommandService,
 };
@@ -20,13 +20,13 @@ pub struct WorkflowControlService {
     queries: ControlQueryService,
     turns: TurnCommandService,
     inbox: std::sync::Arc<InboxCommandService>,
-    workflows: SqliteWorkflowRepository,
+    workflows: WorkflowState,
 }
 
 impl WorkflowControlService {
-    pub fn new(pool: sqlx::SqlitePool, app: &pontia_agent_control::AgentControl) -> Self {
+    pub fn new(workflows: WorkflowState, app: &pontia_agent_control::AgentControl) -> Self {
         Self {
-            workflows: SqliteWorkflowRepository::new(pool.clone(), app.queries()),
+            workflows,
             queries: app.queries(),
             turns: app.turn_commands(),
             inbox: app.inbox_commands(),

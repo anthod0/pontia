@@ -1,19 +1,17 @@
-use crate::common::http;
 use axum::{
     body::Body,
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use pontia_workflow::repository::{
-    CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
-};
+use pontia_workflow::repository::{CreateWorkflowNodeRecord, CreateWorkflowRecord, WorkflowState};
 use serde_json::Value;
 use tower::ServiceExt;
 
 use crate::common::test_app::TestApp;
 
 async fn post(app: &TestApp, uri: &str, key: &str) -> (StatusCode, Value) {
-    let response = http::router(app.state.clone())
+    let response = app
+        .router()
         .oneshot(
             Request::builder()
                 .method("POST")
@@ -38,11 +36,8 @@ async fn post(app: &TestApp, uri: &str, key: &str) -> (StatusCode, Value) {
     )
 }
 
-async fn seed_running_workflow(app: &TestApp) -> SqliteWorkflowRepository {
-    let repository = SqliteWorkflowRepository::new(
-        app.db.clone(),
-        pontia_agent_control::ControlQueryService::new(app.db.clone()),
-    );
+async fn seed_running_workflow(app: &TestApp) -> WorkflowState {
+    let repository = app.workflows.clone();
     repository
         .create_definition(
             CreateWorkflowRecord {
@@ -141,7 +136,8 @@ async fn workflow_retry_is_authenticated_and_persistently_deduplicated_by_failur
         ("test-token", StatusCode::OK),
         ("test-token", StatusCode::OK),
     ] {
-        let response = http::router(app.state.clone())
+        let response = app
+            .router()
             .oneshot(
                 Request::builder()
                     .method("POST")

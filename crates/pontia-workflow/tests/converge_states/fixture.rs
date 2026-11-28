@@ -1,14 +1,7 @@
-use pontia_workflow::repository::{
-    CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
-};
+use pontia_workflow::repository::{CreateWorkflowNodeRecord, CreateWorkflowRecord, WorkflowState};
 use std::{path::Path, time::Duration};
 
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
-
-pub(super) fn queries(pool: &sqlx::SqlitePool) -> pontia_agent_control::ControlQueryService {
-    pontia_agent_control::ControlQueryService::new(pool.clone())
-        .with_clients(super::test_doubles::clients())
-}
 
 pub(super) async fn test_pool(path: &Path) -> sqlx::SqlitePool {
     let database_url = format!("sqlite://{}", path.display());
@@ -24,7 +17,7 @@ pub(super) async fn test_pool(path: &Path) -> sqlx::SqlitePool {
 }
 
 pub(super) async fn seed_linear_workflow(
-    repository: &SqliteWorkflowRepository,
+    repository: &WorkflowState,
     workflow_id: &str,
     root_inputs: &str,
     with_child: bool,
@@ -71,11 +64,7 @@ pub(super) async fn seed_linear_workflow(
     }
 }
 
-pub(super) async fn wait_for_state(
-    repository: &SqliteWorkflowRepository,
-    workflow_id: &str,
-    expected: &str,
-) {
+pub(super) async fn wait_for_state(repository: &WorkflowState, workflow_id: &str, expected: &str) {
     for _ in 0..200 {
         let workflow = repository
             .get_workflow(workflow_id)
@@ -91,7 +80,7 @@ pub(super) async fn wait_for_state(
 }
 
 pub(super) async fn assert_transition(
-    repository: &SqliteWorkflowRepository,
+    repository: &WorkflowState,
     workflow_id: &str,
     expected_state: &str,
     expected_event: &str,
