@@ -18,7 +18,7 @@
   import { workspaceTitle } from '../chat/sessionMetadata'
 
   /** The Git tab of a Bot chat's side panel: a Workspace picker over that Workspace's changes and history. Mounted only while the tab shows. */
-  let { botId, writable = false }: { botId: string; writable?: boolean } = $props()
+  let { botId }: { botId: string } = $props()
 
   const device = useDeviceRuntime()
   // The panel lives as long as its Bot chat page, which is recreated for another Bot.
@@ -58,7 +58,7 @@
 <div class="flex min-h-0 flex-1 flex-col" onkeydown={(event) => view?.keydown(event)}>
   {#if workspace}
     {#key `${device.id}\0${workspace.workspace_id}`}
-      <GitPanel bind:this={view} {writable} {device} workspaceId={workspace.workspace_id} {git}>
+      <GitPanel bind:this={view} {device} workspaceId={workspace.workspace_id} {git}>
         {#snippet workspaceHeading()}
             <ResponsiveSelect value={workspace.workspace_id} onValueChange={choose}
               label={$t('bots.gitWorkspace', { name: workspaceTitle(workspace) })} triggerClass="h-7 min-w-0 max-w-full rounded-chip border-0 px-2 shadow-none data-[size=default]:h-7 hover:bg-muted" title={workspace.canonical_path} align="start" contentClass="w-72" itemClass="py-2" disabledOption={unavailable}

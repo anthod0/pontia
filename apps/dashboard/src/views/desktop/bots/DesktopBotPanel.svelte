@@ -276,7 +276,7 @@
       <BotMessageSearch {bot} active={panel.open && panel.tab === 'search'} bind:text={searchText} bind:filter={searchFilter} {fileSessionId} selected={searchSelected} onselect={jumpToResult} />
     </Tabs.Content>
     <Tabs.Content value="git" class="flex min-h-0 flex-col">
-      {#if panel.tab === 'git'}<BotGitTab writable botId={bot.bot_id} />{/if}
+      {#if panel.tab === 'git'}<BotGitTab botId={bot.bot_id} />{/if}
     </Tabs.Content>
     <Tabs.Content value="todo" class="flex min-h-0 flex-col">
       <div class="min-h-0 flex-1 overflow-auto overscroll-contain p-3">

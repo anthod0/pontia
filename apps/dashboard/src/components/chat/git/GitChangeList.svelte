@@ -7,8 +7,8 @@
   import { changeKey, groupChanges, sameChange } from './gitChanges'
 
   let { files, selected, onopen, groupActions, fileActions }: {
-    groupActions?: Snippet<[GitChangedFile['group']]>
-    fileActions?: Snippet<[GitChangedFile]>
+    groupActions: Snippet<[GitChangedFile['group']]>
+    fileActions: Snippet<[GitChangedFile]>
     files: GitChangedFile[]
     selected?: { path: string; group: GitChangedFile['group'] } | null
     onopen: (file: GitChangedFile) => void
@@ -18,21 +18,18 @@
 
 <div class="px-2 py-1">
   {#each groups as group (group.group)}
-    {@const showHeading = !!groupActions || groups.length > 1 || group.group === 'conflicted'}
     <div class="py-0.5">
-      {#if showHeading}
-        <div class={['grid h-[26px] grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-x-2 px-2 text-11 font-medium text-muted-foreground max-lg:h-8', group.group === 'conflicted' && 'text-(--git-conflict)']}>
-          {#if group.group === 'conflicted'}<WarningCircleIcon aria-hidden="true" class="size-[13px]" />{:else}<span></span>{/if}
-          <span>{$t(group.label)} <span class="font-normal tabular-nums">{$number(group.files.length)}</span></span>
-          {@render groupActions?.(group.group)}
-        </div>
-      {/if}
+      <div class={['grid h-[26px] grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-x-2 px-2 text-11 font-medium text-muted-foreground md:max-lg:h-8 max-md:h-11', group.group === 'conflicted' && 'text-(--git-conflict)']}>
+        {#if group.group === 'conflicted'}<WarningCircleIcon aria-hidden="true" class="size-[13px]" />{:else}<span></span>{/if}
+        <span>{$t(group.label)} <span class="font-normal tabular-nums">{$number(group.files.length)}</span></span>
+        {@render groupActions(group.group)}
+      </div>
       <ul>
         {#each group.files as file (file.group + '\0' + file.path)}
-          <li class={fileActions && "flex items-center"}>
+          <li class="flex items-center">
             <GitFileRow {file} rowKey={changeKey(file)} label={`${$t(group.label)}: ${file.path}`}
               selected={!!selected && sameChange(file, selected)} onopen={() => onopen(file)} />
-            {@render fileActions?.(file)}
+            {@render fileActions(file)}
           </li>
         {/each}
       </ul>

@@ -8,6 +8,7 @@
   import type { GitChangedFile, GitCommitFile } from '../../../api/types'
   import type { GitDiffTarget, GitCommitFileTarget } from '../../../queries/workspaces'
   import { Button } from '$lib/components/ui/button/index.js'
+  import { sameChange } from '../../../components/chat/git/gitChanges'
   import GitDiffContent from '../../../components/chat/git/GitDiffContent.svelte'
 
   let { device, workspaceId, target, files }: {
@@ -18,7 +19,9 @@
   } = $props()
   const initialTarget = untrack(() => target)
   const initialFiles = untrack(() => files)
-  let index = $state(initialFiles.findIndex(file => file.path === initialTarget.file.path))
+  let index = $state(initialFiles.findIndex(file => 'sha' in initialTarget
+    ? file.path === initialTarget.file.path
+    : 'group' in file && sameChange(file, initialTarget.file)))
   let wrap = $state(true)
   const file = $derived(initialFiles[Math.max(0, index)] ?? initialTarget.file)
   // Each pushed screen owns one device and immutable target.

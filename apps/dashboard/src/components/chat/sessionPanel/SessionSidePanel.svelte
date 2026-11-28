@@ -74,7 +74,7 @@
       <!-- Git is read only while the tab shows. -->
       {#if panel.tab === 'git' && source.workspaceId}
         {#key source.workspaceId}
-          <GitPanel writable bind:this={git} {device} workspaceId={source.workspaceId} git={panel.git} />
+          <GitPanel bind:this={git} {device} workspaceId={source.workspaceId} git={panel.git} />
         {/key}
       {:else if !source.workspaceId}
         <Empty.Root class="min-h-0 p-8">
