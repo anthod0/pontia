@@ -1,6 +1,7 @@
 use super::ControlQueryService;
 use crate::runtime::shutdown::ShutdownSession;
 use pontia_core::{Result, domain::SessionState};
+use pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository;
 pub use pontia_storage_sqlite::repositories::session_runtimes::SessionRuntimeRecord;
 use pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository;
 pub use pontia_storage_sqlite::repositories::sessions::SessionLaunchFields;
@@ -8,6 +9,20 @@ use pontia_storage_sqlite::repositories::sessions::SqliteSessionRepository;
 use serde_json::Value;
 
 impl ControlQueryService {
+    pub async fn enabled_client_versions(
+        &self,
+        client_type: &str,
+    ) -> Result<Vec<(String, Option<String>)>> {
+        let records = SqliteAgentClientRepository::new(self.pool.clone())
+            .list()
+            .await?;
+        Ok(records
+            .into_iter()
+            .filter(|row| row.enabled && row.client_type == client_type)
+            .map(|row| (row.client_key, row.version))
+            .collect())
+    }
+
     pub async fn session_state(&self, session: &str) -> Result<Option<SessionState>> {
         SqliteSessionRepository::new(self.pool.clone())
             .get_state(session)

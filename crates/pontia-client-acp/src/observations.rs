@@ -2,7 +2,9 @@ use crate::{
     peer::{Peer, fact, runtime_event},
     relay::{Observation, Report},
 };
-use pontia_agent_control::{AgentBindingService, PontiaEventType, UpsertAgentBindingRequest};
+use pontia_agent_control::{
+    AgentBindingService, ControlQueryService, PontiaEventType, UpsertAgentBindingRequest,
+};
 use pontia_core::{Error, Result, domain::EventType};
 use serde_json::json;
 
@@ -92,8 +94,15 @@ impl Peer {
                 reason,
                 index,
             } => {
-                let turn: String = sqlx::query_scalar("SELECT turn_id FROM events WHERE session_id=? AND event_type='turn.started' AND report_key=?")
-                    .bind(session).bind(format!("acp:promoted:{native}")).fetch_one(&events.db()).await?;
+                let turn = ControlQueryService::new(events.db())
+                    .find_by_report_key(
+                        session,
+                        EventType::TurnStarted,
+                        &format!("acp:promoted:{native}"),
+                    )
+                    .await?
+                    .and_then(|event| event.turn_id)
+                    .ok_or(sqlx::Error::RowNotFound)?;
                 self.state.lock().await.promoted = None;
                 self.finish_turn(turn, reason, json!({"prompt":index+1}))
                     .await?;
@@ -130,13 +139,11 @@ impl Peer {
                     report.key.clone(),
                 )
                 .await?;
-                let running: bool = sqlx::query_scalar(
-                    "SELECT state='running' FROM session_runtimes WHERE runtime_id=?",
-                )
-                .bind(runtime)
-                .fetch_one(&events.db())
-                .await?;
-                if !running {
+                let record = ControlQueryService::new(events.db())
+                    .session_runtime(runtime)
+                    .await?
+                    .ok_or(sqlx::Error::RowNotFound)?;
+                if record.state != "running" {
                     runtime_event(
                         events,
                         session,

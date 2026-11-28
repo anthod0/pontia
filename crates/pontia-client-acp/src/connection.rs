@@ -5,9 +5,9 @@ use crate::{
 };
 use agent_client_protocol::v1::schema::{SessionConfigOption, SessionId, SystemPrompt};
 use pontia_agent_control::{
-    AgentBindingService, AgentControl, EventIngestService,
+    AgentControl, ControlQueryService, EventIngestService,
     ipc::rpc::{Requests, RpcPeer, RpcRequest},
-    runtime::ControlTarget,
+    runtime::{AttachmentBinding, AttachmentProcess, RuntimeAttachmentService},
 };
 use pontia_core::{Error, Result};
 use pontia_runtime::ProcessFingerprint;
@@ -53,6 +53,25 @@ struct RuntimeAttachment {
     session_id: String,
     runtime_id: String,
     client_session_key: Option<String>,
+}
+
+impl RuntimeAttachment {
+    async fn confirm(&self, app: &AgentControl, process: &ProcessFingerprint) -> Result<()> {
+        let binding = self
+            .client_session_key
+            .as_deref()
+            .map_or(AttachmentBinding::Launch, AttachmentBinding::Native);
+        RuntimeAttachmentService::new(app.db())
+            .confirm_attachment(
+                &self.session_id,
+                &self.runtime_id,
+                "acp",
+                "acp",
+                binding,
+                AttachmentProcess::BackfillIfStarting(process),
+            )
+            .await
+    }
 }
 
 pub(crate) fn context(state: &SessionState) -> Value {
@@ -127,17 +146,18 @@ pub(crate) async fn restore(
     state.config_options = context.config_options;
     state.model_windows = context.model_windows;
     state.blocked = context.blocked;
-    if let Some(mut prompt) = context.active {
-        let status: Option<String> = sqlx::query_scalar("SELECT state FROM turns WHERE session_id=? AND turn_id=? AND state IN ('queued','running')")
-            .bind(session).bind(&prompt.turn).fetch_optional(&events.db()).await?;
-        if let Some(status) = status {
-            prompt.started = status == "running";
-            prompt.sequence = 0;
-            prompt.raw_results.clear();
-            prompt.thought = None;
-            state.active = Some(prompt);
-            state.blocked = false;
-        }
+    if let Some(mut prompt) = context.active
+        && let Some(turn) = ControlQueryService::new(events.db())
+            .active_turn(session)
+            .await?
+        && turn.turn_id == prompt.turn
+    {
+        prompt.started = turn.state == "running";
+        prompt.sequence = 0;
+        prompt.raw_results.clear();
+        prompt.thought = None;
+        state.active = Some(prompt);
+        state.blocked = false;
     }
     // Native history is reloaded when idle; reattachment never reloads or resends an active prompt.
     state.history_error = Some(crate::history::HistoryIssue::Pending(
@@ -148,85 +168,6 @@ pub(crate) async fn restore(
 }
 
 impl AcpAdapter {
-    async fn validate_attachment(
-        &self,
-        app: &AgentControl,
-        identity: &RuntimeAttachment,
-        process: &ProcessFingerprint,
-    ) -> Result<()> {
-        match identity.client_session_key.as_deref() {
-            Some(key) => {
-                let binding = AgentBindingService::new(app.db())
-                    .binding_for_client_session("acp", key)
-                    .await?
-                    .ok_or_else(|| Error::NotFound("native binding not found".into()))?;
-                if binding.session_id != identity.session_id {
-                    return Err(Error::StateConflict(
-                        "native session does not match runtime identity".into(),
-                    ));
-                }
-            }
-            None => {
-                let launching: bool = sqlx::query_scalar(
-                    "SELECT EXISTS(SELECT 1 FROM sessions s WHERE s.session_id=? AND s.client_type='acp' AND EXISTS(SELECT 1 FROM session_runtimes r WHERE r.session_id=s.session_id AND r.runtime_id=? AND r.state='starting'))",
-                )
-                .bind(&identity.session_id)
-                .bind(&identity.runtime_id)
-                .fetch_one(&app.db())
-                .await?;
-                if !launching {
-                    return Err(Error::StateConflict(
-                        "Runtime must confirm its native binding".into(),
-                    ));
-                }
-            }
-        }
-
-        let target = ControlTarget::resolve(
-            &app.db(),
-            &app.clients(),
-            &identity.session_id,
-            Some(&identity.runtime_id),
-        )
-        .await?;
-        target.validate(&app.db()).await?;
-
-        sqlx::query(
-            "UPDATE session_runtimes SET process_fingerprint=? WHERE runtime_id=? AND session_id=? AND state='starting' AND process_fingerprint IS NULL AND EXISTS(SELECT 1 FROM sessions WHERE session_id=? AND client_type='acp' AND state!='exited')",
-        )
-        .bind(serde_json::to_string(process)?)
-        .bind(&identity.runtime_id)
-        .bind(&identity.session_id)
-        .bind(&identity.session_id)
-        .execute(&app.db())
-        .await?;
-
-        let confirmed: Option<String> = sqlx::query_scalar(
-            "SELECT process_fingerprint FROM session_runtimes r JOIN sessions s USING(session_id) WHERE r.runtime_id=? AND r.session_id=? AND r.role='acp' AND r.state IN ('starting','running') AND (s.state IN ('created','starting','idle','busy','waiting_for_interaction','interrupted') OR (s.state='error' AND r.state='starting'))",
-        )
-        .bind(&identity.runtime_id)
-        .bind(&identity.session_id)
-        .fetch_optional(&app.db())
-        .await?
-        .flatten();
-        let confirmed = confirmed
-            .map(|value| serde_json::from_str::<ProcessFingerprint>(&value))
-            .transpose()?;
-        if confirmed.as_ref() != Some(process) {
-            return Err(Error::StateConflict(
-                "ACP relay does not belong to the confirmed process".into(),
-            ));
-        }
-
-        sqlx::query(
-            "UPDATE sessions SET metadata=json_remove(metadata,'$.incompatible_control_runtime') WHERE session_id=? AND json_type(metadata,'$.incompatible_control_runtime') IS NOT NULL",
-        )
-        .bind(&identity.session_id)
-        .execute(&app.db())
-        .await?;
-        Ok(())
-    }
-
     pub(crate) async fn attach(
         &self,
         app: AgentControl,
@@ -250,8 +191,7 @@ impl AcpAdapter {
                 rpc: rpc.clone(),
                 process,
             });
-            self.validate_attachment(&app, &identity, &relay.process)
-                .await?;
+            identity.confirm(&app, &relay.process).await?;
             let status = relay.call("relay.status", json!({})).await?;
             let previous = self.peers.lock().await.get(&identity.session_id).cloned();
             if let Some(previous) = previous {
@@ -272,13 +212,21 @@ impl AcpAdapter {
                 .transpose()?;
             let agent_key = match &binding {
                 Some(id) => id[0].clone(),
-                None => sqlx::query_scalar::<_, String>(
-                    "SELECT json_extract(metadata, '$.acp_agent_id') FROM sessions WHERE session_id=?",
-                ).bind(&identity.session_id).fetch_one(&app.db()).await?,
+                None => app
+                    .queries()
+                    .session_metadata(&identity.session_id)
+                    .await?
+                    .ok_or(sqlx::Error::RowNotFound)?["acp_agent_id"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_owned(),
             };
             let definition = self.config.agents.get(&agent_key);
             let mode = app.queries().session_mode(&identity.session_id).await?;
-            let policy = crate::restrictions::SessionPolicy::resolve(definition.and_then(|agent| agent.restricted_execution), mode)?;
+            let policy = crate::restrictions::SessionPolicy::resolve(
+                definition.and_then(|agent| agent.restricted_execution),
+                mode,
+            )?;
             let peer = Peer::connect(
                 &app,
                 PeerIdentity {
@@ -316,8 +264,7 @@ impl AcpAdapter {
             attached.wait_for(|ready| *ready).await.map_err(|_| {
                 Error::ControlUnknown("ACP relay did not confirm attachment".into())
             })?;
-            self.validate_attachment(&app, &identity, &peer.relay.process)
-                .await?;
+            identity.confirm(&app, &peer.relay.process).await?;
             self.peers
                 .lock()
                 .await

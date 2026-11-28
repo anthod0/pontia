@@ -9,7 +9,7 @@ use pontia_agent_control::{
     AgentBindingService, ControlQueryService,
     client_contract::raw_transcripts::AgentBindingResolveRequest,
 };
-use pontia_core::{Error, Result};
+use pontia_core::{Error, Result, domain::SessionState};
 
 use super::{Replay, unavailable};
 use crate::{
@@ -24,12 +24,13 @@ pub(super) async fn load(
     source: &AgentBindingResolveRequest,
 ) -> Result<Replay> {
     let db = adapter.pool.get().ok_or_else(unavailable)?;
-    let state = sqlx::query_scalar::<_, String>("SELECT state FROM sessions WHERE session_id=?")
-        .bind(&source.session_id)
-        .fetch_one(db)
-        .await?;
-    if state != "exited" {
-        return Err(if state == "error" {
+    let queries = ControlQueryService::new(db.clone());
+    let state = queries
+        .session_state(&source.session_id)
+        .await?
+        .ok_or(sqlx::Error::RowNotFound)?;
+    if state != SessionState::Exited {
+        return Err(if state == SessionState::Error {
             Error::Conflict {
                 code: "timeline_history_load_failed",
                 message: "ACP session recovery failed".into(),
@@ -54,9 +55,7 @@ pub(super) async fn load(
             message: format!("ACP launch directory is unavailable: {}", cwd.display()),
         });
     }
-    let mode = ControlQueryService::new(db.clone())
-        .session_mode(&source.session_id)
-        .await?;
+    let mode = queries.session_mode(&source.session_id).await?;
     let policy = SessionPolicy::resolve(definition.restricted_execution, mode)?;
     let mut meta = policy.meta;
     let mut launch = crate::peer::resolve_command(&definition.launch, cwd)?;
@@ -70,11 +69,9 @@ pub(super) async fn load(
             &mut launch,
         )?;
     }
-    launch.env.extend(
-        ControlQueryService::new(db.clone())
-            .runtime_environment(&source.session_id)
-            .await?,
-    );
+    launch
+        .env
+        .extend(queries.runtime_environment(&source.session_id).await?);
     if let Some(profile) = policy.profile {
         profile.configure_launch(&mut launch);
     }

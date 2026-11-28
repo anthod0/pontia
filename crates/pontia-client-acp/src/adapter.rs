@@ -15,7 +15,7 @@ use agent_client_protocol::v1::schema::{
     CancelNotification, ContentBlock, PromptRequest, TextContent,
 };
 use pontia_agent_control::{
-    AgentBindingService, AgentControl, EventIngestService, PontiaEventType,
+    AgentBindingService, AgentControl, ControlQueryService, EventIngestService, PontiaEventType,
     client_contract::{
         AgentClientCapabilities, ClientExitMode, ClientExitOutcome, ClientInteractions,
         ClientOperation, ClientService, ClientServicePhase, ClientSession, ClientSessionDetails,
@@ -27,9 +27,11 @@ use pontia_agent_control::{
     interactions::InteractionResponse,
     runtime::ControlTarget,
 };
-use pontia_core::{Error, Result};
+use pontia_core::{
+    Error, Result,
+    domain::{EventType, SessionState},
+};
 use pontia_runtime::RuntimeStartRequest;
-use pontia_storage_sqlite::repositories::turns::SqliteTurnRepository;
 use serde_json::json;
 use sqlx::SqlitePool;
 use tokio::sync::Mutex;
@@ -132,25 +134,23 @@ impl ClientSession for AcpAdapter {
         Box::pin(async move {
             let mut options = Vec::new();
             let records = if let Some(pool) = self.pool.get() {
-                pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(pool.clone()).list().await?
+                ControlQueryService::new(pool.clone())
+                    .enabled_client_versions("acp")
+                    .await?
             } else {
                 Vec::new()
             };
-            for record in records
-                .iter()
-                .filter(|row| row.client_type == "acp" && row.enabled)
-            {
-                let id = &record.client_key;
-                let Ok(agent) = self.config.definition(id) else {
+            for (id, version) in records {
+                let Ok(agent) = self.config.definition(&id) else {
                     continue;
                 };
                 options.push(SessionCreationOption {
                     model_catalog_key: Some(id.clone()),
-                    id: serde_json::to_string(&["acp", id])?,
+                    id: serde_json::to_string(&["acp", &id])?,
                     name: agent.name.clone(),
                     client_type: "acp".into(),
                     metadata: json!({"acp_agent_id": id}),
-                    version: record.version.clone(),
+                    version,
                 });
             }
             Ok(Some(options))
@@ -170,12 +170,11 @@ impl ClientSession for AcpAdapter {
             let root = std::path::absolute(root)?;
             let _ = self.root.set(root.clone());
             let pool = events.db();
-            let metadata: String =
-                sqlx::query_scalar("SELECT metadata FROM sessions WHERE session_id=?")
-                    .bind(&request.session_id)
-                    .fetch_one(&pool)
-                    .await?;
-            let metadata: serde_json::Value = serde_json::from_str(&metadata)?;
+            let queries = ControlQueryService::new(pool.clone());
+            let metadata = queries
+                .session_metadata(&request.session_id)
+                .await?
+                .ok_or(sqlx::Error::RowNotFound)?;
             let bindings = AgentBindingService::new(pool.clone());
             let binding = bindings.binding_for_session(&request.session_id).await?;
             let bound_identity = binding
@@ -200,11 +199,7 @@ impl ClientSession for AcpAdapter {
                     "ACP Session already has a peer".into(),
                 ));
             }
-            let runtimes: Vec<String> =
-                sqlx::query_scalar("SELECT runtime_id FROM session_runtimes WHERE session_id=?")
-                    .bind(&request.session_id)
-                    .fetch_all(&pool)
-                    .await?;
+            let runtimes = queries.session_runtimes(&request.session_id).await?;
             let runtime = match runtimes.as_slice() {
                 [] if binding.is_some() => {
                     return Err(Error::StateConflict(
@@ -215,7 +210,7 @@ impl ClientSession for AcpAdapter {
                     .runtime_id
                     .clone()
                     .ok_or_else(|| Error::Domain("ACP runtime identity is required".into()))?,
-                [runtime] => runtime.clone(),
+                [runtime] => runtime.runtime_id.clone(),
                 _ => {
                     return Err(Error::StateConflict(
                         "ACP Session has multiple runtimes".into(),
@@ -327,12 +322,10 @@ impl ClientSession for AcpAdapter {
                 if !state.current || self.stopped.load(Ordering::Acquire) {
                     return Err(unavailable());
                 }
-                let terminal: bool = sqlx::query_scalar("SELECT state='exited' FROM sessions WHERE session_id=?")
-                    .bind(&request.session_id).fetch_one(&pool).await?;
-                if terminal { return Err(Error::StateConflict("ACP Session exited during recovery".into())); }
+                let session_state = queries.session_state(&request.session_id).await?.ok_or(sqlx::Error::RowNotFound)?;
+                if session_state == SessionState::Exited { return Err(Error::StateConflict("ACP Session exited during recovery".into())); }
                 state.native = Some(native);
-                state.blocked = binding.is_some() && sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM turns WHERE session_id=? AND state IN ('queued','running'))")
-                    .bind(&request.session_id).fetch_one(&pool).await?;
+                state.blocked = binding.is_some() && queries.session_has_active_turn(&request.session_id).await?;
                 state.ready = true;
                 let params = json!({"context":crate::connection::context(&state),
                     "setup":crate::relay::Observation::Setup {binding:key, metadata, model:state.current_model.clone(),reasoning_effort:crate::models::effort(&state.config_options),cwd:cwd.display().to_string()}});
@@ -438,7 +431,7 @@ impl ClientSession for AcpAdapter {
                     ));
                 }
                 target.validate(&events.db()).await?;
-                let turn = SqliteTurnRepository::new(events.db())
+                let turn = ControlQueryService::new(events.db())
                     .active_turn(&target.session_id)
                     .await?
                     .ok_or_else(|| {
@@ -747,12 +740,17 @@ impl ClientSession for AcpAdapter {
         Box::pin(async move {
             // ACP has no capability flag for usage reports. The persisted observation
             // remains evidence of support even when the peer is disconnected.
-            let (agent_id, usage) = match self.pool.get() {
-                Some(pool) => sqlx::query_as::<_, (Option<String>, Option<String>)>(
-                    "SELECT json_extract(metadata, '$.acp_agent_id'), json_extract(metadata, '$.context_usage.confidence') FROM sessions WHERE session_id = ?",
-                ).bind(session).fetch_optional(pool).await?.unwrap_or_default(),
-                None => Default::default(),
-            };
+            let metadata = match self.pool.get() {
+                Some(pool) => {
+                    ControlQueryService::new(pool.clone())
+                        .session_metadata(session)
+                        .await?
+                }
+                None => None,
+            }
+            .unwrap_or_default();
+            let agent_id = metadata["acp_agent_id"].as_str();
+            let usage = metadata["context_usage"]["confidence"].as_str();
             let peer = self.peer(session).await.ok();
             let state = match &peer {
                 Some(peer) => Some(peer.state.lock().await),
@@ -760,7 +758,7 @@ impl ClientSession for AcpAdapter {
             };
             let mut caps = capabilities::effective(
                 state.as_ref().and_then(|state| state.capabilities.as_ref()),
-                usage.as_deref(),
+                usage,
                 implementation,
             );
             let bounds = if let Some(state) = state.as_ref() {
@@ -772,9 +770,9 @@ impl ClientSession for AcpAdapter {
                 }
                 Some(supported)
             } else if let Some(id) = agent_id
-                && let Ok(definition) = self.config.definition(&id)
+                && let Ok(definition) = self.config.definition(id)
             {
-                Some(AgentBounds::of(&id, Some(definition)).capabilities)
+                Some(AgentBounds::of(id, Some(definition)).capabilities)
             } else {
                 None
             };
@@ -808,7 +806,8 @@ impl ClientSession for AcpAdapter {
         session: &'a str,
     ) -> ClientOperation<'a, ClientSessionDetails> {
         Box::pin(async move {
-            let binding = AgentBindingService::new(pool.clone())
+            let queries = ControlQueryService::new(pool.clone());
+            let binding = AgentBindingService::new(pool)
                 .binding_for_session(session)
                 .await?;
             let (agent_id, agent_info, system_prompt_injected) = match binding {
@@ -818,12 +817,12 @@ impl ClientSession for AcpAdapter {
                     Some(binding.metadata["system_prompt_injected"] == true),
                 ),
                 None => (
-                    sqlx::query_scalar(
-                        "SELECT json_extract(metadata, '$.acp_agent_id') FROM sessions WHERE session_id = ?",
-                    )
-                    .bind(session)
-                    .fetch_one(&pool)
-                    .await?,
+                    queries
+                        .session_metadata(session)
+                        .await?
+                        .ok_or(sqlx::Error::RowNotFound)?["acp_agent_id"]
+                        .as_str()
+                        .map(str::to_owned),
                     serde_json::Value::Null,
                     None,
                 ),
@@ -834,17 +833,16 @@ impl ClientSession for AcpAdapter {
                     .get(id)
                     .map_or(id.as_str(), |agent| &agent.name)
             });
-            let session_state: String =
-                sqlx::query_scalar("SELECT state FROM sessions WHERE session_id = ?")
-                    .bind(session)
-                    .fetch_one(&pool)
-                    .await?;
-            let runtime_state: Option<String> = sqlx::query_scalar(
-                "SELECT state FROM session_runtimes WHERE session_id = ? AND role = 'acp' LIMIT 1",
-            )
-            .bind(session)
-            .fetch_optional(&pool)
-            .await?;
+            let session_state = queries
+                .session_state(session)
+                .await?
+                .ok_or(sqlx::Error::RowNotFound)?;
+            let runtime_state = queries
+                .session_runtimes(session)
+                .await?
+                .into_iter()
+                .find(|r| r.role == "acp")
+                .map(|r| r.state);
             let peer = self.peers.lock().await.get(session).cloned();
             let (connection, in_memory_error) = match peer {
                 Some(peer) => {
@@ -858,32 +856,21 @@ impl ClientSession for AcpAdapter {
                         state.connection_error.clone(),
                     )
                 }
-                None if session_state == "exited" => ("exited", None),
-                None if session_state == "error" => ("failed", None),
+                None if session_state == SessionState::Exited => ("exited", None),
+                None if session_state == SessionState::Error => ("failed", None),
                 None => ("reconnecting", None),
             };
-            let persisted_error: Option<String> = sqlx::query_scalar(
-                r#"SELECT json_extract(payload, '$.failure.message')
-                   FROM events
-                   WHERE session_id = ?
-                     AND event_type IN ('runtime.exited', 'session.error')
-                     AND json_extract(payload, '$.failure.message') IS NOT NULL
-                     AND rowid > COALESCE((
-                         SELECT MAX(rowid) FROM events
-                         WHERE session_id = ? AND event_type = 'runtime.ready'
-                     ), 0)
-                   ORDER BY rowid DESC
-                   LIMIT 1"#,
-            )
-            .bind(session)
-            .bind(session)
-            .fetch_optional(&pool)
-            .await?
-            .flatten();
+            let persisted_error = queries
+                .latest_failure_after_event(
+                    session,
+                    EventType::RuntimeReady,
+                    &[EventType::RuntimeExited, EventType::SessionError],
+                )
+                .await?;
             let error = in_memory_error.or(persisted_error);
             let connection = if error.is_some() && connection != "connected" {
-                if session_state == "error"
-                    || session_state == "exited"
+                if session_state == SessionState::Error
+                    || session_state == SessionState::Exited
                     || runtime_state.as_deref() == Some("exited")
                 {
                     "failed"
@@ -907,22 +894,19 @@ impl ClientSession for AcpAdapter {
         Box::pin(async move {
             let pool = events.db();
             target.validate(&pool).await?;
-            let (model, reasoning_effort): (Option<String>, Option<String>) = sqlx::query_as(
-                "SELECT json_extract(metadata, '$.model'), json_extract(metadata, '$.reasoning_effort') FROM sessions WHERE session_id = ?",
-            )
-            .bind(&target.session_id)
-            .fetch_one(&pool)
-            .await?;
+            let queries = ControlQueryService::new(pool);
+            let settings = queries
+                .session_launch_settings(&target.session_id)
+                .await?
+                .ok_or(sqlx::Error::RowNotFound)?;
             self.provision(
                 events,
                 self.root.get().ok_or_else(unavailable)?,
                 RuntimeStartRequest {
-                    reasoning_effort,
+                    reasoning_effort: settings.reasoning_effort,
                     launch_mode: Default::default(),
-                    mode: pontia_agent_control::ControlQueryService::new(pool.clone())
-                        .session_mode(&target.session_id)
-                        .await?,
-                    model,
+                    mode: queries.session_mode(&target.session_id).await?,
+                    model: settings.model,
                     session_id: target.session_id.clone(),
                     runtime_id: target.runtime_id.clone(),
                     client_type: "acp".into(),
@@ -931,9 +915,7 @@ impl ClientSession for AcpAdapter {
                     handle: None,
                     role: None,
                     start_command: None,
-                    environment: pontia_agent_control::ControlQueryService::new(pool.clone())
-                        .runtime_environment(&target.session_id)
-                        .await?,
+                    environment: queries.runtime_environment(&target.session_id).await?,
                 },
             )
             .await?;
