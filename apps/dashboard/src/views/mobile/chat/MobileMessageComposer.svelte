@@ -15,6 +15,7 @@
   import XIcon from 'phosphor-svelte/lib/XIcon'
   let {
     value = $bindable(''),
+    header,
     prefix,
     onRemovePrefix,
     draftId,
@@ -29,6 +30,7 @@
     value: string
     autofocus?: boolean
     workspaceId?: string
+    header?: Snippet
     prefix?: Snippet
     onRemovePrefix?: () => void
     draftId: string
@@ -133,6 +135,7 @@
   </div>
 {/if}
 <div class="mobile-glass flex flex-col rounded-composer p-1">
+  {@render header?.()}
   {#if prefix}<div class="ml-12 mr-2 mt-2">{@render prefix()}</div>{/if}
   <div class="flex items-end">
     <ComposerAddMenu mobile disabled={!!controller.uploadUnavailable} onSelectFile={() => picker?.choose()} onConfirm={({value,label}) => controller.uploads?.addSecret(value,label)} onClose={focusInput}/>

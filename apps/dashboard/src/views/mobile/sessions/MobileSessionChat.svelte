@@ -74,10 +74,6 @@
       onCancel={chat.cancelQueueMessage}
     />
     {#if chat.selectedCompaction?.phase === 'failed'}<p role="alert">{chat.selectedCompaction.message}</p>{/if}
-    <MobileSessionMetaStrip
-      items={chat.selectedSessionMetadataItems}
-      refresh={chat.refreshCurrentSessionGitStatus}
-    />
     <MobileMessageComposer
       bind:value={$draft}
       draftId={'session:' + session.session_id}
@@ -90,7 +86,17 @@
       onInterrupt={isExecutingSessionState(session.state) && session.capabilities.interrupt
         ? chat.interruptSelectedSession
         : undefined}
-    />
+    >
+      {#snippet header()}
+        <MobileSessionMetaStrip
+          {session}
+          gitStatus={chat.selectedSessionGitStatus}
+          items={chat.selectedSessionMetadataItems}
+          summary={chat.selectedSessionMetadataSummary}
+          refresh={chat.refreshCurrentSessionGitStatus}
+        />
+      {/snippet}
+    </MobileMessageComposer>
   </div>{/if}
 {#if session}<MobileSessionActionSheet
     bind:this={menu}
