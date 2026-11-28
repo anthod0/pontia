@@ -9,7 +9,7 @@ use pontia_core::error::{Error, Result};
 
 use super::RuntimeStartRequest;
 
-pub(super) const SESSION_ENVIRONMENT: &str = "PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG PONTIA_WORKFLOW_ID";
+pub(super) const SESSION_ENVIRONMENT: &str = "PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG";
 
 pub(super) struct RuntimePaths<'a> {
     pub(super) log_path: &'a Path,
@@ -138,7 +138,7 @@ mod tests {
             handle: None,
             role: None,
             start_command: Some("test-agent --approve --session-id sess_resume_1".into()),
-            environment: [("PONTIA_WORKFLOW_ID".to_string(), "wf_123".to_string())]
+            environment: [("CUSTOM_VAR".to_string(), "custom value".to_string())]
                 .into_iter()
                 .collect(),
         };
@@ -153,9 +153,9 @@ mod tests {
         );
         assert!(script.contains("sess_resume_1"), "script was:\n{script}");
         assert!(script.contains("export PONTIA_HOME="));
-        assert!(script.contains("export PONTIA_WORKFLOW_ID='wf_123'"));
-        assert!(script.contains(
-            "unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG PONTIA_WORKFLOW_ID"
+        assert!(script.contains("export CUSTOM_VAR='custom value'"));
+        assert!(script.lines().any(|line| line ==
+            "unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG"
         ));
         for name in [
             "PONTIA_SESSION_ID",
