@@ -1,8 +1,7 @@
 import type { GitCommitFileTarget, GitDiffTarget } from "../../../queries/workspaces";
 
 /**
- * What one Workspace's Git tab shows. Everything here only reads the repository; choosing a
- * branch shows its history and never checks it out.
+ * What one Workspace's Git tab shows. Choosing a branch shows its history.
  */
 export class GitPanelState {
   changesOpen = $state(true);

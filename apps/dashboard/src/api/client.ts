@@ -48,6 +48,7 @@ import type {
   WorkspaceDirectoryListingView,
   FilePickerResultView,
   WorkspaceGitStatusView,
+  GitWriteOperation,
   GitChangeGroup,
   GitBranchesView,
   GitChangesView,
@@ -822,6 +823,14 @@ export function createApi(device: DeviceRuntime) {
     ).git_status;
   }
 
+  async function writeWorkspaceGit(workspaceId: string, operation: GitWriteOperation) {
+    const { git_status } = await request<{ git_status: WorkspaceGitStatusView }>(
+      `/workspaces/${encodeURIComponent(workspaceId)}/git/${operation.action}`,
+      { method: "POST", mutating: true, retryNetworkErrors: false, body: operation.body },
+    );
+    return git_status;
+  }
+
   async function getWorkspaceGitChanges(
     workspaceId: string,
     options: ReadRequestOptions = {},
@@ -1234,6 +1243,7 @@ export function createApi(device: DeviceRuntime) {
     renameWorkspace,
     deleteWorkspace,
     refreshWorkspaceGitStatus,
+    writeWorkspaceGit,
     getWorkspaceGitChanges,
     getWorkspaceGitDiff,
     getWorkspaceGitBranches,

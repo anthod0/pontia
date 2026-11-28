@@ -11,6 +11,7 @@ import { readable } from "svelte/store";
 
 import type {
   GitChangeGroup,
+  GitWriteOperation,
   RegisterWorkspaceInput,
   RenameWorkspaceInput,
   WorkspaceGitStatusView,
@@ -309,6 +310,12 @@ export function createWorkspaceQueries(device: DeviceRuntime) {
     );
   }
 
+  async function writeWorkspaceGit(workspaceId: string, operation: GitWriteOperation) {
+    const status = await device.api.writeWorkspaceGit(workspaceId, operation);
+    device.queryClient.setQueryData(workspaceKeys.gitStatus(workspaceId), status);
+    await invalidateWorkspaceGit(workspaceId);
+  }
+
   const refreshWorkspaceGitStatusMutationOptions = () => ({
     mutationFn: (workspaceId: string) => device.api.refreshWorkspaceGitStatus(workspaceId),
     onSuccess: (status: WorkspaceGitStatusView) => {
@@ -352,6 +359,7 @@ export function createWorkspaceQueries(device: DeviceRuntime) {
     createWorkspaceGitCommitQuery,
     createWorkspaceGitCommitDiffQuery,
     invalidateWorkspaceGit,
+    writeWorkspaceGit,
     fetchWorkspaces,
     fetchWorkspaceFilePickerEntries,
     invalidateWorkspaceQueries,

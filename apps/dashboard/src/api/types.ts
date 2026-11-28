@@ -553,6 +553,12 @@ export interface WorkspaceGitStatusView {
   updated_at: string | null;
 }
 
+export type GitWriteOperation =
+  | { action: "stage" | "unstage"; body: { all: true } | { paths: string[] } }
+  | { action: "discard"; body: { paths: string[] } }
+  | { action: "commit"; body: { message: string; stage_all: boolean } }
+  | { action: "pull" | "push"; body?: never };
+
 export type GitChangeGroup = "conflicted" | "staged" | "unstaged" | "untracked";
 
 export interface GitChangedFile {

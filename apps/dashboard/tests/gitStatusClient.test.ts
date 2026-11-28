@@ -1,3 +1,5 @@
+import { get } from "svelte/store";
+import type { GitWriteOperation } from "../src/api/types";
 import { testDevice } from "./deviceFixture";
 import { describe, expect, test, vi } from "vitest";
 const { refreshWorkspaceGitStatus } = testDevice.api;
@@ -54,4 +56,29 @@ describe("workspace git changes API client", () => {
       }),
     ).toMatchObject({ path: "docs/new name.md" });
   });
+});
+
+describe("workspace Git writes", () => {
+  test.each([
+    { action: "stage", body: { all: true } },
+    { action: "unstage", body: { paths: ["old name", "new name"] } },
+    { action: "discard", body: { paths: ["draft"] } },
+    { action: "commit", body: { message: "Add draft", stage_all: true } },
+    { action: "pull" },
+    { action: "push" },
+  ] satisfies GitWriteOperation[])(
+    "posts $action and applies the returned workspace status",
+    async (operation) => {
+      const status = { workspace_id: "space/one", branch: "main", ahead: 3 };
+      const fetchMock = vi.fn(async () => jsonResponse({ data: { git_status: status } }));
+      vi.stubGlobal("fetch", fetchMock);
+      await testDevice.workspaceQueries.writeWorkspaceGit("space/one", operation);
+      expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+        `/api/v1/workspaces/space%2Fone/git/${operation.action}`,
+        expect.objectContaining({ method: "POST", body: JSON.stringify(operation.body) }),
+      );
+      const statuses = testDevice.workspaceQueries.createWorkspaceGitStatusesStore();
+      expect(get(statuses)["space/one"]).toEqual(status);
+    },
+  );
 });

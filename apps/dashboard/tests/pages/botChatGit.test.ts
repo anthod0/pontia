@@ -68,6 +68,10 @@ beforeEach(() => {
       availability: { status: "unavailable", reason: "missing_directory" },
     }),
   ]);
+  vi.spyOn(testDevice.api, "getWorkspaceGitBranches").mockResolvedValue({
+    head: null,
+    branches: [],
+  });
   vi.spyOn(testDevice.api, "getWorkspaceGitChanges").mockResolvedValue(changes);
   vi.spyOn(testDevice.api, "getWorkspaceGitDiff").mockResolvedValue({
     path: "src/lib.rs",
@@ -252,4 +256,71 @@ test("shows the picker for a saved Workspace that is unavailable", async () => {
   const panel = await openGitTab();
   await within(panel).findByRole("heading", { name: "Choose a workspace" });
   expect(testDevice.api.getWorkspaceGitChanges).not.toHaveBeenCalled();
+});
+
+test("requires confirmation before discarding an unstaged file and updates the list", async () => {
+  const file = { ...changes.files[0]!, group: "unstaged" as const };
+  vi.mocked(testDevice.api.getWorkspaceGitChanges).mockResolvedValue({ ...changes, files: [file] });
+  const write = vi.spyOn(testDevice.api, "writeWorkspaceGit").mockImplementation(async () => {
+    vi.mocked(testDevice.api.getWorkspaceGitChanges).mockResolvedValue({
+      ...changes,
+      total: 0,
+      files: [],
+    });
+    return { ...(await testDevice.api.refreshWorkspaceGitStatus("workspace-1")), clean: true };
+  });
+  render(BotChatPreviewHarness, { botId: bot.bot_id });
+  const panel = await openGitTab();
+  await fireEvent.click(await within(panel).findByRole("button", { name: /^pontia / }));
+  const discard = await within(panel).findByRole("button", { name: "Discard changes: src/lib.rs" });
+  await fireEvent.click(discard);
+  await fireEvent.click(
+    within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Cancel" }),
+  );
+  expect(write).not.toHaveBeenCalled();
+  await fireEvent.click(discard);
+  await fireEvent.click(
+    within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Discard changes" }),
+  );
+  await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+  await waitFor(() => expect(discard).not.toBeInTheDocument());
+  expect(write).toHaveBeenCalledExactlyOnceWith("workspace-1", {
+    action: "discard",
+    body: { paths: ["src/lib.rs"] },
+  });
+});
+
+test("keeps the commit draft after failure and sends one stage-all commit while pending", async () => {
+  const file = { ...changes.files[0]!, group: "unstaged" as const };
+  vi.mocked(testDevice.api.getWorkspaceGitChanges).mockResolvedValue({ ...changes, files: [file] });
+  const status = {
+    ...(await testDevice.api.refreshWorkspaceGitStatus("workspace-1")),
+    staged_count: 0,
+    unstaged_count: 1,
+  };
+  vi.mocked(testDevice.api.refreshWorkspaceGitStatus).mockResolvedValue(status);
+  const response = Promise.withResolvers<typeof status>();
+  const write = vi
+    .spyOn(testDevice.api, "writeWorkspaceGit")
+    .mockRejectedValueOnce(new Error("Git identity missing"))
+    .mockReturnValueOnce(response.promise);
+  render(BotChatPreviewHarness, { botId: bot.bot_id });
+  const panel = await openGitTab();
+  await fireEvent.click(await within(panel).findByRole("button", { name: /^pontia / }));
+  const input = await within(panel).findByRole("textbox", { name: "Commit message" });
+  await fireEvent.input(input, { target: { value: "Save work" } });
+  const commit = within(panel).getByRole("button", { name: "Stage all and commit" });
+  await fireEvent.click(commit);
+  await waitFor(() => expect(within(panel).getByText("Git identity missing")).toBeInTheDocument());
+  expect(input).toHaveValue("Save work");
+  await fireEvent.click(commit);
+  expect(commit).toBeDisabled();
+  await fireEvent.click(commit);
+  expect(write).toHaveBeenCalledTimes(2);
+  expect(write).toHaveBeenLastCalledWith("workspace-1", {
+    action: "commit",
+    body: { message: "Save work", stage_all: true },
+  });
+  response.resolve({ ...status, clean: true });
+  await waitFor(() => expect(input).toHaveValue(""));
 });
