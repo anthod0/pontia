@@ -2,7 +2,6 @@
   import { useMobileHeader } from '../../../shell/mobile/header'
   import { onMount } from 'svelte'
   import { t } from '$lib/i18n'
-  import SessionStateDot from './SessionStateDot.svelte'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import { isExecutingSessionState } from '$lib/sessionState'
   import { chromeMetrics } from '$lib/mobile/chromeMetrics'
@@ -39,11 +38,10 @@
 {#snippet title()}
   {#if session}
     <button
-      class="mobile-glass flex min-h-11 min-w-0 items-center gap-2 rounded-chip px-4 text-left"
+      class="mobile-glass flex min-h-11 min-w-0 items-center rounded-chip px-4 text-left"
       onclick={() => (menuOpen = true)}
     >
       <strong class="truncate">{sessionChatTitle(session, $t)}</strong>
-      <SessionStateDot state={session.state} />
     </button>
   {/if}
 {/snippet}
