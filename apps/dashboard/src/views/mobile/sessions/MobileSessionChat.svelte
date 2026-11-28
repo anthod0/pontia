@@ -53,10 +53,9 @@
       onclick={() => (menuOpen = true)}><DotsThreeIcon weight="bold" /></button
     >{/if}{/snippet}
 <SessionFeed {chat} composerHeight={height}>
-  {#snippet stepsCard(steps, active, turn)}{#if session}<MobileSessionStepsCard
+  {#snippet stepsCard(steps, active)}{#if session}<MobileSessionStepsCard
         {steps}
         {active}
-        {turn}
         {session}
       />{/if}{/snippet}
 </SessionFeed>
