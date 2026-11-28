@@ -12,6 +12,39 @@ pub async fn rejection(
     process_id: Option<u32>,
     request: &RpcRequest,
 ) -> Option<String> {
+    let message = rejection_message(request)?;
+    let result = record_rejection(
+        state,
+        request,
+        process_id,
+        None,
+        async |session, _runtime| {
+            let session_client_type: String =
+                sqlx::query_scalar("SELECT client_type FROM sessions WHERE session_id=?")
+                    .bind(session)
+                    .fetch_one(&state.db())
+                    .await?;
+            match state
+                .clients()
+                .get(&session_client_type)
+                .and_then(|registration| registration.session.as_ref())
+            {
+                Some(client) => Ok(client
+                    .control_connected(state.db(), session)
+                    .await?
+                    .unwrap_or(false)),
+                None => Ok(false),
+            }
+        },
+    )
+    .await;
+    if let Err(error) = result {
+        tracing::warn!(%error, "Could not record control protocol rejection");
+    }
+    Some(message)
+}
+
+pub fn rejection_message(request: &RpcRequest) -> Option<String> {
     if !matches!(
         request.method.as_str(),
         "runtime.attach" | "runtime.register"
@@ -26,9 +59,6 @@ pub async fn rejection(
         return None;
     }
 
-    if let Err(error) = record_rejection(state, request, process_id).await {
-        tracing::warn!(%error, "Could not record control protocol rejection");
-    }
     let received = version
         .and_then(Value::as_u64)
         .map_or_else(|| "missing or invalid".to_owned(), |v| v.to_string());
@@ -39,10 +69,12 @@ pub async fn rejection(
     ))
 }
 
-async fn record_rejection(
+pub async fn record_rejection(
     state: &AgentControl,
     request: &RpcRequest,
     pid: Option<u32>,
+    expected_client: Option<&str>,
+    connected: impl AsyncFnOnce(&str, &str) -> Result<bool>,
 ) -> Result<()> {
     let Some(process) = pid.and_then(pontia_runtime::ProcessFingerprint::capture) else {
         return Ok(());
@@ -55,7 +87,7 @@ async fn record_rejection(
         else {
             return Ok(());
         };
-        (session, Some(runtime), None)
+        (session, Some(runtime), expected_client)
     } else {
         let binding = &params["binding"];
         let (Some(client), Some(key)) = (
@@ -64,6 +96,9 @@ async fn record_rejection(
         ) else {
             return Ok(());
         };
+        if expected_client.is_some_and(|expected| expected != client) {
+            return Ok(());
+        }
         bound_session = crate::AgentBindingService::new(state.db())
             .binding_for_client_session(client, key)
             .await?;
@@ -85,24 +120,7 @@ async fn record_rejection(
     let Some(runtime) = target.runtime_id else {
         return Ok(());
     };
-    let session_client_type: String =
-        sqlx::query_scalar("SELECT client_type FROM sessions WHERE session_id=?")
-            .bind(session)
-            .fetch_one(&state.db())
-            .await?;
-    if expected_runtime.is_some_and(|id| id != runtime)
-        || match state
-            .clients()
-            .get(&session_client_type)
-            .and_then(|registration| registration.session.as_ref())
-        {
-            Some(client) => client
-                .control_connected(state.db(), session)
-                .await?
-                .unwrap_or(false),
-            None => false,
-        }
-    {
+    if expected_runtime.is_some_and(|id| id != runtime) || connected(session, &runtime).await? {
         return Ok(());
     }
     // A rejected client stops retrying. Keep its reason across subsequent daemon restarts.

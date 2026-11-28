@@ -1,4 +1,5 @@
 use pontia_core::{Error, Result};
+use pontia_storage_sqlite::repositories::sessions::SqliteSessionRepository;
 use sqlx::SqlitePool;
 use std::{
     fs::File,
@@ -31,23 +32,20 @@ pub struct FileContent {
 
 #[derive(Clone)]
 pub struct SessionFileService {
-    pool: SqlitePool,
+    sessions: SqliteSessionRepository,
     pontia_home: PathBuf,
 }
 
 impl SessionFileService {
     pub fn new(pool: SqlitePool, pontia_home: PathBuf) -> Self {
-        Self { pool, pontia_home }
+        Self {
+            sessions: SqliteSessionRepository::new(pool),
+            pontia_home,
+        }
     }
 
     async fn ensure_session(&self, session_id: &str) -> Result<()> {
-        if !sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM sessions WHERE session_id = ?)",
-        )
-        .bind(session_id)
-        .fetch_one(&self.pool)
-        .await?
-        {
+        if !self.sessions.exists(session_id).await? {
             return Err(Error::NotFound(format!("Session {session_id} not found")));
         }
         Ok(())

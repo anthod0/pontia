@@ -1,4 +1,7 @@
-use pontia_agent_control::{DeliveryError, DeliveryOperation, InputPayload};
+use pontia_agent_control::{
+    DeliveryError, DeliveryOperation, InputPayload,
+    runtime::{AttachmentBinding, AttachmentProcess, RuntimeAttachmentService},
+};
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
@@ -83,40 +86,9 @@ impl PiConnections {
     }
 
     async fn current_runtime(pool: &SqlitePool, session_id: &str) -> Result<Option<String>> {
-        Ok(sqlx::query_scalar(
-            "SELECT r.runtime_id FROM session_runtimes r JOIN sessions s USING(session_id)
-             WHERE r.session_id=? AND r.role=?
-             AND (s.state IN ('created','starting','idle','busy','waiting_for_interaction','interrupted')
-                  OR (s.state='error' AND r.state='starting'))
-             AND r.state IN ('starting','running')",
-        )
-        .bind(session_id)
-        .bind(crate::spec::CONTROL_RUNTIME_ROLE)
-        .fetch_optional(pool)
-        .await?)
-    }
-
-    async fn validate_identity(
-        pool: &SqlitePool,
-        client_session_key: &str,
-        session_id: &str,
-        runtime_id: &str,
-    ) -> Result<()> {
-        let binding = pontia_agent_control::AgentBindingService::new(pool.clone())
-            .binding_for_client_session("pi", client_session_key)
-            .await?
-            .ok_or_else(|| Error::NotFound("native binding not found".into()))?;
-        if binding.session_id != session_id {
-            return Err(Error::StateConflict(
-                "native session does not match runtime identity".into(),
-            ));
-        }
-        if Self::current_runtime(pool, session_id).await?.as_deref() != Some(runtime_id) {
-            return Err(Error::StateConflict(
-                "report runtime is no longer current".into(),
-            ));
-        }
-        Ok(())
+        RuntimeAttachmentService::new(pool.clone())
+            .active_control_runtime_id(session_id, crate::spec::CONTROL_RUNTIME_ROLE)
+            .await
     }
 
     pub(crate) async fn validate_connection(
@@ -165,32 +137,6 @@ impl PiConnections {
             .pool
             .as_ref()
             .ok_or_else(|| Error::Unavailable("Pi control service is unavailable".into()))?;
-        Self::validate_identity(pool, client_session_key, session_id, runtime_id).await?;
-        if let Some(pid) = channel.process_id() {
-            let confirmed: Option<String> = sqlx::query_scalar(
-                "SELECT process_fingerprint FROM session_runtimes WHERE runtime_id=?",
-            )
-            .bind(runtime_id)
-            .fetch_optional(pool)
-            .await?
-            .flatten();
-            let confirmed = confirmed
-                .map(|value| serde_json::from_str::<pontia_runtime::ProcessFingerprint>(&value))
-                .transpose()?;
-            if confirmed.is_none() || confirmed != pontia_runtime::ProcessFingerprint::capture(pid)
-            {
-                return Err(Error::StateConflict(
-                    "Client connection does not belong to the confirmed agent process".into(),
-                ));
-            }
-        }
-        if let Some(existing) = connections.entries.get(session_id)
-            && existing.runtime_id == runtime_id
-            && Arc::ptr_eq(&existing.channel, &channel)
-            && !existing.retired.load(Ordering::SeqCst)
-        {
-            return Ok(());
-        }
         if let Some(existing) = connections.entries.get(session_id)
             && existing.runtime_id == runtime_id
             && existing.channel.available()
@@ -200,13 +146,33 @@ impl PiConnections {
                 "Client runtime already has an active connection".into(),
             ));
         }
-        sqlx::query(
-            "UPDATE sessions SET metadata=json_remove(metadata,'$.incompatible_control_runtime')
-             WHERE session_id=? AND json_type(metadata,'$.incompatible_control_runtime') IS NOT NULL",
-        )
-        .bind(session_id)
-        .execute(pool)
-        .await?;
+        let process = channel
+            .process_id()
+            .map(|pid| {
+                pontia_runtime::ProcessFingerprint::capture(pid).ok_or_else(|| {
+                    Error::StateConflict("Could not confirm the agent process".into())
+                })
+            })
+            .transpose()?;
+        RuntimeAttachmentService::new(pool.clone())
+            .confirm_attachment(
+                session_id,
+                runtime_id,
+                "pi",
+                crate::spec::CONTROL_RUNTIME_ROLE,
+                AttachmentBinding::Native(client_session_key),
+                process
+                    .as_ref()
+                    .map_or(AttachmentProcess::InProcess, AttachmentProcess::Confirmed),
+            )
+            .await?;
+        if let Some(existing) = connections.entries.get(session_id)
+            && existing.runtime_id == runtime_id
+            && Arc::ptr_eq(&existing.channel, &channel)
+            && !existing.retired.load(Ordering::SeqCst)
+        {
+            return Ok(());
+        }
         if let Some(previous) = connections.entries.insert(
             session_id.into(),
             Arc::new(Connection {
@@ -412,15 +378,10 @@ impl PiConnections {
                     .entries
                     .get(session_id)
                     .is_none_or(|current| Arc::ptr_eq(current, &connection))
-                && sqlx::query_scalar::<_, bool>(
-                    "SELECT EXISTS(SELECT 1 FROM sessions s JOIN session_runtimes r ON r.session_id=s.session_id
-                     WHERE s.session_id=? AND s.state='exited' AND r.runtime_id=?)",
-                )
-                .bind(session_id)
-                .bind(runtime_id)
-                .fetch_one(pool)
-                .await
-                .map_err(|error| E::from(Error::ControlUnknown(error.to_string())))?
+                && RuntimeAttachmentService::new(pool.clone())
+                    .session_exited_with_runtime(session_id, runtime_id)
+                    .await
+                    .map_err(|error| E::from(Error::ControlUnknown(error.to_string())))?
             {
                 return result;
             }

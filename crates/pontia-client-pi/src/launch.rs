@@ -6,7 +6,7 @@ use std::{
 };
 
 use pontia_agent_control::{
-    AgentBindingService, EventIngestService, RuntimeReadinessService,
+    AgentBindingService, ControlQueryService, EventIngestService, RuntimeReadinessService,
     client_contract::{
         ClientExitMode, ClientExitOutcome, ClientLaunchRequest, ClientOperation, ClientSession,
         ClientSessionDetails, DeliveryError, DeliveryOperation, InputPayload,
@@ -110,15 +110,15 @@ impl PiSession {
     }
 
     async fn single_running_runtime(pool: &SqlitePool, session: &str) -> Result<Option<String>> {
-        let runtimes: Vec<String> = sqlx::query_scalar(
-            "SELECT runtime_id FROM session_runtimes WHERE session_id=? AND role=? AND state='running'",
-        )
-        .bind(session)
-        .bind(crate::spec::CONTROL_RUNTIME_ROLE)
-        .fetch_all(pool)
-        .await?;
-        Ok(match runtimes.as_slice() {
-            [runtime] => Some(runtime.clone()),
+        let mut running = ControlQueryService::new(pool.clone())
+            .session_runtimes(session)
+            .await?
+            .into_iter()
+            .filter(|runtime| {
+                runtime.role == crate::spec::CONTROL_RUNTIME_ROLE && runtime.state == "running"
+            });
+        Ok(match (running.next(), running.next()) {
+            (Some(runtime), None) => Some(runtime.runtime_id),
             _ => None,
         })
     }
@@ -324,13 +324,11 @@ impl ClientSession for PiSession {
                     if control.connected_to(&target.session_id, runtime).await? {
                         return Err(error);
                     }
-                    let fingerprint: Option<String> = sqlx::query_scalar(
-                        "SELECT process_fingerprint FROM session_runtimes WHERE runtime_id=? AND state='running'",
-                    )
-                    .bind(runtime)
-                    .fetch_optional(&events.db())
-                    .await?
-                    .flatten();
+                    let fingerprint = ControlQueryService::new(events.db())
+                        .session_runtime(runtime)
+                        .await?
+                        .filter(|runtime| runtime.state == "running")
+                        .and_then(|runtime| runtime.process_fingerprint);
                     let Some(fingerprint) = fingerprint else {
                         return Err(error);
                     };

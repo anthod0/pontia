@@ -4,13 +4,12 @@ mod queries;
 mod reporting;
 
 use crate::rpc::PiRpcPeer;
-use pontia_agent_control::ipc::{identity::NativeAttachment, rpc::RpcRequest};
+use pontia_agent_control::ipc::{identity::NativeAttachment, protocol, rpc::RpcRequest};
 use pontia_agent_control::{AgentBindingService, AgentControl};
 use pontia_core::{Error, Result};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{
-    ops::RangeInclusive,
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -79,14 +78,23 @@ pub(crate) async fn serve_peer(
             }
         };
         let Some(request) = request else { break };
-        if let Some(message) = protocol_rejection(&state, &connections, process_id, &request).await
-        {
-            let _ = peer
-                .reply_error(
-                    request.id,
-                    pontia_agent_control::ipc::protocol::UNSUPPORTED_VERSION,
-                    &message,
+        if let Some(message) = protocol::rejection_message(&request) {
+            {
+                let _guard = connections.lock_identity().await;
+                if let Err(error) = protocol::record_rejection(
+                    &state,
+                    &request,
+                    process_id,
+                    Some("pi"),
+                    async |session, runtime| connections.connected_to(session, runtime).await,
                 )
+                .await
+                {
+                    tracing::warn!(%error, "Could not record Pi control protocol rejection");
+                }
+            }
+            let _ = peer
+                .reply_error(request.id, protocol::UNSUPPORTED_VERSION, &message)
                 .await;
             break;
         }
@@ -151,117 +159,6 @@ pub(crate) async fn serve_peer(
             break;
         }
     }
-}
-
-async fn protocol_rejection(
-    state: &AgentControl,
-    connections: &crate::connections::PiConnections,
-    process_id: Option<u32>,
-    request: &RpcRequest,
-) -> Option<String> {
-    const SUPPORTED: RangeInclusive<u64> =
-        8..=pontia_agent_control::ipc::rpc::PROTOCOL_VERSION as u64;
-    if !matches!(
-        request.method.as_str(),
-        "runtime.attach" | "runtime.register"
-    ) {
-        return None;
-    }
-    let version = request.params.get("version");
-    if version
-        .and_then(Value::as_u64)
-        .is_some_and(|version| SUPPORTED.contains(&version))
-    {
-        return None;
-    }
-    if let Err(error) = record_protocol_rejection(state, connections, process_id, request).await {
-        tracing::warn!(%error, "Could not record Pi control protocol rejection");
-    }
-    let received = version.and_then(Value::as_u64).map_or_else(
-        || "missing or invalid".to_owned(),
-        |version| version.to_string(),
-    );
-    Some(format!(
-        "Incompatible control protocol version ({received}). pontiad supports {} through {}. Restart this Session.",
-        SUPPORTED.start(),
-        SUPPORTED.end()
-    ))
-}
-
-async fn record_protocol_rejection(
-    state: &AgentControl,
-    connections: &crate::connections::PiConnections,
-    process_id: Option<u32>,
-    request: &RpcRequest,
-) -> Result<()> {
-    let Some(process) = process_id.and_then(pontia_runtime::ProcessFingerprint::capture) else {
-        return Ok(());
-    };
-    let _guard = connections.lock_identity().await;
-    let params = &request.params;
-    let bound_session;
-    let (session, expected_runtime) = if request.method == "runtime.attach" {
-        let (Some(session), Some(runtime)) =
-            (params["session_id"].as_str(), params["runtime_id"].as_str())
-        else {
-            return Ok(());
-        };
-        (session, Some(runtime))
-    } else {
-        let binding = &params["binding"];
-        let (Some(client), Some(key)) = (
-            binding["client_type"].as_str(),
-            binding["client_session_key"].as_str(),
-        ) else {
-            return Ok(());
-        };
-        if client != "pi" {
-            return Ok(());
-        }
-        bound_session = AgentBindingService::new(state.db())
-            .binding_for_client_session(client, key)
-            .await?;
-        let session = bound_session
-            .as_ref()
-            .map_or(key, |binding| binding.session_id.as_str());
-        if binding["session_id"]
-            .as_str()
-            .is_some_and(|id| id != session)
-        {
-            return Ok(());
-        }
-        (session, binding["runtime_id"].as_str())
-    };
-    let target = pontia_agent_control::runtime::ControlTarget::resolve(
-        &state.db(),
-        &state.clients(),
-        session,
-        None,
-    )
-    .await?;
-    let Some(runtime) = target.runtime_id else {
-        return Ok(());
-    };
-    if expected_runtime.is_some_and(|id| id != runtime)
-        || connections.connected_to(session, &runtime).await?
-    {
-        return Ok(());
-    }
-    sqlx::query(
-        "UPDATE sessions SET metadata=json_set(metadata,'$.incompatible_control_runtime',?)
-         WHERE session_id=? AND client_type='pi' AND EXISTS (
-             SELECT 1 FROM session_runtimes r WHERE r.session_id=sessions.session_id AND r.runtime_id=?
-             AND r.state IN ('starting','running')
-             AND (r.process_fingerprint=? OR (r.process_fingerprint IS NULL AND r.state='starting'))
-         )",
-    )
-    .bind(&runtime)
-    .bind(session)
-    .bind(&runtime)
-    .bind(serde_json::to_string(&process)?)
-    .execute(&state.db())
-    .await?;
-    Ok(())
 }
 
 async fn reply_result(peer: &PiRpcPeer, id: Option<Value>, result: Result<Value>) -> Result<()> {

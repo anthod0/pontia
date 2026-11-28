@@ -299,6 +299,54 @@ async fn incompatible_handshake_marks_the_runtime_until_a_supported_attachment()
 }
 
 #[tokio::test]
+async fn incompatible_handshake_leaves_connected_starting_runtime_unmarked() {
+    let (state, root) = state().await;
+    let (active, _requests) = client(&state);
+    let (session, runtime) = register(&active, root.path()).await;
+    let runtimes =
+        pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(
+            state.db(),
+        );
+    let mut row = runtimes.get(&runtime).await.unwrap().unwrap();
+    row.state = "starting".into();
+    runtimes.upsert_binding(row).await.unwrap();
+    assert!(!support::connected(&state, &session).await);
+
+    let (server, socket) = UnixStream::pair().unwrap();
+    tokio::spawn(pontia_agent_control::ipc::serve_connection(
+        state.clone(),
+        server,
+    ));
+    let (other, _) = pontia_agent_control::ipc::rpc::RpcPeer::new(socket);
+    let response = other
+        .request(
+            "runtime.attach",
+            json!({"version": 1, "session_id": session, "runtime_id": runtime}),
+            pontia_agent_control::ipc::rpc::MAX_FRAME_BYTES,
+            false,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        response["error"]["code"],
+        pontia_agent_control::ipc::protocol::UNSUPPORTED_VERSION
+    );
+    let metadata = state
+        .queries()
+        .session_metadata(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(metadata.get("incompatible_control_runtime").is_none());
+    active
+        .call("session.get", json!({"session_id": session}))
+        .await
+        .unwrap();
+    active.close();
+    other.close();
+}
+
+#[tokio::test]
 async fn listener_preserves_occupied_paths_and_recovers_a_stale_socket() {
     use std::os::unix::{fs::PermissionsExt, net::UnixListener};
     let root = tempfile::Builder::new().prefix("pl-").tempdir().unwrap();
