@@ -7,7 +7,10 @@ Pontia 让你从电脑或手机浏览器给 Lead Bot 派任务，由它协调开
 
 🚀 [快速开始](#快速开始) · 🌐 [主页](https://pontia.dev) · 🖥️ [Dashboard](https://app.pontia.dev) · 🌍 [English](README.md)
 
-![Lead Bot 对话中显示两名 Helper 的分工、交回的报告和待确认的问题](https://files.pontia.dev/cloud/lead-desk-2640-f11325427ccd.webp)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://files.pontia.dev/cloud/hero-window-dark-b424174b880a.png">
+  <img src="https://files.pontia.dev/cloud/hero-window-light-61f9e177d64e.png" alt="Lead Bot 向 12 名 Helper 分派任务，对话右侧显示设置页预览">
+</picture>
 
 ## 复用现有订阅（BYOS）
 

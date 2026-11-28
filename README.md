@@ -7,7 +7,10 @@ Pontia gives you a Lead Bot that coordinates coding agents on your own machines 
 
 🚀 [Quick start](#quick-start) · 🌐 [Website](https://pontia.dev) · 🖥️ [Dashboard](https://app.pontia.dev) · 🌍 [简体中文](README.zh-CN.md)
 
-![Lead Bot chat with two helpers, a delivered report and pending decisions](https://files.pontia.dev/cloud/lead-desk-2640-f11325427ccd.webp)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://files.pontia.dev/cloud/hero-window-dark-b424174b880a.png">
+  <img src="https://files.pontia.dev/cloud/hero-window-light-61f9e177d64e.png" alt="The Lead Bot assigns work to 12 helpers, with a preview of the settings page beside the chat">
+</picture>
 
 ## Bring your own subscription
 
