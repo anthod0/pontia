@@ -2,7 +2,8 @@
   import ArrowSquareOutIcon from "phosphor-svelte/lib/ArrowSquareOutIcon";
   import PencilSimpleIcon from "phosphor-svelte/lib/PencilSimpleIcon";
   import TrashIcon from "phosphor-svelte/lib/TrashIcon";
-  import { Button } from "$lib/components/ui/button";
+  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { Button, buttonVariants } from "$lib/components/ui/button";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Input } from "$lib/components/ui/input";
   import { m } from "$lib/paraglide/messages";
@@ -90,17 +91,32 @@
               </form>
             </Dialog.Content>
           </Dialog.Root>
-          <form method="POST" action="?/removeDevice">
+          <form id={`remove-device-${device.id}`} method="POST" action="?/removeDevice">
             <input type="hidden" name="device_id" value={device.id} />
-            <Button
-              type="submit"
-              variant="destructive"
-              size="icon"
-              aria-label={m.devices_remove_named({ name: device.name })}
-              title={m.devices_remove()}
-            >
-              <TrashIcon size={16} />
-            </Button>
+            <AlertDialog.Root>
+              <AlertDialog.Trigger
+                type="button"
+                class={buttonVariants({ variant: "destructive", size: "icon" })}
+                aria-label={m.devices_remove_named({ name: device.name })}
+                title={m.devices_remove()}
+              >
+                <TrashIcon size={16} />
+              </AlertDialog.Trigger>
+              <AlertDialog.Content>
+                <AlertDialog.Header>
+                  <AlertDialog.Title>{m.devices_remove_title({ name: device.name })}</AlertDialog.Title>
+                  <AlertDialog.Description>
+                    {m.devices_remove_text()}
+                  </AlertDialog.Description>
+                </AlertDialog.Header>
+                <AlertDialog.Footer>
+                  <AlertDialog.Cancel>{m.cancel()}</AlertDialog.Cancel>
+                  <AlertDialog.Action variant="destructive" type="submit" form={`remove-device-${device.id}`}>
+                    {m.devices_remove()}
+                  </AlertDialog.Action>
+                </AlertDialog.Footer>
+              </AlertDialog.Content>
+            </AlertDialog.Root>
           </form>
         </div>
       </li>

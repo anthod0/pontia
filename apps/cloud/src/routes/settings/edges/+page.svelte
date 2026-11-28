@@ -156,7 +156,7 @@
                     </AlertDialog.Header>
                     <AlertDialog.Footer>
                       <AlertDialog.Cancel>{m.cancel()}</AlertDialog.Cancel>
-                      <AlertDialog.Action type="submit" form={`delete-edge-${edge.id}`}>
+                      <AlertDialog.Action variant="destructive" type="submit" form={`delete-edge-${edge.id}`}>
                         {m.edges_delete_confirm()}
                       </AlertDialog.Action>
                     </AlertDialog.Footer>

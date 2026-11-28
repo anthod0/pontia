@@ -1,7 +1,7 @@
 <script lang="ts">
   import TrashIcon from "phosphor-svelte/lib/TrashIcon";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
-  import { Button } from "$lib/components/ui/button";
+  import { buttonVariants } from "$lib/components/ui/button";
   import { m } from "$lib/paraglide/messages";
   import { getLocale } from "$lib/paraglide/runtime";
   import type { ActionData, PageData } from "./$types";
@@ -35,17 +35,32 @@
               {session.lastSeenAt ? m.sessions_last_active({ date: date(session.lastSeenAt) }) : m.sessions_last_active_unavailable()}{session.country ? ` · ${session.country}` : ""}{session.provider ? ` · ${session.provider}` : ""}
             </p>
           </div>
-          <form method="POST" action="?/revokeSession">
+          <form id={`revoke-session-${session.id}`} method="POST" action="?/revokeSession">
             <input type="hidden" name="session_id" value={session.id} />
-            <Button
-              type="submit"
-              variant="destructive"
-              size="icon"
-              aria-label={revokeLabel}
-              title={revokeLabel}
-            >
-              <TrashIcon size={16} />
-            </Button>
+            <AlertDialog.Root>
+              <AlertDialog.Trigger
+                type="button"
+                class={buttonVariants({ variant: "destructive", size: "icon" })}
+                aria-label={revokeLabel}
+                title={revokeLabel}
+              >
+                <TrashIcon size={16} />
+              </AlertDialog.Trigger>
+              <AlertDialog.Content>
+                <AlertDialog.Header>
+                  <AlertDialog.Title>{revokeLabel}</AlertDialog.Title>
+                  <AlertDialog.Description>
+                    {session.kind === "cli" ? m.sessions_revoke_cli_text() : m.sessions_revoke_browser_text()}
+                  </AlertDialog.Description>
+                </AlertDialog.Header>
+                <AlertDialog.Footer>
+                  <AlertDialog.Cancel>{m.cancel()}</AlertDialog.Cancel>
+                  <AlertDialog.Action variant="destructive" type="submit" form={`revoke-session-${session.id}`}>
+                    {m.sessions_revoke_confirm()}
+                  </AlertDialog.Action>
+                </AlertDialog.Footer>
+              </AlertDialog.Content>
+            </AlertDialog.Root>
           </form>
         </li>
       {/each}
@@ -66,7 +81,7 @@
           </AlertDialog.Header>
           <AlertDialog.Footer>
             <AlertDialog.Cancel>{m.cancel()}</AlertDialog.Cancel>
-            <AlertDialog.Action type="submit" form="revoke-other-browsers-form">
+            <AlertDialog.Action variant="destructive" type="submit" form="revoke-other-browsers-form">
               {m.sign_out()}
             </AlertDialog.Action>
           </AlertDialog.Footer>
