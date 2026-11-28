@@ -90,7 +90,6 @@ pub struct AgentClientAdapter {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentClientSpec {
     pub client_type: &'static str,
-    pub default_for_creation: bool,
     pub capabilities: AgentClientCapabilities,
     pub adapter: AgentClientAdapter,
 }

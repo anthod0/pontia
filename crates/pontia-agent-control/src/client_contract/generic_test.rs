@@ -36,7 +36,6 @@ pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
 
 pub const SPEC: AgentClientSpec = AgentClientSpec {
     client_type: "generic",
-    default_for_creation: true,
     capabilities: CAPABILITIES,
     adapter: AgentClientAdapter {
         lifecycle: super::SessionLifecycleBehavior {

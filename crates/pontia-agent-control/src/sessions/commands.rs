@@ -23,13 +23,13 @@ enum SessionManagementAction {
 }
 
 impl SessionCommandService {
-    pub fn default_client_type(&self) -> Result<&'static str> {
-        self.clients.registry().default_client_type()
-    }
     pub async fn create_session(
         &self,
-        mut request: CreateSessionRequest,
+        request: CreateSessionRequest,
     ) -> Result<CreateSessionOutcome> {
+        if request.client_type.trim().is_empty() {
+            return Err(Error::Domain("client_type must be non-empty".into()));
+        }
         let _creation_guard = if request.ownership.is_some() {
             Some(self.creation_gate.lock().await)
         } else {
@@ -47,9 +47,6 @@ impl SessionCommandService {
                     duplicate: true,
                 });
             }
-        }
-        if request.client_type.is_empty() {
-            request.client_type = self.clients.registry().default_client_type()?.to_string();
         }
         self.clients.for_client(&request.client_type)?;
         let client_config = self

@@ -27,7 +27,6 @@ pub(crate) const CONTROL_RUNTIME_ROLE: &str = "pi_tui";
 
 pub const SPEC: AgentClientSpec = AgentClientSpec {
     client_type: "pi",
-    default_for_creation: true,
     capabilities: CAPABILITIES,
     adapter: AgentClientAdapter {
         lifecycle: pontia_agent_control::client_contract::SessionLifecycleBehavior {

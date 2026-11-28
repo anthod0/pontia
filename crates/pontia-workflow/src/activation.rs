@@ -91,20 +91,13 @@ async fn activate_claimed_node<S: SessionCreator>(
     let termination_file = node_dir.join("termination.md");
     let initial_task =
         render_initial_task(node, handoff_dir, &output_file, &termination_file).await?;
-    let launch = async {
-        match node.execution_profile_id.as_deref() {
-            Some(id) => sessions.resolve_profile(id).await,
-            None => Ok(crate::ProfileSessionConfig {
-                mode: Default::default(),
-                client_type: sessions.default_client_type()?,
-                model: None,
-                reasoning_effort: None,
-                metadata: json!({}),
-                system_instructions: None,
-            }),
-        }
+    let launch = match node.execution_profile_id.as_deref() {
+        Some(id) => sessions.resolve_profile(id).await,
+        None => Err(Error::InvalidDefinition(format!(
+            "Agent Node {} requires an Agent Profile",
+            node.node_id
+        ))),
     }
-    .await
     .map_err(|error| ActivationFailure {
         failure_message: format!(
             "Session configuration failed for Workflow Agent Node {}: {error}",

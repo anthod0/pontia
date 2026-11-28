@@ -35,6 +35,7 @@ type = "agent"
 phase = "Delivery"
 title = "Implement"
 instructions = "Implement and verify the accepted plan."
+execution_profile_id = "coder"
 inputs = ["research.md"]
 output = "result.md"
 ```
@@ -43,7 +44,7 @@ output = "result.md"
 
 每个 Node 都使用 `type = "agent"`。Node 按定义顺序执行。每个输入指向一个初始 Handoff 或之前某个 Node 的输出。为每个输出指定一个唯一的、不含目录部分的文件名。
 
-当 Node 需要使用某个 Agent Profile 的 Client、模型、推理强度、权限模式和系统提示词时，将 `execution_profile_id` 设置为现有 Profile ID。该 Node 自己的 instructions 和 Handoff 输入会作为本次任务的补充。Profile 更新会应用于之后启动的 Node。
+每个 Node 都必须通过 `execution_profile_id` 指定一个已配置 Client 的现有 Agent Profile。Node 会使用该 Profile 的 Client、模型、推理强度、权限模式和系统提示词。该 Node 自己的 instructions 和 Handoff 输入会作为本次任务的补充。Profile 更新会应用于之后启动的 Node。
 
 ## 运行和查看
 

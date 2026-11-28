@@ -1,51 +1,28 @@
-use pontia_agent_control::{
-    AgentControl, CreateSessionRequest, client_contract::test_registration, clients::ClientRegistry,
-};
-use pontia_storage_sqlite::{connect_sqlite, run_migrations};
+use pontia_agent_control::{AgentControl, CreateSessionRequest};
+use pontia_storage_sqlite::connect_sqlite;
 use serde_json::json;
 
 #[tokio::test]
-async fn omitted_client_selection_uses_the_registered_default_without_global_state() {
+async fn create_session_requires_a_client_type() {
     let root = tempfile::tempdir().unwrap();
-    let pool = connect_sqlite(&format!("sqlite://{}", root.path().join("db").display()))
-        .await
-        .unwrap();
-    run_migrations(&pool).await.unwrap();
-    pontia_agent_control::workspaces::upsert_canonical_workspace(
-        &pool,
-        root.path().canonicalize().unwrap().to_str().unwrap(),
-        None,
-    )
-    .await
-    .unwrap();
-    pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
-        pool.clone(),
-    )
-    .save("generic", "default", true)
-    .await
-    .unwrap();
-    let mut clients = ClientRegistry::default();
-    clients.register(test_registration());
-    let state = AgentControl::builder(pool, root.path().to_path_buf())
-        .clients(clients)
-        .build();
-    let request: CreateSessionRequest =
-        serde_json::from_value(json!({"workspace":root.path()})).unwrap();
-    let result = state
-        .session_commands()
-        .create_session(request)
-        .await
-        .unwrap();
-    assert_eq!(result.data["session"]["client_type"], "generic");
-    assert_eq!(result.data["session"]["state"], "idle");
+    let pool = connect_sqlite("sqlite::memory:").await.unwrap();
+    let state = AgentControl::builder(pool, root.path().into()).build();
+    let mut request: CreateSessionRequest =
+        serde_json::from_value(json!({"client_type":"pi"})).unwrap();
+    request.client_type.clear();
+    assert!(matches!(
+        state.session_commands().create_session(request).await,
+        Err(pontia_core::Error::Domain(_))
+    ));
 }
 
 #[test]
-fn explicit_empty_or_null_client_selection_is_not_reinterpreted_as_a_default() {
-    for selection in [json!(""), json!(null)] {
-        assert!(
-            serde_json::from_value::<CreateSessionRequest>(json!({ "client_type": selection }))
-                .is_err()
-        );
+fn session_request_requires_a_nonempty_client_type() {
+    for request in [
+        json!({}),
+        json!({"client_type":""}),
+        json!({"client_type":null}),
+    ] {
+        assert!(serde_json::from_value::<CreateSessionRequest>(request).is_err());
     }
 }

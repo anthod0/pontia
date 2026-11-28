@@ -26,8 +26,7 @@ pub struct WorkflowNodeDefinition {
     #[serde(default)]
     pub inputs: Vec<String>,
     pub output: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub execution_profile_id: Option<String>,
+    pub execution_profile_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

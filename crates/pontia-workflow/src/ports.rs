@@ -22,7 +22,6 @@ pub trait SessionCreator {
         id: &str,
     ) -> impl Future<Output = Result<ProfileSessionConfig>> + Send;
 
-    fn default_client_type(&self) -> Result<String>;
     fn create_session(
         &self,
         request: CreateSessionRequest,
@@ -33,17 +32,15 @@ impl SessionCreator for AgentControl {
     async fn resolve_profile(&self, id: &str) -> Result<ProfileSessionConfig> {
         let profiles = self.agent_profiles();
         let profile = profiles.resolve_launch(id).await?;
-        let (client_type, metadata) =
-            if let (Some(client), Some(key)) = (&profile.client_type, &profile.client_key) {
-                (
-                    client.clone(),
-                    self.clients()
-                        .creation_metadata(&self.db(), client, key)
-                        .await?,
-                )
-            } else {
-                (self.default_client_type()?, serde_json::json!({}))
-            };
+        let (Some(client_type), Some(key)) = (profile.client_type, profile.client_key) else {
+            return Err(Error::InvalidDefinition(format!(
+                "Agent Profile {id} must specify a Client"
+            )));
+        };
+        let metadata = self
+            .clients()
+            .creation_metadata(&self.db(), &client_type, &key)
+            .await?;
         Ok(ProfileSessionConfig {
             mode: profile.mode,
             client_type,
@@ -54,9 +51,6 @@ impl SessionCreator for AgentControl {
         })
     }
 
-    fn default_client_type(&self) -> Result<String> {
-        Ok(self.session_commands().default_client_type()?.to_string())
-    }
     async fn create_session(&self, request: CreateSessionRequest) -> Result<String> {
         let outcome = self.session_commands().create_session(request).await?;
         outcome

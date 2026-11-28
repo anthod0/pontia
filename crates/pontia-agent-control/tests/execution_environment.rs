@@ -233,12 +233,13 @@ async fn creation_restart_and_recovered_resume_keep_launch_context_out_of_events
 #[test]
 fn create_accepts_only_named_session_modes() {
     for mode in ["default", "yolo", "restricted"] {
-        let request: CreateSessionRequest = serde_json::from_value(json!({"mode":mode})).unwrap();
+        let request: CreateSessionRequest =
+            serde_json::from_value(json!({"client_type":"generic","mode":mode})).unwrap();
         assert_eq!(serde_json::to_value(request.mode).unwrap(), mode);
     }
     for invalid in [
-        json!({"mode":"background"}),
-        json!({"execution_policy":{"yolo":true}}),
+        json!({"client_type":"generic","mode":"background"}),
+        json!({"client_type":"generic","execution_policy":{"yolo":true}}),
     ] {
         assert!(serde_json::from_value::<CreateSessionRequest>(invalid).is_err());
     }

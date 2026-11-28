@@ -38,14 +38,19 @@ impl SequencedSessionCreator {
 impl SessionCreator for SequencedSessionCreator {
     async fn resolve_profile(
         &self,
-        _id: &str,
+        id: &str,
     ) -> pontia_workflow::Result<pontia_workflow::ProfileSessionConfig> {
-        panic!("this fixture does not configure Agent Profiles")
+        assert_eq!(id, "writer");
+        Ok(pontia_workflow::ProfileSessionConfig {
+            mode: Default::default(),
+            client_type: "pi".into(),
+            metadata: json!({}),
+            model: None,
+            reasoning_effort: None,
+            system_instructions: None,
+        })
     }
 
-    fn default_client_type(&self) -> pontia_workflow::Result<String> {
-        Ok("pi".into())
-    }
     async fn create_session(
         &self,
         request: CreateSessionRequest,

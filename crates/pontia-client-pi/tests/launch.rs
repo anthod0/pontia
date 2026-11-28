@@ -445,7 +445,8 @@ fn creation_uses_environment_file_and_default_command_precedence() {
                 let result = app
                     .session_commands()
                     .create_session(
-                        serde_json::from_value(json!({"workspace":root.path()})).unwrap(),
+                        serde_json::from_value(json!({"client_type":"pi","workspace":root.path()}))
+                            .unwrap(),
                     )
                     .await
                     .unwrap();
@@ -461,21 +462,19 @@ fn creation_uses_environment_file_and_default_command_precedence() {
             };
             assert_eq!(create().await.1, format!("{expected} --approve"));
             service.save("pi", "default", false).await.unwrap();
-            for selection in [json!({}), json!({"client_type":"pi"})] {
-                assert!(matches!(
-                    app.session_commands()
-                        .create_session(serde_json::from_value(selection).unwrap())
-                        .await,
-                    Err(pontia_core::Error::Conflict {
-                        code: "client_disabled",
-                        ..
-                    })
-                ));
-            }
+            assert!(matches!(
+                app.session_commands()
+                    .create_session(serde_json::from_value(json!({"client_type":"pi"})).unwrap())
+                    .await,
+                Err(pontia_core::Error::Conflict {
+                    code: "client_disabled",
+                    ..
+                })
+            ));
             service.delete("pi", "default").await.unwrap();
             assert!(matches!(
                 app.session_commands()
-                    .create_session(serde_json::from_value(json!({})).unwrap())
+                    .create_session(serde_json::from_value(json!({"client_type":"pi"})).unwrap())
                     .await,
                 Err(pontia_core::Error::Conflict {
                     code: "client_disabled",

@@ -31,6 +31,7 @@ Example definition:
   phase = \"Build\"
   title = \"Implement\"
   instructions = \"Implement and verify the requirements.\"
+  execution_profile_id = \"coder\"
   inputs = [\"requirements.md\"]
   output = \"result.md\"
 
@@ -103,7 +104,7 @@ struct NodeDefinition {
     #[serde(default)]
     inputs: Vec<String>,
     output: String,
-    execution_profile_id: Option<String>,
+    execution_profile_id: String,
 }
 
 #[derive(Debug, Serialize)]

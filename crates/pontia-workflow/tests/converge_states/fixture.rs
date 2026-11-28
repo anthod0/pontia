@@ -49,7 +49,7 @@ pub(super) async fn seed_linear_workflow(
             instructions: "Produce the root output.".to_string(),
             inputs: root_inputs.to_string(),
             output: "root.md".to_string(),
-            execution_profile_id: None,
+            execution_profile_id: Some("writer".into()),
         })
         .await
         .expect("create root node");
@@ -64,7 +64,7 @@ pub(super) async fn seed_linear_workflow(
                 instructions: "Produce the child output.".to_string(),
                 inputs: "[\"root.md\"]".to_string(),
                 output: "child.md".to_string(),
-                execution_profile_id: None,
+                execution_profile_id: Some("writer".into()),
             })
             .await
             .expect("create child node");

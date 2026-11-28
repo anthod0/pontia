@@ -31,14 +31,19 @@ struct BoundSessionCreator {
 impl SessionCreator for BoundSessionCreator {
     async fn resolve_profile(
         &self,
-        _id: &str,
+        id: &str,
     ) -> pontia_workflow::Result<pontia_workflow::ProfileSessionConfig> {
-        panic!("this fixture does not configure Agent Profiles")
+        assert_eq!(id, "writer");
+        Ok(pontia_workflow::ProfileSessionConfig {
+            mode: Default::default(),
+            client_type: "pi".into(),
+            metadata: json!({}),
+            model: None,
+            reasoning_effort: None,
+            system_instructions: None,
+        })
     }
 
-    fn default_client_type(&self) -> pontia_workflow::Result<String> {
-        Ok("pi".into())
-    }
     async fn create_session(
         &self,
         _request: CreateSessionRequest,
@@ -252,7 +257,7 @@ async fn seed_running_single_node(
             instructions: "Write the result.".to_string(),
             inputs: "[]".to_string(),
             output: "result.md".to_string(),
-            execution_profile_id: None,
+            execution_profile_id: Some("writer".into()),
         })
         .await
         .expect("create node");
@@ -617,7 +622,7 @@ async fn submission_rejects_wrong_identity_missing_output_and_duplicate_ownershi
             instructions: "Produce output".to_string(),
             inputs: r#"["result.md"]"#.to_string(),
             output: "result.md".to_string(),
-            execution_profile_id: None,
+            execution_profile_id: Some("writer".into()),
         })
         .await
         .expect("create conflicting Node");

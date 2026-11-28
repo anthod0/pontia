@@ -49,9 +49,6 @@ impl SessionCreator for SequencedSessionCreator {
         })
     }
 
-    fn default_client_type(&self) -> pontia_workflow::Result<String> {
-        Ok("pi".into())
-    }
     async fn create_session(
         &self,
         request: CreateSessionRequest,
@@ -574,7 +571,7 @@ async fn paused_coordinator_ignores_expected_interrupt_and_defers_downstream_dis
                     "[]".to_string()
                 },
                 output: output.to_string(),
-                execution_profile_id: None,
+                execution_profile_id: Some("writer".into()),
             })
             .await
             .expect("create node");
@@ -682,7 +679,7 @@ async fn lagged_notifications_reconcile_a_persisted_confirmed_session_exit() {
             instructions: "Produce the result.".to_string(),
             inputs: "[]".to_string(),
             output: "result.md".to_string(),
-            execution_profile_id: None,
+            execution_profile_id: Some("writer".into()),
         })
         .await
         .expect("create node");

@@ -1,7 +1,7 @@
 use pontia_agent_control::client_contract::{
     ClientConfiguration, ClientOperation, DetectionContext,
 };
-use pontia_config::{ClientConfigDefaults, ConfigurationLayers, RuntimeCommandOverride};
+use pontia_config::ConfigurationLayers;
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 
@@ -117,11 +117,3 @@ pub(crate) fn command(value: &Value) -> Result<String> {
         .filter(|command| !command.trim().is_empty())
         .ok_or_else(|| Error::Domain("Pi tui_command must be nonempty".into()))
 }
-
-pub const DEFAULTS: ClientConfigDefaults = ClientConfigDefaults {
-    default_client_type: "pi",
-    runtime_commands: &[RuntimeCommandOverride {
-        client_type: "pi",
-        environment_variable: "PONTIA_PI_TUI_COMMAND",
-    }],
-};

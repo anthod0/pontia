@@ -43,7 +43,7 @@ struct WorkflowRunNode {
     #[serde(default)]
     inputs: Vec<String>,
     output: String,
-    execution_profile_id: Option<String>,
+    execution_profile_id: String,
 }
 
 #[derive(Debug, Deserialize)]

@@ -185,6 +185,7 @@ type = "agent"
 phase = "Delivery"
 title = "Implement"
 instructions = "Implement the feature."
+execution_profile_id = "coder"
 inputs = ["research.md"]
 output = "result.md"
 "#,
@@ -255,6 +256,11 @@ fn workflow_run_rejects_missing_phase_and_unknown_fields_in_toml() {
     let dir = temp_dir("run-invalid-definition");
     for (name, extra, expected) in [
         ("missing-phase", "", "missing field `phase`"),
+        (
+            "missing-profile",
+            "phase = \"Build\"\n",
+            "missing field `execution_profile_id`",
+        ),
         (
             "unknown-field",
             "phase = \"Build\"\npriority = 1\n",

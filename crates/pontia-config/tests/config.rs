@@ -5,25 +5,19 @@ use std::{
     sync::{Mutex, MutexGuard},
 };
 
-use pontia_config::{
-    ClientConfigDefaults, FilePickerConfig, RuntimeClientConfig, RuntimeCommandOverride,
-    RuntimeConfig,
-};
+use pontia_config::{FilePickerConfig, RuntimeClientConfig, RuntimeCommandOverride, RuntimeConfig};
 
 struct AppConfig;
 impl AppConfig {
-    const CLIENTS: ClientConfigDefaults = ClientConfigDefaults {
-        default_client_type: "pi",
-        runtime_commands: &[RuntimeCommandOverride {
-            client_type: "pi",
-            environment_variable: "PONTIA_PI_TUI_COMMAND",
-        }],
-    };
+    const RUNTIME_COMMANDS: &[RuntimeCommandOverride] = &[RuntimeCommandOverride {
+        client_type: "pi",
+        environment_variable: "PONTIA_PI_TUI_COMMAND",
+    }];
     fn from_vars(vars: &HashMap<String, String>) -> pontia_core::Result<pontia_config::AppConfig> {
-        pontia_config::AppConfig::from_vars(vars, &Self::CLIENTS)
+        pontia_config::AppConfig::from_vars(vars, Self::RUNTIME_COMMANDS)
     }
     fn from_env() -> pontia_core::Result<pontia_config::AppConfig> {
-        pontia_config::AppConfig::from_env(&Self::CLIENTS)
+        pontia_config::AppConfig::from_env(Self::RUNTIME_COMMANDS)
     }
 }
 
@@ -78,7 +72,6 @@ fn loads_config_from_key_value_source() {
             "dev-token".to_string(),
         ),
         ("PONTIA_RUN_MIGRATIONS".to_string(), "false".to_string()),
-        ("PONTIA_DEFAULT_CLIENT_TYPE".to_string(), "pi".to_string()),
         (
             "PONTIA_WORKSPACE_ROOTS".to_string(),
             "projects|Projects|/home/me/projects;tmp|Temporary|/tmp".to_string(),
@@ -102,7 +95,6 @@ fn loads_config_from_key_value_source() {
         Some("https://example.test/dashboard.tar.gz")
     );
     assert!(!config.run_migrations);
-    assert_eq!(config.default_client_type, "pi");
     assert_eq!(config.workspace_browser.roots.len(), 2);
     assert_eq!(config.workspace_browser.roots[0].root_id, "projects");
     assert_eq!(config.workspace_browser.roots[0].label, "Projects");
@@ -190,7 +182,6 @@ fn loads_config_from_toml_file() {
 bind_addr = "127.0.0.1:4040"
 external_api_token = "file-token"
 run_migrations = false
-default_client_type = "pi"
 
 [dashboard]
 source = "/opt/pontia/dashboard"
@@ -225,7 +216,6 @@ roots = [
         Some("/opt/pontia/dashboard")
     );
     assert!(!config.run_migrations);
-    assert_eq!(config.default_client_type, "pi");
     assert_eq!(
         config.client_configuration.runtime_file["pi"]["tui_command"],
         "custom-pi from file"
@@ -247,7 +237,6 @@ fn env_vars_override_config_file_values() {
         r#"
 bind_addr = "127.0.0.1:4040"
 external_api_token = "file-token"
-default_client_type = "pi"
 
 [dashboard]
 source = "/from/file/dashboard"
@@ -271,7 +260,6 @@ tui_command = "pi from file"
             "PONTIA_DASHBOARD_SOURCE".to_string(),
             "/from/env/dashboard".to_string(),
         ),
-        ("PONTIA_DEFAULT_CLIENT_TYPE".to_string(), "pi".to_string()),
     ]);
 
     let config = AppConfig::from_vars(&vars).expect("config should load");
@@ -286,7 +274,6 @@ tui_command = "pi from file"
         config.dashboard.source.as_deref(),
         Some("/from/env/dashboard")
     );
-    assert_eq!(config.default_client_type, "pi");
 }
 
 #[test]
@@ -305,22 +292,6 @@ fn runtime_config_resolves_tui_commands_by_agent_client_config_key() {
         Some("pi from config")
     );
     assert_eq!(config.tui_command_for_client_config_key("unknown"), None);
-}
-
-#[test]
-fn rejects_generic_as_default_client_type() {
-    let home = tempfile::tempdir().expect("Pontia home");
-    let vars = HashMap::from([
-        ("PONTIA_HOME".to_string(), home.path().display().to_string()),
-        (
-            "PONTIA_DEFAULT_CLIENT_TYPE".to_string(),
-            "generic".to_string(),
-        ),
-    ]);
-
-    let error = AppConfig::from_vars(&vars).expect_err("generic default should fail");
-
-    assert!(error.to_string().contains("default client type must be pi"));
 }
 
 #[test]
@@ -473,7 +444,6 @@ fn provides_development_defaults_for_optional_values() {
         Some(dashboard_source.as_str())
     );
     assert!(config.run_migrations);
-    assert_eq!(config.default_client_type, "pi");
     assert!(config.workspace_browser.roots.is_empty());
     assert!(config.remote.is_none());
 }

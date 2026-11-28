@@ -6,21 +6,6 @@ pub(super) fn get<'a>(vars: &'a HashMap<String, String>, key: &str) -> Option<&'
     vars.get(key).map(String::as_str)
 }
 
-pub(super) fn validate_real_default_client_type(
-    key: &'static str,
-    client_type: &str,
-    expected: &str,
-) -> Result<()> {
-    if client_type == expected {
-        Ok(())
-    } else {
-        Err(Error::InvalidConfig {
-            key,
-            message: format!("default client type must be {expected}, got {client_type}"),
-        })
-    }
-}
-
 pub(super) fn non_empty(value: &str) -> Option<String> {
     (!value.trim().is_empty()).then(|| value.to_string())
 }

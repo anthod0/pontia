@@ -20,11 +20,6 @@ pub struct RuntimeCommandOverride {
     pub environment_variable: &'static str,
 }
 
-pub struct ClientConfigDefaults {
-    pub default_client_type: &'static str,
-    pub runtime_commands: &'static [RuntimeCommandOverride],
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppConfig {
     pub pontia_home: PathBuf,
@@ -33,7 +28,6 @@ pub struct AppConfig {
     pub external_api_token: Option<String>,
     pub auth_origin: String,
     pub run_migrations: bool,
-    pub default_client_type: String,
     pub workspace_browser: WorkspaceBrowserConfig,
     pub file_picker: FilePickerConfig,
     pub uploads: UploadsConfig,

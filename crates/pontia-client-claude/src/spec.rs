@@ -2,7 +2,6 @@ use pontia_agent_control::client_contract::*;
 
 pub const SPEC: AgentClientSpec = AgentClientSpec {
     client_type: "claude-agent",
-    default_for_creation: false,
     capabilities: AgentClientCapabilities {
         accept_task: true,
         steer: true,

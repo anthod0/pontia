@@ -245,15 +245,6 @@ impl ClientRegistry {
         })
     }
 
-    pub fn default_client_type(&self) -> pontia_core::Result<&'static str> {
-        self.registrations()
-            .find(|client| client.spec.default_for_creation)
-            .map(|client| client.spec.client_type)
-            .ok_or_else(|| {
-                pontia_core::Error::Unsupported("No default Agent Client is registered".into())
-            })
-    }
-
     pub fn registrations(&self) -> impl Iterator<Item = &ClientRegistration> {
         self.registration_order
             .iter()

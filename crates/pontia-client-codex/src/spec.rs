@@ -25,7 +25,6 @@ pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
 
 pub const SPEC: AgentClientSpec = AgentClientSpec {
     client_type: "codex",
-    default_for_creation: false,
     capabilities: CAPABILITIES,
     adapter: AgentClientAdapter {
         lifecycle: pontia_agent_control::client_contract::SessionLifecycleBehavior {

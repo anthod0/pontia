@@ -67,6 +67,12 @@ pub(crate) fn validate_run_request(request: &RunWorkflowRequest) -> Result<()> {
                 node.title, node.output
             )));
         }
+        if node.execution_profile_id.trim().is_empty() {
+            return Err(Error::InvalidDefinition(format!(
+                "Agent Node {} requires an Agent Profile",
+                node.title
+            )));
+        }
         available_handoffs.insert(node.output.clone(), format!("Agent Node {}", node.title));
     }
     Ok(())

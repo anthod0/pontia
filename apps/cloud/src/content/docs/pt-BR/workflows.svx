@@ -35,6 +35,7 @@ type = "agent"
 phase = "Delivery"
 title = "Implement"
 instructions = "Implement and verify the accepted plan."
+execution_profile_id = "coder"
 inputs = ["research.md"]
 output = "result.md"
 ```
@@ -43,7 +44,7 @@ Defina `cwd` como um diretório existente que você tenha [ativado como uma Work
 
 Use `type = "agent"` em cada Node. Os Nodes são executados na ordem da definição. Cada entrada indica um Handoff inicial ou a saída de um Node anterior. Dê a cada saída um nome de arquivo único, sem componentes de diretório.
 
-Defina `execution_profile_id` com o ID de um Agent Profile existente quando um Node precisar usar o Client, modelo, nível de raciocínio, modo de permissões e system prompt desse Profile. As instructions e os Handoffs do Node são acrescentados para a tarefa específica. Uma atualização do Profile vale para os Nodes iniciados depois dela.
+Cada Node deve definir `execution_profile_id` com o ID de um Agent Profile existente que tenha um Client configurado. O Node usa o Client, o modelo, o nível de raciocínio, o modo de permissões e o system prompt desse Profile. As instructions e os Handoffs do Node são acrescentados para a tarefa específica. Uma atualização do Profile vale para os Nodes iniciados depois dela.
 
 ## Executar e inspecionar
 

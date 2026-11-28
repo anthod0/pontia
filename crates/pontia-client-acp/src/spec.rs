@@ -21,7 +21,6 @@ pub const ACP_MAX_CAPABILITIES: AgentClientCapabilities = AgentClientCapabilitie
 
 pub const SPEC: AgentClientSpec = AgentClientSpec {
     client_type: "acp",
-    default_for_creation: false,
     capabilities: ACP_MAX_CAPABILITIES,
     adapter: AgentClientAdapter {
         lifecycle: SessionLifecycleBehavior {

@@ -20,16 +20,21 @@ pub fn service_path_variables() -> Vec<&'static str> {
         .flat_map(|client| client.service_path_variables().iter().copied())
         .collect()
 }
-use pontia_config::AppConfig;
+use pontia_config::{AppConfig, RuntimeCommandOverride};
+
+const RUNTIME_COMMANDS: &[RuntimeCommandOverride] = &[RuntimeCommandOverride {
+    client_type: "pi",
+    environment_variable: "PONTIA_PI_TUI_COMMAND",
+}];
 
 pub fn config_from_env() -> pontia_core::Result<AppConfig> {
-    AppConfig::from_env(&pontia_client_pi::config::DEFAULTS)
+    AppConfig::from_env(RUNTIME_COMMANDS)
 }
 
 pub fn config_from_vars(
     vars: &std::collections::HashMap<String, String>,
 ) -> pontia_core::Result<AppConfig> {
-    AppConfig::from_vars(vars, &pontia_client_pi::config::DEFAULTS)
+    AppConfig::from_vars(vars, RUNTIME_COMMANDS)
 }
 
 /// The composition root for the Agent Clients included in Pontia.

@@ -34,7 +34,6 @@ const SPEC: AgentClientSpec = AgentClientSpec {
         dispatch: DispatchBehavior::Connected,
         ..TEST_SPEC.adapter
     },
-    ..TEST_SPEC
 };
 
 #[derive(Default)]

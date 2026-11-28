@@ -6,15 +6,6 @@ use pontia_application::AppState;
 
 pub async fn initialize(config: &AppConfig) -> Result<AppState> {
     let clients = pontia_clients::registration(config);
-    if clients.spec(&config.default_client_type).is_none() {
-        return Err(pontia_core::Error::InvalidConfig {
-            key: "PONTIA_DEFAULT_CLIENT_TYPE",
-            message: format!(
-                "client {} is currently unavailable (not registered)",
-                config.default_client_type
-            ),
-        });
-    }
     config.prepare_home()?;
     let db = connect_sqlite(&config.database_url).await?;
 

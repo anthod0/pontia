@@ -40,7 +40,7 @@ pub struct CreateSessionRequest {
     pub mode: pontia_core::SessionMode,
     pub model: Option<String>,
     pub reasoning_effort: Option<String>,
-    #[serde(default, deserialize_with = "deserialize_client_type")]
+    #[serde(deserialize_with = "deserialize_client_type")]
     pub client_type: String,
     pub title: Option<String>,
     pub workspace: Option<String>,

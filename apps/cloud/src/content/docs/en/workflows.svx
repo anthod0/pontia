@@ -35,6 +35,7 @@ type = "agent"
 phase = "Delivery"
 title = "Implement"
 instructions = "Implement and verify the accepted plan."
+execution_profile_id = "coder"
 inputs = ["research.md"]
 output = "result.md"
 ```
@@ -43,7 +44,7 @@ Set `cwd` to an existing directory that you have [activated as a Workspace](/doc
 
 Use `type = "agent"` for each Node. Nodes execute in definition order. Each input names an initial Handoff or an earlier Node output. Give every output a unique file name without directory components.
 
-Set `execution_profile_id` to an existing Agent Profile ID when a Node should use that Profile's Client, model, reasoning effort, permissions mode, and system prompt. The Node instructions and Handoff inputs are added for that specific task. A Profile update applies to Nodes that start afterward.
+Every Node requires an `execution_profile_id` that identifies an existing Agent Profile with a configured Client. The Node uses the Profile's Client, model, reasoning effort, permissions mode, and system prompt. The Node instructions and Handoff inputs are added for that specific task. A Profile update applies to Nodes that start afterward.
 
 ## Run and inspect
 

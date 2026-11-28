@@ -1,16 +1,13 @@
 use std::collections::HashMap;
 
-use pontia_config::{AppConfig, ClientConfigDefaults};
+use pontia_config::AppConfig;
 
 fn load(contents: &str) -> pontia_core::Result<AppConfig> {
     let root = tempfile::tempdir().unwrap();
     std::fs::write(root.path().join("config.toml"), contents).unwrap();
     AppConfig::from_vars(
         &HashMap::from([("PONTIA_HOME".into(), root.path().display().to_string())]),
-        &ClientConfigDefaults {
-            default_client_type: "pi",
-            runtime_commands: &[],
-        },
+        &[],
     )
 }
 

@@ -1812,7 +1812,6 @@ mod workspaces;
 const NO_STEER_CLIENT: pontia_agent_control::client_contract::AgentClientSpec =
     pontia_agent_control::client_contract::AgentClientSpec {
         client_type: "no-steer",
-        default_for_creation: false,
         capabilities: AgentClientCapabilities {
             steer: false,
             ..CAPABILITIES

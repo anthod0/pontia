@@ -35,6 +35,7 @@ type = "agent"
 phase = "Delivery"
 title = "Implement"
 instructions = "Implement and verify the accepted plan."
+execution_profile_id = "coder"
 inputs = ["research.md"]
 output = "result.md"
 ```
@@ -43,7 +44,7 @@ output = "result.md"
 
 各 Node には `type = "agent"` を使います。Node は定義の順に実行されます。各入力には、初期の Handoff か、それより前の Node の出力を指定します。すべての出力には、ディレクトリ部分を含まない一意のファイル名を付けてください。
 
-Node で Agent Profile の Client、モデル、推論レベル、権限モード、システムプロンプトを使う場合は、`execution_profile_id` に既存の Profile ID を指定します。その Node 固有の instructions と Handoff 入力が今回のタスク用に追加されます。Profile の更新は、その後に開始する Node へ適用されます。
+各 Node の `execution_profile_id` には、Client を設定した既存の Agent Profile の ID を指定します。Node はその Profile の Client、モデル、推論レベル、権限モード、システムプロンプトを使用します。その Node 固有の instructions と Handoff 入力が今回のタスク用に追加されます。Profile の更新は、その後に開始する Node へ適用されます。
 
 ## 実行して確認する
 

@@ -10,7 +10,6 @@ pub(super) struct FileConfig {
     pub(super) bind_addr: Option<String>,
     pub(super) external_api_token: Option<String>,
     pub(super) run_migrations: Option<bool>,
-    pub(super) default_client_type: Option<String>,
     pub(super) runtime: Option<std::collections::BTreeMap<String, serde_json::Value>>,
     pub(super) workspace_browser: Option<FileWorkspaceBrowserConfig>,
     pub(super) file_picker: Option<FilePickerConfig>,

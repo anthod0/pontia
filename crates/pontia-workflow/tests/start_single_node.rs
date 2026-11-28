@@ -32,9 +32,6 @@ impl SessionCreator for RecordingSessionCreator {
         })
     }
 
-    fn default_client_type(&self) -> pontia_workflow::Result<String> {
-        Ok("pi".into())
-    }
     async fn create_session(
         &self,
         request: CreateSessionRequest,
@@ -197,7 +194,7 @@ async fn start_creates_the_workflow_handoff_directory() {
             instructions: "Write a standalone result.".to_string(),
             inputs: "[]".to_string(),
             output: "result.md".to_string(),
-            execution_profile_id: None,
+            execution_profile_id: Some("writer".into()),
         })
         .await
         .expect("create node");
@@ -257,7 +254,7 @@ async fn start_rejects_handoff_input_names_that_escape_the_handoff_directory() {
                 instructions: "Read the input.".to_string(),
                 inputs: json!([input]).to_string(),
                 output: "result.md".to_string(),
-                execution_profile_id: None,
+                execution_profile_id: Some("writer".into()),
             })
             .await
             .expect("create node");

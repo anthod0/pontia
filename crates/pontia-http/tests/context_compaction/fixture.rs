@@ -41,7 +41,6 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         runtime_binding: RuntimeBindingBehavior::SharedBackend,
         ..TEST_SPEC.adapter
     },
-    ..TEST_SPEC
 };
 pub const UNSUPPORTED: AgentClientSpec = AgentClientSpec {
     capabilities: AgentClientCapabilities {

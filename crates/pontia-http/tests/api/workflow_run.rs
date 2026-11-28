@@ -54,7 +54,8 @@ async fn workflow_run_rejects_unsupported_node_types_before_creation() {
                 "title": "Sequence",
                 "instructions": "Run children.",
                 "inputs": [],
-                "output": "result.md"
+                "output": "result.md",
+                "execution_profile_id": "writer"
             }]
         }),
     )
@@ -96,7 +97,8 @@ async fn workflow_run_rejects_duplicate_output_owners_with_an_actionable_error()
                     "title": "First writer",
                     "instructions": "Write the first result.",
                     "inputs": [],
-                    "output": "result.md"
+                    "output": "result.md",
+                    "execution_profile_id": "writer"
                 },
                 {
                     "type": "agent",
@@ -104,7 +106,8 @@ async fn workflow_run_rejects_duplicate_output_owners_with_an_actionable_error()
                     "title": "Second writer",
                     "instructions": "Write the second result.",
                     "inputs": ["result.md"],
-                    "output": "result.md"
+                    "output": "result.md",
+                    "execution_profile_id": "writer"
                 }
             ]
         }),
@@ -125,6 +128,17 @@ async fn workflow_run_rejects_duplicate_output_owners_with_an_actionable_error()
 async fn workflow_run_creates_and_starts_a_linear_agent_workflow() {
     let app = TestApp::builder().pi_runtime_stub(true).build().await;
     let _peer = super::workflow_submission::seed_running_workflow(&app).await;
+    app.state
+        .control()
+        .agent_profiles()
+        .create(
+            serde_json::from_value(json!({"profile_id": "writer", "name": "Writer",
+            "client_type": "codex", "client_key": "default", "model": "writer-model"}))
+            .unwrap(),
+            None,
+        )
+        .await
+        .unwrap();
     let cwd = app.workspace().path().display().to_string();
 
     let (status, body) = post_run(
@@ -142,7 +156,7 @@ async fn workflow_run_creates_and_starts_a_linear_agent_workflow() {
                     "instructions": "Research the implementation.",
                     "inputs": ["requirements.md"],
                     "output": "research.md",
-                    "execution_profile_id": null,
+                    "execution_profile_id": "writer",
                 },
                 {
                     "type": "agent",
@@ -151,7 +165,7 @@ async fn workflow_run_creates_and_starts_a_linear_agent_workflow() {
                     "instructions": "Implement the feature.",
                     "inputs": ["research.md"],
                     "output": "result.md",
-                    "execution_profile_id": null,
+                    "execution_profile_id": "writer",
                 },
                 {
                     "type": "agent",
@@ -160,7 +174,7 @@ async fn workflow_run_creates_and_starts_a_linear_agent_workflow() {
                     "instructions": "Review the result.",
                     "inputs": ["result.md"],
                     "output": "review.md",
-                    "execution_profile_id": null,
+                    "execution_profile_id": "writer",
                 }
             ]
         }),
@@ -243,7 +257,7 @@ async fn workflow_run_requires_a_valid_phase() {
                     "instructions": "Do the work.",
                     "inputs": [],
                     "output": "result.md",
-                    "execution_profile_id": null,
+                    "execution_profile_id": "writer",
                 }]
             }),
         )
@@ -273,7 +287,7 @@ async fn workflow_run_rejects_a_missing_phase_during_json_decoding() {
                 "instructions": "Do the work.",
                 "inputs": [],
                 "output": "result.md",
-                "execution_profile_id": null,
+                "execution_profile_id": "writer",
             }]
         }),
     )
@@ -367,7 +381,7 @@ async fn workflow_resolves_profile_launch_settings_and_pins_instructions() {
 }
 
 #[tokio::test]
-async fn workflow_profiles_without_launch_defaults_use_the_default_client() {
+async fn workflow_rejects_profiles_without_a_client() {
     use pontia_workflow::SessionCreator;
     let app = TestApp::new().await;
     app.state
@@ -375,7 +389,7 @@ async fn workflow_profiles_without_launch_defaults_use_the_default_client() {
         .agent_profiles()
         .create(
             serde_json::from_value(json!({
-                "profile_id":"default-client", "name":"Default client",
+                "profile_id":"instructions-only", "name":"Instructions only",
                 "system_prompt":"Keep context"
             }))
             .unwrap(),
@@ -383,16 +397,13 @@ async fn workflow_profiles_without_launch_defaults_use_the_default_client() {
         )
         .await
         .unwrap();
-    let launch = app
-        .state
-        .control()
-        .resolve_profile("default-client")
-        .await
-        .unwrap();
-    assert_eq!(launch.client_type, "generic");
-    assert_eq!(launch.system_instructions.as_deref(), Some("Keep context"));
-    assert_eq!(launch.model, None);
-    assert_eq!(launch.metadata, json!({}));
+    assert!(matches!(
+        app.state
+            .control()
+            .resolve_profile("instructions-only")
+            .await,
+        Err(pontia_workflow::Error::InvalidDefinition(_))
+    ));
 }
 
 #[tokio::test]
@@ -453,7 +464,7 @@ async fn workflow_run_requires_the_current_session_runtime() {
     let app = TestApp::new().await;
     let _origin = super::workflow_submission::seed_running_workflow(&app).await;
     let mut request = json!({"workflow_id":"wf_denied","title":"Denied","cwd":app.workspace().path(),
-        "nodes":[{"type":"agent","phase":"Build","title":"Build","instructions":"Work","output":"out.md"}]});
+        "nodes":[{"type":"agent","phase":"Build","title":"Build","instructions":"Work","output":"out.md","execution_profile_id":"writer"}]});
     assert_eq!(
         post_run(&app, request.clone()).await.0,
         StatusCode::BAD_REQUEST
